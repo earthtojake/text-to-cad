@@ -138,7 +138,7 @@ export function treeAncestors(tree, id) {
  * A list of a flat view's panel (`kit/shell/FlatPanel.jsx`): a board's or a schematic's **Parts**, in
  * blocks, or its **Nets** (`board/BoardSection.jsx`, `schematic/SchematicSection.jsx`), as Altium's
  * PCB panel lists Components and Nets — a part's pins or pads are not rows here, they are what the
- * picked part shows under the lists (`CircuitDetail.jsx`). It is drawn as a tree is in a panel
+ * picked part shows under the lists (the Selected pane, `ItemDetail.jsx`). It is drawn as a tree is in a panel
  * (`settings-ui.md`): dense rows mounted as they scroll into view (`VirtualRows`). The panel's search
  * box searches it (`searchRoots`, the list with what it holds: a part's pads, so `#U3.9` finds one):
  * while something is typed, its ranked hits replace its rows (the arrow keys walk them while its tab is

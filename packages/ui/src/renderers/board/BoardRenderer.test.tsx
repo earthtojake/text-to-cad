@@ -524,13 +524,13 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Zoom to led' }));
   await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
 
-  // A part selects as a click on the board does; under the lists, what is selected: its name, its facts
-  // (a chip card's), then its pads, each its number and net.
+  // A part selects as a click on the board does; under the lists, what is selected: its name, its ID and
+  // facts (a chip card's: the same component), then its pads, each its number and net.
   fireEvent.click(within(parts).getByRole('button', { name: 'Select J1' }));
   expect(selected(controller)).toEqual(['#J1']);
   expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1');
   const facts = () => [...detail()!.querySelectorAll('[data-flat-panel-facts] [data-info-row]')].map(row => row.textContent);
-  expect(facts().slice(0, 2)).toEqual(['ValueConn_01x02', 'FootprintPinHeader_1x02_P2.54mm_Vertical']);
+  expect(facts().slice(0, 3)).toEqual(['IDJ1', 'ValueConn_01x02', 'FootprintPinHeader_1x02_P2.54mm_Vertical']);
   expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
   // Titled with whose pads they are, at a height of its own, its top edge the grip that sizes it.
   expect(detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent).toBe('Pads of J12 pads');

@@ -9,7 +9,7 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { noGeometryAlert } from "../kit/status/loadAlerts.js";
 import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
-import { sceneCopyText, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
@@ -119,7 +119,12 @@ function MeshSurface({ view, data }) {
     run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
   };
 
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  const described = useSceneDescribe(parted ? scene : null);
+  const inspect = useSceneInspect({ scene: previewing ? null : parted ? scene : null, selection, describe: described });
+
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
+    inspect={inspect}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameObject}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}

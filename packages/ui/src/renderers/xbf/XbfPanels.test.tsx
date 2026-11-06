@@ -7,7 +7,7 @@ import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfP
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
-import { useXbfSelectionChips, xbfMassText, xbfMeasurementRows } from '../../../dist/renderers/xbf/xbfChips.js';
+import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows } from '../../../dist/renderers/xbf/xbfChips.js';
 import { selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
 import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
@@ -396,23 +396,31 @@ it("a face picked on a STEP's page opens Quick Edit with its reference, named or
   }
 });
 
-function Card({ id, measured }: { id: string, measured: object }) {
-  const tree = presentXbfTree(structure);
-  const scene = { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts: () => measured };
-  const { chips } = useXbfSelectionChips({ scene, tree, resource: null, selectedIds: [id], facts: new Map(), onRemove: () => {}, onHover: () => {} });
-  return <div>{chips[0].card}</div>;
-}
+// A pick as the Selected pane and its chip's card read it, over a scene that measures what it is asked.
+const describedAs = (measured: object) => xbfDescriber({ scene: { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null,
+  measureParts: () => measured } as any, tree: presentXbfTree(structure) });
+const fact = (item: any, label: string) => item.facts.find((row: any) => row.label === label)?.value;
 
-it("a part's card weighs it by its material, and an assembly's sums its parts", () => {
+it("a part's description weighs it by its material and says where it sits; a subassembly's sums its parts and lists them", () => {
   expect(xbfMassText({ volume: 1000, mass: 1000e-9 * 7870, unweighed: 0 })).toBe('0.00787 kg');
   expect(xbfMassText({ volume: 1000, mass: 12.3456, unweighed: 0 })).toBe('12.35 kg');
   expect(xbfMassText({ volume: 1000, mass: null, unweighed: 1 })).toBe('no material');
-  render(<Card id="i3" measured={{ size: [10, 20, 30], volume: 600, mass: null, unweighed: 1 }} />);
-  expect(screen.getByText('Mass')).toBeTruthy();
-  expect(screen.getByText('no material')).toBeTruthy();
-  cleanup();
-  render(<Card id="n0.0" measured={{ size: [10, 20, 30], volume: 6000, mass: 1.234, unweighed: 1 }} />);
-  expect(screen.getByText('1.234 kg · 1 without material')).toBeTruthy();
+  const base = describedAs({ size: [10, 20, 30], volume: 600, mass: null, unweighed: 1 })('i0');
+  expect([base.title, base.what, base.tip, base.ref, fact(base, 'Size'), fact(base, 'Mass'), base.related]).toEqual(['base', 'hinge', 'hinge', 'base', '10 × 20 × 30 mm', 'no material', null]);
+  const hinge = describedAs({ size: [10, 20, 30], volume: 6000, mass: 1.234, unweighed: 1 })('n0.0');
+  expect([hinge.title, fact(hinge, 'Parts'), fact(hinge, 'Mass')]).toEqual(['hinge', '3', '1.234 kg · 1 without material']);
+  // Its children, a row each that picks it, a folded run of one part's copies said part by part.
+  expect([hinge.related.title, hinge.related.rows.map((row: any) => [row.pick, row.label])]).toEqual(['Parts', [['i0', 'base'], ['i1', 'arm_1'], ['i2', 'arm_2']]]);
+  // Its chip's card is the same description.
+  function Chips() {
+    const scene = { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts: () => null };
+    const tree = presentXbfTree(structure);
+    const { chips } = useXbfSelectionChips({ scene, tree, resource: null, selectedIds: ['n0.0'], facts: new Map(), onRemove: () => {}, onHover: () => {},
+      describe: xbfDescriber({ scene: scene as any, tree }) });
+    return <p>{chips[0].detail.related.rows.length}</p>;
+  }
+  render(<Chips />);
+  expect(screen.getByText('3')).toBeTruthy();
 });
 
 it("the menus are a STEP's: a part's offers Copy Reference, Select, Isolate, Hide others, Hide, the tree's expansion and the framing", () => {

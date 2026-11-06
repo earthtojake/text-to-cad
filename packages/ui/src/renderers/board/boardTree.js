@@ -12,7 +12,7 @@ const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transist
  * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
-import { describeBoardReference } from "./boardFacts.js";
+import { boardReferenceId, describeBoardReference } from "./boardFacts.js";
 
 // KiCad's reference prefixes, read as what the parts are. A prefix not here is "Other".
 const KINDS = Object.freeze([
@@ -145,7 +145,7 @@ export function boardTreeAncestors(tree, id) {
 }
 
 /**
- * What a selector picks, in detail (`kit/inspector/CircuitDetail.jsx`): a part's pads, each its number,
+ * What a selector picks, in detail (`describeBoardPick`'s `related`): a part's pads, each its number,
  * its pin's name and its net; a net's pads, each its part and number; a pad, its part's. Null for
  * anything else (a track, a via, a block of parts).
  */
@@ -176,8 +176,6 @@ export function boardDetail(index, selector, t = english) {
   return null;
 }
 
-// A pick's glyph in the Selected pane, by what it is: a part's body, a pad's copper, anything on a net its trace.
-const glyphOf = (kind) => (kind === "part" ? "part" : kind === "pad" ? "pad" : "net");
 /** The net a pick is on, where it is on one: a pad's, a piece of copper's, a track's, a via's, a zone's. */
 function netOf(resolved) {
   if (!resolved) return "";
@@ -187,22 +185,15 @@ function netOf(resolved) {
 }
 
 /**
- * What is selected, for the Selected pane (`kit/inspector/CircuitDetail.jsx`): the last pick, as what it is
- * (its name, a line in words, its facts: `boardFacts.js`'s, a Quick Edit chip card's) and what it is
- * connected to — a part its own pads, each with its net; a net its pads; a pad, a track, a via, a pour
- * or a zone the pads on its net, the pad itself lit there. Several picks: how many, and each of them.
+ * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
+ * `DetailItem`): what it is — its name, a line in words for a pad, its ID and its facts (`boardFacts.js`'s)
+ * — and what it is connected to: a part its own pads, each with its net; a net its pads; a pad, a track, a
+ * via, a pour or a zone the pads on its net, the pad itself lit there. Its hover tip's short kind: a pad's
+ * net, a part's value. Its glyph is its chip's (`boardReferences.jsx`'s kinds). Null for a selector the
+ * board does not resolve.
  */
-export function boardSelected(index, selected, t = english) {
-  if (!selected.length) return null;
-  if (selected.length > 1) {
-    const rows = selected.map((id) => {
-      const resolved = index.resolve(id), described = describeBoardReference(resolved, index, t);
-      return described ? { id, kind: glyphOf(resolved.kind), pick: id, label: described.name, detail: netOf(resolved) } : null;
-    }).filter(Boolean);
-    return { id: `many:${selected.join(",")}`, kind: "net", pick: "", label: t("selection.count", { count: selected.length }), detail: "",
-      facts: [], count: "", listLabel: t("selection.items"), rows };
-  }
-  const id = selected[0], resolved = index.resolve(id), described = describeBoardReference(resolved, index, t);
+export function describeBoardPick(index, id, t = english) {
+  const resolved = index.resolve(id), described = describeBoardReference(resolved, index, t);
   if (!described) return null;
   const part = resolved.kind === "pad" ? index.parts.get(resolved.pad.ref) : null;
   const what = resolved.kind === "pad" ? [t("selection.padOf", { part: resolved.pad.ref }), part?.value].filter(Boolean).join(" · ")
@@ -210,10 +201,12 @@ export function boardSelected(index, selected, t = english) {
   const net = resolved.kind === "net" ? resolved.net.name : netOf(resolved);
   const list = resolved.kind === "part" ? boardDetail(index, `#${resolved.part.ref}`, t)
     : net ? boardDetail(index, formatBoardRefSelector({ kind: "net", net }), t) : null;
+  const title = resolved.kind === "part" ? t("board.text.pads_of", { name: resolved.part.ref })
+    : resolved.kind === "net" ? t("board.text.pads_on_net", { name: net }) : t("selection.connectedTo", { name: net });
   return {
-    id: `selected:${id}`, kind: glyphOf(resolved.kind), pick: id, label: described.name, detail: what, facts: described.facts,
-    count: list?.count || "", rows: list?.rows || [],
-    listLabel: resolved.kind === "part" ? t("board.text.pads_of", { name: resolved.part.ref })
-      : resolved.kind === "net" ? t("board.text.pads_on_net", { name: net }) : t("selection.connectedTo", { name: net })
+    id: `selected:${id}`, pick: id, kind: described.icon || described.glyph || "solid", title: described.name,
+    tip: resolved.kind === "pad" ? resolved.pad.net || "" : resolved.kind === "part" ? resolved.part.value || "" : "",
+    what, ref: boardReferenceId(id), facts: described.facts,
+    related: list?.rows.length ? { title, count: list.count, rows: list.rows } : null
   };
 }

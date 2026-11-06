@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
@@ -14,7 +15,7 @@ import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
-import { sceneCopyText, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
@@ -22,7 +23,7 @@ import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
-import { createDrawingScene, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
+import { createDrawingScene, describeDrawingPick, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
@@ -59,6 +60,8 @@ const DXF_LIVE = Object.freeze({ commands: ["clearSelection"], declined: DXF_DEC
 // How near a pick must be, in CSS pixels: a cursor's, or a fingertip's (`TOUCH_HIT_PX`).
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
+// A block reference's glyph in the Selected pane and its chip's card, the Layers' own for it.
+const DRAWING_GLYPHS = Object.freeze({ block: Box });
 
 function DxfSurface({ view, data }) {
   const { t } = useI18n();
@@ -128,7 +131,9 @@ function DxfSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource });
+  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`describeDrawingPick`).
+  const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.declared ? units.unit : "", t) : null), [drawing, units, t]);
+  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;
     if (!drawable) return;
@@ -229,7 +234,7 @@ function DxfSurface({ view, data }) {
         over = onMeasurement || Boolean(ink) || Boolean(handle);
       } else if (measureRef.current.hovered) measureRef.current.hover("");
       if (inkIds.join() !== hoveredInkRef.current.join()) { hoveredInkRef.current = inkIds; requestPaint(); }
-      selectionRef.current.hover(handle ? drawingReferenceId(handle) : "");
+      selectionRef.current.hoverHit(handle ? { id: drawingReferenceId(handle) } : null);
       setPointing(current => (current === over ? current : over));
     };
     // The entity under a pane point, as Select would take it ("" for none).
@@ -350,6 +355,11 @@ function DxfSurface({ view, data }) {
       zoom);
   } : null;
 
+  // What is picked, as the frame reads it: the Selected pane under the Layers, the hover tip, the cards' rows.
+  const resource = workspace.resource;
+  const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
+  const inspect = useSceneInspect({ scene, selection, describe, frame: frameEntities, copyText, glyphs: DRAWING_GLYPHS, data: "drawing" });
+
   // ---- the frame: every flat view's (`kit/shell/FlatViewFrame.jsx`) around the drawing's canvas ----
   // While the drawing loads, or once it has failed to, none of the viewer's own chrome. A compact host
   // gets the drawing alone.
@@ -376,7 +386,7 @@ function DxfSurface({ view, data }) {
       updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={handover.quickEdit} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
-      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom}>
+      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom} inspect={inspect}>
       <canvas ref={canvasRef} aria-label={t("drawing.canvas", { name: view.file.name })} role="img" data-drawing-tool={toolMode}
         className={cn("absolute inset-0 block touch-none select-none", cursor)} />
       {/* Measure's layer, over the drawing and under the tools: the pointer stays the drawing's. */}

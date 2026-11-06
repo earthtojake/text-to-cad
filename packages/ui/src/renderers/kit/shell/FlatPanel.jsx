@@ -19,7 +19,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
  * after it, then a row of tabs, buttons as Figma's (a board's Parts, Nets and Layers, a schematic's
  * Parts, Nets and Hierarchy), and the open tab's list under them, scrolling as one; under that, when the
- * view hands one in, what is picked in detail (`detail`: a part's pads, `kit/inspector/CircuitDetail.jsx`),
+ * view hands one in, what is picked in detail (`detail`: the Selected pane, `kit/inspector/ItemDetail.jsx`),
  * at most 45% of the panel's height and scrolling on its own, whatever tab is open. It keeps two lines,
  * the same on both sides: its boxes 8px in, what is read in them 16px in.
  *

@@ -117,7 +117,13 @@ test("a GLB's nodes are what Select picks and Quick Edit names: `n<index>`, the 
   scene.object3D.updateMatrixWorld(true);
   const hit = scene.pick(new THREE.Ray(new THREE.Vector3(2000, 0, 5000), new THREE.Vector3(0, 0, -1)));
   assert.deepEqual([hit.id, hit.name, hit.point.map(Math.round)], ["n1", "part (n1)", [2000, 0, 500]]);
-  assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12"]);
+  // Its card: its index, its triangles, the size it draws at in the file's metres, its authored material's name.
+  assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12", "1 × 1 × 1 m"]);
+  const named = nodeDocument();
+  named.lit.material.name = "steel";
+  const card = createGlbScene(THREE, named.document);
+  card.object3D.updateMatrixWorld(true);
+  assert.deepEqual(card.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12", "1 × 1 × 1 m", "steel"]);
   assert.deepEqual([scene.hasPart("n0"), scene.hasPart("n9"), scene.units], [true, false, { unit: "m", perWorld: 0.001 }]);
   assert.deepEqual([lit.userData.partId, unlit.userData.partId], ["n0", "n1"], "what Annotate hangs a mark on");
   // A pick lights its node; letting go puts back even what the look does not own (an unlit material).

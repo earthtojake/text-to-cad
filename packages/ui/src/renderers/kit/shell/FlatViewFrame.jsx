@@ -64,8 +64,8 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   busy: boolean, children: import("react").ReactNode, file: string, mobile: boolean, compact: boolean,
  *   chromeHidden: boolean, loading: boolean, loadingLabel: string, updating: boolean, updateStatus: { pending: boolean, label: string },
  *   tools: object[], toolRow?: import("react").ReactNode, views?: object[],
- *   panel?: { kind: string, label: string, searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode }[],
- *     detail?: import("react").ReactNode } | null,
+ *   panel?: { kind: string, label: string, searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode }[] } | null,
+ *   inspect?: import("../inspector/inspect.js").Inspect | null,
  *   panelControl?: { current: object | null },
  *   toolStack: object, onToolStackChange(patch: object): void, notice?: import("react").ReactNode,
  *   quickEdit: object | null, alert: object | null, cardAlert: object | null, alertDismissal: { dismissed: boolean, dismiss(): void },
@@ -73,6 +73,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
+ *   `inspect`: what is picked and how the view describes it: the frame's Selected pane and hover tip (`ViewFrame.jsx`).
  *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands,
  *   and the zoom's keys either way.
  *   A view control's `corner` is its control on the corner's bottom row, left of the pill (a button, a switch).
@@ -85,7 +86,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null,
-  corner = "pill", cube = null }) {
+  corner = "pill", cube = null, inspect = null }) {
   const { t } = useI18n();
   // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
   // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
@@ -102,7 +103,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   </>;
   return (
     <ViewFrame surface={surface} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden}
-      selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)}
+      selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)} inspect={inspect}
       tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} toolRow={toolRow} status={status}
       panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
       corner={cornerNode} notice={notice}

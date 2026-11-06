@@ -3,7 +3,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, expect, it, vi } from 'vitest';
 import LinksSection from '../../../dist/renderers/robot/LinksSection.js';
 import { useLinkSelection } from '../../../dist/renderers/robot/useLinkSelection.js';
-import { useRobotReferences } from '../../../dist/renderers/robot/robotReferences.js';
+import { useRobotDescribe, useRobotInspect, useRobotReferences } from '../../../dist/renderers/robot/robotReferences.js';
+import ItemDetail from '../../../dist/renderers/kit/inspector/ItemDetail.js';
+import { robotLinkItem } from '../../../dist/renderers/robot/LinkDetails.js';
+import { robotLinkFacts } from '../../../dist/renderers/robot/robotTree.js';
+import { InspectContext } from '../../../dist/renderers/kit/inspector/inspect.js';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 
 Object.assign(globalThis, { React });
@@ -58,7 +62,7 @@ const groupNamesByLink = new Map([['shoulder_link', ['manipulator']]]);
 
 // What the scene graph was last asked to draw: the viewport half of a selection. What is selected
 // reads back as Quick Edit's chips (`robotReferences.jsx`); the harness lays each chip's card out
-// flat under "Reference details", with its X, as its popover would show it.
+// flat under "Reference details" (`ItemDetail`, as its popover draws it), with its X.
 let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
@@ -71,18 +75,21 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
     selectLink: (name: string, options?: any) => { spy.selectLink?.(name); selection.selectLink(name, options); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
-  const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, groupNamesByLink, meshPath, resource: { kind: 'workspace-file', path: '/work/arm.urdf' }, onOpenFile });
-  return <>
+  const resource = { kind: 'workspace-file', path: '/work/arm.urdf' };
+  const describe = useRobotDescribe({ robot: payload, components, selectLink: observed.selectLink, onOpenFile, groupNamesByLink, resource });
+  const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, resource, describe });
+  const inspect = useRobotInspect({ selection: observed, components, describe });
+  return <InspectContext.Provider value={inspect}>
     {/* In the view's panel, as it ships: its Links tab, searched by the panel's search box. */}
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<LinksSection robot={payload} components={components} parts={parts} selection={observed} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>}
       tab="tree" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     {chips.length ? <section aria-label="Reference details" data-references={JSON.stringify(references.map((reference: any) => reference.target.selectors))}>
       {chips.map((chip: any) => <div key={chip.key} aria-label={`Chip ${chip.label}`} data-copy={chip.copy}>
-        {chip.card}<button type="button" onClick={chip.onRemove}>Remove {chip.label}</button>
+        {chip.detail ? <ItemDetail item={chip.detail} place="card" copy={chip.copy} /> : null}<button type="button" onClick={chip.onRemove}>Remove {chip.label}</button>
       </div>)}
     </section> : null}
-  </>;
+  </InspectContext.Provider>;
 }
 const chipLabels = () => within(screen.getByRole('region', { name: 'Reference details' })).getAllByRole('generic', { name: /^Chip / })
   .map(chip => chip.getAttribute('aria-label'));
@@ -129,13 +136,13 @@ it('selects a link in the scene graph and reads the payload back', () => {
   expect(drawn()).toBe('[["base_link"],[]]');
   expect(screen.getByRole('button', { name: 'Select base_link' }).getAttribute('aria-pressed')).toBe('true');
   let details = within(screen.getByRole('region', { name: 'Reference details' }));
-  expect(details.getByLabelText('Link details').textContent).toContain('2.5 kg');
-  expect(details.getByLabelText('Link details').textContent).toContain('meshes/base.3mf');
-  expect(details.getByLabelText('Link details').textContent).toContain('meshes/base_collision.stl');
+  expect(details.getByRole('region', { name: 'base_link' }).textContent).toContain('2.5 kg');
+  expect(details.getByRole('region', { name: 'base_link' }).textContent).toContain('meshes/base.3mf');
+  expect(details.getByRole('region', { name: 'base_link' }).textContent).toContain('meshes/base_collision.stl');
   expect(details.getByLabelText('Parent joint').textContent).toContain('footprint_to_base');
   // A fixed joint has no axis or limits to report.
   expect(details.getByLabelText('Parent joint').textContent).not.toContain('Axis');
-  expect(details.getByLabelText('Child joints').textContent).toContain('shoulder_link · shoulder_pan · revolute');
+  expect(details.getByLabelText('Child joints').textContent).toContain('shoulder_linkshoulder_pan · revolute');
 
   // A link with no geometry is still a selection: the row, and what the payload says.
   fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }));
@@ -150,7 +157,7 @@ it('selects a link in the scene graph and reads the payload back', () => {
   expect(parentJoint).toContain('3.5 rad/s');
   expect(parentJoint).toContain('Z0.25');
   // The SRDF's planning group the link is in.
-  expect(details.getByLabelText('Link details').textContent).toContain('manipulator');
+  expect(details.getByRole('region', { name: 'shoulder_link' }).textContent).toContain('manipulator');
   // Its chip copies its reference into the description: the file, and the link by name.
   expect(details.getByLabelText('Chip shoulder_link').getAttribute('data-copy')).toBe('/work/arm.urdf#shoulder_link');
 
@@ -194,7 +201,7 @@ it('reads a link’s inertial and geometry back, opens the mesh files it names b
   expect(details.getByText('package://arm/meshes/far.stl').closest('button')).toBeNull();
 
   // Parent and children are the same tree: pressing one selects it there and in the viewport.
-  fireEvent.click(within(details.getByLabelText('Child joints')).getByRole('button', { name: 'shoulder_link' }));
+  fireEvent.click(within(details.getByLabelText('Child joints')).getByRole('button', { name: /^shoulder_link/ }));
   expect(screen.getByRole('button', { name: 'Select shoulder_link' }).getAttribute('aria-pressed')).toBe('true');
   details = within(screen.getByRole('region', { name: 'Reference details' }));
   fireEvent.click(within(details.getByLabelText('Parent joint')).getByRole('button', { name: 'base_link' }));
@@ -254,7 +261,7 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
   // The chip names it; the card's rows say the rest, never the name again. It is a reference to its link.
   expect(chipLabels()).toEqual(['Chip flange']);
   expect(reference.getByLabelText('Chip flange').getAttribute('data-copy')).toBe('/work/arm.urdf#wrist_link');
-  const component = reference.getByLabelText('Component details').textContent!;
+  const component = reference.getByRole('region', { name: 'flange' }).querySelector('[data-flat-panel-facts]')!.textContent!;
   for (const fact of ['wrist_link', '#336699', '1,200', '40.0 × 40.0 × 8.00 mm']) expect(component).toContain(fact);
   expect(component).not.toContain('flange');
 });
@@ -322,7 +329,7 @@ it('a modified click adds a link to the selection, as it adds an object, and a p
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
   fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }), { shiftKey: true });
   expect(drawn()).toBe('[["base_link","shoulder_link"],[]]');
-  expect(screen.getAllByRole('button', { pressed: true }).map(row => row.getAttribute('aria-label')))
+  expect(within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { pressed: true }).map(row => row.getAttribute('aria-label')))
     .toEqual(['Select base_link', 'Select shoulder_link']);
   // Several links are a chip each, and a reference each.
   expect(chipLabels()).toEqual(['Chip base_link', 'Chip shoulder_link']);
@@ -331,4 +338,16 @@ it('a modified click adds a link to the selection, as it adds an object, and a p
   expect(drawn()).toBe('[["shoulder_link"],[]]');
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
   expect(drawn()).toBe('[["base_link"],[]]');
+});
+
+it("a link's description is its joint to its parent with its limits, the parent link, and its child links as what it is connected to", () => {
+  const item = robotLinkItem(robotLinkFacts(robot, 'shoulder_link'), { reference: 'shoulder_link' });
+  // Its hover tip says what joint holds it.
+  expect([item.title, item.tip, item.ref]).toEqual(['shoulder_link', 'revolute', 'shoulder_link']);
+  const joint = item.facts.filter((fact: any) => fact.section === 'Parent joint');
+  expect(joint.map((fact: any) => fact.label)).toEqual(['Joint', 'Joint type', 'Parent', 'Axis', 'Limits', 'Effort', 'Velocity', 'Origin xyz', 'Origin rpy']);
+  expect(joint.find((fact: any) => fact.label === 'Limits').copy).toBe('-1.5708 … 1.5708 rad');
+  expect([item.related.title, item.related.rows.map((row: any) => [row.pick, row.detail])]).toEqual(['Child joints', [['elbow_link', 'elbow_lift · prismatic']]]);
+  // The root is said to be one, with nothing holding it.
+  expect(robotLinkItem(robotLinkFacts(robot, 'base_footprint')).tip).toBe('Root link');
 });

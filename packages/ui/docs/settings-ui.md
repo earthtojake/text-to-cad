@@ -665,23 +665,57 @@ file.
   once it is shown. A
   selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
   the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
-- **Selected** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`; `boardTree.js`'s
-  `boardSelected`, `schematicTree.js`'s `schematicSelected`), as a CAD tool's Properties panel: under the
-  lists, whatever tab is open, at a height of its own whatever it shows (320px at first, or half the
-  panel where that is less: room for a pick's facts and half a dozen of what it is connected to, whatever
-  the window's height; its top edge is the grip that sizes it, kept with the file's view
-  (`panel.detailHeight`), never under 96px, the lists keeping 160px over it), scrolling on its
-  own. First **what it is** — its
-  glyph and name (`C17.1`, `VBUS · track`), a line in words for a pad or a pin ("Pad of C17 · 100nF"),
-  and its facts (its net, layer, width, drill, value, footprint, position: a Quick Edit chip card's) —
-  then **what it is connected to**: a part's own pads or pins, each its net ("Pads of C17"); a net's pads
-  or pins, each its part ("Pads on net VBUS"); a pad's, a pin's, a track's, a via's, a pour's or a
-  wire's net's pads or pins ("Connected to VBUS"), itself lit there. Several picked: how many, and each
-  of them. A text, a graphic or an area has its facts alone. A row selects as a press on the picture
-  does and a double-click frames it; the head's name selects it again. Nothing picked: none.
-- **A hover tip** (`kit/shell/HoverTip.jsx`): under Select, the name of what the pointer rests on — a
-  pad's or a pin's with its net, a part's with its value — in a small tip beside it, once the pointer has
-  rested on it a moment (450ms), gone the moment it leaves; it takes no pointer.
+- **Selected** — every view's that has a panel, 2D or 3D, the frame's (`ViewFrame.jsx` hands it to
+  `FlatPanel`'s `detail`; `kit/inspector/ItemDetail.jsx`'s `useSelectedDetail`), as a CAD tool's
+  Properties panel: under the lists, whatever tab is open, at a height of its own whatever it shows
+  (320px at first, or half the panel where that is less: room for a pick's facts and half a dozen of
+  what it is connected to, whatever the window's height; its top edge is the grip that sizes it, kept
+  with the file's view (`panel.detailHeight`), never under 96px, the lists keeping 160px over it),
+  scrolling on its own. **It is the same component as a Quick Edit chip's card** (`ItemDetail`): a pick
+  reads identically in the pane and in its chip's card, from ONE description the view gives of it
+  (`kit/inspector/inspect.js`'s `DetailItem`, through the frame's `inspect`: its `describe(id)`). First
+  **what it is** — its glyph and name (`C17.1`, `VBUS · track`, `Circle on CUT`, `upper_arm`), its copy
+  (in the pane the name picks it again, a double-click frames it, and the icon after it copies its
+  reference; in a card the name and the icon copy), a line in words where the view has one ("Pad of
+  C17 · 100nF", a part's place in its assembly: "arm / hand"), its **ID** (the reference id, its middle
+  cut where it is long), then its facts, in their groups, each ruled off and named (a link's Inertial,
+  Geometry, Parent joint) — then **what it is connected to**, titled, with its count: a row each, which
+  selects as a press on the picture does (Shift adds) and a double-click frames; the pane lists them
+  all, a card the first eight and "+N more". What each view says:
+  - a board's or a schematic's pick (`describeBoardPick`, `describeSchematicPick`): its net, layer,
+    width, drill, value, footprint, position; a part's own pads or pins, each its net ("Pads of C17"); a
+    net's pads or pins, each its part ("Pads on net VBUS"); a pad's, a pin's, a track's, a via's, a
+    pour's or a wire's net's ("Connected to VBUS"), itself lit there; a text, a graphic or an area its
+    facts alone;
+  - a drawing's entity (`dxf/drawingReferences.js`'s `describeDrawingPick`): its handle, DXF type, layer,
+    an insert's block, a circle's or arc's centre and radius, and what it measures in the drawing's
+    unit — a line's or a straight polyline's length, a circle's diameter, else its box's size; a block
+    reference lists the other references of its block (the payload names a block reference's contents
+    by the reference, so they are no picks of their own); the pane stands under the Layers, where the
+    drawing has them;
+  - an engine document's part or subassembly (`xbf/xbfChips.jsx`'s `xbfDescriber`): its owners, its
+    canonical ref, part count, size (mm), volume and mass; a subassembly lists its children — not its
+    siblings, which the Model tree above it already shows round its row; a face or an edge its part
+    and its key measurements, once the engine has measured it;
+  - a robot's link (`robot/LinkDetails.jsx`'s `robotLinkItem`): its kind, groups and end effectors, its
+    inertial properties, its geometry (a mesh file opening that file), its joint to its parent (name,
+    type, the parent link, a press selecting it, axis, limits with their units, effort, velocity, mimic,
+    origin), and its child links with their joints; a named mesh object its link, colour, triangles
+    and size;
+  - a GLB's node and a 3MF's object (their scenes' `describePart`): a node's index, triangles, size in
+    the file's metres and authored material; an object's build item and triangles. Neither has a panel,
+    so neither has a pane: their chips' cards are the same component all the same.
+  Several picked: how many, and each of them (its name and its short kind), a row that picks it alone.
+  Nothing picked: none. A view without a panel (a phone, a GLB, a mesh, a drawing of a few layers) has
+  no pane; its chips' cards read the same.
+- **A hover tip** — the frame's, every view's that picks (`ViewFrame.jsx`, `kit/shell/HoverTip.jsx`'s
+  `useFrameHoverTip`): under Select, the name of what a press would pick there (the view's `hovered`),
+  from the same description, short — its name and its short kind (`inspect.js`'s `hoverTipText`: a
+  pad's or a pin's net, a part's value, `U12.57 · /TVRAM12`; a line's length, a circle's Ø; a link's
+  parent joint's type; a part's owner; a face's headline measure, once measured) — in a small tip
+  beside where the pointer came onto it, once the pointer has rested on it a moment (450ms), gone the
+  moment it leaves, a button is held (a drag, a pan) or Select is put down; it takes no pointer. No
+  view draws one of its own (`check-kit-boundaries.mjs`' frame guard).
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
   making it the active layer (a filled dot after its name), drawn on top. Which preset draws the board
@@ -1093,7 +1127,8 @@ animation are separate capabilities; the absence of one never leaves empty
 controls for another.
 
 What is picked is [Quick Edit](#quick-edit)'s chips, and a chip's card is what a person
-reads of it (`kit/tools/quick-edit/ReferenceChips.jsx`). A component or subassembly is a chip
+reads of it (`kit/tools/quick-edit/ReferenceChips.jsx`): the Selected pane's own component
+(`kit/inspector/ItemDetail.jsx`, the view's one description of the pick), so it reads as the pane does. A component or subassembly is a chip
 of its own; faces, edges and solids are a chip for each kind on each part — "base · face 3"
 alone, "base · 6 faces" for several, however they were picked — so a large selection stays a
 few chips. A chip names its reference: its own label when it has one (a part's or

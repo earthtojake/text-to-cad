@@ -10,7 +10,7 @@ import { english } from "@cad/ui/i18n";
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
 import { parseSchematicRefSelector } from "@cad/core/lib/schematicRefs.js";
-import { describeSchematicReference } from "./schematicFacts.js";
+import { describeSchematicReference, schematicReferenceId } from "./schematicFacts.js";
 
 // One collator for every comparison (natural order: C2 before C10).
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -112,7 +112,7 @@ export function schematicRowOwners(index, selector) {
 }
 
 /**
- * What a selector picks, in detail (`kit/inspector/CircuitDetail.jsx`): a part's pins, each its number,
+ * What a selector picks, in detail (`describeSchematicPick`'s `related`): a part's pins, each its number,
  * name and net; a net's pins, each its part and number; a pin, its part's. Null for anything else.
  */
 export function schematicDetail(index, selector, t = english) {
@@ -157,26 +157,15 @@ export function sheetOfSelector(selector) {
   return parsed?.kind === "sheet" ? parsed.sheet : null;
 }
 
-// A pick's glyph in the Selected pane, by what it is: a part's symbol, a pin, anything on a net its trace.
-const glyphOf = (kind) => (kind === "part" ? "part" : kind === "pin" ? "pin" : "net");
-
 /**
- * What is selected, for the Selected pane (`kit/inspector/CircuitDetail.jsx`): the last pick, as what it is
- * (its name, a line in words, its facts: `schematicFacts.js`'s, a Quick Edit chip card's) and what it is
- * connected to — a part its own pins, each with its net; a net its pins; a pin, a wire or a label the pins
- * on its net, the pin itself lit there. Several picks: how many, and each of them.
+ * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
+ * `DetailItem`): what it is — its name, a line in words for a pin, its ID and its facts
+ * (`schematicFacts.js`'s) — and what it is connected to: a part its own pins, each with its net; a net its
+ * pins; a pin, a wire or a label the pins on its net, the pin itself lit there. Its hover tip's short
+ * kind: a pin's net, a part's value. Null for a selector the schematic does not resolve.
  */
-export function schematicSelected(index, selected, t = english) {
-  if (!selected.length) return null;
-  if (selected.length > 1) {
-    const rows = selected.map((id) => {
-      const resolved = index.resolve(id), described = describeSchematicReference(resolved, index, t);
-      return described ? { id, kind: glyphOf(resolved.kind), pick: id, label: described.name, detail: resolved.kind === "net" ? "" : String(resolved.net || "") } : null;
-    }).filter(Boolean);
-    return { id: `many:${selected.join(",")}`, kind: "net", pick: "", label: t("selection.count", { count: selected.length }), detail: "",
-      facts: [], count: "", listLabel: t("selection.items"), rows };
-  }
-  const id = selected[0], resolved = index.resolve(id), described = describeSchematicReference(resolved, index, t);
+export function describeSchematicPick(index, id, t = english) {
+  const resolved = index.resolve(id), described = describeSchematicReference(resolved, index, t);
   if (!described) return null;
   const part = resolved.kind === "pin" ? index.parts.get(resolved.ref) : null;
   const what = resolved.kind === "pin" ? [t("selection.pinOf", { part: resolved.ref }), part?.value].filter(Boolean).join(" · ")
@@ -184,10 +173,12 @@ export function schematicSelected(index, selected, t = english) {
   const net = resolved.kind === "net" ? resolved.net : resolved.kind === "part" ? "" : String(resolved.net || "");
   const list = resolved.kind === "part" ? schematicDetail(index, `#${resolved.ref}`, t)
     : net ? schematicDetail(index, formatBoardRefSelector({ kind: "net", net }), t) : null;
+  const title = resolved.kind === "part" ? t("schematic.text.pins_of", { name: resolved.ref })
+    : resolved.kind === "net" ? t("schematic.text.pins_on_net", { name: net }) : t("selection.connectedTo", { name: net });
   return {
-    id: `selected:${id}`, kind: glyphOf(resolved.kind), pick: id, label: described.name, detail: what, facts: described.facts,
-    count: list?.count || "", rows: list?.rows || [],
-    listLabel: resolved.kind === "part" ? t("schematic.text.pins_of", { name: resolved.ref })
-      : resolved.kind === "net" ? t("schematic.text.pins_on_net", { name: net }) : t("selection.connectedTo", { name: net })
+    id: `selected:${id}`, pick: id, kind: described.glyph || "part", title: described.name,
+    tip: resolved.kind === "pin" ? String(resolved.net || "") : resolved.kind === "part" ? String(resolved.part?.value || "") : "",
+    what, ref: schematicReferenceId(id), facts: described.facts,
+    related: list?.rows.length ? { title, count: list.count, rows: list.rows } : null
   };
 }

@@ -1,9 +1,8 @@
 import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useMemo } from "react";
-import CircuitDetail from "../kit/inspector/CircuitDetail.jsx";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
-import { boardRowOwners, boardSelected, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
+import { boardRowOwners, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
 
 // The pins on nothing (`boardTree.js`): shut as the tab opens.
 const CLOSED = Object.freeze(["group:unconnected"]);
@@ -37,16 +36,4 @@ export default function BoardSection({ index, trees, list, ...props }) {
   const ownerOf = useCallback(selector => boardRowOwners(index, selector), [index]);
   return <CircuitTree tree={parts ? trees.parts : trees.nets} searchRoots={parts ? trees.partsSearch : null} nodeIdsOf={boardTreeNodeIds} ownerOf={ownerOf}
     glyphs={KIND_GLYPHS} closedGroups={CLOSED} data="board" panel={panel} {...props} />;
-}
-
-/**
- * What is selected on the board, under its lists (`kit/inspector/CircuitDetail.jsx`, `boardTree.js`'s
- * `boardSelected`): what it is, its facts, and what it is connected to; null while nothing is (the panel
- * then draws none).
- */
-export function useBoardDetail(index, selection, props) {
-  const { t } = useI18n();
-  const { selected } = selection;
-  const detail = useMemo(() => (index ? boardSelected(index, selected, t) : null), [index, selected, t]);
-  return detail ? <CircuitDetail detail={detail} selection={selection} glyphs={KIND_GLYPHS} data="board" {...props} /> : null;
 }

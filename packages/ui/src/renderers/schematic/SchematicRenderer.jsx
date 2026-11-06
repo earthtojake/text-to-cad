@@ -22,15 +22,14 @@ import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js"
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
-import HoverTip from "../kit/shell/HoverTip.jsx";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { usePlotView } from "../kit/viewport/usePlotView.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
-import SchematicSection, { useSchematicDetail, useSchematicTrees } from "./SchematicSection.jsx";
+import SchematicSection, { useSchematicTrees } from "./SchematicSection.jsx";
 import SchematicSelectFilter from "./SchematicSelectFilter.jsx";
 import SheetsSection from "./SheetsSection.jsx";
-import { useSchematicReferences } from "./schematicReferences.jsx";
+import { useSchematicDescribe, useSchematicInspect, useSchematicReferences } from "./schematicReferences.jsx";
 import { createSchematicScene } from "./schematicScene.js";
 import { SCHEMATIC_NO_CAMERA, SCHEMATIC_NO_DISPLAY, SCHEMATIC_SELECT_KINDS, SCHEMATIC_TOOL, SCHEMATIC_TOOL_MODES, readSchematicFilter } from "./tools.js";
 import { useSchematicDocument } from "./useSchematicDocument.js";
@@ -172,7 +171,8 @@ function SchematicSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const { references, chips: pickChips } = useSchematicReferences({ scene, selection, resource: workspace.resource });
+  const describe = useSchematicDescribe(index);
+  const { references, chips: pickChips } = useSchematicReferences({ scene, selection, resource: workspace.resource, describe });
   // A block picked whole (its row menu's Select all parts) is one chip, not a chip a part.
   const trees = useSchematicTrees(index);
   const chips = useMemo(() => groupChips({ selected: selection.selected, chips: pickChips, resource: workspace.resource, select: selection.select,
@@ -259,14 +259,9 @@ function SchematicSurface({ view, data }) {
     if (onSheet && onSheet !== pageRef.current?.path) showSheet(onSheet, selectors);
   }, [showSheet]);
 
-  // The name of what the pointer rests on, under Select (`kit/shell/HoverTip.jsx`): its name, and a pad's or
-  // pin's net, a part's value.
-  const [hoverTip, setHoverTip] = useState(null);
-  const tipOfRef = useRef(null);
-  tipOfRef.current = selector => {
-    const resolved = indexRef.current?.resolve(selector), name = scene?.describePart(selector)?.name;
-    return name ? [name, resolved?.kind === "pin" ? resolved.net : resolved?.kind === "part" ? resolved.part.value : ""].filter(Boolean).join(" · ") : "";
-  };
+  // What a press under Select would pick, which the frame names in its hover tip (`describeSchematicPick`'s
+  // name, and a pin's net or a part's value).
+  const [hovered, setHovered] = useState("");
   // ---- pointer -------------------------------------------------------------
   const [overPick, setOverPick] = useState(false);
   const measureHoverRef = useRef(null);
@@ -351,8 +346,7 @@ function SchematicSurface({ view, data }) {
       } else if (measureRef.current.hovered) measureRef.current.hover("");
       if (inkIds.join() !== hoveredInkRef.current.join()) { hoveredInkRef.current = inkIds; requestPaint(); }
       selectionRef.current.hover(hit ? hit.selector : "");
-      const tipKey = hit && point ? hit.selector : "";
-      setHoverTip(now => ((now?.key || "") === tipKey ? now : tipKey ? { key: tipKey, text: tipOfRef.current(tipKey), x: point.x, y: point.y } : null));
+      setHovered(hit && point ? hit.selector : "");
       setOverPick(current => (current === over ? current : over));
     };
     // Select's drag is KiCad's window selection: drawn as it goes, everything wholly inside it once it lets go (Shift adds).
@@ -525,12 +519,13 @@ function SchematicSurface({ view, data }) {
   // Hierarchy; under them, what is picked in detail.
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildSchematicRefToken({ path, selectors: ids }))).catch(() => {}); };
-  const takeSelect = () => selectTool(SCHEMATIC_TOOL.SELECT);
+  const takeSelect = useCallback(() => selectTool(SCHEMATIC_TOOL.SELECT), [selectTool]);
   const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
-  const detail = useSchematicDetail(index, selection, { onSelect: takeSelect, onShow: showSelectors, onFrame: frameSelectors });
+  const copySelectors = useCallback(ids => (path ? buildSchematicRefToken({ path, selectors: ids }) : ""), [path]);
+  const inspect = useSchematicInspect({ index, describe, selection, hovered, onSelect: takeSelect, show: showSelectors, frame: frameSelectors, copyText: copySelectors });
   const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
-    detail, tabs: [
+    tabs: [
       { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") },
       ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}
@@ -548,13 +543,12 @@ function SchematicSurface({ view, data }) {
       toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
-      zoom={zoom}>
+      zoom={zoom} inspect={inspect}>
       <canvas ref={canvasRef} aria-label={t("schematic.text.schematic_file", { file: view.file.name, sheet: shownSheet && index ? index.sheetName(shownSheet) : "" })}
         role="img" data-schematic-tool={toolMode} data-schematic-sheet={shownSheet || ""}
         className={cn("absolute inset-0 block touch-none select-none", cursor)} />
       <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
       {annotating && shown && index ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
-      {dragging ? null : <HoverTip tip={hoverTip} />}
     </FlatViewFrame>
   );
 }

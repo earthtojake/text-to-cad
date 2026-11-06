@@ -97,6 +97,8 @@ const DOUBLE_PRESS_MS = 600;
  *   the active tool); the shell's own tool's row (Annotate's) takes its place while it is up.
  *   `sidebar`: the file's sections, in order — each a `ToolPanel`, drawn as a tab of the view's panel
  *   (`FlatPanel.jsx`): a tree, joints, metadata. None (null): no panel.
+ *   `inspect`: what is picked and how the renderer describes it (`inspector/inspect.js`): the frame's
+ *   Selected pane under the panel's tabs, the hover tip under Select, and the rows of both.
  *   Gone in preview, kept mounted, so a tree keeps its expansion and scroll.
  *   `referenceChips`: the renderer's description of that selection, as Quick Edit shows it (its
  *   chips, `kit/tools/quick-edit/ReferenceChips.jsx`): a chip each for one or several picks of a kind
@@ -153,7 +155,7 @@ const DOUBLE_PRESS_MS = 600;
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
-  doubleClickFits = true, zoomToSelection = null }) {
+  doubleClickFits = true, zoomToSelection = null, inspect = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -468,6 +470,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       onClose={() => setPreviewPanelOpen(false)} render={frame.previewSettings} /> };
   const body = (
     <ViewFrame rootRef={frame.hostRef} className={pointing ? "cursor-pointer" : ""} rootHandlers={rootHandlers} onCanvasPress={pressCanvas} selecting={frame.selecting}
+      inspect={inspect}
       stageColor={frame.stageColor} file={frame.modelKey} mobile={mobile} compact={compact} chromeHidden={chromeHidden} previewing={previewing}
       preview={preview} tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}

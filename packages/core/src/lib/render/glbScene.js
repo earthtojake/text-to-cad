@@ -184,15 +184,25 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     },
     /** Whether `id` (`n12`) is a node of this file that draws. */
     hasPart: id => nodeOf(id) !== null,
-    /** A node, as Quick Edit's chip says it: its name, and what the file says of it. */
+    /**
+     * A node, as Quick Edit's chip and its card say it: its name, and what the file says of it — its
+     * index, its triangles, the size of what it draws where it stands now (in the file's metres), the
+     * names of its authored materials where they have any, and the STEP occurrence it came from.
+     */
     describePart(id) {
       const index = nodeOf(id);
       if (index === null) return null;
       const node = nodes.get(index);
       const occurrence = String(node.object.userData?.cadOccurrenceId || "").trim();
+      const box = new THREE.Box3();
+      for (const mesh of node.meshes) box.union(new THREE.Box3().setFromObject(mesh, true));
+      const size = box.isEmpty() ? null : box.getSize(new THREE.Vector3()).toArray().map(value => value * GLB_SCENE_UNITS.perWorld);
+      const materials = [...new Set(node.meshes.flatMap(mesh => (authored.get(mesh) || []).map(material => String(material?.name || "").trim())).filter(Boolean))];
       return { name: nodeName(node), facts: [
         { label: "Node", key: "part.node", value: `nodes[${index}]` },
         { label: "Triangles", key: "part.triangles", value: node.meshes.reduce((sum, mesh) => sum + triangles(mesh), 0).toLocaleString("en-US") },
+        ...(size ? [{ label: "Size", key: "part.size", value: `${size.map(value => +value.toPrecision(4)).join(" × ")} ${GLB_SCENE_UNITS.unit}` }] : []),
+        ...(materials.length ? [{ label: "Material", key: "part.material", value: materials.join(", ") }] : []),
         ...(occurrence ? [{ label: "STEP occurrence", key: "part.stepOccurrence", value: occurrence }] : [])
       ] };
     },

@@ -264,8 +264,10 @@ Clip's slider rows open in a popover from their tiles, taking up no tool.
 What there is to read of the file is the view's panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model, a
 robot's Links, Position, an SDF's metadata; a board's Parts, Nets and Layers, a schematic's Parts,
-Nets and Hierarchy, a drawing's Layers — and, under a board's or a schematic's lists, the picked
-part's or net's pads or pins (`kit/inspector/CircuitDetail.jsx`). A file's routines play from the playbar under the model. The panel
+Nets and Hierarchy, a drawing's Layers — and, under the lists, the Selected pane: what is picked and
+what it is connected to, the same component as its Quick Edit chip's card (`kit/inspector/ItemDetail.jsx`,
+from the view's one description of a pick, `kit/inspector/inspect.js`), with the hover tip over the
+canvas, both the frame's (`kit/shell/ViewFrame.jsx`). A file's routines play from the playbar under the model. The panel
 is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
 phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is

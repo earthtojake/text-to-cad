@@ -1,7 +1,8 @@
 import React from 'react';
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import ViewFrame from '../../../../dist/renderers/kit/shell/ViewFrame.js';
+import { HOVER_TIP_DELAY_MS } from '../../../../dist/renderers/kit/shell/HoverTip.js';
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as any;
 afterEach(cleanup);
@@ -31,4 +32,30 @@ it('the update status stands under the strip, at the top centre without one, and
   const idle = render(<ViewFrame file="part.step" mobile={false} compact chromeHidden={false} tools={[]} layout={{}} onLayoutChange={() => {}}
     status={{ update: null }}>{null}</ViewFrame>);
   expect(idle.container.querySelector('[data-view-update-status]')).toBeNull();
+});
+
+// What is picked is the frame's in every view (`settings-ui.md`): the Selected pane under the panel's
+// lists and the hover tip over the canvas, both from the view's description of a pick (`inspect`).
+it('the frame names what a press would pick in a tip beside the pointer, under Select and while no button is held, and shows the pick in the Selected pane', () => {
+  vi.useFakeTimers();
+  const item = { id: 'selected:#U3', pick: '#U3', kind: 'solid', title: 'U3', tip: 'ATmega328P', facts: [{ label: 'Value', value: 'ATmega328P' }] };
+  const inspect = { selected: ['#U3'], describe: () => item, hovered: '#U3', select: () => {}, hover: () => {} };
+  const panel = { kind: 'test', label: 'Panel', searchLabel: 'Search', tabs: [{ id: 'list', label: 'List', content: <p>rows</p> }] };
+  const frame = (props: object) => render(<ViewFrame file="board.kicad_pcb" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}}
+    onLayoutChange={() => {}} selecting panel={panel} inspect={inspect} {...props}><canvas data-testid="canvas" /></ViewFrame>);
+  const view = frame({});
+  expect(view.container.querySelector('[data-flat-panel-detail] [data-detail-head]')!.textContent).toBe('U3');
+  const canvas = view.getByTestId('canvas');
+  fireEvent.pointerMove(canvas, { clientX: 40, clientY: 60, buttons: 0 });
+  act(() => { vi.advanceTimersByTime(HOVER_TIP_DELAY_MS); });
+  expect(view.getByRole('tooltip').textContent).toBe('U3 · ATmega328P');
+  // A drag puts it away; another tool than Select shows none.
+  fireEvent.pointerMove(canvas, { clientX: 50, clientY: 60, buttons: 1 });
+  expect(view.queryByRole('tooltip')).toBeNull();
+  cleanup();
+  const other = frame({ selecting: false });
+  fireEvent.pointerMove(other.getByTestId('canvas'), { clientX: 40, clientY: 60, buttons: 0 });
+  act(() => { vi.advanceTimersByTime(HOVER_TIP_DELAY_MS); });
+  expect(other.queryByRole('tooltip')).toBeNull();
+  vi.useRealTimers();
 });

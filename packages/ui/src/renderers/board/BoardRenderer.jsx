@@ -22,15 +22,14 @@ import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
-import HoverTip from "../kit/shell/HoverTip.jsx";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
-import { useBoardReferences } from "./boardReferences.jsx";
+import { useBoardDescribe, useBoardInspect, useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
 import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
-import BoardSection, { useBoardDetail, useBoardTrees } from "./BoardSection.jsx";
+import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
 import {
@@ -222,7 +221,8 @@ function BoardSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const { references, chips: pickChips } = useBoardReferences({ scene, selection, resource: workspace.resource });
+  const describe = useBoardDescribe(index);
+  const { references, chips: pickChips } = useBoardReferences({ scene, selection, resource: workspace.resource, describe });
   // A block picked whole (its row menu's Select all parts) is one chip, not a chip a part.
   const trees = useBoardTrees(index);
   const chips = useMemo(() => groupChips({ selected: selection.selected, chips: pickChips, resource: workspace.resource, select: selection.select,
@@ -294,14 +294,9 @@ function BoardSurface({ view, data }) {
   // The canvas the view's menu opens over: the one on screen.
   const activeCanvasRef = useMemo(() => ({ get current() { return in3d()?.canvas() || viewRef.current?.canvasRef.current || null; } }), []);
 
-  // The name of what the pointer rests on, under Select (`kit/shell/HoverTip.jsx`): its name, and a pad's or
-  // pin's net, a part's value.
-  const [hoverTip, setHoverTip] = useState(null);
-  const tipOfRef = useRef(null);
-  tipOfRef.current = selector => {
-    const resolved = indexRef.current?.resolve(selector), name = scene?.describePart(selector)?.name;
-    return name ? [name, resolved?.kind === "pad" ? resolved.pad.net : resolved?.kind === "part" ? resolved.part.value : ""].filter(Boolean).join(" · ") : "";
-  };
+  // What a press under Select would pick, which the frame names in its hover tip (`describeBoardPick`'s
+  // name, and a pad's net or a part's value).
+  const [hovered, setHovered] = useState("");
   // ---- pointer: what a tap and a resting pointer do under each tool -----------
   const [overPick, setOverPick] = useState(false);
   const measureHoverRef = useRef(null);
@@ -388,8 +383,7 @@ function BoardSurface({ view, data }) {
       } else if (measureRef.current.hovered) measureRef.current.hover("");
       if (inkIds.join() !== hoveredInkRef.current.join()) { hoveredInkRef.current = inkIds; requestPaint(); }
       selectionRef.current.hover(hit ? hit.selector : "");
-      const tipKey = hit && point ? hit.selector : "";
-      setHoverTip(now => ((now?.key || "") === tipKey ? now : tipKey ? { key: tipKey, text: tipOfRef.current(tipKey), x: point.x, y: point.y } : null));
+      setHovered(hit && point ? hit.selector : "");
       setOverPick(current => (current === over ? current : over));
     };
     // Select's drag is the box between its ends, KiCad's window selection: drawn as it goes, an area
@@ -626,17 +620,18 @@ function BoardSurface({ view, data }) {
   // settings; under them, what is picked in detail.
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildBoardRefToken({ path, selectors: ids }))).catch(() => {}); };
-  const takeSelect = () => selectTool(BOARD_TOOL.SELECT);
+  const takeSelect = useCallback(() => selectTool(BOARD_TOOL.SELECT), [selectTool]);
   const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
-  const detail = useBoardDetail(index, selection, { onSelect: takeSelect, onFrame: frameSelectors });
+  const copySelectors = useCallback(ids => (path ? buildBoardRefToken({ path, selectors: ids }) : ""), [path]);
+  const inspect = useBoardInspect({ index, describe, selection, hovered, onSelect: takeSelect, frame: frameSelectors, copyText: copySelectors });
   const panelTabs = [
     ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
-    tabs: panelTabs, detail } : null;
+    tabs: panelTabs } : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps a crosshair (Annotate's layer has its own).
@@ -660,7 +655,7 @@ function BoardSurface({ view, data }) {
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}
-      zoom={zoom} corner={solid ? "cube" : "pill"} cube={solid ? { projection: { value: projection, onChange: setProjection }, onHome: () => view3dRef.current?.home() } : null}>
+      zoom={zoom} inspect={inspect} corner={solid ? "cube" : "pill"} cube={solid ? { projection: { value: projection, onChange: setProjection }, onHome: () => view3dRef.current?.home() } : null}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
         className={cn("absolute inset-0 block touch-none select-none", cursor, solid && shown3d && "invisible")} />
       {/* The board in 3D, over the flat canvas until its first frame is up, which then lets its rasters go. */}
@@ -673,7 +668,6 @@ function BoardSurface({ view, data }) {
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
       <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
       {annotating && shown && index ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
-      {dragging ? null : <HoverTip tip={hoverTip} />}
     </FlatViewFrame>
   );
 }

@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useI18n } from "@cad/ui/i18n";
 import { formatPromptReference } from "@cad/core/prompt";
-import { InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 import { boardReferenceId } from "./boardFacts.js";
 import {
   AreaKindIcon, DimensionKindIcon, GraphicKindIcon, NetKindIcon, PadKindIcon, PartKindIcon, RuleAreaKindIcon, TextKindIcon, TrackKindIcon, ViaKindIcon,
   ZoneKindIcon
 } from "./boardIcons.jsx";
+import { describeBoardPick } from "./boardTree.js";
 
 const EMPTY = Object.freeze([]);
 // A chip leads with its kind's glyph, as Select's filter names the kinds: a part, a pad, a net or its
@@ -18,9 +19,24 @@ const chipIcon = (glyph) => {
   return Icon ? { icon: <Icon className={CHIP_ICON_CLASS} /> } : { glyph };
 };
 
-/** A pick's card: what the board says of it (`boardFacts.js`). */
-function BoardCard({ facts }) {
-  return <>{facts.map(fact => <InfoRow key={fact.label} label={fact.label}><MonoValue>{fact.value}</MonoValue></InfoRow>)}</>;
+// The board's glyphs in the Selected pane and a chip's card: a chip's kinds, and the lists' (a part, a pad, a net).
+const BOARD_GLYPHS = Object.freeze({ ...KIND_ICONS, part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
+
+/**
+ * What is picked on the board, as its frame reads it (`kit/inspector/inspect.js`): each pick described
+ * (`describeBoardPick`: the Selected pane, a chip's card, the hover tip's name), what the pointer is on
+ * (`hovered`), and what a row of the pane does (`select`, `hover`, `frame`, `onSelect`, `copyText`).
+ */
+export function useBoardInspect({ index, describe, selection, hovered, onSelect, frame, copyText }) {
+  const { selected, select, hover } = selection;
+  return useMemo(() => (index ? { selected, describe, hovered, glyphs: BOARD_GLYPHS, data: "board", select, hover, frame, onSelect, copyText } : null),
+    [index, selected, describe, hovered, select, hover, frame, onSelect, copyText]);
+}
+
+/** A board's picks described (`describeBoardPick`), in the view's language: what the pane, the cards and the tip read. */
+export function useBoardDescribe(index) {
+  const { t } = useI18n();
+  return useCallback(id => (index ? describeBoardPick(index, id, t) : null), [index, t]);
 }
 
 /**
@@ -28,14 +44,14 @@ function BoardCard({ facts }) {
  * as a reference into the file on screen, by its board reference, and as a chip named as the board
  * names it (`R1`, `R1.2`, `net VBUS`, `VBUS · track`, `“blinky”`, an area), led by its kind's glyph —
  * the kinds Select's filter shows (a net's copper is its net's), a point an agent wrote the pick's vertex — its card
- * what the board says of it, its ID the reference.
+ * what the board says of it (`describe`, the Selected pane's), its ID the reference.
  * A click on a chip copies its reference (`<file>#R1.2`); its X drops it; resting on it lights it.
  *
  * @param {{ scene: ReturnType<typeof import("./boardScene.js").createBoardScene> | null,
  *   selection: ReturnType<typeof import("../kit/tools/select/useSceneSelection.js").useSceneSelection>,
  *   resource: import("@cad/core/prompt").ResourceRef | null }} options
  */
-export function useBoardReferences({ scene, selection, resource }) {
+export function useBoardReferences({ scene, selection, resource, describe = null }) {
   const { selected, select, hover } = selection;
   return useMemo(() => {
     if (!scene) return { references: EMPTY, chips: EMPTY };
@@ -47,9 +63,9 @@ export function useBoardReferences({ scene, selection, resource }) {
       const value = reference(id);
       return { key: `pick:${id}`, label: described?.name || boardReferenceId(id), ...chipIcon(described?.icon || described?.glyph || "solid"), id: boardReferenceId(id),
         ...(value ? { copy: formatPromptReference(value) } : {}),
-        card: described ? <BoardCard facts={described.facts} /> : null,
+        detail: describe?.(id) || null,
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };
     });
     return { references, chips };
-  }, [scene, selected, resource, select, hover]);
+  }, [scene, selected, resource, select, hover, describe]);
 }

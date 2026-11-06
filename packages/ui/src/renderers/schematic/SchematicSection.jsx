@@ -1,9 +1,8 @@
 import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useMemo } from "react";
-import CircuitDetail from "../kit/inspector/CircuitDetail.jsx";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PinKindIcon, SymbolKindIcon } from "./schematicIcons.jsx";
-import { buildSchematicTree, schematicRowOwners, schematicSelected, schematicTreeNodeIds } from "./schematicTree.js";
+import { buildSchematicTree, schematicRowOwners, schematicTreeNodeIds } from "./schematicTree.js";
 
 const CLOSED = Object.freeze(["group:unconnected"]);
 const KIND_GLYPHS = Object.freeze({ part: SymbolKindIcon, pin: PinKindIcon, pad: PinKindIcon, net: NetKindIcon });
@@ -36,15 +35,4 @@ export default function SchematicSection({ index, trees, list, ...props }) {
   const ownerOf = useCallback(selector => schematicRowOwners(index, selector), [index]);
   return <CircuitTree tree={parts ? trees.parts : trees.nets} searchRoots={parts ? trees.partsSearch : null} nodeIdsOf={schematicTreeNodeIds} ownerOf={ownerOf}
     glyphs={KIND_GLYPHS} closedGroups={CLOSED} data="schematic" panel={panel} {...props} />;
-}
-
-/**
- * What is selected on the schematic, under its lists (`kit/inspector/CircuitDetail.jsx`, `schematicTree.js`'s
- * `schematicSelected`): what it is, its facts, and what it is connected to; null while nothing is.
- */
-export function useSchematicDetail(index, selection, props) {
-  const { t } = useI18n();
-  const { selected } = selection;
-  const detail = useMemo(() => (index ? schematicSelected(index, selected, t) : null), [index, selected, t]);
-  return detail ? <CircuitDetail detail={detail} selection={selection} glyphs={KIND_GLYPHS} data="schematic" {...props} /> : null;
 }

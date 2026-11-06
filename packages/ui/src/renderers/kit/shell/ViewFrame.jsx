@@ -6,7 +6,10 @@ import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
+import { InspectContext } from "../inspector/inspect.js";
+import { useSelectedDetail } from "../inspector/ItemDetail.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
+import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
@@ -50,6 +53,11 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   after).
  * - **Select in hand** (`selecting`), said on the root (`data-cad-selecting`): a double-click fits only
  *   then, in every view (`viewport/dom.js`'s `doubleClickFits`, which the canvas hooks read).
+ * - **What is picked** (`inspect`, `inspector/inspect.js`'s: the view's picks and its description of
+ *   each), one way in every view: the **Selected pane** under the panel's lists (`ItemDetail.jsx`'s
+ *   `useSelectedDetail`, the panel's `detail`), the same component a Quick Edit chip's card draws; the
+ *   **hover tip** over the canvas under Select (`HoverTip.jsx`), what a press would pick, named short;
+ *   and the view's pick actions to both, wherever they are drawn (`InspectContext`).
  *
  * `preview`: Preview's chrome (`PreviewChrome`'s `active`, `name`, `controls`, `panel`, `panelOpen`
  * and `idle`), which wraps exactly the strip's column, the top-right and the corner. While it is
@@ -71,14 +79,14 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {{ update?: object | null, onRetry?: (() => void) | null, preview?: boolean } | null} [props.status]
  * @param {object[]} props.tools
  * @param {object[]} [props.views]
- * @param {{ kind: string, label: string, searchLabel: string, tabs?: object[], sections?: import("react").ReactNode,
- *   detail?: import("react").ReactNode } | null} [props.panel]
+ * @param {{ kind: string, label: string, searchLabel: string, tabs?: object[], sections?: import("react").ReactNode } | null} [props.panel]
+ * @param {import("../inspector/inspect.js").Inspect | null} [props.inspect]
  */
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
   canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
   layout, onLayoutChange, corner = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
-  contextMenu = null, onCanvasPress = null }) {
+  contextMenu = null, onCanvasPress = null, inspect = null }) {
   const { t } = useI18n();
   const toolsHidden = chromeHidden || compact;
   // The view catching up, said as every view says it, unless the card says why the chrome is gone.
@@ -94,11 +102,14 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
 
   // ---- the panel: docked, open at first in a wide view; none on a phone --------------------------
   const sided = Boolean(panel && (panel.sections || panel.tabs?.length)) && !mobile;
+  // What is picked, under the panel's lists; what a press would pick, beside the pointer.
+  const selectedDetail = useSelectedDetail(sided ? inspect : null);
+  const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, enabled: selecting && !toolsHidden && !previewing });
   const flat = useFlatPanelState({ frameRef: root, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange });
   if (panelControl) panelControl.current = previewing ? null : flat.control;
   const panelNode = sided && !toolsHidden ? <FlatPanel mode="docked" open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={panel.detail ?? null}
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={selectedDetail}
     detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
 
   // ---- the strip's column: at the view's centre, reaching back over the docked panel -------------
@@ -145,6 +156,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   }, [root, toolsHidden, mobile, sided, flat.open, hasQuickEdit]);
 
   return (
+    <InspectContext.Provider value={inspect}>
     <div ref={root} className={cn("relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground", className)}
       data-slot="cad-file-view" data-cad-surface="" data-cad-selecting={selecting ? "" : undefined} {...surface} tabIndex={-1} {...rootHandlers}
       onPointerDownCapture={event => {
@@ -158,7 +170,10 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       <div ref={stageRef} className="@container/cad-viewport pointer-events-none relative min-h-0 min-w-0 flex-1"
         data-cad-canvas={stageColor ?? ""} style={stageColor ? { backgroundColor: stageColor } : undefined}>
         <div ref={canvasBoxRef} className="pointer-events-auto absolute inset-0" aria-busy={busy === undefined ? undefined : busy ? "true" : "false"}
-          data-cad-canvas-box="">{children}</div>
+          data-cad-canvas-box="" {...hoverTip.handlers}>
+          {children}
+          <HoverTip tip={hoverTip.tip} />
+        </div>
         {underlay}
         <PreviewChrome active={false} {...preview}>
           {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-center gap-2"
@@ -191,6 +206,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         {previewing || !alert ? null : <ViewerAlertCard {...alert} file={alert.file ?? file} />}
       </div>
     </div>
+    </InspectContext.Provider>
   );
 }
 

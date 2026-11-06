@@ -161,7 +161,7 @@ export function checkFileViewerBoundary(repo, { shared = SLICE_SHARED } = {}) {
 
 // ONE FRAME. Every renderer, 2D or 3D, mounts `kit/shell/ViewFrame.jsx`, whose canvas is the one
 // thing that differs: the panel and its state, its pill, the strip's column and its reach back over
-// the panel, the top-right, loading and the alert card are drawn there and nowhere else, so no view
+// the panel, the top-right, the hover tip, loading and the alert card are drawn there and nowhere else, so no view
 // can place them its own way again (three assemblies once did, and the panel pushed one view's strip
 // and not the others'). A renderer that needs them hands them to the frame.
 export const VIEW_FRAME = 'packages/ui/src/renderers/kit/shell/ViewFrame.jsx';
@@ -170,6 +170,7 @@ export const VIEW_FRAME_PARTS = [
   ['renders ViewportTopRight', /<ViewportTopRight\b/],
   ['renders ViewerAlertCard', /<ViewerAlertCard\b/],
   ['renders ViewerLoadingOverlay', /<ViewerLoadingOverlay\b/],
+  ['renders HoverTip', /<HoverTip\b/],
   ['draws the strip\'s column (data-cad-tool-groups)', /data-cad-tool-groups=/],
   ['calls useStageReach', /(?<!function\s+)\buseStageReach\s*\(/],
   ['calls useFlatPanelState', /(?<!function\s+)\buseFlatPanelState\s*\(/],

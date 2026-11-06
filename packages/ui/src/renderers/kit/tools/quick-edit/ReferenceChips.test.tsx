@@ -2,7 +2,6 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ReferenceChips from '../../../../../dist/renderers/kit/tools/quick-edit/ReferenceChips.js';
-import { InfoRow } from '../../../../../dist/renderers/kit/inspector/referenceRows.js';
 import { ViewerHostContext } from '../../../../../dist/host/context.js';
 import { testHost } from '../../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../../dist/file-viewer/responsive.js';
@@ -13,7 +12,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const measured = () => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 
 const chip = (n: number, extra = {}) => ({ key: `run:${n}`, label: `base · face ${n}`, id: `f:base.make_box1.${n}`, copy: `/models/base.step#f:base.make_box1.${n}`,
-  card: <InfoRow label="Area" title="Face area">{`${n * 10} mm²`}</InfoRow>, ...extra });
+  detail: { facts: [{ label: 'Area', title: 'Face area', value: `${n * 10} mm²` }] }, ...extra });
 function mount(chips: any[], mobile = false) {
   const copied: string[] = [];
   const host = testHost({ clipboard: { writeText: async (text: string) => { copied.push(text); }, readText: async () => '', writeImage: async () => {} } });
