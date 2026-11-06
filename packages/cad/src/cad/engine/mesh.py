@@ -21,8 +21,10 @@ finer than a twentieth of a millimetre). It is meshed for that file and never ca
 through ``IMeshTools_Parameters`` with one knob set besides:
 ``EnableControlSurfaceDeflectionAllSurfaces``, which holds analytic faces (torus, sphere,
 cone) to the deflection -- measured across nine large documents, from 1.5-2x the deflection to
-under 1x, for 2-13 % more triangles on those parts. Every
-other knob was measured to change nothing useful and stays at its default.
+under 1x, for 2-13 % more triangles on those parts. An export's tolerance sets a second,
+``ForceFaceDeflection``: without it a face whose edges carry a looser tolerance is meshed from
+those edges, 0.15 mm off a sphere asked for 0.01 (#766); faces with tight edges mesh the same.
+Every other knob was measured to change nothing useful and stays at its default.
 
 **BRepMesh as it is.** No check, no second pass, no finer retry, no other tessellator: the
 same measurement found the faces left without triangles the same few hundredths of a per
@@ -207,6 +209,7 @@ def mesh_shape(shape: Any, *, parallel: bool = True, tolerance: float | None = N
     parameters = IMeshTools_Parameters()
     parameters.Deflection, parameters.Angle, parameters.Relative, parameters.InParallel = linear, ANGULAR, False, parallel
     parameters.EnableControlSurfaceDeflectionAllSurfaces = True
+    parameters.ForceFaceDeflection = tolerance is not None
     mesher = BRepMesh_IncrementalMesh(local, parameters)
     flags = mesher.GetStatusFlags()
     mesh = _extract(local, ", ".join(name for bit, name in _MESH_FLAGS if flags & bit) or "no status")
