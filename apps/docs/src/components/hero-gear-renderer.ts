@@ -26,9 +26,9 @@ const CLIP_SPEED = 0.08;
 const EDGE_CREASE_DEG = 35;
 // The folds' width in CSS pixels, and the outline around each part (its back faces pushed out along
 // their normals) in millimetres of the model, so a silhouette is heavier than a fold and grows with
-// the gear, as a drawing's do.
+// the gear, as a drawing's do, up to 4 pixels on a very large gear.
 const FOLD_PX = 1;
-const OUTLINE_MM = 0.5;
+const OUTLINE = { mm: 0.5, maxPx: 4 };
 
 // Where the gear sits: in the backdrop's bottom-right corner, its centre on the corner, so the right
 // edge and the agents under the backdrop cut it to the quarter that turns towards the text. Seen from
@@ -231,7 +231,7 @@ export async function createHeroGear({
     camera.far = distance + radius * 2;
     camera.updateProjectionMatrix();
     folds.linewidth = FOLD_PX * viewport.renderer.getPixelRatio();
-    outline.uniforms.offset.value = OUTLINE_MM;
+    outline.uniforms.offset.value = Math.min(OUTLINE.mm, OUTLINE.maxPx / pixelsPerUnit);
   };
   layout();
   const resized = new ResizeObserver(() => {

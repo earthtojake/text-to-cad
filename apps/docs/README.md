@@ -125,7 +125,9 @@ The hero is the whole first screen under the header, at least the small viewport
 header's (`min-h-[calc(100svh-3.5rem)]`), so the agents show above the fold on a phone too, and
 Features begin after the first scroll. On a short screen its gaps, the wordmark, the tagline and the
 agents' logos shrink with the height, so all of it still fits down to a 600-pixel-tall window.
-Centred in it: the TEXTTOCAD wordmark at full size (up to
+The text is centred across it and anchored high, under a gap that grows with the screen's height
+(at most 8rem), so a tall screen's spare height gathers between the install box and the agents,
+where the gear's corner turns. In it: the TEXTTOCAD wordmark at full size (up to
 800px), the tagline, then the two calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
 star count, Join Discord; `src/components/hero-section.tsx`, the links and the star count from
 `src/lib/github.ts`, which the header shares). Then the one-line install box, which is the page's

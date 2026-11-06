@@ -24,11 +24,14 @@ export async function HeroSection() {
     // too: the small viewport height, which the browser's bars never cover.
     <section className="flex min-h-[calc(100svh-3.5rem)] flex-col">
       {/* The gear sits behind this part only, and fades out above the agents. */}
-      <div className="relative isolate flex flex-1 flex-col justify-center">
+      <div className="relative isolate flex flex-1 flex-col">
         <HeroGear />
-        {/* Its gaps shrink on a short screen, and the wordmark with them, so the agents still fit
-            above the fold on a laptop's 600-odd pixels under the browser's bars. */}
-        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center px-4 pt-[clamp(1rem,4svh,3rem)] pb-[clamp(0.75rem,2.5svh,2rem)] text-center sm:px-6">
+        {/* Anchored high, under a gap that grows with the screen's height past 600px (by a fifth of
+            each pixel more, by 0.15 on a phone, at most 8rem), so a tall screen's spare height
+            gathers between the install box and the agents, where the gear's corner turns. Its gaps
+            shrink on a short screen, and the wordmark with them, so the agents still fit above the
+            fold on a laptop's 600-odd pixels under the browser's bars. */}
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center px-4 pt-[clamp(1rem,calc((100svh_-_600px)*0.15_+_1rem),6rem)] pb-[clamp(0.75rem,2.5svh,2rem)] text-center sm:px-6 sm:pt-[clamp(1rem,calc((100svh_-_600px)*0.2_+_1rem),8rem)]">
           <h1 className="sr-only">text-to-cad: Design physical products with AI.</h1>
           {/* A block of its own, so the centred column does not shrink the wordmark to fit. The gear's
               ring keeps clear of it and of the tagline (`data-gear-clear`). */}
