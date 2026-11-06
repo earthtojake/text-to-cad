@@ -4,7 +4,8 @@
 checker (``tighten.Obstacles``) once, then ``run()`` routes each wanted connection in the plan's order:
 
 - a NET: its pads and the copper already on them fall into islands (pieces of the net's copper that touch, as
-  KiCad's connectivity joins them: pads, tracks, vias, a pour's saved fill); starting from the island with the
+  KiCad's connectivity joins them: pads, tracks and vias; a pour is no part of it, since KiCad refills it round
+  the new copper, so a pad a pour alone joins is still apart); starting from the island with the
   most pads, the nearest island not yet joined is joined to the tree each time, Prim's way, until every island
   with a pad is one (a connection that fails leaves its island apart, said, and the next nearest goes on);
 - a pair of PADS: just that connection, between the islands of the two pads.
@@ -138,7 +139,7 @@ class NewVia:
 
 @dataclass
 class _Item:
-    """A piece of a net's copper: a pad, a track, a via or a pour's fill; its shapes, the layers it is on, its
+    """A piece of a net's copper: a pad, a track or a via; its shapes, the layers it is on, its
     anchors (where a route may end on it: a pad's position, a via's centre, a track's ends) and what it is."""
 
     kind: str
@@ -148,34 +149,14 @@ class _Item:
     pad: Pad | None = None
     track: Track | None = None
     via: Via | None = None
-    fill: np.ndarray | None = None
     name: str = ""
     new: int | None = None  # a track this plan made: its place in Router.tracks, split where a branch meets it
 
 
-def _fill_holds(fill: np.ndarray, points: Sequence[XY]) -> bool:
-    """Whether a pour's fill holds any of ``points`` (even-odd, vectorized over its edges)."""
-    x1, y1 = fill[:, 0], fill[:, 1]
-    x2, y2 = np.roll(x1, -1), np.roll(y1, -1)
-    for px, py in points:
-        straddles = (y1 > py) != (y2 > py)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            crossing = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
-        if np.count_nonzero(straddles & (px < crossing)) % 2:
-            return True
-    return False
-
-
 def _touch(a: _Item, b: _Item) -> bool:
-    """Whether two pieces of one net's copper are joined: a layer in common and their shapes meet (a fill by
-    holding the other's anchors, as KiCad's connectivity tests a pour)."""
+    """Whether two pieces of one net's copper are joined: a layer in common and their shapes meet."""
     if not set(a.layers) & set(b.layers):
         return False
-    if a.fill is not None or b.fill is not None:
-        fill, other = (a, b) if a.fill is not None else (b, a)
-        if other.fill is not None:
-            return False  # two pours of one net meet through what lies on them
-        return _fill_holds(fill.fill, other.anchors)
     for one in a.shapes:
         for two in b.shapes:
             if one.box[0] > two.box[2] or two.box[0] > one.box[2] or one.box[1] > two.box[3] or two.box[1] > one.box[3]:
@@ -357,8 +338,6 @@ class Router:
                 obstacles.add("tracks", keepout.shape, layers, NO_NET)
             if keepout.vias:
                 obstacles.add("vias", keepout.shape, [], NO_NET)
-        for fill in board.fills:
-            self._item(fill.net, _Item("fill", (fill.layer,), (), (), fill=np.array(fill.points, dtype=float)))
         # The outline as KiCad's chords: its arcs may lie up to CHORD_TOLERANCE outside them (Rules.edge adds it).
         fields.set_edge(board.outline)
         obstacles.set_edge(board.outline)
@@ -438,7 +417,7 @@ class Router:
         found: dict[int, _Item] = {}
         for item in items:
             layers = [self.layer_of[layer] for layer in item.layers if self.layer_of.get(layer) in allowed]
-            if not layers or item.kind == "fill":
+            if not layers:
                 continue
             if item.kind == "track":
                 (a, b), half = item.track.ends, item.track.width / 2

@@ -6,7 +6,8 @@ the block has done to it so far, not the file on disk. It is read with the board
 outline placed as KiCad places it), and every shape is the item's own (``shapes``): a pad by its shape, size,
 corner radius, offset and turn; a track as a segment or an arc of its width; a via as a disc on each layer it
 spans. A pad whose padstack draws other shapes on other layers is all of them on every layer (more copper,
-never less); a chamfered corner is the square corner (likewise). The outline and the copper graphics and texts
+never less); a chamfered corner is the square corner (likewise). A copper pour is not read: KiCad refills it round
+the new copper, so it is neither an obstacle nor a connection to the router. The outline and the copper graphics and texts
 (rare) come from the board index (``read_index``), their arcs as chords within ``CHORD_TOLERANCE``, which the
 router adds to their clearance.
 
@@ -28,7 +29,7 @@ from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, rotate
 
 from .shapes import Shape
 
-__all__ = ["BoardCopper", "Fill", "Graphic", "Keepout", "Pad", "Track", "Via", "read_copper"]
+__all__ = ["BoardCopper", "Graphic", "Keepout", "Pad", "Track", "Via", "read_copper"]
 
 XY = tuple[float, float]
 
@@ -99,15 +100,6 @@ class Keepout:
 
 
 @dataclass(frozen=True)
-class Fill:
-    """A pour's filled copper on one layer, as KiCad saved it: part of its net's copper until KiCad refills it."""
-
-    net: str
-    layer: str
-    points: tuple[XY, ...]
-
-
-@dataclass(frozen=True)
 class BoardCopper:
     """What the router reads of a board: its copper layers (front first) and every item it routes round."""
 
@@ -118,7 +110,6 @@ class BoardCopper:
     graphics: tuple[Graphic, ...]
     keepouts: tuple[Keepout, ...]
     holes: tuple[Shape, ...]  # unplated holes
-    fills: tuple[Fill, ...]
     outline: tuple[tuple[XY, ...], ...]  # closed rings: the edge, and any cutout
     open_outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts pieces that close on nothing
 
@@ -338,20 +329,6 @@ def _keepout(node: list, copper: Sequence[str], frame: FootprintFrame | None) ->
     return Keepout(layers, banned("tracks"), banned("vias"), Shape.polygon(outline))
 
 
-def _fills(node: list, table, copper: Sequence[str]) -> list[Fill]:
-    net = net_of(node, table)
-    if not net or sexpr.find(node, "keepout") is not None:
-        return []
-    layers = expand_copper(item_layers(node), copper)
-    found = []
-    for filled in sexpr.find_all(node, "filled_polygon"):
-        layer = layer_of(filled) or (layers[0] if layers else None)
-        points = tuple(points_of(sexpr.find(filled, "pts")))
-        if layer and len(points) >= 3:
-            found.append(Fill(net, layer, points))
-    return found
-
-
 def _drawn(points: Sequence[XY], closed: bool, filled: bool, reach: float) -> tuple[Shape, ...]:
     if filled and closed and len(points) >= 3:
         return (Shape.polygon(points, reach),)
@@ -372,7 +349,6 @@ def read_copper(text: str | list) -> BoardCopper:
     tracks: list[Track] = []
     vias: list[Via] = []
     keepouts: list[Keepout] = []
-    fills: list[Fill] = []
     for node in tree[1:]:
         head = sexpr.head(node)
         if head in ("footprint", "module"):
@@ -408,7 +384,6 @@ def read_copper(text: str | list) -> BoardCopper:
             keepout = _keepout(node, copper, None)
             if keepout is not None:
                 keepouts.append(keepout)
-            fills += _fills(node, table, copper)
     index = read_index(tree)
     graphics = [Graphic(shape.net, shape.layer, _drawn(shape.points, shape.closed, shape.filled, shape.width / 2 + (
                         CHORD_TOLERANCE if shape.shape in ("arc", "circle", "curve", "poly") else 0.0)))
@@ -419,4 +394,4 @@ def read_copper(text: str | list) -> BoardCopper:
                   if len(line) > 3 and math.dist(line[0], line[-1]) <= 0.01)
     open_ = tuple(tuple(line) for line in index.outline if tuple(line) not in rings)
     return BoardCopper(copper, tuple(pads), tuple(tracks), tuple(vias), tuple(graphics), tuple(keepouts),
-                       tuple(holes), tuple(fills), rings, open_)
+                       tuple(holes), rings, open_)

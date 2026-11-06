@@ -46,8 +46,9 @@ board at its block's end, and the next step reads what the last one saved. Each 
    - **The rest with the router, as you direct it:** `route(b, plan)` (`from cad.kicad import route`)
      routes the connections you name, in your order, each on the layers you allow it, at its netclass's
      width and clearance (or yours, never under the board's rules), within your via limit or at your via
-     cost, round everything already on the board; it moves and deletes nothing, and routes only what the
-     plan names (it is no autorouter: no plan, no copper; never hand a board to Freerouting). Put the
+     cost, round everything already on the board but the pours (KiCad refills those round it: a pad a pour
+     alone joins counts as apart); it moves and deletes nothing, and routes only what the plan names (it is
+     no autorouter: no plan, no copper; never hand a board to Freerouting). Put the
      connections with the least room first (a pin between two others, a short link) and the long nets last. A connection it cannot route is answered by name with what walls it in:
      move it before that net, allow it another layer, or route it by hand.
    - **Check** with DRC and the copper stills (step 6), then **fix by hand** whatever reads badly: a

@@ -704,7 +704,8 @@ length), pulls each path tight in continuous geometry, checks every segment and 
 writes the tracks and vias in one commit: nothing on the board is moved or deleted, nothing else is written,
 and the block's save writes the file. Octolinear and deterministic: the same board and plan give the same
 copper. A connection it cannot route is answered by name with why (`Routed.failed`, and a line on stderr);
-copper pours are not obstacles (KiCad refills them round the new copper). It runs in the script's process.
+a copper pour is neither an obstacle nor a connection to it (KiCad refills it round the new copper). It runs in
+the script's process.
 
 ## Manufacturing checks
 
