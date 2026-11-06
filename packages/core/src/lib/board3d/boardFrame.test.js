@@ -47,10 +47,19 @@ test("the 2D window is the 3D camera head on, from either side, and the camera b
   }
 });
 
-test("Front | Back turns the camera over about the board's upright axis through its target", () => {
+test("Front | Back turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {
   const turned = cameraTurnedOver({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0.6, 0.8] });
-  close(turned.position, [10, -40, -30], "eye");
-  close(turned.up, [0, 0.6, -0.8], "up");
+  close(turned.position, [10, 40, -30], "eye");
+  close(turned.up, [0, 0.6, 0.8], "up");
+  // From the 3D views' Home (front, right, above; the world's z up) the eye goes behind, right, below,
+  // and the world's z is still up on screen.
+  const home = cameraTurnedOver({ position: [2.1, -1.65, 1.08], target: [0, 0, 0], up: [0, 0, 1] });
+  close(home.position, [2.1, 1.65, -1.08], "home's eye");
+  close(home.up, [0, 0, 1], "home's up");
+  // Head on, the back is the 2D back view: the eye under the board, the sheet's up still up.
+  const flat = cameraTurnedOver({ position: [5, -5, 100], target: [5, -5, 0], up: [0, 1, 0] });
+  close(flat.position, [5, -5, -100], "head on");
+  close(flat.up, [0, 1, 0], "head on up");
 });
 
 test("a face's raster keeps to its budget and the GPU's largest texture, and maps the sheet onto it, mirrored from the back", () => {

@@ -872,7 +872,7 @@ over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's 
 | Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw |
-| Front \| Back | turns the camera over about the board's upright axis, eased; follows the camera when it is turned over by hand |
+| Front \| Back | turns the camera over the board's left-to-right axis, eased, which way is up kept: the cube reads upright and the back is seen as the 2D view's back, mirrored left to right; follows the camera when it is turned over by hand |
 | Zoom pill | replaced by the cube; the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) are the 3D views' |
 | Projection, Home | the 3D views' own |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |

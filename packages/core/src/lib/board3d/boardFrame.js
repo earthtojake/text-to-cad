@@ -116,13 +116,17 @@ export function planFromCamera({ position, target, halfHeight, width, height, mi
 }
 
 /**
- * The camera turned to the board's other side, about the board's upright axis through its target
- * (the world's y): what Front | Back does in 3D. Position and up, the target kept.
+ * The camera turned to the board's other side: what Front | Back does in 3D. The eye goes over the
+ * board's left-to-right axis through its target (the world's x: y and z negated), and which way is up
+ * stays as it was, so the world's up stays up on screen (the cube reads upright) and the other face is
+ * seen as the 2D view sees the back: mirrored left to right, not upside down. Turned about the
+ * upright axis instead, the picture is the same but the world's up points down. Position and up, the
+ * target kept.
  */
 export function cameraTurnedOver({ position, target, up }) {
-  const turn = ([x, y, z]) => [-x, y, -z];
-  const offset = turn(position.map((value, axis) => value - target[axis]));
-  return { position: offset.map((value, axis) => value + target[axis]), target: [...target], up: turn(up) };
+  const offset = position.map((value, axis) => value - target[axis]);
+  const turned = [offset[0], -offset[1], -offset[2]];
+  return { position: turned.map((value, axis) => value + target[axis]), target: [...target], up: [...up] };
 }
 
 /**
