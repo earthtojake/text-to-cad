@@ -1,0 +1,656 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "33cf07fd-15d9-5b90-9ea0-57b97f80ce13")
+	(paper "A4")
+	(title_block
+		(title "Nine: 3x3 RP2040 macropad")
+		(date "2026-11-06")
+		(rev "A")
+		(company "Nine macropad (text-to-cad demo)")
+	)
+	(lib_symbols)
+	(text "Nine: a 3x3 macropad"
+		(exclude_from_sim no)
+		(at 25.4 30.48 0)
+		(effects
+			(font
+				(size 3 3)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "1f1a9a83-a920-502b-a50c-0b4bbb5d2a0a")
+	)
+	(text "RP2040, 9 hot-swap MX keys with per-key RGB, an EC11 encoder, USB-C. Each key is wired to its own GPIO."
+		(exclude_from_sim no)
+		(at 25.4 36.83 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+			)
+			(justify left bottom)
+		)
+		(uuid "078ae0b0-19be-5515-a99c-f13e86e13103")
+	)
+	(sheet
+		(at 25.4 59.69)
+		(size 44.45 25.4)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "5e1d7320-1ac5-50d4-b1e9-6ef91b0f77c1")
+		(property "Sheetname" "USB & Power"
+			(at 25.4 59.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "usb_power.kicad_sch"
+			(at 25.4 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 69.85 69.85 0)
+			(uuid "19b3c280-a4da-5730-939c-d7f225501f90")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 69.85 72.39 0)
+			(uuid "8c60a823-c8f8-59ec-b0a8-fadaea88da43")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 110.49 54.61)
+		(size 44.45 44.45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "1fb6f9ee-1e8d-5050-b711-feef1b127405")
+		(property "Sheetname" "MCU"
+			(at 110.49 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 110.49 100.33 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 110.49 69.85 180)
+			(uuid "7712a7a4-3bd8-5db7-84fe-b3c67cffd4ca")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 110.49 72.39 180)
+			(uuid "2b06269c-f30a-5a10-bfce-31df4c5ac046")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY1" input
+			(at 154.94 62.23 0)
+			(uuid "f2ae847a-3800-5cc7-b4c1-99eabe2920a9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY2" input
+			(at 154.94 64.77 0)
+			(uuid "39a304df-fbd8-5d77-8689-4b99858be3d4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY3" input
+			(at 154.94 67.31 0)
+			(uuid "067f5690-b412-552c-a541-7eb6713cfb32")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY4" input
+			(at 154.94 69.85 0)
+			(uuid "ba14b4e4-6534-5d5c-b359-353422d6a1e1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY5" input
+			(at 154.94 72.39 0)
+			(uuid "df727b7e-8b18-56ca-bb04-bb122789ccc1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY6" input
+			(at 154.94 74.93 0)
+			(uuid "57193a43-911e-5519-bffe-223396eb4b04")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY7" input
+			(at 154.94 77.47 0)
+			(uuid "69245345-3c36-5b2b-a19b-fe877f841a9a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY8" input
+			(at 154.94 80.01 0)
+			(uuid "44f670db-e3eb-5e04-b6a7-5e78c001a3b1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "KEY9" input
+			(at 154.94 82.55 0)
+			(uuid "7936dcb7-05a7-5835-8e3f-b90acddcdd2e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ENC_A" input
+			(at 154.94 85.09 0)
+			(uuid "09f2fc0f-ee50-5bbf-984f-082fd4522a4e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ENC_B" input
+			(at 154.94 87.63 0)
+			(uuid "79d88dde-0010-524b-a8cc-f5ce238e85c1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ENC_SW" input
+			(at 154.94 90.17 0)
+			(uuid "d253eb57-6c37-54dc-93dd-db0f6c25f232")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "LED_DATA" output
+			(at 154.94 92.71 0)
+			(uuid "65b34bab-df71-58a8-b25a-5b033b733cc7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 199.39 54.61)
+		(size 44.45 44.45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "4ef6076f-069d-563f-9a12-c0d72ba05536")
+		(property "Sheetname" "Keys & LEDs"
+			(at 199.39 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "keys.kicad_sch"
+			(at 199.39 100.33 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "KEY1" output
+			(at 199.39 62.23 180)
+			(uuid "5b472140-7ae3-5ead-808a-ebb1a727ccdb")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY2" output
+			(at 199.39 64.77 180)
+			(uuid "1fc9f334-ba90-5866-bdf7-c7c44dedd51b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY3" output
+			(at 199.39 67.31 180)
+			(uuid "d209f5d2-cd98-5960-be91-4734e0943f1c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY4" output
+			(at 199.39 69.85 180)
+			(uuid "4ee7e025-6538-58bb-8291-bb9bb5912c86")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY5" output
+			(at 199.39 72.39 180)
+			(uuid "7b5ef105-7541-5b0c-92be-64d0d529d01e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY6" output
+			(at 199.39 74.93 180)
+			(uuid "a69aa372-7d41-5ba6-afe2-bdcd79a226c4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY7" output
+			(at 199.39 77.47 180)
+			(uuid "3aeb0864-d942-5eec-afbf-0c32de25d6ed")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY8" output
+			(at 199.39 80.01 180)
+			(uuid "e5101cf1-0319-5e05-adaf-b2b59ccac096")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "KEY9" output
+			(at 199.39 82.55 180)
+			(uuid "d6fe3bd5-7cda-55de-9d17-dd643d295c3a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_A" output
+			(at 199.39 85.09 180)
+			(uuid "f65a8584-e06e-57bf-be0a-8959a489d97e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_B" output
+			(at 199.39 87.63 180)
+			(uuid "c15fb530-4cca-5a41-9914-d32a42eec409")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_SW" output
+			(at 199.39 90.17 180)
+			(uuid "2fa1b6ad-2704-5a49-9499-4435f0f12b95")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "LED_DATA" input
+			(at 199.39 92.71 180)
+			(uuid "d0505c98-bb15-5407-b6d5-cc3cf49e7512")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13"
+					(page "4")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 69.85 69.85)
+			(xy 110.49 69.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "87a77ced-d80c-5817-9d37-7c775098c384")
+	)
+	(wire
+		(pts
+			(xy 69.85 72.39)
+			(xy 110.49 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "37682e06-acca-5867-b377-6a93a5cab7d8")
+	)
+	(wire
+		(pts
+			(xy 154.94 62.23)
+			(xy 199.39 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5aebdf05-22fe-50b9-a5e2-c527520c10bd")
+	)
+	(wire
+		(pts
+			(xy 154.94 64.77)
+			(xy 199.39 64.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d40f7bb6-d959-5002-acad-2a66f05db838")
+	)
+	(wire
+		(pts
+			(xy 154.94 67.31)
+			(xy 199.39 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6aad5a76-83c1-58e9-b17f-f79fda230573")
+	)
+	(wire
+		(pts
+			(xy 154.94 69.85)
+			(xy 199.39 69.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "41613fa2-19c6-5c92-980d-b8ff4df5989c")
+	)
+	(wire
+		(pts
+			(xy 154.94 72.39)
+			(xy 199.39 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "17561474-8b8e-58ba-a29b-e213077e33d3")
+	)
+	(wire
+		(pts
+			(xy 154.94 74.93)
+			(xy 199.39 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "29e92d61-35e7-55e6-97fb-a47f5e1e93ff")
+	)
+	(wire
+		(pts
+			(xy 154.94 77.47)
+			(xy 199.39 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "84f30fdb-065d-5f9b-9344-b86e7ef9cf7e")
+	)
+	(wire
+		(pts
+			(xy 154.94 80.01)
+			(xy 199.39 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dc3081f9-90ed-550d-b6bf-d914dab2ec00")
+	)
+	(wire
+		(pts
+			(xy 154.94 82.55)
+			(xy 199.39 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9d8fc31b-9d46-50ab-a2c8-e95518ca9231")
+	)
+	(wire
+		(pts
+			(xy 154.94 85.09)
+			(xy 199.39 85.09)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fb64f969-6cb5-5e87-8f89-f62e99ab06c7")
+	)
+	(wire
+		(pts
+			(xy 154.94 87.63)
+			(xy 199.39 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "babcbcd4-0cbc-50ba-a860-6b45cd5ddd6e")
+	)
+	(wire
+		(pts
+			(xy 154.94 90.17)
+			(xy 199.39 90.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "630a50a8-f397-5e81-8cbe-34ef769c053b")
+	)
+	(wire
+		(pts
+			(xy 154.94 92.71)
+			(xy 199.39 92.71)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e81cac0e-d2fb-5754-8043-ff6e4e04dc66")
+	)
+	(text "Power: VBUS -> 500 mA polyfuse -> +5V (LEDs, level shifter) -> AP2112K -> +3V3 -> RP2040 core regulator -> +1V1"
+		(exclude_from_sim no)
+		(at 25.4 119.38 0)
+		(effects
+			(font
+				(size 1.4 1.4)
+			)
+			(justify left bottom)
+		)
+		(uuid "38dbdbd5-09b2-5132-ac48-7c85708fa68d")
+	)
+	(text "GPIO: ENC_SW=GP0, ENC_B=GP1, ENC_A=GP2, KEY9=GP3, KEY6=GP4, KEY3=GP5, KEY8=GP9, KEY5=GP10, KEY2=GP11, KEY7=GP26, KEY4=GP27, LED_DATA=GP28, KEY1=GP29"
+		(exclude_from_sim no)
+		(at 25.4 125.73 0)
+		(effects
+			(font
+				(size 1.4 1.4)
+			)
+			(justify left bottom)
+		)
+		(uuid "63b6d183-d3c8-5f34-81aa-c950e03cddbf")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
