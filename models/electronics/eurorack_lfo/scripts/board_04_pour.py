@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["numpy", "scipy", "shapely"]
+# dependencies = ["shapely"]
 # ///
 """Step 4: GND pours on both copper layers over the whole board (0.25 mm clearance, thermal reliefs), stitching
 vias on a 4 mm grid wherever a via fits clear of every other net, then KiCad's zone refill.
@@ -8,10 +8,10 @@ Run: cad run scripts/board_04_pour.py"""
 import sys
 from pathlib import Path
 
-import numpy as np
+from shapely.geometry import LineString, Point, Polygon
+from shapely.ops import unary_union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from assist_route import G, NX, NY, Board  # noqa: E402
 from boardlib import BOARD, H, W, X0, Y0  # noqa: E402
 
 from cad import kicad_pcb  # noqa: E402
@@ -22,40 +22,48 @@ from kicode.util.units import from_mm  # noqa: E402
 
 STITCH = 4.0
 INSET = 0.3
+# The stitching via (0.8/0.4) and the board's rules (twin_orbit.kicad_pro): 0.2 mm from other nets' copper, 0.5 mm
+# hole to hole, 0.3 mm copper to edge; SLACK covers the board index's pad chords (within 0.008 mm of KiCad's).
+VIA_R, DRILL_R, CLEARANCE, HOLE_TO_HOLE, EDGE, SLACK = 0.4, 0.2, 0.2, 0.5, 0.3, 0.02
 
 
-def stitch_points(board_read):
-    B = Board(board_read)
-    for t in board_read.tracks:
-        for a, b in zip(t.points, t.points[1:]):
-            B.add_track(t.layer, (a[0] - X0, a[1] - Y0), (b[0] - X0, b[1] - Y0), t.width, B.nid(t.net))
-    for v in board_read.vias:
-        if v.net != "GND":
-            B.add_via((v.at[0] - X0, v.at[1] - Y0), B.nid(v.net))
-    ok = B.free(B.nid("GND"), 0.25)["via"].copy()
-    from shapely.geometry import Point as _P
-    from assist_route import raster
-    for part in board_read.parts:
-        for pad in part.pads:
-            if pad.drill:
-                ok &= ~raster(_P(pad.at[0] - X0, pad.at[1] - Y0).buffer(pad.drill / 2 + 0.2 + 0.5 + 0.2))
-    for v in [v for v in board_read.vias if v.net != "GND"]:
-        ok &= ~raster(_P(v.at[0] - X0, v.at[1] - Y0).buffer(0.2 + 0.5 + 0.2 + 0.1))
-    # keep stitching clear of GND pads too (no via in a pad) and of each other
+def stitch_points(board):
+    """The stitching sites: on a 4 mm grid, the first spot within 1.5 mm of each grid point where a GND via is in
+    no pad, on no GND track, clear of every other net's copper and every hole, in no keepout, inside the edge.
+    A GND via that a GND track ends at is a tie's (board_03_route.py) and blocks like any hole; the others are
+    this step's own stitching, made again here, so they block nothing."""
+    ends = {end for track in board.tracks if track.net == "GND" for end in (track.points[0], track.points[-1])}
+    blocked = []
+    for pad in board.pads:
+        blocked.append(Polygon(pad.polygon).buffer(VIA_R + (CLEARANCE if pad.net != "GND" else 0.0) + SLACK))
+        if pad.drill:
+            blocked.append(Point(pad.at).buffer(pad.drill / 2 + HOLE_TO_HOLE + DRILL_R + SLACK))
+    for track in board.tracks:
+        keep = CLEARANCE if track.net != "GND" else 0.0
+        blocked.append(LineString(track.points).buffer(track.width / 2 + keep + VIA_R + SLACK))
+    for via in board.vias:
+        if via.net != "GND":
+            blocked.append(Point(via.at).buffer(max(via.diameter / 2 + CLEARANCE + VIA_R,
+                                                    via.drill / 2 + HOLE_TO_HOLE + DRILL_R) + SLACK))
+        elif via.at in ends:
+            blocked.append(Point(via.at).buffer(via.drill / 2 + HOLE_TO_HOLE + DRILL_R + SLACK))
+    for hole in board.holes:
+        blocked.append(Point(hole.at).buffer(hole.diameter / 2 + HOLE_TO_HOLE + DRILL_R + SLACK))
+    for area in board.rule_areas:
+        blocked.append(Polygon(area.outline).buffer(VIA_R + SLACK))
+    taken = unary_union(blocked)
+    room = Polygon(board.outline[0]).buffer(-(EDGE + VIA_R + SLACK))
+    offsets = (0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5)
     pts = []
-    for y in np.arange(2.0, H - 1.5, STITCH):
-        for x in np.arange(2.0, W - 1.5, STITCH):
-            best = None
-            for dy in (0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5):
-                for dx in (0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5):
-                    i, j = int(round((x + dx) / G)), int(round((y + dy) / G))
-                    if 0 <= i < NX and 0 <= j < NY and ok[j, i] and all(B.cu[L][j, i] == 0 for L in B.cu):
-                        best = (round((x + dx), 2), round((y + dy), 2))
-                        break
-                if best:
+    for k in range(int((H - 3.5) // STITCH) + 1):
+        for i in range(int((W - 3.5) // STITCH) + 1):
+            x, y = 2.0 + i * STITCH, 2.0 + k * STITCH
+            for dy in offsets:
+                site = next(((round(x + dx, 2), round(y + dy, 2)) for dx in offsets
+                             if room.contains(p := Point(X0 + x + dx, Y0 + y + dy)) and not taken.intersects(p)), None)
+                if site:
+                    pts.append(site)
                     break
-            if best:
-                pts.append(best)
     return pts
 
 
@@ -94,7 +102,10 @@ with kicad_pcb.edit(BOARD) as b:
     for z in olds:
         settings(z)
     b.update_items(olds)
-    old_v = [v for v in b.get_vias() if v.net.name == "GND"]
+    ends = {(round(p.x / 1e6, 4), round(p.y / 1e6, 4)) for t in b.get_tracks() if t.net.name == "GND"
+            for p in (t.start, t.end)}
+    old_v = [v for v in b.get_vias() if v.net.name == "GND"
+             and (round(v.position.x / 1e6, 4), round(v.position.y / 1e6, 4)) not in ends]  # the ties' vias stay
     if old_v:
         b.remove_items(old_v)
     have_v = set()
