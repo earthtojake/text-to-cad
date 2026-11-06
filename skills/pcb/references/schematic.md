@@ -141,8 +141,10 @@ KiCad's libraries, is what a row of `${KICAD10_SYMBOL_DIR}/Device.kicad_sym` rea
 
 **Fragile on this nightly** (KiCad 10.99 over IPC; check the saved file after each):
 
-- A sheet symbol made over IPC that reuses another sheet's file makes the next save fail: make each new
-  sheet's file its own, or place repeated sheets in KiCad.
+- A sheet symbol made over IPC (`create_items(SheetSymbol())`) cannot be saved, whether its file is there
+  or not: KiCad looks for the new sheet's file inside a folder named after the root's file, and its save
+  fails ("failed to save schematic"). The edit then raises with KiCad's words, and every file is as it
+  was. Write a hierarchy as text, as below, then fill its sheets over IPC.
 - Updating a placed symbol (`update_items`) can detach it from its library: read the file back and check
   its `lib_id` after moving or changing one.
 - A line ending (an arrow) set over IPC is lost on save.
@@ -153,6 +155,27 @@ Editing the `.kicad_sch` as text (KiCad's
 API cannot do: keep every `uuid` (references and the board's links to its symbols are made of them), give
 a new symbol its `lib_symbols` entry and its reference in the `instances` entry for its sheet's path.
 After each edit, read it back, draw it and check it.
+
+**A hierarchy.** Each sheet is a block in its parent, written as text with a new uuid, a pin for each
+hierarchical label inside, and its page under the root's uuid:
+
+```
+(sheet (at 101.6 50.8) (size 25.4 15.24) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+  (stroke (width 0.1524) (type solid)) (fill (color 0 0 0 0.0000)) (uuid "<new uuid>")
+  (property "Sheetname" "Power" (at 101.6 50.1 0) (effects (font (size 1.27 1.27)) (justify left bottom)))
+  (property "Sheetfile" "power.kicad_sch" (at 101.6 66.68 0) (effects (font (size 1.27 1.27)) (justify left top)))
+  (pin "VIN" input (at 101.6 55.88 180) (uuid "<new uuid>") (effects (font (size 1.27 1.27)) (justify left)))
+  (instances (project "<project>" (path "/<root's uuid>" (page "2")))))
+```
+
+and the sheet's own file beside the root, `(kicad_sch (version 20250114) (generator "eeschema") (uuid
+"<new uuid>") (paper "A4") (lib_symbols) (embedded_fonts no))`. Then fill each sheet in an edit of the
+root: `sheet = next(item for item in s.get_hierarchy() if item.name == "Power")`, and
+`s.for_sheet(sheet)` places its symbols, wires and its `VIN` hierarchical label, and saves. A sheet used
+twice is two blocks naming one file, each of its symbols then holding a reference for each block's path
+in its `instances`. A symbol written as text whose library symbol `extends` another is embedded in
+`lib_symbols` flattened, as KiCad saves it: the parent's units and pins under the child's name, with
+every property of the parent's that the child does not set (a lost one is ERC's `lib_symbol_mismatch`).
 
 ## Draw it cleanly
 
@@ -196,8 +219,15 @@ with kicad_sch.edit("board.kicad_sch") as s:
     ...                                       # saved at this block's end
 (netlist,) = kicad_sch.export("board.kicad_sch", "netlist", "tmp").written
 with kicad_pcb.edit("board.kicad_pcb") as b:
-    b.import_netlist(str(netlist))            # dry_run=True first, to see what it would change
+    print(b.import_netlist(str(netlist)).report)  # dry_run=True first, to see what it would change
 ```
+
+`report` is a property, KiCad's account of what the import changed. An import replaces a footprint only
+when the netlist names another library footprint for it, so a project footprint changed in its library
+keeps its old copy on the board, `update_footprints=True` or not. To refresh such parts in place (their
+place, side and nets kept), list the library a second time in the project's `fp-lib-table` under another
+name (`lib_refresh`, the same `uri`), import a copy of the netlist that names them through it
+(`(footprint "lib_refresh:NAME")`), then import the schematic's own netlist again.
 
 A board's and a schematic's edits of one project can also share one block, and one KiCad:
 `with kicad_sch.edit("board.kicad_sch") as s, kicad_pcb.edit("board.kicad_pcb") as b:`, each saved at its

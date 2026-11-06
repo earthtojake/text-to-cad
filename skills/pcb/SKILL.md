@@ -44,8 +44,9 @@ an existing project from an incomplete description.
 
 Change a board through KiCad's IPC API in an edit, a `with` block: `kicad_pcb.edit` hands the block the
 open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`) and saves it at the block's end
-when the block changed it; a block that changes nothing leaves the file byte for byte, and one that
-raises saves nothing (its exception goes on). A board not there yet is made by KiCad, with its project,
+when the block changed it; a block that changes nothing leaves the file byte for byte, one that raises
+saves nothing (its exception goes on), and a save KiCad cannot finish leaves every file as it was,
+saying why. A board not there yet is made by KiCad, with its project,
 and saved. `kicad_sch.edit` does the same for a schematic ([schematic](references/schematic.md#edit-it));
 the two of one project, one inside the other, share one KiCad. Run the script with `cad run board.py`,
 which gives it the `kicad` extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a

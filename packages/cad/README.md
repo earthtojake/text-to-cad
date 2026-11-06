@@ -681,7 +681,8 @@ the file, in private KiCad homes (a person's own KiCad settings and library tabl
 written; `cad.kicad._session`). A file not there yet is made by KiCad, with its project, and saved; an
 existing one is saved at the block's end only when the block changed it (KiCad's own modified state), so a
 block that changes nothing leaves it byte for byte, in its own format; nothing is saved when the block
-raises, and the exception goes on. One KiCad serves a project: the board's and the schematic's edits of one
+raises, and the exception goes on; a save KiCad cannot finish puts back every file it wrote and says why.
+One KiCad serves a project: the board's and the schematic's edits of one
 project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit

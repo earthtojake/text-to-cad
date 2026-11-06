@@ -50,7 +50,21 @@ Updating a footprint through KiCad's IPC API replaces its whole definition (pads
 models) and sets its layer and lock. Edit only footprints read back from the board
 (`b.get_footprints()`), changed and sent with `b.update_items(...)`: KiPy sends their full body. Never
 build a new `FootprintInstance` from an id and a position to update an existing one; it wipes that
-footprint's pads and graphics.
+footprint's pads and graphics. Moving a footprint that owns a zone, and the back side's orientation,
+are [placement](placement.md#move-then-check)'s.
+
+KiPy's traps on this nightly:
+
+- A field is hidden with `field.visible` (`fp.reference_field.visible = False`); `text.attributes.visible`
+  is deprecated and changes nothing.
+- `zone.is_rule_area()` is a method, where its neighbours are properties: `not zone.is_rule_area` is
+  always false.
+- A new `Zone()` has no outline to read (`zone.outline` raises `IndexError`): build one and assign it,
+  `outline = PolygonWithHoles(); outline.outline = line; zone.outline = outline`, `line` a `PolyLine` of
+  `PolyLineNode.from_point(Vector2.from_xy_mm(x, y))` (from `kicode.geometry`).
+- A text's angle set over the API (a footprint field's `text.attributes.angle`, a board text's) reads
+  back changed in the block and is saved as it was. A field turns with its footprint; any other angle
+  is set in the saved file, as text, after the block.
 
 KiCad writes a STEP or GLB export through a temporary file of a fixed name in the output folder, so
 two exports into one folder at once can collide. Give each export (`kicad_pcb.export`, after the block)

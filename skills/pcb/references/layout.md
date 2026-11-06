@@ -7,9 +7,9 @@ board at its block's end, and the next step reads what the last one saved. Each 
 
 ## The method
 
-1. **Start from the schematic.** Export its netlist with KiCad's command line (`kicad-cli sch export
-   netlist -o tmp/board.net board.kicad_sch`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")`
-   in the script), then bring the parts and nets onto the board in an edit:
+1. **Start from the schematic.** Export its netlist (`cad kicad_sch export board.kicad_sch --to netlist
+   -o tmp`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")` in the script), then bring the
+   parts and nets onto the board in an edit:
    `b.import_netlist("tmp/board.net")` (`dry_run=True` first to see what it would change). The
    schematic, not the footprints, says what connects to what.
 2. **Rules before copper.** Set the clearances, netclasses and track widths from the fab's limits and
