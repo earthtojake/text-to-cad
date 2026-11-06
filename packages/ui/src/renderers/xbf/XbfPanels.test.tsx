@@ -182,19 +182,20 @@ function XbfPosition({ kinematics = hingeKinematics, onPose = () => {} }: { kine
 const positionTab = () => document.querySelector<HTMLElement>('[data-flat-panel-section="position"]')!;
 function positionControls() {
   const panel = positionTab();
-  const head = panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!;
   return {
-    head: [document.querySelector('[data-flat-panel-tab="position"] [data-flat-panel-tab-name]')!.textContent, ...[...head.querySelectorAll('button')].map(button => `${button.getAttribute('aria-label')}:${(button as HTMLButtonElement).disabled}`)],
+    head: [document.querySelector('[data-flat-panel-tab="position"] [data-flat-panel-tab-name]')!.textContent,
+      `Reset position:${(panel.querySelector('[data-pose-reset]') as HTMLButtonElement).disabled}`],
     body: [...panel.querySelectorAll('[data-tool-panel-body] button, [data-tool-panel-body] input, [data-tool-panel-body] [role=slider]')]
       .map(element => `${element.getAttribute('role') || element.tagName.toLowerCase()}:${element.getAttribute('aria-label')}:${(element as HTMLInputElement).value ?? ''}`)
   };
 }
 
-it("Position is a STEP's -- its heading, its Pose row, a named slider and value per joint -- through a configuration and back", async () => {
+it("Position is a STEP's -- its heading, its Pose row with Reset on it, a named slider and value per joint -- through a configuration and back", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   render(<XbfPosition />);
   const states: unknown[] = [positionControls()];
   const panel = positionTab();
+  expect(within(panel).getByRole('button', { name: 'Reset position' }).closest('[data-pose-row]')).toBe(within(panel).getByRole('button', { name: /^Pose: / }).closest('[data-pose-row]'));
   await user.click(within(panel).getByRole('button', { name: /^Pose: / }));
   const menu = document.querySelector<HTMLElement>('[role=menu][aria-label="Pose"]')!;
   states.push(within(menu).getAllByRole('menuitemradio').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`));
@@ -204,11 +205,11 @@ it("Position is a STEP's -- its heading, its Pose row, a named slider and value 
   await user.clear(value);
   await user.type(value, '25{Enter}');
   states.push(positionControls());
-  await user.click(within(panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
   states.push(positionControls());
-  // The tab (Reset is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it.
+  // The tab (Reset, in the Pose row, is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it.
   const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`],
-    body: [`button:Pose: ${pose}:`, `input:hinge slider value:${value}`, 'slider:hinge:'] });
+    body: [`button:Pose: ${pose}:`, 'button:Reset position:', `input:hinge slider value:${value}`, 'slider:hinge:'] });
   expect(states).toEqual([shown('Default', '0.00°', true), ['Default:true', 'open:false'], shown('open', '90.0°', false),
     shown('Custom', '25.0°', false), shown('Default', '0.00°', true)]);
 });
@@ -312,7 +313,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   expect(onPose.mock.lastCall![0]).toEqual(pose(90, 100, 70));
   await setValue(user, panel, 'index_curl', '0.2');
   expect(onPose.mock.lastCall![0]).toEqual(pose(18, 20, 14));
-  await user.click(within(panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
   expect(valueOf(panel, 'index_curl')).toBe('0.00');
   expect(onPose.mock.lastCall![0]).toEqual(pose(0, 0, 0));
 });

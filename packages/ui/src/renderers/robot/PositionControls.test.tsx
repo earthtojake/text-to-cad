@@ -19,7 +19,7 @@ const render = (controls: React.ReactElement) => mount(<FlatPanel mode="docked" 
 const poseLabel = () => screen.getByRole('button', { name: /^Pose: / }).getAttribute('aria-label');
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 
-it('opens on the pose row, full width over a slider per joint a person can drive, and Reset at the tab\'s top', () => {
+it('opens on the pose row, full width over a slider per joint a person can drive, and Reset at the pose row\'s end', () => {
   const pose = createPoseStore(fixturePayload('arm.urdf'));
   render(<PositionControls pose={pose}/>);
   // One tab's rows: the Position list around them is the panel's only one, so no row of tabs, and no heading of its own.
@@ -30,9 +30,10 @@ it('opens on the pose row, full width over a slider per joint a person can drive
   // A slide in metres reads in millimetres.
   expect([field('shoulder', 'deg').value, field('lift', 'mm').value]).toEqual(['0°', '0 mm']);
   expect(screen.queryByRole('textbox', { name: /camera_mount|grip_mirror/ })).toBeNull();
-  // Reset is the head's, idle at the default pose, and takes a moved joint back.
+  // Reset is the pose row's, beside the dropdown on one line with nothing above, idle at the default pose, and takes a moved joint back.
   const reset = screen.getByRole('button', { name: 'Reset position' });
-  expect([reset.closest('[data-tool-panel-head-slot]') !== null, (reset as HTMLButtonElement).disabled]).toEqual([true, true]);
+  expect([reset.closest('[data-pose-row]'), (reset as HTMLButtonElement).disabled]).toEqual([screen.getByRole('button', { name: /^Pose: / }).closest('[data-pose-row]'), true]);
+  expect(document.querySelector('[data-tool-panel-head-slot]')!.children.length).toBe(0);
   act(() => { pose.write('shoulder', 30); });
   expect([poseLabel(), (reset as HTMLButtonElement).disabled]).toEqual(['Pose: Custom', false]);
   fireEvent.click(reset);

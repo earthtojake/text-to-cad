@@ -15,7 +15,7 @@ import { useI18n } from "@cad/ui/i18n";
 
 // An engine document's Position: the view's panel's tab exactly as a STEP's is (the STEP
 // renderer's `PoseControlsSection.js` and `MotionControlsSection.js`, copied: one again at the
-// renderers' migration) -- headed "Position", Reset in its heading, the Pose row (Default, the
+// renderers' migration) -- headed "Position", the Pose row with its Reset (Default, the
 // document as built, then its configurations), then a slider per coupling (a constraint moving
 // several joints by ratio, 0 as built, over the range its joints' limits leave it), then a slider
 // per value of every other pair: an angle for a revolute pair, a distance for a prismatic one,

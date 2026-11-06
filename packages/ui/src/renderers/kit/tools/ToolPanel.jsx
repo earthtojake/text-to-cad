@@ -92,7 +92,7 @@ const HeadSlotContext = createContext(null);
 
 /**
  * A control of a section's body drawn in its head: a row at the top of its tab in the view's panel
- * (Position's Reset, the Model tree's Show all). Nothing outside a tab.
+ * (the Model tree's Show all). Nothing outside a tab.
  */
 export function ToolPanelHeadAction({ children }) {
   const slot = useContext(HeadSlotContext);
@@ -107,7 +107,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const kept = Boolean(stack && id);
   // In a view's panel (`kit/shell/FlatPanel.jsx`) a panel is one of its tabs: its name the tab's, its
   // body the tab's page, shown while its tab is open (or while the panel's search is up, under its
-  // name, left out when it holds no match), its head's actions (Position's Reset) a row at its top.
+  // name, left out when it holds no match), its head's actions a row at its top.
   const tabbed = Boolean(stack?.tabbed);
   if (tabbed) collapsible = false;
   const registerTab = tabbed ? stack.register : null;
@@ -226,7 +226,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
       id={`flat-panel-body-${id}`} aria-labelledby={stack.single ? undefined : `flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
       className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
       {searching && !stack.single ? <h3 className="flex h-6 items-center px-4 text-tiny text-muted-foreground">{tabName}</h3> : null}
-      {/* What its body puts in its head (Position's Reset, the Model tree's Show all), at the tab's top-right. */}
+      {/* What its body puts in its head (the Model tree's Show all), at the tab's top-right. */}
       <div ref={setHeadSlot} className="flex items-center justify-end gap-0.5 px-2 empty:hidden" data-tool-panel-head-slot="">{actions}</div>
       <div ref={body} data-tool-panel-body="" className={cn("min-w-0", fit !== "tree" && "px-2")}>
         <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>

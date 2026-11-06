@@ -933,8 +933,9 @@ under every tool: a STEP's where the file has joints to move, a
 robot's where a joint can be driven. Its knobs in the viewport are Select's, while Select's
 filter ticks Position, and only while the parts are where the pose puts them: over an explosion
 Select draws no knobs (the section's controls stay, and using them takes Explode off). Its
-heading holds **Reset position** before its X, idle while the joints are at their default. Its
-first row is the pose, a dropdown the panel's width (`KinematicsPoseRow`, `data-pose-row`):
+first row is the pose (`KinematicsPoseRow`, `data-pose-row`): a dropdown over the rest of the
+panel's width and, at the row's right end, **Reset position**, a 20px icon button idle while the
+joints are at their default; nothing sits above the row, in a tab or not. The dropdown holds
 **Default**, which puts the joints back, then the named poses, and Custom while the joints are
 set by hand. No divider under the pose row and no Reset footer.
 Each joint is Figma's property row (`FileSheetSliderField`): its first line (20px) the joint's
