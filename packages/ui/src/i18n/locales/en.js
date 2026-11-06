@@ -762,6 +762,8 @@ export default {
   "tree.modelTreeArea": "Model tree area",
   "tree.isolation": "Isolation",
   "tree.isolated": "Isolated: {names}",
+  "tree.hiddenCount": "{count} hidden",
+  "tree.hiddenParts": "Hidden parts",
   "tree.searchResults": "Model search results",
   "tree.noPartMatch": "No part matches “{query}”",
   "tree.model": "Model",

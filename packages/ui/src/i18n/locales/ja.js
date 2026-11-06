@@ -734,6 +734,8 @@ export default {
   "tree.modelTreeArea": "モデルツリーの領域",
   "tree.isolation": "分離表示",
   "tree.isolated": "分離表示中: {names}",
+  "tree.hiddenCount": "{count} 件非表示",
+  "tree.hiddenParts": "非表示のパーツ",
   "tree.searchResults": "モデルの検索結果",
   "tree.noPartMatch": "「{query}」に一致するパーツはありません",
   "tree.model": "モデル",

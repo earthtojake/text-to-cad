@@ -4,8 +4,8 @@ import { Eye } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
-  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides,
-  TreeRowLabel, TreeRowSurface, treeRowActionsClass, useTreeRowHeight
+  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph,
+  TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
 import { TreeFilterHighlight } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
@@ -18,13 +18,11 @@ import VirtualRows, { revealRow } from "./VirtualRows.jsx";
 
 const EMPTY = Object.freeze([]);
 const NONE = new Set();
-// The room the eye takes at a row's right end: the row's `--row-actions`.
-const ROW_ACTIONS_WIDTH = "1.5rem";
 // A part or a net can be isolated; a pin or a pad is seen with its part, a group is many things.
 const isolable = node => node.kind === "part" || node.kind === "net";
 function KindGlyph({ kind, glyphs }) {
   const Glyph = glyphs[kind] || glyphs.pad;
-  return <Glyph className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} />;
+  return <TreeRowGlyph><Glyph className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>;
 }
 const additive = event => event.shiftKey || event.metaKey || event.ctrlKey;
 
@@ -36,8 +34,7 @@ const additive = event => event.shiftKey || event.metaKey || event.ctrlKey;
 function IsolateEye({ node, on, onToggle, data }) {
   const { t } = useI18n();
   const action = on ? t("tree.exitIsolate") : t("tree.isolate");
-  // Its glyph ends on the panel's line, 16px in: the row's 8px, and 6px and the button's 2px inside it.
-  return <div data-row-actions="" className={cn(treeRowActionsClass(on), "pr-1.5")}>
+  return <TreeRowActions persistent={on}>
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(on ? "tree.exitIsolateNamed" : "tree.isolateNamed", { name: node.label })} aria-pressed={on}
         className={cn("h-5 w-4", on ? "text-foreground" : "text-muted-foreground")} {...{ [`data-${data}-isolate`]: node.id }}
@@ -45,7 +42,7 @@ function IsolateEye({ node, on, onToggle, data }) {
         <Eye className="size-3" aria-hidden="true" />
       </Button>
     </TooltipHint>
-  </div>;
+  </TreeRowActions>;
 }
 
 // The tree as the rows it draws, top to bottom: each open branch's children follow it, one level deeper.
@@ -63,10 +60,10 @@ function visibleRows(roots, expanded) {
 }
 
 // One row of a list: a block (a schematic sheet, or a kind), a group (the unconnected pins), a part or a net, with one
-// glyph in one column — a branch's chevron, a leaf's own — its name, its muted detail, and a part's or net's eye.
-// A block's name opens or shuts it, as a folder's (its menu's Select all parts selects every part in it);
-// a group's name is a label, and does nothing. Any other branch opens or shuts by its chevron, as the model tree's.
-const ROW_NAME_CLASS = "flex h-full min-w-0 flex-1 items-center gap-1 pr-2 text-left";
+// glyph in its slot — a branch's chevron, a leaf's own — its name, its muted detail, and a part's or net's eye.
+// A block's name opens or shuts it, as a folder's (its menu's Select all parts selects every part in it), and so
+// does a press on its chevron; a group's name is a label, and does nothing. Any other branch opens or shuts by
+// its chevron, as the model tree's.
 function RowName({ node }) {
   return <>
     <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
@@ -89,28 +86,20 @@ function CircuitRow({ node, depth, branch, open, selected, holds, isolated, togg
   const block = node.kind === "block";
   const pickable = node.kind !== "group" && !block;
   const eye = isolable(node);
-  return <RowMenu node={node} menuOf={node.kind === "group" ? null : menuOf}><TreeRowSurface dense active={selected} cursor={holds} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
-    data-holds-selection={holds ? "" : undefined}
-    style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
+  const toggleLabel = t(open ? "tree.collapse" : "tree.expand", { name: node.label });
+  return <RowMenu node={node} menuOf={node.kind === "group" ? null : menuOf}><TreeRowSurface dense depth={depth} actions={eye ? 1 : 0} active={selected} cursor={holds}
+    className="group/row" {...{ [`data-${data}-row`]: node.id }} data-holds-selection={holds ? "" : undefined}
     onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
-    <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
-    {branch && !block ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
-      className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node)}>
-      <TreeRowChevron expanded={open} />
-    </button> : null}
+    {/* A block's chevron is its name's button's too: the pointer's, the keyboard's way in being the name. */}
+    {branch ? <TreeRowToggle open={open} label={toggleLabel} mark={block} onToggle={() => toggle(node)} /> : <KindGlyph kind={node.kind} glyphs={glyphs} />}
     {pickable ? <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected}
       onClick={event => choose(node, event)} onDoubleClick={() => frame(node)}
-      className={cn(ROW_NAME_CLASS, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        branch && "pl-1", eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
-      {branch ? null : <KindGlyph kind={node.kind} glyphs={glyphs} />}
+      className={cn(TREE_ROW_NAME_CLASS, eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
       <RowName node={node} />
-    </button> : block ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
-      onClick={() => toggle(node)} {...{ [`data-${data}-block`]: node.id }}
-      className={cn(ROW_NAME_CLASS, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
-      {/* The block's one button, chevron and name: it opens or shuts, as a folder's row. */}
-      <span className="grid h-6 w-3 shrink-0 place-items-center" aria-hidden="true"><TreeRowChevron expanded={open} /></span>
+    </button> : block ? <button type="button" aria-label={toggleLabel} aria-expanded={open}
+      onClick={() => toggle(node)} {...{ [`data-${data}-block`]: node.id }} className={TREE_ROW_NAME_CLASS}>
       <RowName node={node} />
-    </button> : <span className={cn(ROW_NAME_CLASS, "cursor-default", branch && "pl-1")} {...{ [`data-${data}-group`]: node.id }}>
+    </button> : <span className={cn(TREE_ROW_NAME_CLASS, "cursor-default")} {...{ [`data-${data}-group`]: node.id }}>
       <RowName node={node} />
     </span>}
     {eye ? <IsolateEye node={node} on={isolated} onToggle={onIsolate} data={data} /> : null}
@@ -123,12 +112,11 @@ function CircuitSearchRow({ match, selected, isolated, cursor, choose, frame, ho
   const { t } = useI18n();
   const { entry, indices, alias } = match, { node } = entry;
   const eye = isolable(node);
-  return <RowMenu node={node} menuOf={menuOf}><TreeRowSurface dense active={selected} cursor={cursor} className="group/row relative gap-0 pr-0"
-    style={eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : undefined} onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
-    <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} onDoubleClick={() => frame(node)} style={{ paddingLeft: TREE_ROW_INSET_PX }}
-      className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
-      <KindGlyph kind={node.kind} glyphs={glyphs} />
+  return <RowMenu node={node} menuOf={menuOf}><TreeRowSurface dense depth={0} actions={eye ? 1 : 0} active={selected} cursor={cursor} className="group/row"
+    onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
+    <KindGlyph kind={node.kind} glyphs={glyphs} />
+    <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} onDoubleClick={() => frame(node)}
+      className={cn(TREE_ROW_NAME_CLASS, eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
       <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label} /></TreeRowLabel>
       <TreeRowLabel className="flex-1 text-micro text-muted-foreground">
         {alias ? <TreeFilterHighlight indices={alias.indices} text={alias.text} /> : node.detail || entry.prefix.slice(0, -1)}
@@ -172,7 +160,8 @@ export function treeAncestors(tree, id) {
  * lit; a pick with no row moves nothing, and a press in the list
  * opens and scrolls nothing (its row is in view). One block follows the pick: what a reveal opens is
  * kept apart from the person's shape (`followed`), and the next reveal that goes elsewhere shuts it
- * again, so the list is the shape the person left and at most the one chain the latest pick opened. A
+ * again, as does nothing being selected, so the list is the shape the person left and at most the one
+ * chain the latest pick opened. A
  * block of that chain the person opens or shuts is theirs from then on. Only a list on screen follows
  * (`useFlatPanel()`'s `shown`, its rows not stepped aside for a search): one hidden, or under a
  * collapsed panel, waits, and reveals the pick's row once it is shown. The viewer is read-only:
@@ -316,7 +305,8 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   // A pick made anywhere but here brings its row into view, once: its own row, else the one it is under.
   // The rows above it that the person's shape has shut open as the one chain followed, which shuts the
   // last pick's chain; a press in the list (above) is marked revealed as it is made, and moves nothing.
-  // Nothing selected, or a pick with no row here, leaves what the last reveal opened as it is.
+  // Nothing selected shuts what the last reveal opened, the person's shape left as it is; a pick with no
+  // row here leaves it open.
   const rowElements = useRef(new Map());
   const registerRow = useCallback((key, element) => { if (element) rowElements.current.set(key, element); else rowElements.current.delete(key); }, []);
   const target = useMemo(() => {
@@ -333,6 +323,8 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   }, [selected, target]);
   // A list on screen follows: its tab the one shown, its panel open, its rows not stepped aside for a search.
   const following = flatPanel?.shown !== false && !searching;
+  const nothing = selected.length === 0;
+  useEffect(() => { if (nothing) setFollowed(NONE); }, [nothing]);
   useEffect(() => {
     if (!target) { revealed.current = null; return; }
     if (!following || revealed.current === target) return;
@@ -358,12 +350,12 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
       choose={choose} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
   };
   return <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
-    <div ref={listRef} className="px-2" onClick={event => {
+    <div ref={listRef} onClick={event => {
       // A row menu's item is a portal's: its click reaches here through React, from outside the list.
       if (event.currentTarget.contains(event.target) && !event.target.closest("li,button,input")) clear();
     }}>
       {searching ? matches.length ? <div data-flat-panel-hit="">
-        {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground">
+        {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground" data-tree-status="">
           {t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() })}
         </p> : null}
         <VirtualRows key="search" aria-label={panel.resultsLabel} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}

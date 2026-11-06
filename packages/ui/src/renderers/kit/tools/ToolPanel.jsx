@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
@@ -87,27 +86,15 @@ const REVEAL_CLASS = "animate-in fade-in-0 zoom-in-75 duration-150 motion-reduce
  *   without; the chevron, the X and the grip take their names from it, unless the X says
  *   what it does itself (`closeLabel`, "Clear selection").
  */
-// Where a section's body puts a control in its heading (`ToolPanelHeadAction`).
-const HeadSlotContext = createContext(null);
-
-/**
- * A control of a section's body drawn in its head: a row at the top of its tab in the view's panel
- * (the Model tree's Show all). Nothing outside a tab.
- */
-export function ToolPanelHeadAction({ children }) {
-  const slot = useContext(HeadSlotContext);
-  return slot ? createPortal(children, slot) : null;
-}
-
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, collapsible = true, onClose = null, closeLabel = "",
   fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, lead = false, children }) {
   const { t } = useI18n();
-  const [headSlot, setHeadSlot] = useState(null);
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
   // In a view's panel (`kit/shell/FlatPanel.jsx`) a panel is one of its tabs: its name the tab's, its
   // body the tab's page, shown while its tab is open (or while the panel's search is up, under its
-  // name, left out when it holds no match), its head's actions a row at its top.
+  // name, left out when it holds no match). It draws no heading and pads nothing: the panel's body
+  // stands its rows on the panel's lines.
   const tabbed = Boolean(stack?.tabbed);
   if (tabbed) collapsible = false;
   const registerTab = tabbed ? stack.register : null;
@@ -225,11 +212,9 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role={stack.single ? "region" : "tabpanel"}
       id={`flat-panel-body-${id}`} aria-labelledby={stack.single ? undefined : `flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
       className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-      {searching && !stack.single ? <h3 className="flex h-6 items-center px-4 text-tiny text-muted-foreground">{tabName}</h3> : null}
-      {/* What its body puts in its head (the Model tree's Show all), at the tab's top-right. */}
-      <div ref={setHeadSlot} className="flex items-center justify-end gap-0.5 px-2 empty:hidden" data-tool-panel-head-slot="">{actions}</div>
-      <div ref={body} data-tool-panel-body="" className={cn("min-w-0", fit !== "tree" && "px-2")}>
-        <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+      {searching && !stack.single ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{tabName}</h3> : null}
+      <div ref={body} data-tool-panel-body="" className="min-w-0">
+        <div ref={content} className="flow-root">{children}</div>
       </div>
     </section>;
   }
@@ -242,9 +227,9 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     {collapsed && heading ? null : header}
     {/* A panel that gives way scrolls in the chrome's one scroll region; a fixed one never scrolls. */}
     {fit === "fixed" ? <div ref={body} hidden={collapsed} data-tool-panel-body="" className="min-w-0 overflow-x-clip rounded-b-md">
-      <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+      <div ref={content} className="flow-root">{children}</div>
     </div> : <ScrollArea hidden={collapsed} className="min-w-0 flex-1 rounded-b-md" viewportRef={body} viewportProps={{ "data-tool-panel-body": "" }}>
-      <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+      <div ref={content} className="flow-root">{children}</div>
     </ScrollArea>}
     {/* The person's to size, from its bottom-right corner alone: Quick Edit's grip, inside the
         panel's border, moving both its width and its cap. A folded panel has none: there is no

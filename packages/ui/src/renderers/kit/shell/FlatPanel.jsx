@@ -107,11 +107,13 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
 }
 
 // The panel's two lines, the same on both sides (Figma's): every box in its head and lists — the search
-// field, the collapse button, a tab's button, a row — runs 8px from each edge (`SURFACE_PX`), and
-// what is read in them starts on the line 16px in (`CONTENT_PX`): the search icon, a tab's name, a
-// row's first glyph, a settings label.
-const CONTENT_PX = 16;
+// field, the collapse button, a tab's button, a row's background — runs 8px from each edge
+// (`SURFACE_PX`: the head's padding, and the body's and the detail's, so no tab or list pads itself),
+// and what is read in them starts on the line 16px in: the search icon, a tab's name, a row's first
+// glyph (`--tree-row-pad`, the row's 8px inside the body's), a heading, a settings label; at the
+// right a row's last action's glyph ends 16px in (`--tree-row-actions-pad`).
 const SURFACE_PX = 8;
+const PANEL_ROW_VARIABLES = { "--tree-row-pad": `${SURFACE_PX}px`, "--tree-row-actions-pad": "6px" };
 const KEY_NUDGE_PX = 16;
 export const FLAT_PANEL_DEFAULT_WIDTH = 216;
 export const FLAT_PANEL_MIN_WIDTH = 200;
@@ -314,7 +316,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     className={cn("flex min-h-0 flex-col bg-sidebar text-tiny text-foreground",
       docked && "relative h-full shrink-0 border-r border-border",
       page && "absolute inset-0 z-50")}
-    style={page ? undefined : { width: drawnWidth }}>
+    style={page ? PANEL_ROW_VARIABLES : { ...PANEL_ROW_VARIABLES, width: drawnWidth }}>
     {/* The head: the search, then the collapse button at its right (Back before it, on a phone). */}
     <div className="flex shrink-0 items-center gap-1.5" style={{ padding: `${SURFACE_PX}px ${SURFACE_PX}px 6px` }} data-flat-panel-head="">
       {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
@@ -353,7 +355,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     </div>
     <ScrollArea className="min-h-0 flex-1" viewportRef={scroller} viewportProps={{ "data-flat-panel-scroller": "" }}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className={"group/body flex flex-col pt-1 pb-2"} data-flat-panel-body="">
+        <div ref={body} className="group/body flex flex-col px-2 pt-1 pb-2" data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = searching || entry.id === active;
             return <section key={entry.id} role={single ? "region" : "tabpanel"} id={ids(entry.id).panel} aria-label={entry.label}
@@ -362,7 +364,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
               style={searching && entry.searchLast ? { order: 1 } : undefined}
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-              {searching && !single ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
+              {searching && !single ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{entry.label}</h3> : null}
               <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
             </section>;
           })}
@@ -381,7 +383,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
           detailDraft !== null && "after:bg-ring")}
         onPointerDown={startDetailDrag} onPointerMove={moveDetailDrag} onPointerUp={stopDetailDrag} onPointerCancel={stopDetailDrag} onKeyDown={keyDetailDrag}
         data-flat-panel-detail-grip="" />
-      <FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-2"><FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider></div>
+      </ScrollArea>
     </div> : null}
     {page ? null : <div role="separator" aria-orientation="vertical" aria-label={t("flatPanel.resize")} aria-valuenow={drawnWidth}
       aria-valuemin={FLAT_PANEL_MIN_WIDTH} aria-valuemax={maxWidth} tabIndex={0}

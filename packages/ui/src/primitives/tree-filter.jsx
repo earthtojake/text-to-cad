@@ -8,9 +8,8 @@ import { useI18n } from '@cad/ui/i18n';
  * owns its corpus, ranking and keyboard. `yieldWhileTyping`: the `trailing` controls step aside
  * while the box has focus, so the whole row is the box (a narrow panel's filter). `dense`: a file
  * sidebar section's search box, the head of its section — a tree row's 24px and 11px text, and no
- * box of its own drawn on focus: the caret says where typing goes. Its search icon is centred over
- * the rows' glyph column and its text starts where their names do: the rows sit 4px in (their
- * list's padding), each glyph 5px further (`TREE_ROW_INSET_PX`) and 12px wide, its name 4px after it.
+ * box of its own drawn on focus: the caret says where typing goes. In the view's panel its search
+ * icon stands on the line the rows' glyph slots start on, 16px in (`primitives/tree-row.jsx`).
  */
 export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, inputRef, trailing, yieldWhileTyping = false, dense = false, clearLabel: givenClearLabel, className, ...props }) {
   const { t } = useI18n();

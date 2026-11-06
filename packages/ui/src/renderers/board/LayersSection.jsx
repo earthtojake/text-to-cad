@@ -8,28 +8,24 @@ import {
 } from "@cad/core/lib/plot2d/index.js";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { ROW_NAME_UNDER_ACTIONS, TreeRowLabel, TreeRowSurface, treeRowActionsClass } from "@cad/ui/primitives/tree-row";
+import { ROW_NAME_UNDER_ACTIONS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
 import { cn } from "@cad/ui/utils";
-import { LAYER_ROW_INSET_PX, LayerSwatch } from "../kit/inspector/layerRows.jsx";
+import { LayerSwatch } from "../kit/inspector/layerRows.jsx";
 import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
 import { BoardLayerDisplaySettings, BoardPresetSettings } from "./BoardDisplay.jsx";
-
-// The room the eye takes at a row's right end: the row's `--row-actions`.
-const ROW_ACTIONS_WIDTH = "1.5rem";
 
 /** A layer's Hide/Reveal eye, as a drawing's is: over the row's right end, on hover, kept while hidden. */
 function LayerEye({ id, hidden, onToggle }) {
   const { t } = useI18n();
   const action = hidden ? t("tree.reveal") : t("tree.hide");
-  // Its glyph ends on the panel's line, 16px in: the row's 8px, and 6px and the button's 2px inside it.
-  return <div data-row-actions="" className={cn(treeRowActionsClass(hidden), "pr-1.5")}>
+  return <TreeRowActions persistent={hidden}>
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
         data-layer-visibility={id} onClick={event => { event.stopPropagation(); onToggle(id, hidden); }}>
         {hidden ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
       </Button>
     </TooltipHint>
-  </div>;
+  </TreeRowActions>;
 }
 
 /**
@@ -74,12 +70,11 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
       {isActive ? <span className="size-1.5 shrink-0 rounded-full bg-foreground" data-layer-active="" aria-hidden="true" /> : null}
       <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{(counts.get(layer.id) ?? 0).toLocaleString("en-US")}</TreeRowLabel>
     </>;
-    const labelClass = cn("flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1 pr-2 text-left", hidden && "text-muted-foreground",
-      hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover);
+    const labelClass = cn(TREE_ROW_NAME_CLASS, hidden && "text-muted-foreground", hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover);
     return <li key={layer.id} className="min-w-0">
-      <TreeRowSurface dense className="group/row gap-0 pr-0" style={{ paddingLeft: LAYER_ROW_INSET_PX, "--row-actions": ROW_ACTIONS_WIDTH }} data-layer-row={layer.id}>
+      <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row={layer.id}>
         <LayerSwatch color={palette.layer(layer.id)} />
-        {activatable ? <button type="button" className={cn(labelClass, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+        {activatable ? <button type="button" className={labelClass}
           aria-label={t("board.text.make_active", { name })} aria-pressed={isActive} data-layer-activate={layer.id}
           onClick={() => change({ active: layer.id })}>{label}</button>
           : <span className={labelClass}>{label}</span>}
@@ -90,19 +85,20 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
   // Searching: the layers whose names match, as one list; none, nothing (the panel leaves the tab out).
   if (query) {
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
-    return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
+    return found.length ? <ul className="text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
   return <div className="flex flex-col pt-1 text-tiny">
-    <div className="px-2 pb-1" data-board-display-settings="preset">
+    <div className="pb-1" data-board-display-settings="preset">
       <BoardPresetSettings display={display} sheet={sheet} onChange={onDisplayChange} />
     </div>
-    <div className="px-2" aria-label={t("board.text.board_layers")} data-board-layers="">
+    <div aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
-        <li className="flex h-6 items-center text-muted-foreground" style={{ paddingLeft: LAYER_ROW_INSET_PX }} aria-hidden="true">{group.label}</li>
+        <li className="flex h-6 items-center px-2 text-muted-foreground" aria-hidden="true">{group.label}</li>
         {group.layers.map(row)}
       </ul>)}
     </div>
-    <div className="mt-2 border-t border-border px-2 pt-1" data-board-display-settings="layer-display">
+    {/* Its rule the panel's width, out over the body's padding; the settings under it on the panel's lines. */}
+    <div className="-mx-2 mt-2 border-t border-border px-2 pt-1" data-board-display-settings="layer-display">
       <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
     </div>
   </div>;

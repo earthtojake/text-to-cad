@@ -304,20 +304,21 @@ const valueInputWidth = value => {
  * A slider row (a joint of Position), Figma's property row: its first line the joint's kind (`icon`:
  * a turn or a slide), its name, and its value at the right, a committed field with no box until the
  * pointer or the keyboard is on it (as wide as its figure and unit need, its figures tabular); its
- * second line the slider, under the name, the line its name starts on (`docs/settings-ui.md`). The
+ * second line the slider, under the name, the line its name starts on: the icon 12px, the name 4px
+ * after it, as a tree row's glyph and name stand (`docs/settings-ui.md`). The
  * slider fills from the joint's rest to its value (`Slider`'s `origin`), so how far it is from rest
  * reads at a glance.
  */
 export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, icon = null, children }) {
   return <div className="min-w-0 px-2" data-position-control="">
-    <div className="flex h-5 min-w-0 items-center gap-1.5">
+    <div className="flex h-5 min-w-0 items-center gap-1">
       {icon ? <span className="grid size-3 shrink-0 place-items-center text-muted-foreground [&_svg]:size-3" aria-hidden="true">{icon}</span> : null}
       {label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span data-file-sheet-field-label=""
         className="block min-w-0 flex-1 truncate text-tiny leading-4 text-foreground">{label}</span></TooltipHint> : <span className="flex-1" />}
       {onValueCommit ? <FileSheetValueInput value={value} onValueCommit={onValueCommit} {...valueInputProps}
         className={cn("-mr-1 h-5 border-transparent bg-transparent px-1 shadow-none hover:border-input dark:bg-transparent", valueInputWidth(value), valueInputProps?.className)} /> : null}
     </div>
-    <div className={cn("min-w-0", icon && "pl-[1.125rem]")}>{children}</div>
+    <div className={cn("min-w-0", icon && "pl-4")}>{children}</div>
   </div>;
 }
 

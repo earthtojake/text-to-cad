@@ -260,11 +260,11 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   // Display is the tile beside Preview, shut as the file opens.
   assert.equal(await robot.displayPanel().count(), 0, 'Display is never where a file opens');
   assert.deepEqual([await robot.sidebar(), await robot.stack(), await robot.tiles()], [['Links', 'Position controls'], [], ['Links', 'Position']]);
-  // Its tab opens it in Links' place, its Reset (idle at the default pose) at the tab's top-right.
+  // Its tab opens it in Links' place, its Reset (idle at the default pose) at its pose row's end.
   await robot.openSection('Position');
   assert.equal(await robot.linksPanel().isVisible(), false, 'one section at a time');
-  assert.deepEqual(await robot.position().locator('[data-tool-panel-head-slot]').getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
-    [['Reset position', true]], 'its Reset, at the top of its tab');
+  assert.deepEqual(await robot.position().locator('[data-pose-row]').getByRole('button', { name: 'Reset position' }).evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
+    [['Reset position', true]], 'its Reset, on the pose row');
   await robot.openPosition();
   // One knob per moving joint row of the articulation: no fixed joint; a mimic follower's knob
   // writes its leader. A slider exists per CONTROL, so the follower has none, nor the fixed joint.
@@ -466,6 +466,10 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.pickLinks();
   await robot.linksPanel().waitFor();
   await robot.pressed([]);
+  // Its rows stand on the panel's lines, as every list's do: the first row's glyph slot under the search icon.
+  const [searchIcon, firstGlyph] = await pane.locator('[data-flat-panel]').evaluate(panel => [panel.querySelector('[data-flat-panel-search] svg'),
+    panel.querySelector('[data-flat-panel-section]:not([hidden]) [data-tree-row-glyph]')].map(element => Math.round(element.getBoundingClientRect().left)));
+  assert.equal(firstGlyph, searchIcon, 'a row\'s glyph slot starts on the search icon\'s line');
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
   assert.equal(await pane.getByRole('button', { name: 'Select base_footprint', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Collapse base', exact: true }).count(), 0);

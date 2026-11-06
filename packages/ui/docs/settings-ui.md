@@ -571,8 +571,8 @@ panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, N
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
-**Position**), a section's head actions (Position's Reset, the Model's Show all) a row at the
-top of its tab, and the trees searched by the panel's search box. A file's routines are no tab:
+**Position**), Position's Reset on its pose row and the Model's Show all on a line over its rows,
+and the trees searched by the panel's search box. A file's routines are no tab:
 they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
 drawing with nothing for its Layers to say (fewer than four layers drawn on and no block
 reference: a flat pattern's CUT and BEND). The strip is for using tools, the panel for reading the
@@ -590,11 +590,16 @@ file.
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
-  field, the collapse button, a tab's button, a row's background — runs 8px from each edge. What is
-  read in them starts 16px in: the search icon, a tab's name, a row's first glyph, a layer group's
-  name; a settings heading, label and control (a Select, a value, a checkbox) and a row's eye stand
-  on that 16px line on both sides. Every rule runs the panel's width.
-  A settings row's label column is 3rem (its labels are short words) and its control fills the rest.
+  field, the collapse button, a tab's button, a row's background, a full-width control (Position's
+  pose dropdown, the Model's status lines) — stands 8px from each edge. What is read in them stands
+  16px in: the search icon, a tab's name, a row's first glyph, a heading, a layer group's name, a
+  status line ("12 matches"), a settings label; a settings control (a Select, a value, a checkbox)
+  ends on the 16px line at the right, as a row's last action's glyph and a right-aligned value do. A
+  labelled setting's control stays in its column. The panel owns both lines: its head, body and
+  detail pad 8px, and it sets the rows' `--tree-row-pad` (8px) and `--tree-row-actions-pad` (6px),
+  which the one row reads (`FlatPanel.jsx`, `primitives/tree-row.jsx`); no tab, list or section
+  pads itself. Every rule runs the panel's width. A settings row's label column is 4rem (its labels
+  are short words) and its control fills the rest (`FileSheetSettingRow`).
   The navbar's logo stands on the same 16px line: its drawn mark, not its image's edge.
 - **The Parts and the Nets** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`,
   `schematic/SchematicSection.jsx`), two lists as Altium's PCB panel lists Components and Nets. The
@@ -609,7 +614,8 @@ file.
   does, and leaves the view where it is (a schematic shows the sheet it is on, if it is not the one
   shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
   double-clicked (on a phone, whose page gives the view back, a press frames it). A row's chevron
-  opens or shuts it, and a block's name does too. The Parts open as their blocks, a block of several parts shut. A pick
+  opens or shuts it, and a block's name does too (its chevron, then, is the pointer's alone: the name
+  is the keyboard's button). The Parts open as their blocks, a block of several parts shut. A pick
   made anywhere but in the list — on the picture, in Selected, a search hit's once the search is cleared,
   a host's — brings its row into view, once, as a pick in the 3D views does the Model tree's: a part's, or
   a pad's or a pin's part's, in the Parts; a net's, or the net of what is on one (a pad, a pin, a track, a
@@ -619,7 +625,8 @@ file.
   what a reveal opens is not the person's, and the next reveal that goes elsewhere shuts it again; a
   block the person opened stays open, one they shut stays shut until a pick needs it, and one the
   reveal opened is theirs from the moment they open or shut it — so a list is the shape the person left,
-  and at most the one block the last pick opened. Nothing picked moves nothing. Only a list on screen
+  and at most the one block the last pick opened. Nothing picked shuts what the last pick opened, and
+  leaves the rest as the person left it. Only a list on screen
   follows: one on a tab not shown, or in a collapsed panel, waits, and brings the pick's row into view
   once it is shown. A
   selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
@@ -648,10 +655,13 @@ file.
 - **A drawing's Layers** (`dxf/LayersSection.jsx`): each layer drawn on, in the drawing's order, its
   pen, name, entity count and eye (hidden: not drawn, picked or snapped to), and under a layer the
   block references placed on it, open, a press on one picking it as a tap on the drawing does
-  (Shift adds). A layer with blocks under it leads with its chevron, the others with an empty
-  column of its width, so every pen stands on one line and a block's glyph under its layer's pen,
-  the layer's guide down the chevron's middle. Searching, the layers whose names match, and the
-  blocks whose names do under their layer.
+  (Shift adds). Every layer row is two glyphs, so none starts on a gap: its slot holds its chevron
+  where blocks hang under it, else a layer's icon (lucide's Layers, as light as every kind icon),
+  and the box after it its pen; its name 48px in (16, the slot's 12, 4, the pen's 12, 4), always,
+  whether or not any layer has blocks. A block reference's row stands in line with its layer's: its
+  slot only the layer's guide, down the chevron's middle; its box its block's glyph, under the pen;
+  its name and handle under the layer's name and count. Searching, the layers whose names match,
+  and the blocks whose names do under their layer.
 - **A board's view control on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`) is its
   **side**, the corner's switch over the zoom pill, as wide as it (KiCad's View ▸ Flip Board View):
   **Front** and **Back** side by side, in KiCad's words, the side the board is seen from raised, a press
@@ -738,23 +748,39 @@ Its panels follow these rules:
 - **Nothing opens elsewhere.** A pick shows as Quick Edit's chips; the panel is there
   under every tool. No pick or tool opens or closes the explorer, on desktop or mobile.
 
-Tree rows inset their backgrounds 4px from the panel's edges, and the search box
-shares that inset. A tree in the view's panel (Model, Links) is dense (`TreeRowSurface`'s
-`dense`): 24px rows in the panels' 11px text, and ONE light 12px glyph per row in one
-column, as the explorer has: a subassembly's or folded group's disclosure chevron, turned down
-while open, or a part's box (Links draws its chevrons alone), 4px before the name. The glyph
-column starts 5px in from the row's left end (`TREE_ROW_INSET_PX`), centred under the find
-field's search icon and as far in as the icons of a row's actions sit from its right end, in the
-STEP tree and the explorer alike; each level adds
-the explorer's compact indent, 10px (`TREE_INDENT_PX`), its rows hung from a faint line under
-their owner's glyph (`TreeRowGuides`), as the explorer's are; its search box is its section's head. An assembly row's
-actions, shown on hover and kept while they are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
-Isolate. A Links row that draws something — a link with visuals, or one visual —
-has the eye alone, in its search hit too: a link's hides its own visuals, never its
-child links, and on a partly hidden link hides the rest. They float over the row's right end rather than taking width from it:
-the name runs the row's full width and, while an action shows, fades out half a
-rem before them (a mask, `ROW_NAME_UNDER_ACTIONS`), so nothing is drawn behind the
-buttons and the row keeps its own colour.
+**The one row.** Every list of the view's panel — the Parts, the Nets, Selected's, the Hierarchy, a
+board's and a drawing's Layers, the Model, the Links, every search hit — is ONE row,
+`TreeRowSurface` (`primitives/tree-row.jsx`), and the row alone sets its horizontal geometry, so a
+fix to it lands in every list. In the panel's numbers (216px wide, its body padded 8px):
+
+- **The box**: 24px (36px on a phone), the background 8px from each edge, its radius and its hover,
+  selected and cursor fills; 11px text (`dense`).
+- **The slot**: its first child, always (`TreeRowGlyph`): 12px wide (a phone's 16px glyphs widen
+  it), its glyph centred, its left edge on the search icon's, 16px in, and 10px further a level
+  (the row's padding: `--tree-row-pad` plus 10px a level, from its `depth`). It holds a branch's
+  chevron, the button that opens or shuts it (`TreeRowToggle`: a block's, whose name is that
+  button, the pointer's alone; a locked one a mark at half strength), or the row's own glyph — its
+  kind's light icon, a layer's colour, the robot's anchor — or only a guide, or nothing: a leaf
+  keeps its slot, so every name in a list stands on one line. A list that needs a colour as well
+  (a drawing's Layers) draws a second 12px box 4px after the slot.
+- **The name**: 4px after the slot (or the box), the label 11px and first to truncate, its detail
+  10px and muted 4px after it, ending 8px before the row's end (`TREE_ROW_NAME_CLASS`). A row's
+  first name stands 32px in (48px in a drawing's Layers).
+- **The guides**: a faint line under each owner's slot, drawn by the row from its `depth`, its full
+  height, so the rows under an open branch draw its line unbroken.
+- **The actions** (`TreeRowActions`), shown on hover and kept while one is on, float over the row's
+  right end: each a 16x20 button with a 12px glyph, 2px apart, the last one's glyph ending 16px from
+  the panel's right edge (`--tree-row-actions-pad`, 6px, and its button's 2px). The row's `actions`
+  says how many, so its name, which runs the row's full width, fades out half a rem before them (a
+  mask, `ROW_NAME_UNDER_ACTIONS`): nothing is drawn behind the buttons and the row keeps its own
+  colour. An assembly row's are **Isolate** then the **Hide/Reveal** eye (a part file has no
+  Isolate); a part's or a net's, and a layer's, the eye alone. A Links row that draws something — a
+  link with visuals, or one visual — has the eye alone, in its search hit too: a link's hides its
+  own visuals, never its child links, and on a partly hidden link hides the rest.
+
+A list pads nothing: no `pl-`, `px-` or padding on a row, no inset constant, no chevron of its own
+(`src/designSystem.test.js` holds it). The explorer's rows are the same primitive with its own
+numbers (the defaults: 5px in, 3px at the right), in 12px text, and pad themselves.
 Model and link finds and the explorer's filter share `TreeFilterInput`; the explorer's rows are compact
 24px lines, as the trees' are, but in 12px text.
 
@@ -937,13 +963,16 @@ under every tool: a STEP's where the file has joints to move, a
 robot's where a joint can be driven. Its knobs in the viewport are Select's, while Select's
 filter ticks Position, and only while the parts are where the pose puts them: over an explosion
 Select draws no knobs (the section's controls stay, and using them takes Explode off). Its
-first row is the pose (`KinematicsPoseRow`, `data-pose-row`): a dropdown over the rest of the
-panel's width and, at the row's right end, **Reset position**, a 20px icon button idle while the
-joints are at their default; nothing sits above the row, in a tab or not. The dropdown holds
+first row is the pose (`KinematicsPoseRow`, `data-pose-row`), laid out as the panel's head is: a
+dropdown, a full-width box from the panel's 8px line (its text on the 16px one), then, 6px after it
+in the head's collapse button's column, **Reset position**, a 20px icon button whose glyph ends on
+the right 16px line, idle while the joints are at their default; nothing sits above the row. The
+dropdown holds
 **Default**, which puts the joints back, then the named poses, and Custom while the joints are
 set by hand. No divider under the pose row and no Reset footer.
 Each joint is Figma's property row (`FileSheetSliderField`): its first line (20px) the joint's
-kind — a turn (lucide's RotateCw) or a slide (MoveHorizontal), muted, 12px — its name, and its
+kind — a turn (lucide's RotateCw) or a slide (MoveHorizontal), muted, 12px, 16px in as a row's
+glyph is — its name 4px after it (32px in), and its
 value at the line's right, a committed field with no box until the pointer or the keyboard is on
 it (about five characters wide, tabular figures; degrees read "90.0°", a robot's slides in
 millimetres, "12.5 mm", typed in millimetres too); its second line the slider, under the name, on

@@ -48,11 +48,12 @@
 [data-viewer-layout="mobile"] [data-annotation-selection-bar] button { min-width: 36px; min-height: 36px; }
 /* The view's panel on a phone (its page, `FlatPanel.jsx`), on the Display menu's scale: ONE text size, the panel's (13px), for
  * headings, labels, rows and fields alike — a heading told apart by its colour, never its size —
- * and its rows a finger's. A tree row is 36px (`TREE_ROW_TOUCH_HEIGHT`), its glyphs 16px; the
+ * and its rows a finger's. A tree row is 36px (`TREE_ROW_TOUCH_HEIGHT`), its glyphs 16px (its slot
+ * widens with them, and its guides follow the slots' centres: `--tree-row-glyph`); the
  * filter a 32px field; a pose or routine dropdown, a value field and the transport's buttons 32px.
  * (Inputs keep the panel's text size: the page's viewport, not a 16px font, stops a phone zooming
  * in on a focused field.) */
-[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] { gap: 6px; }
+[data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] { gap: 6px; --tree-row-glyph: 16px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-tree-row] svg { width: 16px; height: 16px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] { height: 36px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-slot="tree-filter"] input { height: 34px; padding-left: 28px; }

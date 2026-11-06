@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useRef } from "react";
-import { ScrollArea } from "@cad/ui/primitives/scroll-area";
-import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_INSET_PX, TreeRowLabel, TreeRowSurface, useTreeRowHeight } from "@cad/ui/primitives/tree-row";
+import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, useTreeRowHeight } from "@cad/ui/primitives/tree-row";
+import { cn } from "@cad/ui/utils";
 import { useFlatPanel } from "../shell/FlatPanel.jsx";
 import VirtualRows from "./VirtualRows.jsx";
 import { InfoRow, MonoValue } from "./referenceRows.jsx";
@@ -9,16 +9,15 @@ const additive = event => event.shiftKey || event.metaKey || event.ctrlKey;
 
 function Glyph({ kind, glyphs }) {
   const Icon = glyphs[kind] || glyphs.pad;
-  return <Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} />;
+  return <TreeRowGlyph><Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>;
 }
 
 // One pad or pin: its glyph, its name (a number under its part, a part and a number under a net), and its muted detail.
 function DetailRow({ node, lit, choose, frame, hover, glyphs, data }) {
-  return <TreeRowSurface dense active={lit} className="group/row relative gap-0 pr-0" onMouseEnter={() => hover(node.pick)} onMouseLeave={() => hover("")}>
+  return <TreeRowSurface dense depth={0} active={lit} className="group/row" onMouseEnter={() => hover(node.pick)} onMouseLeave={() => hover("")}>
+    <Glyph kind={node.kind} glyphs={glyphs} />
     <button type="button" aria-pressed={lit} onClick={event => choose(node, event)} onDoubleClick={() => frame(node)} {...{ [`data-${data}-detail-row`]: node.id }}
-      className="flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ paddingLeft: TREE_ROW_INSET_PX }}>
-      <Glyph kind={node.kind} glyphs={glyphs} />
+      className={TREE_ROW_NAME_CLASS}>
       <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
       {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
     </button>
@@ -63,33 +62,32 @@ export default function CircuitDetail({ detail, selection, glyphs, data, onSelec
   const frame = useCallback(node => refs.current.onFrame?.([node.pick]), []);
   const { rows, facts = [] } = detail;
   const renderRow = at => <MemoDetailRow node={rows[at]} lit={picked.has(rows[at].pick)} choose={choose} frame={frame} hover={hover} glyphs={glyphs} data={data} />;
-  return <section aria-label={detail.label} className="flex min-h-0 flex-1 flex-col text-tiny" {...{ [`data-${data}-detail`]: detail.id }}>
-    <ScrollArea className="min-h-0 flex-1">
-      {/* What it is: its name, what that is in words, its facts. */}
-      <div className="px-2 pt-1.5" data-flat-panel-selected="">
-        <TreeRowSurface dense className="relative min-w-0 gap-0 pr-0">
-          <button type="button" onClick={event => (detail.pick ? choose(detail, event) : null)} onDoubleClick={() => (detail.pick ? frame(detail) : null)}
-            className="flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ paddingLeft: TREE_ROW_INSET_PX }} {...{ [`data-${data}-detail-head`]: detail.id }}>
-            <Glyph kind={detail.kind} glyphs={glyphs} />
-            <TreeRowLabel className="min-w-0 flex-1">{detail.label}</TreeRowLabel>
-          </button>
-        </TreeRowSurface>
-        {detail.detail ? <p className="truncate pb-1 text-micro text-muted-foreground" style={{ paddingLeft: TREE_ROW_INSET_PX + 16 }}
-          data-flat-panel-selected-what="">{detail.detail}</p> : null}
-        {facts.length ? <div className="pb-1.5" style={{ paddingLeft: TREE_ROW_INSET_PX, paddingRight: TREE_ROW_INSET_PX }} data-flat-panel-facts="">
-          {facts.map(fact => <InfoRow key={fact.label} label={fact.label}><MonoValue>{fact.value}</MonoValue></InfoRow>)}
-        </div> : null}
-      </div>
-      {/* What it is connected to: the other pads or pins on its net, or its own. */}
-      {rows.length ? <div className="px-2 pb-2">
-        <h3 className="flex h-6 items-center justify-between gap-2 border-t border-border text-micro text-muted-foreground" style={{ paddingLeft: TREE_ROW_INSET_PX, paddingRight: TREE_ROW_INSET_PX }}
-          data-flat-panel-detail-title="">
-          <span className="truncate">{detail.listLabel}</span><span className="shrink-0">{detail.count}</span>
-        </h3>
-        <VirtualRows key={detail.id} aria-label={detail.listLabel} count={rows.length} rowHeight={rowHeight}
-          rowKey={at => rows[at].id} rowProps={() => ({ className: "min-w-0" })} renderRow={renderRow} />
+  // In the panel's detail pane, which pads and scrolls it: what it is reads on the panel's 16px lines,
+  // its rows on its 8px one, the "what it is" line under the name, after the glyph slot.
+  return <section aria-label={detail.label} className="flex flex-col text-tiny" {...{ [`data-${data}-detail`]: detail.id }}>
+    {/* What it is: its name, what that is in words, its facts. */}
+    <div className="pt-1.5" data-flat-panel-selected="">
+      <TreeRowSurface dense depth={0} className="min-w-0">
+        <Glyph kind={detail.kind} glyphs={glyphs} />
+        <button type="button" onClick={event => (detail.pick ? choose(detail, event) : null)} onDoubleClick={() => (detail.pick ? frame(detail) : null)}
+          className={cn(TREE_ROW_NAME_CLASS, "font-medium")} {...{ [`data-${data}-detail-head`]: detail.id }}>
+          <TreeRowLabel className="min-w-0 flex-1">{detail.label}</TreeRowLabel>
+        </button>
+      </TreeRowSurface>
+      {detail.detail ? <p className="truncate pr-2 pb-1 text-micro text-muted-foreground" style={{ paddingLeft: "calc(var(--tree-row-pad, 5px) + 1rem)" }}
+        data-flat-panel-selected-what="">{detail.detail}</p> : null}
+      {facts.length ? <div className="px-2 pb-1.5" data-flat-panel-facts="">
+        {facts.map(fact => <InfoRow key={fact.label} label={fact.label}><MonoValue>{fact.value}</MonoValue></InfoRow>)}
       </div> : null}
-    </ScrollArea>
+    </div>
+    {/* What it is connected to: the other pads or pins on its net, or its own; its rule the pane's width. */}
+    {rows.length ? <div className="pb-2">
+      <h3 className="-mx-2 flex h-6 items-center justify-between gap-2 border-t border-border px-4 text-micro text-muted-foreground"
+        data-flat-panel-detail-title="">
+        <span className="truncate">{detail.listLabel}</span><span className="shrink-0">{detail.count}</span>
+      </h3>
+      <VirtualRows key={detail.id} aria-label={detail.listLabel} count={rows.length} rowHeight={rowHeight}
+        rowKey={at => rows[at].id} rowProps={() => ({ className: "min-w-0" })} renderRow={renderRow} />
+    </div> : null}
   </section>;
 }

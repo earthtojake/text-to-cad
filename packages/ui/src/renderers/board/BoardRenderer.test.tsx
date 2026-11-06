@@ -577,17 +577,22 @@ it('a pick on the board brings its row into view in the list on screen, one bloc
   tap(pane, [5, 17.54]);
   await waitFor(() => expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'part:R2']));
   await waitFor(() => expect(scrolled).toEqual(['part:R1', 'part:J1']));
-  // Nothing picked moves nothing; D1's pad opens led again.
-  tap(pane, [36, 26]);
-  expect(selected(controller)).toEqual([]);
+  // D1's pad opens led again; nothing picked then shuts it, the block only the pick opened, and leaves
+  // power, the one the person opened, open.
   tap(pane, [20, 23.175]);
   await waitFor(() => expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']));
   await waitFor(() => expect(scrolled.at(-1)).toBe('part:D1'));
+  tap(pane, [36, 26]);
+  expect(selected(controller)).toEqual([]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'part:R2']));
+  tap(pane, [20, 23.175]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']));
+  await waitFor(() => expect(scrolled).toEqual(['part:R1', 'part:J1', 'part:D1', 'part:D1']));
   // A press in the list keeps what the reveal opened and scrolls nothing.
   fireEvent.click(within(parts).getByRole('button', { name: 'Select R2' }));
   expect(selected(controller)).toEqual(['#R2']);
   expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']);
-  expect(scrolled).toEqual(['part:R1', 'part:J1', 'part:D1']);
+  expect(scrolled).toEqual(['part:R1', 'part:J1', 'part:D1', 'part:D1']);
   // Shut by the person, led is theirs: a pick in power leaves it shut, and one in led opens it again.
   fireEvent.click(within(parts).getByRole('button', { name: 'Collapse led' }));
   tap(pane, [5, 17.54]);

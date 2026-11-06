@@ -735,6 +735,8 @@ export default {
   "tree.modelTreeArea": "模型樹狀結構區域",
   "tree.isolation": "隔離",
   "tree.isolated": "已隔離：{names}",
+  "tree.hiddenCount": "已隱藏 {count} 個",
+  "tree.hiddenParts": "隱藏的零件",
   "tree.searchResults": "模型搜尋結果",
   "tree.noPartMatch": "沒有與「{query}」相符的零件",
   "tree.model": "模型",

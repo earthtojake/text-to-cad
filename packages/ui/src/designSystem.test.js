@@ -84,6 +84,43 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
   assert.match(navbar, /"cad-navbar-logo justify-start px-1"/);
 });
 
+// The panel's rows have ONE owner of their horizontal geometry (docs/settings-ui.md): the row
+// primitive pads a row by its `depth` and draws its guides, and the view's panel sets the lines. No
+// list pads a row, nor brings its own glyph column or chevron: only the primitive and the explorer
+// (which pads its own rows) read the old constants.
+const ROW_OWNERS = ["primitives/tree-row.jsx", "file-viewer/navigation/FolderExplorer.jsx", "file-viewer/navigation/ModelList.jsx"];
+const ROW_CONSTANTS = /\b(TREE_ROW_INSET_PX|TREE_INDENT_PX|LAYER_ROW_INSET_PX|TreeRowGuides)\b/;
+const ROW_PADDING = /paddingLeft|paddingInline|(?<![\w-])p[lx]-/;
+// The opening tag at `from`, to its closing `>`: braces and quotes skipped.
+const openingTag = (text, from) => {
+  let depth = 0, quote = "";
+  for (let at = from + 1; at < text.length; at += 1) {
+    const char = text[at];
+    if (quote) { if (char === quote) quote = ""; continue; }
+    if (char === "\"" || char === "'" || char === "`") quote = char;
+    else if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+    else if (char === ">" && depth === 0) return text.slice(from, at + 1);
+  }
+  return text.slice(from);
+};
+
+test("a panel row is padded by the row primitive alone: no list pads one, reads the old insets, or draws its own chevron", () => {
+  const found = [];
+  for (const file of sources(root)) {
+    const name = relative(root, file);
+    if (ROW_OWNERS.includes(name)) continue;
+    const text = readFileSync(file, "utf8");
+    if (ROW_CONSTANTS.test(text)) found.push(`${name}: ${text.match(ROW_CONSTANTS)[1]}`);
+    if (name.startsWith("renderers/") && /\bTreeRowChevron\b/.test(text)) found.push(`${name}: TreeRowChevron`);
+    for (const match of text.matchAll(/<TreeRowSurface\b/g)) {
+      const tag = openingTag(text, match.index);
+      if (ROW_PADDING.test(tag)) found.push(`${name}: ${tag.replace(/\s+/g, " ").slice(0, 120)}`);
+    }
+  }
+  assert.deepEqual(found, []);
+});
+
 // A size of the scale given to a primitive replaces the primitive's own (a button's text-xs), and
 // survives a colour after it: cn() knows the scale's names as sizes.
 test("cn() merges the scale's sizes as font sizes", async () => {

@@ -735,6 +735,8 @@ export default {
   "tree.modelTreeArea": "模型树区域",
   "tree.isolation": "隔离",
   "tree.isolated": "已隔离：{names}",
+  "tree.hiddenCount": "已隐藏 {count} 个",
+  "tree.hiddenParts": "隐藏的零件",
   "tree.searchResults": "模型搜索结果",
   "tree.noPartMatch": "没有与“{query}”匹配的零件",
   "tree.model": "模型",

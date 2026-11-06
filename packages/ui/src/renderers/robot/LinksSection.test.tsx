@@ -108,7 +108,7 @@ it('draws the kinematic tree collapsed below the first real choice, with each li
   // object's row carries the part box, below).
   expect(screen.queryByRole('button', { name: /^(Collapse|Expand) base_link$/ })).toBeNull();
   const indent = (name: string) => (screen.getByRole('button', { name: `Select ${name}` }).closest('div') as HTMLElement).style.paddingLeft;
-  expect([indent('base_link'), indent('shoulder_link'), indent('camera_link')]).toEqual(['0px', '0px', '0px']);
+  expect(new Set([indent('base_link'), indent('shoulder_link'), indent('camera_link')]).size).toBe(1);
   expect(screen.getByRole('list', { name: 'Robot links' }).querySelectorAll('svg.lucide-box, svg.lucide-boxes')).toHaveLength(0);
   fireEvent.click(screen.getByRole('button', { name: 'Expand shoulder_link' }));
   expect(rows()).toContain('Select elbow_link');

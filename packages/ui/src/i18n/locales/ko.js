@@ -734,6 +734,8 @@ export default {
   "tree.modelTreeArea": "모델 트리 영역",
   "tree.isolation": "격리",
   "tree.isolated": "격리됨: {names}",
+  "tree.hiddenCount": "{count}개 숨김",
+  "tree.hiddenParts": "숨긴 부품",
   "tree.searchResults": "모델 검색 결과",
   "tree.noPartMatch": "“{query}”와(과) 일치하는 부품이 없습니다",
   "tree.model": "모델",
