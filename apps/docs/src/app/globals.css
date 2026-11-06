@@ -110,16 +110,12 @@
   from { opacity: 0; }
 }
 
-/* The hero's backdrop, the turning gear (`HeroGear`): faded out over its last 2.5rem, so it never
-   reaches the agents under it, and to an eighth of its strength in an ellipse round the hero's text
-   (34rem by 15rem from the centre, at most 62% of a narrow screen's width and 28% of its height), so
-   the text sits on a calm field and the gear shows past it. */
+/* The hero's backdrop, the turning gear (`HeroGear`), its centre on the backdrop's bottom-right
+   corner: faded out over its last 4rem, so the gear sinks behind the agents under it rather than
+   stopping at a line. */
 .hero-backdrop {
-  --hero-clearing: radial-gradient(ellipse min(34rem, 62vw) min(15rem, 28svh) at 50% 50%, rgb(0 0 0 / 0.12) 20%, #000);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent), var(--hero-clearing);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent), var(--hero-clearing);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
 }
 
 @theme inline {

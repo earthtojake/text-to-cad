@@ -14,8 +14,8 @@ import {
 
 /** The homepage's hero, the whole first screen under the header: the TEXTTOCAD wordmark and the
  * tagline, the two calls to action (GitHub with its stars, Join Discord) and the one-line install
- * -- the page's Install, at `#install` -- centred over the planetary gear turning in the background,
- * then the agents it works with at the foot of the screen. */
+ * -- the page's Install, at `#install` -- centred, with the planetary gear turning in the
+ * bottom-right corner behind them, then the agents it works with at the foot of the screen. */
 export async function HeroSection() {
   const stars = await getGitHubStars();
 
@@ -30,8 +30,9 @@ export async function HeroSection() {
             above the fold on a laptop's 600-odd pixels under the browser's bars. */}
         <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center px-4 pt-[clamp(1rem,4svh,3rem)] pb-[clamp(0.75rem,2.5svh,2rem)] text-center sm:px-6">
           <h1 className="sr-only">text-to-cad: Design physical products with AI.</h1>
-          {/* A block of its own, so the centred column does not shrink the wordmark to fit. */}
-          <div className="w-full max-w-[min(800px,calc((100svh-3.5rem)*1.15))]">
+          {/* A block of its own, so the centred column does not shrink the wordmark to fit. The gear's
+              ring keeps clear of it and of the tagline (`data-gear-clear`). */}
+          <div data-gear-clear className="w-full max-w-[min(800px,calc((100svh-3.5rem)*1.15))]">
             <LogoBuild
               id="hero-wordmark"
               name="logo-texttocad"
@@ -42,7 +43,7 @@ export async function HeroSection() {
               className="mx-auto h-auto w-full max-w-[800px]"
             />
           </div>
-          <p className="mt-[clamp(0.75rem,2.7svh,1.5rem)] text-2xl font-semibold tracking-tight text-foreground sm:text-3xl [@media(min-width:64rem)_and_(min-height:44rem)]:text-4xl">
+          <p data-gear-clear className="mt-[clamp(0.75rem,2.7svh,1.5rem)] text-2xl font-semibold tracking-tight text-foreground sm:text-3xl [@media(min-width:64rem)_and_(min-height:44rem)]:text-4xl">
             Design physical products with AI.{" "}
             <span className="text-brand">100% open source and free.</span>
           </p>

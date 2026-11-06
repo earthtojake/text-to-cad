@@ -24,22 +24,23 @@ const CLIP_SPEED = 0.08;
 // A fold drawn as an edge: above the 28.5 degrees between a mesh's neighbouring facets on a
 // cylinder, so a bore draws its rims and no lines down its wall.
 const EDGE_CREASE_DEG = 35;
-// Line widths in CSS pixels: the folds, and the outline around each part (its back faces pushed out
-// along their normals), a little heavier, as a drawing's silhouettes are.
+// The folds' width in CSS pixels, and the outline around each part (its back faces pushed out along
+// their normals) in millimetres of the model, so a silhouette is heavier than a fold and grows with
+// the gear, as a drawing's do.
 const FOLD_PX = 1;
-const OUTLINE_PX = 1.5;
+const OUTLINE_MM = 0.5;
 
-// Where the gear sits: centred behind the hero, its ring around the text. The view tilts with the
-// backdrop's shape (width over height) -- low over a wide screen, so the ring is a wide ellipse
-// between the header and the agents, steeper on a tall one, so it rounds out above and below the
-// text -- and the ring is as wide as that shape asks (a share of the width: past the edges on a
-// phone) while its height keeps clear of the backdrop's top and bottom.
-const TILT_DEG_BY_ASPECT: [number, number][] = [[0.65, 60], [1, 48], [1.6, 34], [2.25, 27], [2.7, 22]];
-const RING_WIDTH_BY_ASPECT: [number, number][] = [[1, 1.3], [1.6, 0.8]];
-const RING_FILLS_HEIGHT = 0.86;
-const RING_PX = { min: 420, max: 1200 };
-// The side the camera looks from, in plan: the planets' best side at the clip's first pose.
-const AZIMUTH: [number, number] = [0.41, -0.91];
+// Where the gear sits: in the backdrop's bottom-right corner, its centre on the corner, so the right
+// edge and the agents under the backdrop cut it to the quarter that turns towards the text. Seen from
+// above at 45 degrees. Its ring's radius is a share of the backdrop's height, which leaves the text
+// the upper left; on a narrow screen a share of its width instead, so a phone shows the corner arc
+// behind the lower half; and never so large that the ring's outline reaches the text's corners
+// (`setClearance`), with a little room to spare.
+const VIEW: [number, number, number] = [0.8, -1, 1.2];
+const RING_RADIUS = { ofHeight: 0.815, ofWidth: 0.9, clearing: 0.96, min: 240 };
+
+/** A point the ring keeps clear of, in CSS pixels from the backdrop's top-left corner. */
+export type GearClearance = { x: number; y: number };
 
 export type GearInk = { fold: string; outline: string };
 
@@ -48,23 +49,12 @@ export type HeroGear = {
   advance(seconds: number): void;
   render(): void;
   setInk(ink: GearInk): void;
+  /** The points the ring keeps clear of, as the text lays out; places the gear again and draws. */
+  setClearance(points: GearClearance[]): void;
   dispose(): void;
 };
 
 type GlbDocument = Awaited<ReturnType<typeof buildGlbDocumentFromBuffer>>;
-
-// A value from a table of (x, value) rows, straight between rows, held past the ends.
-function interpolate(table: [number, number][], x: number) {
-  if (x <= table[0][0]) return table[0][1];
-  for (let i = 1; i < table.length; i += 1) {
-    const [x1, y1] = table[i];
-    if (x <= x1) {
-      const [x0, y0] = table[i - 1];
-      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-    }
-  }
-  return table[table.length - 1][1];
-}
 
 // An outline material: back faces pushed out along their normals, drawn flat; the faces in front
 // hide all of it but the rim past a part's edge.
@@ -120,12 +110,11 @@ export async function createHeroGear({
   const root = new THREE.Group();
   root.add(placed);
 
-  // In CAD space (millimetres, Z up): the ring's radius, and the assembly's depth along its axis. The
-  // rest pose's box: `meshCycle` turns the parts inside the fixed ring and never lifts them, while
-  // the animated box also covers the file's other clip, an explode along the axis.
+  // In CAD space (millimetres, Z up): the ring's radius. The rest pose's box: `meshCycle` turns the
+  // parts inside the fixed ring and never lifts them, while the animated box also covers the file's
+  // other clip, an explode along the axis.
   const bounds = glb.restBounds ?? { min: [0, 0, 0], max: [1, 1, 1] };
   const radius = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]) / 2;
-  const depth = bounds.max[2] - bounds.min[2];
 
   const folds = new LineMaterial({ linewidth: FOLD_PX });
   const outline = outlineMaterial();
@@ -204,46 +193,45 @@ export async function createHeroGear({
   );
 
   // Sizes the drawing buffer to the backdrop (`renderModel`'s resize, whose own framing this
-  // replaces), then frames the gear as above: an orthographic camera on the gear's centre, at the
-  // scale that makes the ring `ringWidth` pixels across.
+  // replaces), then places the gear as above: an orthographic camera on the gear's centre, at the
+  // scale that gives the ring its radius in pixels, its view running from the centre up and to the
+  // left, so the centre lands on the backdrop's bottom-right corner.
   const camera = viewport.camera as THREE.OrthographicCamera;
   const center = new THREE.Vector3(
     (bounds.min[0] + bounds.max[0]) / 2,
     (bounds.min[1] + bounds.max[1]) / 2,
     (bounds.min[2] + bounds.max[2]) / 2
   );
+  const view = new THREE.Vector3(...VIEW).normalize();
+  const distance = radius * 4;
+  // How high the ring's outline reaches over its centre, as a share of its radius: the ring seen at
+  // the view's tilt, and the parts' top faces above the centre.
+  const tilt = Math.asin(view.z);
+  const ringTop = Math.sin(tilt) + ((bounds.max[2] - center.z) / radius) * Math.cos(tilt);
+  let clearance: GearClearance[] = [];
   const layout = () => {
     viewport.resize();
     const { width, height } = viewport.renderer.getSize(new THREE.Vector2());
-    const aspect = width / Math.max(height, 1);
-    const tilt = THREE.MathUtils.degToRad(interpolate(TILT_DEG_BY_ASPECT, aspect));
-    const sin = Math.sin(tilt);
-    const cos = Math.cos(tilt);
-    const ringWidth = Math.min(
-      Math.max(
-        Math.min(
-          interpolate(RING_WIDTH_BY_ASPECT, aspect) * width,
-          (RING_FILLS_HEIGHT * height) / (sin + (depth / (2 * radius)) * cos)
-        ),
-        RING_PX.min
-      ),
-      RING_PX.max
-    );
-    const pixelsPerUnit = ringWidth / (2 * radius);
-    const halfHeight = height / 2 / pixelsPerUnit;
-    const distance = radius * 4;
-    camera.position.copy(center).addScaledVector(new THREE.Vector3(AZIMUTH[0] * cos, AZIMUTH[1] * cos, sin), distance);
+    let ringRadius = Math.min(RING_RADIUS.ofHeight * height, RING_RADIUS.ofWidth * width);
+    for (const point of clearance) {
+      const across = Math.max(width - point.x, 0);
+      const up = Math.max(height - point.y, 0);
+      ringRadius = Math.min(ringRadius, RING_RADIUS.clearing * Math.hypot(across, up / ringTop));
+    }
+    ringRadius = Math.max(ringRadius, RING_RADIUS.min);
+    const pixelsPerUnit = ringRadius / radius;
+    camera.position.copy(center).addScaledVector(view, distance);
     camera.up.set(0, 0, 1);
     camera.lookAt(center);
-    camera.top = halfHeight;
-    camera.bottom = -halfHeight;
-    camera.left = -halfHeight * aspect;
-    camera.right = halfHeight * aspect;
+    camera.left = -width / pixelsPerUnit;
+    camera.right = 0;
+    camera.top = height / pixelsPerUnit;
+    camera.bottom = 0;
     camera.near = distance - radius * 2;
     camera.far = distance + radius * 2;
     camera.updateProjectionMatrix();
     folds.linewidth = FOLD_PX * viewport.renderer.getPixelRatio();
-    outline.uniforms.offset.value = OUTLINE_PX / pixelsPerUnit;
+    outline.uniforms.offset.value = OUTLINE_MM;
   };
   layout();
   const resized = new ResizeObserver(() => {
@@ -262,6 +250,11 @@ export async function createHeroGear({
       viewport.render();
     },
     setInk,
+    setClearance(points: GearClearance[]) {
+      clearance = points;
+      layout();
+      viewport.render();
+    },
     dispose() {
       resized.disconnect();
       disposeGlbAnimationRuntime(animation);

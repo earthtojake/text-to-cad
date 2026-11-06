@@ -135,11 +135,12 @@ Windows browser has Windows preselected), with nothing under it: what the comman
 (`installSummary`) and the link to installing by hand, app by app, and updates, the repository's
 `docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
 homepage. Behind them the planetary gear turns (`src/components/hero-gear.tsx`, drawn by
-`hero-gear-renderer.ts`): a faint line drawing centred on the hero, its ring round the text, the
-view low over a wide screen and steeper on a tall one, so the ring is a wide ellipse on a laptop
-and rounds out above and below the text on a phone (where its sides run off the screen). It fades
-to an eighth of its strength behind the text and out above the agents (`.hero-backdrop` in
-`globals.css`). It is decoration (hidden from assistive technology, never under the pointer or in
+`hero-gear-renderer.ts`): a faint line drawing seen from above at 45 degrees, its centre on the
+bottom-right corner of the space above the agents, so the right edge and the agents cut it off.
+Its ring's radius is a share of that space's height (on a phone, of its width: a corner arc behind
+the lower half), and never so large that its outline reaches the wordmark's or the tagline's
+corner (`data-gear-clear`). It fades out above the agents (`.hero-backdrop` in `globals.css`). It
+is decoration (hidden from assistive technology, never under the pointer or in
 the tab order), loads after the page has loaded and the browser is idle, so the text paints first,
 and not at all for Save-Data; it fades in, turns only while on screen in a visible tab, holds still
 for reduced motion, and draws at most 1.5 device pixels per CSS pixel. At the foot of the screen a

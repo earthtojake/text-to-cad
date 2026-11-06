@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { GearInk, HeroGear as HeroGearDrawing } from "@/components/hero-gear-renderer";
+import type { GearClearance, GearInk, HeroGear as HeroGearDrawing } from "@/components/hero-gear-renderer";
 
-// The drawing's ink in each theme: a cool slate a little off the page's background, the outlines a
-// shade stronger than the folds, so the gear reads as a faint technical drawing behind the text.
+// The drawing's ink in each theme: a cool slate a step off the page's background, the outlines a
+// shade stronger than the folds, so the gear reads as a faint technical drawing beside the text.
 const INK: Record<"light" | "dark", GearInk> = {
-  light: { fold: "#d3dae2", outline: "#c2ccd7" },
-  dark: { fold: "#3e444b", outline: "#4a525b" },
+  light: { fold: "#c3ccd6", outline: "#aab6c3" },
+  dark: { fold: "#47505a", outline: "#56606b" },
 };
 // The backdrop is decoration: its drawing buffer stops at 1.5 device pixels per CSS pixel.
 const MAX_PIXEL_RATIO = 1.5;
@@ -16,9 +16,20 @@ function currentInk() {
   return INK[document.documentElement.classList.contains("dark") ? "dark" : "light"];
 }
 
+// What the ring keeps clear of: the bottom-right corners of the hero's text beside the backdrop (the
+// wordmark and the tagline, `data-gear-clear` in hero-section.tsx), in the backdrop's pixels.
+function clearanceOf(host: HTMLElement): GearClearance[] {
+  const origin = host.getBoundingClientRect();
+  const text = host.parentElement?.querySelectorAll<HTMLElement>("[data-gear-clear]") ?? [];
+  return Array.from(text, (element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.right - origin.left, y: box.bottom - origin.top };
+  });
+}
+
 /**
- * The hero's backdrop: the planetary gear, large, faint and slowly turning behind the hero's text
- * (`hero-gear-renderer.ts` draws it, and places it), fading out above the agents and toward the text
+ * The hero's backdrop: the planetary gear, large, faint and slowly turning in the bottom-right corner,
+ * cut off by the edges (`hero-gear-renderer.ts` draws it, and places it), fading out above the agents
  * (`.hero-backdrop` in globals.css). Decoration only: hidden from assistive technology, never under
  * the pointer or in the tab order. It loads once the page has loaded and the browser is idle, so the
  * hero's text paints first, and not at all for a visitor saving data; it fades in once drawn, turns
@@ -75,6 +86,10 @@ export function HeroGear() {
       if (!frame) gear?.render();
     });
     theme.observe(document.documentElement, { attributeFilter: ["class"], attributes: true });
+    // As the text lays out (a resize, a font arriving), the ring keeps clear of it.
+    const relaid = new ResizeObserver(() => gear?.setClearance(clearanceOf(host)));
+    relaid.observe(host);
+    host.parentElement?.querySelectorAll("[data-gear-clear]").forEach((element) => relaid.observe(element));
 
     const load = async () => {
       const { createHeroGear } = await import("@/components/hero-gear-renderer");
@@ -85,7 +100,7 @@ export function HeroGear() {
         return;
       }
       gear = created;
-      gear.render();
+      gear.setClearance(clearanceOf(host));
       setDrawn(true);
       sync();
     };
@@ -108,6 +123,7 @@ export function HeroGear() {
       cancelAnimationFrame(frame);
       seen.disconnect();
       theme.disconnect();
+      relaid.disconnect();
       document.removeEventListener("visibilitychange", sync);
       reduced.removeEventListener("change", sync);
       gear?.dispose();
