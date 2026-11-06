@@ -209,11 +209,12 @@ _BREAK = re.compile(rb"\r?\n *")
 def _settle(path: Path, changed_styles: bool = False) -> None:
     """The written file made a function of the document alone (see the module docstring): its
     presentations in the document's order (``_presentations``), its assembly occurrences
-    numbered as a fresh process numbers them (``_occurrences``), and its PMI records as AP242
-    has them (``_pmi_records``); written again when any changed it."""
+    numbered as a fresh process numbers them (``_occurrences``), its PMI records as AP242
+    has them (``_pmi_records``) and its densities typed, in the unit their numbers are in
+    (``_density_units``); written again when any changed it."""
     original = path.read_bytes()
     data = _prune_unused_styles(original) if changed_styles else original
-    settled = _pmi_records(_occurrences(_presentations(data)))
+    settled = _density_units(_pmi_records(_occurrences(_presentations(data))))
     if settled != original:
         path.write_bytes(settled)
 
@@ -369,7 +370,7 @@ def _one_line(text: bytes) -> bytes:
     return b"'".join(pieces)
 
 
-# The kernel's writer gets three PMI records wrong, found by an AP242 reader of no OCCT
+# The kernel's writer gets four PMI records wrong, found by an AP242 reader of no OCCT
 # (``ap242.py``, and the standard's EXPRESS):
 # - a tolerance's bounds, ``TOLERANCE_VALUE``'s, as ``MEASURE_WITH_UNIT(0.2,#u)``: the value
 #   untyped, where ``measure_value`` is a select a strict reader needs typed. They are written as
@@ -383,7 +384,9 @@ def _one_line(text: bytes) -> bytes:
 #   GD&T unit from the first dimension's context and, with none, a bare ``SI_UNIT($,.METRE.)``
 #   (``STEPCAFControl_Writer::GetUnit``), the value left in the document's millimetres -- a
 #   flatness of 0.05 mm written as 0.05 m. Each such measure refers to the file's millimetre
-#   unit instead, and the bare metre, then unreferenced, is dropped.
+#   unit instead, and the bare metre, then unreferenced, is dropped;
+# - a ``DATUM_SYSTEM`` and its compartments per tolerance, where tolerances naming one frame name
+#   one system. Each frame is kept once, its first, and the tolerances refer to that.
 _TOLERANCE_VALUE = re.compile(rb"TOLERANCE_VALUE\s*\(\s*#(\d+)\s*,\s*#(\d+)\s*\)")
 _UNTYPED_BOUND = re.compile(rb"MEASURE_WITH_UNIT\s*\(\s*([-+]?[0-9.]+(?:[eE][-+]?[0-9]+)?)\s*,\s*#(\d+)\s*\)\s*;")
 _RUNOUT = re.compile(rb"RUNOUT_ZONE_DEFINITION\s*\(\s*#\d+\s*,\s*\(\s*\)\s*\)\s*;")
@@ -392,6 +395,10 @@ _MILLIMETRE = re.compile(rb"\(\s*LENGTH_UNIT\s*\(\s*\)\s*NAMED_UNIT\s*\(\s*\*\s*
 _METRE = re.compile(rb"\(\s*LENGTH_UNIT\s*\(\s*\)\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\$\s*,\s*\.METRE\.\s*\)\s*\)")
 _MEASURE = re.compile(rb"MEASURE_WITH_UNIT\s*\(.*,\s*#(\d+)\s*\)\s*;", re.S)
 _GDT_MAGNITUDE = re.compile(rb"_TOLERANCE\s*\(\s*'(?:[^']|'')*'\s*,\s*'(?:[^']|'')*'\s*,\s*#(\d+)")
+_DATUM_SYSTEM = re.compile(rb"#(\d+)\s*=\s*DATUM_SYSTEM\s*\(.*\(([^()]*)\)\s*\)\s*;", re.S)
+_DATUM_REFERENCE = re.compile(rb"GEOMETRIC_TOLERANCE_WITH_DATUM_REFERENCE\s*\(\s*\(([^()]*)\)\s*\)")
+# What a dropped record alone may have held, dropped with it.
+_HELD = (b"PLANE_ANGLE_MEASURE_WITH_UNIT", b"DATUM_REFERENCE_COMPARTMENT")
 
 
 def _pmi_records(data: bytes) -> bytes:
@@ -432,21 +439,40 @@ def _pmi_records(data: bytes) -> bytes:
             if found and int(found.group(1)) in metres:
                 replaced[magnitude] = record[:found.start(1) - 1] + b"#%d" % millimetre + record[found.end(1):]
     runouts = [number for number in spans if b"RUNOUT_ZONE_" in text(number)[:64]]
-    candidates: dict[int, int] = {}  # a record that may go: its angle, or 0
+    candidates: dict[int, tuple[int, ...]] = {}  # a record that may go: what it alone may hold
     for number in runouts:
         record = text(number)
         if _RUNOUT.search(record):
-            candidates[number] = 0
+            candidates[number] = ()
         else:
             found = _ORIENTATION.search(record)
             if found:
-                candidates[number] = int(found.group(1))
+                candidates[number] = (int(found.group(1)),)
+    # A frame written again: each tolerance refers to its first system, and the others may go.
+    kept: dict[tuple[bytes, ...], int] = {}
+    again: dict[int, int] = {}
+    for number in spans:
+        found = _DATUM_SYSTEM.match(text(number))
+        if found is None:
+            continue
+        compartments = tuple(int(ref) for ref in _REFERENCE.findall(found.group(2)))
+        frame = tuple(_one_line(text(held)).partition(b"=")[2] for held in compartments)
+        first = kept.setdefault(frame, number)
+        if first != number:
+            again[number] = first
+            candidates[number] = compartments
+    if again:
+        for number in spans:
+            found = _DATUM_REFERENCE.search(text(number))
+            if found and {int(ref) for ref in _REFERENCE.findall(found.group(1))} & set(again):
+                named = _REFERENCE.sub(lambda ref: b"#%d" % again.get(int(ref[1]), int(ref[1])), found[1])
+                replaced[number] = text(number)[:found.start(1)] + named + text(number)[found.end(1):]
     if not candidates and not replaced:
         return data
     # Who refers to each record that may go (one pass, strings blanked, each as it is written).
     for number in metres:
-        candidates.setdefault(number, 0)
-    watched = set(candidates) | {angle for angle in candidates.values() if angle}
+        candidates.setdefault(number, ())
+    watched = set(candidates) | {held for holds in candidates.values() for held in holds}
     referred: dict[int, set[int]] = {number: set() for number in watched}
     for number in spans:
         record = _QUOTED.sub(b"''", replaced.get(number, text(number)))
@@ -455,14 +481,37 @@ def _pmi_records(data: bytes) -> bytes:
                 referred[int(ref)].add(number)
     dropped = {number for number in candidates if not referred[number]}
     for number in list(dropped):
-        angle = candidates[number]
-        if angle and angle in spans and b"PLANE_ANGLE_MEASURE_WITH_UNIT" in text(angle) and referred[angle] <= dropped:
-            dropped.add(angle)
+        for held in candidates[number]:
+            if held in spans and any(kind in text(held) for kind in _HELD) and referred[held] <= dropped:
+                dropped.add(held)
     if not replaced and not dropped:
         return data
     pieces = [body[:heads[0].start()]]
     pieces.extend(replaced.get(number, text(number)) for number in spans if number not in dropped)
     return data[:start] + b"".join(pieces) + data[end:]
+
+
+# The kernel's writer names a density's unit gram³·cm², two exponents wrong (the number is in
+# g/cm³, and OCCT's reader takes the exponents as read), so a reader of the unit refuses it: NIST's
+# STEP File Analyzer, "the length unit exponent should be -3". Each element is written with the
+# unit it names on the next record, and the file's numbers stay. The value it writes untyped, where
+# ``measure_value`` is a select a strict reader needs typed: ``POSITIVE_RATIO_MEASURE``, as an AP242
+# writer of no OCCT types it (haecceity's).
+_DENSITY_VALUE = re.compile(rb"(MEASURE_REPRESENTATION_ITEM\s*\(\s*'density'\s*,\s*)"
+                            rb"([-+]?[0-9.]+(?:[eE][-+]?[0-9]+)?)(\s*,)")
+_DENSITY_MASS = re.compile(rb"(DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*)3\.(\s*\)\s*;\s*#\2\s*=\s*\(\s*MASS_UNIT\s*\(\s*\)"
+                           rb"\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\$\s*,\s*\.GRAM\.\s*\)\s*\))")
+_DENSITY_LENGTH = re.compile(rb"(DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*)2\.(\s*\)\s*;\s*#\2\s*=\s*\(\s*LENGTH_UNIT\s*\(\s*\)"
+                             rb"\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\.CENTI\.\s*,\s*\.METRE\.\s*\)\s*\))")
+
+
+def _density_units(data: bytes) -> bytes:
+    """Each density typed and its unit stated as its number is, g/cm³ (see above); a file with no
+    material is left as it is."""
+    if b"DERIVED_UNIT_ELEMENT" not in data:
+        return data
+    data = _DENSITY_VALUE.sub(rb"\g<1>POSITIVE_RATIO_MEASURE(\g<2>)\g<3>", data)
+    return _DENSITY_LENGTH.sub(rb"\g<1>-3.\g<3>", _DENSITY_MASS.sub(rb"\g<1>1.\g<3>", data))
 
 
 def _default_tolerances(path: Path, stated: list[tuple[str, str]]) -> None:

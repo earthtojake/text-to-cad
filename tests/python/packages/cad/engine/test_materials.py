@@ -5,6 +5,7 @@ import base64
 import copy
 import io
 import json
+import re
 import tempfile
 import textwrap
 import unittest
@@ -192,6 +193,28 @@ class MaterialsTest(unittest.TestCase):
         densities = {child.material.material.density for child in step.children}
         self.assertIn(metals.aluminum().material.density, densities)
         self.assertIn(metals.mild_steel().material.density, densities)
+
+    def test_a_step_states_each_density_in_grams_per_cubic_centimetre(self):
+        """OCCT's writer leaves the value untyped and names the unit gram³·cm²: the export types it
+        and states the unit as the number is (``export.step._density_units``), and the reader gives
+        each density back the same."""
+        script = self.folder / "model.py"
+        script.write_text(textwrap.dedent(SOURCE.replace("ROUGHNESS", "0.5")), encoding="utf-8")
+        report = engine_build.build(script, ["assembly"], cwd=self.folder)[0]
+        self.assertTrue(report["ok"], report.get("error"))
+        path = self.folder / "assembly.step"
+        data = path.read_text(encoding="utf-8")
+        records = dict(re.findall(r"^#(\d+) = (.*?);$", data, re.M | re.S))
+        units = re.findall(r"MEASURE_REPRESENTATION_ITEM\('density',POSITIVE_RATIO_MEASURE\([^,]+\),#(\d+)\)", data)
+        self.assertGreaterEqual(len(units), 2)
+        for unit in units:
+            stated = []
+            for element in re.findall(r"#(\d+)", records[unit]):
+                named, exponent = re.fullmatch(r"DERIVED_UNIT_ELEMENT\(#(\d+),(.*)\)", records[element]).groups()
+                stated.append((re.search(r"SI_UNIT\((.*?)\)", records[named]).group(1), float(exponent)))
+            self.assertEqual(stated, [("$,.GRAM.", 1.0), (".CENTI.,.METRE.", -3.0)])
+        densities = {child.material.material.density for child in reader.read_step(path).children}
+        self.assertEqual(densities, {metals.aluminum().material.density, metals.mild_steel().material.density})
 
     def test_mutation_changes_content_key_and_rejects_arbitrary_reconstruction_types(self):
         changed = copy.deepcopy(FULL)

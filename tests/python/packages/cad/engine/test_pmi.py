@@ -1901,6 +1901,52 @@ def pmi_plate():
         self.assertEqual(read(self.step)[0]["geometric_tolerance"]["value"], 0.05)
 
 
+# A plate whose tolerances name one frame three times and another once. Tolerance values
+# ILLUSTRATIVE.
+FRAMES = '''
+import build123d as bd
+from cad.ap242 import annotate, datum, position_tolerance, surface_profile_tolerance
+from cad.engine import step, xbf
+
+
+@xbf(out="XBF/pmi_plate.xbf")
+@step(out="pmi_plate.step")
+def pmi_plate():
+    body = bd.Box(100, 60, 10) - bd.Cylinder(5, 10)
+    body.label = "plate"
+    bottom = body.faces().sort_by(bd.Axis.Z)[0]
+    front, back = body.faces().sort_by(bd.Axis.Y)[0], body.faces().sort_by(bd.Axis.Y)[-1]
+    left, right = body.faces().sort_by(bd.Axis.X)[0], body.faces().sort_by(bd.Axis.X)[-1]
+    hole = body.faces().filter_by(bd.GeomType.CYLINDER)[0]
+    return annotate(body, datum("A", bottom), datum("B", front),
+                    position_tolerance("hole", hole, 0.1, datums=["A", "B"]),
+                    surface_profile_tolerance("right", right, 0.5, datums=["A", "B"]),
+                    surface_profile_tolerance("back", back, 0.5, datums=["A", "B"]),
+                    surface_profile_tolerance("left", left, 0.5, datums=["A"]))
+'''
+
+
+class DatumFrameTest(_Folder):
+    def test_a_frame_several_tolerances_name_is_one_datum_system(self) -> None:
+        """OCCT's writer writes a ``DATUM_SYSTEM`` per tolerance: the export writes each frame once
+        (``export.step._pmi_records``). A frame is its datums: A stays apart from A|B, and every
+        tolerance still reads its own to OCCT and to a reader of no OCCT."""
+        self.build(FRAMES)
+        data = self.step.read_bytes()
+        self.assertEqual(data.count(b"DATUM_SYSTEM("), 2)
+        self.assertEqual(data.count(b"DATUM_REFERENCE_COMPARTMENT("), 3)
+        found = ap242.report(self.step)
+        self.assertEqual(found["problems"], [])
+        self.assertEqual(sorted((entry["entity"], entry["datums"]) for entry in found["tolerances"]),
+                         [("POSITION_TOLERANCE", ["A", "B"]), ("SURFACE_PROFILE_TOLERANCE", ["A"]),
+                          ("SURFACE_PROFILE_TOLERANCE", ["A", "B"]), ("SURFACE_PROFILE_TOLERANCE", ["A", "B"])])
+        frames = [json.dumps(entry["geometric_tolerance"]["datums"]) for entry in read(self.step)
+                  if entry["kind"] == "geometric_tolerance"]
+        self.assertEqual(sorted(frames), sorted(json.dumps(entry["geometric_tolerance"]["datums"])
+                                                for entry in read(self.xbf) if entry["kind"] == "geometric_tolerance"))
+        self.assertEqual(sorted(json.loads(frame) for frame in frames), [["A"], ["A", "B"], ["A", "B"], ["A", "B"]])
+
+
 class RefTest(_Folder):
     def hole_name(self) -> str:
         """The hole's element name, as the served document names it."""

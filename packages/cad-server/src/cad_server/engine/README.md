@@ -86,10 +86,9 @@ A part's material is native: `part.material = bd_materials.metals.aluminum()`.
 `paint(part, faces, material)` gives faces one. Set an assembly's material before reading
 its children's inherited properties. Set an explicit `part.color` after `.material`, since
 build123d's material setter sets colour. Set materials on finished parts, after the
-last operation: an edit of one is then no kernel call. Two limits of OCCT's STEP writer show in a STEP export: it names the density
-unit gram³·cm² (the exponents wrong, the number right: the reader gives the density back as
-written), and it writes materials sharing a name as one entity, so a STEP gives every such
-material the first one's description.
+last operation: an edit of one is then no kernel call. A limit of OCCT's STEP writer shows in a STEP
+export: it writes materials sharing a name as one entity, so a STEP gives every such material the
+first one's description.
 
 An assembly's mechanism is build123d's joints: `RevoluteJoint`,
 `LinearJoint`, `CylindricalJoint`, `BallJoint` and `RigidJoint` on its parts, placed with
@@ -2486,11 +2485,12 @@ included, each named, a STEP's by each annotation's id and the ref
 that holds no geometry: `a STEP would drop PMI linked to no geometry: ID (ref 'REF': WHY). Fix the
 refs in the model, or remove the annotations`); one of a document another system wrote is
 written, and what it leaves out is said (`pmi.dropped`: `warning: pmi: FILE: ID is not carried
-whole: WHY` in the export's log). OCCT's writer gets three PMI records wrong, and the STEP export
+whole: WHY` in the export's log). OCCT's writer gets four PMI records wrong, and the STEP export
 puts them right (`export/step.py`, `_pmi_records`; found and checked by the AP242 reader below):
 a plus-minus tolerance's bounds untyped (`MEASURE_WITH_UNIT(0.2,#u)`); a two-attribute
-`RUNOUT_ZONE_DEFINITION` beside every diametral zone; and, in a document with no dimension, every
-tolerance magnitude in a bare metre while its value is millimetres. OCCT's own reader finds a
+`RUNOUT_ZONE_DEFINITION` beside every diametral zone; in a document with no dimension, every
+tolerance magnitude in a bare metre while its value is millimetres; and a `DATUM_SYSTEM` per
+tolerance, where each frame is written once. OCCT's own reader finds a
 datum only through a tolerance that names it.
 
 **The check in the written file.** Every STEP written of a document that holds PMI a STEP
