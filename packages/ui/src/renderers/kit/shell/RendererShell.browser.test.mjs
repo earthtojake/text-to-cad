@@ -708,6 +708,16 @@ test('a renderer says more about its load than a download: finding the file, edi
     ['Preview'], 'Preview at the strip\'s end');
   assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'Display, Projection, then Home over the cube');
+  // Each the strip's own 24px button, 4px apart, flush with the cube's right face (20px inside its box) and
+  // the lowest standing on the box's top.
+  const column = await pane.locator('[data-view-corner] > button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().toJSON()));
+  assert.equal(column.length, 3);
+  for (const [index, box] of column.entries()) {
+    assert.deepEqual([box.width, box.height], [24, 24], `corner button ${index} is 24px square`);
+    assert.ok(Math.abs(box.x + box.width - (cubeBox.x + cubeBox.width - 20)) < 0.5, `corner button ${index} flush with the cube's right face`);
+    if (index) assert.ok(Math.abs(box.y - column[index - 1].y - 28) < 0.5, `corner button ${index} 4px under the one over it`);
+  }
+  assert.ok(Math.abs(column.at(-1).y + 24 - cubeBox.y) < 0.5, 'the column stands on the cube box\'s top');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
 

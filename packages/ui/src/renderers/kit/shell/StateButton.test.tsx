@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ArrowUpToLine, Square } from 'lucide-react';
+import { Layers2, Square } from 'lucide-react';
 import StateButton from '../../../../dist/renderers/kit/shell/StateButton.js';
 import ProjectionToggle from '../../../../dist/renderers/kit/shell/ProjectionToggle.js';
 
@@ -37,9 +37,9 @@ it('shows the state on screen and names it; its tooltip says what a press does, 
 });
 
 it('lit for a state a person may lose track of, it is drawn in the pressed fill and still says what a press does', () => {
-  render(<StateButton icon={ArrowUpToLine} label="Side: Bottom" tooltip="View from top" shortcut="⇧F" lit onPress={() => {}} />);
+  render(<StateButton icon={Layers2} label="Side: Bottom" tooltip="View from top" shortcut="⇧F" lit onPress={() => {}} />);
   const button = screen.getByRole('button', { name: 'Side: Bottom' });
-  expect(icon(button)).toBe('lucide-arrow-up-to-line');
+  expect(icon(button)).toBe('lucide-layers-2');
   expect([button.getAttribute('data-variant'), button.getAttribute('aria-keyshortcuts'), button.hasAttribute('aria-pressed')]).toEqual(['secondary', 'Shift+F', false]);
   hover(button);
   expect(tip()!.textContent).toBe('View from top⇧F');

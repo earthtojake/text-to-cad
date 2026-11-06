@@ -12,9 +12,9 @@ import { useStripButtonClass } from "../tools/FloatingToolBar.js";
  * strip's tooltips show theirs). `lit`: a state a person may lose track of (a view seen from its other
  * side), drawn in the strip's pressed fill for as long as it holds, its tooltip kept.
  *
- * It is a tile of the strip in hand (`useStripButtonClass`), or of the view's corner (`className`,
- * `ViewCorner.jsx`'s `VIEW_CORNER_BUTTON_CLASS`, in a `ViewCornerTile`), the same size whatever its
- * state, so nothing round it moves when the state does.
+ * It is a tile of the strip in hand (`useStripButtonClass`), or a button of the view's corner (`className`,
+ * `ViewCorner.jsx`'s `VIEW_CORNER_BUTTON_CLASS`, the tile carrying the corner's surface), the same size
+ * whatever its state, so nothing round it moves when the state does.
  *
  * @param {{ icon: import("react").ComponentType<{ "aria-hidden"?: boolean | "true" }>, label: string, tooltip: string,
  *   onPress(): void, shortcut?: string, lit?: boolean, disabled?: boolean, tooltipSide?: "top" | "right" | "bottom" | "left",

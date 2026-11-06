@@ -1,5 +1,5 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { ArrowDownToLine, ArrowUpToLine, Box, Square } from "lucide-react";
+import { Box, Square } from "lucide-react";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -11,8 +11,9 @@ import {
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
-import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerState, ViewCornerTile, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerState, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
+import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
 /**
  * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
@@ -124,8 +125,8 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
 /**
  * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
  * switched often enough to keep there: in the corner's column over the zoom pill, from the top down
- * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, each a 32px tile, and
- * on a phone rows of the strip's More —
+ * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, each one 24px corner
+ * button, and on a phone rows of the strip's More —
  *
  * - **Display**, the corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
  *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
@@ -133,10 +134,10 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
  * - **2D/3D**, the board drawn flat or as a board in 3D: the view's state button (`kit/shell/StateButton.jsx`,
  *   Projection's), a square while it is flat and a box in 3D, its name the state ("View: 2D"), its tooltip
  *   what a press does ("Switch to 3D", and its key, 3); on a phone More's row 3D view, ticked in 3D;
- * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the same state button, an arrow
- *   down onto the board seen from the top and up under it seen from the bottom, lit in the strip's pressed
- *   fill while it is (the view people lose track of), its name the side ("Side: Bottom"), its tooltip what
- *   a press does ("View from top", and its key, ⇧F). From the bottom the board is mirrored, its back
+ * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the same state button, the board as
+ *   two stacked layers, the side it is seen from solid (`boardSideIcons.jsx`), lit in the strip's pressed
+ *   fill while it is seen from the bottom (the view people lose track of), its name the side ("Side: Bottom"),
+ *   its tooltip what a press does ("View from top", and its key, ⇧F). From the bottom the board is mirrored, its back
  *   layers on top; in 3D the camera turns over to the other side (`onSide`), and the button follows the
  *   camera, whichever side of the board's plane it is on. On a phone More's row View from bottom, ticked
  *   while it is.
@@ -158,23 +159,23 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
   const switchDimension = () => onDimensionChange(solid ? "2d" : "3d");
   const presets = boardPresetMode({ display, sheet, onChange, t });
   const [flat, inThreeD] = [t("board.text.view_2d"), t("board.text.view_3d")];
-  // Each state's Lucide icon: a square for the board flat, a box for it in 3D; seen from the top an arrow
-  // down onto it, from the bottom an arrow up under it (Flux's flip glyphs).
+  // Each state's icon: Lucide's square for the board flat and box for it in 3D; the board's two layers, the
+  // side facing the viewer solid, from the top or the bottom.
   return [
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null,
       submenu: () => <DisplayMenuItems mode={presets} projection={projection} />,
       // Its tooltip and menu open beside it, away from the corner, as a 3D view's column's Display does.
-      corner: <ViewCornerTile><ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
+      corner: <ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
         icon={SolidModeIcon} className={VIEW_CORNER_BUTTON_CLASS} tooltipSide={viewCornerAway(corner).side} side={viewCornerAway(corner).side}
-        align="end" />}</ViewCornerSided></ViewCornerTile> },
+        align="end" />}</ViewCornerSided> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: solid, tile: null, onSelect: switchDimension,
       corner: <ViewCornerState icon={solid ? Box : Square} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
         tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
         disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} />
     }] : []),
-    { id: "side", label: t("board.text.view_from_bottom"), icon: <ArrowUpToLine />, disabled, active: below, tile: null, onSelect: flip,
-      corner: <ViewCornerState icon={below ? ArrowUpToLine : ArrowDownToLine} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
+    { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, tile: null, onSelect: flip,
+      corner: <ViewCornerState icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
         tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT} lit={below}
         disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} /> }
   ];
