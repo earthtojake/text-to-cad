@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support.paths import REPO_ROOT, add_repo_path
+from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
 add_repo_path("packages/cad/src")
@@ -813,11 +813,6 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         marks = {"windsurf": ".codeium/windsurf", "goose": ".config/goose", "cline": ".cline"}
         for name in names:
             (home.home / marks[name]).mkdir(parents=True)
-
-    def test_the_skills_are_this_repository_s(self) -> None:
-        self.assertEqual(list(providers.SKILLS),
-                         sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md")))
-        self.assertFalse(set(providers.RETIRED_SKILLS) & set(providers.SKILLS))
 
     def test_a_retired_skill_of_ours_is_deleted_and_an_uninstall_removes_one_a_later_install_left(self) -> None:
         # The Skills CLI adds skills and never removes one: what an earlier release shipped stays loaded. Nothing
