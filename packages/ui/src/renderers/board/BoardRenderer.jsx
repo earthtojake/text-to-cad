@@ -26,7 +26,7 @@ import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
-import { useBoardDescribe, useBoardInspect, useBoardReferences } from "./boardReferences.jsx";
+import { useBoardDescribe, useBoardInspect, useBoardReferences, useBoardTip } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
 import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
 import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
@@ -624,7 +624,8 @@ function BoardSurface({ view, data }) {
   const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const copySelectors = useCallback(ids => (path ? buildBoardRefToken({ path, selectors: ids }) : ""), [path]);
-  const inspect = useBoardInspect({ index, describe, selection, hovered, onSelect: takeSelect, frame: frameSelectors, copyText: copySelectors });
+  const tip = useBoardTip(index);
+  const inspect = useBoardInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, frame: frameSelectors, copyText: copySelectors });
   const panelTabs = [
     ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),

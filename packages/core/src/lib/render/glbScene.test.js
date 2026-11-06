@@ -119,6 +119,8 @@ test("a GLB's nodes are what Select picks and Quick Edit names: `n<index>`, the 
   assert.deepEqual([hit.id, hit.name, hit.point.map(Math.round)], ["n1", "part (n1)", [2000, 0, 500]]);
   // Its card: its index, its triangles, the size it draws at in the file's metres, its authored material's name.
   assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12", "1 × 1 × 1 m"]);
+  // The hover tip's: its name alone, measuring nothing.
+  assert.deepEqual([scene.nameOf("n1"), scene.nameOf("n9")], ["part (n1)", ""]);
   const named = nodeDocument();
   named.lit.material.name = "steel";
   const card = createGlbScene(THREE, named.document);

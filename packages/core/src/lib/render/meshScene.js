@@ -96,6 +96,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
     },
     /** Whether `path` (`o2.1`) is a 3MF object of this file. */
     hasPart: path => byPath.has(path),
+    /** A 3MF object's name alone, as its chip says it, counting nothing: the hover tip's. "" for none. */
+    nameOf(path) {
+      const records = byPath.get(path);
+      return records ? objectName(path, records[0].mesh.name) : "";
+    },
     /** A 3MF object, as Quick Edit's chip says it: its name, and its place in the build. */
     describePart(path) {
       const records = byPath.get(path);

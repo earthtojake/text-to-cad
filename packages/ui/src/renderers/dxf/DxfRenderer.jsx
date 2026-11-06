@@ -23,7 +23,7 @@ import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
-import { createDrawingScene, describeDrawingPick, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
+import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
@@ -358,7 +358,8 @@ function DxfSurface({ view, data }) {
   // What is picked, as the frame reads it: the Selected pane under the Layers, the hover tip, the cards' rows.
   const resource = workspace.resource;
   const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
-  const inspect = useSceneInspect({ scene, selection, describe, frame: frameEntities, copyText, glyphs: DRAWING_GLYPHS, data: "drawing" });
+  const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);
+  const inspect = useSceneInspect({ scene, selection, describe, tip, frame: frameEntities, copyText, glyphs: DRAWING_GLYPHS, data: "drawing" });
 
   // ---- the frame: every flat view's (`kit/shell/FlatViewFrame.jsx`) around the drawing's canvas ----
   // While the drawing loads, or once it has failed to, none of the viewer's own chrome. A compact host

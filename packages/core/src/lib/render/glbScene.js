@@ -184,6 +184,11 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     },
     /** Whether `id` (`n12`) is a node of this file that draws. */
     hasPart: id => nodeOf(id) !== null,
+    /** A node's name alone, as its chip says it, measuring nothing: the hover tip's. "" for none. */
+    nameOf(id) {
+      const index = nodeOf(id);
+      return index === null ? "" : nodeName(nodes.get(index));
+    },
     /**
      * A node, as Quick Edit's chip and its card say it: its name, and what the file says of it — its
      * index, its triangles, the size of what it draws where it stands now (in the file's metres), the

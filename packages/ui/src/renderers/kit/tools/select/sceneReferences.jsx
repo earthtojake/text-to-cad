@@ -25,12 +25,15 @@ export function useSceneDescribe(scene) {
  * A scene's picks as its frame reads them (`inspector/inspect.js`'s `Inspect`): what `useSceneSelection`
  * has picked and what the pointer is on in the view (`pointed`), each described (`describe`), and what a
  * row of the pane does — picks it, lights it, frames it (`frame`) — and what its name copies (`copyText`).
- * Null with no scene.
+ * The hover tip's words are `tip`'s, else the scene's name for the part alone (`nameOf`), which measures
+ * nothing. Null with no scene.
  */
-export function useSceneInspect({ scene, selection, describe, frame = null, copyText = null, glyphs = null, data = "" }) {
+export function useSceneInspect({ scene, selection, describe, tip = null, frame = null, copyText = null, glyphs = null, data = "" }) {
   const { selected, select, hover, pointed } = selection;
-  return useMemo(() => (scene ? { selected, describe, hovered: pointed || "", select, hover, frame, copyText, glyphs, data: data || undefined } : null),
-    [scene, selected, describe, pointed, select, hover, frame, copyText, glyphs, data]);
+  const named = useCallback(id => scene?.nameOf?.(id) || "", [scene]);
+  const words = tip || (scene?.nameOf ? named : null);
+  return useMemo(() => (scene ? { selected, describe, tip: words, hovered: pointed || "", select, hover, frame, copyText, glyphs, data: data || undefined } : null),
+    [scene, selected, describe, words, pointed, select, hover, frame, copyText, glyphs, data]);
 }
 
 /** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file). */

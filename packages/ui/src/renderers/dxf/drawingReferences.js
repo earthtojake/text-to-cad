@@ -78,6 +78,24 @@ function entityMeasures(entity) {
   return { length: straight, diameter: type === "CIRCLE" && entity.radius != null ? 2 * entity.radius : null, size };
 }
 
+// An entity's headline measure, for its hover tip: a straight run's length, a circle's diameter, an arc's
+// radius ("25.00 mm", "Ø 12.00 mm", "R 4.00 mm"), from its own primitives alone; "" for anything else.
+function entityHeadline(entity, unit) {
+  const { length, diameter } = entityMeasures(entity);
+  return length !== null ? inUnit(length, unit) : diameter !== null ? `Ø ${inUnit(diameter, unit)}`
+    : entity.radius != null ? `R ${inUnit(entity.radius, unit)}` : "";
+}
+
+/**
+ * The hover tip's words for a pick (`kit/inspector/inspect.js`'s `tip`): its name and its headline measure,
+ * from the entity alone — no facts, and no look through the drawing for its block's other references.
+ */
+export function drawingPickTip(drawing, id, unit = "", t = english) {
+  const handle = drawingHandleOf(id);
+  const entity = handle && HANDLE.test(handle) ? drawing.entities.get(handle) : null;
+  return entity ? [entityName(entity, t), entityHeadline(entity, unit)].filter(Boolean).join(" · ") : "";
+}
+
 /**
  * An entity, as Quick Edit's chip and the Selected pane say it: its name, and what the drawing says of it
  * — its handle and DXF type, its layer, the block an INSERT places, a circle's or arc's centre and radius,
@@ -89,7 +107,7 @@ function entityMeasures(entity) {
 export function describeEntity(entity, unit = "", t = english) {
   const at = value => inUnit(value, unit);
   const { length, diameter, size } = entityMeasures(entity);
-  const tip = length !== null ? at(length) : diameter !== null ? `Ø ${at(diameter)}` : entity.radius != null ? `R ${at(entity.radius)}` : "";
+  const tip = entityHeadline(entity, unit);
   return {
     name: entityName(entity, t),
     tip,

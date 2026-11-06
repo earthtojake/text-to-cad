@@ -5,7 +5,7 @@ import test from "node:test";
 import { prepareDrawing } from "@cad/core/lib/drawing2d/index.js";
 import { parsePromptReference } from "@cad/core/prompt";
 import {
-  createDrawingScene, describeDrawingPick, describeEntity, drawingHandleOf, drawingReferenceId, drawingUnits, layerRows, layersSectionShown
+  createDrawingScene, describeDrawingPick, describeEntity, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layerRows, layersSectionShown
 } from "./drawingReferences.js";
 
 class NullPath { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} }
@@ -58,6 +58,9 @@ test("a pick's lengths are in the unit its drawing declares, as Measure reads th
   assert.equal(diameter({ insunits: 6, name: "Meters" }), "12.00 m");
   assert.equal(diameter({ insunits: 0, name: "Unitless" }), "12.00 units");
   assert.equal(describeDrawingPick(drawing, "h90", drawingUnits({ insunits: 1 }).unit).tip, "Ø 12.00 in");
+  // The hover tip's own words: the name and the headline measure, from the entity alone.
+  assert.equal(drawingPickTip(drawing, "h90", "mm"), "Circle on CUT · Ø 12.00 mm");
+  assert.equal(drawingPickTip(drawing, "h99", "mm"), "Block M5_NUT on HARDWARE");
 });
 
 test("a drawing's unit is the one it declares, and bare drawing units when it declares none", () => {

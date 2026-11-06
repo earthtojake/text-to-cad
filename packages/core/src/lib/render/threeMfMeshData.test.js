@@ -290,6 +290,7 @@ test("a 3MF's objects are known by their place in its build, and its unit is the
   assert.deepEqual(scene.units, { unit: "in", perWorld: 1 });
   assert.deepEqual(["o1", "o2.1", "o2.2"].map(path => scene.describePart(path).name), ["frame", "wheel (o2.1)", "wheel (o2.2)"]);
   assert.deepEqual(scene.describePart("o2.2").facts.map(fact => fact.value), ["2, component 2", "12"]);
+  assert.deepEqual([scene.nameOf("o2.2"), scene.nameOf("o9")], ["wheel (o2.2)", ""]);
   scene.dispose();
 
   const model = unit => zipSync({ "3D/3dmodel.model": strToU8(`<?xml version="1.0"?>\n<model ${unit} xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources/></model>`) });

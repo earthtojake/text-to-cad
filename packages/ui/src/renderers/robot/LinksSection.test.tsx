@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, expect, it, vi } from 'vitest';
 import LinksSection from '../../../dist/renderers/robot/LinksSection.js';
 import { useLinkSelection } from '../../../dist/renderers/robot/useLinkSelection.js';
-import { useRobotDescribe, useRobotInspect, useRobotReferences } from '../../../dist/renderers/robot/robotReferences.js';
+import { useRobotDescribe, useRobotInspect, useRobotReferences, useRobotTip } from '../../../dist/renderers/robot/robotReferences.js';
 import ItemDetail from '../../../dist/renderers/kit/inspector/ItemDetail.js';
 import { robotLinkItem } from '../../../dist/renderers/robot/LinkDetails.js';
 import { robotLinkFacts } from '../../../dist/renderers/robot/robotTree.js';
@@ -350,4 +350,12 @@ it("a link's description is its joint to its parent with its limits, the parent 
   expect([item.related.title, item.related.rows.map((row: any) => [row.pick, row.detail])]).toEqual(['Child joints', [['elbow_link', 'elbow_lift · prismatic']]]);
   // The root is said to be one, with nothing holding it.
   expect(robotLinkItem(robotLinkFacts(robot, 'base_footprint')).tip).toBe('Root link');
+});
+
+it("the hover tip's words for a robot are its link's name and the joint that holds it, or an object's name and link, building no facts", () => {
+  let tip: (id: string) => string = () => '';
+  function Probe() { tip = useRobotTip({ robot, components }); return null; }
+  render(<Probe/>);
+  expect([tip('shoulder_link'), tip('base_footprint'), tip('wrist_link:v1/object/0'), tip('nowhere')])
+    .toEqual(['shoulder_link · revolute', 'base_footprint · Root link', 'flange · wrist_link', '']);
 });

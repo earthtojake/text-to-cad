@@ -689,7 +689,8 @@ file.
     facts alone;
   - a drawing's entity (`dxf/drawingReferences.js`'s `describeDrawingPick`): its handle, DXF type, layer,
     an insert's block, a circle's or arc's centre and radius, and what it measures in the drawing's
-    unit — a line's or a straight polyline's length, a circle's diameter, else its box's size; a block
+    unit (Measure's formatter, `formatMeasurement`, "units" where the file declares none, as Measure reads
+    them) — a line's or a straight polyline's length, a circle's diameter, else its box's size; a block
     reference lists the other references of its block (the payload names a block reference's contents
     by the reference, so they are no picks of their own); the pane stands under the Layers, where the
     drawing has them;
@@ -709,13 +710,16 @@ file.
   Nothing picked: none. A view without a panel (a phone, a GLB, a mesh, a drawing of a few layers) has
   no pane; its chips' cards read the same.
 - **A hover tip** — the frame's, every view's that picks (`ViewFrame.jsx`, `kit/shell/HoverTip.jsx`'s
-  `useFrameHoverTip`): under Select, the name of what a press would pick there (the view's `hovered`),
-  from the same description, short — its name and its short kind (`inspect.js`'s `hoverTipText`: a
-  pad's or a pin's net, a part's value, `U12.57 · /TVRAM12`; a line's length, a circle's Ø; a link's
-  parent joint's type; a part's owner; a face's headline measure, once measured) — in a small tip
-  beside where the pointer came onto it, once the pointer has rested on it a moment (450ms), gone the
-  moment it leaves, a button is held (a drag, a pan) or Select is put down; it takes no pointer. No
-  view draws one of its own (`check-kit-boundaries.mjs`' frame guard).
+  `useFrameHoverTip`): under Select, the name of what a press would pick there (the view's `hovered`) and
+  its short kind — a pad's or a pin's net, a part's value (`U12.57 · /TVRAM12`); a drawing entity's
+  headline measure in the drawing's unit (`Line on CUT · 25.00 mm`, `Ø 12.00 mm`); a link's parent
+  joint's type; a part's or subassembly's owner; a face's part, kind and number — in a small tip beside
+  where the pointer came onto it, once the pointer has rested on it a moment (450ms), gone the moment it
+  leaves, a button is held (a drag, a pan) or Select is put down; it takes no pointer. It runs as the
+  pointer moves, so it is **cheap by rule**: each view gives it a short path of its own (`inspect.js`'s
+  `tip`), names from what is in hand, measuring and listing nothing (a 3D scene's `nameOf`, `xbfTipper`,
+  `useRobotTip`, `drawingPickTip`, `boardPickTip`, `schematicPickTip`); the full description runs only
+  for the pane and a card. No view draws a tip of its own (`check-kit-boundaries.mjs`' frame guard).
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
   making it the active layer (a filled dot after its name), drawn on top. Which preset draws the board

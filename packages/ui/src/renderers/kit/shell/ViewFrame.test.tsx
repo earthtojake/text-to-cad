@@ -59,3 +59,16 @@ it('the frame names what a press would pick in a tip beside the pointer, under S
   expect(other.queryByRole('tooltip')).toBeNull();
   vi.useRealTimers();
 });
+
+it("the hover tip takes the view's short words where it has them, and never runs the full description for a hover", () => {
+  vi.useFakeTimers();
+  const describe = vi.fn(() => null);
+  const inspect = { selected: [], describe, tip: (id: string) => `${id} · hinge`, hovered: 'pin', select: () => {}, hover: () => {} };
+  const view = render(<ViewFrame file="part.step" mobile={false} compact={false} chromeHidden={false} tools={[]} layout={{}} onLayoutChange={() => {}}
+    selecting inspect={inspect}><canvas data-testid="canvas" /></ViewFrame>);
+  fireEvent.pointerMove(view.getByTestId('canvas'), { clientX: 10, clientY: 10, buttons: 0 });
+  act(() => { vi.advanceTimersByTime(HOVER_TIP_DELAY_MS); });
+  expect(view.getByRole('tooltip').textContent).toBe('pin · hinge');
+  expect(describe).not.toHaveBeenCalled();
+  vi.useRealTimers();
+});

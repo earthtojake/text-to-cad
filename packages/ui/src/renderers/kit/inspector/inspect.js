@@ -35,6 +35,9 @@ import { english } from "@cad/ui/i18n";
  * @property {readonly string[]} selected  What is picked, in order.
  * @property {(id: string) => DetailItem | null} describe  One pick.
  * @property {string} [hovered]  What a press would pick now ("" for nothing): the hover tip's.
+ * @property {(id: string) => string} [tip]  The hover tip's words for a pick, from what is in hand: its name
+ *   and its short kind, measuring and listing nothing (the tip runs as the pointer moves; `describe` runs
+ *   for the pane and a card). Without it, `hoverTipText(describe(id))`.
  * @property {Record<string, import("react").ComponentType<any>>} [glyphs]  The view's own glyphs, by kind.
  * @property {string} [data]  The prefix of the pane's data attributes (`data-<data>-detail-row`).
  * @property {(id: string, options?: { multiSelect?: boolean }) => void} select

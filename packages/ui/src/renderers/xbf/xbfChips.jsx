@@ -75,6 +75,26 @@ export function xbfPartFacts({ assembly, parts, measured }, t = english) {
 }
 
 /**
+ * The hover tip's words for a pick in an engine document (`kit/inspector/inspect.js`'s `tip`), from the tree
+ * and the scene's names alone, measuring nothing: a part's or subassembly's name and its owner ("pin ·
+ * hinge"), a face's or an edge's part and its kind and number ("base · face 3"). "" for an id it does not hold.
+ */
+export function xbfTipper({ scene, tree }) {
+  if (!scene) return () => "";
+  return (id) => {
+    const parsed = parseXbfElementId(id);
+    if (!parsed?.kind) {
+      const node = tree.nodes.get(id);
+      if (!node) return "";
+      const owner = (tree.owners.get(id) || []).map(key => tree.nodes.get(key)).filter(item => item && item !== tree.wrapper).at(-1);
+      return [node.label, owner?.label].filter(Boolean).join(" · ");
+    }
+    const part = `i${parsed.instance}`, element = scene.describeElement(id);
+    return element ? `${tree.nodes.get(part)?.label || scene.describePart(part)?.name || part} · ${parsed.kind} ${element.ordinal}` : "";
+  };
+}
+
+/**
  * A pick in an engine document, as the Selected pane, its chip's card and the hover tip read it
  * (`kit/inspector/inspect.js`'s `DetailItem`):
  * - a part or subassembly (`i3`, `n0.2`): its name; where it sits, its owners outermost first

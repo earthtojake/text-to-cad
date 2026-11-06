@@ -24,7 +24,7 @@ import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
 import { selects } from "../kit/tools/select/selectFilter.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import PositionControls from "./PositionControls.jsx";
-import { useRobotDescribe, useRobotInspect, useRobotReferences } from "./robotReferences.jsx";
+import { useRobotDescribe, useRobotInspect, useRobotReferences, useRobotTip } from "./robotReferences.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
 import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
@@ -365,7 +365,8 @@ function RobotSurface({ view, data }) {
     const linkOf = new Map((components || []).map(component => [component.id, component.link]));
     return sceneCopyText(resource, [...new Set(ids.map(id => linkOf.get(id) ?? id))].filter(name => isLabelSelector(String(name || ""))));
   }, [resource, components]);
-  const inspect = useRobotInspect({ selection, components, describe, frame: frameIds, copyText: copyLinks, enabled: Boolean(scene) && !shell.previewing });
+  const tip = useRobotTip({ robot: robot?.robot || null, components });
+  const inspect = useRobotInspect({ selection, components, describe, tip, frame: frameIds, copyText: copyLinks, enabled: Boolean(scene) && !shell.previewing });
 
   return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
     inspect={inspect}

@@ -31,9 +31,12 @@ export default function HoverTip({ tip }) {
  * pointer came onto it. Only while the pointer is on the canvas and no button is held (a drag, a pan), and
  * only while `enabled` (Select in hand). `handlers` go on the box the canvas is drawn in, whose pixels the
  * tip is placed in.
- * @param {{ hovered: string, describe: ((id: string) => import("../inspector/inspect.js").DetailItem | null) | null, enabled: boolean }} options
+ * Its words come from the view's short path (`tip`) where it has one, so a hover measures and lists nothing;
+ * else from its full description.
+ * @param {{ hovered: string, describe: ((id: string) => import("../inspector/inspect.js").DetailItem | null) | null,
+ *   tip?: ((id: string) => string) | null, enabled: boolean }} options
  */
-export function useFrameHoverTip({ hovered, describe, enabled }) {
+export function useFrameHoverTip({ hovered, describe, tip: words = null, enabled }) {
   const pointer = useRef(null);
   const [over, setOver] = useState(false);
   const [held, setHeld] = useState(false);
@@ -51,7 +54,7 @@ export function useFrameHoverTip({ hovered, describe, enabled }) {
   // Where the pointer was as it came onto what it rests on: the tip stays there while it rests.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const at = useMemo(() => pointer.current, [hovered, over]);
-  const text = useMemo(() => (hovered && describe ? hoverTipText(describe(hovered)) : ""), [hovered, describe]);
+  const text = useMemo(() => (!hovered ? "" : words ? words(hovered) : describe ? hoverTipText(describe(hovered)) : ""), [hovered, describe, words]);
   const tip = enabled && over && !held && hovered && text && at ? { key: hovered, text, x: at.x, y: at.y } : null;
   return { handlers, tip };
 }

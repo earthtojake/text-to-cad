@@ -6,7 +6,7 @@ import {
   AreaKindIcon, DimensionKindIcon, GraphicKindIcon, NetKindIcon, PadKindIcon, PartKindIcon, RuleAreaKindIcon, TextKindIcon, TrackKindIcon, ViaKindIcon,
   ZoneKindIcon
 } from "./boardIcons.jsx";
-import { describeBoardPick } from "./boardTree.js";
+import { describeBoardPick, boardPickTip } from "./boardTree.js";
 
 const EMPTY = Object.freeze([]);
 // A chip leads with its kind's glyph, as Select's filter names the kinds: a part, a pad, a net or its
@@ -27,16 +27,22 @@ const BOARD_GLYPHS = Object.freeze({ ...KIND_ICONS, part: PartKindIcon, pad: Pad
  * (`describeBoardPick`: the Selected pane, a chip's card, the hover tip's name), what the pointer is on
  * (`hovered`), and what a row of the pane does (`select`, `hover`, `frame`, `onSelect`, `copyText`).
  */
-export function useBoardInspect({ index, describe, selection, hovered, onSelect, frame, copyText }) {
+export function useBoardInspect({ index, describe, tip = null, selection, hovered, onSelect, frame, copyText }) {
   const { selected, select, hover } = selection;
-  return useMemo(() => (index ? { selected, describe, hovered, glyphs: BOARD_GLYPHS, data: "board", select, hover, frame, onSelect, copyText } : null),
-    [index, selected, describe, hovered, select, hover, frame, onSelect, copyText]);
+  return useMemo(() => (index ? { selected, describe, tip, hovered, glyphs: BOARD_GLYPHS, data: "board", select, hover, frame, onSelect, copyText } : null),
+    [index, selected, describe, tip, hovered, select, hover, frame, onSelect, copyText]);
 }
 
 /** A board's picks described (`describeBoardPick`), in the view's language: what the pane, the cards and the tip read. */
 export function useBoardDescribe(index) {
   const { t } = useI18n();
   return useCallback(id => (index ? describeBoardPick(index, id, t) : null), [index, t]);
+}
+
+/** The hover tip's short words for a pick (`boardPickTip`), in the view's language. */
+export function useBoardTip(index) {
+  const { t } = useI18n();
+  return useCallback(id => (index ? boardPickTip(index, id, t) : ""), [index, t]);
 }
 
 /**

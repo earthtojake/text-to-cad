@@ -29,7 +29,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import SchematicSection, { useSchematicTrees } from "./SchematicSection.jsx";
 import SchematicSelectFilter from "./SchematicSelectFilter.jsx";
 import SheetsSection from "./SheetsSection.jsx";
-import { useSchematicDescribe, useSchematicInspect, useSchematicReferences } from "./schematicReferences.jsx";
+import { useSchematicDescribe, useSchematicInspect, useSchematicReferences, useSchematicTip } from "./schematicReferences.jsx";
 import { createSchematicScene } from "./schematicScene.js";
 import { SCHEMATIC_NO_CAMERA, SCHEMATIC_NO_DISPLAY, SCHEMATIC_SELECT_KINDS, SCHEMATIC_TOOL, SCHEMATIC_TOOL_MODES, readSchematicFilter } from "./tools.js";
 import { useSchematicDocument } from "./useSchematicDocument.js";
@@ -523,7 +523,8 @@ function SchematicSurface({ view, data }) {
   const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
   const copySelectors = useCallback(ids => (path ? buildSchematicRefToken({ path, selectors: ids }) : ""), [path]);
-  const inspect = useSchematicInspect({ index, describe, selection, hovered, onSelect: takeSelect, show: showSelectors, frame: frameSelectors, copyText: copySelectors });
+  const tip = useSchematicTip(index);
+  const inspect = useSchematicInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, show: showSelectors, frame: frameSelectors, copyText: copySelectors });
   const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
     tabs: [
       { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },

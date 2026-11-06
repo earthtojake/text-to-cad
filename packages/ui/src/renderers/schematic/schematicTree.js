@@ -158,6 +158,15 @@ export function sheetOfSelector(selector) {
 }
 
 /**
+ * The hover tip's words for a pick (`kit/inspector/inspect.js`'s `tip`): its name, and a pin's net or a
+ * part's value — what the schematic's tip has always said, without the lists of what it is connected to.
+ */
+export function schematicPickTip(index, id, t = english) {
+  const resolved = index.resolve(id), name = describeSchematicReference(resolved, index, t)?.name;
+  return name ? [name, resolved?.kind === "pin" ? resolved.net : resolved?.kind === "part" ? resolved.part?.value : ""].filter(Boolean).join(" · ") : "";
+}
+
+/**
  * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
  * `DetailItem`): what it is — its name, a line in words for a pin, its ID and its facts
  * (`schematicFacts.js`'s) — and what it is connected to: a part its own pins, each with its net; a net its

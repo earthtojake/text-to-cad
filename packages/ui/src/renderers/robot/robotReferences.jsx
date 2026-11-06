@@ -36,18 +36,34 @@ export function useRobotDescribe({ robot, components = EMPTY, selectLink = null,
 }
 
 /**
+ * The hover tip's words for a robot's pick (`kit/inspector/inspect.js`'s `tip`), from the description as it
+ * stands, building no facts: a link's name and the type of the joint that holds it ("Root link" for the
+ * root), a mesh object's name and its link.
+ */
+export function useRobotTip({ robot, components = EMPTY }) {
+  const { t } = useI18n();
+  return useCallback((id) => {
+    const component = components.find(item => item.id === id);
+    if (component) return [component.name || component.link, component.link].filter(Boolean).join(" · ");
+    if (!robot || !(robot.links || []).some(link => String(link?.name || "") === id)) return "";
+    const joint = (robot.joints || []).find(item => String(item?.child || "") === id);
+    return `${id} · ${joint ? String(joint.type || "") : t("robot.rootLink")}`;
+  }, [robot, components, t]);
+}
+
+/**
  * What is picked in a robot, as its frame reads it (`kit/inspector/inspect.js`): its links, then its
  * mesh objects, each described (`describe`), what the pointer is on in the view (`pointed`), and what a
  * row does — a link's selects that link, an object's that object.
  */
-export function useRobotInspect({ selection, components = EMPTY, describe, frame = null, copyText = null, enabled = true }) {
+export function useRobotInspect({ selection, components = EMPTY, describe, tip = null, frame = null, copyText = null, enabled = true }) {
   const { selectedLinkNames, selectedComponentIds, selectLink, select, hoverLink, hover, pointed } = selection;
   const selected = useMemo(() => [...selectedLinkNames, ...selectedComponentIds], [selectedLinkNames, selectedComponentIds]);
   const isComponent = useCallback(id => components.some(component => component.id === id), [components]);
   const pick = useCallback((id, options) => (isComponent(id) ? select(id, options) : selectLink(id, options)), [isComponent, select, selectLink]);
   const light = useCallback(id => (isComponent(id) ? hover(id) : hoverLink(id)), [isComponent, hover, hoverLink]);
-  return useMemo(() => (enabled ? { selected, describe, hovered: pointed || "", select: pick, hover: light, frame, copyText, data: "links" } : null),
-    [enabled, selected, describe, pointed, pick, light, frame, copyText]);
+  return useMemo(() => (enabled ? { selected, describe, tip, hovered: pointed || "", select: pick, hover: light, frame, copyText, data: "links" } : null),
+    [enabled, selected, describe, tip, pointed, pick, light, frame, copyText]);
 }
 
 /**

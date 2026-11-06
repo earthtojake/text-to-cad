@@ -185,6 +185,15 @@ function netOf(resolved) {
 }
 
 /**
+ * The hover tip's words for a pick (`kit/inspector/inspect.js`'s `tip`): its name, and a pad's net or a
+ * part's value — what the board's tip has always said, without the lists of what it is connected to.
+ */
+export function boardPickTip(index, id, t = english) {
+  const resolved = index.resolve(id), name = describeBoardReference(resolved, index, t)?.name;
+  return name ? [name, resolved?.kind === "pad" ? resolved.pad.net : resolved?.kind === "part" ? resolved.part?.value : ""].filter(Boolean).join(" · ") : "";
+}
+
+/**
  * A pick, as the Selected pane, its chip's card and the hover tip read it (`kit/inspector/inspect.js`'s
  * `DetailItem`): what it is — its name, a line in words for a pad, its ID and its facts (`boardFacts.js`'s)
  * — and what it is connected to: a part its own pads, each with its net; a net its pads; a pad, a track, a

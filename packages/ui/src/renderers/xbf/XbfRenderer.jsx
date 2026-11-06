@@ -30,7 +30,7 @@ import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
 import { MeasureIcon, SelectIcon, SelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from "./XbfSelectionModes.jsx";
-import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs } from "./xbfChips.jsx";
+import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
 import { viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTopologyMenu } from "./xbfMenus.js";
@@ -715,8 +715,10 @@ function XbfSurface({ view, data }) {
     const bounds = scene?.selectionBounds([...leavesOf(ids.filter(id => !isElementId(id))), ...ids.filter(isElementId)]);
     if (bounds) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(bounds);
   }, [scene, leavesOf]);
-  const inspect = useMemo(() => (scene && !previewing ? { selected, describe, hovered: pointed, select: inspectSelect, hover: inspectHover,
-    frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
+  // The hover tip's own short path: names from the tree, nothing measured (`xbfTipper`).
+  const tip = useMemo(() => xbfTipper({ scene, tree }), [scene, tree]);
+  const inspect = useMemo(() => (scene && !previewing ? { selected, describe, tip, hovered: pointed, select: inspectSelect, hover: inspectHover,
+    frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
     inspect={inspect}

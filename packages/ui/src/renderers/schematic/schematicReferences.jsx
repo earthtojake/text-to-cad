@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { formatPromptReference } from "@cad/core/prompt";
 import { schematicReferenceId } from "./schematicFacts.js";
-import { describeSchematicPick } from "./schematicTree.js";
+import { describeSchematicPick, schematicPickTip } from "./schematicTree.js";
 import {
   BusEntryKindIcon, JunctionKindIcon, LabelKindIcon, NetKindIcon, NoConnectKindIcon, PinKindIcon, SheetKindIcon, SymbolKindIcon, WireKindIcon
 } from "./schematicIcons.jsx";
@@ -19,15 +19,21 @@ export function useSchematicDescribe(index) {
   return useCallback(id => (index ? describeSchematicPick(index, id, t) : null), [index, t]);
 }
 
+/** The hover tip's short words for a pick (`schematicPickTip`), in the view's language. */
+export function useSchematicTip(index) {
+  const { t } = useI18n();
+  return useCallback(id => (index ? schematicPickTip(index, id, t) : ""), [index, t]);
+}
+
 /**
  * What is picked on the schematic, as its frame reads it (`kit/inspector/inspect.js`): each pick
  * described, what the pointer is on (`hovered`), and what a row of the pane does (`select`, `hover`,
  * `show` — the sheet it is on — `frame`, `onSelect`, `copyText`).
  */
-export function useSchematicInspect({ index, describe, selection, hovered, onSelect, show, frame, copyText }) {
+export function useSchematicInspect({ index, describe, tip = null, selection, hovered, onSelect, show, frame, copyText }) {
   const { selected, select, hover } = selection;
-  return useMemo(() => (index ? { selected, describe, hovered, glyphs: KIND_ICONS, data: "schematic", select, hover, show, frame, onSelect, copyText } : null),
-    [index, selected, describe, hovered, select, hover, show, frame, onSelect, copyText]);
+  return useMemo(() => (index ? { selected, describe, tip, hovered, glyphs: KIND_ICONS, data: "schematic", select, hover, show, frame, onSelect, copyText } : null),
+    [index, selected, describe, tip, hovered, select, hover, show, frame, onSelect, copyText]);
 }
 
 /**

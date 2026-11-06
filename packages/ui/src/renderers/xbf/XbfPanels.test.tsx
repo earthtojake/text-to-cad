@@ -7,7 +7,7 @@ import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfP
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
-import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows } from '../../../dist/renderers/xbf/xbfChips.js';
+import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
 import { selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
 import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
@@ -421,6 +421,14 @@ it("a part's description weighs it by its material and says where it sits; a sub
   }
   render(<Chips />);
   expect(screen.getByText('3')).toBeTruthy();
+});
+
+it("the hover tip's words for an engine document are its tree's names, measuring nothing", () => {
+  const measureParts = vi.fn(() => null);
+  const tip = xbfTipper({ scene: { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts } as any,
+    tree: presentXbfTree(structure) });
+  expect([tip('i0'), tip('n0.0'), tip('i3'), tip('i99')]).toEqual(['base · hinge', 'hinge', 'pin', '']);
+  expect(measureParts).not.toHaveBeenCalled();
 });
 
 it("the menus are a STEP's: a part's offers Copy Reference, Select, Isolate, Hide others, Hide, the tree's expansion and the framing", () => {
