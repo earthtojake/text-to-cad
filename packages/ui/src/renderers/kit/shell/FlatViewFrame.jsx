@@ -39,8 +39,8 @@ import { VIEWPORT_CUBE_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewpor
  * a resize of the canvas (`useFlatCanvasView.js`); the strip alone stays at the view's centre, over
  * the panel where they meet. A file's panel opens in a view 1024px wide or more and starts
  * collapsed in a narrower one, until the person opens or closes it; that, its width and its tab
- * are the file's (`useFlatPanelState`, `filePanel.js`). Collapsed, its expand button stands on a pill at the canvas's top-left. On a phone it
- * opens as the whole view.
+ * are the file's (`useFlatPanelState`, `filePanel.js`). Collapsed, its expand button stands on a pill at the canvas's top-left. A phone
+ * has no panel (no pill, no keys for it): the strip alone, at the view's centre.
  * ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search (`useFlatHandover`'s `panelControl`).
  *
  * While the picture loads, or once it has failed to, none of the viewer's own chrome: the load
@@ -52,8 +52,6 @@ const MEASURE_ICON = <MeasureIcon className="size-3.5" aria-hidden="true" />;
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and what hangs under it: one column at the top centre, as every view's (`RendererShell.jsx`).
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
-// On a phone with a panel, its pill stands at the left of the strip's line (a 36px tile in 4px of padding and a border).
-const TOOLBAR_POSITION_PHONE_SIDEBAR = Object.freeze({ ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX + 46 + 8}px` });
 
 
 /**
@@ -116,10 +114,10 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   corner = "pill", cube = null }) {
   const { t } = useI18n();
   const toolsHidden = chromeHidden || compact;
-  const sided = Boolean(panel?.tabs.length);
-  const besideSidebarTile = mobile && sided;
+  // A phone has no panel: what its lists offer is reached from the canvas.
+  const sided = Boolean(panel?.tabs.length) && !mobile;
 
-  // ---- the panel: docked, or on a phone the whole view; open at first in a wide view ----
+  // ---- the panel: docked; open at first in a wide view ----
   const frameRef = useRef(null);
   const tabs = panel?.tabs ?? [];
   const flat = useFlatPanelState({ frameRef, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack, onToolStackChange });
@@ -173,14 +171,14 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
     <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground"
       data-slot="cad-file-view" {...surface} data-cad-canvas="" tabIndex={-1}
       onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
-      {mode === "docked" ? panelNode : null}
+      {panelNode}
       <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">
         <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={busy ? "true" : "false"}>{children}</div>
         <PreviewChrome active={false}>
-          {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
-            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
+          {toolsHidden ? null : <div className="pointer-events-none absolute z-20 flex flex-col items-center gap-2"
+            style={{ ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
-              <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
+              <div ref={topControls} className="flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
                 <FloatingToolBar tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} touch={mobile} />
                 {toolRow}
                 {status}
@@ -215,7 +213,6 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
         <ViewerLoadingOverlay loading={{ opening: loading && !alert, progress: { label: loadingLabel } }} operationKey={file} />
         <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={onReload} file={file} />
       </div>
-      {mode === "page" ? panelNode : null}
     </div>
   );
 }

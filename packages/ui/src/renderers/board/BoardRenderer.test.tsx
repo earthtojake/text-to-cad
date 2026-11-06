@@ -916,7 +916,7 @@ it("the panel collapses whole to a pill at the canvas's top-left; ⌘\\ shows an
   dispose();
 });
 
-it("under 1024px the panel starts collapsed and, opened, docks all the same; on a phone it is the whole view, and a pick gives the board back", async () => {
+it("under 1024px the panel starts collapsed and, opened, docks all the same; a phone has none", async () => {
   const sized = (width: number) => vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 700, width, height: 700, toJSON: noop } as DOMRect);
   sized(900);
@@ -929,16 +929,11 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; on 
   expect(view.pane.querySelector('[data-flat-panel-scrim]')).toBeNull();
   view.dispose();
   cleanup();
-  // A phone: the panel is the whole view, Back before its search; a row pressed closes it, the pick made.
+  // A phone: no panel and no pill; the board, its strip and its corner's controls in More.
   sized(400);
   const phone = await open();
   await opened(phone.pane);
-  await waitFor(() => expect(panel(phone.pane).getAttribute('data-flat-panel')).toBe('page'));
-  fireEvent.click(within(phone.pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
-  expect(panel(phone.pane).querySelector('[data-flat-panel-head]')!.firstElementChild!.getAttribute('aria-label')).toBe('Back to the view');
-  fireEvent.click(within(tabBody(phone.pane, 'parts')).getByRole('button', { name: 'Select J1' }));
-  expect(panel(phone.pane).hidden).toBe(true);
-  expect(selected(await controllerOf(phone))).toEqual(['#J1']);
+  expect([phone.pane.querySelector('[data-flat-panel]'), phone.pane.querySelector('[data-flat-panel-pill]')]).toEqual([null, null]);
   phone.dispose();
 });
 

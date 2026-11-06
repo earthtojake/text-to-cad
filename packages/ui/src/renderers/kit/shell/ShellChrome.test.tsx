@@ -163,21 +163,15 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {} }]);
 });
 
-it("on a phone the panel's pill is one tile at the top-left, on the strip's line, the strip kept clear of it; it opens the panel as the whole view, Back before its search", () => {
-  frame({ mobile: true });
-  const strip = screen.getByRole('group', { name: 'Interaction tools' });
-  const pill = screen.getByRole('button', { name: 'Show panel' });
-  // The pill reserves its width and an 8px gap; the controls centre within that room, with their
-  // viewport-centering offset verified in the real-browser layout test.
-  expect(strip.contains(pill)).toBe(false);
+it("on a phone there is no panel, no pill and no key for one, and the strip is centred in the view", () => {
+  frame({ mobile: true, viewer: true });
   const column = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
-  expect(column.style).toMatchObject({ left: '62px', right: '8px' });
+  expect(column.style).toMatchObject({ left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px' });
   expect(column.className).toMatch(/\bitems-center\b/);
-  expect(flatPanel().hidden).toBe(true);
-  fireEvent.click(pill);
-  expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden, shownTab()]).toEqual(['page', false, 'Harness tree']);
-  fireEvent.click(screen.getByRole('button', { name: 'Back to the view' }));
-  expect(flatPanel().hidden).toBe(true);
+  expect([document.querySelector('[data-flat-panel]'), screen.queryByRole('button', { name: 'Show panel' })]).toEqual([null, null]);
+  fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '\\', ctrlKey: true });
+  fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '/' });
+  expect(document.querySelector('[data-flat-panel]')).toBeNull();
   fireEvent.click(tool('Pencil'));
   expect(tool('Pencil').getAttribute('aria-pressed')).toBe('true');
   // The drawing row is the same row on a phone, its buttons 36px tiles (`data-touch`), wrapping where it must; there is no chevron.

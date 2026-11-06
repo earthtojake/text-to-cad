@@ -77,7 +77,7 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('mobile tools centre on the viewport and keep the panel pill\'s gap as space runs out', async (t) => {
+test('a phone\'s tools centre on the viewport, with no panel and no pill, as space runs out', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel.harness`);
@@ -94,14 +94,10 @@ test('mobile tools centre on the viewport and keep the panel pill\'s gap as spac
       const view = viewport.getBoundingClientRect(), tools = strip.getBoundingClientRect();
       const mobile = width < 600;
       if (Math.abs(view.width - width) > 1 || column.hasAttribute('data-mobile') !== mobile) return false;
-      const expected = view.left + Math.max(mobile ? 62 : 8, (view.width - tools.width) / 2);
+      const expected = view.left + Math.max(8, (view.width - tools.width) / 2);
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
-    if (width < 600) {
-      const pill = await pane.getByRole('button', { name: 'Show panel', exact: true }).boundingBox();
-      const strip = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
-      assert.ok(strip.x >= pill.x + pill.width + 8, 'keeps the panel\'s pill clear');
-    }
+    if (width < 600) assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a phone has no panel');
   }
   await pane.getByRole('button', { name: 'More tools', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Preview', exact: true }).waitFor();

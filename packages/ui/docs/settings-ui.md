@@ -222,9 +222,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   an even 4px apart, a tool's chevron touching its button, in a 34px row (`FloatingToolBar`,
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
   ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
-  20px wide, in one row that never wraps. Centre it on the viewport whenever it fits;
-  clamp its position to keep 8px from the edges and, on a phone, from the panel's pill at its left.
-  Its available width still uses all the room after that pill. What does not fit goes into
+  20px wide, in one row that never wraps. It is centred in the whole view, on a phone as on a
+  desktop and in every renderer (`kit/shell/FlatViewFrame.jsx`, `RendererShell.jsx`), 8px from the
+  edges at the least; what does not fit goes into
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
   in hand, Projection's row switches the projection as its tile does, and Display's row opens its
@@ -240,8 +240,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   view.
 - **The view's panel**, docked at the left: one search over a tab per section of what there is
   to read of the file — a STEP assembly's Model, a robot's Links, Position, an SDF's
-  metadata, a drawing's Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; on a phone the
-  whole view (see [The view's panel](#the-views-panel-and-the-tool-stack)). A file with no
+  metadata, a drawing's Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; a phone has
+  none (see [The view's panel](#the-views-panel-and-the-tool-stack)). A file with no
   section (a mesh) has none.
 - **Quick Edit** at top-right, 8px in, a STEP's or a robot's: the box of the note a
   person writes to their agent, there only while something is picked, drawn or measured
@@ -581,8 +581,8 @@ full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a s
 `bg-canvas`, the content area behind every view, 2D and 3D, which sits darker than the chrome in
 both themes, as Figma's, VS Code's and Linear's canvas does)
 with a rule at its right, and the canvas the narrower for it: open, at any width, it takes its
-width out of the canvas, and the picture is drawn in what it leaves, nothing of it under the panel
-(a phone's whole-view page aside). The strip stays at the view's centre,
+width out of the canvas, and the picture is drawn in what it leaves, nothing of it under the panel.
+The strip stays at the view's centre,
 panel open or not, and stands over the panel where a narrow view makes them meet, as Figma's toolbar
 stands over its layers; its reach is written before the frame is painted, so opening or shutting the
 panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
@@ -635,7 +635,7 @@ file.
   a group's has the view's menu (Copy Reference, Select, Isolate, Zoom to it). A part's or net's selects it as a click on the picture
   does, and leaves the view where it is (a schematic shows the sheet it is on, if it is not the one
   shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
-  double-clicked (on a phone, whose page gives the view back, a press frames it). A row's chevron
+  double-clicked. A row's chevron
   opens or shuts it, and a block's name does too (its chevron, then, is the pointer's alone: the name
   is the keyboard's button). The Parts open as their blocks, a block of several parts shut. A pick
   made anywhere but in the list — on the picture, in Selected, a search hit's once the search is cleared,
@@ -726,12 +726,11 @@ file.
   (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). Zoom to fit and 100%
   measure the room beside the panel. A file whose panel the person has not opened or closed opens
   it in a view 1024px wide or more and starts it collapsed under that; once they have, the choice is
-  the file's at any width. Opened, it docks as it does on a wide view. **On a phone**
-  (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
-  whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
-  Quick Edit's sheet keeps the bottom. There its text is one size (13px, the Display menu's), its
-  search a 36px field and its tabs 32px, its tree rows 36px with 16px glyphs, its dropdowns and
-  value fields 32px and a joint's row 44px (`globals.css`, `[data-flat-panel="page"]`).
+  the file's at any width. Opened, it docks as it does on a wide view. **On a phone** (under 600px)
+  there is no panel, for now, in any renderer: no pill, no page, and ⌘\\ and / open nothing; what the
+  lists offer is reached from the canvas (a pick, the view's menu, the strip's More) and the strip
+  stands alone at the view's centre. `FlatPanel`'s whole-view page (`mode: "page"`, its sizes in
+  `globals.css`'s `[data-flat-panel="page"]` rules) is kept for the panel's return; no frame mounts it.
 
 **The tool stack** (`ToolStack`) is the column under the strip and the sub-toolbar, centred
 with them, for a renderer's own `toolPanels`. STEP and the robot renderer hand none: their
@@ -835,7 +834,7 @@ break parting them, `SubToolbar`'s `data-wrapped`). An SDF's counts are two tile
 their labels read whole.
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
 portalled menu, select or hint is the same size as the chrome it opened from. There is no view
-cube; the view's panel is a pill at the strip's left, opening as the whole view; and
+cube and no view's panel; and
 Quick Edit is a bottom sheet (see
 [Quick Edit](#quick-edit)). The explorer is the same popover, never wider than the window less
 1rem. The shortcut hint is hidden.
@@ -1380,7 +1379,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
 - **⌘\\** (Ctrl+\\) on a KiCad board or schematic shows and hides its panel, and **/** opens it with
   the keyboard in its search, while the view has the keyboard; in the search box, Escape clears what is
-  typed, then (on a phone) closes the panel.
+  typed. A phone has no panel, and neither key opens one there.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.

@@ -281,22 +281,13 @@ it('robot Links and Position are the view\'s panel\'s tabs whatever Select picks
   robot.client.dispose();
 });
 
-it('on a phone a robot\'s panel is a pill beside the strip, opening the whole view on Links and Position tabs', async () => {
+it('on a phone a robot has no panel: no pill, no Links or Position tab, the strip alone', async () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844, toJSON: noop } as DOMRect);
   const robot = await openRobot({ phone: true });
   expect(robot.pane.querySelector('[data-viewer-layout]')!.getAttribute('data-viewer-layout')).toBe('mobile');
-  const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
-  const pill = within(robot.pane).getByRole('button', { name: 'Show panel' });
-  expect(strip.contains(pill)).toBe(false);
-  fireEvent.click(pill);
-  const aside = robot.pane.querySelector<HTMLElement>('aside[data-flat-panel]')!;
-  await waitFor(() => expect([aside.getAttribute('data-flat-panel'), aside.hidden]).toEqual(['page', false]));
-  expect([...aside.querySelectorAll('[role=tab]')].map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')]))
-    .toEqual([['Links', 'true'], ['Position', 'false']]);
-  fireEvent.click(aside.querySelector('[data-flat-panel-tab="position"]')!);
-  await waitFor(() => expect(robot.jointField('shoulder')).toBeTruthy());
-  expect(robot.pane.querySelector<HTMLElement>('[data-tool-panel][aria-label="Links"]')!.hidden).toBe(true);
+  expect(within(robot.pane).getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  expect([within(robot.pane).queryByRole('button', { name: 'Show panel' }), robot.pane.querySelector('[data-flat-panel]')]).toEqual([null, null]);
   robot.client.dispose();
 });
 
