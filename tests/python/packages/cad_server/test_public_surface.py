@@ -199,10 +199,18 @@ class Manifest(unittest.TestCase):
                     self.assertEqual("", out)
                     # The NOUN is right: it is never reported as the unknown thing.
                     self.assertNotIn(f"unknown command {noun!r}", err)
-                    self.assertIn(f"usage: cad {noun} <operation>", err)
+                    # Its verbs and no other: in the one line said of a verb it does not have, which points at
+                    # the type's help, never prints it; in that help after a command line that names none.
+                    listed = (err.partition("; it has ")[2].partition(";")[0] if rest
+                              else err.split("operations:")[1])
                     for verb in verbs:
-                        self.assertIn(verb, err)
-                    self.assertNotIn("export", err.split("operations:")[1])
+                        self.assertIn(verb, listed)
+                    self.assertNotIn("export", listed)
+                    if rest:
+                        self.assertNotIn("usage:", err)
+                        self.assertIn(f"'cad {noun} --help' says what each does", err)
+                    else:
+                        self.assertIn(f"usage: cad {noun} <operation>", err)
 
     def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
         code, out, err = self._dispatch("urdf", "--help")
