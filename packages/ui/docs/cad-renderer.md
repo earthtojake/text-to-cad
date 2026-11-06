@@ -250,7 +250,15 @@ pointer resting go
 through the 3D views' `usePointerPick`, handed the pointer alone: the board view picks once a frame
 (the bodies, each baked geometry with its accelerator, `viewer/raycastBvh.js`, then the face); a drag
 turns the view. Its faces' bytes are put on screen as
-drawn (no sRGB decode and encode), so they match the flat canvas's colours.
+drawn (no sRGB decode and encode), so they match the flat canvas's colours. The switch shows nothing but
+the board: entering, the 3D viewport mounts see-through and deaf to the pointer over the flat canvas, its
+stage `presentable` (the frame presentation, `viewport/framePresentation.js`, keeps a new canvas covered
+until its scene says so) only once the face its camera sees is drawn, and the board view swaps the two
+canvases in one commit when that frame is up, head on (in perspective, its eye where the face is drawn
+at the flat scale for the viewport's lens, `boardFrame.js`'s `perspectiveHeadOn`); then the camera
+eases. Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
+viewport, which then goes: its own window when nobody has moved the 3D camera since the opening (the
+count of hands on it, `camera/cameraTouch.js`'s `cameraHands`), else the camera's (`planFromCamera`).
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
 board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision

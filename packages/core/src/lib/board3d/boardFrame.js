@@ -73,12 +73,13 @@ export function millimetresPerPixel(camera, depth, paneHeight) {
  * The 2D view's window as a 3D camera, head on: the pane's centre on the sheet, from the side the 2D
  * view shows, square to the board, at the same millimetres per pixel. What a 3D view opens on, so its
  * first frame is the 2D picture. A perspective snapshot (`lib/perspective.js`): position, target, up
- * and the orthographic half height.
+ * and the orthographic half height. `planFromCamera` of it is the window again, exactly: the round trip
+ * of a 3D view nobody turned.
  *
  * @param {{ transform: { scale: number, offsetX: number, offsetY: number }, width: number, height: number,
  *   side: "top" | "bottom", mirrorX: number | null, thickness?: number, distance: number }} view
  *   `mirrorX`: the page x the 2D view mirrors about from the back (`boardMirrorX`); `distance`: how
- *   far the eye stands off the face.
+ *   far the eye stands off the face (a perspective lens's is `perspectiveHeadOn`'s).
  */
 export function headOnCamera({ transform, width, height, side, mirrorX = null, thickness = BOARD_THICKNESS_MM, distance }) {
   if (!transform || !(transform.scale > 0) || !(width > 0) || !(height > 0)) return null;
@@ -90,6 +91,22 @@ export function headOnCamera({ transform, width, height, side, mirrorX = null, t
   const target = [sheetX, planY, z];
   const off = side === "bottom" ? -distance : distance;
   return { position: [target[0], target[1], z + off], target, up: [0, 1, 0], orthographicHalfHeight: height / 2 / transform.scale };
+}
+
+/**
+ * A head-on camera (`headOnCamera`) for a perspective lens of vertical field `fov` (degrees): its eye on the
+ * same line of sight, where the face is drawn at the window's scale (the face's half height at the target is
+ * the eye's distance times tan(fov / 2)). An orthographic picture is the same from any distance; a
+ * perspective one only from that one, so the lens the viewport has decides it.
+ */
+export function perspectiveHeadOn(camera, fov) {
+  const half = (Number(fov) * Math.PI) / 360;
+  if (!camera || !(camera.orthographicHalfHeight > 0) || !(half > 0 && half < Math.PI / 2)) return camera;
+  const away = camera.position.map((value, axis) => value - camera.target[axis]);
+  const length = Math.hypot(...away);
+  if (!(length > 0)) return camera;
+  const distance = camera.orthographicHalfHeight / Math.tan(half);
+  return { ...camera, position: camera.target.map((value, axis) => value + (away[axis] / length) * distance) };
 }
 
 /**

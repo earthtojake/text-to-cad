@@ -83,10 +83,12 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * camera's projection; there is no cube and no Home button (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
  * (naming an area by a drag is the 2D view's); Front | Back turns the camera over and follows it.
- * Entering 3D opens head on, on the window the 2D view shows, and eases to the 3D views' Home, the board
- * framed whole from the opening direction (or to the camera this file was left at in 3D); leaving it
- * frames the 2D view on what the camera was centred on, from its side. Which of the two is up, and the
- * 3D camera and projection, are the file's view (`board3d`).
+ * Entering 3D opens head on, on the window the 2D view shows (the flat canvas on screen until the board in
+ * 3D has drawn that same picture), and eases to the 3D views' Home, the board framed whole from the
+ * opening direction (or to the camera this file was left at in 3D). Leaving it with the camera where that
+ * left it gives the 2D view back as it was; once the camera has been moved, leaving frames the 2D view on
+ * what the camera was centred on, at its scale, from its side (the board in 3D up until the flat canvas
+ * has painted it). Which of the two is up, and the 3D camera and projection, are the file's view (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -443,7 +445,10 @@ function BoardSurface({ view, data }) {
   }, [requestPaint]);
 
   // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
+  // `shown3d`: the board in 3D is on screen in its place; `closing3d`: leaving 3D, the board in 3D stays
+  // over the flat canvas until the flat canvas has painted the window it hands over.
   const [shown3d, setShown3d] = useState(false);
+  const [closing3d, setClosing3d] = useState(false);
   const boardView = useBoardView({
     plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag,
     paused: dimension === "3d" && shown3d
@@ -470,11 +475,15 @@ function BoardSurface({ view, data }) {
 
   // ---- 2D | 3D: one view, its other canvas ------------------------------------------------
   // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
-  // this file was left at in 3D, or to Home; a file left in 3D opens on its camera.
+  // this file was left at in 3D, or to Home; a file left in 3D opens on its camera. The flat canvas stays
+  // on screen until the board in 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
   const mirrorFor = useCallback(side => boardMirrorX(sheetRef.current, side), []);
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
-  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false }));
+  // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it.
+  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, flat: false }));
+  // The side the 2D view showed as 3D was entered, and the window leaving 3D hands the 2D view (none: its own).
+  const enteredRef = useRef(null);
   const leavingRef = useRef(null);
   const switchDimension = useCallback(next => {
     if (next === dimensionRef.current) return;
@@ -484,23 +493,37 @@ function BoardSurface({ view, data }) {
       const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side: displayRef.current.side,
         mirrorX: mirrorFor(displayRef.current.side), thickness: thicknessRef.current, distance: 2 * span }) : null;
       const left = saved.current.board3d.camera;
-      setOpening({ camera: headOn, then: left, home: !left });
+      enteredRef.current = { side: displayRef.current.side };
+      setOpening({ camera: headOn, then: left, home: !left, flat: Boolean(headOn) });
+      setClosing3d(false);
     } else {
-      // Leaving: the 2D view framed on what the camera was centred on, from its side.
-      const plan = view3dRef.current?.plan(mirrorFor) || null;
+      // Leaving a camera nobody has moved since it opened gives the 2D view back as it was, from the side
+      // it showed (the opening's ease is not a move); a camera moved, the 2D view framed on what it was
+      // centred on, at its scale, from its side.
+      const solid3d = view3dRef.current;
+      const plan = solid3d?.moved() ? solid3d.plan(mirrorFor) : null;
       leavingRef.current = plan?.transform || null;
-      if (plan && plan.side !== displayRef.current.side) setDisplay(current => ({ ...current, side: plan.side }));
-      setShown3d(false);
+      const side = plan ? plan.side : enteredRef.current?.side;
+      if (side && side !== displayRef.current.side) setDisplay(current => ({ ...current, side }));
+      setClosing3d(true);
     }
+    dimensionRef.current = next;
     setDimension(next);
   }, [mirrorFor]);
+  // Left: the flat canvas painted at the window it is handed, under the board in 3D, which then goes.
   useEffect(() => {
-    if (dimension !== "2d" || !leavingRef.current) return;
-    viewRef.current?.setView(leavingRef.current);
+    if (dimension !== "2d" || !closing3d) return;
+    if (leavingRef.current) viewRef.current?.setView(leavingRef.current);
     leavingRef.current = null;
-  }, [dimension]);
+    viewRef.current?.settle();
+    setShown3d(false);
+    setClosing3d(false);
+  }, [dimension, closing3d]);
   // The 3D camera, kept with the file's view; the side it sees is the Display's side (Front | Back follows it).
+  // Only while 3D is the view: leaving, the board in 3D is still up for a frame, and what its camera does then
+  // (an ease cut short, its viewport taken down) is nobody's.
   const onCamera3d = useCallback((camera, side) => {
+    if (dimensionRef.current !== "3d") return;
     remember3d({ camera });
     if (side !== displayRef.current.side) setDisplay(current => ({ ...current, side }));
   }, [remember3d]);
@@ -685,6 +708,8 @@ function BoardSurface({ view, data }) {
     selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
   const solid = dimension === "3d" && layered && plot;
+  // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
+  const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
   // Front | Back: the Display's side in 2D; in 3D the camera turns over to it, and the side follows the camera.
   const chooseSide = side => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.turnTo(side) : setDisplay(current => ({ ...current, side })));
   // In 3D, Display's menu ends with the camera's projection, a setting changed seldom (`settings-ui.md`).
@@ -700,15 +725,17 @@ function BoardSurface({ view, data }) {
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}
       zoom={zoom} inspect={inspect}>
+      {/* In 3D the flat canvas takes no pointer: until the board in 3D is up it shows the picture that opens it. */}
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
-        className={cn("absolute inset-0 block touch-none select-none", cursor, solid && shown3d && "invisible")} />
-      {/* The board in 3D, over the flat canvas until its first frame is up, which then lets its rasters go. */}
-      {solid ? <Suspense fallback={null}>
+        className={cn("absolute inset-0 block touch-none select-none", cursor, solid && "pointer-events-none", solid && shown3d && "invisible")} />
+      {/* The board in 3D, unseen over the flat canvas until it has drawn the same picture, which then lets its rasters
+          go; leaving, over it until it has painted the window it is handed. */}
+      {mounted3d ? <Suspense fallback={null}>
         <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
           thickness={thickness} parts={boardParts} models={models} client={workspace.client} showModels={showModels} bodyInk={bodyInk} pickPart={handlers.pickPart}
           display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
-          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating}
-          overlay={overlay} onCamera={onCamera3d} onShown={() => setShown3d(true)} />
+          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating} shown={shown3d || !opening.flat}
+          overlay={overlay} onCamera={onCamera3d} onShown={() => { if (dimensionRef.current === "3d") setShown3d(true); }} />
       </Suspense> : null}
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
       <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
