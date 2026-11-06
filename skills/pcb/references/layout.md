@@ -18,8 +18,8 @@ board at its block's end, and the next step reads what the last one saved. Each 
    outer layers, 0.024 inner); size power nets and their pours from it, signals at the netclass width.
    `set_design_rules` sets the board's minimums; a netclass's clearance and width, which DRC holds a
    track to over them (a board an edit makes has KiCad's `Default`, 0.2 mm), are the `.kicad_pro`'s
-   `net_settings.classes` (JSON): write them between edits (an edit's save writes the project too),
-   and read DRC to see them taken.
+   `net_settings.classes` (JSON), which an edit's save leaves as it is: write them outside an edit
+   block, and read DRC to see them taken.
 3. **Place one part or one small functional group at a time,** as [placement](placement.md) sets
    out: fixed parts first (connectors, mounting holes, anything the enclosure locates), then each IC
    with its own group, in order of how little distance each connection tolerates. Draw the outline
