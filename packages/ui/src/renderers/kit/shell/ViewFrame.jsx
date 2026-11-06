@@ -105,8 +105,10 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // What is picked, under the panel's lists; what a press would pick, beside the pointer.
   const selectedDetail = useSelectedDetail(sided ? inspect : null);
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
+  // Where the strip starts, from the view's left edge (measured below): the panel's head stays left of it.
+  const [stripReach, setStripReach] = useState(null);
   const flat = useFlatPanelState({ frameRef: root, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange,
-    compact: Boolean(compact) });
+    compact: Boolean(compact), reach: stripReach });
   if (panelControl) panelControl.current = previewing ? null : flat.control;
   const panelNode = sided && !toolsHidden ? <FlatPanel mode="docked" open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
@@ -127,6 +129,11 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
       // column's gap, which would leave a wider gap under the strip than at its sides.
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
       const top = controls.getBoundingClientRect().top;
+      // The strip's own row stands at the view's centre whatever the panel's width: its left edge is how
+      // wide the panel may be with its head (the search and its collapse button) clear of it.
+      const strip = controls.firstElementChild?.getBoundingClientRect();
+      const reach = !mobile && strip?.width > 0 ? Math.round(strip.left - frame.getBoundingClientRect().left) : null;
+      setStripReach(current => (current === reach ? current : reach));
       frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
       if (mobile || !rows.length) {
         frame.style.removeProperty("--cad-top-right-left");

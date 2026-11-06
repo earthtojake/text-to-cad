@@ -775,7 +775,8 @@ file.
   hover reveal, and a pick on the picture never opens it.
   ⌘\ (Ctrl+\) shows and hides it, and / opens it with the keyboard in its search, while the view has
   the keyboard. Docked, open or collapsed is the person's, and so is its width (216px at first, 200px
-  to half the view, from a grip on its right edge, Left/Right by 16px). **All of the panel's state is
+  to half the view and never so wide that the strip, at the view's centre, covers its head: 8px short
+  of the strip's left edge; from a grip on its right edge, Left/Right by 16px). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width, the tab and the Selected
   pane's height are kept in the file's view (`panel`, `kit/shell/filePanel.js`), written by the panel's
   own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the

@@ -161,3 +161,21 @@ it("a panel the person opened or closed stays so while the view is resized acros
   resize(800);
   expect((await panel()).open, 'open after a remount').toBe(true);
 });
+
+// The strip stands at the view's centre, over the panel where they meet: the panel is never so wide that
+// the strip covers its head (its search and its collapse button), whatever the person drags it to.
+it("is never wider than leaves its head clear of the strip, nor than half the view", async () => {
+  frameWidth = 1024;
+  function Reached({ reach }: { reach: number | null }) {
+    const frameRef = useRef<HTMLDivElement>(null);
+    const flat = useFlatPanelState({ frameRef, mobile: false, enabled: true, kind: 'board', toolStack: { panels: {}, collapsed: {} },
+      onToolStackChange: () => {}, reach });
+    return <div ref={frameRef} data-frame=""><output data-testid="max">{flat.maxWidth}</output></div>;
+  }
+  const { rerender } = render(<Reached reach={null} />);
+  expect(screen.getByTestId('max').textContent).toBe('512');
+  rerender(<Reached reach={447} />); // the strip's left edge, 447px in: the head ends 8px short of it
+  expect(screen.getByTestId('max').textContent).toBe('439');
+  rerender(<Reached reach={900} />); // a narrow strip leaves the half-view cap
+  expect(screen.getByTestId('max').textContent).toBe('512');
+});

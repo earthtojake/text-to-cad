@@ -58,9 +58,12 @@ export const FLAT_PANEL_OPEN_PX = 1024;
  * `compact` view (a picture taken out of sight, a host's inline card) only reads it, as its panel is
  * never shown and its file's view is not the one kept.
  * @param {{ frameRef: { current: HTMLElement | null }, mobile: boolean, enabled: boolean, kind: string,
- *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void, compact?: boolean }} options
+ *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void, compact?: boolean,
+ *   reach?: number | null }} options
+ *   `reach`: where the strip starts, px from the view's left edge (`ViewFrame.jsx` measures it): the panel
+ *   is at most as wide as leaves its head an inset clear of the strip, and never wider than half the view.
  */
-export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, onToolStackChange, compact = false }) {
+export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, onToolStackChange, compact = false, reach = null }) {
   const [frameWidth, setFrameWidth] = useState(0);
   useLayoutEffect(() => {
     const element = frameRef.current;
@@ -110,7 +113,8 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   }, [mode, change]);
   const tab = panel.tab;
   const changeTab = useCallback(id => change({ tab: id }), [change]);
-  const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2));
+  const half = Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2);
+  const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.min(half, reach > 0 ? reach - VIEWPORT_INSET_PX : half));
   const width = panel.width ?? FLAT_PANEL_DEFAULT_WIDTH;
   const changeWidth = useCallback(next => change({ width: next }), [change]);
   const detailHeight = panel.detailHeight ?? null;
