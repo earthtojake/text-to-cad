@@ -131,8 +131,9 @@ Windows browser has Windows preselected), with nothing under it: what the comman
 `docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
 homepage. Then the framed CAD demo, then a small
 uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos,
-each with its name beneath, drifting sideways and moved by the mouse wheel, a drag, a swipe or the
-arrow keys (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
+each with its name beneath, drifting sideways (resting under a mouse, a finger or the focus, and
+off screen) and moved by a trackpad's sideways swipe, Shift with the wheel, a drag, a swipe or the
+arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
 Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
 links; under them one line asks for a plugin request (a new GitHub issue). Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
