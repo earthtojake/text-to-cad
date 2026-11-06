@@ -201,6 +201,9 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     if (next) viewer?.setPerspective?.(next, { animate: true });
     else if (opening.home) viewer?.goHome?.();
   }, [presented]);
+  // The side the camera looks at is drawn on every stage: a revision is a new stage under a camera that
+  // does not move, so no perspective change tells it the camera is under the board.
+  useEffect(() => { if (stage.see(sideNow())) render(); }, [stage, tick]);
   const perspectiveChange = useCallback(snapshot => {
     const plain = plainShellCamera(snapshot);
     if (!plain) return;

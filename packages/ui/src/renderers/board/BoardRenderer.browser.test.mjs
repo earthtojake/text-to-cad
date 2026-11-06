@@ -18,7 +18,8 @@ const BOARD = JSON.parse(await readFile(new URL('./__fixtures__/board.plot.json'
 const BRACKET = new URL('../../../../core/src/lib/xbf/__fixtures__/bracket/', import.meta.url);
 // The bracket's document id, as the models table names a STEP it resolved (a document id is a uuid).
 const BRACKET_ID = 'b4ac0e70-0000-4000-8000-000000000001';
-// What the board's routes answer now: its plot, and its models table (none: a 404, as a server without the route).
+// What the board's routes answer now: its plot, and its models table (none: a 404, as a server without the route);
+// `revision` names a revision of the file past the first.
 let served = { plot: BOARD, models: null };
 const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
 
@@ -62,7 +63,7 @@ before(async () => {
     else if (url.pathname.endsWith('/plot')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(served.plot)); }
     else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
-      const entry = { kind: 'kicad_pcb', file: '/models/blinky.kicad_pcb', url: '/blinky.kicad_pcb', hash: `${root}-blinky`, bytes: 4096 };
+      const entry = { kind: 'kicad_pcb', file: '/models/blinky.kicad_pcb', url: '/blinky.kicad_pcb', hash: `${root}-blinky${served.revision ? `-${served.revision}` : ''}`, bytes: 4096 };
       response.end(JSON.stringify({ documents: [{ entry, revision: entry.hash }] }));
     } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
@@ -218,5 +219,35 @@ test('in 3D a part stands its model, a press on its body picks the part rather t
   await page.mouse.click(box.x + x, box.y + y);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
   assert.deepEqual(await picked(), ['#R1.2']);
+  assert.deepEqual(errors, []);
+});
+
+test('in 3D a revision of the board read while the camera looks at its back draws the back face', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(async () => { await page.close(); served = { plot: BOARD, models: null }; });
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  await pane.locator('[data-board-dimension="3d"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
+  const camera = () => page.evaluate(() => window.__cadCamera());
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await pane.locator('[data-board-side="bottom"]').click();
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && camera.position[2] < 0; });
+  await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
+  const before = await camera();
+  // The file saved again, a little thinner: a new plot, so a new stage, under the camera where it was.
+  const plot = structuredClone(BOARD);
+  plot.board.thickness = 1.2;
+  served = { plot, models: null, revision: 'r2' };
+  await page.evaluate(() => window.cadHarness.a.client.refresh());
+  await page.waitForFunction(() => window.__cadCamera?.()?.originalBounds?.min?.[2] === -1.2);
+  const after = await camera();
+  assert.ok(after.position.every((value, axis) => Math.abs(value - before.position[axis]) < 1e-6), 'the camera did not move');
+  await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
   assert.deepEqual(errors, []);
 });
