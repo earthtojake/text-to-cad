@@ -67,7 +67,7 @@ from typing import Iterable, Sequence
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, locked, net_of,
-    net_table, pad_shape, points_of, read_index,
+    net_table, pad_shape, points_of, read_index, zone_outline,
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
 from cad.engine.formats.kicad.dimensions import dimension_shapes
@@ -471,7 +471,7 @@ class _Builder:
             if head == "pad":
                 self.pad(child, frame, ref, margins)
             elif head == "zone":
-                self.zone(child)
+                self.zone(child, frame if frame.zones_placed else None)
             elif head == "property" or head == "fp_text":
                 self.footprint_text(child, frame, ref, value, fields)
             elif head and head.startswith("fp_") and head[3:] in _GRAPHICS:
@@ -780,7 +780,7 @@ class _Builder:
         if net:
             self.sheet.copper.append(Copper.disc(net, layers, at, size))
 
-    def zone(self, node: list) -> None:
+    def zone(self, node: list, frame: FootprintFrame | None = None) -> None:
         keepout = sexpr.find(node, "keepout") is not None
         layers = expand_copper(item_layers(node), self.copper)
         if keepout:
@@ -790,7 +790,7 @@ class _Builder:
             return
         net = net_of(node, self.table)
         flags = {"net": net} if net and not keepout else {}
-        outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"))
+        outline = zone_outline(node, frame)
         attr = sexpr.find(node, "attr")
         teardrop = attr is not None and sexpr.find(attr, "teardrop") is not None
         fills: dict[str, list[list[XY]]] = {}

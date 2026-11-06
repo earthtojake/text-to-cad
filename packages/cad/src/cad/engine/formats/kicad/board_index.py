@@ -94,6 +94,7 @@ __all__ = [
     "read_board",
     "read_board_index",
     "read_index",
+    "zone_outline",
 ]
 
 #: How far beyond a piece of copper a ``#net:NAME@x..y..`` point may land and still name it, mm.
@@ -1197,11 +1198,14 @@ class FootprintFrame:
 
     A footprint is placed by ``(at x y angle)`` or, since KiCad 11, by ``(transform (translate x y)
     (rotate angle) (scale sx sy))``; the angle is degrees counter-clockwise on screen either way, and
-    a scale (1 1 on every board KiCad writes today) multiplies a child's point before the turn.
+    a scale (1 1 on every board KiCad writes today) multiplies a child's point before the turn. A
+    footprint's own zones are in its frame too where it is placed by a transform (``zones_placed``), and
+    in the board's where it is placed by ``at``, as KiCad 10 and before wrote them.
     """
 
     def __init__(self, node: list):
         transform = sexpr.find(node, "transform")
+        self.zones_placed = transform is not None
         if transform is not None:
             self.x, self.y = sexpr.pair(sexpr.find(transform, "translate"), (0.0, 0.0))
             self.angle = sexpr.number(sexpr.value(transform, "rotate"), 0.0)
@@ -1298,7 +1302,7 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
                 holes.append(hole)
             continue
         if head == "zone":
-            named.add("zone", _read_zone(child, table, copper), owner)  # stored in the board's frame
+            named.add("zone", _read_zone(child, table, copper, frame if frame.zones_placed else None), owner)
             continue
         if head in ("property", "fp_text"):
             named.add("text", [_footprint_text(child, frame, ref, value, shown)], owner)
@@ -1405,19 +1409,26 @@ def _outline(items: list[tuple[list[XY], bool]]) -> list[XY]:
     return hull(point for points, _closed_ in items for point in points)
 
 
-def _read_zone(node: list, table, copper: Sequence[str]) -> list[Zone]:
+def zone_outline(node: list, frame: FootprintFrame | None = None) -> list[XY]:
+    """A zone's outline on the board: as written, or placed through ``frame``, its footprint's, when the
+    footprint holds it in its own frame (``FootprintFrame.zones_placed``)."""
+    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"))
+    return [frame.place(point) for point in outline] if frame is not None else outline
+
+
+def _read_zone(node: list, table, copper: Sequence[str], frame: FootprintFrame | None = None) -> list[Zone]:
     rule = sexpr.find(node, "keepout") is not None
     layers = expand_copper(item_layers(node), copper)
     if rule:
         # A rule area keeps out of its copper and of the other layers it names, as the plot draws it.
         layers = list(dict.fromkeys([*layers, *(layer for layer in item_layers(node) if not _COPPER.match(layer) and "*" not in layer and "&" not in layer)]))
-        outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
+        outline = tuple(zone_outline(node, frame))
         name = sexpr.value(node, "name")
         return [Zone(net=None, layer=layer, outline=outline, id=item_id(node), name=str(name) if isinstance(name, str) and name else None,
                      layers=tuple(layers), locked=locked(node), rule=True) for layer in layers]
     if not layers:
         return []
-    outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
+    outline = tuple(zone_outline(node, frame))
     fills: dict[str, list[tuple[XY, ...]]] = {}
     for filled in sexpr.find_all(node, "filled_polygon"):
         layer = layer_of(filled) or layers[0]
