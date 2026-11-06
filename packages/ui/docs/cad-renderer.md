@@ -1144,7 +1144,10 @@ The model tree rows are the panel's one row (`TreeRowSurface`, `dense`: 24px row
 on the panel's 16px line and 10px further a level, hung from faint lines under their owners'
 chevrons, their kind icons light: `docs/settings-ui.md`). A part is a
 leaf: its faces and edges are the viewport's to pick, never rows. An assembly's disclosure
-button expands its children; the rest of the row selects it. Labels keep the row's width;
+button expands its children; the rest of the row selects it. A folded row (a part repeated under
+one name, `pin (8)`) is pressed the same way: its chevron opens and shuts it, and the rest of the
+row selects every part under it, which the row then holds, lit, as an assembly's row holds its own
+selection, so a press on a row selects it and opens nothing (`xbfTree.js`'s `xbfHeldPaths`). Labels keep the row's width;
 measurements belong to Quick Edit's chips' cards. An assembly row's actions (`XbfPartActions.jsx`), shown on hover and kept
 shown while they are on, are Isolate (not in a part file; while that node is isolated, an X that
 leaves isolation, shown the whole time) and then Hide (the eye, off while isolated). A double-click
@@ -1202,7 +1205,9 @@ chains or tangent face groups. Double-clicking empty space exits isolation, or, 
 Isolation restricts the selectable subtree without propagating an excluded
 ancestor's disabled state into the isolated descendants. Hidden geometry stays
 unselectable. Selection reveals expand the required ancestors and scroll once
-per selection or explicit reveal command. Later expansion and manual scrolling
+per selection or explicit reveal command. A reveal opens a row where its chevron opens
+and shuts it, the host's open rows (a folded row by its own id), so the chevron shuts
+whatever a reveal opened. Later expansion and manual scrolling
 must not pull the view back to that row.
 
 A chip's card is read-only: under the reference's name (which copies the reference) and its ID —

@@ -11,7 +11,7 @@ import ToolPanel from '../kit/tools/ToolPanel.jsx';
 import { useFlatPanel, useFlatPanelSection } from '../kit/shell/FlatPanel.jsx';
 import { modelTreeSearchChain, useTreeSearch } from '../kit/inspector/modelTreeSearch.js';
 import VirtualRows, { revealRow } from '../kit/inspector/VirtualRows.jsx';
-import { implicitXbfRoots, xbfSelectionPaths } from './xbfTree.js';
+import { implicitXbfRoots, xbfHeldPaths, xbfSelectionPaths } from './xbfTree.js';
 import { useI18n } from "@cad/ui/i18n";
 
 // An engine document's Model tree, as the STEP renderer's was, over the engine's tree as
@@ -159,15 +159,6 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     visit(tree);
     return ids;
   },[locked,tree]);
-  const foldedRows=useMemo(()=>{
-    const rows=[];
-    const visit=nodes=>{for(const node of nodes){
-      if(node.memberSelectionIds?.length)rows.push(node);
-      visit(node.children || EMPTY);
-    }};
-    visit(tree);
-    return rows;
-  },[tree]);
   const visibleRoots=implicitRoots.length ? implicitRoots.at(-1).children : tree;
   const availability=useMemo(()=>availabilityOf(partControls.hiddenPartIds,partControls.selectableNodeIds),[partControls.hiddenPartIds,partControls.selectableNodeIds]);
   const implicitOwner=useMemo(()=>implicitRoots.reduce((owner,node)=>nodeAvailability(node,availability,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false}),[implicitRoots,availability]);
@@ -209,8 +200,19 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   useEffect(()=>registerKeys?.(event=>searchKeys.current(event)),[registerKeys]);
   const latest=useRef(null);
   latest.current={partControls};
-  // A selected part or assembly at its row; a picked face or edge at its part's.
+  // Rows opened or shut in the one place their expansion lives, which a chevron and a reveal both
+  // write: the host's (an assembly by its selection id, a folded row, which selects nothing, by its
+  // own), so whatever opened a row, its chevron shuts it; the tree's own only without a host.
+  const flip=useCallback(nodes=>{
+    const {partControls}=latest.current;
+    if(partControls.onToggleTreeNode){for(const node of nodes)partControls.onToggleTreeNode(node.selectionId || node.id);return;}
+    setLocalExpanded(current=>{const next=new Set(current);for(const node of nodes)if(!next.delete(node.id))next.add(node.id);return next;});
+  },[]);
+  // A selected part or assembly at its row; a picked face or edge at its part's. The rows that hold
+  // it are those, but a folded row for its parts once all of them are selected: it is lit, and the
+  // selection is revealed at it, so a press on any row selects and opens nothing.
   const paths=useMemo(()=>xbfSelectionPaths(tree,selectedIds),[tree,selectedIds]);
+  const heldPaths=useMemo(()=>xbfHeldPaths(paths,selectedIds),[paths,selectedIds]);
   // What the tree brings into view: the selection, or what was isolated when isolation is the last
   // to change (from the model, a menu or a key): its owners opened and its row scrolled to, as a pick's.
   const focusedIds=partControls.focusedNodeIds || EMPTY;
@@ -219,7 +221,7 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   if(revealFrom.current.selection !== selectionKey)revealFrom.current={...revealFrom.current,selection:selectionKey,from:'selection'};
   if(revealFrom.current.focus !== focusKey)revealFrom.current={...revealFrom.current,focus:focusKey,from:focusedIds.length ? 'focus' : revealFrom.current.from};
   const revealing=revealFrom.current.from === 'focus';
-  const revealPaths=useMemo(()=>revealing ? xbfSelectionPaths(tree,focusedIds) : paths,[revealing,tree,focusedIds,paths]);
+  const revealPaths=useMemo(()=>revealing ? xbfSelectionPaths(tree,focusedIds) : heldPaths,[revealing,tree,focusedIds,heldPaths]);
   const revealKey=revealing ? `focus:${focusKey}` : selectionKey;
   const reveal=useRef({key:null,complete:false});
   useEffect(()=>{
@@ -229,19 +231,11 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     const missing=revealPaths.flatMap(path=>path.slice(0,-1)).filter(node=>!expanded.has(node.id));
     // A locked tree does not open for a pick: what the mode shows is what there is to scroll to.
     if(missing.length && locked){reveal.current.complete=true;return;}
-    if(missing.length){
-      const local=[];
-      for(const node of new Map(missing.map(node=>[node.id,node])).values()){
-        if(node.selectionId && partControls.onToggleTreeNode)partControls.onToggleTreeNode(node.selectionId);
-        else local.push(node.id);
-      }
-      if(local.length)setLocalExpanded(current=>new Set([...current,...local]));
-      return;
-    }
+    if(missing.length){flip([...new Map(missing.map(node=>[node.id,node])).values()]);return;}
     if(searching || !onScreen)return;
     const row=rowElements.current.get(target.id);
     if(row && !row.closest('[hidden]')){revealRow(row);reveal.current.complete=true;}
-  },[active,onScreen,revealKey,revealPaths,expanded,locked,partControls.onToggleTreeNode,searching]);
+  },[active,onScreen,revealKey,revealPaths,expanded,locked,flip,searching]);
 
   // The rows' callbacks never change; each reads the tree as it is when pressed.
   const choose=useCallback((node,event)=>{
@@ -259,17 +253,8 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     }
     if(node.selectionId)partControls.onSelectTreeNode?.(node.selectionId,{multiSelect:event?.shiftKey || event?.metaKey || event?.ctrlKey});
   },[]);
-  const toggle=useCallback(node=>{
-    const {partControls}=latest.current;
-    if(partControls.onToggleTreeNode){partControls.onToggleTreeNode(node.selectionId || node.id);return;}
-    setLocalExpanded(current=>{const next=new Set(current);if(next.has(node.id))next.delete(node.id);else next.add(node.id);return next;});
-  },[]);
-  const selectedNodeIds=useMemo(()=>selectedIds.filter(id=>!String(id).includes('/')),[selectedIds]);
-  const highlighted=useMemo(()=>{
-    const ids=new Set(paths.map(path=>path.at(-1).id));
-    for(const node of foldedRows)if(node.memberSelectionIds.every(id=>selectedNodeIds.includes(id)))ids.add(node.id);
-    return ids;
-  },[paths,foldedRows,selectedNodeIds]);
+  const toggle=useCallback(node=>flip([node]),[flip]);
+  const highlighted=useMemo(()=>new Set([...paths,...heldPaths].map(path=>path.at(-1).id)),[paths,heldPaths]);
   const revealIndex=revealPaths.length ? rowIndex.get(revealPaths.at(-1).at(-1).id) : undefined;
   const treePinned=useMemo(()=>revealIndex === undefined ? EMPTY : [revealIndex],[revealIndex]);
   const matches=found.matches;
