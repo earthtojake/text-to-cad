@@ -120,6 +120,18 @@ def independent_check(case: unittest.TestCase, copper, rules: Rules, router: Rou
         edge = min(float(e.grid_distance(x, y).min()) for e in edges)
         case.assertGreaterEqual(edge - half, rules.edge_clearance - 1e-6, new)
         case.assertTrue(np.all((x > 0) & (x < 30) & (y > 0) & (y < 20)), new)
+    # No end left dangling: each end of a new track is in a pad of its net, on a via of it, or where another
+    # track of it ends (KiCad joins tracks end to end, and calls an end on another track's middle dangling).
+    ends = {}
+    for new in router.tracks:
+        for end in (new.start, new.end):
+            ends[(new.net, end)] = ends.get((new.net, end), 0) + 1
+    vias = {(via.net, via.at) for via in router.vias}
+    for (net, end), count in ends.items():
+        x, y = end[0] / 1e6, end[1] / 1e6
+        in_pad = any(pad.net == net and any(shape.point_distance(x, y) <= 1e-9 for shape in pad.copper)
+                     for pad in copper.pads)
+        case.assertTrue(in_pad or (net, end) in vias or count > 1, (net, end))
 
 
 class Shapes(unittest.TestCase):

@@ -150,6 +150,7 @@ class _Item:
     via: Via | None = None
     fill: np.ndarray | None = None
     name: str = ""
+    new: int | None = None  # a track this plan made: its place in Router.tracks, split where a branch meets it
 
 
 def _fill_holds(fill: np.ndarray, points: Sequence[XY]) -> bool:
@@ -430,7 +431,9 @@ class Router:
 
     def _terminals(self, items: Sequence[_Item], window: _Window, allowed: Sequence[int]) -> dict[int, _Item]:
         """The states (layer * nodes + node) a route may start or end on in ``items``: nodes inside a pad's or a
-        via's copper, or on a track's centreline (within its width), on each allowed layer it is on."""
+        via's copper; on the centreline of a track this plan made (split there when the branch lands: KiCad joins
+        a track's ends, and calls one that stops on another track's middle dangling); and at the ends of a track
+        that was on the board, which is never cut. On each allowed layer it is on."""
         g, nodes = self.pitch, window.nx * window.ny
         found: dict[int, _Item] = {}
         for item in items:
@@ -439,8 +442,10 @@ class Router:
                 continue
             if item.kind == "track":
                 (a, b), half = item.track.ends, item.track.width / 2
-                shapes = [Shape.segment(a, b, 0.0) if item.track.shape.kind != "arc" else item.track.shape]
-                inside = max(half - 0.01, 0.0) if item.track.shape.kind != "arc" else half
+                if item.new is not None:  # this plan's own: on its centreline, where it is split for the branch
+                    shapes, inside = [Shape.segment(a, b, 0.0)], 1e-6
+                else:  # the board's: at its ends alone, for a track there is never cut
+                    shapes, inside = [Shape.point(*a, 0.0), Shape.point(*b, 0.0)], max(half - 0.01, 0.0)
             else:
                 shapes, inside = (list(item.pad.inner) if item.kind == "pad" else list(item.shapes)), 0.0
             for shape in shapes:
@@ -453,10 +458,7 @@ class Router:
                     continue
                 X, Y = np.meshgrid((window.i0 + np.arange(c0, c1)) * g, (window.j0 + np.arange(r0, r1)) * g)
                 distance = shape.grid_distance(X, Y)
-                if item.kind == "track" and item.track.shape.kind == "arc":
-                    hit = distance <= 0.0  # grown by half its width already; a node in its copper
-                else:
-                    hit = distance <= inside + 1e-9
+                hit = distance <= inside + 1e-9
                 rows, cols = np.nonzero(hit)
                 for r, c in zip((rows + r0).tolist(), (cols + c0).tolist()):
                     node = r * window.nx + c
@@ -644,19 +646,16 @@ class Router:
         return (window.i0 + c) * self.g_nm, (window.j0 + r) * self.g_nm
 
     def _anchor(self, item: _Item, at: Point) -> Point | None:
-        """Where a route that reaches ``item`` at ``at`` ends on it: a pad's position, a via's centre, the foot on
-        an axis-aligned track's centreline; None to end where it is (inside the copper already)."""
+        """Where a route that reaches ``item`` at ``at`` ends on it: a pad's position, a via's centre, the nearer end
+        of a track that was on the board; None to end where it is (on the centreline of this plan's own track)."""
         if item.kind == "pad":
             return _nm(item.pad.at)
         if item.kind == "via":
             return _nm(item.via.at)
-        if item.kind == "track" and item.track.shape.kind == "segment":
-            (ax, ay), (bx, by) = (_nm(p) for p in item.track.ends)
-            if ay == by and min(ax, bx) <= at[0] <= max(ax, bx):
-                return at[0], ay
-            if ax == bx and min(ay, by) <= at[1] <= max(ay, by):
-                return ax, at[1]
-        return None
+        if item.kind == "track" and item.new is None:  # the board's track: its nearer end
+            ends = [_nm(p) for p in item.track.ends]
+            return min(ends, key=lambda end: (end[0] - at[0]) ** 2 + (end[1] - at[1]) ** 2)
+        return None  # this plan's track: the route ends on its centreline, where it is split
 
     def _clear(self, want: Want, net: int, layer: int, room: np.ndarray | None, window: _Window | None):
         """The exact check of a segment of this route on ``layer`` (nanometres), with a quick refusal from the
@@ -708,7 +707,30 @@ class Router:
                 raise AssertionError(f"the route of {want.net} ({between[0]} to {between[1]}) failed its own exact "
                                      "clearance check: a bug in the router; nothing is written")
         runs_out, vias_out = tight
+        for item, end in ((first, runs_out[0][1][0]), (last, runs_out[-1][1][-1])):
+            if item.kind == "track" and item.new is not None:
+                self._split(item, end, want.net)
         return self._commit(want, net, runs_out, vias_out, allowed, between)
+
+    def _split(self, item: _Item, at: Point, net: str) -> None:
+        """This plan's track ``item`` cut in two where a branch meets it (``at``, on its centreline), so the branch
+        ends where two tracks end, as KiCad's own router leaves a T: the same copper, in two items."""
+        new = self.tracks[item.new]
+        if at in (new.start, new.end):
+            return
+        self.tracks[item.new] = NewTrack(new.net, new.layer, new.width, new.start, at)
+        self.tracks.append(NewTrack(new.net, new.layer, new.width, at, new.end))
+        halves = []
+        for index, (a, b) in ((item.new, (new.start, at)), (len(self.tracks) - 1, (at, new.end))):
+            pa, pb = _mm(a), _mm(b)
+            shape = Shape.segment(pa, pb, new.width / 2)
+            halves.append((index, shape, Track(new.net, new.layer, new.width, shape, (pa, pb)), (pa, pb)))
+        (index, shape, track, ends), second = halves[0], halves[1]
+        item.shapes, item.track, item.anchors = (shape,), track, ends
+        index, shape, track, ends = second
+        other = _Item("track", (new.layer,), (shape,), ends, track=track, new=index)
+        self._item(net, other)
+        self._last.append(other)
 
     def _tighten(self, want: Want, net: int, runs: list[tuple[int, list[Point]]], vias: list[Point], first: _Item,
                  last: _Item, window: _Window, rooms: list[np.ndarray]):
@@ -779,7 +801,7 @@ class Router:
                 fields.add_copper([shape], [board_layer], net, keep)
                 obstacles.add("copper", shape, [board_layer], net, keep)
                 track = Track(want.net, name, want.width, shape, (pa, pb))
-                self._item(want.net, item := _Item("track", (name,), (shape,), (pa, pb), track=track))
+                self._item(want.net, item := _Item("track", (name,), (shape,), (pa, pb), track=track, new=len(self.tracks)))
                 self._last.append(item)
                 self.tracks.append(NewTrack(want.net, name, want.width, a, b))
                 count += 1

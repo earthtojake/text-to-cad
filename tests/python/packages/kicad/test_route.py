@@ -9,7 +9,10 @@ KiCad, so the keep-out lands on the back, in the footprint's frame -- and routes
 - ``VCC`` on the front: routed at its netclass's 0.5 mm;
 - ``SIG``, two resistors on either side of a track and a via of net ``OLD`` already on the board: routed round
   them, the old copper left byte for byte (its uuids and its geometry);
-- ``WALL``, a resistor inside a closed ring of keep-out: not routed, said by name, the rest routed all the same.
+- ``WALL``, a resistor inside a closed ring of keep-out: not routed, said by name, the rest routed all the same;
+- ``TEE``, three pads: the third joins the track between the first two where it passes, a T where three tracks
+  end (the router splits its own track there, as KiCad's router leaves a T), and DRC calls no end of the
+  router's dangling.
 
 KiCad's DRC of the saved board finds no error but the connections left unrouted: WALL's, and OLD's, which the
 plan leaves to the agent. A copy of the placed board
@@ -90,6 +93,9 @@ BOARD = (
     + _header("J1", 5, 15, ["KEEP", "VCC"]) + _header("J2", 35, 15, ["KEEP", "OLD"])
     + _resistor("R1", 12, 25, "SIG", "VCC") + _resistor("R2", 28, 25, "SIG", "OLD")
     + _resistor("R3", 32, 5, "WALL", "N3") + _resistor("R4", 8, 5, "WALL", "N4")
+    # TEE's three pads: the third joins the first two's track where it passes, a T.
+    + _resistor("R5", 12, 9.5, "TEE", "N5") + _resistor("R6", 20, 9.5, "TEE", "N6")
+    + _resistor("R7", 14.375, 17.5, "N7", "TEE")
     # K1 carries its own keep-out, off its centre: placed, turned and flipped in the edit.
     + f'(footprint "Keepout" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate 10 25) (rotate 0) (scale 1 1)) '
     + _reference("K1") + _keepout([(-1, -6), (1, -6), (1, 2), (-1, 2)], '"F.Cu"') + ")"
@@ -126,6 +132,7 @@ SCRIPT = textwrap.dedent("""
             {"net": "VCC", "layers": ["F.Cu"]},
             {"net": "SIG", "layers": ["F.Cu", "B.Cu"], "vias": 2},
             {"net": "WALL", "layers": ["F.Cu", "B.Cu"]},
+            {"net": "TEE", "layers": ["F.Cu"]},
         ])
     print(json.dumps({"ok": routed.ok, "lines": routed.human_lines(),
                       "routed": {c.net: c.routed for c in routed.connections},
@@ -163,7 +170,8 @@ class Route(unittest.TestCase):
 
         board = self.project("a")
         outcome = self.routed(board)
-        self.assertEqual({"KEEP": True, "VCC": True, "SIG": True, "WALL": False}, outcome["routed"], outcome["lines"])
+        self.assertEqual({"KEEP": True, "VCC": True, "SIG": True, "WALL": False, "TEE": True}, outcome["routed"],
+                         outcome["lines"])
         self.assertIn("R3.1 is walled in", outcome["reasons"]["WALL"])
         self.assertIn("NOT routed WALL: R3.1 to R4.1: R3.1 is walled in", "\n".join(outcome["lines"]))
         read = kicad_pcb.read(board)
@@ -179,6 +187,12 @@ class Route(unittest.TestCase):
         found = kicode.call(self, "drc", board)["measurements"]["drc"]
         errors = sorted({f["type"] for f in found if f["severity"] == "error"})
         self.assertEqual(["unconnected_items"], errors, found)
+        dangling = {item["description"].split("[")[1].split("]")[0] for f in found if f["type"].endswith("_dangling")
+                    for item in f["items"]}
+        self.assertEqual({"OLD"}, dangling, "no end the router left: OLD's own track and via join nothing")
+        tee = [t for t in read.tracks if t.net == "TEE"]
+        ends = [end for t in tee for end in (t.points[0], t.points[-1])]
+        self.assertTrue(any(ends.count(end) == 3 for end in ends), f"a T where three TEE tracks end: {tee}")
         apart = {item["description"].split("[")[1].split("]")[0] for f in found if f["type"] == "unconnected_items"
                  for item in f["items"]}
         self.assertEqual({"WALL", "OLD"}, apart, "the connection said, and OLD's, which the plan leaves alone")
