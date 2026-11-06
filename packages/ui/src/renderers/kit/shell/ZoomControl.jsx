@@ -19,9 +19,11 @@ export { ZOOM_FACTOR };
  * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, a small toolbar of the strip's
  * buttons (`ViewCorner.jsx`), and the percentage pressed opens the zoom's menu — Zoom in, Zoom out,
  * Zoom to 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's keys, `pressZoomKey`).
- * A 3D view shows no percentage: its corner is the cube's, with Zoom to fit over it.
+ * A 3D view shows no percentage: its corner is the cube's, with Home over it. A flat view that draws its
+ * picture in 3D keeps its pill, which zooms the 3D camera (`viewportZoom`).
  *
- * 100% is the picture as authored, framed whole (a flat view's fit): a fixed ruler, which nothing shown
+ * 100% is the picture as authored, framed whole (a flat view's fit; in 3D the 3D views' own ruler, the
+ * authored box at the camera's angle): a fixed ruler, which nothing shown
  * moves. The number is the view's, read through `zoom.read()` and redrawn at most once a frame as the view
  * tells it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders. Its
  * digits are tabular and its width is fixed, so the pill never shifts as it changes.
@@ -87,7 +89,9 @@ export function zoomViewControl(zoom, { t, disabled = false }) {
  * A 3D view's zoom (`ViewZoom`), read live through its viewport (`ShellViewport.jsx`'s handle in
  * `viewerRef`): the zoom against the authored box, its steps about the camera's target, and word of the
  * camera moving. What the zoom's keys and a phone's More reach in every 3D view, a renderer's own frame
- * or a flat view's frame showing one alike.
+ * or a flat view's frame showing one alike, and a flat view's pill while its picture is in 3D. It hears the
+ * camera of the viewport up when it is subscribed: an owner whose viewport comes up later makes it again
+ * once it is (a new `subscribe`, which the pill subscribes again).
  * @returns {ViewZoom}
  */
 export function viewportZoom(viewerRef) {

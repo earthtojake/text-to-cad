@@ -47,28 +47,33 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
 });
 
 // A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves every
-// corner control there, as one group, the bottom row reading from the corner outwards.
+// corner control there, as one group: each column flush with its anchor's outer edge, the pill's a gap over it.
 it('every corner control follows the corner the host anchors the cube at', async () => {
-  const { ViewCornerRow, ViewCornerSideProvider, ViewCubeColumn, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
+  const { ViewCornerSideProvider, ViewCubeColumn, ViewPillColumn, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
   const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
   const corner = (side: string) => {
     const view = render(<ViewCornerSideProvider value={side}>
-      <ViewCornerRow><span /></ViewCornerRow>
+      <ViewPillColumn><span /></ViewPillColumn>
       <ViewCubeColumn projection={{ value: 'orthographic', onChange: () => {} }} onHome={() => {}} />
       <ZoomControl zoom={zoom} />
     </ViewCornerSideProvider>);
-    const style = (selector: string) => (view.container.querySelector(selector) as HTMLElement).style;
-    const placed = (selector: string) => [style(selector).left, style(selector).right];
-    const column = [...view.container.querySelectorAll('[data-view-corner]')].find(el => !el.hasAttribute('data-view-corner-row')) as HTMLElement;
-    const result = { pill: placed('[data-zoom-pill]'), row: placed('[data-view-corner-row]'), order: style('[data-view-corner-row]').flexDirection,
-      column: [column.style.left, column.style.right] };
+    const element = (selector: string) => view.container.querySelector(selector) as HTMLElement;
+    const placed = (selector: string) => [element(selector).style.left, element(selector).style.right, element(selector).style.bottom];
+    const cube = [...view.container.querySelectorAll('[data-view-corner]')].find(el => !el.hasAttribute('data-view-pill-column')) as HTMLElement;
+    const result = { pill: placed('[data-zoom-pill]'), pillColumn: placed('[data-view-pill-column]'),
+      aligned: element('[data-view-pill-column]').classList.contains(side === 'left' ? 'items-start' : 'items-end'),
+      cubeColumn: [cube.style.left, cube.style.right] };
     view.unmount();
     return result;
   };
-  expect(corner('right')).toEqual({ pill: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)'],
-    row: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 132px)'], order: 'row', column: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 20px)'] });
-  expect(corner('left')).toEqual({ pill: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto'],
-    row: ['calc(var(--cad-viewport-corner-left, 0px) + 132px)', 'auto'], order: 'row-reverse', column: ['calc(var(--cad-viewport-corner-left, 0px) + 20px)', 'auto'] });
+  const bottom = 'calc(8px + var(--cad-viewport-corner-bottom, 0px))';
+  const over = 'calc(46px + var(--cad-viewport-corner-bottom, 0px))';
+  expect(corner('right')).toEqual({ pill: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', bottom],
+    pillColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', over], aligned: true,
+    cubeColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 20px)'] });
+  expect(corner('left')).toEqual({ pill: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto', bottom],
+    pillColumn: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto', over], aligned: true,
+    cubeColumn: ['calc(var(--cad-viewport-corner-left, 0px) + 20px)', 'auto'] });
   const host = document.body.appendChild(document.createElement('div'));
   expect(viewCornerSide(host)).toBe('right');
   host.style.setProperty('--cad-viewport-corner-left', '2px');

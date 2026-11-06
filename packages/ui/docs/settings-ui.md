@@ -21,7 +21,7 @@ the host's `links` and the `appSettings` `CadViewer` hands it — and the name m
 under the file's name: Models and Files, the file explorer). The view's one frame (`kit/shell/ViewFrame.jsx`, which
 every renderer mounts, 2D or 3D) owns the scene's chrome: the tool strip and Preview at its end, the sub-toolbar of
 the tool in hand under it, the update status, the view's panel, Quick Edit, the view's corner (the cube with
-Display, Projection and Home over it, or a flat view's zoom pill and its bottom row) and Preview, with Preview's own
+Display, Projection and Home over it, or a flat view's zoom pill and its column over it) and Preview, with Preview's own
 bar in the navbar's place. Renderers supply
 their tools, their tools' rows, their panel's sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
@@ -221,7 +221,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   model; how you look at it is the view's corner (**The view's corner**, below). **What goes on the
   screen is what is changed often**: a tool, Display and Projection, a board's Display (its preset), 2D | 3D and side, the zoom. What is
   changed now and then goes in the view's panel or behind a menu: a board's layers and layer display are
-  its Layers tab's, Grid is Display's menu's, Zoom to selection and Zoom to 100% the zoom's menu's. 24px tiles with 14px icons,
+  its Layers tab's, Grid is Display's menu's and so is a board's projection in 3D, Zoom to selection
+  and Zoom to 100% the zoom's menu's. 24px tiles with 14px icons,
   an even 4px apart, a tool's chevron touching its button, in a 34px row (`FloatingToolBar`,
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
   ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
@@ -258,7 +259,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   control floats over that corner lifts it clear with `--cad-viewport-corner-bottom`, the
   room that control takes from the bottom edge. A host can instead anchor it at bottom-left
   with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`, and the whole
-  corner follows it there (**The corner's bottom row**, below).
+  corner follows it there (**A flat view's column**, below).
   Codex's tab presentation uses this for all its views to avoid the floating composer.
   Preview omits it, and so does a phone.
 - **Preview** ends the tool strip, for a 3D file (`data-view-controls`, `FloatingToolBar`'s
@@ -274,7 +275,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `ProjectionToggle.jsx`), then **Home** nearest the cube (a house: the view it opened with — the
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
-  view controls on the corner's **bottom row**, left of the pill (below). The corner is for navigation
+  view controls in a **column over the pill** (below). The corner is for navigation
   only, never a tool, but it is drawn in the **strip's language**: every control is the tool strip's
   (`FloatingToolBar.js`) without its border and its shadow, the same in light and dark. Its surface is
   the strip's fill (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`, `floatingSurface.js`'s
@@ -285,28 +286,29 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   zoom pill a small toolbar of three, − and + either side of the 48px percentage (112px); a board's
   switches small toolbars whose segments are strip buttons, the chosen one on (the strip's pressed
   fill). Over an empty canvas they stand a step off it as the strip does; over the picture or the
-  model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 6px apart, tooltips
-  and menus to the left. A state shows on the control itself (Projection's icon, a board's side). A
-  phone has no corner: its view's controls are
-  rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
-  back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
-  [Preview](#camera-animation-and-preview)).
-- **The corner's bottom row** (`ViewCorner.jsx`'s `ViewCornerRow`, `viewportLayout.js`'s `viewCornerLayout`): a
-  view's own controls for how it is looked at, side by side on the pill's line, right-aligned 6px left of
-  the pill (126px from the right edge), each of a fixed width and the pill's 32px height, so their
-  bottoms are its, lifted by `--cad-viewport-corner-bottom` as the pill is. The cube's box ends 90px
-  from the right edge, so the row clears it by 36px: when a flat view shows its picture in 3D and the
-  pill becomes the cube, not one of the row's controls moves. A 3D view's column stands flush with the
-  cube's right face (14px from the right edge) on its box's top, its 32px tiles 6px apart. A board's
-  row is `[Display] [2D | 3D] [Front | Back]`: Display a one-button toolbar (32px), its menu opening up
-  and away from the corner; the two switches small toolbars on the corner's surface
-  (`ViewCornerSwitch`, `VIEW_CORNER_SURFACE_CLASS`, the one surface every corner control shares), 72px
-  and 104px wide. A host that anchors the cube at the bottom-left
-  (`--cad-viewport-corner-left`) moves all of the corner there, as one group mirrored: the cube's column
-  flush with its left face, the pill where the cube's drawing ends (14px inside its box, as at the right),
-  the row 6px right of the pill (132px from the box's edge) and in the order it reads from the corner
-  outwards (`[pill or cube] [Front | Back] [2D | 3D] [Display]`), the tooltips and menus opening to
-  the right; `--cad-viewport-corner-bottom` lifts it all either way.
+  model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 6px apart; a column's
+  tooltips and menus open beside it, away from the corner, the pill's above it. A state shows on the
+  control itself (Projection's icon, a board's side). A phone has no corner: its view's controls are
+  rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's 3D view and View
+  from the back, ticked while they are, and in 3D its projection in Display's submenu). A view drawn as a
+  picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and
+  Preview's own controls are its bar's (see [Preview](#camera-animation-and-preview)).
+- **A flat view's column** (`ViewCorner.jsx`'s `ViewPillColumn`, `viewportLayout.js`'s
+  `viewCornerLayout`): a view's own controls for how it is looked at, stacked over its zoom pill as a
+  3D view's column stands over its cube: right-aligned, flush with the pill's right edge (8px from the
+  right edge), each the pill's 32px height, 6px apart and the lowest 6px over the pill (46px from the
+  bottom), lifted by `--cad-viewport-corner-bottom` as the pill is. A 3D view's column stands flush with
+  the cube's right face (14px from the right edge) on its box's top, its 32px tiles 6px apart: the same
+  column, each over its own anchor. A board's is, from the top down, Display, 2D | 3D, Front | Back,
+  over the pill: Display a one-button toolbar (32px), its hint and menu beside it, away from the corner,
+  as a 3D view's Display; the two switches small toolbars on the corner's surface (`ViewCornerSwitch`,
+  `VIEW_CORNER_SURFACE_CLASS`, the one surface every corner control shares), 72px and 104px wide. A
+  board in 3D keeps this corner, the pill zooming its camera: not one control moves between 2D and 3D.
+  A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves all of the
+  corner there, as one group mirrored: the cube's column flush with its left face, the pill where the
+  cube's drawing ends (14px inside its box, as at the right), a flat view's column flush with the
+  pill's left edge, in the same order from the top down, the tooltips and menus opening to the right;
+  `--cad-viewport-corner-bottom` lifts it all either way.
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
   Quick Edit's peek) as in Preview, one transparent row on no surface, the same row in both;
   the tools view's Reset is an item of its Playback settings (see
@@ -747,10 +749,11 @@ file.
   it by that handle (`drawing.dxf#h9C`), and the search finds it by it. Searching, the layers whose names match,
   and the blocks whose names do under their layer.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
-  often, so on the corner's bottom row, left of the zoom pill or the cube, the same in 2D and 3D:
+  often, so in the corner's column over the zoom pill, from the top down, the same in 2D and 3D:
   **Display**, the corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
   menu the presets as one radio group — Board, Copper, Assembly, Placement — the one on screen ticked,
-  and Custom, ticked and not a choice, while the Layers tab's eyes have left the preset's set);
+  and Custom, ticked and not a choice, while the Layers tab's eyes have left the preset's set; in 3D,
+  after a rule, the camera's **Projection**, changed seldom, so here and not on the screen);
   **2D | 3D** (below, [A board in 3D](#a-board-in-3d)); and the **side** (KiCad's View ▸ Flip Board View):
   **Front** and **Back** side by side, in KiCad's words, the side the board is seen from raised, a press
   on the other flipping it; from the back the board is mirrored, its back layers on top. The rest of how a
@@ -759,7 +762,7 @@ file.
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More: Display a submenu of the presets, 3D view and View from the back ticked while they are on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More: Display a submenu of the presets (in 3D, then Projection), 3D view and View from the back ticked while they are on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
@@ -913,9 +916,10 @@ tab's Display and the view's theme, on the 2D canvas's colour; what the 2D view 
 dimension, a fab note, ink) is drawn as it falls, on a see-through plane round the slab at each face's
 height, so nothing the 2D view shows is lost. It is the view's other canvas in the same
 frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
-selection, the ink and the measurements are the same mounted components, with the same names, in both;
-the one change is the corner, whose zoom pill becomes the 3D views' cube with their Projection and Home
-over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's Alt+3 opens its 3D view.
+selection, the ink, the measurements and the corner are the same mounted components, with the same
+names, in both: the column and the zoom pill stand where they stood, and the pill zooms the 3D camera.
+There is no cube (a board turns over by Front | Back), Projection is Display's menu's and Home's work is
+Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 
 | Control | In 3D |
 | --- | --- |
@@ -926,21 +930,24 @@ over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's 
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
 | The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
-| Front \| Back | turns the camera over the board's left-to-right axis, eased, which way is up kept: the cube reads upright and the back is seen as the 2D view's back, mirrored left to right; follows the camera when it is turned over by hand |
-| Zoom pill | replaced by the cube; the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) are the 3D views' |
-| Projection, Home | the 3D views' own |
+| Front \| Back | turns the camera over the board's left-to-right axis, eased, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right; follows the camera when it is turned over by hand |
+| Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
+| Projection | Display's menu's, after a rule under the presets: Orthographic or Perspective, kept with the file's view |
+| Home | none: Zoom to fit (F, a double-click on empty space under Select, the pill's or the view's menu) frames the board |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
-Entering 3D opens head on, on the window the 2D view shows, from the side it shows, and eases to Home
-(or to the camera the file was left at in 3D); leaving frames the 2D view on what the camera was centred
-on, from its side. Which is up, the 3D camera and its projection are the file's view (`board3d`). The
-library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row of More.
+Entering 3D opens head on, on the window the 2D view shows, from the side it shows, and eases to the
+3D views' opening view, the board framed whole (or to the camera the file was left at in 3D); leaving
+frames the 2D view on what the camera was centred on, from its side. Which is up, the 3D camera and
+its projection are the file's view (`board3d`). The library card's picture is the flat board in
+either mode. On a phone, **3D view** is a ticked row of More, and in 3D Display's submenu ends with
+Projection.
 
 ## Display settings and section primitives
 
 Display is not a tool. Its button is the view's corner's — a 3D view's at the top of the column over
-the cube, over Projection and Home; a board's on its corner's bottom row — and shows the current mode's
-sphere icon. It opens a stock shadcn dropdown menu
+the cube, over Projection and Home; a board's at the top of its column over the zoom pill — and shows
+the current mode's sphere icon. It opens a stock shadcn dropdown menu
 (`DisplayPopover.jsx`): a muted **Display** label, the modes as a `DropdownMenuRadioGroup`,
 a separator, then **Grid**, a `DropdownMenuCheckboxItem`. On a phone the strip's **More**
 menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`), with no
@@ -949,8 +956,10 @@ toggles it and leaves the menu open (`onSelect` prevents the close). Clicking ou
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
 settings are its corner's — Display (its presets), 2D | 3D and the side — and its Layers tab's layer
-display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); it has Projection and Home only
-in 3D, over the cube, and no Preview. It follows the theme as every view does: the app's own canvas
+display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); in 3D its Display's list ends,
+after a separator, with **Projection** (a muted label, then Orthographic and Perspective, a
+`DropdownMenuRadioGroup`: choosing one closes the menu, as a mode does); it has no Home and no Preview.
+It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
@@ -1298,8 +1307,10 @@ a fixed width, and the percentage, pressed, its menu — Zoom in, Zoom out (half
 100%, then Zoom to fit and Zoom to selection, each with its key, as Figma's: ⌘+ and ⌘- (Ctrl+= and
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
 tools do not: its corner's Home, F, a double-click on empty space under Select and the view's menu frame it, and the
-same keys zoom it. On a phone the zoom is More's Zoom submenu. **100% is the model as authored,
-framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`) at the camera's angle — a
+same keys zoom it. A board in 3D keeps its pill, which reads and steps its 3D camera
+(`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom submenu. **100% is the
+model as authored, framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`; a board's
+slab) at the camera's angle — a
 fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which
 leave the number where it is while the camera stays. **Zoom to fit frames what is shown now**
 (`scene.shownBounds()`: the parts as they stand, exploded or posed, the hidden ones left out, the
@@ -1484,8 +1495,8 @@ strip's buttons (Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the corner's buttons (Display, Projection,
 Home, the zoom's), the navbar's right-hand controls (the
 update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
-settings, Exit preview) are hinted by name — the strip's and the corner's row's hints above their
-buttons, the column's over the cube beside them, away from the corner, the others' below; a
+settings, Exit preview) are hinted by name — the strip's and the zoom pill's hints above their
+buttons, a corner column's beside them, away from the corner, the others' below; a
 corner switch's words say it all, with no hint; there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,
 the transport (play, pause, the scrubber), the drawing row's settings or labelled text
