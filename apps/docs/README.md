@@ -148,7 +148,8 @@ each with its name beneath, drifting sideways (resting under a mouse, a finger o
 off screen) and moved by a trackpad's sideways swipe, Shift with the wheel, a drag, a swipe or the
 arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
 Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
-links; under them one line asks for a plugin request (a new GitHub issue). Then Features (below). The site has no
+links, and nothing follows them in the hero: under their names as much room as the label has over
+their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
 from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take

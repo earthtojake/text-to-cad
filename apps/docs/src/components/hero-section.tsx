@@ -5,7 +5,6 @@ import { HeroGear } from "@/components/hero-gear";
 import { InstallBox } from "@/components/install-box";
 import { LogoBuild } from "@/components/logo-build";
 import { Button } from "@/components/ui/button";
-import { pluginRequestUrl } from "@/lib/content";
 import {
   formatGitHubStars,
   getGitHubStars,
@@ -86,20 +85,17 @@ export async function HeroSection() {
         </div>
       </div>
 
-      {/* At the foot of the screen, a label over the agents' logos, no section title. */}
-      <div id="agents" className="mx-auto w-full max-w-[1200px] scroll-mt-20 px-4 pb-[clamp(0.75rem,2.5svh,2rem)] sm:px-6">
+      {/* At the foot of the screen, a label over the agents' logos, no section title. Under the
+          names, as much room as the label has over the glyphs (its 12px gap and the third of a tile
+          above each glyph), so the strip closes the screen evenly: 36px under the 72px tiles, 40px
+          under the 88px ones. */}
+      <div id="agents" className="mx-auto w-full max-w-[1200px] scroll-mt-20 px-4 pb-9 sm:px-6 [@media(min-width:64rem)_and_(min-height:44rem)]:pb-10">
         <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
           WORKS WITH THESE AGENTS
         </p>
         <div className="mt-3">
           <AgentCarousel />
         </div>
-        <p className="mt-[clamp(0.5rem,1.6svh,1.25rem)] text-center text-sm leading-6 text-muted-foreground">
-          No plugin for your agent yet?{" "}
-          <a href={pluginRequestUrl} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
-            Request one
-          </a>
-        </p>
       </div>
     </section>
   );
