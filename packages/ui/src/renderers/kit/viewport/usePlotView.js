@@ -78,7 +78,10 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     };
   }, [plot, requestPaint, drawViewKey, colorScheme, paused]);
 
-  /** Paint the frame final now: the view drawn at its own scale, not a patch scaled while it rests. */
+  /**
+   * Paint the frame final now: the view drawn at its own scale, not a patch scaled while it rests. What a
+   * capture paints first, and what a covered pane paints before it is uncovered (a board leaving 3D).
+   */
   const settle = useCallback(() => {
     paintNow();
     rastersRef.current?.flush();
@@ -117,6 +120,6 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   }, [noun]);
 
   return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView, zoom: view.zoom,
-    capture, thumbnail,
+    capture, thumbnail, settle,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

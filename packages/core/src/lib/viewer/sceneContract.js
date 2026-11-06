@@ -62,6 +62,11 @@
  *   answer is one of a few rigs the scene holds, so a host can tell whether it changed by identity.
  * @property {(ray: import("three").Ray) => ({ id: string, point: import("three").Vector3 } | null)} [pick]
  *   Only scenes that select.
+ * @property {() => boolean} [presentable]  `false` while the scene is in place but not yet fit to be
+ *   seen: a board's slab before its face's picture is drawn on it (`board3d/boardStage.js`). A new
+ *   viewport keeps its canvas covered until the scene says it is, so the first frame shown is the
+ *   whole of it; asked as each frame is drawn, and of no account once the canvas is shown. Absent means
+ *   presentable.
  * @property {boolean} [complete]  `false` while `restBounds` may still GROW: a large model published
  *   in pieces into one scene identity, with no box declared for the whole of it. The viewport
  *   frames `restBounds` as it stands, so something is on screen at once, and frames once more

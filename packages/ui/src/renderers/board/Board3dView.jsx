@@ -14,9 +14,14 @@
  * (`kit/tools/select/usePointerPick.js`); a drag turns the view.
  *
  * Its stage's background is the 2D canvas's colour (`plot2d/theme.js`'s `boardPalette`), so the board
- * sits on its canvas as it does in 2D. It opens on `opening.camera` (the 2D window head on, or the
- * camera it was left at) and then eases to `opening.then` (the camera this file was left at in 3D) or
- * to Home.
+ * sits on its canvas as it does in 2D. It opens on `opening.camera`: the 2D window head on, unseen
+ * (`shown` false: see-through, and deaf to the pointer) over the flat canvas showing that same picture,
+ * until its viewport has presented a frame of the board with its face drawn (the stage is `presentable`
+ * only then); it then tells the board view (`onShown`), which shows it in place of the flat canvas in one
+ * frame: no frame of the viewport's own cover, nor of the bare slab. (Opened on the camera a file was
+ * left at in 3D, it is shown at once, its cover over the pane until that frame.) Drawn and shown, it eases
+ * to `opening.then` (the camera this file was left at in 3D) or to Home; whether anybody has moved the
+ * camera since (`moved`: a hand on it, `kit/camera/cameraTouch.js`) is what leaving 3D asks.
  *
  * Its parts stand on it (`@cad/core/lib/board3d/boardParts.js`): each footprint's 3D model, the STEP the
  * board's models table names (`models`, `GET …/models`) read by its document id through the engine
@@ -31,12 +36,15 @@ import * as THREE from "three";
 import { boardPalette } from "@cad/core/lib/plot2d/index.js";
 import { createBoardStage } from "@cad/core/lib/board3d/boardStage.js";
 import { createBoardParts, createModelLoader } from "@cad/core/lib/board3d/boardParts.js";
-import { BOARD_THICKNESS_MM, cameraTurnedOver, millimetresPerPixel, planFromCamera, sheetToWorldMatrix, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
+import {
+  BOARD_THICKNESS_MM, cameraTurnedOver, millimetresPerPixel, perspectiveHeadOn, planFromCamera, sheetToWorldMatrix, sideSeenAlong
+} from "@cad/core/lib/board3d/boardFrame.js";
 import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import ShellViewport from "../kit/shell/ShellViewport.jsx";
 import DoubleClickFit from "../kit/shell/DoubleClickFit.jsx";
 import { useStageViewport } from "../kit/shell/useStageViewport.js";
 import { plainShellCamera, scopeShellCamera } from "../kit/shell/fileView.js";
+import { cameraHands } from "../kit/camera/cameraTouch.js";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 
 const SCALE = VIEWER_SCENE_SCALE.CAD;
@@ -48,12 +56,13 @@ const POINTER_ONLY = Object.freeze({ pick: () => null });
 /**
  * @param {{ handle: { current: object | null }, viewerRef: { current: object | null }, modelKey: string,
  *   layout: object, outline: number[][][] | null, display: object, colorScheme: "light" | "dark",
- *   opening: { camera: object, then: object | null }, projection: string,
+ *   opening: { camera: object, then: object | null, home: boolean, flat?: boolean }, projection: string, shown: boolean,
  *   pickAt(located: object): object | null, onTap(point: object, event: object): void, onHover(point: object | null, event: object | null): void,
  *   picking: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
  *   onCamera(camera: object, side: "top" | "bottom"): void, onShown(): void }} props
+ *   `shown`: the board view shows this canvas in place of the flat one (after `onShown`).
  */
-export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, thickness = BOARD_THICKNESS_MM, display, colorScheme, opening, projection,
+export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, thickness = BOARD_THICKNESS_MM, display, colorScheme, opening, projection, shown = false,
   pickAt, onTap, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null }) {
   const live = useRef(null);
   live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme, client, bodyInk, pickPart };
@@ -129,14 +138,18 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     render();
   }, [stage, tick]);
   // The faces are drawn as the 2D view draws the board fitted to this pane (its hairlines a pixel, its
-  // labels at that detail): fixed once the pane is known, so a resize redraws nothing.
+  // labels at that detail): fixed once the pane is known, so a resize redraws nothing. A pane with no size
+  // yet is drawn at its first resize (the viewport's settle, `requestPaint`): its stage is presentable only
+  // once a face is drawn.
   const lineScale = useRef(0);
   const lookKey = JSON.stringify([{ ...display, side: null }, colorScheme]);
-  useEffect(() => {
+  const applyLook = () => {
     const { width, height } = paneSize(), sheet = stage.sheet;
     if (!lineScale.current && width > 0 && height > 0) lineScale.current = Math.min(width / sheet.width, height / sheet.height) * 0.88;
-    if (!lineScale.current) return;
-    if (stage.setLook({ display, theme: colorScheme, lineScale: lineScale.current })) paintOverlay();
+    return lineScale.current > 0 && stage.setLook({ display: live.current.display, theme: live.current.colorScheme, lineScale: lineScale.current });
+  };
+  useEffect(() => {
+    if (applyLook()) paintOverlay();
     render();
   }, [stage, lookKey, tick]);
 
@@ -184,24 +197,38 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   };
   const requestPaint = () => {
     if (paintFrame.current) return;
-    paintFrame.current = requestAnimationFrame(() => { paintFrame.current = 0; paintOverlay(); });
+    paintFrame.current = requestAnimationFrame(() => { paintFrame.current = 0; if (!lineScale.current) applyLook(); paintOverlay(); });
   };
   useEffect(() => () => cancelAnimationFrame(paintFrame.current), []);
 
-  // ---- opening: head on, then eased to where it goes ------------------------------------------
+  // ---- opening: head on, shown once it is the board's picture, then eased to where it goes ------
   const [initial] = useState(() => scopeShellCamera(opening.camera, modelKey, SCALE));
-  const eased = useRef(false);
   const [presented, setPresented] = useState(false);
   const presentation = useCallback(state => setPresented(state.key === modelKey && !state.preparing), [modelKey]);
+  const eased = useRef(false);
+  const opened = useRef(null);
+  // Head on in perspective, the eye stands where the face is drawn at the flat picture's scale for the lens
+  // the viewport has (its focal length at its aspect), set before the first frame can be drawn (the faces
+  // are drawn in this same pass); a lens or a projection changed later keeps that scale at the target.
   useEffect(() => {
-    if (!presented || eased.current || !runtime()) return;
+    const now = runtime();
+    if (eased.current || !opening.flat || !initial || !now?.camera?.isPerspectiveCamera) return;
+    viewerRef.current?.setPerspective?.(perspectiveHeadOn(initial, now.camera.getEffectiveFOV()), { animate: false });
+  }, [stage, tick]);
+  // The viewport has drawn the board with its face (its stage `presentable`), head on: the board view
+  // shows this canvas now, in place of the flat one, which shows the same picture.
+  useEffect(() => { if (presented) live.current.onShown(); }, [presented]);
+  // Shown and drawn, it eases from head on; the hands on the camera then are the opening's own, and any
+  // after them somebody's (`moved`).
+  useEffect(() => {
+    if (!shown || !presented || eased.current || !runtime()) return;
     eased.current = true;
-    live.current.onShown();
     const viewer = viewerRef.current;
     const next = opening.then ? scopeShellCamera(opening.then, modelKey, SCALE) : null;
     if (next) viewer?.setPerspective?.(next, { animate: true });
     else if (opening.home) viewer?.goHome?.();
-  }, [presented]);
+    opened.current = cameraHands(runtime());
+  }, [shown, presented]);
   // The side the camera looks at is drawn on every stage: a revision is a new stage under a camera that
   // does not move, so no perspective change tells it the camera is under the board.
   useEffect(() => { if (stage.see(sideNow())) render(); }, [stage, tick]);
@@ -258,12 +285,14 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       if (!now || sideNow() === side) return;
       viewer.setPerspective({ ...now, ...cameraTurnedOver(now) }, { animate: true });
     },
-    /** The 3D camera as the 2D view's window: what leaving 3D frames, and what a prompt's view is. */
+    /** Whether anybody has moved the camera since it was shown and eased to where it opens: leaving 3D then frames its `plan`. */
+    moved: () => opened.current !== null && cameraHands(runtime()) !== opened.current,
+    /** The 3D camera as the 2D view's window: what leaving 3D frames once the camera has moved, and what a prompt's view is. */
     plan(mirrorX) {
       const current = camera(), target = runtime()?.controls?.target, { width, height } = paneSize();
       if (!current || !target) return null;
       return planFromCamera({ position: current.position.toArray(), target: target.toArray(), halfHeight: (pixelSize(target) * height) / 2,
-        width, height, mirrorX, thickness });
+        perspective: Boolean(current.isPerspectiveCamera), width, height, mirrorX, thickness });
     },
     camera: () => plainShellCamera(viewerRef.current?.getPerspective?.()),
     setCamera: camera => viewerRef.current?.setPerspective?.(scopeShellCamera(camera, modelKey, SCALE), { animate: false }),
@@ -282,7 +311,8 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       <DoubleClickFit viewport={viewport} scene={stage} viewerRef={viewerRef} />
     </>;
   }, [stage, picking, viewerRef]);
-  return <div ref={frameRef} className="absolute inset-0 z-0" data-board-3d="">
+  // Unseen until shown: see-through (the viewport's cover with it) and deaf to the pointer, over the flat canvas.
+  return <div ref={frameRef} className={shown ? "absolute inset-0 z-0" : "pointer-events-none absolute inset-0 z-0 opacity-0"} data-board-3d="">
     <ShellViewport ref={viewerRef} scene={stage} modelKey={modelKey} sceneScaleMode={SCALE} perspective={initial} {...props}
       viewCube={false} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
   </div>;

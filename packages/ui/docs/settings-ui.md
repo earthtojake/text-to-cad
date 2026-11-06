@@ -936,12 +936,16 @@ Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 | Home | none: Zoom to fit (F, a double-click on empty space under Select, the pill's or the view's menu) frames the board |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
-Entering 3D opens head on, on the window the 2D view shows, from the side it shows, and eases to the
-3D views' opening view, the board framed whole (or to the camera the file was left at in 3D); leaving
-frames the 2D view on what the camera was centred on, from its side. Which is up, the 3D camera and
-its projection are the file's view (`board3d`). The library card's picture is the flat board in
-either mode. On a phone, **3D view** is a ticked row of More, and in 3D Display's submenu ends with
-Projection.
+Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
+the eye where the face is drawn at the 2D scale), and eases to the 3D views' opening view, the board
+framed whole (or to the camera the file was left at in 3D); the 2D picture stays on screen until the 3D
+view has drawn that same picture, so the switch shows no frame of anything else. Leaving with the camera
+where that left it (nothing turned, panned or zoomed since) gives the 2D view back exactly as it was,
+from its side; once the camera has been moved, leaving frames the 2D view on what the camera was centred
+on, at the matching scale, from its side. Either way the 3D view stays until the 2D canvas has painted
+the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
+The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
+of More, and in 3D Display's submenu ends with Projection.
 
 ## Display settings and section primitives
 
