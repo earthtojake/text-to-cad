@@ -7,8 +7,8 @@ its measuring is the trimesh integration's (``cad.trimesh._check``), imported wh
 
 - ``molding``, injection molding: draft, undercut candidates and projected area along one pull
   (``pull``), or with ``candidates`` the pulls ranked (x, y, z and the mesh's principal axes);
-- ``printing``, 3D printing: walls, overhangs and support volume, or with ``candidates`` the six
-  axis-aligned orientations ranked.
+- ``printing``, 3D printing: walls, overhangs and support volume of the part as it stands, and with
+  ``candidates`` the six axis-aligned orientations ranked beside them.
 
 Each option belongs to a process (``OPTIONS``), and one given to the other process is refused by name
 before anything is read, as an option the check does not take would be (law 16). The standard library
@@ -113,8 +113,8 @@ def dfm_for(document_type: str) -> Any:
         zero_tol: molding: draft under this many degrees is zero draft; default 0.05.
         samples: printing: rays cast for the wall-thickness field; default 2000.
         angle_limit: printing: down-facing faces under this many degrees from horizontal need support; default 45.
-        candidates: rank the candidates instead: molding the pulls (x, y, z and the part's principal axes),
-          printing the six axis-aligned orientations.
+        candidates: rank the candidates: molding the pulls (x, y, z and the part's principal axes), in place
+          of one pull's figures; printing the six axis-aligned orientations, beside the part's own figures.
         """
         resolved = options(document_type, process,
                            {"pull": pull, "units": units, "wall_limit": wall_limit, "zero_tol": zero_tol,

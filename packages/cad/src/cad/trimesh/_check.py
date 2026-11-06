@@ -97,11 +97,8 @@ def check(document_type: str, source: Any, *, process: str, candidates: bool = F
                 report = _molding.pulls(mesh, options["wall_limit"], options["zero_tol"])
             else:
                 report = _molding.measure(mesh, pull, options["wall_limit"], options["zero_tol"])
-        else:
-            if candidates:
-                report = _printing.orientations(mesh, options["angle_limit"])
-            else:
-                report = _printing.measure(mesh, options["samples"], options["angle_limit"])
+        else:  # the part as it stands, and with candidates the orientations ranked beside it
+            report = _printing.measure(mesh, options["samples"], options["angle_limit"], orientations=candidates)
     report = {"process": process, **report}
     try:
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
@@ -147,7 +144,7 @@ def _findings(report: dict[str, Any], process: str, candidates: bool) -> tuple[C
                                       "measured per body", "mesh"))
     if process == "molding" and mesh.get("note"):
         found.append(CheckFinding("warning", "several_bodies", mesh["note"], "mesh"))
-    if candidates:
+    if candidates and process == "molding":  # the pulls ranked: no one pull's draft or undercuts to say
         return tuple(found)
     if process == "molding":
         draft = report.get("draft") or {}
@@ -202,11 +199,6 @@ def _summary(path: Path, report: dict[str, Any], process: str, candidates: bool)
             f"{row['pull']} {_mm(row['undercut_candidate_area_mm2'])} mm2 undercut, "
             f"{_mm(row['zero_draft_wall_area_mm2'])} mm2 zero-draft, min draft {_mm(row['min_wall_draft_deg'])} deg"
             for row in rows)
-    if process == "printing" and candidates:
-        rows = sorted(report["orientations"]["candidates"], key=lambda row: row["support_area_mm2"])
-        return head + ", orientations by support area: " + "; ".join(
-            f"{row['orientation']} {_mm(row['support_area_mm2'])} mm2, {_mm(row['build_height_mm'])} mm tall"
-            for row in rows)
     if process == "molding":
         draft, undercuts, projection = report["draft"], report["undercuts"], report["projection"]
         least = (draft.get("min_wall_draft") or {}).get("draft_deg")
@@ -216,7 +208,13 @@ def _summary(path: Path, report: dict[str, Any], process: str, candidates: bool)
                 f"projected {_mm(projection['projected_area_mm2'])} mm2, depth {_mm(projection['depth_along_pull_mm'])} mm")
     mesh, overhangs, walls, support = (report["mesh"], report["overhangs"], report["wall_thickness"],
                                        report["support_volume"])
-    return (f"{head}: {_mm(mesh['volume_mm3'])} mm3, {mesh['body_count']} body(ies); overhangs under "
+    said = (f"{head}: {_mm(mesh['volume_mm3'])} mm3, {mesh['body_count']} body(ies); overhangs under "
             f"{overhangs['angle_limit_used_deg']:g} deg {_mm(overhangs['down_facing_area_below_limit_mm2'])} mm2; walls "
             f"min {_mm(walls.get('min_mm'))}, p05 {_mm(walls.get('p05_mm'))}, median {_mm(walls.get('median_mm'))} mm; "
             f"support ~{_mm(support['estimated_support_volume_mm3'])} mm3")
+    if candidates:
+        rows = sorted(report["orientations"]["candidates"], key=lambda row: row["support_area_mm2"])
+        said += "; orientations by support area: " + "; ".join(
+            f"{row['orientation']} {_mm(row['support_area_mm2'])} mm2, {_mm(row['build_height_mm'])} mm tall"
+            for row in rows)
+    return said

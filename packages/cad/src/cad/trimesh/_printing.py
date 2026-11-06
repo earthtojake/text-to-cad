@@ -341,8 +341,9 @@ def _scale_hint(mesh: trimesh.Trimesh) -> dict:
     }
 
 
-def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float) -> dict:
-    """Every family: the mesh, its scale, overhangs, wall thickness and support volume."""
+def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, orientations: bool = False) -> dict:
+    """Every family: the mesh, its scale, overhangs, wall thickness and support volume, and with
+    ``orientations`` the six axis-aligned candidate orientations ranked beside them."""
     report = {
         "mesh": _safe(_mesh_facts, mesh),
         "scale": _safe(_scale_hint, mesh),
@@ -350,6 +351,8 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float) -> dict:
         "wall_thickness": _safe(_wall_facts, mesh, samples),
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }
+    if orientations:
+        report["orientations"] = _safe(_orientation_facts, mesh, angle_limit)
     _mark_partial(report)
     return report
 

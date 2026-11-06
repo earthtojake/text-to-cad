@@ -67,7 +67,7 @@ mating clearance would otherwise record the fit gap as a wall.
 ## Measure it
 
 `cad <type> dfm --process printing` measures overhangs, wall thickness and support volume, and
-with `--candidates` ranks the six axis-aligned build orientations:
+with `--candidates` ranks the six axis-aligned build orientations beside them, in one run:
 
 ```bash
 cad stl dfm part.stl --process printing --angle-limit 45
@@ -100,7 +100,7 @@ measured with `cad.trimesh.printing(mesh)` in a check script.
   `per_body`.
 - `measurements.support_volume`: `estimated_support_volume_mm3`, `part_volume_mm3` and
   `support_to_part_ratio_pct`, a prism from each down-facing face to the plate: a coarse upper bound.
-- With `--candidates`: `measurements.orientations.candidates`, one row per orientation
+- With `--candidates`, beside the families above: `measurements.orientations.candidates`, one row per orientation
   (`current_plus_z`, `flip_180_x`, `rot_plus_90_x`, `rot_minus_90_x`, `rot_plus_90_y`,
   `rot_minus_90_y`) with its `support_area_mm2`, `support_area_pct` and `build_height_mm`.
 

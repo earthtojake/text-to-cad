@@ -204,7 +204,7 @@ class CheckTest(unittest.TestCase):
 
         self.assertEqual(payload["overhangs"]["angle_limit_used_deg"], 30.0)
 
-    def test_candidates_rank_the_orientations(self) -> None:
+    def test_candidates_rank_the_orientations_beside_the_parts_own_figures(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(_wedge(30.0), tmp, "wedge30")
@@ -212,6 +212,9 @@ class CheckTest(unittest.TestCase):
 
         self.assertEqual(len(result.measurements["orientations"]["candidates"]), 6)
         self.assertIn("orientations by support area", result.summary)
+        # The part as it stands is measured too: its walls, overhangs and support, and what they show.
+        self.assertGreaterEqual(set(result.measurements), {"mesh", "overhangs", "wall_thickness", "support_volume"})
+        self.assertIn("overhangs", {finding.code for finding in result.findings})
 
     def test_an_overhang_is_said_where_it_is(self) -> None:
         with tempfile.TemporaryDirectory() as td:

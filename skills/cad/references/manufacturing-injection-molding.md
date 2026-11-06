@@ -141,7 +141,8 @@ accurate to about one cell ring.
 
 ### `--candidates`: `measurements.pulls.candidates`
 
-Repeats the draft and undercut summaries for x, y, z AND the mesh's own
+In place of one pull's `draft`, `undercuts` and `projection` (it takes no `--pull`),
+repeats the draft and undercut summaries for x, y, z AND the mesh's own
 principal axes, each row a `pull` with its `undercut_candidate_area_mm2`,
 `wall_area_mm2`, `zero_draft_wall_area_mm2`, `wall_area_below_1deg_mm2` and
 `min_wall_draft_deg`. A part modelled off-axis has no good pull among the three
