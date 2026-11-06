@@ -18,25 +18,6 @@ Design physical products with AI.
 
 # text-to-cad
 
-The text-to-cad plugin gives your agent local workflows for generating 3D models
-as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks,
-generates engineering drawings, and connects to popular 3D printing, sheet metal
-and CNC fabrication services.
-
-It is supported by all popular agents that support plugins or the
-[skills](https://skills.sh) framework, including Claude Code, Codex, Cursor,
-Gemini and Grok.
-
-### How it works
-
-1. Your agent writes each model as a Python script with [build123d](https://github.com/gumyr/build123d), built on [Open CASCADE](https://dev.opencascade.org).
-2. Running the script, `python model.py`, builds the model with text-to-cad's
-   server into a document it holds in memory (its parts, names, colours, materials
-   and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each
-   model's work in memory, so an edit rebuilds only what it changed.
-3. The CAD viewer shows the model in your agent app or your browser, and follows
-   every rebuild.
-
 ## 🚀 Quickstart
 
 macOS and Linux:
@@ -65,17 +46,14 @@ Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
 
 ## ✨ Features
 
-What your agent can design, check and make with text-to-cad.
+The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.
 
-- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with build123d, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms.
+- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms, and shown live in the CAD viewer.
 - [**Circuit boards**](skills/pcb/SKILL.md): KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.
 - [**Manufacturing checks**](skills/cad/SKILL.md#can-it-be-made): Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.
-- [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.
-- [**The CAD Viewer**](skills/cad/SKILL.md#show-the-model): Shows each model in your agent app or your browser and follows every rebuild. Measure, clip and explode it, or mark it up for your agent.
-- [**Cut files**](skills/cad/references/2d-profiles-and-dxf.md): DXF profiles, gaskets and flat patterns with their bend lines, for laser and waterjet cutting.
-- [**SendCutSend orders**](skills/sendcutsend/SKILL.md): Checks DXF and STEP files against SendCutSend's own guide, materials and services before you upload them.
-- [**3D printing**](skills/print3d/SKILL.md): Slices a model to G-code with OrcaSlicer for your printer, and sends Bambu Lab prints to Bambu Connect or Bambu Studio.
-- [**Robots and worlds**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.
+- [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block, plus DXF flat patterns for laser and waterjet cutting.
+- [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
+- [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.
 
 ## 🛠️ Contributing
 

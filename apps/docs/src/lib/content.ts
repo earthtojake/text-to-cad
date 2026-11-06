@@ -1,6 +1,6 @@
 /**
  * The homepage's copy, which the README says too (README.md and apps/docs/README.md): the plugin's
- * description, how it works, the install commands, the agents and the features. The page renders it,
+ * description, the install commands, the agents and the features. The page renders it,
  * and so does /llms.txt (app/llms.txt/route.ts), so the two never drift apart.
  */
 import { normalizeDiscordUrl } from "@/lib/github";
@@ -9,21 +9,6 @@ import { siteConfig } from "@/lib/site";
 // What the plugin is: its long description, as every plugin manifest says it.
 export const pluginDescription =
   "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
-
-// Who it is for: the sentence after the description, the skills framework linked.
-export const support = {
-  before: "It is supported by all popular agents that support plugins or the",
-  link: { text: "skills", href: "https://skills.sh" },
-  after: "framework, including Claude Code, Codex, Cursor, Gemini and Grok.",
-};
-
-// How a model is made, under the overview: the README's How it works, step for step. Code is in
-// backticks, which the page sets as code.
-export const howItWorks = [
-  "Your agent writes each model as a Python script with build123d, built on Open CASCADE.",
-  "Running the script, `python model.py`, builds the model with text-to-cad's server into a document it holds in memory (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each model's work in memory, so an edit rebuilds only what it changed.",
-  "The CAD viewer shows the model in your agent app or your browser, and follows every rebuild.",
-];
 
 // The install: one command per system, which sets up text-to-cad in every agent app on the computer
 // and, run again, updates it (the README's Quickstart, which says the same, word for word).
@@ -57,7 +42,7 @@ export const agents = [
   { name: "Goose", logo: "goose" },
   { name: "Kilo", logo: "kilo" },
   { name: "Kiro CLI", logo: "kiro-cli" },
-  { name: "Nous Research", logo: "nous-research" },
+  { name: "Hermes", logo: "nous-research" },
   { name: "OpenCode", logo: "opencode" },
   { name: "Roo", logo: "roo" },
   { name: "Trae", logo: "trae" },
@@ -98,13 +83,13 @@ export const contributing = {
 // What text-to-cad does, the README's Features, item for item and word for word: each one's name,
 // the page that documents it (a path in the repository; every skill's folder is one of them), what it
 // does, and the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx).
-export const featuresIntro = "What your agent can design, check and make with text-to-cad.";
+export const featuresIntro = "The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.";
 export const features = [
   {
     id: "parts",
     name: "Parts and assemblies",
     path: "skills/cad/SKILL.md",
-    summary: "Models written as Python scripts with build123d, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms.",
+    summary: "Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms, and shown live in the CAD viewer.",
     file: "bracket.py",
   },
   {
@@ -125,40 +110,19 @@ export const features = [
     id: "drawings",
     name: "Engineering drawings",
     path: "skills/engineering-drawing/SKILL.md",
-    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
+    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block, plus DXF flat patterns for laser and waterjet cutting.",
     file: "bracket.pdf",
   },
   {
-    id: "viewer",
-    name: "The CAD Viewer",
-    path: "skills/cad/SKILL.md#show-the-model",
-    summary: "Shows each model in your agent app or your browser and follows every rebuild. Measure, clip and explode it, or mark it up for your agent.",
-    file: "bracket.step",
-  },
-  {
-    id: "cut",
-    name: "Cut files",
-    path: "skills/cad/references/2d-profiles-and-dxf.md",
-    summary: "DXF profiles, gaskets and flat patterns with their bend lines, for laser and waterjet cutting.",
-    file: "bracket_flat.dxf",
-  },
-  {
-    id: "sendcutsend",
-    name: "SendCutSend orders",
+    id: "fabrication",
+    name: "Fabrication services",
     path: "skills/sendcutsend/SKILL.md",
-    summary: "Checks DXF and STEP files against SendCutSend's own guide, materials and services before you upload them.",
-    file: "bracket_flat.dxf",
-  },
-  {
-    id: "print",
-    name: "3D printing",
-    path: "skills/print3d/SKILL.md",
-    summary: "Slices a model to G-code with OrcaSlicer for your printer, and sends Bambu Lab prints to Bambu Connect or Bambu Studio.",
-    file: "housing.gcode.3mf",
+    summary: "[Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.",
+    file: "bracket_flat.dxf, housing.gcode.3mf",
   },
   {
     id: "robots",
-    name: "Robots and worlds",
+    name: "Robotics and simulation",
     path: "skills/robot-simulation/SKILL.md",
     summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.",
     file: "arm.urdf",

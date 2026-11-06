@@ -248,109 +248,11 @@ function DrawingsArt() {
   );
 }
 
-// The CAD Viewer over the bracket: the panel at the left, the tool strip with Measure in hand, a
-// measurement along the plate's front edge, and the view cube.
-function ViewerArt() {
-  return (
-    <Sheet view="8 4 224 142">
-      <g className={faint}>
-        <Draw d="M18 8 H222 A6 6 0 0 1 228 14 V136 A6 6 0 0 1 222 142 H18 A6 6 0 0 1 12 136 V14 A6 6 0 0 1 18 8 Z" strokeWidth={1} />
-        <Draw d="M54 8 V142" strokeWidth={0.8} />
-        <Fade>
-          <path d="M19 22 H44 M23 34 H47 M23 46 H40 M19 58 H45" strokeWidth={1.6} />
-          <rect x={115} y={15} width={58} height={13} rx={6.5} strokeWidth={0.9} />
-          {[125, 137, 161].map((x) => (
-            <circle key={x} cx={x} cy={21.5} r={2.4} fill="currentColor" stroke="none" />
-          ))}
-          {/* The view cube. */}
-          <path d="M205 107 L214.5 112.5 V123.5 L205 129 L195.5 123.5 V112.5 Z M205 118 L195.5 112.5 M205 118 L214.5 112.5 M205 118 V129" strokeWidth={0.9} />
-        </Fade>
-      </g>
-      <g className={accent}>
-        <Fade>
-          <rect x={16} y={28} width={35} height={12} rx={3} fill="currentColor" fillOpacity={0.14} stroke="none" />
-          <circle cx={149} cy={21.5} r={2.4} fill="currentColor" stroke="none" />
-        </Fade>
-      </g>
-      <IsoBracket size="small" />
-      <g className={accent}>
-        <Draw late d="M85.7 100.8 L135 129.3" strokeWidth={1.2} />
-        <Fade late>
-          <path d="M98.9 93.2 L84.2 101.7 M148.2 121.7 L133.5 130.2" strokeWidth={0.6} />
-          <circle cx={98.9} cy={93.2} r={2} fill="currentColor" stroke="none" />
-          <circle cx={148.2} cy={121.7} r={2} fill="currentColor" stroke="none" />
-          <rect x={92} y={108} width={32} height={13} rx={6.5} fill="currentColor" stroke="none" />
-          <text x={108} y={117.5} style={{ ...label, fill: "var(--background)" }} textAnchor="middle">60 mm</text>
-        </Fade>
-      </g>
-    </Sheet>
-  );
-}
-
-// The bracket unfolded: the cut outline and the hole on the cut layer, the bend on its own layer.
-function CutArt() {
-  return (
-    <Sheet view="60 22 120 122">
-      <g className={ink}>
-        <Draw d="M72 39 H168 V111 H72 Z" strokeWidth={1.4} />
-        <Draw d="M148.8 70.2 a4.8 4.8 0 1 0 0.01 0" strokeWidth={1.2} />
-      </g>
-      <g className={accent}>
-        <Fade late>
-          <path d="M120 33 V117" strokeWidth={1.2} strokeDasharray="6 3" />
-          <text x={124} y={31} style={{ ...label, fontSize: 7.5 }}>bend 90°</text>
-        </Fade>
-      </g>
-      <Fade late>
-        <g className={ink}>
-          <path d="M72 134 H86" strokeWidth={1.4} />
-          <text x={90} y={137} style={{ ...label, fontSize: 7.5 }}>cut</text>
-        </g>
-        <g className={accent}>
-          <path d="M116 134 H130" strokeWidth={1.2} strokeDasharray="4 2" />
-          <text x={134} y={137} style={{ ...label, fontSize: 7.5 }}>bend</text>
-        </g>
-      </Fade>
-    </Sheet>
-  );
-}
-
-// The same flat pattern, read against SendCutSend's guide: the checks a preflight report makes.
-function SendCutSendArt() {
-  const checks = ["Units and scale", "Closed contours", "Bend lines", "Material, thickness"];
-  return (
-    <Sheet view="10 30 222 84" narrow>
-      <g className={ink}>
-        <Draw d="M16 48 H88 V102 H16 Z" strokeWidth={1.3} />
-        <Draw d="M74 71.4 a3.6 3.6 0 1 0 0.01 0" strokeWidth={1} />
-      </g>
-      <g className={accent}>
-        <Fade>
-          <path d="M52 44 V106" strokeWidth={1} strokeDasharray="5 2.5" />
-        </Fade>
-      </g>
-      {checks.map((text, i) => (
-        <g key={text}>
-          <g className={accent}>
-            <Draw late d={`M106 ${44 + i * 20} a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0`} strokeWidth={1.1} />
-            <Draw late d={`M109 ${44 + i * 20} l2 2.2 l4 -4.4`} strokeWidth={1.4} />
-          </g>
-          <g className={ink}>
-            <Fade late>
-              <text x={124} y={47 + i * 20} style={{ ...label, fontFamily: "var(--font-sans)", fontSize: 10 }}>{text}</text>
-            </Fade>
-          </g>
-        </g>
-      ))}
-    </Sheet>
-  );
-}
-
 // The housing on the bed, layer by layer, the nozzle laying the next one.
-function PrintArt() {
+function PrintShapes() {
   const walls = [80, 84, 88, 92, 96, 100, 104, 108, 112];
   return (
-    <Sheet view="30 18 180 112">
+    <>
       <g className={faint}>
         <Draw d="M36 124.5 H204" strokeWidth={1.4} />
         <Fade>
@@ -364,6 +266,41 @@ function PrintArt() {
       </g>
       <g className={accent}>
         <Draw late d="M64 72 H72 M168 72 H172" strokeWidth={2.6} />
+      </g>
+    </>
+  );
+}
+
+// Fabrication services on one sheet: the bracket's flat pattern read against SendCutSend's guide, its
+// checks beneath, and the housing printing beside it.
+function FabricationArt() {
+  const checks = ["Closed contours", "Bend lines"];
+  return (
+    <Sheet view="6 14 234 98">
+      <g className={ink}>
+        <Draw d="M14 24 H92 V64 H14 Z" strokeWidth={1.3} />
+        <Draw d="M78 40 a3.6 3.6 0 1 0 0.01 0" strokeWidth={1} />
+      </g>
+      <g className={accent}>
+        <Fade>
+          <path d="M53 20 V68" strokeWidth={1} strokeDasharray="5 2.5" />
+        </Fade>
+      </g>
+      {checks.map((text, i) => (
+        <g key={text}>
+          <g className={accent}>
+            <Draw late d={`M16 ${80 + i * 16} a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0`} strokeWidth={1.1} />
+            <Draw late d={`M18.6 ${80 + i * 16} l2 2 l3.6 -4`} strokeWidth={1.3} />
+          </g>
+          <g className={ink}>
+            <Fade late>
+              <text x={33} y={83 + i * 16} style={{ ...label, fontFamily: "var(--font-sans)", fontSize: 9.5 }}>{text}</text>
+            </Fade>
+          </g>
+        </g>
+      ))}
+      <g transform="translate(106 6) scale(0.62)">
+        <PrintShapes />
       </g>
     </Sheet>
   );
@@ -412,10 +349,7 @@ const ART: Record<string, () => ReactNode> = {
   boards: BoardsArt,
   checks: ChecksArt,
   drawings: DrawingsArt,
-  viewer: ViewerArt,
-  cut: CutArt,
-  sendcutsend: SendCutSendArt,
-  print: PrintArt,
+  fabrication: FabricationArt,
   robots: RobotsArt,
 };
 

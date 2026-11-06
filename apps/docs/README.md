@@ -130,13 +130,11 @@ Windows browser has Windows preselected), with nothing under it: what the comman
 (`installSummary`) and the link to installing by hand, app by app, and updates, the repository's
 `docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
 homepage. Then the framed CAD demo, then a small
-uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos
-scrolling as skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
+uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos,
+each with its name beneath, drifting sideways and moved by the mouse wheel, a drag, a swipe or the
+arrow keys (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
 Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
-links; under them one line asks for a plugin request (a new GitHub issue). Overview has the
-plugin's description, which every manifest and the README's opening paragraph say word for word
-(`test_plugin_manifests.py` holds them to one text), and How it works: three steps from a model's
-script to the CAD viewer (`howItWorks`), the README's How it works. Then Features (below). The site has no
+links; under them one line asks for a plugin request (a new GitHub issue). Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
 from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
@@ -146,7 +144,7 @@ Explanatory
 text fill the content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, how it works, the install commands, what they
+together: the install commands, what they
 do, the link to installing by hand, the features and Contributing. Updates are on
 `docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
 the privacy policy. The site has the hero and the agents carousel. The page's copy lives in

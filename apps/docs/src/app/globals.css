@@ -87,12 +87,6 @@
 
 }
 
-/* The agents' logos on the home page: one copy's width, over and over (`AgentCarousel`). */
-@keyframes agents-carousel {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
 /* The Features drawings, drawn in once as each tile first scrolls into view (`FeaturesReveal`,
    `FeatureArt`): strokes trace along their length (pathLength 1; the dash starts just short of the path, so a
    round cap shows nothing before it moves), the late ones after the part, and

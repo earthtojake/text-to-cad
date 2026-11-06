@@ -68,8 +68,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             )
 
     def test_plugin_manifests_describe_the_plugin_identically(self) -> None:
-        # Each host lists the plugin by its manifest's description, and the README's intro and the
-        # docs site's Overview say it too; they are one text, so an edit to one must reach them all.
+        # Each host lists the plugin by its manifest's description, and the docs site keeps it as
+        # its copy (llms.txt); they are one text, so an edit to one must reach them all.
         codex = load_json(CODEX_PLUGIN_PATH)
         marketplace = load_json(MARKETPLACE_PATH)
         descriptions = {
@@ -81,10 +81,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "gemini": load_json(GEMINI_EXTENSION_PATH).get("description"),
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
         }
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        descriptions["readme intro"] = " ".join(readme.split("\n# text-to-cad\n\n", 1)[1].split("\n\n", 1)[0].split())
         page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
-        descriptions["docs overview"] = re.search(r'const pluginDescription =\s*"([^"]+)"', page).group(1)
+        descriptions["docs copy"] = re.search(r'const pluginDescription =\s*"([^"]+)"', page).group(1)
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
 
     def test_the_readme_and_the_docs_site_install_alike(self) -> None:
@@ -410,7 +408,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # the links: a renamed or retired skill would leave a feature pointing at nothing, and a new
         # skill no feature links would go unmentioned.
         content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        # A feature links its own page and any skill its summary links inline (Fabrication services).
         paths = re.findall(r'path: "(skills/[^"#]+)(?:#[^"]*)?"', content)
+        paths += re.findall(r'\]\((skills/[^)#]+)(?:#[^)]*)?\)', content)
         self.assertTrue(paths, "no feature paths found in the docs site's copy")
         self.assertEqual([path for path in paths if not (REPO_ROOT / path).is_file()], [])
         shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
