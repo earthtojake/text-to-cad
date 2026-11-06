@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Box, Eye, EyeOff, Layers } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
   ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph, TreeRowLabel,
-  TreeRowSurface, TreeRowToggle
+  TreeRowSurface, TreeRowToggle, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
 import { cn } from "@cad/ui/utils";
 import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
 import { LayerSwatch } from "../kit/inspector/layerRows.jsx";
+import VirtualRows from "../kit/inspector/VirtualRows.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { drawingReferenceId, layerRows } from "./drawingReferences.js";
 import { useI18n } from "@cad/ui/i18n";
@@ -51,6 +52,8 @@ function searchRows(rows, query) {
  * colour. A block reference's row stands in line with its layer's: its slot only the layer's guide
  * (under the chevron), its box its block's glyph (under the colour), its name under the layer's name.
  * While the panel's search is up, the layers whose names match and the blocks whose names do, opened.
+ * The rows are one flat list mounted as they scroll into view (`VirtualRows`), as a circuit's tree is:
+ * a drawing of thousands of block references draws, and searches, only the rows on screen.
  *
  * @param {{ drawing: import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing,
  *   hiddenLayers: ReadonlySet<string>, onToggleLayer(name: string): void,
@@ -69,42 +72,46 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
     if (!next.delete(name)) next.add(name);
     return next;
   });
+  // Each layer's row, then (opened) its block references', one flat list.
+  const flat = useMemo(() => rows.flatMap(row => {
+    const open = row.inserts.length > 0 && (Boolean(query) || !folded.has(row.name));
+    return [{ row, open }, ...(open ? row.inserts.map(insert => ({ row, insert })) : [])];
+  }), [rows, query, folded]);
+  const rowHeight = useTreeRowHeight();
+  const renderRow = useCallback(at => {
+    const { row, open, insert } = flat[at];
+    if (!insert) {
+      const hidden = hiddenLayers.has(row.name);
+      return <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row={row.name}>
+        {row.inserts.length ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: row.name })} onToggle={() => toggle(row.name)} />
+          : <TreeRowGlyph><Layers className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>}
+        <LayerSwatch color={row.color} />
+        <span className={cn(TREE_ROW_NAME_CLASS, hidden && "text-muted-foreground", hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover)}>
+          <TreeRowLabel className="max-w-full shrink-0">{row.name}</TreeRowLabel>
+          <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{row.entities.toLocaleString("en-US")}</TreeRowLabel>
+        </span>
+        <LayerEye name={row.name} hidden={hidden} onToggle={onToggleLayer} />
+      </TreeRowSurface>;
+    }
+    const id = drawingReferenceId(insert.handle);
+    return <TreeRowSurface dense depth={0} active={chosen.has(id)}
+      onMouseEnter={() => selection.hover(id)} onMouseLeave={() => selection.hover("")}>
+      <TreeRowGlyph guide />
+      <TreeRowGlyph><Box className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>
+      {/* Its detail is its handle, the entity's id in the file (what its reference names, `#h9C`),
+          marked as one and said whole in its tooltip: the payload carries no insertion point. */}
+      <TooltipHint content={t("layers.handle", { handle: insert.handle })} side="right">
+        <button type="button" aria-label={t("layers.selectBlock", { name: insert.block || insert.handle })} aria-pressed={chosen.has(id)} data-insert-row={insert.handle}
+          onClick={event => selection.select(id, { multiSelect: event.shiftKey || event.metaKey || event.ctrlKey })}
+          className={TREE_ROW_NAME_CLASS}>
+          <TreeRowLabel className="max-w-full shrink-0">{insert.block || t("layers.block")}</TreeRowLabel>
+          <TreeRowLabel className="flex-1 text-micro text-muted-foreground">#{insert.handle}</TreeRowLabel>
+        </button>
+      </TooltipHint>
+    </TreeRowSurface>;
+  }, [flat, hiddenLayers, chosen, selection, onToggleLayer, t]);
   if (query && !rows.length) return null;
-  return <ul className="text-tiny" aria-label={t("layers.label")} data-drawing-layers="" data-flat-panel-hit={query ? "" : undefined}>
-    {rows.map(row => {
-      const hidden = hiddenLayers.has(row.name), open = row.inserts.length > 0 && (Boolean(query) || !folded.has(row.name));
-      return <li key={row.name} className="min-w-0">
-        <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row={row.name}>
-          {row.inserts.length ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: row.name })} onToggle={() => toggle(row.name)} />
-            : <TreeRowGlyph><Layers className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>}
-          <LayerSwatch color={row.color} />
-          <span className={cn(TREE_ROW_NAME_CLASS, hidden && "text-muted-foreground", hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover)}>
-            <TreeRowLabel className="max-w-full shrink-0">{row.name}</TreeRowLabel>
-            <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{row.entities.toLocaleString("en-US")}</TreeRowLabel>
-          </span>
-          <LayerEye name={row.name} hidden={hidden} onToggle={onToggleLayer} />
-        </TreeRowSurface>
-        {open ? <ul>{row.inserts.map(insert => {
-          const id = drawingReferenceId(insert.handle);
-          return <li key={insert.handle} className="min-w-0">
-            <TreeRowSurface dense depth={0} active={chosen.has(id)}
-              onMouseEnter={() => selection.hover(id)} onMouseLeave={() => selection.hover("")}>
-              <TreeRowGlyph guide />
-              <TreeRowGlyph><Box className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>
-              {/* Its detail is its handle, the entity's id in the file (what its reference names, `#h9C`),
-                  marked as one and said whole in its tooltip: the payload carries no insertion point. */}
-              <TooltipHint content={t("layers.handle", { handle: insert.handle })} side="right">
-                <button type="button" aria-label={t("layers.selectBlock", { name: insert.block || insert.handle })} aria-pressed={chosen.has(id)} data-insert-row={insert.handle}
-                  onClick={event => selection.select(id, { multiSelect: event.shiftKey || event.metaKey || event.ctrlKey })}
-                  className={TREE_ROW_NAME_CLASS}>
-                  <TreeRowLabel className="max-w-full shrink-0">{insert.block || t("layers.block")}</TreeRowLabel>
-                  <TreeRowLabel className="flex-1 text-micro text-muted-foreground">#{insert.handle}</TreeRowLabel>
-                </button>
-              </TooltipHint>
-            </TreeRowSurface>
-          </li>;
-        })}</ul> : null}
-      </li>;
-    })}
-  </ul>;
+  return <VirtualRows className="text-tiny" aria-label={t("layers.label")} data-drawing-layers="" data-flat-panel-hit={query ? "" : undefined}
+    count={flat.length} rowHeight={rowHeight} rowKey={at => (flat[at].insert ? `insert:${flat[at].insert.handle}` : `layer:${flat[at].row.name}`)}
+    rowProps={() => ({ className: "min-w-0" })} renderRow={renderRow} />;
 }
