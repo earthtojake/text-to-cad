@@ -5,7 +5,6 @@ Each FILE (an on-disk CAD file, a relative one read from this folder, or a docum
 holds) is registered and printed as its page, ``/<id>``."""
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -24,7 +23,9 @@ def resolve_dist_dir(explicit: str) -> str:
 
 
 def parse_args(argv=None, *, prog=DEFAULT_PROG):
-    parser = argparse.ArgumentParser(prog=prog, description=__doc__)
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(prog=prog, description=__doc__)
     parser.add_argument('files', nargs='*', metavar='FILE',
                         help='a CAD file to open (or a document id the engine holds): its page is /<id>')
     parser.add_argument('--host', default=None, help='Pin the engine bind address; default loopback.')
@@ -49,8 +50,8 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
-            print('CAD Viewer client is not built; build apps/web or install the cad-server wheel', file=sys.stderr)
-            return 1
+            return _failed(options, prog, ValueError('CAD Viewer client is not built; build apps/web or install the '
+                                                     'cad-server wheel'))
     try:
         answer = request({'op': 'viewer', **options})
         if not answer or 'failed' in answer:
@@ -60,8 +61,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         if os.environ.get('CAD_VIEWER_WARM', '').strip() != '0':
             request({'op': 'warm'})
     except (OSError, ValueError) as error:
-        print(f'CAD Viewer: {error}', file=sys.stderr)
-        return 1
+        return _failed(options, prog, error)
     if options['json']:
         print(json.dumps(answer), flush=True)
     else:
@@ -76,3 +76,14 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         except CannotOpen as error:
             print(f'CAD Viewer: could not open a browser ({error}); open the URL above', file=sys.stderr)
     return 0
+
+
+def _failed(options, prog, error):
+    """A launch that failed, by the ``cad`` command's contract (``cad_server._internal.cli_errors``): its
+    words on stderr, or under ``--json`` its one JSON document on stdout; exit 1."""
+    from cad_server._internal.cli_errors import classify, write
+
+    if options['json']:
+        return write(classify(error), prog=prog, as_json=True)
+    print(f'CAD Viewer: {error}', file=sys.stderr)
+    return 1

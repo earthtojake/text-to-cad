@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import unittest
 
 from tests.python.support.paths import add_sources
@@ -41,9 +42,14 @@ COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "requirement",
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
+    """A command line run as the ``cad`` command runs it: its exit status, its stdout and its stderr (a
+    command line its parser refuses exits, as argparse's do)."""
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = cli.main(argv)
+        try:
+            code = cli.main(argv)
+        except SystemExit as exited:
+            code = exited.code
     return code, out.getvalue(), err.getvalue()
 
 
@@ -70,9 +76,12 @@ class TheCommandTable(unittest.TestCase):
         code, _, err = _run(["stl", "snapshot", "part.glb", "out.png"])
         self.assertEqual(2, code)
         self.assertIn("part.glb is a glb, not a stl: use cad glb snapshot", err)
-        code, said, _ = _run(["urdf", "validate", "robot.srdf", "--json"])
-        self.assertEqual(1, code)
-        self.assertIn('"error": "robot.srdf is a srdf, not a urdf: use cad srdf validate"', said)
+        # The same failure with --json: the same status, its one document on stdout and nothing else.
+        code, said, err = _run(["urdf", "validate", "robot.srdf", "--json"])
+        self.assertEqual(2, code)
+        self.assertEqual({"ok": False, "error": "robot.srdf is a srdf, not a urdf: use cad srdf validate",
+                          "reason": "wrong_type"}, json.loads(said))
+        self.assertEqual("", err)
 
     def test_a_model_is_its_id_and_a_file_is_its_types(self) -> None:
         """``cad model`` takes a model's document id and no file; a file's type takes its file and no id."""
@@ -110,7 +119,7 @@ class TheCommandTable(unittest.TestCase):
                     self.assertNotIn("is a urdf, not a srdf", said + err)
                     self.assertIn('"path"', said)
             code, said, _ = _run(["srdf", "validate", "--urdf", str(urdf), str(urdf), "--json"])
-            self.assertEqual(1, code)
+            self.assertEqual(2, code)
             self.assertIn("is a urdf, not a srdf", said)
 
     def test_an_operation_a_type_lacks_names_the_ones_it_has(self) -> None:

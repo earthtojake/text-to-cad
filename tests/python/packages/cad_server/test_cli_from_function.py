@@ -224,7 +224,7 @@ class Serialization(unittest.TestCase):
 
         out = io.StringIO()
         self.assertEqual(1, run_cli(boom, ["a.py", "--json"], prog="t", stdout=out))
-        self.assertEqual({"ok": False, "error": "nope"}, json.loads(out.getvalue()))
+        self.assertEqual({"ok": False, "error": "nope", "reason": "failed"}, json.loads(out.getvalue()))
 
     def test_an_exception_reports_cleanly_without_json(self):
         def boom(target: Path) -> Result:

@@ -24,9 +24,14 @@ from cad_server.cli.document_types import pull_value, type_main
 
 
 def _run(document_type: str, *argv: str) -> tuple[int, str, str]:
+    """The command run: its exit status (a source its parser refuses exits, as argparse's errors do), stdout
+    and stderr."""
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = type_main(document_type, ["dfm", *argv])
+        try:
+            code = type_main(document_type, ["dfm", *argv])
+        except SystemExit as exited:
+            code = exited.code
     return code, out.getvalue(), err.getvalue()
 
 
@@ -72,9 +77,9 @@ class ManufacturingCheckCommand(unittest.TestCase):
 
     def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
         """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one."""
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
-            _run("stl", str(self.box), "--process", "molding", "--not-a-flag")
-        self.assertEqual(raised.exception.code, 2)
+        code, _out, err = _run("stl", str(self.box), "--process", "molding", "--not-a-flag")
+        self.assertEqual(code, 2)
+        self.assertIn("unrecognized arguments: --not-a-flag", err)
         code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "molding", "--json")
         self.assertEqual((code, json.loads(out)["findings"][0]["code"]), (1, "invalid_target"))
 

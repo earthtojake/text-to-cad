@@ -23,8 +23,9 @@ DEFAULT_PROG = "cad requirement"
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     from cad._internal.integrations import INTEGRATIONS
+    from cad_server._internal.cli_parser import parser as command_parser
 
-    parser = argparse.ArgumentParser(
+    parser = command_parser(
         prog=prog, allow_abbrev=False,
         description="Print the exact requirement that installs this device's cad, for a program run with a Python "
                     f"of its own: cad's integrations named ({', '.join(INTEGRATIONS)}), pinned at this device's "
@@ -57,8 +58,9 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
     try:
         found = requirement(args.integrations)
     except ValueError as error:
-        print(f"{prog}: {error}", file=sys.stderr)
-        return 2
+        from cad_server._internal.cli_errors import Failure, write
+
+        return write(Failure(str(error), "invalid_argument"), prog=prog, as_json=args.json)
     if args.json:
         sys.stdout.write(json.dumps(found) + "\n")
         return 0

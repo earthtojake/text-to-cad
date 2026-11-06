@@ -39,7 +39,9 @@ def describe(found: dict[str, Any] | None = None, *, path: Path | None = None) -
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(
         prog=prog,
         description=(
             "Show or change the usage stats and crash reports text-to-cad sends from CAD's apps (the CAD app in an agent "

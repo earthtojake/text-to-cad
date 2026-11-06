@@ -194,10 +194,12 @@ cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 | A MoveIt or ROS consumer | Its own load when available: RViz, robot_state_publisher's TF tree, a Gazebo load, MoveIt Setup Assistant (IK for the primary group, plan to a named state). |
 
 - One run validates ONE file and collects every finding (severity, code, XML path) with a summary.
-  `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "issues":
-  [{"severity", "code", "message", "element", "hint"}], "summary"}`, where `element` is the XML
-  path. It exits nonzero if the target fails, and relative targets resolve from the working
-  directory: run from the workspace that owns the files.
+  `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "findings":
+  [{"severity", "code", "message", "location", "hint"}], "summary"}`, where `location` is the XML
+  path. It exits 1 if the target fails its checks, and 2, with nothing checked, for a command line
+  it refuses -- a file of another format, an option it does not take -- which `--json` says as one
+  `{"ok": false, "error", "reason"}`. Relative targets resolve from the working directory: run
+  from the workspace that owns the files.
 - A clean check is a guardrail, not proof: it cannot show that a joint origin or axis matches the
   robot, that mesh units match `scale`, that a planning group matches the task, or that a plugin
   loads. Say which validator or smoke test passed, never just that the file is valid.

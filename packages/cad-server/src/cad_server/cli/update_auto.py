@@ -19,7 +19,9 @@ DEFAULT_PROG = "cad update auto"
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(
         prog=prog,
         description="Show or change automatic updates. While they are on (by default), the engine reads the version "
                     "feed once an hour and, when a newer release is out, installs it in the background and switches to "

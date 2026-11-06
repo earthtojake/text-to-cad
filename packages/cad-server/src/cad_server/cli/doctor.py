@@ -50,7 +50,6 @@ stdlib-only on purpose: this must work when the heavy dependency set is broken.
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -485,7 +484,9 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
 
 
 def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
-    parser = argparse.ArgumentParser(
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(
         prog=prog,
         description="Set the server up (register it, write the cad command, make the CAD kernel environment, "
                     "start the engine) and report what this device runs: the current installation, the "

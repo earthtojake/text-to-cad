@@ -74,7 +74,9 @@ src/cad_server/
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, the
                          #   install channel, file locks (the state folder's one lock:
-                         #   `file_lock.state`), the CLI derivation
+                         #   `file_lock.state`), the CLI derivation, the one parser every
+                         #   command reads its options by (cli_parser) and the one failure
+                         #   contract every command fails by (cli_errors)
   _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
                          #   plugin (its manifests and skills) -- produced when the wheel is
                          #   packaged, never committed, never edited

@@ -136,11 +136,12 @@ PREPARE_ENV = "CAD_UPDATE_PREPARE"
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
     """``cad setup``'s parser, or with ``uninstall`` ``cad uninstall``'s, or with ``update``
     ``cad update``'s (``cad_server.cli.update``): setup's options, and the switch helper's own."""
+    from cad_server._internal.cli_parser import parser as command_parser
     from cad_server._internal.providers import APPS, SKILLS_AGENTS
     from cad_server.updates import INSTALL, INSTALL_WINDOWS
 
     if uninstall:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Take text-to-cad out of every agent app on this machine: what earlier `cad setup` runs "
@@ -148,7 +149,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
                         "cad command when it is text-to-cad's own; this installation's engine stopped.",
         )
     elif update:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
@@ -157,7 +158,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
     else:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
@@ -207,7 +208,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
     except ValueError as error:
         parser.error(str(error))
     port, source = (named, "CAD_ENGINE_PORT") if named is not None else (default_port(), "default")
-    installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]))
+    installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]), prog)
     return installer.uninstall() if uninstall else installer.install()
 
 
@@ -281,12 +282,13 @@ class Installer:
     """One run of ``cad setup`` or ``cad uninstall``: its plan, what it did, and how it says so."""
 
     def __init__(self, args: argparse.Namespace, only: list[str], port: int, source: str,
-                 argv: list[str] | None = None) -> None:
+                 argv: list[str] | None = None, prog: str = DEFAULT_PROG) -> None:
         from cad_server import __version__
         from cad_server._internal import plugin, providers
 
         self.args, self.only, self.port, self.source = args, only, port, source
         self.argv = list(argv or [])
+        self.prog = prog
         self.providers = providers
         self.machine = providers.Machine.here()
         self.release = __version__
@@ -307,6 +309,15 @@ class Installer:
     def say(self, line: str = "") -> None:
         self.out.write(line + "\n")
         self.out.flush()
+
+    def _failed(self, words: str) -> int:
+        """A run that stops before its plan, said already in its lines: exit 1, and under ``--json`` its one
+        JSON document on stdout (``cad_server._internal.cli_errors``), so a caller reading it finds an answer."""
+        if not self.args.json:
+            return 1
+        from cad_server._internal.cli_errors import Failure, write
+
+        return write(Failure(words), prog=self.prog, as_json=True)
 
     def stage(self, stage: str, detail: str = "") -> None:
         """The engine's own run (``--engine-update``): the update's stage it reached, a progress frame
@@ -350,7 +361,7 @@ class Installer:
             from cad_server.updates import command
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
-            return 1
+            return self._failed(f"text-to-cad {self.release}'s release folder was not made: {refused}")
         run = [made["cad"], "setup", *self.argv]
         self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
@@ -832,7 +843,7 @@ class Installer:
             self.say(f"Not installed: {installations.packaged_words(package)}. Run the install command from "
                      f"a terminal of its own (Windows Terminal or PowerShell), not from an app's: {command()}")
             if not self.args.dry_run:
-                return 1
+                return self._failed(f"Not installed: {installations.packaged_words(package)}")
         if not self.args.dry_run and not self.engine_update:
             relocated = self._relocated()
             if relocated is not None:

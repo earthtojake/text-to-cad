@@ -73,6 +73,25 @@ runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 These stay as they were: `cad run`, `serve`, `status`, `stop`, `delete`, `server`, `setup`, `update`,
 `uninstall`, `doctor`, `plugin`, `viewer`, `telemetry`.
 
+### How a command fails
+
+Every command fails by one contract: the failure's class sets the exit status, the same with `--json`
+and without -- 2 for the command line and its input (a command or an option it does not take, an
+argument missing or out of range, a file of another type), 1 for a failure of the work, 130 for
+Ctrl-C -- and under `--json` it is one JSON document on stdout, `{"ok": false, "error": ..., "reason":
+...}`, with nothing else there and no traceback. `reason` is one of `usage`, `invalid_argument`,
+`wrong_type`, `not_found` (exit 2), `engine_unavailable`, `failed`, `internal_error` (exit 1) and
+`canceled` (130). Read the exit status, then `reason`; `error` is for a person.
+
+| 0.10 | Now |
+| --- | --- |
+| a refusal under `--json` (`part.glb is a glb, not a stl`) exited 1 | exits 2, as it does without `--json`, `"reason": "wrong_type"` |
+| a usage error under `--json` (`cad xbf export --json`) was argparse's text on stderr | `{"ok": false, "error": "the following arguments are required: SRC, DST", "reason": "usage"}` on stdout, exit 2 |
+| a failure no command expected, under `--json`, printed its JSON and then a traceback | its JSON alone, `"reason": "internal_error"`, exit 1 |
+| a prefix of an option was read as the option: `cad status --js`, `cad doctor --p` (which ran `--prune`) | an unrecognized argument, exit 2, naming the option it is closest to |
+| an unknown command printed the whole usage | its name, the one command it is closest to, and `'cad --help' lists the commands` |
+| Ctrl-C printed a traceback | `cad: canceled`, exit 130 |
+
 ## The manufacturing measurements
 
 The dfm skill's `scripts/mold_tool.py` and the dfam-check skill's `scripts/dfam_tool.py`, and the

@@ -53,7 +53,11 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         print(f"release  {refused}", file=sys.stderr, flush=True)
         print(f"Once that is fixed, run `cad update` again, or the install command: {updates.command()}",
               file=sys.stderr, flush=True)
-        return 1
+        if not args.json:
+            return 1
+        from cad_server._internal.cli_errors import Failure, write
+
+        return write(Failure(f"text-to-cad {newest}'s release folder was not made: {refused}"), prog=prog, as_json=True)
     run = [made["cad"], "setup", *given]
     if os.name == "nt":
         return subprocess.call(run)

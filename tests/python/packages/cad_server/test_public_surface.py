@@ -209,12 +209,15 @@ class Manifest(unittest.TestCase):
         self.assertIn("\n  validate ", out)
         self.assertNotIn("export", out.split("operations:")[1])
 
-    def test_an_unknown_noun_lists_every_command(self):
+    def test_an_unknown_noun_names_it_and_where_the_commands_are(self):
+        # Never the whole list: the word, at most one suggestion, and the help that lists them.
         code, out, err = self._dispatch("frobnicate", "export")
+        self.assertEqual((2, ""), (code, out))
+        self.assertEqual("cad: unknown command 'frobnicate'; 'cad --help' lists the commands\n", err)
+        code, out, err = self._dispatch("stauts")
         self.assertEqual(2, code)
-        self.assertIn("unknown command 'frobnicate'", err)
-        for command in ("model ", "xbf ", "urdf ", "snapshot, validate", "viewer", "serve"):
-            self.assertIn(command, err)
+        self.assertEqual("cad: unknown command 'stauts' (did you mean 'status'?); 'cad --help' lists the commands\n",
+                         err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):
         # No retired-surface recognition: the answer is Python's own error, not a note about history.

@@ -8,6 +8,7 @@ getting to the help text or an error never imports the CAD stack.
 import contextlib
 import importlib
 import io
+import json
 import subprocess
 import sys
 import unittest
@@ -115,10 +116,15 @@ class Dispatch(unittest.TestCase):
         self.assertRegex(text, r"retired: part\.xbf's renderer \(RSS\) \d+s ago · tube\.py \(LRU\) \d+s ago")
 
     def test_unknown_command_exits_two_and_names_it_on_stderr(self):
-        code, _, err = self._run(["nope"])
-        self.assertEqual(code, 2)
-        self.assertIn("nope", err)
-        self.assertIn("usage: cad", err)
+        # Named, with where the commands are listed: never the whole usage.
+        code, out, err = self._run(["nope"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "cad: unknown command 'nope'; 'cad --help' lists the commands\n")
+        # At most one suggestion, never run; under --json the same failure as the contract's one document.
+        code, out, err = self._run(["stats", "--json"])
+        self.assertEqual((code, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": "unknown command 'stats' (did you "
+                                           "mean 'status'?); 'cad --help' lists the commands"})
 
     def test_subcommand_argv_is_forwarded_untouched(self):
         """The dispatcher must not consume or reorder a subcommand's own flags."""
