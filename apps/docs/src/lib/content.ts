@@ -60,7 +60,7 @@ export const contributing = {
   items: [
     {
       title: "Bugs and plugin requests",
-      body: "A bug report with the model script and the output of `cad doctor` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
+      body: "A bug report with the model script and the output of `cad doctor --check` is the fastest to fix, and an agent app without a plugin gets one on request. A security problem is reported privately, as SECURITY.md says.",
       links: [
         { text: "Open an issue", href: `${siteConfig.repository}/issues/new` },
         { text: "Request a plugin", href: pluginRequestUrl },

@@ -171,6 +171,16 @@ def parse(argv: list[str]) -> Plan:
     return plan
 
 
+def _missing(plan: Plan) -> str | None:
+    """What a plan names that is not there, in words -- the folder ``--directory`` names, the script (read from
+    that folder, as uv run reads it) -- or None for a plan whose inputs are there."""
+    if plan.directory and not os.path.isdir(plan.directory):
+        return f"no such folder: {plan.directory}"
+    if plan.kind == "script" and not os.path.isfile(os.path.join(plan.directory or "", plan.target)):
+        return f"no such file: {plan.target}"
+    return None
+
+
 def _option(plan: Plan, name: str, value: str | None) -> None:
     """One of uv run's options, read into the plan: those cad reads itself, and the rest handed to uv."""
     from cad_server._internal import extras
@@ -428,6 +438,12 @@ def main(argv: list[str] | None = None) -> int:
     except base.Refused as refused:
         said(str(refused))
         return 1
+    missing = _missing(plan)
+    if missing is not None:
+        # The command line's mistake (``cad_server._internal.cli_errors``: exit 2, ``not_found``), said before
+        # any environment is made, as uv run says it: never a traceback from the program's runner.
+        said(missing)
+        return 2
     try:
         if plan.directory:
             os.chdir(plan.directory)

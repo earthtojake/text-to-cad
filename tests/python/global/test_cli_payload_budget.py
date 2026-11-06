@@ -25,6 +25,10 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad-server/src/cad_server/cli/plugin.py",
         # `cad requirement --json`: the requirement, its indexes and find-links.
         "packages/cad-server/src/cad_server/cli/requirement.py",
+        # `cad doctor --json`: each check of the report, and what --prune removed.
+        "packages/cad-server/src/cad_server/cli/doctor.py",
+        # Every command's failure under --json: the contract's one document.
+        "packages/cad-server/src/cad_server/_internal/cli_errors.py",
         # The checks' Result dataclasses.
         "packages/cad/src/cad/results.py",
         # A document type's operation refused before it ran (`cad stl export part.glb --json`).

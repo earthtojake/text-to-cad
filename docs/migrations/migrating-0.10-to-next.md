@@ -109,9 +109,76 @@ the checks are `dfm` (a 3D type's manufacturing check), `drc` (a board's), `erc`
 0.10 answered `issues`, each with `element`. A file of another type is refused by name before anything
 runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 
-These stay as they were: `serve`, `status`, `stop`, `delete`, `server`, `uninstall`, `plugin`, `viewer`,
-`telemetry`. `cad run` changes what it runs a program in ([`cad run`](#cad-run-tier-1)), and `setup`,
-`update` and `doctor` what they set up ([Setting up and updating](#setting-up-and-updating)).
+These stay as they were, but for how they fail and what one that destroys asks (below): `serve`,
+`status`, `stop`, `delete`, `server`, `uninstall`, `plugin`, `viewer`, `telemetry`. `cad run` changes
+what it runs a program in ([`cad run`](#cad-run-tier-1)), and `setup`, `update` and `doctor` what they
+set up ([Setting up and updating](#setting-up-and-updating)); what `cad doctor` reports, and what `cad
+update --dry-run` reads, are below too.
+
+### How a command fails
+
+Every command fails by one contract: the failure's class sets the exit status, the same with `--json`
+and without -- 2 for the command line and its input (a command or an option it does not take, an
+argument missing or out of range, a file of another type or one that is not there, a command that
+destroys run where no one can be asked, without `--yes`), 1 for a failure of the work, 130 for Ctrl-C --
+and under `--json` it is one JSON document on stdout, `{"ok": false, "error": ..., "reason": ...}`,
+with nothing else there and no traceback. `reason` is one of `usage`, `invalid_argument`, `wrong_type`,
+`not_found`, `confirmation_required` (exit 2), `declined`, `engine_unavailable`, `failed`,
+`internal_error` (exit 1) and `canceled` (130). Read the exit status, then `reason`; `error` is for a
+person. A check's findings are still its answer, not a failure: a check that finds a blocking one exits
+1 with its result (`"ok": false`, its `findings`), as `cad doctor` does with its report.
+
+| 0.10 | Now |
+| --- | --- |
+| a refusal under `--json` (`part.glb is a glb, not a stl`) exited 1 | exits 2, as it does without `--json`, `"reason": "wrong_type"` |
+| a usage error under `--json` (`cad xbf export --json`) was argparse's text on stderr | `{"ok": false, "error": "the following arguments are required: SRC, DST", "reason": "usage"}` on stdout, exit 2 |
+| a failure no command expected, under `--json`, printed its JSON and then a traceback | its JSON alone, `"reason": "internal_error"`, exit 1 |
+| a prefix of an option was read as the option: `cad status --js`, `cad doctor --p` (which ran `--prune`) | an unrecognized argument, exit 2, naming the option it is closest to |
+| an unknown command printed the whole usage, and an operation a type does not have (`cad step exprt`) the type's whole help | its name, the one it is closest to, and where they are told, in one line: `'cad --help' lists the commands`; `it has export, snapshot, inspect, dfm; 'cad step --help' says what each does` |
+| Ctrl-C printed a traceback | `cad: canceled`, exit 130 |
+| `cad telemetry on` or `cad update auto off` that could not save the choice said so on stdout, where its answer goes | on stderr, as every failure's words are without `--json`: `cad telemetry: could not save the choice: ...`, exit 1 |
+| a value a check's option does not take (`cad sdf validate world.sdf --gz-check maybe`, `cad stl dfm part.stl --process casting`) failed as a `ValueError` naming the Python parameter, exit 1 | `argument --gz-check: invalid choice: 'maybe' (choose from 'auto', 'required', 'never')`, exit 2, `usage` |
+| a manufacturing check's option refused (`--samples 0`, `--pull` beside `--candidates`, the other process's option) exited 1 | exits 2, `invalid_argument`, measuring nothing |
+| a file that is not there: `cad urdf validate missing.urdf` exited 1 with an `invalid_target` finding, `cad stl snapshot missing.stl` 2, `cad kicad_pcb inspect` 2 with its own words | every type's every operation: `no such file: missing.urdf`, exit 2, `not_found`, before anything runs |
+| a file an option names that is not there: `cad srdf validate robot.srdf --urdf missing.urdf` exited 1 with a `missing_urdf` finding; `--annotation`, `--measurements` and `--job` exited 2 as `invalid_argument`; a schematic's `--display missing.json` beside `--sheet` printed a traceback | `--urdf missing.urdf: no such file` (and so for each), exit 2, `not_found`, before anything runs; a `--display` that is not JSON, `invalid_argument` |
+| a file of no type given to a type's command (`cad urdf validate robot.xml`) exited 1 with a finding | `robot.xml is not a urdf file: cad urdf takes .urdf`, exit 2, `wrong_type` |
+| `cad viewer --json missing.step` (or `part.py`, or an id the engine does not hold) started the engine, then said `CAD Viewer: no CAD file at ...` on stderr, exit 1 | refused before the engine is asked, exit 2: `no such file: missing.step` (`not_found`); ``part.py is a model's script, not a CAD file: `cad run part.py` builds its models and prints each one's page`` (`wrong_type`); an id the engine does not hold, `not_found` |
+| `cad run missing.py` made the program's environment, then printed the runner's traceback, exit 1 | `cad run: no such file: missing.py`, exit 2, before any environment is made (a `--directory` that is not there: `no such folder`) |
+| `cad doctor --help` moved an earlier release's state folder into this one's, and any command's `--help` or `--json` run could say the telemetry notice (and record it as said) | help -- `-h`, `--help`, and now `cad help <command ...>` at any depth (`cad help step` printed the root's) -- does nothing but print the help; an answer in JSON says no notice, which waits for a run a person reads |
+| a model's script where its document is wanted (`cad model inspect part.py`) was refused saying `python SCRIPT.py` prints the id, and the help said the same | ``part.py is a model's script, not a document id: `cad run part.py` builds its models and prints each one's id``, exit 2, `wrong_type`; the help says `cad run SCRIPT.py`; `cad serve part.py` says to run `cad run part.py` first |
+
+### A command that destroys asks first
+
+`cad uninstall` (and `--purge`), `cad delete`, `cad doctor --prune` and `cad server --rotate-token` say
+their plan -- what they remove, how many -- and ask, `(y/N)`, at a terminal; anything but `y` or `yes`
+changes nothing (exit 1, `declined`). Where no one can be asked -- an agent's shell, a pipe, `--json`, CI
+-- they change nothing without `-y`/`--yes`: exit 2, `confirmation_required`, naming the command with
+`--yes` (under `--json`, `"userActionRequired": true` and `"next"`). A script or an agent that runs one
+of them on a person's word adds `--yes`. `cad delete --dry-run` lists what it would delete, and how
+many. `cad setup` asks nothing, and the install command's `--uninstall` passes `--yes` itself.
+
+| 0.10 | Now |
+| --- | --- |
+| `cad delete <id>` deleted at once | asks; `cad delete <id> --yes` where nothing can ask |
+| `cad uninstall`, `cad uninstall --purge` took text-to-cad out at once | the plan, then asks; `--yes` where nothing can ask |
+| `cad doctor --prune` removed at once | the list, then asks; `cad doctor --prune --yes` where nothing can ask |
+| `cad server --rotate-token` replaced the token at once | asks; `--yes` where nothing can ask |
+
+### What `cad doctor` reports, and what `cad update --dry-run` reads
+
+`cad doctor` exited 4 for a CAD kernel that would not load and wrote that line (`kernel FAILED`) to
+stderr, the rest of its report to stdout. It exits 1 for it now, with the whole report on stdout. Its
+help no longer says it makes the CAD kernel environment, which it no longer does ([Setting up and
+updating](#setting-up-and-updating)). Two forms are new: `cad doctor --check` is the report alone -- it
+registers, writes and starts nothing, and says what `cad doctor` would write -- for a bug report or a
+look; `--json` is the report as one document, `{"ok", "version", "checks": [{"name", "status",
+"detail"}]}`. The report also says where each integration's operations run (`trimesh`, `kicad`).
+
+`cad update --dry-run` printed this release's setup plan alone, never reading the version feed; it reads
+it now (bounded, keeping nothing) and says first what an update would install: `cad update: would install
+text-to-cad 0.11.2 (this is 0.11.0), ...`, or that it would set this release up again because it is the
+newest or the feed cannot be reached; under `--json` the plan's document carries it as `update`
+(`{"current", "feed", "release"}`).
 
 ## The manufacturing measurements (tier 1)
 

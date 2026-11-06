@@ -67,7 +67,10 @@ class UrdfValidateCliTests(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = cli.main(list(argv))
+            try:
+                exit_code = cli.main(list(argv))
+            except SystemExit as exited:  # a command line its parser refuses: the file of no type, not there
+                exit_code = exited.code
         return exit_code, stdout.getvalue() + stderr.getvalue()
 
     def test_valid_urdf_passes_with_summary(self) -> None:
@@ -84,9 +87,9 @@ class UrdfValidateCliTests(unittest.TestCase):
         # so the parser rejects it rather than quietly validating half the ask.
         first = self._write("a.urdf", VALID_URDF)
         second = self._write("b.urdf", VALID_URDF)
-        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
-            self._run(str(first), str(second))
-        self.assertEqual(2, cm.exception.code)
+        exit_code, output = self._run(str(first), str(second))
+        self.assertEqual(2, exit_code)
+        self.assertIn("unrecognized arguments", output)
 
     def test_invalid_structure_fails(self) -> None:
         urdf_path = self._write(
@@ -116,14 +119,20 @@ class UrdfValidateCliTests(unittest.TestCase):
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.urdf"))
-        self.assertEqual(exit_code, 1)
-        self.assertIn("file not found", output)
+        self.assertEqual(exit_code, 2)  # the command line's, before anything is read
+        self.assertIn("no such file", output)
 
     def test_non_urdf_suffix_fails(self) -> None:
         path = self._write("robot.xml", VALID_URDF)
         exit_code, output = self._run(str(path))
-        self.assertEqual(exit_code, 1)
-        self.assertIn("must be a .urdf file", output)
+        self.assertEqual(exit_code, 2)
+        self.assertIn("is not a urdf file: cad urdf takes .urdf", output)
+
+    def test_a_package_root_that_is_no_pair_is_refused_by_its_flag(self) -> None:
+        urdf_path = self._write("robot.urdf", VALID_URDF)
+        exit_code, output = self._run(str(urdf_path), "--packages", "robot_description")
+        self.assertEqual(exit_code, 2)
+        self.assertIn("--packages expects NAME=PATH, got 'robot_description'", output)
 
     def test_missing_local_mesh_fails(self) -> None:
         urdf_path = self._write(

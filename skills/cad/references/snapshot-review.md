@@ -110,7 +110,9 @@ the picture is drawn; a file of the pose is a posed model
 ([exports](exports.md#posed-files-and-parts-on-their-own)).
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
-and a failure as `{"ok": false, "error": ...}` on stdout, with exit status 1.
+and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status
+is the failure's class with `--json` and without: 2 for a request refused before anything ran
+(`reason`: `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for a render that failed.
 
 ## Clipped views
 

@@ -19,7 +19,9 @@ command runs that needs one its own environment lacks (a 3D type's `dfm`, the `t
 integration's) runs in the environment of that integration, made once by the engine the same way
 (`cad_server/_internal/integration_env.py`). An external program that ships as a Python package (KiCad's
 `kicad-cli`, in kicode) is its integration's extra and installs the same way; any other is the person's to
-install, found by its probe. `cad doctor` reports no integration.
+install, found by its probe. `cad doctor` says, for each integration with an extra but build123d (the
+kernel's own line), whether this installation carries it or where its environment is and whether it is
+made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
 ## Is it really an integration?
 

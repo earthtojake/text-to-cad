@@ -18,8 +18,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
-explains any other failure.
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
 kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit

@@ -47,6 +47,21 @@ class NamingTest(unittest.TestCase):
         with self.assertRaisesRegex(extras.Refused, "^--with takes a requirement"):
             run.parse(["--with", "", "model.py"])
 
+    def test_a_script_or_a_folder_that_is_not_there_is_refused_before_any_environment(self) -> None:
+        # The command line's mistake, exit 2, in one line: no environment is made (the installation is never
+        # read) and the program's runner never starts, so there is no traceback.
+        from cad_server.cli import run
+
+        with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder), \
+                mock.patch.object(base.Installation, "here", side_effect=AssertionError("an environment was asked")):
+            Path("there").mkdir()
+            for argv, said in ((["missing.py"], "cad run: no such file: missing.py\n"),
+                               (["python", "missing.py", "--flag"], "cad run: no such file: missing.py\n"),
+                               (["--directory", "gone", "model.py"], "cad run: no such folder: gone\n"),
+                               (["--directory", "there", "missing.py"], "cad run: no such file: missing.py\n")):
+                with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual((run.main(argv), err.getvalue()), (2, said))
+
     def test_a_script_s_header_names_its_packages_and_its_python(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-header-"))
         self.addCleanup(shutil.rmtree, folder, True)

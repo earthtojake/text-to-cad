@@ -277,7 +277,7 @@ class EngineApp:
         folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with a fresh link,
         which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
         whose proxy outlives a link."""
-        from .main import resolve_dist_dir
+        from .main import Unopened, resolve_dist_dir
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
@@ -285,7 +285,9 @@ class EngineApp:
         try:
             documents = [self.document(name, start) for name in options.get('files') or []]
         except ValueError as error:
-            return {'failed': str(error)}
+            # With the ``cad`` command's reason for a FILE it does not open (``main.Unopened``), which the
+            # launcher exits by.
+            return {'failed': str(error), **({'reason': error.reason} if isinstance(error, Unopened) else {})}
         with self.lock:
             reused = self._default is not None
             app = self.default_app(dist or None)
@@ -300,20 +302,23 @@ class EngineApp:
 
     def document(self, name, start):
         """A file or an id a launch names, as ``{id, file}``: a file registered by its canonical path
-        (its id derived from it), an id taken as the engine holds it. ``ValueError`` for another."""
+        (its id derived from it), an id taken as the engine holds it. ``Unopened`` (a ``ValueError``) for
+        another: an id the engine does not hold, or a FILE the viewer does not open (``main.unopened``, the
+        rule the launcher refuses one by before it asks)."""
         from cad.engine.ids import is_id
 
-        from .scanner import VIEWER_EXTENSIONS, extension_of
+        from .main import Unopened, unopened
 
         if is_id(name):
             if not self.server.holds(name):
                 self.server.revive(name)  # a document the engine's cache holds, after a restart
             if not (self.server.holds(name) or self.server.file_of(name)):
-                raise ValueError(f'no document {name} is held')
+                raise Unopened(f'no document {name} is held', 'not_found')
             return {'id': name, 'file': self.server.file_of(name)}
+        refused = unopened(name, start)
+        if refused is not None:
+            raise Unopened(refused[1], refused[0])
         path = os.path.join(start, os.path.expanduser(name))
-        if extension_of(path) not in VIEWER_EXTENSIONS or not os.path.isfile(path):
-            raise ValueError(f'no CAD file at {os.path.abspath(path)}')
         ident = self.server.remember(path)
         return {'id': ident, 'file': to_posix_path(self.server.file_of(ident))}
 

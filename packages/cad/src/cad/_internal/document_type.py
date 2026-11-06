@@ -125,7 +125,7 @@ def refuse_other(document_type: str, source: Any) -> None:
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:
-            raise ValueError(f"cad.model takes a model's handle or its document id (python SCRIPT.py prints it), "
+            raise ValueError(f"cad.model takes a model's handle or its document id (cad run SCRIPT.py prints it), "
                              f"not {text!r}")
         return
     if entry.has_file:

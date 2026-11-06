@@ -25,7 +25,9 @@ DEFAULT_PROG = "cad plugin"
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(
         prog=prog,
         allow_abbrev=False,
         description="Write text-to-cad's plugin folder, which every agent app here is pointed at, from this "
@@ -52,8 +54,9 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         try:
             result["written"] = plugin.write()
         except (plugin.Missing, OSError, ValueError) as error:
-            print(f"cad plugin: {path} could not be written: {error}", file=sys.stderr)
-            return 1
+            from cad_server._internal.cli_errors import Failure, write
+
+            return write(Failure(f"{path} could not be written: {error}"), prog=prog, as_json=args.json)
         plugin.say_written(result["written"], lambda line: print(line, file=sys.stderr))
         done = result["written"]
         if args.refresh and (done["created"] or done["changed"] or done["removed"]):
