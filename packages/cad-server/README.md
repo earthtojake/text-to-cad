@@ -126,7 +126,8 @@ exact requirement a Python of a program's own installs this release's cad by
 up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
 made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
-`cad setup`, as the update button does, and `cad update auto on|off` turns automatic updates on or off
+`cad setup`, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the
+release it would install before the plan), and `cad update auto on|off` turns automatic updates on or off
 (on by default: the engine installs a newer patch release in the background and switches to it once
 idle; a minor or major release waits for the update button or `cad update`);
 `cad uninstall` takes text-to-cad out, asked first as every command that destroys is (`cad delete`, `cad

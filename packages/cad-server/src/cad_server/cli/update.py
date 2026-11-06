@@ -4,7 +4,9 @@ The same path as the update button and the install command run again: the newest
 feed names (read now; ``cad_server/updates.py``) is installed in its own folder, ``<state>/releases/<release>``
 (``cad_server._internal.releases``), and that release's own ``cad setup`` runs from there with these
 arguments (``cad_server.cli.setup``): its base, every agent app's plugin, and the switch of the engine to it.
-With the feed out of reach, or this the newest, it is this release's ``cad setup``.
+With the feed out of reach, or this the newest, it is this release's ``cad setup``. ``--dry-run`` reads the
+feed too, kept nowhere, and says what an update would do -- the release it would install, or this one set up
+again and why -- before this release's setup plan, and changes nothing.
 
 ``cad update --switch <release>`` is the switch's helper (``cad_server._internal.switch``), which the
 engine starts detached as it drains for the update button: not a command to run by hand.
@@ -38,7 +40,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
     from cad_server.cli import setup
 
     if args.dry_run:
-        return setup.main(given, prog)
+        return setup.main(given, prog, update=_would(prog, args))
     from cad_server import __version__, updates
 
     newest = updates.newest() if updates.checking(asked=True) else None
@@ -63,6 +65,25 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         return subprocess.call(run)
     os.execv(run[0], run)
     return 1  # not reached
+
+
+def _would(prog: str, args: argparse.Namespace) -> dict:
+    """What ``cad update`` would do, for its dry run: the version feed read now -- a read the person asked
+    for, bounded, kept nowhere (``updates.newest_now``) -- said in a line before this release's setup plan
+    (stdout, or stderr under ``--json``, whose document carries it as ``update``): the release it would
+    install, or that it would set this one up again, and why."""
+    from cad_server import __version__, updates
+
+    state, newer = updates.newest_now()
+    why = {"newer": f"would install text-to-cad {newer} (this is {__version__}), then set it up in every agent app "
+                    "here, as its own setup plans it; this release's plan of it",
+           "newest": f"text-to-cad {__version__} is the newest release: it would set this one up again",
+           "unreachable": f"could not reach the version feed ({updates.feed_url()}): it would set up this release, "
+                          f"{__version__}, again",
+           "off": f"the version feed is not read here (CAD_UPDATE_CHECK=0, or CI): it would set up this release, "
+                  f"{__version__}, again"}[state]
+    print(f"{prog}: {why}:", file=sys.stderr if args.json else sys.stdout, flush=True)
+    return {"current": __version__, "feed": {"newer": "read", "newest": "read"}.get(state, state), "release": newer}
 
 
 if __name__ == "__main__":

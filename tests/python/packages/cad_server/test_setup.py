@@ -257,6 +257,33 @@ class TheCommand(Fixture):
         self.assertIn("CAD_ENGINE_PORT='no-port' is not a port", err)
         self.assertFalse(self.state.exists())
 
+    def test_an_update_s_dry_run_says_what_it_would_install_before_the_plan(self) -> None:
+        """``cad update --dry-run`` reads the version feed -- a read, kept nowhere -- and says the release an
+        update would install, or why it would set this one up again, before this release's plan."""
+        from cad_server import updates
+        from cad_server.cli import update
+
+        def run(*argv: str, feed) -> tuple[int, str, str]:
+            with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}), \
+                    mock.patch.object(updates, "_get", return_value=feed), mock.patch.object(updates, "_seen", set()):
+                return self._run(update.main, argv)
+
+        code, out, _err = run("--dry-run", feed={"latest": "99.0.0"})
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertEqual(lines[0], f"cad update: would install text-to-cad 99.0.0 (this is {RELEASE}), then set it up in "
+                                   "every agent app here, as its own setup plans it; this release's plan of it:")
+        self.assertTrue(lines[1].startswith(f"text-to-cad {RELEASE} for this machine"), out)
+        self.assertIn("Dry run: nothing was changed.", out)
+        code, out, _err = run("--dry-run", feed=None)
+        self.assertEqual(out.splitlines()[0], "cad update: could not reach the version feed "
+                                              f"(https://api.texttocad.dev/v1/versions): it would set up this release, "
+                                              f"{RELEASE}, again:")
+        code, out, err = run("--dry-run", "--json", feed={"latest": RELEASE})
+        self.assertEqual(json.loads(out)["update"], {"current": RELEASE, "feed": "read", "release": None})
+        self.assertIn(f"cad update: text-to-cad {RELEASE} is the newest release", err)
+        self.assertFalse((self.state / updates.FILE).exists(), "a dry run keeps nothing")
+
     def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
         command(self.bin, "claude", CLAUDE)
         self.desktop_with({"other": {"command": "node", "args": ["server.js"]}})

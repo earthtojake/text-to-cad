@@ -90,6 +90,12 @@ them on a person's word adds `--yes`. `cad delete --dry-run` lists what it would
 | `cad doctor --prune` removed at once | the list, then asks; `cad doctor --prune --yes` where nothing can ask |
 | `cad server --rotate-token` replaced the token at once | asks; `--yes` where nothing can ask |
 
+`cad update --dry-run` printed this release's setup plan alone, never reading the version feed; it reads
+it now (bounded, keeping nothing) and says first what an update would install: `cad update: would install
+text-to-cad 0.11.2 (this is 0.11.0), ...`, or that it would set this release up again because it is the
+newest or the feed cannot be reached; under `--json` the plan's document carries it as `update`
+(`{"current", "feed", "release"}`).
+
 ### How a command fails
 
 Every command fails by one contract: the failure's class sets the exit status, the same with `--json`

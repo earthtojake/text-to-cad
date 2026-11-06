@@ -348,7 +348,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. An automatic update (on by default, `cad update auto off` to
+    and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
+    feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
     background and switches only once it has been idle for a minute. It takes patch releases
     only; a minor or major release waits for the person's click.

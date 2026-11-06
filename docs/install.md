@@ -415,7 +415,9 @@ command.
 
 Running the install command again does the same, and so does `cad update` in a
 terminal: each installs the newest release, updates every app, moves the server to
-it and lists the apps to restart. To update one app by hand, run the update
+it and lists the apps to restart. `cad update --dry-run` changes nothing: it reads the
+version feed and says the release an update would install (or that it would set this
+one up again, and why), then prints the plan. To update one app by hand, run the update
 commands under its heading, then restart it.
 
 An update writes the plugin folder again for the new release

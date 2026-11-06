@@ -31,9 +31,10 @@ gets one line (``line``) with its first ``cad_show`` result: the release, and th
 every agent app on the computer (``cad setup``). A skill's ``cad`` command says nothing.
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
-the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
-or tool call waits on it -- what is told comes from the feed as last read. Each hour's attempt is
-spent before it is made, so a feed that cannot be reached is tried once an hour.
+the background (``refresh``) or for the update a person asked for (``newest``) or asked to see
+(``newest_now``, ``cad update --dry-run``: read and kept nowhere), so no start, request or tool call
+waits on it -- what is told comes from the feed as last read. Each hour's attempt is spent before it is
+made, so a feed that cannot be reached is tried once an hour.
 """
 
 from __future__ import annotations
@@ -185,6 +186,29 @@ def newest(*, fetch: bool = True) -> str | None:
     if found is not None and checking(asked=True):
         candidates.append(found["latest"])
     return _newest(candidates, __version__)
+
+
+def newest_now(*, get: Callable[[str], Any] | None = None) -> tuple[str, str | None]:
+    """For an update's dry run, which changes nothing: the feed read now, bounded (``TIMEOUT_SECONDS``) and
+    kept nowhere, and what an update would do: ``("newer", release)``, the release it would install;
+    ``("newest", None)``, this release's own setup again; ``("unreachable", None)``, the feed out of reach
+    (an update then sets this release up again); ``("off", None)``, no feed read here (``checking``)."""
+    from cad_server import __version__
+
+    if not checking(asked=True):
+        return "off", None
+    with _seen_lock:
+        candidates: list[Any] = [*_seen]
+    fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
+    if fresh is None:
+        return "unreachable", None
+    newer = _newest([*candidates, fresh["latest"]], __version__)
+    return ("newer", newer) if newer is not None else ("newest", None)
+
+
+def feed_url() -> str:
+    """Where the version feed is read from: what ``cad update --dry-run`` names when it cannot reach it."""
+    return f"{api_url()}/versions"
 
 
 def command(system: str | None = None) -> str:

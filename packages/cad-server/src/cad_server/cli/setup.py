@@ -195,8 +195,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
     return parser
 
 
-def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> int:
-    """``cad setup``, or with ``uninstall`` ``cad uninstall`` (``cad_server.cli.uninstall`` calls it so)."""
+def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninstall: bool = False,
+         update: dict[str, Any] | None = None) -> int:
+    """``cad setup``, or with ``uninstall`` ``cad uninstall`` (``cad_server.cli.uninstall`` calls it so);
+    ``update``: what ``cad update --dry-run`` read of the version feed, which its ``--json`` carries."""
     from cad_server._internal.providers import APPS, SKILLS_AGENTS
     from cad_server.engine.daemon import default_port, environment_port
 
@@ -215,6 +217,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
         parser.error(str(error))
     port, source = (named, "CAD_ENGINE_PORT") if named is not None else (default_port(), "default")
     installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]), prog)
+    installer.update = update
     return installer.uninstall() if uninstall else installer.install()
 
 
@@ -295,6 +298,8 @@ class Installer:
         self.args, self.only, self.port, self.source = args, only, port, source
         self.argv = list(argv or [])
         self.prog = prog
+        # What `cad update --dry-run` read of the version feed (``cad_server.cli.update``), for its --json.
+        self.update: dict[str, Any] | None = None
         self.providers = providers
         self.machine = providers.Machine.here()
         self.release = __version__
@@ -430,7 +435,8 @@ class Installer:
                 {"app": row["app"], "label": row["label"], "action": row["action"], "subject": row["subject"],
                  "commands": [], "edit": None} for row in extra]
             document = {"schema": SCHEMA, "plan": plan, "actions": self.actions, "stopped": self.stopped,
-                        "verified": verified, "restart": restart}
+                        "verified": verified, "restart": restart,
+                        **({"update": self.update} if self.update is not None else {})}
             sys.stdout.write(json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n")
             sys.stdout.flush()
         return code
