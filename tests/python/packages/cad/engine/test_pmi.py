@@ -40,8 +40,8 @@ from cad.ap242 import (annotate, camera, datum, dimensional_location, dimensiona
 from cad.engine import build as engine_build
 from cad.engine import document, export
 from cad.engine.export import ap242
-from cad.engine.pmi import (PMI, PMIError, PMIUnsupported, _faces, _ref, _resolved_part, _surface, coverage, dropped,
-                               otherwise_controlled, read, records_of_document, refuse_dropped, suggestions)
+from cad.engine.pmi import (PMI, PMIError, PMIUnsupported, _bores, _faces, _ref, _resolved_part, _surface, coverage,
+                               dropped, otherwise_controlled, read, records_of_document, refuse_dropped, suggestions)
 
 FIXTURE = Path(__file__).resolve().parent / "pmi_golden"
 WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
@@ -1486,6 +1486,24 @@ class CoverageTest(_Folder):
         found = suggestions(entries, faces, material=True)
         self.assertEqual([said["faces"] for said in found], [["plate/face 3"], ["plate/face 4"], ["plate/face 5"]])
         self.assertIn('datums=["A", "B"]', found[0]["answer"])
+
+    def test_a_slot_s_round_ends_are_no_holes_and_a_hole_of_two_halves_is_one(self) -> None:
+        """A hole's faces go all the way round their axis (``_bores``): a slot's end turns half way,
+        and asks nothing; a hole another system wrote as two half cylinders is still a hole."""
+        said = self.build(SUGGESTED.replace("+ bd.Pos(30, 0, 10) * bd.Cylinder(8, 10))",
+                                            "- bd.Pos(30, 0, -5) * bd.extrude(bd.SlotOverall(24, 8), amount=10))"))
+        [found] = self.served()["pmi_coverage"]
+        self.assertEqual([entry["question"] for entry in found["suggestions"] if entry["kind"] == "hole"],
+                         ["What is the 9 mm hole for?", "What is the 6.8 mm hole for?"], said)
+
+        def half(at: int, y: float, turn: float = math.pi, diameter: float = 8.0) -> dict:
+            return {"ref": f"plate/face {at}", "surface": "cylinder", "area": 50.0, "diameter": diameter, "hole": True,
+                    "axis": (0.0, 0.0, 1.0, 0.0, y, 0.0), "turn": turn}
+
+        kept = _bores([half(1, 0.0), half(2, 0.0), half(3, 8.0), half(4, -8.0, 1.5 * math.pi), half(5, 20.0),
+                       half(6, 20.0, diameter=12.0), {"ref": "plate/face 7", "surface": "plane", "area": 9.0}])
+        self.assertEqual([face.get("hole") for face in kept], [True, True, False, False, False, False, None])
+        self.assertFalse(any("turn" in face or "axis" in face for face in kept))
 
     def test_a_built_part_s_holes_are_measured_and_its_boss_is_not_one(self) -> None:
         said: list[str] = []

@@ -339,7 +339,8 @@ pmi: PART: ask: What is the 9 mm hole for? Suggest dimensional_size(...), positi
 - **What it asks**, in this order: the part's material, where it has none; datum A, on
   the largest flat face, where it has no datum; a general requirement
   (`general_tolerance("general", "ISO 2768-mK")`), where faces are uncovered and none is
-  given; and each hole no size is on, read by its diameter: an ISO 273 clearance hole
+  given; and each hole no size is on (a slot's round end is none), read by its diameter:
+  an ISO 273 clearance hole
   (its H class, and a position by the floating-fastener formula, hole less fastener), a
   coarse thread's tap drill (a thread note, 6H, and a position by the fixed-fastener
   formula), or a bore something fits in (H7).

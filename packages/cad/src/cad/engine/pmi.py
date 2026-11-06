@@ -2227,16 +2227,17 @@ def coverage_of(structure: dict[str, Any], shapes: Mapping[int, Any]) -> list[di
     """The structure's ``pmi_coverage``: ``coverage`` of each part its ``pmi`` has an entry on, and
     what its requirements leave unsaid (``suggestions``), as ``{"part", "uncovered", "conflicts",
     "suggestions"}``, by part (a prototype index), its faces every face of its shape (``shapes``, by
-    prototype index) as the structure spells them, each measured (``_measured``). A part with no
-    entry says nothing. Derived where the structure is served, the build's report read from the same."""
+    prototype index) as the structure spells them, each measured (``_measured``, ``_bores``). A part
+    with no entry says nothing. Derived where the structure is served, the build's report read from
+    the same."""
     entries = structure.get("pmi") or []
     canonical = _canonical(structure)
     prototypes = structure.get("prototypes") or []
     found = []
     for index in sorted({entry["part"] for entry in entries if entry["part"] is not None}):
         faces = _faces(shapes[index])
-        measured = [{"ref": canonical(index, "face", at), **_measured(faces.FindKey(at))}
-                    for at in range(1, faces.Extent() + 1)]
+        measured = _bores([{"ref": canonical(index, "face", at), **_measured(faces.FindKey(at))}
+                           for at in range(1, faces.Extent() + 1)])
         mine = [entry for entry in entries if entry["part"] == index]
         material = index < len(prototypes) and prototypes[index].get("material") is not None
         found.append({"part": index, **coverage(mine, [face["ref"] for face in measured]),
@@ -2247,7 +2248,7 @@ def coverage_of(structure: dict[str, Any], shapes: Mapping[int, Any]) -> list[di
 def _measured(face: Any) -> dict[str, Any]:
     """What ``suggestions`` reads of a face: its surface's kind (``_surface``) and area, and a
     cylinder's diameter and whether it bounds a hole (its material outside it: the face's outward
-    normal toward its axis)."""
+    normal toward its axis), with the axis it turns on and how far, for ``_bores`` to total."""
     from OCP.BRepGProp import BRepGProp, BRepGProp_Face
     from OCP.GProp import GProp_GProps
     from OCP.gp import gp_Pnt, gp_Vec
@@ -2266,7 +2267,29 @@ def _measured(face: Any) -> dict[str, Any]:
         along = gp_Vec(*axis["direction"])
         out = gp_Vec(gp_Pnt(*axis["point"]), point)
         out.Subtract(along.Multiplied(out.Dot(along)))
-        found.update(diameter=_as_held(round(2 * values["radius"], 6)), hole=normal.Dot(out) < 0)
+        foot = gp_Vec(*axis["point"])
+        foot.Subtract(along.Multiplied(foot.Dot(along)))
+        sign = next((1 if part > 0 else -1 for part in (along.X(), along.Y(), along.Z()) if round(part, 6)), 1)
+        found.update(diameter=_as_held(round(2 * values["radius"], 6)), hole=normal.Dot(out) < 0, turn=high_u - low_u,
+                     axis=tuple(round(part, 6) for part in (sign * along.X(), sign * along.Y(), sign * along.Z(),
+                                                            foot.X(), foot.Y(), foot.Z())))
+    return found
+
+
+def _bores(measured: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``measured`` as ``suggestions`` reads it: a cylinder's ``hole`` kept where the faces of its
+    diameter on its axis go all the way round, one face or several (a hole another system wrote
+    as two halves), and none where they do not (a slot's round end turns half way)."""
+    turned: dict[Any, float] = {}
+    for face in measured:
+        if face.get("hole"):
+            turned[face["axis"], face["diameter"]] = turned.get((face["axis"], face["diameter"]), 0.0) + face["turn"]
+    found = []
+    for face in measured:
+        kept = {key: value for key, value in face.items() if key not in ("axis", "turn")}
+        if "hole" in kept:
+            kept["hole"] = kept["hole"] and round(turned[face["axis"], face["diameter"]], 6) >= round(math.tau, 6)
+        found.append(kept)
     return found
 
 

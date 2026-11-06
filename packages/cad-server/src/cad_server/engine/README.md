@@ -2353,7 +2353,8 @@ return annotate(body,
   and logged by the build as `pmi: PART: ask: QUESTION Suggest ANSWER (WHY)`), never applied: the
   part's material where it has none; datum A on its largest flat face where it has no datum; a
   general requirement (`general_tolerance("general", "ISO 2768-mK")`) where faces are uncovered and
-  none is given; and each hole no size is on, by its diameter, from the tables in `pmi.py`: an ISO
+  none is given; and each hole no size is on (faces going all the way round an axis, so a slot's
+  round end is none), by its diameter, from the tables in `pmi.py`: an ISO
   273 clearance hole (its series' H class, ISO 286, and a position by the floating-fastener formula,
   hole less fastener), a coarse thread's tap drill (a thread note, 6H, and a position by the
   fixed-fastener formula, half the mating medium clearance hole less the fastener), else a bore
