@@ -1,4 +1,5 @@
-"""Real KiCad on the test schematics: ERC, the exports, and the nets the reader resolves held to KiCad's own.
+"""Real KiCad on the test schematics: ERC, the exports, and the nets the reader resolves held to KiCad's own;
+and the libraries a project names by KiCad's own variables, read by ERC and its board's DRC.
 
 The schematics are the test projects (``tests/python/support/kicad_schematic.py``), written fresh in a
 temporary folder; ``cad.kicad_sch.erc`` and ``export`` run where the ``cad`` command runs them, in the
@@ -8,13 +9,15 @@ homes.
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support import kicode
 from tests.python.support.engine_daemon import isolate
-from tests.python.support.kicad_schematic import at, write_bus_schematic, write_schematic
+from tests.python.support.kicad_schematic import at, write_bus_schematic, write_schematic, write_symbol_libraries
 
 
 def kicad_nets(netlist: Path) -> dict[str, set[str]]:
@@ -74,6 +77,68 @@ class SchematicFiles(unittest.TestCase):
         rows = bom.read_text(encoding="utf-8").splitlines()
         self.assertEqual(rows[0], '"Refs","Value","Footprint","MPN","Qty","DNP"')
         self.assertTrue(any(row.startswith('"R1","10k"') and "RC0603FR-0710KL" in row for row in rows), rows)
+
+
+# A footprint as KiCad's library holds it (``header``: its file's version) and as a board places it (``at``), the
+# two copies equal; ``divider``'s R1 and R2 name it ``Resistor_SMD:R_0603_1608Metric``, C1 ``Capacitor_SMD:...``.
+_FOOTPRINT = '''(footprint "{name}"{header} (layer "F.Cu"){at}
+  (property "Reference" "R1" (at 0 -2) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+  (property "Value" "10k" (at 0 2) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+  (attr smd)
+  (pad "1" smd rect (at -0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask"))
+  (pad "2" smd rect (at 0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask")))'''
+_BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
+ (general (thickness 1.6)) (paper "A4")
+ (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (36 "B.SilkS" user "b.silkscreen") (37 "F.SilkS" user "f.silkscreen")
+ (38 "B.Mask" user) (39 "F.Mask" user) (44 "Edge.Cuts" user) (49 "F.Fab" user))
+ (setup (pad_to_mask_clearance 0))
+ (gr_rect (start 0 0) (end 40 30) (stroke (width 0.05) (type default)) (fill none) (layer "Edge.Cuts"))
+ {footprint}
+)
+'''
+# What KiCad says of a library row it cannot read or of what it holds: ERC's and DRC's library checks, and the
+# note of the ones not made.
+_LIBRARY_CHECKS = ("lib_symbol_issues", "lib_symbol_mismatch", "footprint_link_issues", "libraries_not_checked",
+                   "lib_footprint_issues", "lib_footprint_mismatch")
+
+
+class KicadsOwnLibraries(unittest.TestCase):
+    def test_rows_naming_kicads_libraries_read_the_installation_of_the_3d_library_the_view_reads(self) -> None:
+        """A project's library tables name KiCad's own libraries by its variables, as KiCad's own tables do
+        (``${KICAD10_SYMBOL_DIR}/Device.kicad_sym``; an older major's and KiCad 5's spellings too): ERC and DRC
+        read them in the KiCad installation whose 3D library the board view reads -- here a test-owned one,
+        which ``CAD_KICAD_3DMODELS`` names -- and never where the caller's own variables point."""
+        with tempfile.TemporaryDirectory(prefix="kicad-own-libraries-") as folder:
+            root = Path(folder)
+            kicad = root / "kicad"  # stands for KiCad's installation: 3dmodels, symbols, footprints side by side
+            (kicad / "3dmodels").mkdir(parents=True)
+            self.assertEqual(sorted(write_symbol_libraries(kicad / "symbols")), ["Connector", "Device", "power"])
+            for library, name in (("Resistor_SMD", "R_0603_1608Metric"), ("Capacitor_SMD", "C_0603_1608Metric")):
+                (kicad / "footprints" / f"{library}.pretty").mkdir(parents=True)
+                (kicad / "footprints" / f"{library}.pretty" / f"{name}.kicad_mod").write_text(
+                    _FOOTPRINT.format(name=name, header=' (version 20241229) (generator "pcbnew")', at="") + "\n",
+                    encoding="utf-8")
+            sheet = write_schematic(root / "design")
+            rows = {"sym": [("Device", "${KICAD10_SYMBOL_DIR}/Device.kicad_sym"),
+                            ("Connector", "${KICAD9_SYMBOL_DIR}/Connector.kicad_sym"),
+                            ("power", "${KICAD_SYMBOL_DIR}/power.kicad_sym")],
+                    "fp": [("Resistor_SMD", "${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty"),
+                           ("Capacitor_SMD", "${KISYSMOD}/Capacitor_SMD.pretty")]}
+            for table, libraries in rows.items():
+                (sheet.parent / f"{table}-lib-table").write_text(f"({table}_lib_table\n  (version 7)\n" + "".join(
+                    f'  (lib (name "{name}")(type "KiCad")(uri "{uri}")(options "")(descr ""))\n' for name, uri in libraries)
+                    + ")\n", encoding="utf-8")
+            board = sheet.with_suffix(".kicad_pcb")
+            board.write_text(_BOARD.format(footprint=_FOOTPRINT.format(
+                name="Resistor_SMD:R_0603_1608Metric", header="", at=" (at 20 15)")), encoding="utf-8")
+            elsewhere = str(root / "elsewhere")  # the caller's own, which a run never reads
+            with mock.patch.dict(os.environ, {"CAD_KICAD_3DMODELS": str(kicad / "3dmodels"),
+                                              "KICAD10_SYMBOL_DIR": elsewhere, "KICAD10_FOOTPRINT_DIR": elsewhere}):
+                erc = kicode.call(self, "erc", sheet, document_type="kicad_sch")
+                drc = kicode.call(self, "drc", board)
+            found = [(finding["code"], finding["message"]) for finding in erc["findings"] + drc["findings"]
+                     if finding["code"] in _LIBRARY_CHECKS]
+            self.assertEqual(found, [])
 
 
 if __name__ == "__main__":

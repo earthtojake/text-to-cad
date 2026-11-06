@@ -9,10 +9,10 @@ folders or named by ``CAD_KICAD_CLI``, which picks the kicad-cli of cad's typed 
 this runs the pinned one.
 
 It runs in a private folder of its own, the homes the typed commands' runs get (``_program.private_run``:
-kicode's ``environment``, no display, KiCad's 3D library variables naming the first library a board's 3D
-view reads), removed when it exits, so nothing of the person's KiCad settings is read or written whatever
-their environment names. Its arguments, stdin, stdout, stderr and exit code are
-kicad-cli's; relative paths are the caller's folder's.
+kicode's ``environment``, no display, KiCad's library variables naming KiCad's own libraries: the first 3D
+library a board's 3D view reads, the others an installation of KiCad's), removed when it exits, so nothing of
+the person's KiCad settings or library variables is read or written whatever their environment names. Its
+arguments, stdin, stdout, stderr and exit code are kicad-cli's; relative paths are the caller's folder's.
 """
 
 from __future__ import annotations

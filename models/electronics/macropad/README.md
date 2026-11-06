@@ -122,15 +122,11 @@ written by the commands below, and `.gitignore` keeps them out of Git.
 ## Rebuild
 
 From this folder, with the `cad` command. KiCad's stock libraries are named through
-`${KICAD10_SYMBOL_DIR}` and `${KICAD10_FOOTPRINT_DIR}`, which ERC, DRC and the generators read from the
-environment: set them to KiCad's own folders first, or ERC counts every stock symbol as a missing library
-and DRC every stock footprint. KiCad's 3D library needs nothing: the board's 3D view and its exports find
-it.
+`${KICAD10_SYMBOL_DIR}` and `${KICAD10_FOOTPRINT_DIR}`, which ERC and DRC read in the KiCad you installed:
+nothing to set. The generators (`gen_footprints.py`, `gen_schematic.py`) read the same libraries in macOS's
+KiCad.app; elsewhere, give them KiCad's folders in those two variables.
 
 ```bash
-export KICAD10_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols      # macOS
-export KICAD10_FOOTPRINT_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints
-
 # the 3D models KiCad's library lacks: run this before opening the board in 3D or exporting its STEP or GLB
 cad run src/vendor_parts.py                # macropad.3dshapes/: the hot-swap socket and the EC11
 

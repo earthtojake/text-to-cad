@@ -28,10 +28,10 @@ from cad.registry import INTEGRATIONS
 from cad._internal import programs
 from cad._internal.programs import version_tuple  # noqa: F401 - the tests' and callers' comparison
 
-__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "LIBRARY_VARIABLES", "KicadMissingError",
-           "KicadRunError", "carried", "check_api_server", "check_version", "find_kicad_cli", "headless_env",
-           "install_hint", "kicad_version", "library_variables", "packaged", "private_run", "project_as_found", "quiet",
-           "ready"]
+__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "LIBRARY_VARIABLES", "STOCK_VARIABLES",
+           "KicadMissingError", "KicadRunError", "carried", "check_api_server", "check_version", "find_kicad_cli",
+           "headless_env", "install_hint", "kicad_version", "library_variables", "packaged", "private_run",
+           "project_as_found", "quiet", "ready"]
 
 # What kicad-cli says on stderr that says nothing about the board.
 _NOISE = ("Fontconfig error",)
@@ -58,10 +58,24 @@ CLI_NAMES = ("kicad-cli", "kicad-cli.exe")
 # (``programs.headless_env``); kicode's own kicad-cli gets kicode's (``kicode.environment``), which sets the
 # same three and, on Linux, where the packaged build finds its stock data and plugins.
 _HOMES = {"KICAD_CONFIG_HOME": "settings", "KICAD_DOCUMENTS_HOME": "documents", "KICAD_CACHE_HOME": "cache"}
+_MAJORS = range(6, 13)
 #: KiCad's 3D library variables, every spelling a footprint names its model by: KiCad 5's, then one a major
 #: version since 6. A kicad-cli reads its own version's (kicode's, 10.99, reads every other spelling as its own).
-LIBRARY_VARIABLES = ("KISYS3DMOD", *(f"KICAD{major}_3DMODEL_DIR" for major in range(6, 13)))
-_LIBRARY_VARIABLE = re.compile(r"KICAD\d*_3DMODEL_DIR|KISYS3DMOD")
+LIBRARY_VARIABLES = ("KISYS3DMOD", *(f"KICAD{major}_3DMODEL_DIR" for major in _MAJORS))
+#: KiCad's other library variables, by the folder of KiCad's installation each names, beside its ``3dmodels``:
+#: every spelling a project's library tables name KiCad's own libraries by (``${KICAD10_FOOTPRINT_DIR}/
+#: Resistor_SMD.pretty``, ``${KICAD10_SYMBOL_DIR}/Device.kicad_sym``), KiCad 5's, then one a major version since 6.
+STOCK_VARIABLES = {
+    "footprints": ("KISYSMOD", *(f"KICAD{major}_FOOTPRINT_DIR" for major in _MAJORS)),
+    "symbols": ("KICAD_SYMBOL_DIR", *(f"KICAD{major}_SYMBOL_DIR" for major in _MAJORS)),
+    "template": ("KICAD_TEMPLATE_DIR", *(f"KICAD{major}_TEMPLATE_DIR" for major in _MAJORS)),
+    "blocks": tuple(f"KICAD{major}_DESIGN_BLOCK_DIR" for major in _MAJORS),
+}
+# Every path variable KiCad defines, any major's spelling: the libraries above, and the person's own folders beside
+# them (their packages', ``KICADn_3RD_PARTY``, and their templates', ``KICAD_USER_TEMPLATE_DIR``), which a run
+# leaves to KiCad's defaults, inside its private homes. None that this process's environment names reaches a run.
+_LIBRARY_VARIABLE = re.compile(r"KICAD\d*_(?:3DMODEL|FOOTPRINT|SYMBOL|TEMPLATE|DESIGN_BLOCK)_DIR|KICAD\d*_3RD_PARTY"
+                               r"|KICAD_USER_TEMPLATE_DIR|KISYS3DMOD|KISYSMOD")
 
 
 def library_variables(folder: str | os.PathLike | None) -> dict[str, str]:
@@ -69,12 +83,24 @@ def library_variables(folder: str | os.PathLike | None) -> dict[str, str]:
     return {} if folder is None else {name: os.fspath(folder) for name in LIBRARY_VARIABLES}
 
 
-def _library() -> str | None:
-    """KiCad's 3D library as the viewer reads it first (``models3d.library_roots``: ``CAD_KICAD_3DMODELS``'s
-    first folder, else the newest installed KiCad's), or None where there is none."""
-    from cad.engine.formats.kicad.models3d import library_roots
+def _libraries() -> dict[str, str]:
+    """KiCad's own libraries, each of its variables naming it: the 3D library the viewer reads first
+    (``models3d.library_roots``: ``CAD_KICAD_3DMODELS``'s first folder, else the newest installed KiCad's), and
+    each of the others (:data:`STOCK_VARIABLES`) the first folder of its name in an installation of KiCad: one
+    whose ``3dmodels`` folder ``CAD_KICAD_3DMODELS`` names, in its order, then each installed KiCad
+    (``models3d.installations``, newest first). A library no installation has is unnamed."""
+    from cad.engine.formats.kicad.models3d import installations, library_roots
 
-    return next(iter(library_roots()), None)
+    roots = library_roots()
+    found = library_variables(roots[0] if roots else None)
+    # An installation keeps its 3D library as ``3dmodels``, beside the others; any other folder of models is not one.
+    places = [*(os.path.dirname(root) for root in roots if os.path.normcase(os.path.basename(root)) == "3dmodels"),
+              *installations()]
+    for kind, names in STOCK_VARIABLES.items():
+        folder = next((os.path.join(place, kind) for place in places if os.path.isdir(os.path.join(place, kind))), None)
+        if folder is not None:
+            found.update({name: folder for name in names})
+    return found
 
 
 class KicadMissingError(programs.ProgramMissing):
@@ -150,10 +176,13 @@ def headless_env(root: str | os.PathLike, cli: Path | None = None) -> dict[str, 
     kicode's kicad-cli -- ``cli``, or none named where this environment holds kicode -- else
     ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``.
 
-    KiCad's 3D library variables (:data:`LIBRARY_VARIABLES`) name the library the viewer reads a board's
-    models in first -- ``CAD_KICAD_3DMODELS``'s first folder, else the newest installed KiCad's -- and none
-    where there is none: never what this process's environment or the person's KiCad settings say. A
-    board's STEP or GLB export names its own (``_export``)."""
+    KiCad's library variables name KiCad's own libraries (``_libraries``): the 3D ones
+    (:data:`LIBRARY_VARIABLES`) the library the viewer reads a board's models in first --
+    ``CAD_KICAD_3DMODELS``'s first folder, else the newest installed KiCad's -- and the footprint, symbol,
+    template and design-block ones (:data:`STOCK_VARIABLES`) the folders of KiCad's installation; none where
+    there is none. No path variable of KiCad's is what this process's environment or the person's KiCad
+    settings say: the person's own folders (``KICADn_3RD_PARTY``, ``KICAD_USER_TEMPLATE_DIR``) are KiCad's
+    defaults, inside ``root``. A board's STEP or GLB export names a 3D library of its own (``_export``)."""
     kicode = _kicode()
     if kicode is not None and (cli is None or _is_packaged(cli)):
         env = programs.headless_env(root)
@@ -162,7 +191,7 @@ def headless_env(root: str | os.PathLike, cli: Path | None = None) -> dict[str, 
         env = programs.headless_env(root, _HOMES)
     for name in [name for name in env if _LIBRARY_VARIABLE.fullmatch(name)]:
         del env[name]
-    env.update(library_variables(_library()))
+    env.update(_libraries())
     return env
 
 
