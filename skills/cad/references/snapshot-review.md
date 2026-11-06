@@ -84,7 +84,9 @@ an `azimuth:elevation` pair in degrees, a camera object (`position`, `target`, `
 `direction`, `zoom`, `orthographicHalfHeight`), or `authored` (below). A camera
 object's lengths are in the viewer's scene coordinates, as a Quick Edit packet carries
 them: a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit.
-Projection and focal length belong in `display.camera`.
+Projection and focal length belong in `display.camera`. The presets are the world's axes, Z up,
+not a part's own front: `front` looks from -Y along +Y, `top` from +Z down, so a panel modelled
+lying flat (its face to +Z, as its DXF is drawn) faces `top` and shows edge-on from `front`.
 
 `--size-profile` is one of exactly these names; anything else is refused with this
 list:

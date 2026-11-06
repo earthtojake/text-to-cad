@@ -91,7 +91,8 @@ measured with `cad.trimesh.printing(mesh)` in a check script.
 `--json` prints one line, `ok`, `findings`, `summary` and `measurements`:
 
 - `measurements.mesh`: `bbox_mm`, `volume_mm3`, `surface_area_mm2`, `triangle_count`, `watertight`,
-  `body_count`.
+  `body_count`, and `internal_void_count` for a cavity sealed inside a body (one body, its void
+  measured with it: the skin over it is one of its walls).
 - `measurements.scale`: `bbox_diagonal_mm`, `units_suspect`, `note`.
 - `measurements.overhangs`: `down_facing_area_below_limit_mm2` and `_pct`, `face_count_below_limit`,
   `down_facing_angle_histogram_mm2`, and `largest_faces_below_limit`, each at its location. Faces
@@ -107,7 +108,7 @@ measured with `cad.trimesh.printing(mesh)` in a check script.
 
 The check is facts only: it never compares a figure with a printer's or a material's limit, so its
 `OK` is not a printable verdict. Its findings say what the figures show (warnings `overhangs`,
-`not_watertight`, `units_suspect`; info `several_bodies`, `walls_not_measured`). It exits 1 when
+`not_watertight`, `units_suspect`; info `several_bodies`, `sealed_voids`, `walls_not_measured`). It exits 1 when
 something was not measured: a `measurement_failed` error names the family (`wall_thickness`,
 `support_volume`) and the rest are still reported; `mesh_unreadable`, `not_finite` and
 `invalid_target` carry no measurements at all. Treat an unmeasured family as unverified, never as a
@@ -139,7 +140,8 @@ Compare only trustworthy pairs of evidence:
 - On an assembly, attribute a wall violation to the body in `per_body` it belongs to; a thin figure
   pooled across bodies is not a finding against the part as a whole.
 - Do not apply support-angle findings to powder processes (SLS, MJF). Their check is trapped-powder
-  escape, which nothing here measures: report it unverified when enclosed cavities are likely.
+  escape: a sealed cavity is said (`sealed_voids`), and an escape hole for one is not measured, so
+  report that unverified.
 - Do not silently rescale geometry. When `scale.units_suspect` is true the file is probably in metres
   or inches, every down-facing face reads as resting on the plate, and overhang and support figures
   of 0.0 mean nothing: report a units finding and ask the person to confirm units before comparing

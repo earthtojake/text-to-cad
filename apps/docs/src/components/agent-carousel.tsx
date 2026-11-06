@@ -128,7 +128,7 @@ export function AgentCarousel() {
             height={100}
             unoptimized
             draggable={false}
-            className="h-[72px] w-auto invert mix-blend-darken lg:h-[88px] dark:invert-0 dark:mix-blend-lighten"
+            className="h-[72px] w-auto invert mix-blend-darken [@media(min-width:64rem)_and_(min-height:44rem)]:h-[88px] dark:invert-0 dark:mix-blend-lighten"
           />
           <span className="whitespace-nowrap text-center text-xs leading-4 text-muted-foreground">{agent.name}</span>
         </li>

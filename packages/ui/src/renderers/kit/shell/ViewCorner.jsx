@@ -12,10 +12,10 @@ import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
  * The view's corner: how you look at the model, at the bottom-right, where the cube is (Blender's
  * navigation gizmo and the buttons beside it). A 3D view's is a column of buttons over the
  * cube — Display, Projection, Home — flush with the cube's right face (`ViewCubeColumn`); a flat view,
- * which has no orientation to turn, has its zoom pill there (`ZoomControl.jsx`). A view with controls
- * of its own for how it is looked at (a view that is seen from two sides, or drawn flat or in 3D) puts
- * them on the corner's bottom row, LEFT of the pill or the cube (`ViewCornerRow`): a fixed place, so
- * when the pill becomes the cube (a flat view turning into a 3D one) not one of them moves. The top strip
+ * which has no orientation to turn, has its zoom pill there (`ZoomControl.jsx`), and its own controls
+ * for how it is looked at (a view that is seen from two sides, or drawn flat or in 3D) in a column over
+ * the pill, flush with its right edge (`ViewPillColumn`). A flat view that draws its picture in 3D keeps
+ * its pill and its column: the pill zooms the 3D camera, and not one control moves. The top strip
  * is what you do to the model; this corner is how you look at it.
  *
  * Every control here is the tool strip's tiles (`FloatingToolBar.js`) on the strip's own surface
@@ -24,13 +24,14 @@ import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
  * (`ViewCornerSwitch`) and the zoom pill a small toolbar of them, its segments the strip's buttons, with
  * their hover, pressed, open and on states and their tooltips. Over an empty canvas they stand a step
  * off it, as the strip does; over the picture or the model the fill, nearly opaque and blurred, keeps
- * their glyphs at full contrast. Their menus open to the left and up.
+ * their glyphs at full contrast. A column's tooltips and menus open beside it, away from the corner;
+ * the pill's above it.
  *
  * A host may anchor the cube at the bottom-left (`--cad-viewport-corner-left`, `viewer-host.md`): then
- * the whole corner stands there, mirrored as one group (`viewCornerLayout`): the column flush with the
- * cube's left face, the pill 8px from the left, the row right of it in the order it reads from the
- * corner outwards, tooltips and menus to the right. The frame reads the side (`viewCornerSide`) and says
- * it to everything in the corner (`ViewCornerSideProvider`, `useViewCornerSide`).
+ * the whole corner stands there, mirrored as one group (`viewCornerLayout`): a column flush with the
+ * cube's left face or the pill's left edge, the pill where the cube's drawing ends, tooltips and menus
+ * to the right. The frame reads the side (`viewCornerSide`) and says it to everything in the corner
+ * (`ViewCornerSideProvider`, `useViewCornerSide`).
  */
 
 const ViewCornerSideContext = createContext("right");
@@ -71,24 +72,21 @@ export function ViewCornerTile({ children }) {
   return <div className={VIEW_CORNER_TOOLBAR_CLASS} data-view-corner-tile="">{children}</div>;
 }
 
-/** The corner's column: its buttons stacked, aligned on the corner's edge, a gap between them. */
-export function ViewCornerColumn({ children, style, className }) {
+/** The corner's column: its controls stacked, aligned on the corner's edge, a gap between them. */
+export function ViewCornerColumn({ children, style, className, ...data }) {
   const side = useViewCornerSide();
   return <div className={cn("pointer-events-auto absolute z-20 flex flex-col", side === "left" ? "items-start" : "items-end", className)}
-    style={{ gap: VIEWPORT_CORNER_GAP_PX, ...style }} data-view-corner="">{children}</div>;
+    style={{ gap: VIEWPORT_CORNER_GAP_PX, ...style }} data-view-corner="" {...data}>{children}</div>;
 }
 
 /**
- * The corner's bottom row, beside the pill or the cube: its controls side by side, from a fixed place
- * by the pill (`viewCornerLayout`'s `row`), each of a fixed width, so none moves when the pill becomes
- * the cube. Its controls are given in the order they read from the corner's far side inwards (at the
- * bottom-right, left to right); at the bottom-left the row runs the other way, so it reads from the
- * corner outwards there too.
+ * A flat view's column over its zoom pill: the view's own controls for how it is looked at (`children`,
+ * from the top down), flush with the pill's outer edge, the lowest a gap above it, as a 3D view's column
+ * stands over its cube (`viewCornerLayout`'s `pillColumn`). Mirrored with the corner, at the bottom-left
+ * flush with the pill's left edge; the order from the top down is the same either side.
  */
-export function ViewCornerRow({ children, style = null }) {
-  const side = useViewCornerSide();
-  return <div className="pointer-events-auto absolute z-20 flex items-center" style={{ gap: VIEWPORT_CORNER_GAP_PX, ...viewCornerLayout(side).row, ...style }}
-    data-view-corner="" data-view-corner-row="" data-side={side}>{children}</div>;
+export function ViewPillColumn({ children }) {
+  return <ViewCornerColumn style={viewCornerLayout(useViewCornerSide()).pillColumn} data-view-pill-column="">{children}</ViewCornerColumn>;
 }
 
 // A switch's segments: the strip's buttons drawn out to share its width, words in place of a glyph.
@@ -115,9 +113,9 @@ export function ViewCornerSwitch({ label, options, value, onChange, disabled = f
 /**
  * A 3D view's column over the cube: what it is displayed as (`display`, the view's own Display button,
  * where it has one: a node, or `display(away)` given which way its tooltip and menu open,
- * `viewCornerAway`), Projection, then Home nearest the cube, the view it opened with. Every 3D view's,
- * a renderer's own frame or a flat view's frame showing a 3D view alike, so they never differ. It stands
- * over the cube wherever the host anchors it (`viewCornerLayout`'s `cubeColumn`).
+ * `viewCornerAway`), Projection, then Home nearest the cube, the view it opened with. Every 3D view's
+ * (`RendererShell.jsx`), so they never differ. It stands over the cube wherever the host anchors it
+ * (`viewCornerLayout`'s `cubeColumn`).
  *
  * @param {{ projection: { value: string, onChange(value: string): void }, onHome(): void,
  *   display?: import("react").ReactNode | ((away: { side: string, align: string }) => import("react").ReactNode),

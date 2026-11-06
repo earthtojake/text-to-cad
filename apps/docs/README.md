@@ -45,8 +45,9 @@ The hero is one GLB, `public/hero/planetary.glb`: the planetary gear model
 into a clip. It is committed as a PLAIN file (never LFS: Vercel serves it statically
 with no backend), one of the few CAD files Git holds
 (`tests/python/global/test_no_cad_assets_tracked.py` lists it, with a size cap). The page
-frames it, draws each part's folds and outline in the hero's edge colour, and plays the
-clip slowed to a display pace. The site and its checks read only that committed file;
+draws it in the hero's background as a faint technical drawing, each part's folds and outline
+with its hidden lines removed, and plays the clip slowed to a background's pace. The site and its
+checks read only that committed file;
 nothing in the docs app's build or `npm run check` reads the sample corpus. Refresh it
 by hand after changing the model: run its script, which prints its document id, then
 `cad model export <id> apps/docs/public/hero/planetary.glb`. Preserve the `meshCycle`
@@ -120,8 +121,14 @@ two at one size and weight (text-sm, medium). It has no
 section links, no burger, no Discord link and no theme toggle: the site follows the system's light
 or dark theme, on load and as it changes (`layout.tsx`'s theme script sets the `.dark` class).
 
-The hero is centred: the TEXTTOCAD wordmark at full size (up to 800px), the tagline, then the two
-calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
+The hero is the whole first screen under the header, at least the small viewport height less the
+header's (`min-h-[calc(100svh-3.5rem)]`), so the agents show above the fold on a phone too, and
+Features begin after the first scroll. On a short screen its gaps, the wordmark, the tagline and the
+agents' logos shrink with the height, so all of it still fits down to a 600-pixel-tall window.
+The text is centred across it and anchored high, under a gap that grows with the screen's height
+(at most 8rem), so a tall screen's spare height gathers between the install box and the agents,
+where the gear's corner turns. In it: the TEXTTOCAD wordmark at full size (up to
+800px), the tagline, then the two calls to action, the site's own outline Buttons at one neutral style (GitHub with a divider and its
 star count, Join Discord; `src/components/hero-section.tsx`, the links and the star count from
 `src/lib/github.ts`, which the header shares). Then the one-line install box, which is the page's
 Install and carries its stable address, `#install` (`src/components/install-box.tsx`: the ONE-LINE
@@ -129,13 +136,23 @@ INSTALL label, a macOS / Linux | Windows toggle over `installCommands`, the comm
 Windows browser has Windows preselected), with nothing under it: what the command does
 (`installSummary`) and the link to installing by hand, app by app, and updates, the repository's
 `docs/install.md` (`manualInstall`), are in the README's Quickstart and `/llms.txt`, not on the
-homepage. Then the framed CAD demo, then a small
-uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos,
+homepage. Behind them the planetary gear turns (`src/components/hero-gear.tsx`, drawn by
+`hero-gear-renderer.ts`): a faint line drawing seen from above at 45 degrees, its centre on the
+bottom-right corner of the space above the agents, so the right edge and the agents cut it off.
+Its ring's radius is a share of that space's height (on a phone, of its width: a corner arc behind
+the lower half), and never so large that its outline reaches the wordmark's or the tagline's
+corner (`data-gear-clear`). It fades out above the agents (`.hero-backdrop` in `globals.css`). It
+is decoration (hidden from assistive technology, never under the pointer or in
+the tab order), loads after the page has loaded and the browser is idle, so the text paints first,
+and not at all for Save-Data; it fades in, turns only while on screen in a visible tab, holds still
+for reduced motion, and draws at most 1.5 device pixels per CSS pixel. At the foot of the screen a
+small uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section title): the logos,
 each with its name beneath, drifting sideways (resting under a mouse, a finger or the focus, and
 off screen) and moved by a trackpad's sideways swipe, Shift with the wheel, a drag, a swipe or the
 arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
 Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
-links; under them one line asks for a plugin request (a new GitHub issue). Then Features (below). The site has no
+links, and nothing follows them in the hero: under their names as much room as the label has over
+their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
 from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
@@ -156,8 +173,8 @@ of the install instructions.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 commands, what they do and the link to installing by hand to one text, and holds the `#install`
 anchor to the hero. The unboxed
-wordmark and one prominent tagline, centred, sit above the two calls to action, the install box and the
-independently framed CAD demo. “100% open source and free.” follows
+wordmark and one prominent tagline, centred, sit above the two calls to action and the install box,
+over the turning gear. “100% open source and free.” follows
 “Design physical products with AI.” in blue, using a lighter brand shade on dark
 surfaces. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
@@ -171,7 +188,7 @@ The homepage's Features are the README's, item for item and word for word (`feat
 `featuresIntro` in `src/lib/content.ts`; `test_plugin_manifests.py` holds the two lists to one text,
 and every skill's folder to a feature that links it). Each feature is a tile
 (`src/components/feature-grid.tsx`): a line drawing of the file it makes over that file's name, in
-the hero demo's caption bar, then its name, linking to the page that documents it, and what it does.
+a caption bar, then its name, linking to the page that documents it, and what it does.
 The drawings (`src/components/feature-art.tsx`) are inline SVG in the site's tokens, so they follow
 the light and dark themes: the part in the foreground, construction in the muted ink, what the
 feature adds in the brand blue, a check's finding in the destructive red. Two parts run through

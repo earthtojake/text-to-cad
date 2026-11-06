@@ -249,5 +249,6 @@ for key in sorted(set(want) | set(have)):
 
 A part on one and not the other, or a pin on another net, is a change the netlist import has not
 carried, or one made on the board alone. The other exports: `--to pdf` (every sheet), `--to svg` (a
-file per sheet), `--to bom` (a CSV a line per value, footprint and `MPN`, for
-[review-assembly](review-assembly.md)).
+file per sheet), `--to bom` (a CSV a line per value, footprint and `MPN`, its `Refs` in ranges such as
+`C103-C106`, for [review-assembly](review-assembly.md)). An assembler's BOM is the board's
+(`cad kicad_pcb export --to bom`: every designator, no ranges).

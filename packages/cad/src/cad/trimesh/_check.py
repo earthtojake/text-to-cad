@@ -14,7 +14,7 @@ each family that could not be measured, for a mesh that could not be read and fo
 finite number (the result is then without measurements, which would not be JSON); a warning for what
 the figures show (``zero_draft_walls``, ``undercut_candidates``, ``overhangs``, ``units_suspect``,
 ``not_watertight``, ``several_bodies``, ``coarse_curved_face``); an info for what bounds a figure
-(``probe_resolution``). Its location is the place a figure was measured at, ``x, y, z`` in
+(``probe_resolution``) or what the mesh is made of (``several_bodies``, ``sealed_voids``). Its location is the place a figure was measured at, ``x, y, z`` in
 millimetres, or the family's name. It passes while every family measured: nothing here compares a figure
 against a process's limit.
 """
@@ -142,6 +142,10 @@ def _findings(report: dict[str, Any], process: str, candidates: bool) -> tuple[C
         if (mesh.get("body_count") or 0) > 1:
             found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
                                       "measured per body", "mesh"))
+        if mesh.get("internal_void_count"):
+            found.append(CheckFinding("info", "sealed_voids", f"{mesh['internal_void_count']} sealed internal "
+                                      "void(s), each measured with the body that holds it: a resin or powder process "
+                                      "traps material in one, and nothing here measures a way out", "mesh"))
     if process == "molding" and mesh.get("note"):
         found.append(CheckFinding("warning", "several_bodies", mesh["note"], "mesh"))
     if candidates and process == "molding":  # the pulls ranked: no one pull's draft or undercuts to say

@@ -102,6 +102,9 @@ Use scalar PBR looks for those paths. OCCT snapshots keep their documented appea
 - **Absolute versus relative placement:** `.located(loc)` replaces location;
   `.moved(loc)` and `Location * shape` compose it, so `.located()` after a
   rotation can discard the orientation.
+- **A face's winding sets its extrusion:** `bd.extrude(face, h)` runs along the face's
+  normal, so a `Polygon` whose points run clockwise (seen from +Z) faces -Z and extrudes
+  down. Give the direction (`dir=(0, 0, 1)`) or list the points anticlockwise.
 
 ```python
 # A local box, rotated before placement:

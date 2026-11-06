@@ -9,16 +9,23 @@ import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { GridIcon } from "../view-settings/DisplayModeOptions.js";
 
+// The camera's two projections, as Display's list names them where a view keeps Projection there.
+const PROJECTIONS = Object.freeze(["orthographic", "perspective"]);
+
 /**
  * Display's choices, one list wherever it is shown (the Display tile's menu, a phone's More
  * submenu): the file's modes, then, after a rule, the Grid switch, which every mode draws. A view
  * whose modes are its own names them (`label`), may show a mode that is a state rather than a choice
- * (`disabled`: what the view's own settings came to by hand), and may have no grid.
+ * (`disabled`: what the view's own settings came to by hand), and may have no grid. A view that keeps
+ * the camera's projection here, a setting it changes seldom, rather than as a tile of its own
+ * (`ProjectionToggle.jsx`), ends the list with it (`projection`): after a rule, under its muted name,
+ * Orthographic and Perspective, the one on screen ticked.
  *
  * @param {{ mode: { value: string, options: { value: string, label?: string, Icon?: Function, disabled?: boolean }[], onChange(value: string): void },
- *   grid?: { value: boolean, onChange(value: boolean): void } | null }} props
+ *   grid?: { value: boolean, onChange(value: boolean): void } | null,
+ *   projection?: { value: string, onChange(value: string): void } | null }} props
  */
-export function DisplayMenuItems({ mode, grid = null }) {
+export function DisplayMenuItems({ mode, grid = null, projection = null }) {
   const { t } = useI18n();
   return <>
     <DropdownMenuRadioGroup aria-label={t("display.mode")} value={mode.value} onValueChange={mode.onChange}>
@@ -34,16 +41,25 @@ export function DisplayMenuItems({ mode, grid = null }) {
         <GridIcon className="size-4" />{t("display.grid")}
       </DropdownMenuCheckboxItem>
     </> : null}
+    {projection ? <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-muted-foreground">{t("projection.label")}</DropdownMenuLabel>
+      <DropdownMenuRadioGroup aria-label={t("projection.label")} value={projection.value === "perspective" ? "perspective" : "orthographic"}
+        onValueChange={value => { if (value !== projection.value) projection.onChange(value); }}>
+        {PROJECTIONS.map(value => <DropdownMenuRadioItem key={value} value={value} data-display-projection={value}>{t(`projection.${value}`)}</DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+    </> : null}
   </>;
 }
 
 /**
  * The Display tile: the mode on screen's sphere, opening Display's list (`DisplayMenuItems`). A
- * mode chosen closes it; the Grid switch leaves it open. Projection is a tile of its own that switches
- * on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
+ * mode chosen closes it, as a projection chosen does; the Grid switch leaves it open. Projection is
+ * otherwise a tile of its own that switches on a click (`ProjectionToggle.jsx`); on a phone Display is
+ * More's submenu instead (`RendererShell.jsx`).
  */
-export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, className = null, side = "bottom", align = "center",
-  icon = null }) {
+export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, className = null,
+  side = "bottom", align = "center", icon = null }) {
   const { t } = useI18n();
   const tileClass = useStripButtonClass();
   const current = mode.options.find(option => option.value === mode.value) || mode.options[0];
@@ -61,7 +77,7 @@ export default function DisplayPopover({ disabled = false, boundary = null, tool
     <DropdownMenuContent side={side} align={align} sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuLabel className="text-muted-foreground">{t("display.label")}</DropdownMenuLabel>
-      <DisplayMenuItems mode={mode} grid={grid} />
+      <DisplayMenuItems mode={mode} grid={grid} projection={projection} />
     </DropdownMenuContent>
   </DropdownMenu>;
 }

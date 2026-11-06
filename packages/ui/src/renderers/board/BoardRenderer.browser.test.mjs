@@ -146,7 +146,7 @@ const project3d = (camera, point, width, height) => {
   return [(dot(d, right) / (camera.halfHeight * camera.aspect) + 1) / 2 * width, (1 - dot(d, up) / camera.halfHeight) / 2 * height];
 };
 
-test('in 3D the board is its two faces in the 2D colours, a press on a pad’s pixels picks what the 2D press picks, and the corner’s switches do not move', async (t) => {
+test('in 3D the board is its two faces in the 2D colours, a press on a pad’s pixels picks what the 2D press picks, and the corner stays: its column over the pill, whose zoom is the camera’s', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
   page.setDefaultTimeout(30000);
@@ -156,14 +156,30 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  const switches = () => Promise.all(['[data-view-corner-row] [data-display-mode]', '[data-board-dimension-switch]', '[data-board-side-switch]']
-    .map(selector => pane.locator(selector).boundingBox()));
-  const flat = await switches();
+  // The corner's boxes, from the top down: Display, 2D | 3D and the side in the column, then the pill.
+  const corner = () => pane.evaluate(element => [...element.querySelectorAll('[data-view-pill-column] > *, [data-zoom-pill]')]
+    .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
+  const flat = await corner();
+  const pill = flat.at(-1);
+  assert.equal(flat.length, 4);
+  for (const [index, box] of flat.entries()) {
+    assert.equal(box.x + box.width, pill.x + pill.width, `corner control ${index} flush with the pill's right edge`);
+    if (index) assert.equal(box.y - flat[index - 1].y - flat[index - 1].height, 6, `corner control ${index} 6px under the one over it`);
+  }
   await pane.locator('[data-board-dimension="3d"]').click();
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
-  assert.deepEqual(await switches(), flat, 'the corner row stands where it stood');
-  // Head on from the top, as the 2D view sees it, through the 3D camera.
+  assert.deepEqual(await corner(), flat, 'every corner control stands where it stood');
+  // The pill is the 3D camera's zoom: a step in (half again), and it reads the camera's new percentage.
   const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await settled();
+  const before = (await page.evaluate(() => window.__cadCamera())).zoomPercent;
+  await pane.locator('[data-zoom-pill]').getByRole('button', { name: 'Zoom in' }).click();
+  await page.waitForFunction(before => {
+    const { zoomPercent } = window.__cadCamera();
+    return Math.abs(zoomPercent / before - 1.5) < 0.01
+      && document.querySelector('[data-zoom-pill] [data-zoom-control]').textContent === `${Math.round(zoomPercent).toLocaleString()}%`;
+  }, before);
+  // Head on from the top, as the 2D view sees it, through the 3D camera.
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [20, -15, 200], target: [20, -15, 0], up: [0, 1, 0] }));
   await settled();
   const canvas = pane.locator('[data-board-3d] canvas').first();

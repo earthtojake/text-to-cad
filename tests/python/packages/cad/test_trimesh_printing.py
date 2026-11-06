@@ -259,6 +259,20 @@ class MultiBodyWallTest(unittest.TestCase):
         # 0.3 mm is the fit gap; the thinnest real wall is the 1.7 mm socket.
         self.assertGreater(thinnest, 1.0)
 
+    def test_a_sealed_cavity_is_its_bodys_and_its_skin_a_wall(self) -> None:
+        """A groove that stops short of the top (the macropad's knob) is a sealed void inside one solid: one
+        body, with the void said, and the 0.5 mm skin over it measured as one of its walls."""
+        with tempfile.TemporaryDirectory() as td:
+            part = Box(20, 20, 10) - Pos(0, 0, 4.0) * Box(16, 16, 1)   # its top at 4.5, the box's at 5
+            result = cad.stl.dfm(_stl(part, Path(td), "sealed"), process="printing", samples=4000)
+
+        self.assertEqual((result.measurements["mesh"]["body_count"], result.measurements["mesh"]["internal_void_count"]),
+                         (1, 1))
+        codes = {finding.code for finding in result.findings}
+        self.assertIn("sealed_voids", codes)
+        self.assertNotIn("several_bodies", codes)
+        self.assertAlmostEqual(result.measurements["wall_thickness"]["min_mm"], 0.5, delta=0.01)
+
     def test_a_body_resting_on_another_is_closed_and_measured(self) -> None:
         """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so
         neither body is closed. Each is closed again as the bodies are split (trimesh's repair, which needs
