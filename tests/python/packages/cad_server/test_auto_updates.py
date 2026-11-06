@@ -105,22 +105,34 @@ class RetryTest(Fixture):
         self.assertTrue(auto_updates.quiet(100.0, 100.0 + auto_updates.IDLE_SECONDS))
 
 
-class PatchOnlyTest(Fixture):
-    def test_automatic_updates_take_patch_releases_only(self) -> None:
+class SemanticVersioningTest(Fixture):
+    def test_below_1_0_a_patch_release_installs_itself_and_a_minor_or_major_one_waits(self) -> None:
         self.assertTrue(auto_updates.takes("0.11.0", "0.11.1"))
         self.assertTrue(auto_updates.takes("0.11.0", "0.11.12"))
-        for version, latest in (("0.11.3", "0.12.0"), ("0.11.3", "1.0.0"), ("1.4.2", "2.0.0"),
-                                ("0.11.1", "0.11.1"), ("0.11.2", "0.11.1"),
-                                ("0.11.0", "0.11.1rc1"), ("0.11.0.dev0", "0.11.1"), (None, "0.11.1")):
+        for latest in ("0.12.0", "1.0.0", "1.1.0"):
+            self.assertFalse(auto_updates.takes("0.11.3", latest), latest)
+
+    def test_from_1_0_a_patch_or_minor_release_installs_itself_and_a_major_one_waits(self) -> None:
+        for latest in ("1.4.3", "1.5.0", "1.12.0"):
+            self.assertTrue(auto_updates.takes("1.4.2", latest), latest)
+        for version, latest in (("1.9.3", "2.0.0"), ("1.4.2", "3.1.0")):
             self.assertFalse(auto_updates.takes(version, latest), (version, latest))
 
-    def test_cad_update_auto_says_a_minor_release_waits_for_a_click(self) -> None:
-        with mock.patch("cad_server.updates.notice", return_value={"latest": "1.2.0", "version": "1.1.0"}):
-            line = auto_updates.describe()
-        self.assertIn("text-to-cad 1.2.0 is out, a new minor release: automatic updates take patch releases only, "
-                      "so update with the button or `cad update`", line)
-        with mock.patch("cad_server.updates.notice", return_value={"latest": "1.1.1", "version": "1.1.0"}):
-            self.assertNotIn("minor release", auto_updates.describe())
+    def test_only_a_later_plain_release_is_taken(self) -> None:
+        for version, latest in (("0.11.1", "0.11.1"), ("0.11.2", "0.11.1"), ("1.5.0", "1.4.9"),
+                                ("0.11.0", "0.11.1rc1"), ("0.11.0.dev0", "0.11.1"), ("1.04.2", "1.4.3"),
+                                (None, "0.11.1")):
+            self.assertFalse(auto_updates.takes(version, latest), (version, latest))
+
+    def test_cad_update_auto_says_a_release_that_waits_is_out(self) -> None:
+        for version, latest, kind in (("0.11.0", "0.12.0", "minor"), ("0.11.3", "1.0.0", "major"),
+                                      ("1.1.0", "2.0.0", "major")):
+            with mock.patch("cad_server.updates.notice", return_value={"latest": latest, "version": version}):
+                self.assertIn(f"; text-to-cad {latest} is out, a new {kind} release, which waits for you: update "
+                              "with the button or `cad update`", auto_updates.describe())
+        for version, latest in (("0.11.0", "0.11.1"), ("1.1.0", "1.2.0")):
+            with mock.patch("cad_server.updates.notice", return_value={"latest": latest, "version": version}):
+                self.assertNotIn("is out", auto_updates.describe(), "one it takes is said once it installs")
 
 
 class Engine:
@@ -286,13 +298,19 @@ class AutomaticTest(Fixture):
         self.assertEqual(self.runs(), [])
         self.assertIsNone(auto_updates.attempted(), "nothing was tried")
 
-    def test_a_minor_or_major_release_is_never_started_by_itself(self) -> None:
-        for latest in ("1.2.0", "2.0.0"):
-            self.notice = {"latest": latest, "version": "1.1.0"}
+    def test_a_release_that_bumps_the_breaking_part_is_never_started_by_itself(self) -> None:
+        for version, latest in (("1.1.0", "2.0.0"), ("0.11.0", "0.12.0"), ("0.11.0", "1.0.0")):
+            self.notice = {"latest": latest, "version": version}
             self.assertIsNone(self.job.automatic(self.engine), latest)
         self.assertEqual(self.runs(), [])
         self.assertIsNone(auto_updates.attempted(), "nothing was tried")
         self.assertEqual(self.job.status()["automatic"], None)
+
+    def test_from_1_0_a_minor_release_is_started_by_itself(self) -> None:
+        self.notice = {"latest": "1.2.0", "version": "1.1.0"}
+        self.assertEqual(self.job.automatic(self.engine), "1.2.0")
+        self.until(self.waiting, "the release installed and its base made")
+        self.assertEqual(auto_updates.attempted()["release"], "1.2.0")
 
     def test_turned_off_while_it_waits_it_is_given_up_and_goes_on_when_turned_on(self) -> None:
         self.job.automatic(self.engine)

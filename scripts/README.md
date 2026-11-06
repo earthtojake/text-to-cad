@@ -126,8 +126,10 @@ where those files ship, so these scripts are what produces them.
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
-  fork) and pass both the target's version and the latest tag. Called by
-  `test.yml` (Version Check).
+  fork) and pass both the target's version and the latest tag, and a release that
+  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add or change
+  a migration guide. Called by `test.yml` (Version Check); see `CONTRIBUTING.md`,
+  "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
   (`PROJECTS`: `cad`, `cad-server`, `cad-mcp`, `cadgen`, in the order they go up) and what its GitHub Release attaches: of
@@ -177,7 +179,10 @@ where those files ship, so these scripts are what produces them.
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
-  `0.4.x` releases before 0.5.0) and for comparing versions. Sourced by
+  `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
+  among them: the part a release bumps, the breaking part, and whether a device takes a
+  release by itself (`version_installs_itself`, the release check's copy of the server's
+  `auto_updates.takes`, which a test holds equal to it). Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s

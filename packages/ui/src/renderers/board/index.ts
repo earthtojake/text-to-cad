@@ -37,7 +37,7 @@ export const BOARD_FILE = /\.kicad_pcb$/i;
  * A `.kicad_pcb` is a flat view, as a `.dxf` is: the backend reads the board from its file, layer
  * by layer (`GET /api/v1/documents/kicad_pcb/<id>/plot`), and the client paints the layers on a canvas, with Select (its parts,
  * pads, nets, tracks, vias, zones, texts, dimensions and graphics, or a point or an area), Annotate and Measure, its Board and
- * Layers in the view's panel, its Display in the view's corner; 2D | 3D shows the same view in 3D
+ * Layers in the view's panel, its Display in the view's corner; 2D/3D shows the same view in 3D
  * (`Board3dView.jsx`, a chunk of its own, loaded only then).
  * Registering loads no three.js, no viewport and no backend connection; a board drawn in 2D loads none either.
  *

@@ -212,6 +212,8 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     thickness,
     sheet,
     locate,
+    /** Fit to be seen (`lib/viewer/sceneContract.js`): every face the camera has looked at holds its picture, not the bare slab. */
+    presentable: () => Object.keys(wanted).every(side => !wanted[side] || Boolean(drawnKey[side])),
     /** The kit's pick: a part's body in front of the face (`pickBody`), else what the view's `pickAt` makes of the point the ray meets, with its world point. */
     pick(ray) {
       const body = pickBody ? pickBody(ray) : null;

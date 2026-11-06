@@ -73,12 +73,13 @@ export function millimetresPerPixel(camera, depth, paneHeight) {
  * The 2D view's window as a 3D camera, head on: the pane's centre on the sheet, from the side the 2D
  * view shows, square to the board, at the same millimetres per pixel. What a 3D view opens on, so its
  * first frame is the 2D picture. A perspective snapshot (`lib/perspective.js`): position, target, up
- * and the orthographic half height.
+ * and the orthographic half height. `planFromCamera` of it is the window again, exactly: the round trip
+ * of a 3D view nobody turned.
  *
  * @param {{ transform: { scale: number, offsetX: number, offsetY: number }, width: number, height: number,
  *   side: "top" | "bottom", mirrorX: number | null, thickness?: number, distance: number }} view
  *   `mirrorX`: the page x the 2D view mirrors about from the back (`boardMirrorX`); `distance`: how
- *   far the eye stands off the face.
+ *   far the eye stands off the face (a perspective lens's is `perspectiveHeadOn`'s).
  */
 export function headOnCamera({ transform, width, height, side, mirrorX = null, thickness = BOARD_THICKNESS_MM, distance }) {
   if (!transform || !(transform.scale > 0) || !(width > 0) || !(height > 0)) return null;
@@ -93,16 +94,34 @@ export function headOnCamera({ transform, width, height, side, mirrorX = null, t
 }
 
 /**
+ * A head-on camera (`headOnCamera`) for a perspective lens of vertical field `fov` (degrees): its eye on the
+ * same line of sight, where the face is drawn at the window's scale (the face's half height at the target is
+ * the eye's distance times tan(fov / 2)). An orthographic picture is the same from any distance; a
+ * perspective one only from that one, so the lens the viewport has decides it.
+ */
+export function perspectiveHeadOn(camera, fov) {
+  const half = (Number(fov) * Math.PI) / 360;
+  if (!camera || !(camera.orthographicHalfHeight > 0) || !(half > 0 && half < Math.PI / 2)) return camera;
+  const away = camera.position.map((value, axis) => value - camera.target[axis]);
+  const length = Math.hypot(...away);
+  if (!(length > 0)) return camera;
+  const distance = camera.orthographicHalfHeight / Math.tan(half);
+  return { ...camera, position: camera.target.map((value, axis) => value + (away[axis] / length) * distance) };
+}
+
+/**
  * The 3D camera as the 2D view's window: centred on the sheet point the camera is centred on (where
  * its line of sight meets the face it looks at), from that side, at the millimetres per pixel there.
  * What leaving a 3D view frames the 2D view on.
  *
- * @param {{ position: number[], target: number[], halfHeight: number, width: number, height: number,
+ * @param {{ position: number[], target: number[], halfHeight: number, perspective?: boolean, width: number, height: number,
  *   mirrorX: (side: "top" | "bottom") => number | null, thickness?: number }} camera  `halfHeight`: the
- *   view's half height in millimetres at its target.
+ *   view's half height in millimetres at its target; `perspective`: a perspective lens, whose half height
+ *   grows with the depth, so the face point's is the target's times the face point's depth over the
+ *   target's (a target standing over the face, as Home's does over a board's parts, is nearer the eye).
  * @returns {{ side: "top" | "bottom", transform: { scale: number, offsetX: number, offsetY: number } } | null}
  */
-export function planFromCamera({ position, target, halfHeight, width, height, mirrorX, thickness = BOARD_THICKNESS_MM }) {
+export function planFromCamera({ position, target, halfHeight, perspective = false, width, height, mirrorX, thickness = BOARD_THICKNESS_MM }) {
   if (!(halfHeight > 0) || !(width > 0) || !(height > 0)) return null;
   const direction = target.map((value, axis) => value - position[axis]);
   const hit = rayOnBoard({ origin: position, direction }, thickness);
@@ -111,12 +130,13 @@ export function planFromCamera({ position, target, halfHeight, width, height, mi
   const mirror = side === "bottom" ? mirrorX(side) : null;
   const planX = mirror == null ? sheetX : 2 * mirror - sheetX;
   const planY = -sheetY;
-  const scale = height / (2 * halfHeight);
+  // Along the line of sight the target is at distance 1 (`direction` is the eye to it), the face point at `hit.distance`.
+  const scale = height / (2 * halfHeight * (perspective && hit ? hit.distance : 1));
   return { side, transform: { scale, offsetX: width / 2 - planX * scale, offsetY: height / 2 + planY * scale } };
 }
 
 /**
- * The camera turned to the board's other side: what Front | Back does in 3D. The eye goes over the
+ * The camera turned to the board's other side: what Flip does in 3D. The eye goes over the
  * board's left-to-right axis through its target (the world's x: y and z negated), and which way is up
  * stays as it was, so the world's up stays up on screen (the cube reads upright) and the other face is
  * seen as the 2D view sees the back: mirrored left to right, not upside down. Turned about the
