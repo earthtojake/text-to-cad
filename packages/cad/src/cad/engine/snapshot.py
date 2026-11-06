@@ -77,7 +77,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from cad._internal.refused import NotThere
 from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
@@ -132,9 +131,10 @@ class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders."""
 
 
-class NoSuchFile(SnapshotRefused, NotThere):
+class NoSuchFile(SnapshotRefused):
     """A file a flag names (``--annotation``, ``--measurements``, ``--job``) that is not there: refused as every
-    request is, and as the input that is not there it is (``cad._internal.refused.NotThere``)."""
+    request is, and told apart as the input that is not there it is (the server's ``cad`` command says it
+    ``not_found``)."""
 
 
 # --- the request ---------------------------------------------------------------------------

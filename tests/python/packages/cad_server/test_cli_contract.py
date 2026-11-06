@@ -221,13 +221,11 @@ class MissingInputs(unittest.TestCase):
     operation's own file is: exit 2, ``not_found``, said before anything runs or renders."""
 
     def test_a_file_an_option_names_that_is_not_there(self) -> None:
-        from cad._internal.refused import NotThere
         from cad.engine.snapshot import NoSuchFile, SnapshotRefused
 
         refused = NoSuchFile("--job gone.json: no such file")
         self.assertIsInstance(refused, SnapshotRefused)  # still the snapshot's refusal for its callers
         self.assertEqual((classify(refused).reason, classify(refused).status), ("not_found", 2))
-        self.assertEqual(classify(NotThere("--urdf gone.urdf: no such file")).reason, "not_found")
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / "robot.srdf").write_text('<robot name="r"/>\n', encoding="utf-8")

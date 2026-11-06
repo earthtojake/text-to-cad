@@ -725,7 +725,7 @@ before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapsho
 file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
 there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
 names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
-schematic's `--display`): the library's refusal of one is `cad._internal.refused.NotThere`. A model's document
+schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
 is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
 one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
 the same way. The commands are the server's
