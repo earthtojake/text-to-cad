@@ -2512,8 +2512,9 @@ assign it to `material.pbr`. The existing controls use their native PBR names:
 `transmission`, `attenuation_color`, `attenuation_distance` (metres), `clearcoat`,
 `clearcoat_roughness`, `emissive`, `emissive_intensity`, and `opacity`. Base `color` floats
 are sRGB ratios; emission and attenuation floats are linear RGB. Hex strings are converted
-by the upstream library. Shape colours and plain face paints keep their sRGB hex,
-0–255 integer and build123d `Color` inputs; documents and glTF base factors use linear RGB.
+by the upstream library. Shape colours keep build123d's sRGB inputs (a hex string, a name, a
+`Color`, 0–1 floats: its setter refuses 0–255 integers), and plain face paints take sRGB hex, 0–255
+integers and a build123d `Color`; documents and glTF base factors use linear RGB.
 
 XBF stores the native physical dataclass and the complete resolved PBR data, including
 embedded textures and texture transforms, on the XCAF material label. Native texture maps

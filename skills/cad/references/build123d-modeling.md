@@ -82,7 +82,10 @@ There is no text-to-cad material class, catalogue or adapter.
 `attenuation_color`, `attenuation_distance`, `clearcoat`, `clearcoat_roughness`,
 `emissive`, `emissive_intensity`, and `opacity`. Base colour floats are sRGB ratios;
 emission and attenuation floats are linear. Hex strings avoid that ambiguity.
-Shape colours and plain paints also accept 0–255 integers and build123d `Color`.
+A shape's colour (`shape.color = ...`, build123d's own setter) takes a hex string (`"#f2f0ea96"`
+with alpha), a colour name, a build123d `Color` or 0–1 sRGB floats `(0.95, 0.94, 0.92, 0.59)`; it
+refuses 0–255 integers with OCCT's `Color out`. A paint (`paint(shape, faces, ...)`) takes those and
+0–255 integers, `(242, 240, 234)` or four with alpha.
 
 XBF keeps native physics and the resolved PBR data; GLB and the viewer retain the
 appearance. STEP keeps name, density and colour. Native texture maps are preserved in

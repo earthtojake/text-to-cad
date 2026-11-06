@@ -149,8 +149,9 @@ is the script's folder; two explicit names in it must differ.
 - **`import build123d as bd`, and use it attribute-style** (`bd.Box`). The import is lazy:
   the kernel loads on first use, in the worker. `from build123d import Box`, or a
   module-level `bd.Color(...)` or `bd.Align` default, loads it at that line instead.
-- **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"`, or 0-255
-  integers. Import `metals` from `bd_materials`; assign a native material with
+- **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"` (`"#4a6fa5cc"` with
+  alpha). `part.color` is build123d's: it takes no 0-255 integers (OCCT's `Color out`), which
+  `paint` does. Import `metals` from `bd_materials`; assign a native material with
   `part.material = metals.aluminum()`
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
 - **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
