@@ -778,6 +778,58 @@ machine-checked source: `check-version.sh` and `bump-version.sh` (which `Prepare
 `VERSION` on it (1.0.0 too, since a trailing `.0` is insignificant to PyPI), and a test keeps
 this list identical to the file.
 
+### Which number a release bumps
+
+Releases follow [Semantic Versioning](https://semver.org): `VERSION` is `MAJOR.MINOR.PATCH`, and the
+part a release bumps says what it asks of the people who update to it. A breaking change bumps the
+major from 1.0 and, below 1.0, which the standard leaves to the project, the minor: that part is the
+*breaking slot*. Nothing else declares a break, no flag in any config: the number does.
+
+| | Below 1.0 (`0.y.z`) | From 1.0 (`x.y.z`) |
+| --- | --- | --- |
+| A breaking change | the minor: `0.11.4` to `0.12.0` | the major: `1.4.2` to `2.0.0` |
+| An addition that breaks nothing | the patch: `0.11.4` to `0.11.5` | the minor: `1.4.2` to `1.5.0` |
+| A fix | the patch | the patch: `1.4.2` to `1.4.3` |
+| Installs itself on every device | a patch release | a patch or minor release |
+| Waits for the person's click | a minor or major release | a major release |
+
+With automatic updates on, the default, every device's engine installs a newer release that breaks
+nothing by itself and switches to it once idle, under agent threads that are running, with no click
+(`cad_server.auto_updates.takes`); a release that bumps the breaking slot waits for the person's click
+and reaches each device when its person updates. The release to 1.0 bumps the major, and waits like
+any. So choose the bump by what the release asks of people, not by its size. A change is breaking when
+something that worked stops working: a command, option, tool, Python name or file format removed or
+renamed, an output shape changed (a `--json` key, an exit status, an MCP tool's answer), a setting that
+comes to mean something else, anything a skill or a person's script would have to be edited for. A
+breaking change always comes with a migration guide under `docs/migrations/`, which says what to
+change. An addition that renames nothing (a new command, a new document type, a new option) breaks
+nothing. Version Check refuses a release that installs itself and adds or changes a migration guide;
+the rest is the release's author's to judge, and when in doubt it is the breaking slot.
+
+**What breaks, by tier.** [Law 15](packages/cad/README.md#the-design-laws) ("Compatibility, by who
+pays for a break") sorts what a release can change into four tiers and says what compatibility each
+keeps; it is the one statement of them. Which slot a change takes is a separate question, the one this
+table answers: the tier decides what compatibility code a change keeps, the slot whether the release
+installs itself.
+
+| Law 15's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
+| --- | --- | --- |
+| 1. What an agent reads each session | an addition; a doc's wording | a rename, a removal or a changed contract (a flag's meaning, a `--json` key, an exit status), each a hard cutover |
+| 2. The library's public imports | an addition | a rename or a move, though its alias keeps every script working; the alias's removal; a change to a name's contract, what it takes or returns |
+| 3. A person's data | a new form, with the previous shipped release's read and migrated on first touch | a release that cannot read what the previous shipped release wrote, or reads it as meaning something else |
+| 4. Protocols where two releases meet while both run | an addition within a number; a new number whose newer side keeps answering the previous one | a new number whose newer side stops answering the previous one |
+
+Tier 1 is breaking though the agents adapt within the session (the skills ship with the change):
+a person's own script, or a caller pinned to the old spelling, stops working. Tier 2 changes in two
+steps, each in the breaking slot. The rename keeps the earlier spelling an alias of the same object for
+a release at least, so no script stops working, but the law names an alias in the migration guide
+alone, and a release with a migration guide takes the breaking slot: the person's click brings it, and
+the alias's warning says the new spelling. The alias's removal, a release or more later, is what stops
+a script that still spells the old name. A change to a name's contract keeps no alias. In tier 4 the
+number is the protocol's, not the release's: a new one makes the release a breaking one only where the
+newer side stops answering the previous number, which the law decides case by case; the worker
+contract keeps no window, so a new worker contract always does.
+
 ### Shipping a release
 
 Merging a pull request that changes `VERSION` releases it: `Publish Release`
@@ -791,8 +843,8 @@ not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 2
 minutes the release took to reach PyPI.
 
 A release pull request comes one of two ways. Choose the bump deliberately for
-every release; if a release request does not specify one, confirm it rather
-than assuming.
+every release, by [Which number a release bumps](#which-number-a-release-bumps); if a
+release request does not specify one, confirm it rather than assuming.
 
 A release with significant user-facing features adds its What's new entry before it ships: its
 minor version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale
@@ -837,29 +889,14 @@ The pull request's Version Check says what merging it releases, and refuses:
   a contributor's pull request can never start one;
 - a version that is not past the target branch's and the latest release tag's, or that is on
   the list of [versions a release cannot take](#versions-a-release-cannot-take);
-- a patch release (the same `X.Y` as the target's) that adds or changes a migration guide under
-  `docs/migrations/`: see **Patch releases install themselves**, below;
+- a release that installs itself -- below 1.0 a patch, the target's `X.Y`; from 1.0 a patch or
+  minor, the target's `X` -- that adds or changes a migration guide under `docs/migrations/`: see
+  [Which number a release bumps](#which-number-a-release-bumps);
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never
   start. Release such a change after it merges, from its own pull request;
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
-
-**Patch releases install themselves.** With automatic updates on, the default, every device's
-engine installs a newer patch release by itself and switches to it once idle, under agent threads
-that are running, with no click (`cad_server.auto_updates.takes`); a minor or major release waits for
-the person's click. So choose the bump by what the release asks of people, not by its size:
-
-- **patch** (`0.11.0` to `0.11.1`): fixes and additions nothing has to change for. No command,
-  option, tool, Python name or file format removed or renamed, no output shape changed (a `--json`
-  key, an MCP tool's answer), no setting that means something else, nothing a skill or a person's
-  script would have to be edited for, and no migration guide;
-- **minor** (`0.11.x` to `0.12.0`): anything else on 0.x -- a rename, a removal, a hard cutover, a
-  change a migration guide explains. It reaches each device when its person updates.
-
-Version Check refuses a patch release that adds or changes a migration guide; the rest is the
-release's author's to judge, and when in doubt it is a minor release. An addition that renames
-nothing (a new command, a new document type, a new option) may ship in a patch.
 
 A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
 tested whole, Windows included, before it can merge. Merge it once everything is

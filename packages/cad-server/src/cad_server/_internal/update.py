@@ -200,8 +200,9 @@ class Update:
 
     def automatic(self, engine: Any) -> str | None:
         """The engine's own update, asked for as it tends itself (``Daemon.tend``): when automatic
-        updates are on (``auto_updates.enabled``) and a patch release newer than this one is known
-        (``auto_updates.takes``: never a minor or major one, which waits for a click) --
+        updates are on (``auto_updates.enabled``) and a newer release that breaks nothing is known
+        (``auto_updates.takes``: a patch release below 1.0, a patch or minor one from 1.0; one that
+        bumps the breaking part waits for a click) --
         the feed as last read, read again in the background when an hour has passed, or an agent
         app's newer server (``updates.notice``) -- and nothing stands in its way: no update running
         or getting ready, none failed in the last ``RECALL_SECONDS``, no drain, no ``cad setup``
@@ -219,7 +220,7 @@ class Update:
             if found is None:
                 return None
             target = found["latest"]
-            if not auto_updates.takes(found["version"], target):  # a minor or major release waits for a click
+            if not auto_updates.takes(found["version"], target):  # a breaking release waits for a click
                 return None
             with self.lock:
                 if self.auto is not None or self.state["state"] in ("working", "restarting"):
