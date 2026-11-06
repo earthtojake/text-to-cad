@@ -202,21 +202,37 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 
 ## Board views
 
-The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
-KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
-Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
-area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\ hides and shows
-it, / searches it) has one search over two tabs. Its **Circuit** lists the parts in the
-schematic blocks their footprints record (by kind on a board that records none) and the nets: a
-block picks every part in it, a net picks the whole net. Each arrives as a reference
-([checks](references/checks.md#references) says what each names and how to resolve it). Its
-**Layers** tab lists the layers: each layer's eye, and a press for the active layer (drawn on top).
-How the board is drawn is the toolbar's, after its tools: **Flip board**, and **Display** — the preset (the mode), Other layers (KiCad's high-contrast modes: the layers but the
-active one **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and
-vias through an active copper layer, always stay at full strength), the copper pours and the zones'
-and tracks' opacity. They are the display, so a Quick Edit's packet
+The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
+Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
+graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
+drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
+schematic blocks their footprints record (by kind on a board that records none): a block picks every
+part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
+([checks](references/checks.md#references) says what each names and how to resolve it). **Layers**
+lists the layers: each layer's eye, and a press for the active layer (drawn on top); under them, how
+the board is drawn: Other layers (KiCad's high-contrast modes: the layers but the active one
+**Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and vias
+through an active copper layer, always stay at full strength), the copper pours and the zones' and
+tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
+tabs, the picked part's or net's pads. The view's corner, left of the zoom, has **Display** (the
+preset: the mode), **2D | 3D** and **Front | Back**. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
+
+In 3D (**2D | 3D**, or the key 3) the board is a slab whose two faces are drawn as the 2D view draws
+them, each part standing its 3D model. A press picks what the 2D view picks where the pointer's ray
+meets the face, or the part whose body is in front of it; a drag turns the view; **Front | Back**
+turns the camera over. A part's model is the STEP its footprint names, looked for only in the
+board's folder (`${KIPRJMOD}`), KiCad's installed 3D library (every `${KICADn_3DMODEL_DIR}`) and the
+folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is); a `.wrl` name is read as the `.step` or
+`.stp` beside it. `CAD_KICAD_3DMODELS` is read from the server's environment: a server already
+running does not see a variable set in a shell afterwards, so set it before the server starts
+(`cad stop`, then run any `cad` command with it set). A part without a model stands as a block, and
+**Parts** lists it under **No 3D model**, with why: VRML only (no STEP beside the VRML), not found,
+outside the folders above, too large, not a STEP, embedded in the board, or too many models.
+`cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way (`models`: found,
+missing with the reason, and the parts that name none).
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
 theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
@@ -233,7 +249,6 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
-The board view is 2D only. For a 3D look, export the board to GLB (`cad kicad_pcb export board.kicad_pcb --to glb -o out/`, or `kicad_pcb.export(board, to="glb", out=...)` after an edit) and open that file in the viewer.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
@@ -243,13 +258,13 @@ solid inferred from the 2D plot.
 ## Schematic views
 
 `cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
-selection, Measure, annotations and Quick Edit, and its panel: one search over the **Circuit** and,
-for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
+selection, Measure, annotations and Quick Edit, and its panel: one search over **Parts**, **Nets**
+and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
 junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
-The **Circuit** lists the parts by the sheet they are placed on, each with its pins, and the nets with
-the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
+**Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
+with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
 `#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
 app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
