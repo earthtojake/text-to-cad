@@ -170,10 +170,21 @@ class TheCommandTable(unittest.TestCase):
             self.assertIn("is a urdf, not a srdf", said)
 
     def test_an_operation_a_type_lacks_names_the_ones_it_has(self) -> None:
-        code, _, err = _run(["stl", "inspect", "part.stl"])
-        self.assertEqual(2, code)
-        self.assertIn("cad stl has no operation 'inspect'; it has export, snapshot", err)
+        # Said as an unknown command is: one line, at most one suggestion, and where the operations are told,
+        # never the type's whole help after it; a type named with no operation at all shows its help.
+        code, out, err = _run(["stl", "inspect", "part.stl"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "cad stl: cad stl has no operation 'inspect'; it has export, snapshot, dfm; "
+                              "'cad stl --help' says what each does\n")
+        code, out, err = _run(["step", "exprt", "--json"])
+        self.assertEqual((code, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
+            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm; "
+            "'cad step --help' says what each does")})
         self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
+        code, out, err = _run(["stl"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertTrue(err.startswith("cad stl: cad stl needs an operation\n\nusage: cad stl <operation> FILE"), err)
 
     def test_the_old_spellings_are_commands_that_never_existed(self) -> None:
         for argv in (["export", "a.xbf", "a.step"], ["snapshot", "a.xbf", "a.png"], ["inspect", "a.xbf"]):

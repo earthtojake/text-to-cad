@@ -579,7 +579,7 @@ def type_main(document_type: str, argv: Sequence[str] | None = None, prog: str |
         sys.stdout.write(type_usage(document_type))
         return 0
     if not argv:
-        return _no_operation(prog, document_type, f"cad {document_type} needs an operation", argv)
+        return _no_operation(prog, document_type, f"cad {document_type} needs an operation", argv, usage=True)
     operation, rest = argv[0], argv[1:]
     run = OPERATIONS.get((document_type, operation))
     if run is None:
@@ -588,16 +588,19 @@ def type_main(document_type: str, argv: Sequence[str] | None = None, prog: str |
         close = suggest(operation, operations_of(document_type))
         return _no_operation(prog, document_type, f"cad {document_type} has no operation {operation!r}"
                              + (f" (did you mean {close!r}?)" if close else "")
-                             + f"; it has {', '.join(operations_of(document_type))}", rest)
+                             + f"; it has {', '.join(operations_of(document_type))}; 'cad {document_type} --help' "
+                               "says what each does", rest)
     return run(rest, f"{prog} {operation}")
 
 
-def _no_operation(prog: str, document_type: str, problem: str, argv: list[str]) -> int:
-    """A type's command line that names none of its operations: the command line's failure (``usage``),
-    under ``--json`` its JSON document alone, else the problem and the type's operations on stderr."""
+def _no_operation(prog: str, document_type: str, problem: str, argv: list[str], *, usage: bool = False) -> int:
+    """A type's command line that names none of its operations: the command line's failure (``usage``), said
+    as an unknown command is (``cad_server.cli._unknown``) -- under ``--json`` its JSON document alone, else
+    its line on stderr, the type's help after it only for a command line that names no operation at all
+    (``usage``), never after one it does not have."""
     from cad_server._internal.cli_errors import Failure, wants_json, write
 
-    if wants_json(argv):
-        return write(Failure(problem, "usage"), prog=prog, as_json=True)
+    if wants_json(argv) or not usage:
+        return write(Failure(problem, "usage"), prog=prog, as_json=wants_json(argv))
     sys.stderr.write(f"{prog}: {problem}\n\n" + type_usage(document_type))
     return 2
