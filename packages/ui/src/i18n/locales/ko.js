@@ -713,6 +713,8 @@ export default {
   "drawing.empty": "이 도면의 모델 공간에 지오메트리가 없어 표시할 내용이 없습니다.",
   "drawing.panel": "도면 패널",
   "drawing.search": "도면 검색",
+  "drawing.reading": "도면 읽는 중",
+  "drawing.updating": "도면 업데이트 중…",
 
   "tree.collapse": "{name} 접기",
   "tree.expand": "{name} 펼치기",

@@ -575,7 +575,7 @@ Model (`STEP_PART_VIEW_FEATURES`).
 ## The view's panel and the tool stack
 
 **The view's panel** (`kit/shell/FlatPanel.jsx`; a board's and a schematic's `FlatViewFrame.jsx`, a
-3D view's `RendererShell.jsx`, a drawing's `DxfRenderer.jsx`, one state, `useFlatPanelState`) holds what there is to read of the
+3D view's `RendererShell.jsx`, a drawing's `FlatViewFrame.jsx` too, one state, `useFlatPanelState`) holds what there is to read of the
 file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 `bg-canvas`, the content area behind every view, 2D and 3D, which sits darker than the chrome in
@@ -1113,7 +1113,7 @@ and its state kept. It is essential, so no setting turns it off.
 
 Quick Edit keeps its corner, 8px in, and never reaches under the tool strip or its tool's row:
 the top-right column starts past the strip's right edge (`--cad-top-right-left`), measured by
-the frame (`RendererShell.jsx`, `FlatViewFrame.jsx`, `DxfRenderer.jsx`), so the strip is never
+the frame (`RendererShell.jsx`, `FlatViewFrame.jsx`), so the strip is never
 covered. The view's panel is docked beside the canvas, never over it.
 
 On a phone Quick Edit is a bottom sheet, shadcn's drawer as it ships (`primitives/drawer.jsx`,

@@ -714,6 +714,8 @@ export default {
   "drawing.empty": "此图纸的模型空间中没有几何体，因此无内容可显示。",
   "drawing.panel": "图纸面板",
   "drawing.search": "搜索图纸",
+  "drawing.reading": "正在读取图纸",
+  "drawing.updating": "正在更新图纸…",
 
   "tree.collapse": "折叠{name}",
   "tree.expand": "展开{name}",

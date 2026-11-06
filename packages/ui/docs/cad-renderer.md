@@ -284,10 +284,10 @@ document, so the pane is a canvas and the drawing is painted on it. No three.js
 viewport, no scene, no Display settings, no Preview. The questions the old
 Material/Bends tabs answered were about a sheet-metal part the viewer was inventing
 from the file; a drawing is not that. What it has is what a person needs to talk about
-a drawing — the kit's chrome, composed around the canvas rather than around
-`ShellViewport` (`DxfRenderer.jsx`): the strip at the top centre, the tool's row under
-it, the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, where the drawing has a
-Layers tab: `useFlatPanelState`, kind `drawing`), Quick Edit at the top-right.
+a drawing — every flat view's frame and hooks around its canvas, a board's and a schematic's
+(`kit/shell/FlatViewFrame.jsx`, `useFlatTools`, `flatViewTools` and `useFlatHandover`): the strip
+at the top centre, the tool's row under it, the view's panel docked at the left (`kit/shell/FlatPanel.jsx`,
+where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right, the zoom pill in the corner.
 
 - **Tools** (`dxf/tools.js`): **Select** (in hand; the view's hand too: a drag pans, a
   tap picks), **Pencil**, **Shapes** and **Measure**, no view controls (Display, Projection and

@@ -740,6 +740,8 @@ export default {
   "drawing.empty": "This drawing has no geometry in its modelspace, so there is nothing to show.",
   "drawing.panel": "Drawing panel",
   "drawing.search": "Search the drawing",
+  "drawing.reading": "Reading drawing",
+  "drawing.updating": "Updating drawing…",
 
   // The trees, their rows and menus, and the details panels (a robot's, an SDF's, a drawing's).
   "tree.collapse": "Collapse {name}",

@@ -1,56 +1,31 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { MousePointer2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera, planProjection } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
-import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../host/context.js";
+import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
-import { hasOpenPopup } from "../../lib/popups.js";
-import { useAnnotationSession } from "../../annotation/session.js";
 import { annotationAt, withGroups } from "../../annotation/geometry.js";
-import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolLabel, drawingToolVariant } from "../../annotation/toolbar.jsx";
-import { promptView, promptViews } from "../../annotation/views.js";
-import ViewerAlertCard, { useAlertDismissal } from "../kit/status/ViewerAlertCard.jsx";
-import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
-import { ViewUpdateStatus } from "../kit/status/ViewUpdateStatus.jsx";
-import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
-import { stripLeft, useStageReach } from "../kit/shell/useStageReach.js";
-import { ViewportTopRight } from "../kit/shell/ViewportTopRight.jsx";
-import { attachLiveBinding } from "../kit/shell/liveBinding.js";
-import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
-import { useViewerHistory } from "../kit/shell/useViewerHistory.js";
-import { useViewerShortcuts } from "../kit/shell/useViewerShortcuts.js";
-import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
+import { promptView } from "../../annotation/views.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
-import FlatPanel, { FlatPanelPill, useFlatPanelState } from "../kit/shell/FlatPanel.jsx";
-import FloatingToolBar, { StripTouchProvider } from "../kit/tools/FloatingToolBar.js";
-import PreviewChrome from "../kit/tools/PreviewChrome.jsx";
-import { normalizeToolStack } from "../kit/tools/toolStackLayout.js";
-import AnnotationOverlay, { CAD_ANNOTATION_DEFAULTS } from "../kit/tools/annotate/AnnotationOverlay.jsx";
-import { MeasureIcon } from "../kit/tools/measure/SceneMeasure.jsx";
+import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
+import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
+import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
-import { useMeasureSession } from "../kit/tools/measure/useMeasureSession.js";
-import { MeasurementsBar } from "../kit/tools/measure/measurementChips.jsx";
-import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
 import { sceneCopyText, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
-import ViewportContextMenu from "../kit/shell/ViewportContextMenu.jsx";
-import ZoomPill, { zoomViewControl } from "../kit/shell/ZoomControl.jsx";
-import { VIEWPORT_PILL_POSITION } from "../kit/shell/viewportLayout.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 import { createDrawingScene, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
-import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS, pressToolKey } from "../kit/tools/toolShortcuts.js";
 import { useI18n } from "@cad/ui/i18n";
 
 /**
@@ -67,41 +42,34 @@ import { useI18n } from "@cad/ui/i18n";
  * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
  * board's and a 3D view's): its search, then its Layers tab (`layersSectionShown`), kept open or
- * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome is
- * every view's — the strip at the top centre of the view, the tool's row under it, Quick Edit at the
- * top-right — drawn from the kit's parts around the 2D canvas.
+ * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome and
+ * the hands are every flat view's, a board's and a schematic's (`kit/shell/FlatViewFrame.jsx`,
+ * `kit/shell/useFlatView.js`): this renderer brings its canvas, its picks and its Layers.
  *
  * The picture comes from the BACKEND (`GET /api/v1/documents/dxf/<id>/drawing`), which runs ezdxf over the file and
  * returns flat primitives, each naming its entity. This renderer never parses DXF.
  */
 
 const SAVE_DELAY_MS = 180;
-const DRAWING_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating drawing…" });
-const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
-const MEASURE_ICON = <MeasureIcon className="size-3.5" aria-hidden="true" />;
 const NO_LAYERS = Object.freeze(new Set());
+// The frame's own data attribute, which says what is drawn.
+const DRAWING_SURFACE = Object.freeze({ "data-drawing-surface": "" });
+// What a host may ask of a drawing, and the words for what it cannot (`tools.js`).
+const DXF_LIVE = Object.freeze({ commands: ["clearSelection"], declined: DXF_DECLINED_LIVE_COMMANDS });
 // How near a pick must be, in CSS pixels: a cursor's, or a fingertip's (`TOUCH_HIT_PX`).
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
-const INSET = `${VIEWPORT_INSET_PX}px`;
-// The strip and what hangs under it: one column at the top centre, as every view's (`RendererShell.jsx`).
-const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
-// On a phone with a panel, its pill stands at the left of the strip's line.
-const TOOLBAR_POSITION_PHONE_SIDEBAR = Object.freeze({ ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX + 46 + 8}px` });
 
 function DxfSurface({ view, data }) {
   const { t } = useI18n();
   const host = useViewerHost();
-  const destination = usePromptDestination();
   const mobile = useViewerMobile();
-  const viewerElement = useContext(ViewerElementContext);
   const workspace = useWorkspaceDocument({ view, data });
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
   const drawing = payload.drawing;
   const units = useMemo(() => drawingUnits(drawing?.units), [drawing]);
-  const [actionError, setActionError] = useState(null);
-  const { onReady, onStateChange } = view;
+  const { onStateChange } = view;
   const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
 
   // ---- the view this file was left at ---------------------------------------
@@ -124,19 +92,9 @@ function DxfSurface({ view, data }) {
   }, []);
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
-  // ---- tools ----------------------------------------------------------------
-  // The tool in hand is never saved: a drawing opens in Select.
-  const [toolMode, setToolMode] = useState(DXF_TOOL_MODES.defaultMode);
-  const selectTool = useCallback(mode => setToolMode(current => DXF_TOOL_MODES.next(current, mode)), []);
-  const drawingFamily = toolMode === DXF_TOOL.PENCIL || toolMode === DXF_TOOL.SHAPES ? toolMode : null;
-  const annotating = drawingFamily !== null;
-  const measuring = toolMode === DXF_TOOL.MEASURE;
-  const selecting = toolMode === DXF_TOOL.SELECT;
-  const history = useViewerHistory();
-  const annotation = useAnnotationSession(drawingFamily, CAD_ANNOTATION_DEFAULTS, history);
-  const measure = useMeasureSession({ fileKey: file, revision: workspace.resource.revision, picking: measuring && Boolean(drawing) });
-  // A measurement taken, deleted or cleared is a step of the drawing's one history, with the ink's.
-  measure.history.current = history;
+  // ---- tools: every flat view's (`kit/shell/useFlatView.js`); a drawing opens in Select ----
+  const tools = useFlatTools({ toolModes: DXF_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(drawing) });
+  const { toolMode, annotating, measuring, annotation, measure } = tools;
   const [hiddenLayers, setHiddenLayers] = useState(NO_LAYERS);
   const toggleLayer = useCallback(name => setHiddenLayers(current => {
     const next = new Set(current);
@@ -308,9 +266,6 @@ function DxfSurface({ view, data }) {
     measureModeActive: measuring, runtimeRef: measureRuntimeRef, mountRef: containerRef, preview: false, viewerReadyTick: 0
   });
 
-  // ---- host chrome -----------------------------------------------------------
-  useEffect(() => { onReady?.(true); }, [onReady]);
-
   // With a drawing on screen, a failure to read the file again leaves that drawing to use.
   const shown = Boolean(drawing);
   const alert = useMemo(() => {
@@ -329,35 +284,6 @@ function DxfSurface({ view, data }) {
   // Settled is this revision's drawing painted: a capture waits out an update.
   const ready = shown && !payload.loading && !payload.updating && !alert;
 
-  // ---- snapshot to the prompt ------------------------------------------------
-  const resourceRef = useRef(workspace.resource);
-  resourceRef.current = workspace.resource;
-  const promptAvailable = destination.available;
-  const snapshot = useCallback(() => {
-    setActionError(null);
-    // The host binds its destination during the gesture, BEFORE the PNG exists.
-    const pixels = capture();
-    void pixels.catch(() => {});
-    let pending;
-    try { pending = host.promptContext.deliver(createViewPromptContext({ resource: resourceRef.current, capture: pixels })); }
-    catch (error) { pending = Promise.reject(error); }
-    Promise.resolve(pending)
-      .catch((error) => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }))
-      .then((result) => setActionError(promptDeliveryError(result)));
-  }, [capture, host.promptContext]);
-
-  // A host's own capture request is the same act, acknowledged.
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
-  const captureKey = workspace.commands.captureRequest?.key ?? null;
-  const appliedCapture = useRef(null);
-  useEffect(() => {
-    if (captureKey === null || appliedCapture.current === captureKey || !ready || !promptAvailable) return;
-    appliedCapture.current = captureKey;
-    workspace.acknowledgeCommand?.("captureRequest", captureKey);
-    snapshotRef.current();
-  }, [captureKey, ready, promptAvailable, workspace.acknowledgeCommand]);
-
   // A host asking to select a reference is answered rather than dropped: a person picks.
   const selectKey = workspace.commands.selectReference?.key ?? null;
   const declinedSelect = useRef(null);
@@ -367,89 +293,16 @@ function DxfSurface({ view, data }) {
     workspace.acknowledgeCommand?.("selectReference", selectKey);
   }, [selectKey, workspace.acknowledgeCommand]);
 
-  // ---- Quick Edit ------------------------------------------------------------
-  // A note carries the views with annotation ink as JSON files — a plan-view job
-  // `cad <type> snapshot --annotation PACKET --camera authored` draws, the annotation on the sheet.
-  const promptFile = useCallback(() => (resourceRef.current?.kind === "workspace-file" ? resourceRef.current.path : null), []);
-  const annotationNow = useCallback(() => drawingAnnotationDocument(annotationRef.current.items, unitsRef.current.unit), []);
-  const quickEditPrompt = useMemo(() => ({
-    views: () => (host.promptFiles && promptFile() ? promptViews(currentView(), annotationRef.current.views, annotationRef.current.items) : []),
-    files: views => {
-      const input = promptFile();
-      if (!host.promptFiles || !input || !views.length) return null;
-      return host.promptFiles.create({ name: input.split("/").pop(), input, views, annotation: annotationNow() });
-    },
-    read: path => host.promptFiles.read(path),
-  }), [host.promptFiles, promptFile, currentView, annotationNow]);
   const resourcePath = workspace.resource?.path;
   const nameReference = useCallback(reference => {
     const id = reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
     const part = id ? scene?.describePart(id) : null;
     return part ? { name: part.name, kind: "solid" } : "";
   }, [resourcePath, scene]);
-  const forgetAnnotation = annotation.forget;
-  const quickEditAnnotation = useMemo(() => (annotating || annotation.hasAnnotation
-    ? { present: annotation.hasAnnotation, clear: forgetAnnotation } : null), [annotating, annotation.hasAnnotation, forgetAnnotation]);
-  const clearQuickEdit = () => { selection.clear(); measure.select([]); if (annotation.hasAnnotation) annotation.forget(); };
-  // Annotate's copy: the drawing with its ink, to the clipboard.
-  const copyAction = () => {
-    if (!annotating || !shown) return false;
-    void host.clipboard.writeImage(capture()).catch(error => setActionError(error instanceof Error ? error.message : String(error)));
-    return true;
-  };
-
-  // ---- keys: Escape lets go, Delete deletes what Select picked, ⌘Z walks the history ----
-  const letGo = () => {
-    const session = annotationRef.current, now = measureRef.current;
-    if (session.selected.length) { session.select([]); return true; }
-    if (now.drafting) { now.cancelDraft(); return true; }
-    if (now.selected.length) { now.select([]); return true; }
-    if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
-    return false;
-  };
-  // The strip's tools as last drawn: what a tool's letter takes up.
-  const toolKeysRef = useRef([]);
-  // The strip's zoom as last drawn (Zoom to selection and all): what the zoom's keys reach.
-  const zoomKeysRef = useRef(null);
-  // The panel's ⌘\ and / (`useFlatPanelState`'s control), while there is one.
-  const panelControl = useRef(null);
-  useViewerShortcuts({
-    viewerElement,
-    onCopy: () => copyAction(),
-    onDelete: () => {
-      if (annotating) return false;
-      const session = annotationRef.current;
-      const ink = session.selected.length > 0;
-      if (ink) session.remove(session.selected);
-      return Boolean(measureRef.current.removeSelected()) || ink;
-    },
-    onUndo: () => history.undo(),
-    onRedo: () => history.redo(),
-    onChord: event => {
-      if (event.key !== "\\" || event.shiftKey || !panelControl.current) return false;
-      panelControl.current.toggle();
-      return true;
-    },
-    // / searches the panel, a tool's letter takes it up, F fits the drawing (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
-      : shown && pressToolKey(event, { tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit })),
-    zoom: () => (shown ? zoomKeysRef.current : null),
-    escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
-    onEscape(event) {
-      if (hasOpenPopup(viewerElement?.current)) return;
-      // Annotate's layer spends its own Escape (its editor, the stroke in hand).
-      if (annotating && event.target instanceof Element && event.target.closest("[data-cad-annotation-overlay]")) return;
-      if (letGo()) return;
-      // Nothing to let go of: the tool in hand goes down, back to Select.
-      if (!selecting) selectTool(DXF_TOOL.SELECT);
-    }
-  });
-
-  // ---- the live command surface ----------------------------------------------
+  // ---- Quick Edit, the keys and the live command surface: every flat view's (`useFlatHandover`) ----
   const referencesRef = useRef(references);
   referencesRef.current = references;
-  const runtimeRef = useRef(null);
-  runtimeRef.current = {
+  const runtime = {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
       loading: payload.loading || payload.updating, selection: referencesRef.current, camera: null, display: {},
@@ -462,16 +315,11 @@ function DxfSurface({ view, data }) {
     capture,
     thumbnail
   };
-  // A drawing has settled once it is read and painted: a library card's picture waits for that.
-  const whenSettled = useWhenSettled(() => ready);
-  // The card the viewport shows, and its dismissal: put away, its icon in the navbar brings it back.
-  const cardAlert = alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: t("alert.captureDrawingFailed"), message: actionError } : null);
-  const alertDismissal = useAlertDismissal(cardAlert, { hasContent: shown, scope: file, onNavigationActionsChange: view.onNavigationActionsChange });
-  const binding = data.services.live;
-  useEffect(() => {
-    if (!binding) return undefined;
-    return attachLiveBinding(binding, () => runtimeRef.current, { commands: ["clearSelection"], declined: DXF_DECLINED_LIVE_COMMANDS, ready: whenSettled });
-  }, [binding, whenSettled]);
+  const annotationDocument = useCallback(items => drawingAnnotationDocument(items, unitsRef.current.unit), []);
+  const handover = useFlatHandover({
+    view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
+    capture, currentView, annotationDocument, runtime, live: DXF_LIVE, fit, captureFailed: t("alert.captureDrawingFailed")
+  });
 
   // ---- the menu: a secondary tap on the drawing, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over an entity: its reference (with what is picked already), Select or Deselect, Hide its layer,
@@ -502,152 +350,45 @@ function DxfSurface({ view, data }) {
       zoom);
   } : null;
 
-  // ---- the frame ---------------------------------------------------------------
-  // While the drawing loads, or once it has failed to, none of the viewer's own chrome: the load
-  // itself, or the card saying why. A compact host gets the drawing alone.
+  // ---- the frame: every flat view's (`kit/shell/FlatViewFrame.jsx`) around the drawing's canvas ----
+  // While the drawing loads, or once it has failed to, none of the viewer's own chrome. A compact host
+  // gets the drawing alone.
   const failed = Boolean(alert) && !shown;
   const compact = Boolean(view.appearance?.compact);
   const chromeHidden = payload.loading || failed;
-  const toolsHidden = chromeHidden || compact;
-  const layered = layersSectionShown(drawing);
-  const besideSidebarTile = mobile && layered;
-  const toolStack = useMemo(() => normalizeToolStack(workspace.services.preferences?.toolStack), [workspace.services.preferences?.toolStack]);
-  const toolStackRef = useRef(toolStack);
-  toolStackRef.current = toolStack;
-  const onPreferenceChange = workspace.services.onPreferenceChange;
-  const changeToolStack = useCallback(patch => {
-    const next = normalizeToolStack({ ...toolStackRef.current, ...(typeof patch === "function" ? patch(toolStackRef.current) : patch) });
-    toolStackRef.current = next;
-    onPreferenceChange?.({ toolStack: next });
-  }, [onPreferenceChange]);
-  const stripTool = (id, label, icon, extra = {}) => ({ id, label, icon, active: toolMode === id, disabled: !shown, onSelect: () => selectTool(id), ...extra });
-  const tools = [
-    stripTool(DXF_TOOL.SELECT, t("tool.select"), SELECT_ICON, { shortcut: TOOL_SHORTCUTS.select }),
-    // Pencil and Shapes: plain buttons, each the tool last chosen in it, its tooltip that tool and its key; the tools are the row's.
-    ...DRAWING_TOOLS.map(({ id }) => {
-      const variant = drawingToolVariant(id, annotation);
-      const Icon = annotationToolIcon(variant);
-      return stripTool(id, drawingToolLabel(id, t), <Icon className="size-3" strokeWidth={2} aria-hidden="true" />,
-        { tooltip: drawingToolLabel(variant, t), shortcut: DRAWING_SHORTCUTS[variant] });
-    }),
-    stripTool(DXF_TOOL.MEASURE, t("tool.measure"), MEASURE_ICON, { shortcut: TOOL_SHORTCUTS.measure })
-  ];
-  toolKeysRef.current = tools;
-  // The strip's zoom, and the zoom's keys.
+  const { strip, row } = flatViewTools(tools, { colorScheme, shown, t });
+  // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`).
   const zoom = { ...drawingView.zoom, zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
-  zoomKeysRef.current = zoom;
-  // The drawing tools' row under the strip, and Measure's (its measurements, while there are any); Select has none.
-  const toolRow = annotating
-    ? <AnnotationToolbar annotation={annotation} colorScheme={colorScheme} placements={false} />
-    : measuring ? <MeasurementsBar measure={measure} /> : null;
-  const updateStatus = payload.updating && !alert ? <div className="pointer-events-none flex max-w-full items-center" data-viewport-status="">
-    <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-  </div> : null;
-
-  // ---- the view's panel: docked, or on a phone the whole view; open at first in a wide view ----
-  const frameRef = useRef(null);
-  const flat = useFlatPanelState({ frameRef, mobile, enabled: layered && !toolsHidden, kind: "drawing", toolStack, onToolStackChange: changeToolStack });
-  panelControl.current = layered && !toolsHidden ? flat.control : null;
-  const panelTabs = useMemo(() => (layered ? [{
+  handover.zoomKeys.current = zoom;
+  // The panel: the drawing's Layers, where it has layers and blocks to read (`layersSectionShown`).
+  const panel = layersSectionShown(drawing) ? { kind: "drawing", label: t("drawing.panel"), searchLabel: t("drawing.search"), tabs: [{
     id: "layers", label: t("layers.title"),
     content: <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
-  }] : []), [layered, drawing, hiddenLayers, toggleLayer, selection, t]);
-  const panelNode = layered && !toolsHidden ? <FlatPanel mode={flat.mode} open={flat.open} onClose={() => flat.setOpen(false)} label={t("drawing.panel")}
-    searchLabel={t("drawing.search")} tabs={panelTabs} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
-
-  // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).
-  const stageRef = useRef(null);
-  useStageReach(stageRef, frameRef);
-  // The strip's column is measured into the canvas's variables, as every view's is: the top-right
-  // corner (Quick Edit) starts past its right.
-  const topControls = useRef(null);
-  useLayoutEffect(() => {
-    const controls = topControls.current, viewport = stageRef.current, frame = frameRef.current;
-    if (!controls || !viewport || !frame) return undefined;
-    const measureColumn = () => {
-      const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
-      const top = controls.getBoundingClientRect().top;
-      // On the frame, where the drawing's fit reads it (`useDrawingView.js`).
-      frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
-      if (mobile || !rows.length) {
-        viewport.style.removeProperty("--cad-top-right-left");
-        return;
-      }
-      const box = viewport.getBoundingClientRect();
-      const right = Math.max(...rows.map(row => row.right)) - box.left;
-      viewport.style.setProperty("--cad-top-right-left", `${Math.round(right + VIEWPORT_INSET_PX)}px`);
-    };
-    measureColumn();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const resized = new ResizeObserver(measureColumn);
-    resized.observe(controls);
-    resized.observe(viewport);
-    return () => {
-      resized.disconnect();
-      frame.style.removeProperty("--cad-tools-bottom");
-      viewport.style.removeProperty("--cad-top-right-left");
-    };
-  }, [toolsHidden, mobile, layered, flat.open, flat.mode]);
+  }] } : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps its crosshair (Annotate's layer has its own).
   const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
-    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground"
-      data-slot="cad-file-view" data-drawing-surface data-cad-canvas="" tabIndex={-1}
-      onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
-      {flat.mode === "docked" ? panelNode : null}
-      <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">
-        <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={payload.loading || payload.updating ? "true" : "false"}>
-          <canvas ref={canvasRef} aria-label={t("drawing.canvas", { name: view.file.name })} role="img" data-drawing-tool={toolMode}
-            className={cn("absolute inset-0 block touch-none select-none", cursor)} />
-          {/* Measure's layer, over the drawing and under the tools: the pointer stays the drawing's. */}
-          <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
-          {annotating && shown ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
-          {empty ? (
-            <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground"
-              data-drawing-empty>
-              {t("drawing.empty")}
-            </p>
-          ) : null}
-        </div>
-        <PreviewChrome active={false}>
-          {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
-            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
-            <StripTouchProvider value={mobile}>
-              <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-                <FloatingToolBar tools={tools} touch={mobile} views={shown && mobile ? [zoomViewControl(zoom, { t })] : []} />
-                {toolRow}
-                {updateStatus}
-              </div>
-            </StripTouchProvider>
-          </div>}
-          {/* The top-right: the host's notice once the drawing is on screen, and Quick Edit under it —
-              hidden, not unmounted, while the drawing loads: a note being written outlives a reload. */}
-          <ViewportTopRight notice={chromeHidden ? null : view.notice}>
-            {compact ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile}
-              resource={workspace.resource} references={references} chips={chips} nameReference={nameReference} annotation={quickEditAnnotation}
-              prompt={quickEditPrompt} onCopy={copyAction} onEscape={letGo} onClear={clearQuickEdit} disabled={!shown} />}
-          </ViewportTopRight>
-        </PreviewChrome>
-        {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
-        {layered && !toolsHidden && !flat.open ? <FlatPanelPill touch={mobile} onOpen={() => flat.setOpen(true)} /> : null}
-        {/* Where there is no strip (a compact host), the drawing catching up says so at the top centre. */}
-        {toolsHidden && payload.updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
-          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
-          <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-        </div> : null}
-        {/* The view's corner: its zoom pill (`ViewCorner.jsx`); a phone's zoom is More's. */}
-        {toolsHidden || mobile || !shown ? null : <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />}
-        {chromeHidden || !contextMenuItems ? null : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
-        <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
-          operationKey={file} />
-        <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />
-      </div>
-      {flat.mode === "page" ? panelNode : null}
-    </div>
+    <FlatViewFrame surface={DRAWING_SURFACE} containerRef={containerRef} busy={payload.loading || payload.updating}
+      file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={payload.loading} loadingLabel={t("drawing.reading")}
+      updating={payload.updating} updateStatus={{ pending: true, label: t("drawing.updating") }} tools={strip} toolRow={row} views={[]}
+      panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      quickEdit={handover.quickEdit} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
+      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} zoom={zoom}>
+      <canvas ref={canvasRef} aria-label={t("drawing.canvas", { name: view.file.name })} role="img" data-drawing-tool={toolMode}
+        className={cn("absolute inset-0 block touch-none select-none", cursor)} />
+      {/* Measure's layer, over the drawing and under the tools: the pointer stays the drawing's. */}
+      <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
+      {annotating && shown ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
+      {empty ? (
+        <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground"
+          data-drawing-empty>
+          {t("drawing.empty")}
+        </p>
+      ) : null}
+    </FlatViewFrame>
   );
 }
 

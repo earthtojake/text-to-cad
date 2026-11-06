@@ -713,6 +713,8 @@ export default {
   "drawing.empty": "この図面のモデル空間にはジオメトリがないため、表示するものがありません。",
   "drawing.panel": "図面パネル",
   "drawing.search": "図面を検索",
+  "drawing.reading": "図面を読み込み中",
+  "drawing.updating": "図面を更新中…",
 
   "tree.collapse": "{name}を折りたたむ",
   "tree.expand": "{name}を展開",
