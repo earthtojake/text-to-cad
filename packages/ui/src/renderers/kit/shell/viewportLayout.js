@@ -23,7 +23,7 @@ export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CU
 // its top vertex this far down from the box's top (the box is wider and taller for its axis labels).
 export const VIEWPORT_CUBE_FACE_RIGHT_PX = 20;
 export const VIEWPORT_CUBE_FACE_TOP_PX = 19;
-// The gap between the view corner's round buttons. The lowest stands on the top of the cube's box, not
+// The gap between the view corner's controls. The lowest stands on the top of the cube's box, not
 // on the cube: the cube turns with the camera and may reach almost to its box's top, so only the box
 // keeps the gap under the column clear at every angle.
 export const VIEWPORT_CORNER_GAP_PX = 6;
@@ -36,12 +36,20 @@ export const VIEWPORT_CUBE_COLUMN_POSITION = Object.freeze({
 export const VIEWPORT_PILL_POSITION = Object.freeze({
   right: `${VIEWPORT_INSET_PX}px`, bottom: `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-bottom, 0px))`
 });
-// The 28px pill (`ZoomControl.jsx`'s), 104px wide, and the column over it.
-export const VIEWPORT_PILL_PX = 28;
-export const VIEWPORT_PILL_WIDTH_PX = 104;
+// The corner's controls (`ViewCorner.jsx`): the strip's 24px tiles 4px inside their box and 4px apart
+// (`tools/stripTouch.js`), so a one-button toolbar is 32px square, without the strip's border.
+export const VIEWPORT_CORNER_TILE_PX = 24;
+export const VIEWPORT_CORNER_PAD_PX = 4;
+export const VIEWPORT_CORNER_CONTROL_PX = VIEWPORT_CORNER_TILE_PX + 2 * VIEWPORT_CORNER_PAD_PX;
+// The pill (`ZoomControl.jsx`'s): −, the 48px percentage and +, 32px tall and 112px wide, and the column over it.
+const PILL_PERCENT_PX = 48;
+export const VIEWPORT_PILL_PX = VIEWPORT_CORNER_CONTROL_PX;
+// Its two tiles and the percentage, the box's 4px either end and the 4px either side of the percentage.
+export const VIEWPORT_PILL_WIDTH_PX = 2 * VIEWPORT_CORNER_TILE_PX + PILL_PERCENT_PX + 4 * VIEWPORT_CORNER_PAD_PX;
 // The corner's bottom row (`ViewCorner.jsx`'s `ViewCornerRow`): left of the pill, a gap from it, on its
-// line. The cube's box ends 90px from the right edge (96px wide, overhanging it by 6), so the row clears
-// it by 28px and stands where it stands whether the pill or the cube is in the corner.
+// line, its right 126px from the right edge. The cube's box ends 90px from the right edge (96px wide,
+// overhanging it by 6), so the row clears it by 36px and stands where it stands whether the pill or the
+// cube is in the corner; its controls are the pill's height, so their bottoms are the pill's.
 export const VIEWPORT_CORNER_ROW_POSITION = Object.freeze({
   right: `${VIEWPORT_INSET_PX + VIEWPORT_PILL_WIDTH_PX + VIEWPORT_CORNER_GAP_PX}px`,
   bottom: `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-bottom, 0px))`

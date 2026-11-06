@@ -136,8 +136,8 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
   expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {} }]);
 });
 
-it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's", () => {
-  const { preferences, remount } = frame();
+it("the panel's tabs are there whatever the tool, a tool's own section coming and going with it; a tab shows its section alone, its content kept; the tab, the width and a collapse are the person's, and never the tab's settings", () => {
+  const { preferences } = frame();
   fireEvent.click(tool('Pencil'));
   expect(tabNames()).toEqual(['Harness tree', 'Reference']);
   fireEvent.click(tool('Pose'));
@@ -148,21 +148,19 @@ it("the panel's tabs are there whatever the tool, a tool's own section coming an
   expect(panel('Harness position')!.querySelector('[aria-expanded]')).toBeNull();
   fireEvent.click(tab('Reference'));
   expect(sections()).toEqual(['Harness reference']);
-  expect(layout(preferences).tabs).toEqual({ model: 'reference' });
   // Its width, from the grip on its right edge: 16px a key, Home and End to its bounds.
   const grip = screen.getByRole('separator', { name: 'Resize panel' });
   fireEvent.keyDown(grip, { key: 'End' });
-  expect(layout(preferences).panels.flat).toEqual({ width: Number(grip.getAttribute('aria-valuemax')) });
+  expect(flatPanel().style.width).toBe(`${grip.getAttribute('aria-valuemax')}px`);
   fireEvent.keyDown(grip, { key: 'Home' });
-  expect(layout(preferences).panels.flat).toEqual({ width: 200 });
-  // Collapsed, it goes whole, its pill at the canvas's top-left; kept, as the tab is, through a remount.
+  expect(flatPanel().style.width).toBe('200px');
+  // Collapsed, it goes whole, its pill at the canvas's top-left; shown again, on the tab it showed.
   fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }));
-  expect([flatPanel().hidden, layout(preferences).collapsed]).toEqual([true, { flat: true }]);
-  remount();
   expect(flatPanel().hidden).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Show panel' }));
-  // The tool is never kept: the file opens in Select, Pose's section and its tab gone with it.
-  expect([flatPanel().hidden, shownTab(), tabNames()]).toEqual([false, 'Reference', ['Harness tree', 'Reference']]);
+  expect([flatPanel().hidden, shownTab()]).toEqual([false, 'Reference']);
+  // All of it is the file's (`filePanel.js`, kept in the file's view by the file viewer), none the tab's.
+  expect([preferences.writes, layout(preferences)]).toEqual([0, { panels: {}, collapsed: {} }]);
 });
 
 it("on a phone the panel's pill is one tile at the top-left, on the strip's line, the strip kept clear of it; it opens the panel as the whole view, Back before its search", () => {

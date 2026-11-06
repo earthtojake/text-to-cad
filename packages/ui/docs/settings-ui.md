@@ -270,30 +270,34 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `ProjectionToggle.jsx`), then **Home** nearest the cube (a house: the view it opened with — the
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
-  view controls on the corner's **bottom row**, left of the pill (below). The corner's design
-  language is its own, for navigation only, never a tool: **round** — 28px discs with 14px icons on one
-  surface (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`): the canvas at 85% under a 4px blur, a wash
-  of the foreground over it (9%, 16% under the pointer, while a menu is open and while a state is on),
-  no border and no shadow. Over an empty canvas it is the canvas and the wash; over the picture or the
-  model its glyphs keep their contrast and what passes under it is a faint hint. 6px apart, tooltips
-  and menus to the left; the pill is the
-  same disc drawn out into a capsule, the same height and fill, − and + discs either end of the
-  percentage, and a board's switches the same capsule beside it, their halves side by side, the
-  chosen one raised on the stronger fill. A state shows on the control itself (Projection's icon, a
-  board's side). The strip's
-  square tiles on the floating surface stay the tools'. A phone has no corner: its view's controls are
+  view controls on the corner's **bottom row**, left of the pill (below). The corner is for navigation
+  only, never a tool, but it is drawn in the **strip's language**: every control is the tool strip's
+  (`FloatingToolBar.js`) without its border and its shadow, the same in light and dark. Its surface is
+  the strip's fill (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`, `floatingSurface.js`'s
+  `FLOATING_CHROME_FILL_CLASS`: the popover's colour at 90% under a small blur), in the strip's shape
+  (`VIEW_CORNER_TOOLBAR_CLASS`: 4px in, 4px between its tiles, rounded-md), and in it the strip's own
+  buttons (`VIEW_CORNER_BUTTON_CLASS`: 24px tiles, 14px icons, the strip's hover, pressed, open and on
+  fills, its tooltips). A single button is a one-button toolbar, 32px square (`ViewCornerTile`); the
+  zoom pill a small toolbar of three, − and + either side of the 48px percentage (112px); a board's
+  switches small toolbars whose segments are strip buttons, the chosen one on (the strip's pressed
+  fill). Over an empty canvas they stand a step off it as the strip does; over the picture or the
+  model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 6px apart, tooltips
+  and menus to the left. A state shows on the control itself (Projection's icon, a board's side). A
+  phone has no corner: its view's controls are
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
   back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
 - **The corner's bottom row** (`ViewCorner.jsx`'s `ViewCornerRow`, `VIEWPORT_CORNER_ROW_POSITION`): a
   view's own controls for how it is looked at, side by side on the pill's line, right-aligned 6px left of
-  the pill (118px from the right edge), each of a fixed width, lifted by `--cad-viewport-corner-bottom`
-  as the pill is. The cube's box ends 90px from the right edge, so the row clears it by 28px: when a flat
-  view shows its picture in 3D and the pill becomes the cube, not one of the row's controls moves. A
-  board's row is `[Display] [2D | 3D] [Front | Back]`: Display the round button (28px), its menu opening
-  up and away from the corner; the two switches capsules on the corner's surface
-  (`ViewCornerSwitch`, `VIEW_CORNER_SURFACE_CLASS`, the one surface the corner's discs, pill and
-  switches share), 72px and 104px wide. A host that anchors the cube at the bottom-left
+  the pill (126px from the right edge), each of a fixed width and the pill's 32px height, so their
+  bottoms are its, lifted by `--cad-viewport-corner-bottom` as the pill is. The cube's box ends 90px
+  from the right edge, so the row clears it by 36px: when a flat view shows its picture in 3D and the
+  pill becomes the cube, not one of the row's controls moves. A 3D view's column stands flush with the
+  cube's right face (14px from the right edge) on its box's top, its 32px tiles 6px apart. A board's
+  row is `[Display] [2D | 3D] [Front | Back]`: Display a one-button toolbar (32px), its menu opening up
+  and away from the corner; the two switches small toolbars on the corner's surface
+  (`ViewCornerSwitch`, `VIEW_CORNER_SURFACE_CLASS`, the one surface every corner control shares), 72px
+  and 104px wide. A host that anchors the cube at the bottom-left
   (`--cad-viewport-corner-left`) moves neither the pill nor the row today.
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
   Quick Edit's peek) as in Preview, one transparent row on no surface, the same row in both;
@@ -605,8 +609,8 @@ file.
   list is labelled by the tab's name for assistive technology.
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
   weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
-  sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
-  file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
+  sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, the file's
+  (its view's `panel.tab`, below), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
   field, the collapse button, a tab's button, a row's background, a full-width control (Position's
   pose dropdown, the Model's status lines) — stands 8px from each edge. What is read in them stands
@@ -653,8 +657,8 @@ file.
   `boardSelected`, `schematicTree.js`'s `schematicSelected`), as a CAD tool's Properties panel: under the
   lists, whatever tab is open, at a height of its own whatever it shows (320px at first, or half the
   panel where that is less: room for a pick's facts and half a dozen of what it is connected to, whatever
-  the window's height; its top edge is the grip that sizes it, kept across files as
-  `toolStack.panels.flatDetail`, never under 96px, the lists keeping 160px over it), scrolling on its
+  the window's height; its top edge is the grip that sizes it, kept with the file's view
+  (`panel.detailHeight`), never under 96px, the lists keeping 160px over it), scrolling on its
   own. First **what it is** — its
   glyph and name (`C17.1`, `VBUS · track`), a line in words for a pad or a pin ("Pad of C17 · 100nF"),
   and its facts (its net, layer, width, drill, value, footprint, position: a Quick Edit chip card's) —
@@ -682,7 +686,7 @@ file.
   and the blocks whose names do under their layer.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
   often, so on the corner's bottom row, left of the zoom pill or the cube, the same in 2D and 3D:
-  **Display**, the round corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
+  **Display**, the corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
   menu the presets as one radio group — Board, Copper, Assembly, Placement — the one on screen ticked,
   and Custom, ticked and not a choice, while the Layers tab's eyes have left the preset's set);
   **2D | 3D** (below, [A board in 3D](#a-board-in-3d)); and the **side** (KiCad's View ▸ Flip Board View):
@@ -708,16 +712,21 @@ file.
   PanelLeftOpen) alone on a pill at the canvas's top-left, 8px in, on the strip's surface. No rail, no
   hover reveal, and a pick on the picture never opens it.
   ⌘\ (Ctrl+\) shows and hides it, and / opens it with the keyboard in its search, while the view has
-  the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
-  width (`toolStack.panels.flat`: 216px at first, 200px to half the view, from a grip on its right
-  edge, Left/Right by 16px).
+  the keyboard. Docked, open or collapsed is the person's, and so is its width (216px at first, 200px
+  to half the view, from a grip on its right edge, Left/Right by 16px). **All of the panel's state is
+  the file's**, as its camera and its layers are: open or collapsed, the width, the tab and the Selected
+  pane's height are kept in the file's view (`panel`, `kit/shell/filePanel.js`), written by the panel's
+  own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the
+  file's record by the file viewer whatever the renderer writes. A reload brings each file's back;
+  another file starts at its own, or at the defaults.
 - **Open, it is always docked**: the canvas is the narrower for it, at any width; it never covers
   the picture. Showing or hiding it is a resize of the canvas, as a 3D viewport's: a view still at
   its fit refits to the room it has now, and a view the person has moved keeps its zoom against
   the fit and the point of the picture at its centre at the centre of the room left
   (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). Zoom to fit and 100%
-  measure the room beside the panel. Under 1024px of
-  view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**
+  measure the room beside the panel. A file whose panel the person has not opened or closed opens
+  it in a view 1024px wide or more and starts it collapsed under that; once they have, the choice is
+  the file's at any width. Opened, it docks as it does on a wide view. **On a phone**
   (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
   whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
   Quick Edit's sheet keeps the bottom. There its text is one size (13px, the Display menu's), its

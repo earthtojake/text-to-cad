@@ -30,17 +30,16 @@ import { VIEWPORT_CUBE_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewpor
  * the top-right, the loading cover and the alert card, laid out as every view's
  * (`RendererShell.jsx`'s), from the kit's parts. The renderer brings the picture (its canvases and
  * layers, `children`, in the pane the canvas view measures: `containerRef`), its tools
- * (`flatViewTools`), its view controls (`views`: the view's corner's round buttons over its zoom pill,
+ * (`flatViewTools`), its view controls (`views`: the view's corner's buttons beside its zoom pill,
  * `ViewCorner.jsx`; on a phone, rows of the strip's More with the zoom), its panel's tabs (`panel`)
  * and Quick Edit's props (`useFlatHandover`'s `quickEdit`).
  *
  * The panel is docked, the canvas always the narrower for it while it is open, at any width: the
  * picture is drawn in what the panel leaves, never under it, and opening or shutting the panel is
  * a resize of the canvas (`useFlatCanvasView.js`); the strip alone stays at the view's centre, over
- * the panel where they meet. In a view 1024px wide
- * or more it is open until the person collapses it (kept: `toolStack.collapsed.flat`, its width
- * `toolStack.panels.flat`, its tab by the kind of file `toolStack.tabs`); narrower, it starts
- * collapsed. Collapsed, its expand button stands on a pill at the canvas's top-left. On a phone it
+ * the panel where they meet. A file's panel opens in a view 1024px wide or more and starts
+ * collapsed in a narrower one, until the person opens or closes it; that, its width and its tab
+ * are the file's (`useFlatPanelState`, `filePanel.js`). Collapsed, its expand button stands on a pill at the canvas's top-left. On a phone it
  * opens as the whole view.
  * ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search (`useFlatHandover`'s `panelControl`).
  *
@@ -104,7 +103,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
  *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands,
  *   and the zoom's keys either way.
- *   A view control's `corner` is its control on the corner's bottom row, left of the pill (a round button, a switch).
+ *   A view control's `corner` is its control on the corner's bottom row, left of the pill (a button, a switch).
  *   `corner`: "pill", or "cube" while the picture is shown in 3D: the view the frame holds draws the cube
  *   (`ShellViewport.jsx`'s), and the frame puts every 3D view's column over it (`ViewCorner.jsx`'s `ViewCubeColumn`:
  *   Projection, `cube.projection`, and Home, `cube.onHome`). Nothing else of the frame changes.

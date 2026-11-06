@@ -1,15 +1,17 @@
 // The tool stack's layout, a viewing preference of the person's rather than of a file: the tab
-// keeps it (`settings.toolStack` of the tab record) and it holds across files. Three things, and
-// nothing else (any other key a stored record carries is dropped):
+// keeps it (`settings.toolStack` of the tab record) and it holds across files. Two things (any
+// other key a stored record carries is dropped):
 //
 //   panels     for each panel a person can size (`ToolPanel.jsx`'s `resizable`), the width and
-//              the height cap they dragged it to, by panel id, and the view's panel's width (`flat`:
-//              `FlatPanel.jsx`) — only what they set; a panel opens at its defaults otherwise
-//              (`TOOL_PANEL_WIDTH`, and `toolPanelDefaultHeight`: the stack's height);
-//   collapsed  which panels are folded to their first row, by id (the view's panel, `flat`,
-//              collapsed: `useFlatPanelState`);
-//   tabs       the tab a flat view's panel shows, by the kind of file (`board`: `layers`); absent
-//              until one is chosen.
+//              the height cap they dragged it to, by panel id — only what they set; a panel opens
+//              at its defaults otherwise (`TOOL_PANEL_WIDTH`, and `toolPanelDefaultHeight`: the
+//              stack's height);
+//   collapsed  which panels are folded to their first row, by id.
+//
+// The view's panel (`kit/shell/FlatPanel.jsx`) is the file's, not the tab's (`kit/shell/filePanel.js`).
+// It was once kept here, for every file alike — `panels.flat`, `panels.flatDetail`, `collapsed.flat`
+// and `tabs` (its tab by the kind of file) — and a record that still carries those keeps them, read
+// as they always were, until the panel adopts them for a file and drops them; nothing writes them now.
 //
 // Importing this module has no environmental effects.
 
@@ -51,7 +53,7 @@ const flags = value => {
  * The layout the stack is drawn with, from anything a store handed back: the sizes of the panels a
  * person has set (`{ width?, height? }` by id, each bounded; a panel with neither is absent),
  * and the panels whose folded state differs from nothing at all (`true` folded, `false` unfolded
- * against a panel that starts folded), and the tab each kind of flat view's panel shows.
+ * against a panel that starts folded), and the old shared form's tab of the view's panel by the kind of file.
  * @returns {{ panels: Record<string, { width?: number, height?: number }>, collapsed: Record<string, boolean>, tabs?: Record<string, string> }}
  */
 export function normalizeToolStack(value) {
@@ -61,8 +63,8 @@ export function normalizeToolStack(value) {
     const width = bounded(size.width, TOOL_PANEL_WIDTH), height = bounded(size.height, TOOL_PANEL_MIN_HEIGHT);
     if (width !== undefined || height !== undefined) panels[id] = { ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}) };
   }
+  // The old shared form's tabs, read until the view's panel drops them (`filePanel.js`): no tab, no key.
   const tabs = words(value?.tabs);
-  // No tab chosen is no key: a stack without a flat view's panel reads as it always has.
   return { panels, collapsed: flags(value?.collapsed), ...(Object.keys(tabs).length ? { tabs } : {}) };
 }
 

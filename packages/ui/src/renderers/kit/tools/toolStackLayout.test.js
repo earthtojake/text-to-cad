@@ -18,13 +18,13 @@ test("the layout is the sizes a person set, by panel, and the folded panels — 
   assert.deepEqual(normalizeToolStack({ panels: { tree: { width: 99999 } } }).panels.tree, { width: 4000 }, "a stored size is bounded; the viewer bounds what is drawn");
 });
 
-test("a flat view's panel keeps the tab it shows, by the kind of file: a word for a word, nothing else", () => {
+test("the old shared form of the view's panel's tab, by the kind of file, reads as it was written until the panel drops it: a word for a word, nothing else", () => {
   assert.deepEqual(normalizeToolStack({ tabs: { board: "layers", schematic: "sheets", "Not an id": "layers", dxf: 3, sdf: "Layers!" } }).tabs,
     { board: "layers", schematic: "sheets" });
   assert.equal("tabs" in normalizeToolStack({ tabs: {} }), false, "no tab chosen is no key");
 });
 
-test("the view's panel's width is kept as a panel's; the old floating sidebar's sizes are nobody's", () => {
+test("the view's panel's old shared width reads as a panel's until the panel drops it; the old floating sidebar's sizes are nobody's", () => {
   assert.deepEqual(normalizeToolStack({ panels: { flat: { width: 260 }, "sidebar:tree": { width: 200, height: 300 }, "sidebar:position": { width: 240 } } }).panels,
     { flat: { width: 260 } });
 });

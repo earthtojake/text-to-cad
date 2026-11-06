@@ -11,7 +11,7 @@ import {
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
-import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSwitch } from "../kit/shell/ViewCorner.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSwitch, ViewCornerTile } from "../kit/shell/ViewCorner.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 
 /**
@@ -120,7 +120,7 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
  * switched often enough to keep there: on the corner's bottom row, left of the zoom pill or the cube
  * (`kit/shell/ViewCorner.jsx`), the same row in 2D and in 3D, and on a phone rows of the strip's More —
  *
- * - **Display**, the round corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
+ * - **Display**, the corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
  *   on a phone More's submenu);
  * - **2D | 3D**, the board drawn flat or as a board in 3D (on a phone More's ticked row, 3D view; the key 3);
  * - **Front | Back**, the side it is seen from (KiCad's F and B layers; KiCad's View ▸ Flip Board View):
@@ -141,8 +141,8 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
   const presets = boardPresetMode({ display, sheet, onChange, t });
   return [
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null, submenu: () => <DisplayMenuItems mode={presets} />,
-      corner: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
-        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="end" /> },
+      corner: <ViewCornerTile><DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
+        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="end" /></ViewCornerTile> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: dimension === "3d", tile: null,
       onSelect: () => onDimensionChange(dimension === "3d" ? "2d" : "3d"),

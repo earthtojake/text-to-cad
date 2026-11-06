@@ -11,6 +11,7 @@ import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
 import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FLAT_DETAIL_MIN_HEIGHT, flatDetailHeight } from "../tools/toolStackLayout.js";
+import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "./filePanel.js";
 import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 /**
@@ -40,18 +41,20 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * name, in their order, `ToolPanel.jsx`'s tabbed form). `useFlatPanelState` is what a view keeps of it.
  */
 
-// Narrower than this, the panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
+// Narrower than this, a file's panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
 export const FLAT_PANEL_OPEN_PX = 1024;
-const FLAT_PANEL_ID = "flat";
-// The detail's height, the person's (a grip on its top edge, kept: `toolStack.panels.flatDetail`): at
-// first 320px, or half the panel where that is less, never under four rows, and the lists keep 160px over it.
-const DETAIL_ID = "flatDetail";
 
 /**
- * A view's panel's state, the same in every view that has one: docked (a phone: the whole view), open
- * at first in a view 1024px wide or more and the person's from there (kept: `toolStack.collapsed.flat`,
- * its width `toolStack.panels.flat`, its tab by `kind` in `toolStack.tabs`), starting collapsed in a
- * narrower one; and `control`, what ⌘\ and / reach (`toggle()`, `search()`).
+ * A view's panel's state, the same in every view that has one, and the file's (`filePanel.js`): kept
+ * in the file's view as its camera is, so a reload brings it back for that file and another file
+ * starts at its own. Docked (a phone: the whole view); open as a file first opens in a view 1024px wide
+ * or more and collapsed in a narrower one, until the person opens or closes it — that choice is then
+ * the file's, at any width; its width (216px at first), its tab (the first at first) and the Selected
+ * pane's height (`flatDetailHeight`'s) the person's too. On a phone it starts collapsed each time and
+ * keeps nothing. `control` is what ⌘\ and / reach (`toggle()`, `search()`).
+ *
+ * A file with no panel of its own starts from the tab's old shared one, where the tab still carries it
+ * (`legacyFilePanel`), which is then dropped from the tab's settings and never written there again.
  * @param {{ frameRef: { current: HTMLElement | null }, mobile: boolean, enabled: boolean, kind: string,
  *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void }} options
  */
@@ -68,34 +71,46 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
     return () => observer.disconnect();
   }, [frameRef]);
   const mode = mobile ? "page" : "docked";
-  // In a wide view it is the person's, kept; narrower, and on a phone, it starts collapsed each time.
-  const kept = mode === "docked" && !(frameWidth && frameWidth < FLAT_PANEL_OPEN_PX);
-  const [sessionOpen, setSessionOpen] = useState(false);
-  useEffect(() => { setSessionOpen(false); }, [kept, mode]);
-  // The layout as the person last changed it here, the host's store's once it answers (a host
-  // without one keeps it for as long as the view is open).
-  const [layout, setLayout] = useState(toolStack);
-  useEffect(() => { setLayout(toolStack); }, [toolStack]);
-  const changeStack = useCallback(patch => {
-    setLayout(current => ({ ...current, ...patch(current) }));
-    onToolStackChange(patch);
-  }, [onToolStackChange]);
-  const open = enabled && (kept ? layout?.collapsed?.[FLAT_PANEL_ID] !== true : sessionOpen);
+  // A phone's panel is the view's own while it is open, and kept nowhere.
+  const [pageOpen, setPageOpen] = useState(false);
+  useEffect(() => { setPageOpen(false); }, [mode]);
+  // The file's panel as it opened (the file viewer's: `FilePanelContext`), or the tab's old shared one.
+  const file = useContext(FilePanelContext);
+  const fileRef = useRef(file);
+  fileRef.current = file;
+  const [initial] = useState(() => {
+    const own = readFilePanel(file?.panel);
+    return Object.keys(own).length ? { panel: own, tabs: null, adopted: false } : { ...legacyFilePanel(toolStack), adopted: true };
+  });
+  const [panel, setPanel] = useState(initial.panel);
+  const panelRef = useRef(panel);
+  const change = useCallback(patch => {
+    const next = { ...panelRef.current, ...patch };
+    panelRef.current = next;
+    setPanel(next);
+    fileRef.current?.change(next);
+  }, []);
+  useEffect(() => {
+    // A starting value taken from the old shared form is the file's from now on; the shared form goes.
+    if (initial.adopted && Object.keys(initial.panel).length) fileRef.current?.change(initial.panel);
+    if (hasLegacyFilePanel(toolStack)) onToolStackChange(withoutLegacyFilePanel);
+  }, []);
+  // Its tab, once the view names its kind (a view reads its file before it has a panel to name).
+  const legacyTab = initial.adopted ? legacyFilePanelTab(initial.tabs, kind) : undefined;
+  useEffect(() => { if (legacyTab && panelRef.current.tab === undefined) change({ tab: legacyTab }); }, [legacyTab, change]);
+  const wide = !(frameWidth && frameWidth < FLAT_PANEL_OPEN_PX);
+  const open = enabled && (mode === "page" ? pageOpen : (panel.open ?? wide));
   const setOpen = useCallback(next => {
-    if (!kept) { setSessionOpen(next); return; }
-    changeStack(current => {
-      const collapsed = { ...current?.collapsed };
-      if (next) delete collapsed[FLAT_PANEL_ID]; else collapsed[FLAT_PANEL_ID] = true;
-      return { collapsed };
-    });
-  }, [kept, changeStack]);
-  const tab = layout?.tabs?.[kind];
-  const changeTab = useCallback(id => changeStack(current => ({ tabs: { ...current?.tabs, [kind]: id } })), [changeStack, kind]);
+    if (mode === "page") { setPageOpen(next); return; }
+    change({ open: Boolean(next) });
+  }, [mode, change]);
+  const tab = panel.tab;
+  const changeTab = useCallback(id => change({ tab: id }), [change]);
   const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2));
-  const width = layout?.panels?.[FLAT_PANEL_ID]?.width ?? FLAT_PANEL_DEFAULT_WIDTH;
-  const changeWidth = useCallback(next => changeStack(current => ({ panels: { ...current?.panels, [FLAT_PANEL_ID]: { width: next } } })), [changeStack]);
-  const detailHeight = layout?.panels?.[DETAIL_ID]?.height ?? null;
-  const changeDetailHeight = useCallback(next => changeStack(current => ({ panels: { ...current?.panels, [DETAIL_ID]: { height: next } } })), [changeStack]);
+  const width = panel.width ?? FLAT_PANEL_DEFAULT_WIDTH;
+  const changeWidth = useCallback(next => change({ width: next }), [change]);
+  const detailHeight = panel.detailHeight ?? null;
+  const changeDetailHeight = useCallback(next => change({ detailHeight: next }), [change]);
   const [focusSearch, setFocusSearch] = useState(0);
   const openRef = useRef(open);
   openRef.current = open;

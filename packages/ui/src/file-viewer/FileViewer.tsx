@@ -13,6 +13,7 @@ import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
+import { FilePanelContext, filePanelOf, withFilePanel } from "../renderers/kit/shell/filePanel.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -67,10 +68,6 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     if (mayTakeKeyboard(element.ownerDocument, element.ownerDocument.defaultView as Window)) element.focus({ preventScroll: true });
   }, [ready, key, appearance.compact]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
-  // A departing renderer flushes its last per-file state during unmount. That write belongs to its
-  // own key even after another file opens; whether it is kept is the host's (`CadViewer` keeps the
-  // file on screen's alone, and drops this one once it has landed).
-  const setRendererState = useCallback((value: JsonValue) => { if (latest.current.sourceId === source.id && rendererStateKey) changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } })); }, [changeState, rendererStateKey, source.id]);
 
   // The renderer is re-rendered only when what it is handed changes: not by a navbar action it
   // published, a resize within one layout, or anything else this frame redraws for itself. Its
@@ -80,16 +77,31 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const openedKey = `${String(key)}\u0000${rendererStateKey}`;
   if (openedState.current.key !== openedKey) openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
   const rendererState = openedState.current.value;
+  // The view's panel, the file's (`kit/shell/filePanel.js`): held here for the file on screen, from
+  // its record as it opened, and merged into every record its renderer writes, so a renderer that
+  // writes its view wholesale never drops it. One holder per file opened: a departing renderer's last
+  // write carries its own file's panel.
+  const opened = useMemo(() => ({ record: rendererState as JsonValue | undefined, panel: filePanelOf(rendererState) as object }), [openedKey]);
+  // A departing renderer flushes its last per-file state during unmount. That write belongs to its
+  // own key even after another file opens; whether it is kept is the host's (`CadViewer` keeps the
+  // file on screen's alone, and drops this one once it has landed).
+  const writeView = useCallback(() => {
+    if (latest.current.sourceId !== source.id || !rendererStateKey) return;
+    const value = withFilePanel(opened.record, opened.panel) as JsonValue;
+    changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } }));
+  }, [changeState, rendererStateKey, source.id, opened]);
+  const setRendererState = useCallback((value: JsonValue) => { opened.record = value; writeView(); }, [opened, writeView]);
+  const filePanel = useMemo(() => ({ panel: opened.panel, change: (panel: object) => { opened.panel = panel; writeView(); } }), [opened, writeView]);
   const shown = loaded.status === "ready" ? loaded : null;
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><Renderer notice={notice} key={key} file={shown.file} source={source}
+    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
       onPreviewChange={onPreviewChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
-      state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
+      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></RenderBoundary>;
   }, [shown, key, onError, notice, source, onPreviewChange, onReady,
-    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, reload, t]);
+    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t]);
 
   let body: ReactNode;
   if (loaded.status === "empty") body = presentation?.home ?? null;

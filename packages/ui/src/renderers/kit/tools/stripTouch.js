@@ -5,6 +5,9 @@ import { createContext, useContext } from "react";
 // touch strip (a phone) they are 36px, their icons 18px.
 export const STRIP_BUTTON_CLASS = "size-6 [&>svg]:size-3.5!";
 export const TOUCH_STRIP_BUTTON_CLASS = "size-9 rounded-md [&>svg]:size-4.5!";
+// The strip's own shape around its tiles (`FloatingToolBar.js`): 4px in, its tiles 4px apart, its
+// corners rounded-md. A toolbar of any length is this shape on its surface (the view's corner's too).
+export const STRIP_SHAPE_CLASS = "items-center gap-1 rounded-md p-1";
 
 const StripTouch = createContext(false);
 /** Marks the chrome over a phone's view, the strip and the rows under it, as touch-sized. */

@@ -7,6 +7,7 @@ import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
+import { VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/board/BoardRenderer.js';
 import BOARD from './__fixtures__/board.plot.json';
@@ -226,6 +227,15 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
   expect(cornerButtons(pane)).toEqual(['Display mode: Board', '2D', '3D', 'Front', 'Back']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
+  // Every corner control is a small toolbar on the one corner box (`ViewCorner.jsx`): the strip's fill and
+  // shape with no border or shadow, its buttons the strip's tiles.
+  const boxes = [...corner(pane).querySelectorAll<HTMLElement>('[data-view-corner-tile], [role=radiogroup]'), pane.querySelector<HTMLElement>('[data-zoom-pill]')!];
+  expect(boxes.length).toBe(4);
+  for (const control of boxes) {
+    expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => control.classList.contains(name))).toBe(true);
+    expect([...control.classList].some(name => /^(border|shadow)/.test(name))).toBe(false);
+    for (const button of control.querySelectorAll('button')) expect(button.classList.contains('size-6')).toBe(true);
+  }
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }

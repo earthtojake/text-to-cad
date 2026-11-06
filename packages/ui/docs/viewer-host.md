@@ -139,10 +139,11 @@ tool strip, the tool in hand's sub-toolbar and its docked panel, its view's cont
 Display, Preview) ending the strip and, in Preview, Preview's own bar
 (`settings-ui.md#camera-animation-and-preview`), the same with a navbar or without; a
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
-file's name opens that). The layout a person gives the view's panel — open or collapsed, its
-width, its tab by the kind of file — and the tool stack's panels is one
+file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
-beside the appearance and the home's layout.
+beside the appearance and the home's layout; the view's panel — open or collapsed, its width,
+its tab — is the file's, kept in its view as its camera is (`kit/shell/filePanel.js`, merged
+into the renderer's record by `FileViewer`).
 
 ## Preview and renderer navigation actions
 
@@ -454,7 +455,7 @@ the defaults), thrown out with the tab and kept across a reload. The host suppli
 lives through one adapter, `TabRecordStorage` — a synchronous read and write of the
 whole record: the web over `sessionStorage`, the CAD app over memory
 (`memoryTabRecord`) — and the package owns the record's shape, version and normalization. `settings` is
-`{ toolStack, appearance, library, explorer }`: tab-wide (the view's panel's and tool stack's layout, the
+`{ toolStack, appearance, library, explorer }`: tab-wide (the tool stack's layout, the
 appearance, the home's layout, the folder the explorer was last in), and what every renderer reads as its preferences;
 `files` holds the view of the file on screen, under `[absolute path, renderer id]`, and no
 other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` drops the view
