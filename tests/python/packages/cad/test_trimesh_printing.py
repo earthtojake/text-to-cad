@@ -259,6 +259,23 @@ class MultiBodyWallTest(unittest.TestCase):
         # 0.3 mm is the fit gap; the thinnest real wall is the 1.7 mm socket.
         self.assertGreater(thinnest, 1.0)
 
+    def test_a_body_resting_on_another_is_closed_and_measured(self) -> None:
+        """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so
+        neither body is closed. Each is closed again as the bodies are split (trimesh's repair, which needs
+        networkx: the trimesh extra carries it) and measured against itself: the diffuser's 2 mm wall too."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "two.stl"
+            diffuser = trimesh.creation.box((20, 20, 2))
+            baffle = trimesh.creation.box((20, 20, 10))
+            baffle.apply_translation((0, 0, 6))
+            trimesh.util.concatenate([diffuser, baffle]).export(str(path))
+            result = cad.stl.dfm(path, process="printing", samples=400)
+
+        self.assertTrue(result.ok, [(finding.code, finding.message) for finding in result.findings])
+        self.assertFalse(result.measurements["mesh"]["watertight"])
+        walls = sorted(body["min_mm"] for body in result.measurements["wall_thickness"]["per_body"] if body["min_mm"])
+        self.assertEqual([round(wall, 3) for wall in walls], [2.0, 10.0])
+
     def test_per_body_carries_p05_for_the_same_judgement_rule_as_pooled(self) -> None:
         """SKILL.md says judge on p05_mm (min_mm alone can be a sampling
         outlier) and also says attribute a violation to its own body rather

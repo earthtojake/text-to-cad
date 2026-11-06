@@ -305,7 +305,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
                    "and support", extra="trimesh", process="in-process",
-        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy"), identity=("trimesh",)),
+        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",)),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

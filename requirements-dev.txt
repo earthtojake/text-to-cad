@@ -20,7 +20,7 @@
 
 # The packages' own runtime dependencies come with the editable installs above: the library's
 # (numpy), its build123d extra's (build123d, cadquery-ocp-novtk, bd_materials, threejs-materials,
-# matplotlib, shapely, ezdxf, pillow) and its trimesh extra's (trimesh, rtree, scipy), and the
+# matplotlib, shapely, ezdxf, pillow) and its trimesh extra's (trimesh, rtree, scipy, networkx), and the
 # server's (uv, ezdxf, pillow).
 
 # The viewer's browser checks drive a headless Chromium through Python Playwright (the

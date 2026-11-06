@@ -1,6 +1,6 @@
 """``cad.trimesh``: the trimesh integration -- our measurements of a triangle mesh for manufacturing,
-taking trimesh's ``Trimesh`` (its extra, ``cad[trimesh]``: trimesh, with rtree for its ray casts and
-scipy for its connected bodies).
+taking trimesh's ``Trimesh`` (its extra, ``cad[trimesh]``: trimesh, with rtree for its ray casts,
+scipy for its connected bodies and networkx for the repair that closes a body split open).
 
 Each returns the report as plain data, every figure in millimetres, degrees and square millimetres --
 facts, never verdicts: nothing here compares a figure against a process's limit:

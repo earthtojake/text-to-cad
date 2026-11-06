@@ -79,15 +79,17 @@ kicad = [
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and
 # subdivision APIs (face adjacency, connected components, subdivide_to_size, intersects_location), which a
-# major release is free to change. rtree and scipy are trimesh's optional extras, and ours are not
-# optional: the undercut and wall-thickness ray casts need rtree's index, and mesh.split, body_count and
-# the connected-component graphs need scipy -- without them a family dies on a ModuleNotFoundError.
-# Meshes are read by the library's own readers (a 3MF and a GLB written as an STL first), so trimesh's
-# 3MF loader and the packages it alone needs (lxml, networkx) are not ours.
+# major release is free to change. rtree, scipy and networkx are trimesh's optional extras, and ours are
+# not optional: the undercut and wall-thickness ray casts need rtree's index; mesh.split, body_count and
+# the connected-component graphs need scipy; and mesh.split's repair of an open body (fill_holes: two
+# bodies printed one on the other share a face, so neither is closed) needs networkx -- without them a
+# family dies on a ModuleNotFoundError. Meshes are read by the library's own readers (a 3MF and a GLB
+# written as an STL first), so trimesh's 3MF loader and lxml, which it alone needs, are not ours.
 trimesh = [
   "trimesh>=4.6,<6",
   "rtree>=1.2,<2",
   "scipy>=1.14,<2",
+  "networkx>=3.2,<4",
 ]
 
 [project.urls]
