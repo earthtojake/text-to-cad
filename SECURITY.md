@@ -100,7 +100,8 @@ library and the folders `CAD_KICAD_3DMODELS` names, every symlink followed first
 names is shown as missing, and the page asks for a model's mesh by an id, never by a path. A name is
 checked against those folders as text before any file system call is made for it, and one that is a
 network share (`\\server\share`), a device (`\\?\`, `\\.\`) or drive-relative is refused outright, on
-every platform: on Windows, opening a share would offer its server the person's credentials.
+every platform: on Windows, opening a share would offer its server the person's credentials. A board
+names at most 512 distinct models, each STEP at most 64 MiB and all of them at most 512 MiB.
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 

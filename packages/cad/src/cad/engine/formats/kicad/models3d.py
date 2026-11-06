@@ -18,7 +18,8 @@ defines (``text_variables``) is read too. The person's KiCad settings (their own
 The model must be a STEP: a ``.wrl`` or ``.wrz`` name is read as the ``.step`` or ``.stp`` beside it, as
 KiCad's own libraries ship both. A resolved file's REAL path (every symlink followed) must lie inside one
 of the folders above, end in ``.step`` or ``.stp`` and be at most ``MAX_BYTES``; a board names at most
-``MAX_MODELS`` distinct models. Anything else is missing, with the reason:
+``MAX_MODELS`` distinct models, whose distinct files come to at most ``MAX_TOTAL_BYTES``. Anything else is
+missing, with the reason:
 
 ========================  ==========================================================
 ``not-found``             no file of that name in any folder it is looked for in
@@ -27,7 +28,7 @@ of the folders above, end in ``.step`` or ``.stp`` and be at most ``MAX_BYTES``;
 ``too-large``             over ``MAX_BYTES``
 ``not-step``              a format other than STEP or VRML (IGES, an unknown suffix)
 ``embedded``              a model embedded in the board (``kicad-embed://``), not read yet
-``too-many``              past the ``MAX_MODELS``-th distinct model
+``too-many``              past the ``MAX_MODELS``-th distinct model, or past ``MAX_TOTAL_BYTES`` in all
 ========================  ==========================================================
 
 A place is first read as text: it must lie inside one of the folders above before any file system call is
@@ -52,13 +53,15 @@ from typing import Iterable, Mapping, Sequence
 
 from cad.engine.formats.kicad import sexpr
 
-__all__ = ["MAX_BYTES", "MAX_MODELS", "REASONS", "Resolved", "library_roots", "model_names", "resolve_models",
+__all__ = ["MAX_BYTES", "MAX_MODELS", "MAX_TOTAL_BYTES", "REASONS", "Resolved", "library_roots", "model_names", "resolve_models",
            "standard_libraries"]
 
 #: The largest STEP a board's part is drawn from: KiCad's largest library model is a few megabytes.
 MAX_BYTES = 64 * 1024 * 1024
 #: The most distinct models one board's table names.
 MAX_MODELS = 512
+#: The most bytes of STEP one board's models come to, each distinct file once.
+MAX_TOTAL_BYTES = 512 * 1024 * 1024
 #: Why a model is missing, each as its table says it.
 REASONS = ("not-found", "vrml-only", "outside", "too-large", "not-step", "embedded", "too-many")
 
@@ -262,11 +265,19 @@ def resolve_models(board: Path | str, names: Iterable[str], *, environ: Mapping[
     roots = [folder, *libraries]
     variables = _project_variables(board)
     answers: dict[str, Resolved] = {}
+    sizes: dict[str, int] = {}
     for name in names:
         if name in answers:
             continue
         if len(answers) >= MAX_MODELS:
             answers[name] = Resolved(name, name.replace("\\", "/").rsplit("/", 1)[-1], reason="too-many")
             continue
-        answers[name] = _resolve(name, folder, libraries, roots, variables)
+        answer = _resolve(name, folder, libraries, roots, variables)
+        if answer.path is not None and answer.path not in sizes:
+            size = int(str(answer.stamp).rsplit("-", 1)[-1])
+            if sum(sizes.values()) + size > MAX_TOTAL_BYTES:
+                answer = Resolved(name, answer.file, reason="too-many")
+            else:
+                sizes[answer.path] = size
+        answers[name] = answer
     return answers

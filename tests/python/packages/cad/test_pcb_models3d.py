@@ -143,6 +143,12 @@ class Resolve(unittest.TestCase):
         with mock.patch.object(models3d, "MAX_MODELS", 1):
             found = self.resolve("models/own.step", "rel.3dshapes/x.step")
         self.assertEqual((found["models/own.step"][1], found["rel.3dshapes/x.step"][1]), (None, "too-many"))
+        # The files a board's models come to, each counted once, are capped in all: the next one is too many.
+        size = (self.project / "models" / "own.step").stat().st_size
+        with mock.patch.object(models3d, "MAX_TOTAL_BYTES", 2 * size):
+            found = self.resolve("models/own.step", "${KIPRJMOD}/models/own.step", "rel.3dshapes/x.step",
+                                 "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.step")
+        self.assertEqual([found[name][1] for name in found], [None, None, None, "too-many"])
 
     def test_the_libraries_are_the_named_folders_and_kicads_install(self) -> None:
         named = os.pathsep.join([str(self.library), str(self.outside / "none")])
