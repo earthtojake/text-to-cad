@@ -46,6 +46,13 @@ test("a file with clips is framed and lit on the box sampled over every pose", (
   assert.deepEqual([scene.bounds, scene.restBounds], [animatedBounds, animatedBounds]);
 });
 
+test("a renderer that draws the model larger than the file grows restBounds, and the scene's bounds follow at rest", () => {
+  const scene = createGlbScene(THREE, glbDocument().document);
+  const grown = { min: [-500, -500, -900], max: [500, 500, 500] };
+  scene.restBounds = grown;
+  assert.deepEqual(scene.bounds, grown);
+});
+
 test("Inspect wears the viewer's finish and keeps colour, map and opacity; Render restores the authored finish", () => {
   const { document, body, lid, steel, texture } = glbDocument();
   const scene = createGlbScene(THREE, document);

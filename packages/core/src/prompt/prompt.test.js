@@ -99,6 +99,22 @@ test('a delivery ledger delivers each operation once, bounds work in flight, and
   assert.equal(restarted, 1, 'the oldest completed operation was evicted');
 });
 
+test('a selection with a summary reads its summary, then its references', () => {
+  const summarized = { resource: { kind: 'workspace-file', path: '/work/bracket.step' }, target: { kind: 'cad-selector', selectors: ['bracket/face 3', 'bracket/face 1'] },
+    summary: 'The peak stress, 120 MPa, is above the 100 MPa this material yields at' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(summarized)])),
+    'fix this\n\nReferences:\nThe peak stress, 120 MPa, is above the 100 MPa this material yields at · /work/bracket.step#bracket/face 3,bracket/face 1');
+});
+
+test('a part picked in a model keeps its message: a label alone is not written', () => {
+  const part = { resource: { kind: 'workspace-file', path: '/models/x.step' }, target: { kind: 'cad-selector', selectors: ['arm'] }, label: 'arm' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(part)])), 'fix this\n\nReferences:\n/models/x.step#arm');
+});
+
+test('a summary must be text', () => {
+  const bad = { resource: { kind: 'workspace-file', path: '/work/bracket.step' }, target: { kind: 'cad-selector', selectors: ['bracket/face 3'] }, summary: 4 };
+  assert.throws(() => validatePromptContext(createPromptContext([referencePart(bad)])), /summary must be text/);
+});
 
 test('prompt serialization prefers inline text and preserves references without reading file bytes', async () => {
   const { resolvePromptMessage } = await import('./index.js');

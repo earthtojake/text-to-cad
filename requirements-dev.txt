@@ -18,7 +18,7 @@
 
 # The packages' own runtime dependencies come with the editable installs above: the library's
 # (numpy) and its build123d extra's (build123d, cadquery-ocp-novtk, bd_materials, threejs-materials,
-# matplotlib, shapely, ezdxf, pillow), and the server's (uv, ezdxf, pillow).
+# matplotlib, shapely, ezdxf, pillow, scipy, netgen-mesher), and the server's (uv, ezdxf, pillow).
 
 # The viewer's browser checks drive a headless Chromium through Python Playwright (the
 # launch smoke test, scripts/test/test-viewer-launch.sh), as does the manual parity bench

@@ -611,7 +611,8 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   resetZoomBaseline = false,
   originalModelScale = false,
   viewDirection = null,
-  viewUp = null
+  viewUp = null,
+  insetLeft = null
 } = {}) {
   if (!runtime?.THREE || !runtime?.camera || !runtime?.controls) {
     return false;
@@ -628,6 +629,8 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   // viewport before installing the pose, not the aspect before a panel opened or closed.
   runtime.syncCameraViewport?.(runtime.camera, frameMetrics.width, frameMetrics.height);
   const fitNearClip = Math.max(boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode) / 1200, 0.01);
+  const inset = typeof runtime.framingInset === "function" ? runtime.framingInset() : null;
+  const covered = { left: Number(inset?.left) || 0, bottom: Number(inset?.bottom) || 0 };
   const frame = interactiveCameraFrameForBounds(runtime.THREE, {
     camera: runtime.camera,
     controls: runtime.controls,
@@ -637,7 +640,12 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
     nearClip: fitNearClip,
     viewDirection,
-    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP
+    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP,
+    // Chrome a renderer keeps over the viewport (`runtime.framingInset()`: `{ left, bottom }` in pixels, an FEA
+    // result's Study panel and its colour bar), so the model is framed in what it leaves; a caller may say none
+    // at the left (Preview hides the panels).
+    insetLeft: (insetLeft ?? covered.left) / frameMetrics.width,
+    insetBottom: covered.bottom / frameMetrics.height
   });
   if (!frame) {
     return false;

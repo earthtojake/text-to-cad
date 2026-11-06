@@ -23,6 +23,7 @@ export function validatePromptReference(reference) {
   }
   requireValue(resource.revision === undefined || typeof resource.revision === 'string', 'revision must be a string');
   requireValue(reference.label === undefined || typeof reference.label === 'string', 'label must be text');
+  requireValue(reference.summary === undefined || typeof reference.summary === 'string', 'summary must be text');
   if (target.kind === 'text-range') {
     requireValue(resource.kind !== 'cad-model', 'a model has no text ranges');
     requireValue(position(target.start) && position(target.end), 'invalid text range');
@@ -152,7 +153,14 @@ export function formatPromptMessage(context, { attachmentPath, attachmentText } 
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
-    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference));
+    if (part.kind === 'reference') {
+      const { reference } = part;
+      const token = formatPromptReference(reference);
+      if (reference.target.kind === 'whole-resource') files.push(token);
+      // A selection with a summary (what a result's chosen row is: a check, a finding, a load) reads that sentence,
+      // then what it names, so the agent is told what the selection is about, not only which it is.
+      else references.push(reference.target.kind === 'cad-selector' && reference.summary ? `${reference.summary} · ${token}` : token);
+    }
     else if (part.kind === 'attachment') {
       const inline = attachmentText?.(part);
       if (inline) { attachments.push(inline); continue; }

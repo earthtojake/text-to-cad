@@ -159,7 +159,9 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     meshCount: look.meshCount,
     keepsAuthoredFinish: [...authored.values()].some(list => list.some(material => material?.userData?.cadAuthoredFinish === true)),
     object3D: root,
-    get bounds() { return explodedBounds || bounds; },
+    // At rest, `restBounds`: a renderer that draws the model larger than the file holds it grows that (an FEA result,
+    // deformed), and the floor, the shadows and the camera's planes follow.
+    get bounds() { return explodedBounds || this.restBounds; },
     restBounds: bounds,
     // glTF is metres; the scene draws them as millimetres.
     units: GLB_SCENE_UNITS,

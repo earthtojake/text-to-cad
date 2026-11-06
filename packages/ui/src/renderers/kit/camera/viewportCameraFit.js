@@ -18,17 +18,26 @@ export function interactiveFitPadding(aspect) {
   return { x: INTERACTIVE_CAMERA_FIT_PADDING, y: INTERACTIVE_CAMERA_FIT_PADDING + WIDE_VIEWPORT_EXTRA_VERTICAL_PADDING * wide };
 }
 
+// A covered share past this leaves too little to frame into: the fit then ignores it.
+const MAX_INSET = 0.5;
+
 /** Fit the projected bounding box, including perspective depth, rather than
  * the rotation-invariant sphere that wastes space around long or flat models.
  * Returns a plan; never mutates the camera, controls or saved view. Without a
  * `padding` the viewport's own applies (`interactiveFitPadding`); a number is
- * both axes' padding (a library card's picture).
+ * both axes' padding (a library card's picture). `insetLeft`: the share of the
+ * viewport's width that chrome covers at its left (an FEA result's Study panel);
+ * `insetBottom`, the share of its height chrome covers at its foot (a colour bar):
+ * the model is fitted into what they leave and the camera panned so it sits in
+ * the middle of that, orbiting about the point the pan leaves.
  */
 export function interactiveCameraFrameForBounds(THREE, {
   camera, controls, bounds, modelOffset = null, frameAspect = camera?.aspect || 1,
   minRadius = 0, viewDirection = null, viewUp = null,
   nearClip = camera?.near,
   padding = null,
+  insetLeft = 0,
+  insetBottom = 0,
 } = {}) {
   if (!camera || !controls || !bounds?.min?.every(Number.isFinite) || !bounds?.max?.every(Number.isFinite)) return null;
   const frame = boundsCenterAndRadius(THREE, bounds, { offset: modelOffset });
@@ -44,7 +53,12 @@ export function interactiveCameraFrameForBounds(THREE, {
   right.normalize();
   const screenUp = new THREE.Vector3().crossVectors(direction, right).normalize();
   const halfSize = new THREE.Vector3(...bounds.max).sub(new THREE.Vector3(...bounds.min)).multiplyScalar(0.5);
-  const aspect = Math.max(Number.isFinite(frameAspect) ? frameAspect : 1, 1e-3);
+  const fullAspect = Math.max(Number.isFinite(frameAspect) ? frameAspect : 1, 1e-3);
+  const share = (value) => (Number.isFinite(value) && value > 0 && value < MAX_INSET ? value : 0);
+  const covered = share(insetLeft), coveredBelow = share(insetBottom);
+  // The share of the height the model is fitted into, and its aspect: what the chrome at the left and foot leave.
+  const tall = 1 - coveredBelow;
+  const aspect = Math.max(fullAspect * (1 - covered) / tall, 1e-3);
   const fitPadding = Number.isFinite(padding)
     ? { x: Math.max(padding, 1), y: Math.max(padding, 1) }
     : interactiveFitPadding(aspect);
@@ -56,8 +70,8 @@ export function interactiveCameraFrameForBounds(THREE, {
     for (const y of [-halfSize.y, halfSize.y]) {
       for (const z of [-halfSize.z, halfSize.z]) {
         const corner = new THREE.Vector3(x, y, z);
-        const extentX = Math.abs(corner.dot(right)) * fitPadding.x;
-        const extentY = Math.abs(corner.dot(screenUp)) * fitPadding.y;
+        const extentX = Math.abs(corner.dot(right)) * fitPadding.x / tall;
+        const extentY = Math.abs(corner.dot(screenUp)) * fitPadding.y / tall;
         const depth = corner.dot(direction);
         halfHeight = Math.max(halfHeight, extentY, extentX / aspect);
         distance = Math.max(distance, depth + Math.max(extentX / horizontalSlope, extentY / verticalSlope, minRadius, nearMargin, 1e-6));
@@ -69,10 +83,14 @@ export function interactiveCameraFrameForBounds(THREE, {
   if (camera.isOrthographicCamera) {
     distance = fitDistanceForRadius(camera, frame.radius, { aspect, minRadius, padding: Math.max(fitPadding.x, fitPadding.y) });
   }
+  // Panned left by half the covered width and down by half the covered height, so the model sits in the middle of
+  // what is left: the whole view's half-height at the model is the fitted one (at the fitted distance, in perspective).
+  const halfTall = camera.isOrthographicCamera ? halfHeight : distance * verticalSlope;
+  const target = frame.center.clone().addScaledVector(right, -covered * halfTall * fullAspect).addScaledVector(screenUp, -coveredBelow * halfTall);
   return {
     ...frame, halfHeight, distance, direction, up,
-    position: frame.center.clone().addScaledVector(direction, distance),
-    target: frame.center.clone(), zoom: 1,
+    position: target.clone().addScaledVector(direction, distance),
+    target, zoom: 1,
   };
 }
 

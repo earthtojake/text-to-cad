@@ -43,6 +43,12 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "urdf validate": ("cad_server.cli.urdf_validate", "validate a URDF robot description"),
     "sdf validate": ("cad_server.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cad_server.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # Finite element analysis. `faces` lists a part's faces with the refs a
+    # study names; `solve` runs one study and writes the result
+    # GLB (a von Mises colour map on the deformed shape) where it is told to.
+    "fea faces": ("cad_server.cli.fea_faces", "list a part's faces with the refs a study names"),
+    "fea parts": ("cad_server.cli.fea_parts", "list an assembly's parts and the pairs that touch"),
+    "fea solve": ("cad_server.cli.fea_solve", "run a static stress study on a part or a bonded assembly"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment, with the "
                                   "packages its header or --with names"),

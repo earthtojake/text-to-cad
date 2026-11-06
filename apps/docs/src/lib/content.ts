@@ -156,6 +156,12 @@ export const skillGroups = [
       "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh.",
   },
   {
+    name: "FEA",
+    path: "skills/fea",
+    summary:
+      "Runs a linear static stress study on a STEP part or bonded assembly, solved by a locally installed CalculiX, reporting peak stress, safety factor and displacement with a colour-mapped result.",
+  },
+  {
     name: "G-code",
     path: "skills/gcode",
     summary:
