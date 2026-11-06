@@ -81,15 +81,17 @@ def _is(error: BaseException, module: str, name: str) -> bool:
 def classify(error: BaseException) -> Failure:
     """The failure an exception is, by its class: a ``Failure`` as it is; an interrupt ``canceled``; the
     engine out of reach (``ConnectionError``) ``engine_unavailable``; a document the engine does not hold
-    (``cad.engine.serve.NotHeld``) ``not_found``; an argument the library refused by name
-    (``cad._internal.refused.ArgumentRefused``) ``invalid_argument``; anything else ``failed``."""
+    (``cad.engine.serve.NotHeld``), and a file the library was given that is not there
+    (``cad._internal.refused.NotThere``: ``--annotation notes.json``), ``not_found``; any other argument the
+    library refused by name (``cad._internal.refused.ArgumentRefused``) ``invalid_argument``; anything else
+    ``failed``."""
     if isinstance(error, Failure):
         return error
     if isinstance(error, KeyboardInterrupt):
         return Failure("canceled", "canceled")
     if isinstance(error, ConnectionError):
         return Failure(failure_text(error), "engine_unavailable")
-    if _is(error, "cad.engine.serve", "NotHeld"):
+    if _is(error, "cad.engine.serve", "NotHeld") or _is(error, "cad._internal.refused", "NotThere"):
         return Failure(failure_text(error), "not_found")
     if _is(error, "cad._internal.refused", "ArgumentRefused"):
         return Failure(failure_text(error), "invalid_argument")

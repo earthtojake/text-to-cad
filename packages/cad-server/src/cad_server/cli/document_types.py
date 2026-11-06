@@ -268,11 +268,33 @@ def _first_parameter(target: tuple[str, str]) -> str:
 
 def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
     """A generated operation's run: its file, the function's first parameter as the parser read it (wherever
-    it stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
+    it stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's, and each
+    file its options name refused when it is not there (``_present``)."""
     from cad_server._internal.cli_from_function import _verb, generated_parser, run_cli
 
-    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], _first_parameter(target))
+    parser = _present(_typed(generated_parser(target, prog=prog), document_type, target[1], _first_parameter(target)))
     return run_cli(_verb(target), argv, prog=prog, parser=parser)
+
+
+def _present(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """A generated operation's ``parser`` (``cli_from_function``) with the check that each file one of its
+    options names is there -- a ``Path`` option of a check is a file it reads (``cad srdf validate --urdf
+    robot.urdf``) --, a file that is not there being the command line's failure (``not_found``), as the
+    operation's own file is (``_typed``), said before anything runs. Only a generated parser's: a hand-written
+    one's ``Path`` may be a folder to write (``cad kicad_pcb export -o DIR``)."""
+    from cad_server._internal.cli_errors import Failure
+
+    named = [action for action in parser._actions if action.option_strings and action.type is Path]  # noqa: SLF001
+
+    def check(parsed: argparse.Namespace) -> None:
+        for action in named:
+            given = getattr(parsed, action.dest, None)
+            if given is not None and not os.path.exists(os.path.expanduser(str(given))):
+                raise Failure(f"{max(action.option_strings, key=len)} {given}: no such file", "not_found")
+
+    if named:
+        parser.checks.append(check)  # type: ignore[attr-defined]
+    return parser
 
 
 def _answer(as_json: bool, payload: dict, lines: list[str]) -> int:
@@ -442,9 +464,16 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
         given = args.display
         if given and not given.strip().startswith("{") and not given.strip().endswith(".json"):
             given = json.dumps({"appearance": given.strip()})
-        if given and given.strip().endswith(".json"):
-            given = Path(given).read_text(encoding="utf-8")
-        display = json.loads(given) if given else {}
+        # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
+        # that does not read, are the command line's, said before anything renders.
+        if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
+            return _failed(bool(args.json), prog, f"--display {given.strip()}: no such file", "not_found")
+        try:
+            if given and given.strip().endswith(".json"):
+                given = Path(given.strip()).expanduser().read_text(encoding="utf-8")
+            display = json.loads(given) if given else {}
+        except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
+            return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
         if not isinstance(display, dict):
             return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border, appearance}",
                            "invalid_argument")

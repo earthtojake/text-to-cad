@@ -721,7 +721,9 @@ has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
 before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
 file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
-there, by every type's every operation alike (`no such file: part.stl`; `not_found`). A model's document
+there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
+names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
+schematic's `--display`): the library's refusal of one is `cad._internal.refused.NotThere`. A model's document
 is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
 one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
 the same way. The commands are the server's
@@ -982,7 +984,9 @@ repeats). A parameter whose type is a `Literal` of strings is an enumeration, it
 choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
-(`invalid_argument`, exit 2), never as a failure of the work. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
+(`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
+reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
+its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`: the

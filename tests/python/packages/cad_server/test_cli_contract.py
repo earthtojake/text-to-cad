@@ -43,6 +43,18 @@ def _parse(made: Parser, argv: list[str]) -> tuple[object, str, str]:
     return found, out.getvalue(), err.getvalue()
 
 
+def _cad(argv: list[str]) -> tuple[object, str, str]:
+    """``cad ARGV`` run in this process (``cli.main``): its exit status -- a command line its parser refuses
+    exits, as argparse's do --, its stdout and its stderr."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code: object = cli.main(argv)
+        except SystemExit as exited:
+            code = exited.code
+    return code, out.getvalue(), err.getvalue()
+
+
 def _sample(**options) -> Parser:
     made = parser("cad sample", **options)
     made.add_argument("source")
@@ -173,26 +185,55 @@ class Consent(unittest.TestCase):
 
 
 class TheDispatcher(unittest.TestCase):
-    def _run(self, argv: list[str]) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = cli.main(argv)
-        return code, out.getvalue(), err.getvalue()
-
     def test_a_crash_under_json_is_its_document_and_no_traceback(self) -> None:
         with mock.patch.object(cli, "_run_module", side_effect=RuntimeError("boom")), \
                 mock.patch.object(cli, "_report"), mock.patch.object(cli, "_tell"):
-            code, out, err = self._run(["status", "--json"])
+            code, out, err = _cad(["status", "--json"])
             self.assertEqual((code, err), (1, ""))
             self.assertEqual(json.loads(out), {"ok": False, "error": "RuntimeError: boom", "reason": "internal_error"})
             with self.assertRaises(RuntimeError):  # without --json, its traceback the person's
-                self._run(["status"])
+                _cad(["status"])
 
     def test_an_interrupt_is_canceled_with_the_shell_s_status(self) -> None:
         with mock.patch.object(cli, "_main", side_effect=KeyboardInterrupt):
-            self.assertEqual(self._run(["status"]), (130, "", "cad: canceled\n"))
-            code, out, _err = self._run(["status", "--json"])
+            self.assertEqual(_cad(["status"]), (130, "", "cad: canceled\n"))
+            code, out, _err = _cad(["status", "--json"])
             self.assertEqual((code, json.loads(out)["reason"]), (130, "canceled"))
+
+
+class MissingInputs(unittest.TestCase):
+    """A file the command line names that is not there is its mistake whichever option names it, as the
+    operation's own file is: exit 2, ``not_found``, said before anything runs or renders."""
+
+    def test_a_file_an_option_names_that_is_not_there(self) -> None:
+        from cad._internal.refused import NotThere
+        from cad.engine.snapshot import NoSuchFile, SnapshotRefused
+
+        refused = NoSuchFile("--job gone.json: no such file")
+        self.assertIsInstance(refused, SnapshotRefused)  # still the snapshot's refusal for its callers
+        self.assertEqual((classify(refused).reason, classify(refused).status), ("not_found", 2))
+        self.assertEqual(classify(NotThere("--urdf gone.urdf: no such file")).reason, "not_found")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "robot.srdf").write_text('<robot name="r"/>\n', encoding="utf-8")
+            (root / "part.stl").write_text("solid t\nendsolid t\n", encoding="utf-8")
+            (root / "board.kicad_sch").write_text("(kicad_sch (version 20231120))\n", encoding="utf-8")
+            gone, out = str(root / "gone.json"), str(root / "out.png")
+            for argv, said in (
+                    (["srdf", "validate", str(root / "robot.srdf"), "--urdf", str(root / "gone.urdf")],
+                     f"--urdf {root / 'gone.urdf'}: no such file"),
+                    (["stl", "snapshot", str(root / "part.stl"), out, "--annotation", gone], f"--annotation {gone}: no such file"),
+                    (["stl", "snapshot", "--job", gone], f"--job {gone}: no such file"),
+                    (["kicad_sch", "snapshot", str(root / "board.kicad_sch"), out, "--sheet", "/", "--display", gone],
+                     f"--display {gone}: no such file")):
+                with self.subTest(argv=argv[:2]), mock.patch.object(cli, "_tell"):
+                    code, stdout, stderr = _cad([*argv, "--json"])
+                    self.assertEqual((code, stderr), (2, ""))
+                    self.assertEqual(json.loads(stdout), {"ok": False, "error": said, "reason": "not_found"})
+            self.assertFalse(os.path.exists(out), "nothing was drawn")
+            code, stdout, _ = _cad(["kicad_sch", "snapshot", str(root / "board.kicad_sch"), out, "--border", "--display",
+                                    "{not json", "--json"])
+            self.assertEqual((code, json.loads(stdout)["reason"]), (2, "invalid_argument"))
 
 
 class EndToEnd(unittest.TestCase):

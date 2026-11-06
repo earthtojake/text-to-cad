@@ -77,6 +77,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from cad._internal.refused import NotThere
 from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
@@ -129,6 +130,11 @@ RENDER_SCALE_RANGE = (1.0, 3.0)
 
 class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders."""
+
+
+class NoSuchFile(SnapshotRefused, NotThere):
+    """A file a flag names (``--annotation``, ``--measurements``, ``--job``) that is not there: refused as every
+    request is, and as the input that is not there it is (``cad._internal.refused.NotThere``)."""
 
 
 # --- the request ---------------------------------------------------------------------------
@@ -331,7 +337,7 @@ def _load(value: Any, label: str) -> Any:
             raise SnapshotRefused(f"{label} is not JSON: {error}") from None
     path = Path(text).expanduser()
     if not path.is_file():
-        raise SnapshotRefused(f"{label} {text}: no such file")
+        raise NoSuchFile(f"{label} {text}: no such file")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
