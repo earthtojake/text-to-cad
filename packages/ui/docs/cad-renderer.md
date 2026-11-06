@@ -1704,7 +1704,8 @@ a board's 3D view — frames in the room under the view's tool strip and centres
 fit does: the strip's reach is the frame's `--cad-tools-bottom` (`runtimeCamera.js`'s
 `readStripClearance`, none in Preview's view), its share of the height `fitRoom`, and the camera's
 target stands above the box's centre by half of what the strip takes. The 100% ruler and a resize's
-rescale read the reach the last fit measured, so a sub-toolbar coming and going moves neither. Nothing shows that percentage in 3D (a flat view's corner pill shows its own, `ZoomControl.jsx`); the
+rescale read the reach the last fit measured, so a sub-toolbar coming and going moves neither. The editor's view, covered by Preview, is resized with the page and never re-fitted at that size: it
+rescales, so leaving Preview gives back the fit it opened with. Nothing shows that percentage in 3D (a flat view's corner pill shows its own, `ZoomControl.jsx`); the
 viewport's `zoomPercent()`, `subscribeCamera()` and `zoomBy(factor)` serve the zoom keys and a phone's
 Zoom submenu, and the `window.__cadCamera()` test seam reads it (`zoomPercent`). The corner's Home
 (`goHome()`) frames what is shown from the opening direction. The acts that frame the

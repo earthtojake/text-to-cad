@@ -214,6 +214,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const activeViewPlaneFaceRef = useRef("");
   const previewRef = useRef(preview);
   useLayoutEffect(() => { runtimeRef.current?.setSuspended?.(suspended); }, [suspended, viewerReadyTick]);
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
   const perspectivePropRef = useRef(perspective);
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
@@ -376,7 +378,11 @@ const ShellViewport = forwardRef(function ShellViewport({
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // A covered view (the editor's, under Preview) is resized with the page around it, not by
+    // anyone looking at it: it rescales and is never re-fitted to a size it is not seen at. A fit
+    // frames in the room under the strip, which depends on the height, so a fit to Preview's
+    // height kept after it would leave the view off the open fit when it is uncovered.
+    if (suspendedRef.current || !refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.
