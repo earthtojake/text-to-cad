@@ -1,6 +1,6 @@
 {
   "name": "@cad/core",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
@@ -31,7 +31,7 @@
   "dependencies": {
     "meshoptimizer": "^1.3.0",
     "three": "0.187.0",
-    "three-mesh-bvh": "0.9.16"
+    "three-mesh-bvh": "0.9.17"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
