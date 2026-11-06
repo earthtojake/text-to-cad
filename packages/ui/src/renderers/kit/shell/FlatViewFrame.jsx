@@ -166,8 +166,8 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
     detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
 
   return (
-    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"
-      data-slot="cad-file-view" {...surface} data-cad-scene-backdrop="" tabIndex={-1}
+    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground"
+      data-slot="cad-file-view" {...surface} data-cad-canvas="" tabIndex={-1}
       onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
       {mode === "docked" ? panelNode : null}
       <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">

@@ -58,7 +58,7 @@ beforeEach(() => {
   override(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return this.hasAttribute('data-cad-tool-stack') ? STACK_HEIGHT : 0; } });
   const rect = Element.prototype.getBoundingClientRect;
   override(Element.prototype, 'getBoundingClientRect', { value(this: HTMLElement) {
-    if (this.hasAttribute('data-cad-scene-backdrop')) return DOMRect.fromRect({ x: 0, y: 0, ...VIEWER });
+    if (this.hasAttribute('data-cad-canvas')) return DOMRect.fromRect({ x: 0, y: 0, ...VIEWER });
     if (this.matches('section[data-tool-panel]')) return DOMRect.fromRect({ x: 8, y: 48, width: parseFloat(this.style.width) || 0, height: parseFloat(this.style.maxHeight) || 100 });
     return rect.call(this);
   } });

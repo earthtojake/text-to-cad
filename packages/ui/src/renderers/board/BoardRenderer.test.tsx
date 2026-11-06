@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@cad/core/client';
+import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
@@ -697,19 +698,19 @@ it("a switch of theme draws the board again in that theme's canvas and palette, 
   const swatch = (id: string) => pane.querySelector<HTMLElement>(`[data-layer-row="${id}"] [data-layer-glyph] span`)!.style.backgroundColor;
   showTab(pane, 'Layers');
   await waitFor(() => expect(pane.querySelector('[data-layer-row="F.SilkS"]')).not.toBeNull());
-  // Light: the app's white canvas, KiCad's silkscreen yellow darkened to read on it.
+  // Light: the app's light canvas, KiCad's silkscreen yellow darkened to read on it.
   expect(themes.at(-1)).toBe('light');
-  expect(canvases.at(-1)).toBe('#FFFFFF');
+  expect(canvases.at(-1)).toBe(APP_THEME_COLORS.light.canvas);
   expect(swatch('F.SilkS')).toBe('rgb(156, 150, 77)');
   themes.length = 0;
   await view.scheme('dark');
   // Dark: drawn again here, KiCad's own colours on the neutral dark canvas, nothing asked of the server.
   await waitFor(() => expect(themes).toContain('dark'));
-  await waitFor(() => expect(canvases.at(-1)).toBe('#292929'));
+  await waitFor(() => expect(canvases.at(-1)).toBe(APP_THEME_COLORS.dark.canvas));
   expect(swatch('F.SilkS')).toBe('rgb(242, 237, 161)');
   expect(reads).toBe(plots);
   await view.scheme('light');
-  await waitFor(() => expect(canvases.at(-1)).toBe('#FFFFFF'));
+  await waitFor(() => expect(canvases.at(-1)).toBe(APP_THEME_COLORS.light.canvas));
   dispose();
 });
 

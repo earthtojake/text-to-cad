@@ -63,9 +63,10 @@ One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outlin
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
 decimals. The sheet is what the renderer frames; the whole canvas is its background: `background` is
-the dark canvas (the viewer's neutral dark grey, `#292929`, where KiCad's theme has navy), what a
-reader with no theme draws on. The viewer and `cad kicad_pcb snapshot` draw on their theme's own
-(`plot2d/theme.js`'s `boardPalette`: white or that grey) in its palette; no colour is the payload's. It
+a neutral dark grey (`#292929`, where KiCad's theme has navy), what a reader with no theme draws
+on. The viewer draws on its theme's own (`plot2d/theme.js`'s `boardPalette`: the app's canvas,
+`lib/appTheme.js`) and `cad kicad_pcb snapshot` on its own (white or that grey), each in its
+palette; no colour is the payload's. It
 clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
 where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
 

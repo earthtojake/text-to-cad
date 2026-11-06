@@ -8,14 +8,30 @@ import { VIEWPORT_CORNER_GAP_PX } from "./viewportLayout.js";
  * orientation to turn, has its zoom pill there (`ZoomControl.jsx`), and over it its own view buttons (a
  * board's Display). The top strip is what you do to the model; this corner is how you look at it.
  *
- * The buttons are see-through discs on the canvas, no border and no surface of their own, so the
- * corner reads as part of the view rather than a toolbar. Their menus open to the left and up.
+ * Every control here sits on one surface (`VIEW_CORNER_SURFACE_CLASS`): the canvas itself, nearly
+ * opaque and lightly blurred, under the corner's faint wash, no border and no shadow. Over an empty
+ * canvas it is the canvas and the wash, so the corner reads as part of the view rather than a
+ * toolbar; over the picture or the model it keeps its glyphs at full contrast, what passes under it
+ * a faint hint. Their menus open to the left and up.
  */
 
-/** A round corner button's classes, for a `ToolbarButton` (or a trigger built on one). */
-export const VIEW_CORNER_BUTTON_CLASS = "relative size-7 rounded-full border-0 bg-foreground/[0.09] text-muted-foreground shadow-none "
-  + "hover:bg-foreground/[0.16] hover:text-foreground aria-expanded:bg-foreground/[0.16] aria-expanded:text-foreground "
-  + "data-[variant=secondary]:bg-foreground/[0.16] data-[variant=secondary]:text-foreground [&>svg]:size-3.5!";
+/**
+ * The corner's surface: the canvas at 85% under a light blur (the background colour), the wash over
+ * it (a background image in `--view-corner-wash`, the foreground at 9%). A state that strengthens the
+ * wash sets the variable to `VIEW_CORNER_WASH_STRONG`'s 16%, so the backing stays under it.
+ */
+export const VIEW_CORNER_SURFACE_CLASS = "bg-canvas/85 backdrop-blur-[4px] "
+  + "bg-[image:linear-gradient(var(--view-corner-wash),var(--view-corner-wash))] "
+  + "[--view-corner-wash:color-mix(in_oklab,var(--foreground)_9%,transparent)]";
+
+/** A round corner button's classes, for a `ToolbarButton` (or a trigger built on one). Hovered, open or
+ * on, its wash is the stronger one; the button's own state fills give way to the surface's backing. */
+export const VIEW_CORNER_BUTTON_CLASS = `relative size-7 rounded-full border-0 ${VIEW_CORNER_SURFACE_CLASS} text-muted-foreground shadow-none `
+  + "hover:bg-canvas/85 dark:hover:bg-canvas/85 hover:text-foreground aria-expanded:text-foreground data-[variant=secondary]:bg-canvas/85 "
+  + "data-[variant=secondary]:hover:bg-canvas/85 data-[variant=secondary]:text-foreground "
+  + "hover:[--view-corner-wash:color-mix(in_oklab,var(--foreground)_16%,transparent)] "
+  + "aria-expanded:[--view-corner-wash:color-mix(in_oklab,var(--foreground)_16%,transparent)] "
+  + "data-[variant=secondary]:[--view-corner-wash:color-mix(in_oklab,var(--foreground)_16%,transparent)] [&>svg]:size-3.5!";
 
 /** The corner's column: its buttons stacked, right-aligned, a gap between them. */
 export function ViewCornerColumn({ children, style, className }) {

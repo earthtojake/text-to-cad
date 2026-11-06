@@ -271,9 +271,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
   view controls over it in the same column (a board's side: a switch as wide as the pill). The corner's design
-  language is its own, for navigation only, never a tool: **round** — 28px discs with 14px icons on a
-  see-through fill of the canvas's foreground (9%, 16% under the pointer, while a menu is open and while
-  a state is on), no border and no shadow, 6px apart, tooltips and menus to the left; the pill is the
+  language is its own, for navigation only, never a tool: **round** — 28px discs with 14px icons on one
+  surface (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`): the canvas at 85% under a 4px blur, a wash
+  of the foreground over it (9%, 16% under the pointer, while a menu is open and while a state is on),
+  no border and no shadow. Over an empty canvas it is the canvas and the wash; over the picture or the
+  model its glyphs keep their contrast and what passes under it is a faint hint. 6px apart, tooltips
+  and menus to the left; the pill is the
   same disc drawn out into a capsule, the same height and fill, − and + discs either end of the
   percentage, and a board's side the same capsule over it, its two halves the two sides side by side, the
   chosen one raised on the stronger fill. A state shows on the control itself (Projection's icon, a
@@ -561,7 +564,8 @@ Model (`STEP_PART_VIEW_FEATURES`).
 3D view's `RendererShell.jsx`, a drawing's `DxfRenderer.jsx`, one state, `useFlatPanelState`) holds what there is to read of the
 file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
-lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
+`bg-canvas`, the content area behind every view, 2D and 3D, which sits darker than the chrome in
+both themes, as Figma's, VS Code's and Linear's canvas does)
 with a rule at its right, and the canvas the narrower for it: open, at any width, it takes its
 width out of the canvas, and the picture is drawn in what it leaves, nothing of it under the panel
 (a phone's whole-view page aside). The strip stays at the view's centre,
@@ -1178,7 +1182,7 @@ GLB, STL/3MF, URDF/SRDF/SDF), and a view whose renderer does not (a DXF, 2D) has
 button, not a disabled one, and never enters it, whatever asks. It is the shell's own state;
 hosts neither start nor observe it. Its button is a play triangle ("Preview"), the strip's last
 tile after Display, in every host. A press covers the view at once
-("Preparing preview…", in the scene's backdrop colour) and enters Preview under the cover,
+("Preparing preview…", on the canvas) and enters Preview under the cover,
 which lifts once Preview's view has presented its first frame, its published mesh is complete
 and the studio frame's picture has converged
 (every sample drawn: the viewport's `pictureProgress`) — at least 700ms; at five seconds it stops

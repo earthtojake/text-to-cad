@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
+import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 
 // The drawing under test is a COMMITTED payload: exactly what
 // a DXF document's `drawing` answered for `__fixtures__/sample.dxf`, so this test
@@ -198,9 +199,10 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   // reaches to the 16 px gutter and no further.
   assert.ok(Math.abs(box.height - (light.height - strip - 32)) <= 3, `fitted to the gutter: ${box.height} in ${light.height}`);
 
-  // Default pen: the theme's foreground, on the theme's background. The outline is
+  // Default pen: the theme's foreground, on the canvas. The outline is
   // default-pen line-work.
-  assert.ok(near(box.backdrop, [255, 255, 255], 12), `light background: ${box.backdrop}`);
+  const canvas = [1, 3, 5].map(at => Number.parseInt(APP_THEME_COLORS.light.canvas.slice(at, at + 2), 16));
+  assert.ok(near(box.backdrop, canvas, 12), `light canvas: ${box.backdrop}`);
   const edgeLight = darkestInk(light);
   assert.ok(edgeLight[0] < 110 && edgeLight[1] < 110 && edgeLight[2] < 110, `dark ink on light: ${edgeLight}`);
 

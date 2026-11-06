@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
+import { appThemeColors } from "@cad/core/lib/appTheme.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import { boardPlanProjection, planToSheet } from "@cad/core/lib/plot2d/index.js";
 import { drawSchematicOverlay } from "@cad/core/lib/schematic2d/schematicOverlay.js";
@@ -65,9 +66,8 @@ const SCHEMATIC_SURFACE = Object.freeze({ "data-schematic-surface": "" });
 const SLICES = Object.freeze({ schematic: "1", isolated: "1" });
 const SCHEMATIC_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
 const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
-// The app's neutral grey round the sheet: a shade off the light theme's paper, the dark theme's own background.
-const SURROUND = Object.freeze({ light: "#E5E5E5", dark: "#292929" });
-const surroundOf = scheme => SURROUND[scheme === "dark" ? "dark" : "light"];
+// Round the sheet, the canvas: the content area every view draws on (`--canvas`, `lib/appTheme.js`).
+const surroundOf = scheme => appThemeColors(scheme).canvas;
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
 const finite = value => typeof value === "number" && Number.isFinite(value);

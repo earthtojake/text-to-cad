@@ -11,6 +11,7 @@ import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, FileSheetValueInput, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SUB_TOOLBAR_SLIDER_CLASS } from "../kit/tools/SubToolbar.jsx";
+import { VIEW_CORNER_SURFACE_CLASS } from "../kit/shell/ViewCorner.jsx";
 
 /**
  * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
@@ -129,7 +130,7 @@ function BoardSideSwitch({ below, onChange, disabled }) {
   // The words say it all, so no tooltip: a press on the side not chosen flips the board.
   const half = (side, chosen) => <button type="button" role="radio" aria-checked={chosen} disabled={disabled} className={SIDE_HALF_CLASS}
     data-board-side={side} onClick={() => { if (!chosen) onChange(); }}>{t(side === "bottom" ? "board.text.from_bottom" : "board.text.from_top")}</button>;
-  return <div role="radiogroup" aria-label={t("board.text.side")} className="pointer-events-auto inline-flex h-7 w-[6.5rem] items-center rounded-full bg-foreground/[0.09]"
+  return <div role="radiogroup" aria-label={t("board.text.side")} className={cn("pointer-events-auto inline-flex h-7 w-[6.5rem] items-center rounded-full", VIEW_CORNER_SURFACE_CLASS)}
     data-board-side-switch="">
     {half("top", !below)}
     {half("bottom", below)}

@@ -407,7 +407,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const topControls = useRef(null);
   useLayoutEffect(() => {
     const controls = topControls.current;
-    const viewport = controls?.closest("[data-cad-scene-backdrop]");
+    const viewport = controls?.closest("[data-cad-canvas]");
     if (!controls || !viewport) return undefined;
     const measure = () => {
       const column = controls.parentElement;
@@ -511,7 +511,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   const body = (
     <div
-      className={cn("relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground", pointing && "cursor-pointer")}
+      className={cn("relative flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-foreground", pointing && "cursor-pointer")}
       data-slot="cad-file-view"
       data-cad-surface
       tabIndex={-1}
@@ -568,12 +568,12 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
             {/* The render pane's box. The canvas fills exactly this area, so a camera fit
                 centres in what is visible and a change of the pane's size reaches the scene
                 as a plain resize. Its background is the
-                scene's edge colour: the canvas is resized on the next frame, and one frame of
-                the chrome's background above a dark stage is a visible band. */}
+                scene's edge colour (the canvas, in the tools view): the scene is resized on the
+                next frame, and one frame of another colour above a dark stage is a visible band. */}
             <div ref={stageRef}
               className="@container/cad-viewport pointer-events-none relative min-w-0 flex-1"
-              data-cad-scene-backdrop={frame.sceneBackdrop}
-              style={{ backgroundColor: frame.sceneBackdrop }}
+              data-cad-canvas={frame.stageColor}
+              style={{ backgroundColor: frame.stageColor }}
             >
               {/* The canvas is clipped to the stage; the strip is not, so it reaches over the docked panel. */}
               <div className="pointer-events-auto absolute inset-0 z-0 overflow-hidden">
@@ -704,7 +704,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                 className={cn("absolute inset-0 z-40 flex items-center justify-center",
                   // At once over the press, so nothing of preview shows first; it fades only as it lifts.
                   previewCovered ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 transition-opacity duration-300 motion-reduce:transition-none")}
-                style={{ backgroundColor: frame.sceneBackdrop }}>
+                style={{ backgroundColor: frame.stageColor }}>
                 {previewCovered ? <span role="status" className="flex items-center gap-2 text-tiny text-muted-foreground">
                   <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />{t("preview.preparing")}
                 </span> : null}

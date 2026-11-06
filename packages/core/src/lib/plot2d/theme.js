@@ -1,9 +1,9 @@
 /**
  * A board's colours, in the viewer's two themes. **Dark** is KiCad's default colour theme, as the
  * board view draws a board: the "KiCad Default" board colours, by layer
- * (`common/settings/builtin_color_themes.h`), on the viewer's neutral dark canvas (`#292929`, the
- * app's dark `--background`, in place of KiCad's navy). **Light** is the same layers on the app's
- * light canvas (`#ffffff`): KiCad ships no light board theme (its built-ins, Default and Classic,
+ * (`common/settings/builtin_color_themes.h`), on the viewer's neutral dark canvas (the app's dark
+ * `--canvas`, `lib/appTheme.js`, in place of KiCad's navy). **Light** is the same layers on the app's
+ * light canvas: KiCad ships no light board theme (its built-ins, Default and Classic,
  * are both dark), so it is derived, one rule for every colour — each kept where it already reads on
  * white at WCAG's 3:1 for graphics (both outer coppers, the magenta courtyard, ...), else its OKLCH
  * lightness lowered, its hue kept and its chroma only as far as sRGB needs, until it does — so a
@@ -17,8 +17,10 @@
  * hole golden with a light wall; names on copper light or dark against the copper's own colour. The
  * payload carries geometry only (`docs/plot-payload.md`); what colour a layer is, is this module's,
  * so a change of theme draws the board again in the browser, never on the server.
- * `render/board.py` (`cad kicad_pcb snapshot`) mirrors both tables.
+ * `render/board.py` (`cad kicad_pcb snapshot`) mirrors both tables, its stills on the canvas this
+ * module had before the canvas moved to `--canvas` (`#292929`, `#ffffff`).
  */
+import { APP_THEME_COLORS } from "../appTheme.js";
 
 /** KiCad's zone opacity: a pour's fill is drawn at this share of its layer's colour. */
 export const ZONE_OPACITY = 0.6;
@@ -26,7 +28,8 @@ export const ZONE_OPACITY = 0.6;
 export const DIM_OPACITY = 0.3;
 
 const DARK = Object.freeze({
-  background: "#292929",
+  // The canvas: the content area behind every view, the board drawn on it and seen through its holes.
+  background: APP_THEME_COLORS.dark.canvas,
   copper: { "F.Cu": "#C83434", "B.Cu": "#4D7FC4" },
   // Inner copper, In1 to In30, in KiCad's order.
   inner: [
@@ -56,7 +59,7 @@ const DARK = Object.freeze({
 
 // The light theme: DARK's colours by the rule above (each at 3:1 or more on #ffffff, its hue kept).
 const LIGHT = Object.freeze({
-  background: "#FFFFFF",
+  background: APP_THEME_COLORS.light.canvas,
   copper: { "F.Cu": "#C83434", "B.Cu": "#4D7FC4" },
   inner: [
     "#5BA35C", "#CE7D2C", "#14A5A5", "#DB628B", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#67A35B", "#E6762B",

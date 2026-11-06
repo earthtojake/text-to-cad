@@ -3,7 +3,7 @@
  * view's pan, zoom, fit, tap, drag and hover, its rasters, its capture and its card's picture).
  *
  * The whole pane is the board's canvas in the view's theme (`plot2d/theme.js`'s `boardPalette`: the
- * app's light or dark `--background`), which reaches past the board as KiCad's does, and the board
+ * app's light or dark `--canvas`), which reaches past the board as KiCad's does, and the board
  * is drawn in that theme's palette. A switch of theme draws the rasters again from the payload
  * already held: nothing is asked of the server.
  */

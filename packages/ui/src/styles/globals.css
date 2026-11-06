@@ -77,10 +77,10 @@
     @apply border-border outline-ring/50;
   }
 
-  /* What a file opening shows: the page's own background, plain and opaque — no glow, no blur,
+  /* What a file opening shows: the canvas, plain and opaque — no glow, no blur,
    * nothing of what is behind it seen through. */
   .cad-loading-overlay {
-    background: var(--background);
+    background: var(--canvas);
   }
 
   ::selection {

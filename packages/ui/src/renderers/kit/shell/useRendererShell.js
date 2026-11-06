@@ -9,8 +9,8 @@ import { useI18n } from "@cad/ui/i18n";
 import { DRAWING_SHORTCUTS, pressToolKey } from "../tools/toolShortcuts.js";
 import { useViewerHistory } from "./useViewerHistory.js";
 import { promptView, promptViews } from "../../../annotation/views.js";
-import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
-import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
+import { sceneEdgeColor } from "../look/canvasColor.js";
+import { useCanvasColor } from "../look/useCanvasColor.js";
 import { previewViewScene } from "../viewport/previewViewScene.js";
 import { CAD_ANNOTATION_DEFAULTS } from "../tools/annotate/AnnotationOverlay.jsx";
 import { annotationDocumentOf } from "../tools/annotate/annotation3d.js";
@@ -245,7 +245,9 @@ export function useRendererShell({
   // A renderer whose own work needs the display settings BEFORE it can hand this hook a scene
   // — one that reads them while it is still deciding what to load — creates them itself and passes
   // them in. It is the same store either way; owning it here is a convenience, not a rule.
-  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings);
+  // The canvas (`--canvas`): the tools view's scene is drawn on it, as every view's content is.
+  const canvasColor = useCanvasColor(colorScheme === "dark");
+  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings, canvasColor);
   useLayoutEffect(() => { viewSettingsStore.configure({ features }); }, [viewSettingsStore, features]);
   // Before the first paint, like every later edit: through the store, never around it.
   useLayoutEffect(() => { viewSettingsStore.restore(restored.display, restored.preview); }, [viewSettingsStore, restored]);
@@ -354,13 +356,13 @@ export function useRendererShell({
   }, [scheduleSessionSave]);
 
   // ---- host chrome ----------------------------------------------------------
-  const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
-  const sceneBackdrop = useMemo(
+  // The box the scene fills: the colour the scene reaches its edges with, the canvas in the tools view.
+  const stageColor = useMemo(
     () => resolvedScene.view.background.enabled && resolvedScene.view.background.opacity === 1
       ? resolvedScene.view.background.color
-      : resolvedScene.view.background.enabled ? chromeBackdropColor
-        : sceneBackdropEdgeColor(resolvedScene.theme?.background, chromeBackdropColor),
-    [chromeBackdropColor, resolvedScene.theme, resolvedScene.view.background]
+      : resolvedScene.view.background.enabled ? canvasColor
+        : sceneEdgeColor(resolvedScene.theme?.background, canvasColor),
+    [canvasColor, resolvedScene.theme, resolvedScene.view.background]
   );
   // The tab's settings (`@cad/ui/tab-store`): the person's, in every file of the tab. Read
   // through their own normalizers, so a host that hands over less is still whole here.
@@ -726,7 +728,7 @@ export function useRendererShell({
     viewSettings: { view: desiredScene.view, store: viewSettingsStore },
     // Frame-facing (RendererShell).
     frame: {
-      view, hostRef, hostElement, sceneBackdrop, modelKey, presentationKey, sceneScaleMode, scene,
+      view, hostRef, hostElement, stageColor, modelKey, presentationKey, sceneScaleMode, scene,
       viewerRef, previewViewRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       onCameraSettled: reportCameraSettled,
       preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,

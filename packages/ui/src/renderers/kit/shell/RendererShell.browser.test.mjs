@@ -87,7 +87,7 @@ test('mobile tools centre on the viewport and keep the panel pill\'s gap as spac
     await page.locator('#root > div').evaluate((element, width) => element.style.setProperty('width', `${width}px`, 'important'), width);
     await page.waitForFunction(width => {
       const pane = document.querySelector('[data-testid="one"]');
-      const viewport = pane.querySelector('[data-cad-scene-backdrop]');
+      const viewport = pane.querySelector('[data-cad-canvas]');
       const strip = pane.querySelector('[aria-label="Interaction tools"]');
       const column = pane.querySelector('[data-cad-tool-groups]');
       if (!viewport || !strip || !column) return false;

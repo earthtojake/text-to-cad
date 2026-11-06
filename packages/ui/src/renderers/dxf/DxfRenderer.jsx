@@ -595,8 +595,8 @@ function DxfSurface({ view, data }) {
   const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
-    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"
-      data-slot="cad-file-view" data-drawing-surface data-cad-scene-backdrop="" tabIndex={-1}
+    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground"
+      data-slot="cad-file-view" data-drawing-surface data-cad-canvas="" tabIndex={-1}
       onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
       {flat.mode === "docked" ? panelNode : null}
       <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">

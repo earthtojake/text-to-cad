@@ -1,27 +1,27 @@
-// The app background behind the resolved CAD scene.
+// The canvas: the content area behind every view, the colour a scene is drawn on.
 //
-// Inspect and Render paint their own scene backgrounds. The app's `--background`
-// token provides the fallback for the frame around that scene.
-// A missing or unreadable token falls back to the viewer's neutral light and
-// neutral grey dark palette. This is app UI resolution; the standalone snapshot
+// The app's `--canvas` token defines it, the 2D views' and the 3D views' alike; the
+// tools view's scene takes it in place of its theme's background, and the box the
+// scene fills is painted it too. Preview and Render paint their own studio.
+// A missing or unreadable token falls back to the written-out pair (core's
+// `lib/appTheme.js`). This is app UI resolution; the standalone snapshot
 // renderer consumes its own supplied theme settings without app preferences.
 //
 // Plain functions, no `@/` imports and no React, so `node --test` loads this
 // file directly; `document` arrives as an argument for the same reason.
 import { APP_THEME_COLORS } from "@cad/core/lib/appTheme.js";
 
-/** The `--background` pair, written out: what the tokens resolve to.
+/** The `--canvas` pair, written out: what the token resolves to.
  *
- * Taken from the app's surface pair rather than spelled again here. Renderers
- * and the headless snapshot bundle paint on this same background, and a second
- * copy of the number is the one that drifts. */
-export const CHROME_BACKDROP_FALLBACK = Object.freeze({
-  light: APP_THEME_COLORS.light.background,
-  dark: APP_THEME_COLORS.dark.background
+ * Taken from the app's own colours rather than spelled again here: the 2D views
+ * draw on the same pair, and a second copy of the number is the one that drifts. */
+export const CANVAS_FALLBACK = Object.freeze({
+  light: APP_THEME_COLORS.light.canvas,
+  dark: APP_THEME_COLORS.dark.canvas
 });
 
-/** The custom property defining the app's background. */
-export const CHROME_BACKGROUND_TOKEN = "--background";
+/** The custom property defining the canvas. */
+export const CANVAS_TOKEN = "--canvas";
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));
@@ -112,10 +112,10 @@ function oklabToHex(lightness, aAxis, bAxis) {
 /**
  * A CSS colour as `#rrggbb`, or null when this parser does not know it.
  *
- * Three notations, because three are what a computed `--background` can be:
+ * Three notations, because three are what a computed token can be:
  * `oklch()` (what both apps author), `rgb()`/`rgba()` (what a browser
  * serialises a legacy colour to) and hex (what a hand-written token or a
- * theme setting looks like). Alpha is dropped — a backdrop is opaque — and
+ * theme setting looks like). Alpha is dropped — the canvas is opaque — and
  * every other notation is null rather than an approximation.
  */
 export function cssColorToHex(value) {
@@ -161,56 +161,55 @@ export function cssColorToHex(value) {
 }
 
 /**
- * The `--background` token as the document computes it right now, or `""`.
+ * The `--canvas` token as the document computes it right now, or `""`.
  *
- * Read off `<html>`, because that is where both apps declare the pair and
+ * Read off `<html>`, because that is where both apps declare the tokens and
  * where the `.dark` class that swaps them is toggled.
  */
-export function readChromeBackgroundToken(doc = typeof document === "undefined" ? null : document) {
+export function readCanvasToken(doc = typeof document === "undefined" ? null : document) {
   const root = doc?.documentElement;
   const view = doc?.defaultView;
   if (!root || typeof view?.getComputedStyle !== "function") {
     return "";
   }
   try {
-    return view.getComputedStyle(root).getPropertyValue(CHROME_BACKGROUND_TOKEN).trim();
+    return view.getComputedStyle(root).getPropertyValue(CANVAS_TOKEN).trim();
   } catch {
     return "";
   }
 }
 
 /**
- * The chrome's own background, or the written-out pair when there is no
- * chrome to read.
+ * The canvas, or the written-out pair when there is no token to read.
  *
  * `prefersDark` is the APP's light/dark — a host's `colorScheme`, or the
  * standalone viewer's own resolved scheme. Scene lighting and materials do
  * not change the app's appearance.
  */
-export function resolveChromeBackdropColor({ token = "", prefersDark = false } = {}) {
+export function resolveCanvasColor({ token = "", prefersDark = false } = {}) {
   return cssColorToHex(token)
-    || (prefersDark === true ? CHROME_BACKDROP_FALLBACK.dark : CHROME_BACKDROP_FALLBACK.light);
+    || (prefersDark === true ? CANVAS_FALLBACK.dark : CANVAS_FALLBACK.light);
 }
 
 /**
- * The colour the scene reaches its edges with, for the box the canvas fills.
+ * The colour the scene reaches its edges with, for the box the scene fills.
  *
- * The WebGL canvas is opaque and covers that box, so this is only ever seen
+ * The WebGL surface is opaque and covers that box, so this is only ever seen
  * for the frame between a resize and the renderer catching up — and "only a
- * frame" is exactly long enough to see a band of the app's own background
- * above a dark stage. A gradient's edge stop is the honest answer there, not
- * its solid base: that is the colour the picture ends on.
+ * frame" is exactly long enough to see a band of another colour above a dark
+ * stage. A gradient's edge stop is the honest answer there, not its solid
+ * base: that is the colour the picture ends on.
  *
  * It is also what a test can read. `scene.background` is a three.js texture
  * with no DOM presence and the viewport renderer keeps no drawing buffer, so
- * the box's own `background-color` is the one place the chosen backdrop is
+ * the box's own `background-color` is the one place the chosen colour is
  * legible from outside the renderer.
  * @param {{ type?: unknown, linearEnd?: unknown, radialOuter?: unknown, solidColor?: unknown } | null} background
  * @param {string} fallback
  */
-export function sceneBackdropEdgeColor(background = null, fallback = CHROME_BACKDROP_FALLBACK.light) {
+export function sceneEdgeColor(background = null, fallback = CANVAS_FALLBACK.light) {
   const type = String(background?.type || "").trim().toLowerCase();
-  // A transparent canvas reveals the app behind it, not a dormant solid color.
+  // A transparent scene reveals the canvas behind it, not a dormant solid color.
   if (type === "transparent") return fallback;
   const edge = type === "linear"
     ? background?.linearEnd

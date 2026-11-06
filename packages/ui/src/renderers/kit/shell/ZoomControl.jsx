@@ -9,6 +9,7 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
+import { VIEW_CORNER_SURFACE_CLASS } from "./ViewCorner.jsx";
 
 export { ZOOM_FACTOR };
 
@@ -34,7 +35,7 @@ export default function ZoomPill({ zoom, style = null }) {
   const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   const percent = useZoomPercent(zoom);
   const shown = `${Math.round(percent).toLocaleString()}%`;
-  return <div className="pointer-events-auto absolute z-20 inline-flex h-7 items-center rounded-full bg-foreground/[0.09]" style={style ?? undefined} data-zoom-pill="">
+  return <div className={cn("pointer-events-auto absolute z-20 inline-flex h-7 items-center rounded-full", VIEW_CORNER_SURFACE_CLASS)} style={style ?? undefined} data-zoom-pill="">
     <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={PILL_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>

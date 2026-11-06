@@ -6,6 +6,7 @@ import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { fitPlotTransform, layoutPlot, pageToScreen } from '@cad/core/lib/plot2d/plot.js';
+import { boardPalette } from '@cad/core/lib/plot2d/theme.js';
 
 // A board's one load path, in a real browser: the COMMITTED payload (`__fixtures__/README.md`: the
 // test board as the engine draws it from its file), served as `GET /api/v1/documents/kicad_pcb/<id>/plot` serves it, painted from
@@ -88,12 +89,13 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
     .getPropertyValue('--cad-tools-bottom')) || 0);
   const transform = fitPlotTransform(layoutPlot(BOARD), Math.round(canvas.width), Math.round(canvas.height), { top });
   const at = ([x, y]) => pageToScreen(transform, x, y);
-  // The board on KiCad's canvas: its background off the page as on it, the board's area shadowed over it;
-  // the VBUS track (y = 15) red.
-  const background = hex(BOARD.sheets[0].background);
-  assert.ok(near(pixel(fitted, 2, 2), background, 12), `KiCad's canvas round the board: ${pixel(fitted, 2, 2)}`);
+  // The board on the app's canvas: the theme's background off the page as on it, the board's area shadowed
+  // over it (its 35% grey); the VBUS track (y = 15) red.
+  const background = hex(boardPalette('dark').background);
+  assert.ok(near(pixel(fitted, 2, 2), background, 12), `the canvas round the board: ${pixel(fitted, 2, 2)}`);
   const [cornerX, cornerY] = at([1, 1]);
-  assert.ok(near(pixel(fitted, cornerX, cornerY), [62, 62, 62], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
+  const area = background.map(channel => Math.round(channel + 0.35 * (100 - channel)));
+  assert.ok(near(pixel(fitted, cornerX, cornerY), area, 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
   const [trackX, trackY] = at([30, 15]);
   assert.ok(red(pixel(fitted, trackX, trackY)), `the track: ${pixel(fitted, trackX, trackY)}`);
   // R1 pad 2 (35.825, 15): drawn as the board draws it, until a press selects it and lights it.
