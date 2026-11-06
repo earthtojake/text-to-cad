@@ -45,7 +45,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
                                   "with the integrations its imports use"),
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
-    "doctor": ("cad_server.cli.doctor", "set the server up and report what this device runs (--check: read-only)"),
+    "doctor": ("cad_server.cli.doctor", "set the server up and report it (--check: report only)"),
     # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
