@@ -16,6 +16,10 @@ board at its block's end, and the next step reads what the last one saved. Each 
    each net's current (`b.get_design_rules()`, `b.set_design_rules(...)`, the project's
    `.kicad_pro`). Width for current: IPC-2221, `I = k * dT^0.44 * A^0.725` (A in mil², k = 0.048 on
    outer layers, 0.024 inner); size power nets and their pours from it, signals at the netclass width.
+   `set_design_rules` sets the board's minimums; a netclass's clearance and width, which DRC holds a
+   track to over them (a board an edit makes has KiCad's `Default`, 0.2 mm), are the `.kicad_pro`'s
+   `net_settings.classes` (JSON): write them between edits (an edit's save writes the project too),
+   and read DRC to see them taken.
 3. **Place one part or one small functional group at a time,** as [placement](placement.md) sets
    out: fixed parts first (connectors, mounting holes, anything the enclosure locates), then each IC
    with its own group, in order of how little distance each connection tolerates. Draw the outline
@@ -38,7 +42,9 @@ board at its block's end, and the next step reads what the last one saved. Each 
    headless KiCad has no interactive router. Fast nets and differential pairs follow the next section.
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
    `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
-   errors are what to fix now. Moving a part after routing is fine: reroute what it touched.
+   errors are what to fix now. Moving a part after routing is fine: reroute what it touched. A pour's
+   thermal reliefs round dense small pads can neck below the minimum connection width
+   (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every
    step (below). Fix what it finds the same way.
 
@@ -160,7 +166,9 @@ from cad import kicad_pcb
 
 board = kicad_pcb.read(sys.argv[1] if len(sys.argv) > 1 else "board.kicad_pcb")
 
-# 1. Octolinear: every straight segment runs at a multiple of 45 degrees (arcs excluded).
+# 1. Octolinear: every straight segment runs at a multiple of 45 degrees (arcs excluded). On a board
+# whose parts are turned to their place (a ring of LEDs on a round board), measure a part's escapes
+# against its own rotation instead.
 off_angle = []
 for track in board.tracks:
     if track.arc:
