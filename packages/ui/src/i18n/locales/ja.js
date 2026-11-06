@@ -772,6 +772,7 @@ export default {
   "layers.hideNamed": "レイヤー {name} を非表示",
   "layers.selectBlock": "ブロック {name} を選択",
   "layers.block": "ブロック",
+  "layers.handle": "ハンドル {handle}",
   "drawing.type.line": "線分",
   "drawing.type.arc": "円弧",
   "drawing.type.circle": "円",

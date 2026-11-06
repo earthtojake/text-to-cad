@@ -772,6 +772,7 @@ export default {
   "layers.hideNamed": "레이어 {name} 숨기기",
   "layers.selectBlock": "블록 {name} 선택",
   "layers.block": "블록",
+  "layers.handle": "핸들 {handle}",
   "drawing.type.line": "선",
   "drawing.type.arc": "호",
   "drawing.type.circle": "원",

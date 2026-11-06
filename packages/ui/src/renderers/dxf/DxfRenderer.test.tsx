@@ -290,6 +290,8 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
   // HARDWARE holds the two M5_NUT references; a click picks one, as a tap on the drawing would.
   const inserts = [...list.querySelectorAll('[data-insert-row]')];
   expect(inserts.map(row => row.getAttribute('data-insert-row'))).toEqual(['99', '9B']);
+  // Each its block's name, then its handle marked as one (the payload holds no insertion point).
+  expect(inserts.map(row => row.textContent)).toEqual(['M5_NUT#99', 'M5_NUT#9B']);
   fireEvent.click(inserts[0]);
   await waitFor(() => expect(within(pane.querySelector('[data-quick-edit-box]') as HTMLElement).getByRole('button', { name: 'Block M5_NUT on HARDWARE' })).toBeTruthy());
 
@@ -298,6 +300,9 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
   fireEvent.change(search, { target: { value: 'nut' } });
   await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-layer-row]')].map(row => row.getAttribute('data-layer-row'))).toEqual(['HARDWARE']));
   expect(aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')).toHaveLength(2);
+  // A handle finds its reference, as it is shown or bare.
+  fireEvent.change(search, { target: { value: '#9b' } });
+  await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')].map(row => row.getAttribute('data-insert-row'))).toEqual(['9B']));
   fireEvent.change(search, { target: { value: 'zzz' } });
   await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
   fireEvent.change(search, { target: { value: '' } });

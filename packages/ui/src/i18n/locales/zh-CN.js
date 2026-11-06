@@ -773,6 +773,7 @@ export default {
   "layers.hideNamed": "隐藏图层 {name}",
   "layers.selectBlock": "选择块 {name}",
   "layers.block": "块",
+  "layers.handle": "句柄 {handle}",
   "drawing.type.line": "直线",
   "drawing.type.arc": "圆弧",
   "drawing.type.circle": "圆",

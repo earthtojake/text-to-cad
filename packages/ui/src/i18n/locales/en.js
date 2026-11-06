@@ -800,6 +800,7 @@ export default {
   "layers.hideNamed": "Hide layer {name}",
   "layers.selectBlock": "Select block {name}",
   "layers.block": "Block",
+  "layers.handle": "Handle {handle}",
   "drawing.type.line": "Line",
   "drawing.type.arc": "Arc",
   "drawing.type.circle": "Circle",

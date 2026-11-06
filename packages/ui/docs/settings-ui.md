@@ -694,7 +694,9 @@ file.
   and the box after it its pen; its name 48px in (16, the slot's 12, 4, the pen's 12, 4), always,
   whether or not any layer has blocks. A block reference's row stands in line with its layer's: its
   slot only the layer's guide, down the chevron's middle; its box its block's glyph, under the pen;
-  its name and handle under the layer's name and count. Searching, the layers whose names match,
+  its name under the layer's name and, under its count, its handle as the entity's id it is, `#9C` (the
+  payload carries no insertion point to show instead), its tooltip **Handle 9C**; Copy Reference names
+  it by that handle (`drawing.dxf#h9C`), and the search finds it by it. Searching, the layers whose names match,
   and the blocks whose names do under their layer.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
   often, so on the corner's bottom row, left of the zoom pill or the cube, the same in 2D and 3D:

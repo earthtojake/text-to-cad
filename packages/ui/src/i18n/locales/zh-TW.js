@@ -773,6 +773,7 @@ export default {
   "layers.hideNamed": "隱藏圖層 {name}",
   "layers.selectBlock": "選取圖塊 {name}",
   "layers.block": "圖塊",
+  "layers.handle": "控點 {handle}",
   "drawing.type.line": "直線",
   "drawing.type.arc": "圓弧",
   "drawing.type.circle": "圓",

@@ -28,13 +28,14 @@ function LayerEye({ name, hidden, onToggle }) {
   </TreeRowActions>;
 }
 
-/** The layers a search keeps: a layer whose name matches, with all its block references, or one with a block that does, with those. */
+/** The layers a search keeps: a layer whose name matches, with all its block references, or one with a block that does (by
+ * its block's name or its handle, `9C` or `#9C`), with those. */
 function searchRows(rows, query) {
   if (!query) return rows;
   const has = text => String(text || "").toLowerCase().includes(query);
   return rows.flatMap(row => {
     if (has(row.name)) return [row];
-    const inserts = row.inserts.filter(insert => has(insert.block) || has(insert.handle));
+    const inserts = row.inserts.filter(insert => has(insert.block) || has(`#${insert.handle}`));
     return inserts.length ? [{ ...row, inserts }] : [];
   });
 }
@@ -90,12 +91,16 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
               onMouseEnter={() => selection.hover(id)} onMouseLeave={() => selection.hover("")}>
               <TreeRowGlyph guide />
               <TreeRowGlyph><Box className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>
-              <button type="button" aria-label={t("layers.selectBlock", { name: insert.block || insert.handle })} aria-pressed={chosen.has(id)} data-insert-row={insert.handle}
-                onClick={event => selection.select(id, { multiSelect: event.shiftKey || event.metaKey || event.ctrlKey })}
-                className={TREE_ROW_NAME_CLASS}>
-                <TreeRowLabel className="max-w-full shrink-0">{insert.block || t("layers.block")}</TreeRowLabel>
-                <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{insert.handle}</TreeRowLabel>
-              </button>
+              {/* Its detail is its handle, the entity's id in the file (what its reference names, `#h9C`),
+                  marked as one and said whole in its tooltip: the payload carries no insertion point. */}
+              <TooltipHint content={t("layers.handle", { handle: insert.handle })} side="right">
+                <button type="button" aria-label={t("layers.selectBlock", { name: insert.block || insert.handle })} aria-pressed={chosen.has(id)} data-insert-row={insert.handle}
+                  onClick={event => selection.select(id, { multiSelect: event.shiftKey || event.metaKey || event.ctrlKey })}
+                  className={TREE_ROW_NAME_CLASS}>
+                  <TreeRowLabel className="max-w-full shrink-0">{insert.block || t("layers.block")}</TreeRowLabel>
+                  <TreeRowLabel className="flex-1 text-micro text-muted-foreground">#{insert.handle}</TreeRowLabel>
+                </button>
+              </TooltipHint>
             </TreeRowSurface>
           </li>;
         })}</ul> : null}
