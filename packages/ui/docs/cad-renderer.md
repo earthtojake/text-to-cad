@@ -172,7 +172,9 @@ calls one hook; the shell owns the rest.
 | `loadReport.js` | `shellLoadReport`: what the shell asks the status kit about one document load, as one pure function, and all it returns is the loading presentation over the viewport. A renderer whose document is a plain download passes `load` and nothing more. One whose document can be EDITED or PREVIEWED while it is open knows more than the shell can: `load.editPending` (queued work of the person's own, with nothing of it on screen), `load.currentPreview` (that work IS what is drawn, so the wait is over even though the write is not) and `load.finding` (the file is not even located yet). An alert is `load.alert`, which the frame draws as the alert card (`ViewerAlertCard`: every alert; one the model survives, a warning beside it included, can be dismissed). |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape or a ⌘C / Ctrl+C belongs to (focus inside it, or the page after a press inside it); the renderer says what Escape means, and a copy is the active tool's (the drawing tools' view with its annotations, else the selection's references, `copySelection`). The order is [the design system's](settings-ui.md#keyboard). |
 | `viewportLayout.js` | The chrome's geometry: its inset from the viewer's edges (`VIEWPORT_INSET_PX`, 8px), the strip's row (`VIEWPORT_TOP_BAR_PX`, 34px), the cube's size and place (bottom-right, 2px from the right, `VIEWPORT_CORNER_INSET_PX`, and `VIEWPORT_CUBE_BOTTOM`, 8px off the bottom so its axes stay inside the view, plus `--cad-viewport-corner-bottom`, which a host whose control floats over that corner sets to lift it clear), the tool column's bottom (`VIEWPORT_STACK_BOTTOM`: an inset above the cube's line). |
-| `ViewCorner.jsx` | The view's corner at the bottom-right: a 3D view's column over the cube (Display, Projection, Home), a flat view's zoom pill and its own view buttons over it; round discs, the corner's own design language (`settings-ui.md`). |
+| `ViewCorner.jsx` | The view's corner at the bottom-right: a 3D view's column over the cube (`ViewCubeColumn`: Display, Projection, Home — the one column every 3D view's corner is, `RendererShell.jsx`'s and a flat view's frame showing a 3D view alike), a flat view's zoom pill, and the bottom row left of the pill or the cube (`ViewCornerRow`, fixed in place: a view's own controls, `ViewCornerSwitch` capsules and round buttons); round discs and capsules on one surface (`VIEW_CORNER_SURFACE_CLASS`), the corner's own design language (`settings-ui.md`). |
+| `useStageViewport.js` | A `ShellViewport` outside the shell: the applied view settings as its props (`useStageView`, Preview's view's too) and the projection's control (`projectionControl`, the shell's too); `useStageViewport`, a flat view's picture shown in 3D: its own settings, no grid or floor, its stage's background the flat canvas's colour. |
+| `DoubleClickFit.jsx` | A double-click on nothing under Select fits: every 3D view's. |
 | `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. Every view passes its items, built from one set of groups (`viewMenu.js`, below); a flat view hands its own canvas (`canvasRef`) and pane in place of a 3D runtime. |
 | `viewMenu.js` | The entries of every view's menu, in one order: the reference (Copy Reference), the pick (Select or Deselect, Isolate, Exit all isolates), what is shown (Hide others, Show all, Hide or Reveal), the view's own (a tree's Expand and Collapse, a schematic's sheets, a drawing's layers, a board's Flip), and last the framing (Zoom to fit; Zoom to selection, off with nothing picked). Over something, the menu opens with its reference; over empty space it is the view as a whole and the framing. `menuGroups` joins the groups with a rule between them. A 3D scene's is `kit/tools/select/sceneMenu.js`'s (`scene.selectionBounds` for Zoom to selection). |
 
@@ -224,6 +226,23 @@ proportion to its height (to 96px or its content), never `"fixed"`; the column s
 if the rest still does not fit. Every panel is `TOOL_PANEL_WIDTH` wide (164px, a six-tool
 strip's); `resizable` makes a panel the person's to size on its own, from the grip in its
 bottom-right corner alone, kept under its `id`. The engine document's and the robot renderer hand none.
+
+A board is a flat view with two canvases in one frame (`FlatViewFrame.jsx`): the flat canvas
+(`board/useBoardView.js`) and, under 2D | 3D, the board in 3D (`board/Board3dView.jsx`, a lazy
+chunk, so a board in 2D loads no three.js): a `ShellViewport` (its settings through
+`useStageViewport.js`) around core's bare board (`@cad/core/lib/board3d/`: `boardStage.js`, a slab cut
+to the outline; `boardFaces.js`, its two faces the 2D drawer's own `drawPlot` of each side and an
+overlay of `drawBoardOverlay` and the ink, drawn through one scratch canvas per kind into textures
+overwritten in place, at most 8 megapixels a face (a quarter of it on software WebGL) and 2 an
+overlay, freed when 3D is left; `boardFrame.js`, the sheet to the world and back). The frame, the
+strip, the panel, the selection (`useSceneSelection` over the board's one scene), the tools'
+sessions and Quick Edit never unmount: the board view hands the active canvas's half — where a pane
+point lands on the board and how far a pick reaches, Measure's camera, Annotate's surface
+(`board/board3dAnnotation.js`), the framing, the zoom (`ZoomControl.jsx`'s `viewportZoom` in 3D)
+and the capture — to the same handlers. The frame's `corner` is `"cube"` while the 3D view is up:
+the pill gives way to the 3D views' cube and their column over it. A tap and the pointer resting go
+through the 3D views' `usePointerPick`; a drag turns the view. Its faces' bytes are put on screen as
+drawn (no sRGB decode and encode), so they match the flat canvas's colours.
 
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
@@ -780,7 +799,7 @@ A reload shows the same file, and restores it:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection }`: which is up, the 3D camera as a perspective snapshot, null for Home, and its projection; the record's `camera` stays the flat canvas's transform). |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |

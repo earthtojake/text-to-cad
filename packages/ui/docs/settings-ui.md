@@ -216,8 +216,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the same second section with no rule between (a file with only tools that pick has it after a rule,
   as its own second section), in every host, with a navbar or without. The strip is what you do to the
   model; how you look at it is the view's corner (**The view's corner**, below). **What goes on the
-  screen is what is changed often**: a tool, Display and Projection, a board's side, the zoom. What is
-  changed now and then goes in the view's panel or behind a menu: a board's preset and layer display are
+  screen is what is changed often**: a tool, Display and Projection, a board's Display (its preset), 2D | 3D and side, the zoom. What is
+  changed now and then goes in the view's panel or behind a menu: a board's layers and layer display are
   its Layers tab's, Grid is Display's menu's, Zoom to selection and Zoom to 100% the zoom's menu's. 24px tiles with 14px icons,
   an even 4px apart, a tool's chevron touching its button, in a 34px row (`FloatingToolBar`,
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
@@ -270,7 +270,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `ProjectionToggle.jsx`), then **Home** nearest the cube (a house: the view it opened with — the
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
-  view controls over it in the same column (a board's side: a switch as wide as the pill). The corner's design
+  view controls on the corner's **bottom row**, left of the pill (below). The corner's design
   language is its own, for navigation only, never a tool: **round** — 28px discs with 14px icons on one
   surface (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`): the canvas at 85% under a 4px blur, a wash
   of the foreground over it (9%, 16% under the pointer, while a menu is open and while a state is on),
@@ -278,13 +278,23 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   model its glyphs keep their contrast and what passes under it is a faint hint. 6px apart, tooltips
   and menus to the left; the pill is the
   same disc drawn out into a capsule, the same height and fill, − and + discs either end of the
-  percentage, and a board's side the same capsule over it, its two halves the two sides side by side, the
+  percentage, and a board's switches the same capsule beside it, their halves side by side, the
   chosen one raised on the stronger fill. A state shows on the control itself (Projection's icon, a
   board's side). The strip's
   square tiles on the floating surface stay the tools'. A phone has no corner: its view's controls are
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
   back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
+- **The corner's bottom row** (`ViewCorner.jsx`'s `ViewCornerRow`, `VIEWPORT_CORNER_ROW_POSITION`): a
+  view's own controls for how it is looked at, side by side on the pill's line, right-aligned 6px left of
+  the pill (118px from the right edge), each of a fixed width, lifted by `--cad-viewport-corner-bottom`
+  as the pill is. The cube's box ends 90px from the right edge, so the row clears it by 28px: when a flat
+  view shows its picture in 3D and the pill becomes the cube, not one of the row's controls moves. A
+  board's row is `[Display] [2D | 3D] [Front | Back]`: Display the round button (28px), its menu opening
+  up and away from the corner; the two switches capsules on the corner's surface
+  (`ViewCornerSwitch`, `VIEW_CORNER_SURFACE_CLASS`, the one surface the corner's discs, pill and
+  switches share), 72px and 104px wide. A host that anchors the cube at the bottom-left
+  (`--cad-viewport-corner-left`) moves neither the pill nor the row today.
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
   Quick Edit's peek) as in Preview, one transparent row on no surface, the same row in both;
   the tools view's Reset is an item of its Playback settings (see
@@ -304,7 +314,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Flip board, Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; the corner’s Display, 2D \| 3D and Front \| Back |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
@@ -670,19 +680,22 @@ file.
   slot only the layer's guide, down the chevron's middle; its box its block's glyph, under the pen;
   its name and handle under the layer's name and count. Searching, the layers whose names match,
   and the blocks whose names do under their layer.
-- **A board's view control on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`) is its
-  **side**, the corner's switch over the zoom pill, as wide as it (KiCad's View ▸ Flip Board View):
+- **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
+  often, so on the corner's bottom row, left of the zoom pill or the cube, the same in 2D and 3D:
+  **Display**, the round corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
+  menu the presets as one radio group — Board, Copper, Assembly, Placement — the one on screen ticked,
+  and Custom, ticked and not a choice, while the Layers tab's eyes have left the preset's set);
+  **2D | 3D** (below, [A board in 3D](#a-board-in-3d)); and the **side** (KiCad's View ▸ Flip Board View):
   **Front** and **Back** side by side, in KiCad's words, the side the board is seen from raised, a press
   on the other flipping it; from the back the board is mirrored, its back layers on top. The rest of how a
   board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
-  in the settings form's rows: over the layers **Display** —
-  **Preset**, the modes as a Select (Board, Copper, Assembly, Placement, and Custom while the Layers
-  tab's eyes have left the mode's set) — and, under them, **Layer display**: **Others** (KiCad's high-contrast
+  in the settings form's rows: under the layers, **Layer display**: **Others** (KiCad's high-contrast
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the side is a row of the strip's More, View from the back, ticked while it is on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More: Display a submenu of the presets, 3D view and View from the back ticked while they are on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
+
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
   the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
@@ -820,6 +833,34 @@ Quick Edit is a bottom sheet (see
 Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick.
+
+### A board in 3D
+
+**2D | 3D** shows the same view of a board in 3D (`board/Board3dView.jsx`, a lazy chunk): the board as a
+slab cut to its outline, its two faces the 2D drawer's own pictures of the two sides, in the Layers
+tab's Display and the view's theme, on the 2D canvas's colour. It is the view's other canvas in the same
+frame (`FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
+selection, the ink and the measurements are the same mounted components, with the same names, in both;
+the one change is the corner, whose zoom pill becomes the 3D views' cube with their Projection and Home
+over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's Alt+3 opens its 3D view.
+
+| Control | In 3D |
+| --- | --- |
+| Select: a click, Shift, a click on nothing | the same pick where the pointer's ray meets the face it enters, from that side, with the same filter and the layers that side draws |
+| Select: a drag | turns the view, as in every 3D view; naming an area is the 2D view's, and an area named stays selected and drawn |
+| Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other |
+| Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
+| Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits |
+| Display, the Layers tab | the same Display: both faces redraw |
+| Front \| Back | turns the camera over about the board's upright axis, eased; follows the camera when it is turned over by hand |
+| Zoom pill | replaced by the cube; the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) are the 3D views' |
+| Projection, Home | the 3D views' own |
+| A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
+
+Entering 3D opens head on, on the window the 2D view shows, from the side it shows, and eases to Home
+(or to the camera the file was left at in 3D); leaving frames the 2D view on what the camera was centred
+on, from its side. Which is up, the 3D camera and its projection are the file's view (`board3d`). The
+library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row of More.
 
 ## Display settings and section primitives
 

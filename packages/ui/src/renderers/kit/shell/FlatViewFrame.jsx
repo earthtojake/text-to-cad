@@ -19,8 +19,8 @@ import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
-import { ViewCornerColumn } from "./ViewCorner.jsx";
-import { VIEWPORT_PILL_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewportLayout.js";
+import { ViewCornerRow, ViewCubeColumn } from "./ViewCorner.jsx";
+import { VIEWPORT_CUBE_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewportLayout.js";
 
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
@@ -102,14 +102,19 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
- *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands.
- *   A view control's `corner` is its round button there (a board's Display).
+ *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands,
+ *   and the zoom's keys either way.
+ *   A view control's `corner` is its control on the corner's bottom row, left of the pill (a round button, a switch).
+ *   `corner`: "pill", or "cube" while the picture is shown in 3D: the view the frame holds draws the cube
+ *   (`ShellViewport.jsx`'s), and the frame puts every 3D view's column over it (`ViewCorner.jsx`'s `ViewCubeColumn`:
+ *   Projection, `cube.projection`, and Home, `cube.onHome`). Nothing else of the frame changes.
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
-  alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null }) {
+  alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null,
+  corner = "pill", cube = null }) {
   const { t } = useI18n();
   const toolsHidden = chromeHidden || compact;
   const sided = Boolean(panel?.tabs.length);
@@ -196,12 +201,15 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
-        {/* The view's corner: its zoom pill, and its own view buttons over it (`ViewCorner.jsx`). A phone's are More's. */}
+        {/* The view's corner (`ViewCorner.jsx`): its own controls on the bottom row, then its zoom pill, or,
+            while the picture is shown in 3D, the cube (the 3D view's own) with Projection and Home over it.
+            The row stands where it stands either way. A phone's are More's. */}
         {toolsHidden || mobile || !shown || !zoom ? null : <>
-          {views?.some(view => view.corner) ? <ViewCornerColumn style={VIEWPORT_PILL_COLUMN_POSITION}>
+          {views?.some(view => view.corner) ? <ViewCornerRow>
             {views.map(view => (view.corner ? <span key={view.id} className="contents">{view.corner}</span> : null))}
-          </ViewCornerColumn> : null}
-          <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />
+          </ViewCornerRow> : null}
+          {corner === "cube" && cube ? <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION} projection={cube.projection} onHome={cube.onHome} />
+            : <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />}
         </>}
         {chromeHidden || !canvasRef || !contextMenuItems ? null
           : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}

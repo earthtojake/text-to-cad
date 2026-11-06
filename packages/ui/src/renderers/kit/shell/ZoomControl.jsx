@@ -80,6 +80,23 @@ export function zoomViewControl(zoom, { t, disabled = false }) {
     tile: null, submenu: () => <ZoomMenuItems zoom={zoom} /> };
 }
 
+/**
+ * A 3D view's zoom (`ViewZoom`), read live through its viewport (`ShellViewport.jsx`'s handle in
+ * `viewerRef`): the zoom against the authored box, its steps about the camera's target, and word of the
+ * camera moving. What the zoom's keys and a phone's More reach in every 3D view, a renderer's own frame
+ * or a flat view's frame showing one alike.
+ * @returns {ViewZoom}
+ */
+export function viewportZoom(viewerRef) {
+  return {
+    read: () => viewerRef.current?.zoomPercent?.() ?? 100,
+    subscribe: listener => viewerRef.current?.subscribeCamera?.(listener) || (() => {}),
+    zoomBy: factor => viewerRef.current?.zoomBy?.(factor),
+    zoomTo100: () => viewerRef.current?.zoomTo100?.(),
+    fit: () => viewerRef.current?.resetZoom?.()
+  };
+}
+
 /** The view's zoom, live: read again at most once a frame after the view says it moved. */
 function useZoomPercent(zoom) {
   const { read, subscribe } = zoom;

@@ -1,5 +1,5 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { FlipHorizontal2 } from "lucide-react";
+import { Box, FlipHorizontal2 } from "lucide-react";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -10,20 +10,22 @@ import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
-import { VIEW_CORNER_SURFACE_CLASS } from "../kit/shell/ViewCorner.jsx";
+import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSwitch } from "../kit/shell/ViewCorner.jsx";
+import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 
 /**
  * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
  * changed often, in the panel or behind a menu what is changed now and then):
  *
- * - **The side**, on the screen (`boardViewControls`): a switch over the view's zoom pill, as wide as it
- *   (`kit/shell/ViewCorner.jsx`; on a phone, a ticked row of the strip's More), **Front** and **Back** side
- *   by side (KiCad's F and B layers; KiCad's View ▸ Flip Board View), the side the board is seen from
- *   raised: from the back the board is mirrored, its back layers on top.
- * - **Preset** and **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), over and under its
- *   layers, as KiCad's Appearance panel has them: **Preset**, the modes (`plot2d/boardDisplay.js`'s layer
- *   sets, KiCad's layer presets: Board, Copper, Assembly, Placement), and **Custom** while the Layers tab's
- *   eyes have left the mode's set (choosing the mode goes back to it); **Layer display**, KiCad's Layer
+ * - **On the screen** (`boardViewControls`), the corner's bottom row, left of the zoom pill or the cube
+ *   (`kit/shell/ViewCorner.jsx`; on a phone, rows of the strip's More): **Display**, the presets (the
+ *   modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board, Copper, Assembly,
+ *   Placement, and **Custom** while the Layers tab's eyes have left the mode's set: choosing a mode goes
+ *   back to it); **2D | 3D**; and **Front** | **Back** (KiCad's F and B layers; KiCad's View ▸ Flip Board
+ *   View), the side the board is seen from raised: from the back the board is mirrored, its back layers on top.
+ * - **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), under its layers, as KiCad's
+ *   Appearance panel has them, KiCad's Layer
  *   Display Options: **Others**, every layer but the active one (a press on its row chooses it) **Shown**,
  *   **Dimmed** or **Hidden** — the board's outline and the holes through an active copper layer at full
  *   strength either way (`plot2d/plot.js`'s `focusedLayers`); Ctrl+H (⌘H) cycles them while the board has
@@ -79,18 +81,17 @@ function Opacity({ id, label, name, value, onChange }) {
 }
 
 /**
- * **Display**: the preset.
- * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
+ * The board's **Display**: its presets (KiCad's layer presets, `plot2d/boardDisplay.js`'s modes) as a
+ * 3D view's Display lists its modes (`kit/shell/DisplayPopover.jsx`), the one on screen ticked, and
+ * Custom, a state rather than a choice, while the Layers tab's eyes have left the preset's set
+ * (choosing a preset goes back to it).
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void, t?: Function }} options
  */
-export function BoardPresetSettings({ display, sheet, onChange }) {
-  const { t } = useI18n();
+export function boardPresetMode({ display, sheet, onChange, t = english }) {
   const choice = boardDisplayChoice(display, sheet);
-  const presets = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => [value, t(labelKey)]);
-  if (choice.value === CUSTOM) presets.push([CUSTOM, t("board.text.custom")]);
-  return <FileSheetSettingsSection title={t("display.label")} sectionId="board-display">
-    <Choice label={t("board.text.preset")} name={t("board.text.board_display_mode")} value={choice.value} options={presets}
-      onChange={value => { if (value !== CUSTOM) onChange(selectBoardMode(display, value)); }} data={{ "data-board-display": choice.value }} />
-  </FileSheetSettingsSection>;
+  const options = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey) }));
+  if (choice.value === CUSTOM) options.push({ value: CUSTOM, label: t("board.text.custom"), disabled: true });
+  return { value: choice.value, options, onChange: value => { if (value !== CUSTOM && value !== choice.value) onChange(selectBoardMode(display, value)); } };
 }
 
 /**
@@ -114,35 +115,45 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
   </FileSheetSettingsSection>;
 }
 
-// The side's switch: a capsule as wide as the zoom pill under it (`ZoomControl.jsx`), its two halves the two
-// sides side by side, the one the board is seen from raised on the corner's stronger fill.
-const SIDE_HALF_CLASS = "h-7 flex-1 rounded-full text-tiny font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/45 disabled:opacity-50 "
-  + "aria-checked:bg-foreground/[0.16] aria-checked:text-foreground text-muted-foreground hover:text-foreground";
-/** The side's switch: Front and Back side by side, the one the board is seen from chosen; a press on the other flips it. */
-function BoardSideSwitch({ below, onChange, disabled }) {
-  const { t } = useI18n();
-  // The words say it all, so no tooltip: a press on the side not chosen flips the board.
-  const half = (side, chosen) => <button type="button" role="radio" aria-checked={chosen} disabled={disabled} className={SIDE_HALF_CLASS}
-    data-board-side={side} onClick={() => { if (!chosen) onChange(); }}>{t(side === "bottom" ? "board.text.from_bottom" : "board.text.from_top")}</button>;
-  return <div role="radiogroup" aria-label={t("board.text.side")} className={cn("pointer-events-auto inline-flex h-7 w-[6.5rem] items-center rounded-full", VIEW_CORNER_SURFACE_CLASS)}
-    data-board-side-switch="">
-    {half("top", !below)}
-    {half("bottom", below)}
-  </div>;
-}
-
 /**
- * The board's view control on the screen (`FloatingToolBar.js`'s `ViewportViewControl`): its side, the one
- * it is switched often enough to keep there — the capsule over the view's zoom pill (`corner`), and on a
- * phone a ticked row of the strip's More (View from the back). The rest of how the board is drawn — its
- * preset and its layer display — is the Layers tab's (`LayersSection.jsx`), opened now and then.
- * @param {{ display: ReturnType<typeof readBoardDisplay>, onChange(display: object): void, disabled?: boolean, t?: Function }} options
+ * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
+ * switched often enough to keep there: on the corner's bottom row, left of the zoom pill or the cube
+ * (`kit/shell/ViewCorner.jsx`), the same row in 2D and in 3D, and on a phone rows of the strip's More —
+ *
+ * - **Display**, the round corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
+ *   on a phone More's submenu);
+ * - **2D | 3D**, the board drawn flat or as a board in 3D (on a phone More's ticked row, 3D view; the key 3);
+ * - **Front | Back**, the side it is seen from (KiCad's F and B layers; KiCad's View ▸ Flip Board View):
+ *   from the back the board is mirrored, its back layers on top; in 3D the camera turns to the other
+ *   side, and the switch follows the camera (on a phone More's ticked row, View from the back).
+ *
+ * The rest of how the board is drawn — its layers and its layer display — is the Layers tab's
+ * (`LayersSection.jsx`), opened now and then.
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
+ *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
+ *   onSide?: ((side: "top" | "bottom") => void) | null, disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
+ *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
  */
-export function boardViewControls({ display, onChange, disabled = false, t = english }) {
+export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, disabled = false,
+  boundary = null, t = english }) {
   const below = display.side === "bottom";
-  const flip = () => onChange({ ...display, side: below ? "top" : "bottom" });
-  return [{
-    id: "side", label: t("board.text.view_from_bottom"), icon: <FlipHorizontal2 />, disabled, active: below, onSelect: flip,
-    tile: null, corner: <BoardSideSwitch below={below} onChange={flip} disabled={disabled} />
-  }];
+  const side = next => (onSide ? onSide(next) : onChange({ ...display, side: next }));
+  const presets = boardPresetMode({ display, sheet, onChange, t });
+  return [
+    { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null, submenu: () => <DisplayMenuItems mode={presets} />,
+      corner: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
+        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="end" /> },
+    ...(onDimensionChange ? [{
+      id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: dimension === "3d", tile: null,
+      onSelect: () => onDimensionChange(dimension === "3d" ? "2d" : "3d"),
+      corner: <ViewCornerSwitch label={t("board.text.dimension")} value={dimension} onChange={onDimensionChange} disabled={disabled} className="w-[4.5rem]"
+        options={[{ value: "2d", label: t("board.text.view_2d") }, { value: "3d", label: t("board.text.view_3d") }]}
+        data={{ "data-board-dimension-switch": "" }} option={value => ({ "data-board-dimension": value })} />
+    }] : []),
+    { id: "side", label: t("board.text.view_from_bottom"), icon: <FlipHorizontal2 />, disabled, active: below, tile: null,
+      onSelect: () => side(below ? "top" : "bottom"),
+      corner: <ViewCornerSwitch label={t("board.text.side")} value={below ? "bottom" : "top"} onChange={side} disabled={disabled}
+        options={[{ value: "top", label: t("board.text.from_top") }, { value: "bottom", label: t("board.text.from_bottom") }]}
+        data={{ "data-board-side-switch": "" }} option={value => ({ "data-board-side": value })} /> }
+  ];
 }

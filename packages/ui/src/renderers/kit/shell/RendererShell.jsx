@@ -1,7 +1,7 @@
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { House, LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
+import { LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -15,8 +15,8 @@ import { modelUpdateStatus, ViewPreviewLabel, ViewUpdateStatus } from "../status
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
 import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
-import { zoomViewControl } from "./ZoomControl.jsx";
-import { VIEW_CORNER_BUTTON_CLASS, ViewCornerColumn } from "./ViewCorner.jsx";
+import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCubeColumn } from "./ViewCorner.jsx";
 import { VIEWPORT_CUBE_COLUMN_POSITION } from "./viewportLayout.js";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
@@ -33,7 +33,7 @@ import ShellViewport from "./ShellViewport.jsx";
 import PreviewView from "./PreviewView.jsx";
 import { previewCoverStep } from "./previewCover.js";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
-import { pickSceneAt } from "../tools/select/sceneMenu.js";
+import DoubleClickFit from "./DoubleClickFit.jsx";
 import AnnotationSelectionBar from "../tools/annotate/AnnotationSelectionBar.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
 
@@ -169,30 +169,6 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
-/**
- * A double-click on empty space under Select fits the model, as F does and as every flat view's
- * double-click does: what the renderer, ink or a knob took first (`defaultPrevented`, or a capture
- * that stopped it) is theirs, and so is a double-click on something the scene picks.
- */
-function DoubleClickFit({ viewport, scene, active, viewerRef }) {
-  const { hostRef, runtimeRef, viewerReadyTick } = viewport;
-  const live = useRef(null);
-  live.current = { scene, active };
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return undefined;
-    const onDoubleClick = (event) => {
-      const now = live.current;
-      if (!now.active || event.defaultPrevented || event.target !== runtimeRef.current?.renderer?.domElement) return;
-      if (pickSceneAt({ hostRef, runtimeRef }, now.scene, event.clientX, event.clientY)) return;
-      viewerRef.current?.resetZoom?.();
-    };
-    host.addEventListener("dblclick", onDoubleClick);
-    return () => host.removeEventListener("dblclick", onDoubleClick);
-  }, [hostRef, runtimeRef, viewerReadyTick, viewerRef]);
-  return null;
-}
-
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
@@ -478,14 +454,8 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   // The view's zoom (`ZoomControl.jsx`'s `ViewZoom`): the viewport's zoom against the authored box, read live,
   // for the keys, a phone's More and the corner's Zoom to fit.
   const viewerRef = frame.viewerRef;
-  const zoomBase = useMemo(() => ({
-    read: () => viewerRef.current?.zoomPercent?.() ?? 100,
-    subscribe: listener => viewerRef.current?.subscribeCamera?.(listener) || (() => {}),
-    zoomBy: factor => viewerRef.current?.zoomBy?.(factor),
-    zoomTo100: () => viewerRef.current?.zoomTo100?.(),
-    fit: () => viewerRef.current?.resetZoom?.()
   // A model's viewport, once it is up: its camera is the one the readout follows.
-  }), [viewerRef, scene, viewerLoading]);
+  const zoomBase = useMemo(() => viewportZoom(viewerRef), [viewerRef, scene, viewerLoading]);
   const zoom = { ...zoomBase, zoomToSelection: zoomToSelection?.run || null, selectionAvailable: Boolean(zoomToSelection?.available) };
   // What the zoom's keys reach (`useRendererShell`'s `zoom`): the zoom as the strip has it now.
   frame.zoomKeys.current = zoom;
@@ -671,15 +641,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}
               {/* The view's corner, over the cube: Display, Projection, then Home, nearest the cube (`ViewCorner.jsx`). */}
-              {toolsHidden || previewing || mobile || failed || !shell.previewable ? null : <ViewCornerColumn style={VIEWPORT_CUBE_COLUMN_POSITION}>
-                <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid}
-                  className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="left" side="left" align="end" />
-                <ProjectionToggle disabled={shell.idle} projection={frame.projection} tooltipSide="left" className={VIEW_CORNER_BUTTON_CLASS} />
-                <ToolbarButton label={t("view.home")} tooltipSide="left" disabled={shell.idle}
-                  className={VIEW_CORNER_BUTTON_CLASS} onClick={() => frame.viewerRef.current?.goHome?.()} data-view-home="">
-                  <House aria-hidden="true" />
-                </ToolbarButton>
-              </ViewCornerColumn>}
+              {toolsHidden || previewing || mobile || failed || !shell.previewable ? null : <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION}
+                projection={frame.projection} onHome={() => frame.viewerRef.current?.goHome?.()} disabled={shell.idle}
+                display={<DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid}
+                  className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="left" side="left" align="end" />} />}
               <ViewportTopRight notice={chromeHidden ? null : view.notice}>
                 {/* On a phone Quick Edit is a bottom sheet (`docked`), portalled out of this corner. */}
                 {compact || !references ? null : quickEdit}

@@ -32,6 +32,33 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
     drawPlotImages: (_ctx: unknown, _layout: unknown, { transform }: { transform: any }) => { frames.push({ ...transform }); }
   };
 });
+// The board in 3D mounts the 3D views' viewport, which needs WebGL: a stand-in here, which says it has
+// presented and answers the camera calls; the pixels and the picks through it are the browser suite's.
+const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[] }));
+vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
+  const React = await import('react');
+  return {
+    default: React.forwardRef(function StandInViewport(props: any, ref) {
+      viewport3d.props = props;
+      React.useImperativeHandle(ref, () => ({
+        captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }),
+        getPerspective: () => ({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0, 1] }),
+        setPerspective: (camera: any) => { viewport3d.calls.push(`setPerspective ${JSON.stringify(camera.position)}`); return true; },
+        goHome: () => { viewport3d.calls.push('goHome'); return true; },
+        resetZoom: () => { viewport3d.calls.push('resetZoom'); return true; },
+        zoomToBounds: () => true, zoomPercent: () => 100, subscribeCamera: () => () => {}, zoomBy: () => true, zoomTo100: () => true
+      }));
+      const hostRef = React.useRef<HTMLDivElement | null>(null);
+      const runtimeRef = React.useRef<any>(null);
+      React.useEffect(() => { props.onPresentationChange?.({ key: props.modelKey, preparing: false }); }, [props.modelKey]);
+      const context = { hostRef, runtimeRef, mountRef: hostRef, viewerReadyTick: 1, commitScene: () => true };
+      return <div ref={hostRef} data-stand-in-viewport="">
+        <canvas ref={canvas => { runtimeRef.current = canvas ? { renderer: { domElement: canvas, capabilities: { maxTextureSize: 4096 }, initTexture() {} }, requestRender() {} } : null; }} />
+        {typeof props.children === 'function' ? props.children(context) : props.children}
+      </div>;
+    })
+  };
+});
 vi.mock('@cad/core/lib/drawing2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, any>>();
   return { ...actual, clearSurface: (ctx: unknown, options: { background?: string }) => { canvases.push(options.background ?? null); return actual.clearSurface(ctx, options); } };
@@ -125,8 +152,8 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The view's corner (`ViewCorner.jsx`): the side, over the zoom pill.
-const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-corner]')!;
+// The view's corner's bottom row (`ViewCorner.jsx`): Display, 2D | 3D and the side, left of the zoom pill or the cube.
+const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-corner-row]')!;
 const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent);
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
@@ -148,6 +175,19 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElemen
 };
 const choice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
   within(await displayMenu(user, pane)).getByRole('combobox', { name }).textContent;
+/** The corner's Display: its menu of presets, opened (portalled, as every dropdown is). */
+const presetMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
+  if (!menuShown('Display')) await user.click(within(corner(pane)).getByRole('button', { name: /^Display mode:/ }));
+  return openMenu('Display');
+};
+/** The preset Display has ticked (Custom while the eyes have left the preset's set), the menu put away again. */
+const presetChoice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
+  const menu = await presetMenu(user, pane);
+  const ticked = menu.querySelector('[role=menuitemradio][aria-checked=true]')?.textContent ?? null;
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(menuShown('Display')).toBeNull());
+  return ticked;
+};
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 // An open menu, by its accessible name (portalled under the body, as every dropdown is).
 const openMenu = (name: string) => waitFor(() => { const found = document.querySelector<HTMLElement>(`[role=menu][aria-label="${name}"]`); expect(found).not.toBeNull(); return found!; });
@@ -182,9 +222,9 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // Its view control on the screen is the corner's side, over the zoom pill; the strip has none.
+  // Its view controls on the screen are the corner's row, left of the zoom pill: Display, 2D | 3D and the side; the strip has none.
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Front', 'Back']);
+  expect(cornerButtons(pane)).toEqual(['Display mode: Board', '2D', '3D', 'Front', 'Back']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
@@ -225,15 +265,15 @@ it('a native board uses the host language for its controls, tree and accessible 
   dispose();
 });
 
-it('a board without its index is the picture, its side, and its Layers (with the preset and layer display): no tools, no Parts or Nets, no Quick Edit', async () => {
+it('a board without its index is the picture, its corner, and its Layers (with the layer display): no tools, no Parts or Nets, no Quick Edit', async () => {
   const { board: _index, ...picture } = BOARD as any;
   readPlot = () => json(picture);
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  // No tools, so no strip; the side in the corner, over the zoom pill.
+  // No tools, so no strip; Display, 2D | 3D and the side in the corner, left of the zoom pill.
   expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Front', 'Back']);
+  expect(cornerButtons(pane)).toEqual(['Display mode: Board', '2D', '3D', 'Front', 'Back']);
   // Its one list, with no row of tabs over it.
   expect(within(panel(pane)).queryAllByRole('tab')).toEqual([]);
   expect(within(panel(pane)).getByRole('region', { name: 'Layers' })).toBeTruthy();
@@ -622,15 +662,16 @@ it('a pick on the board brings its row into view in the list on screen, one bloc
   dispose();
 });
 
-it("Display holds KiCad's presets and layer display options — the others, the pours, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
+it("the Layers tab holds KiCad's layer display options — the others, the pours, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
   const menu = await displayMenu(user, pane);
-  expect([...menu.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section'))).toEqual(['board-display', 'board-layer-display']);
+  // The preset is the corner's Display, not the tab's: the tab has the layers and their display.
+  expect([...menu.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section'))).toEqual(['board-layer-display']);
   expect(within(menu).getAllByRole('combobox').map(select => [select.getAttribute('aria-label'), select.textContent]))
-    .toEqual([['Board display mode', 'Board'], ['Other layers', 'Shown']]);
+    .toEqual([['Other layers', 'Shown']]);
   expect(within(menu).getByRole('slider', { name: 'Zone opacity' }).getAttribute('aria-valuenow')).toBe('0.6');
   expect((within(menu).getByRole('textbox', { name: 'Track opacity value' }) as HTMLInputElement).value).toBe('100%');
   // KiCad's own as a board opens: nothing dimmed, the zones at 60%, the tracks at 100%.
@@ -679,7 +720,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   }
   fireEvent.click(layers.querySelector('[data-layer-visibility="F.Cu"]')!);
   await waitFor(() => expect(drawn.at(-1)!.layers).not.toContain('F.Cu'));
-  expect(await choice(user, pane, 'Board display mode')).toBe('Custom');
+  expect(await presetChoice(user, pane)).toBe('Custom');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.layers).toEqual(
     ['area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
   // Shown again, the set is the mode's own: stored as the mode's, so a rebuild's new layer follows it.
@@ -738,11 +779,11 @@ it('a preset chooses the layers; the side and the pours are switches kept throug
   await user.click(within(side).getByRole('radio', { name: 'Back' }));
   expect(within(side).getByRole('radio', { name: 'Back' }).getAttribute('aria-checked')).toBe('true');
   await user.click(within(await displayMenu(user, pane)).getByRole('checkbox', { name: 'Copper pours' }));
-  // A switch is not a layer set: the preset is still the one on screen.
-  expect(await choice(user, pane, 'Board display mode')).toBe('Board');
-  await user.click(within(await displayMenu(user, pane)).getByRole('combobox', { name: 'Board display mode' }));
-  expect((await screen.findAllByRole('option')).map(option => option.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
-  await user.click(screen.getByRole('option', { name: 'Copper' }));
+  // A switch is not a layer set: the preset is still the one on screen, the corner's Display ticks it.
+  expect(await presetChoice(user, pane)).toBe('Board');
+  const presets = await presetMenu(user, pane);
+  expect(within(presets).getAllByRole('menuitemradio').map(option => option.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
+  await user.click(within(presets).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, others: 'shown', zones: 0.6, tracks: 1 }));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
 
@@ -929,4 +970,70 @@ it("a panel docking beside a board is a resize of its pane: a board still at its
   await waitFor(() => expect(frames.at(-1)!.scale).toBeCloseTo(moved.scale, 9));
   centred(600);
   dispose();
+});
+
+it("2D | 3D is one view: the strip and the panel stay the same mounted controls, only the pill becomes the cube, and what is picked and measured stays; 3 switches; the file keeps it", async () => {
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  // A pick and a measurement in 2D.
+  tap(pane, [35.825, 15]);
+  fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
+  tap(pane, [34.2, 15.1]);
+  tap(pane, [35.8, 14.9]);
+  await within(pane).findByRole('button', { name: 'Measurement 1: 1.65 mm' });
+  fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Select' }));
+  const controller = await controllerOf(view);
+  expect(selected(controller)).toEqual(['#R1.2']);
+  // What the strip, the panel and the corner's row are, by their names and by the elements themselves.
+  const controls = () => ({
+    strip: strip(pane), panel: panel(pane), row: corner(pane),
+    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-view-corner-row] button')]
+      .map(button => button.getAttribute('aria-label') || button.textContent)
+  });
+  const flat = controls();
+  expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
+
+  await user.click(within(corner(pane)).getByRole('radio', { name: '3D' }));
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).not.toBeNull());
+  // Its first frame up, the flat canvas is put away (and lets its rasters go); the camera eases to Home.
+  await waitFor(() => expect(pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')).toBe(true));
+  await waitFor(() => expect(viewport3d.calls).toContain('goHome'));
+  const solid = controls();
+  expect(solid.names).toEqual(flat.names);
+  for (const key of ['strip', 'panel', 'row'] as const) expect(solid[key], key).toBe(flat[key]);
+  expect(within(corner(pane)).getByRole('radio', { name: '3D' }).getAttribute('aria-checked')).toBe('true');
+  // The pill is the cube now, with every 3D view's Projection and Home over it.
+  expect(pane.querySelector('[data-zoom-pill]')).toBeNull();
+  expect(viewport3d.props.viewCube).toBe(true);
+  expect(within(pane).getByRole('button', { name: 'Projection: Orthographic' })).toBeTruthy();
+  fireEvent.click(pane.querySelector('[data-view-home]')!);
+  // The pick and the measurement are where they were; a camera is the 3D view's to pose.
+  expect(selected(controller)).toEqual(['#R1.2']);
+  fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
+  expect(within(pane).getByRole('button', { name: 'Measurement 1: 1.65 mm' })).toBeTruthy();
+  await controller.setCamera({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0] });
+  expect(viewport3d.calls.at(-1)).toBe('setPerspective [0,0,100]');
+  // Display's presets, in 3D as in 2D.
+  await user.click(within(await presetMenu(user, pane)).getByRole('menuitemradio', { name: 'Copper' }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.mode).toBe('copper'));
+  // The file keeps it: 3D, opened again in 3D.
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value).toMatchObject({ mode: '3d', projection: 'orthographic' }));
+  // 3, as KiCad's Alt+3: back to 2D, the pill back, the flat canvas shown.
+  fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: '3' });
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
+  expect(pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')).toBe(false);
+  expect(selected(controller)).toEqual(['#R1.2']);
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('2d'));
+  fireEvent.keyDown(pane.querySelector('[data-board-surface] canvas')!, { key: '3' });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('3d'));
+  const stored = view.state;
+  dispose();
+  cleanup();
+  const again = await open('blinky.kicad_pcb', { state: stored });
+  await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
+  expect(within(corner(again.pane)).getByRole('radio', { name: '3D' }).getAttribute('aria-checked')).toBe('true');
+  again.dispose();
 });

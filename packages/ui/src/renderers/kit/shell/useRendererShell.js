@@ -25,6 +25,7 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
+import { projectionControl } from "./useStageViewport.js";
 import { DISPLAY_MODE_OPTIONS } from "../view-settings/DisplayModeOptions.js";
 import { normalizeViewFeatures } from "@cad/core/common/viewSettings.js";
 import { useWhenSettled } from "./useWhenSettled.js";
@@ -685,10 +686,7 @@ export function useRendererShell({
       for (const [group, change] of Object.entries(patch || {})) for (const field of Object.keys(change || {})) controls.changed(previewControl(group, field));
       viewSettingsStore.patchPreview(patch);
     }} />;
-  const projection = {
-    value: desiredScene.view.camera.projection,
-    onChange: value => { controls.used(`projection_${value}`); viewSettingsStore.patch({ camera: { projection: value } }); },
-  };
+  const projection = projectionControl(viewSettingsStore, desiredScene, value => controls.used(`projection_${value}`));
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
