@@ -308,8 +308,9 @@ or 1.5.0) and a patch release below it (0.11.0 to 0.11.1). Such a release carrie
 an agent must change for, so it may land under a running agent thread unannounced; one that bumps the
 breaking part (1.9.3 to 2.0.0; 0.11.3 to 0.12.0 or 1.0.0) may rename a command or need a migration
 guide, so it waits for a click, the update button offering it as ever, and `cad status` says it is out.
-The release process holds a release to that: one the engine takes may add, never rename or remove, and
-never comes with a migration guide. Such a release is installed at once, in the
+The release process holds a release to that: one the engine takes may add, and may move a library name
+whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
+migration guide. Such a release is installed at once, in the
 background -- its folder, and its own `cad setup --engine-update` with `CAD_UPDATE_PREPARE=1`, which
 registers it and makes its base and stops there, so nothing of the apps or the engine changes -- and
 the rest, its setup whole (the apps' plugins) and the switch above, waits until the engine is idle:

@@ -31,17 +31,17 @@ moved such a copy aside. A loose copy of a skill that still ships is moved aside
 
 ## The library's imports (tier 2)
 
-Every 0.10 import keeps working, as an alias of the same object as its new spelling (the two result
-classes aside: [What an alias cannot keep](#what-an-alias-cannot-keep)). Each says so once per
-process, with `CadDeprecationWarning` (a `FutureWarning`, which Python shows by default), naming the
-new path:
+These renames break nothing, since every 0.10 spelling still works: each is an alias of the same
+object as its new spelling, but the two result classes (below), and says so once per process, with
+`CadDeprecationWarning` (a `FutureWarning`, which Python shows by default), naming the new path:
 
 ```text
 model.py:1: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read
 ```
 
-Migrate a project on first touch. A document type is one object now -- its decorator, its reader
-and its operations -- and our helpers that take build123d's objects are `cad.build123d`'s.
+What does break is under [What an alias cannot keep](#what-an-alias-cannot-keep), at the end of this
+section. Migrate a project on first touch. A document type is one object now -- its decorator, its
+reader and its operations -- and our helpers that take build123d's objects are `cad.build123d`'s.
 
 | 0.10 | Now |
 | --- | --- |
@@ -72,6 +72,8 @@ A model whose body returns something no producer takes now fails naming what the
 pandas integration: one would add a producer of it)`.
 
 ### What an alias cannot keep
+
+These do break, where a program relies on them:
 
 - **A star import.** An alias is in no `__all__`, so `from cad import *` no longer binds `memo`,
   `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`, `snapshot` or `inspect`, nor `from

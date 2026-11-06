@@ -788,7 +788,7 @@ major from 1.0 and, below 1.0, which the standard leaves to the project, the min
 | | Below 1.0 (`0.y.z`) | From 1.0 (`x.y.z`) |
 | --- | --- | --- |
 | A breaking change | the minor: `0.11.4` to `0.12.0` | the major: `1.4.2` to `2.0.0` |
-| An addition that breaks nothing | the patch: `0.11.4` to `0.11.5` | the minor: `1.4.2` to `1.5.0` |
+| An addition, or a deprecation (a rename that keeps the old name working) | the patch: `0.11.4` to `0.11.5` | the minor: `1.4.2` to `1.5.0` |
 | A fix | the patch | the patch: `1.4.2` to `1.4.3` |
 | Installs itself on every device | a patch release | a patch or minor release |
 | Waits for the person's click | a minor or major release | a major release |
@@ -798,13 +798,14 @@ nothing by itself and switches to it once idle, under agent threads that are run
 (`cad_server.auto_updates.takes`); a release that bumps the breaking slot waits for the person's click
 and reaches each device when its person updates. The release to 1.0 bumps the major, and waits like
 any. So choose the bump by what the release asks of people, not by its size. A change is breaking when
-something that worked stops working: a command, option, tool, Python name or file format removed or
-renamed, an output shape changed (a `--json` key, an exit status, an MCP tool's answer), a setting that
-comes to mean something else, anything a skill or a person's script would have to be edited for. A
-breaking change always comes with a migration guide under `docs/migrations/`, which says what to
-change. An addition that renames nothing (a new command, a new document type, a new option) breaks
-nothing. Version Check refuses a release that installs itself and adds or changes a migration guide;
-the rest is the release's author's to judge, and when in doubt it is the breaking slot.
+something that worked stops working: a command, option, tool or file format removed or renamed, a
+Python name removed, an output shape changed (a `--json` key, an exit status, an MCP tool's answer), a
+setting that comes to mean something else, anything a skill or a person's script would have to be
+edited for. A breaking change always comes with a migration guide under `docs/migrations/`, which says
+what to change. An addition that renames nothing (a new command, a new document type, a new option)
+breaks nothing, and neither does a Python name renamed with its earlier spelling kept as its alias
+(tier 2, below). Version Check refuses a release that installs itself and adds or changes a migration
+guide; the rest is the release's author's to judge, and when in doubt it is the breaking slot.
 
 **What breaks, by tier.** [Law 15](packages/cad/README.md#the-design-laws) ("Compatibility, by who
 pays for a break") sorts what a release can change into four tiers and says what compatibility each
@@ -815,20 +816,24 @@ installs itself.
 | Law 15's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
 | --- | --- | --- |
 | 1. What an agent reads each session | an addition; a doc's wording | a rename, a removal or a changed contract (a flag's meaning, a `--json` key, an exit status), each a hard cutover |
-| 2. The library's public imports | an addition | a rename or a move, though its alias keeps every script working; the alias's removal; a change to a name's contract, what it takes or returns |
+| 2. The library's public imports | an addition; a rename or a move whose earlier spelling stays an alias of the same object, its interface unchanged (a deprecation, which bumps the minor from 1.0) | the alias's removal; a change to a name's contract (what it takes or returns), including a spelling kept by something that is not the same object with the same interface |
 | 3. A person's data | a new form, with the previous shipped release's read and migrated on first touch | a release that cannot read what the previous shipped release wrote, or reads it as meaning something else |
 | 4. Protocols where two releases meet while both run | an addition within a number; a new number whose newer side keeps answering the previous one | a new number whose newer side stops answering the previous one |
 
 Tier 1 is breaking though the agents adapt within the session (the skills ship with the change):
 a person's own script, or a caller pinned to the old spelling, stops working. Tier 2 changes in two
-steps, each in the breaking slot. The rename keeps the earlier spelling an alias of the same object for
-a release at least, so no script stops working, but the law names an alias in the migration guide
-alone, and a release with a migration guide takes the breaking slot: the person's click brings it, and
-the alias's warning says the new spelling. The alias's removal, a release or more later, is what stops
-a script that still spells the old name. A change to a name's contract keeps no alias. In tier 4 the
-number is the protocol's, not the release's: a new one makes the release a breaking one only where the
-newer side stops answering the previous number, which the law decides case by case; the worker
-contract keeps no window, so a new worker contract always does.
+steps, and only the second breaks. The rename keeps the earlier spelling an alias of the same object,
+its interface unchanged, for a release at least, so no script stops working: it takes the non-breaking
+slot, and may install itself. Law 15 keeps an alias out of every document but the migration guide, and
+asks for no guide when one is made: the rename is announced by its warning, which names the new
+spelling at the line that spelled the old, and held by the pinned table (`cad._internal.aliases`), and
+it is listed in a migration guide when a breaking release next writes one, at the latest the release
+that removes it, where it must be. That removal, a release or more later, is what stops a script that
+still spells the old name, so it takes the breaking slot. So does a change to a name's contract, which
+no alias keeps, and so does a spelling kept by something other than the same object with the same
+interface. In tier 4 the number is the protocol's, not the release's: a new one makes the release a
+breaking one only where the newer side stops answering the previous number, which the law decides case
+by case; the worker contract keeps no window, so a new worker contract always does.
 
 ### Shipping a release
 

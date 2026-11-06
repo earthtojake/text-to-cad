@@ -379,9 +379,11 @@ No plugin for your agent yet?
 
 ## Updates
 
-text-to-cad updates itself with every release that breaks nothing: fixes and additions,
-which need nothing of you. Its version numbers follow [Semantic Versioning](https://semver.org),
-so the number says which kind a release is: before 1.0, a patch release, like 0.11.0 to
+text-to-cad updates itself with every release that breaks nothing, which needs nothing of
+you: fixes, additions, and new names for what a model imports with the old names still working
+(a model that still uses an old name says so in a warning naming the new one). Its version
+numbers follow [Semantic Versioning](https://semver.org), so the number says which kind a
+release is: before 1.0, a patch release, like 0.11.0 to
 0.11.1; from 1.0, a patch or minor release, like 1.4.2 to 1.4.3 or 1.5.0. Once an hour the
 CAD server checks whether a newer release is out, and when it is one of those, it
 installs it in the background at once, then, once nothing
