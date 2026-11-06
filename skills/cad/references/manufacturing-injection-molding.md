@@ -31,7 +31,8 @@ warning: zero_draft_walls at 0, -10, 0: 1250.84 mm2 of wall has no draft along t
 OK part.step: molding along 0,0,1: walls 1250.84 mm2, zero-draft 1250.84 mm2, min wall draft 0 deg, undercut candidates 0 mm2, projected 550 mm2, depth 10 mm
 ```
 
-The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id: a STEP or an xbf is
+The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id, and `<type>` is its document
+type: `stl`, `threemf` (`cad threemf dfm part.3mf`), `glb`, `step`, `xbf` or `model`. A STEP or an xbf is
 tessellated by the engine, so there is nothing to export first. `--pull` is an axis (`z`, `-y`) or
 `x,y,z` components, `z` by default; `--wall-limit` (45 degrees) is where a face stops being a wall and
 `--zero-tol` (0.05 degrees) is zero draft. A mesh already held in a program (an `.obj`, a `.ply`) is

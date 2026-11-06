@@ -79,7 +79,8 @@ cad step dfm part.step --process printing --angle-limit 45 --candidates
 OK part.stl: printing: 5497.6 mm3, 1 body(ies); overhangs under 45 deg 0 mm2; walls min 6.012, p05 10, median 10 mm; support ~0 mm3
 ```
 
-The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id: a STEP or an xbf is
+The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id, and `<type>` is its document
+type: `stl`, `threemf` (`cad threemf dfm part.3mf`), `glb`, `step`, `xbf` or `model`. A STEP or an xbf is
 tessellated by the engine, so there is nothing to export first. Set `--angle-limit` to the target
 process's self-supporting angle ([above](#process-limits)) before measuring, and measure again when the process
 changes: the overhang and support figures are binned against it. `--samples` (default 2000) is the

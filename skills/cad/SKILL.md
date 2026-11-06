@@ -184,7 +184,7 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bra
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
-calls `export(x, path, ...)` on each (`x` a model call's handle); running it rewrites every deliverable
+calls `model.export(x, path, ...)` on each (`from cad import model`; `x` a model call's handle); running it rewrites every deliverable
 ([exports](references/exports.md)). An export takes a document and its destinations,
 and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a
@@ -339,7 +339,11 @@ review each one the same way:
 ```bash
 cad step dfm part.step --process molding --pull z
 cad model dfm "$ID" --process printing --angle-limit 45 --candidates
+cad threemf dfm part.3mf --process printing
 ```
+
+`<type>` is the source's document type: `stl`, `glb`, `step`, `xbf`, `threemf` for a `.3mf`, and
+`model` for a model's id.
 
 A check reports facts, never a verdict: its `OK` means every family was measured, not that the part
 can be made, and it exits 1 with a `measurement_failed` finding for a family it could not measure.
