@@ -2401,8 +2401,9 @@ tube is 47 segments round at the engine's tolerance, its facets 0.095 mm deep; 2
 0.01). Each part is meshed at the finer of its own deflection and the ceiling, so a tolerance never
 makes a part coarser than the viewer draws it -- most of a robot's parts are under 60 mm across,
 where a quarter per cent is already finer than 0.05 mm, and meshed coarser their faces were seen to
-lose triangles. It is meshed for that file alone and never cached, so the viewer, the snapshot and
-every other export keep the engine's mesh; the file says what it was meshed to
+lose triangles. An explicit tolerance also sets `ForceFaceDeflection`, so loose edge tolerances do
+not override the requested face deflection. It is meshed for that file alone and never cached, so the
+viewer, the snapshot and every other export keep the engine's mesh; the file says what it was meshed to
 (**Translation formats**). It is refused by name for any other kind (a GLB is the viewer's own
 mesh) and for a mesh file's source, whose triangles are the file's. Since which faces the mesher
 leaves without triangles changes with the tolerance, the export names each part it left faces of,
