@@ -194,7 +194,9 @@ cad model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 The same is `model.export(x, path, tolerance=0.02)` in an `exports.py` and
 `@stl("hopper.stl", tolerance=0.02)` or `@threemf(...)` on a model. Each part is meshed again
 at the finer of the tolerance and its own, for that file alone, so a small part is never made
-coarser; the viewer, snapshots and every other export keep the viewer's mesh. The file says
+coarser; the viewer, snapshots and every other export keep the viewer's mesh. The tolerance
+holds on every face, an imported STEP's faces whose edges carry a looser tolerance too (those
+cost the most triangles). The file says
 what it was meshed to (the STL's header, the 3MF's description). It is
 for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
 one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
