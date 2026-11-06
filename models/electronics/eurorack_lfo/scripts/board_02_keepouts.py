@@ -1,12 +1,13 @@
 """Step 2b: put each footprint's own keepout zones back over the footprint. Moving a footprint over KiCad's IPC API
 (board_02_place.py) moved its pads, lines and texts but left its rule-area zones behind, a little further each move
-(KiPy moves a footprint zone's outline by the move in the footprint's frame): the PJ398SM's F.Cu keepout ended up tens of millimetres from its jack, some off the board. This rewrites
-each such zone's outline in the saved board from the library footprint, through the footprint's place and rotation.
-Text edit of the saved board (no KiCad running): run it after board_02_place.py, before routing.
+(KiPy moves a footprint zone's outline by the move in the footprint's frame): the PJ398SM's F.Cu keepout ended up
+tens of millimetres from its jack, some off the board. KiCad 11 holds a footprint's own zones in the footprint's
+frame, as it holds its pads, so this writes each such zone's outline in the saved board as its library footprint has
+it: every point as the library writes it (its y negated on the back, which KiCad's flip mirrors), and KiCad places
+it with the footprint. Text edit of the saved board (no KiCad running): run it after board_02_place.py, before
+routing.
 Run: python3 scripts/board_02_keepouts.py"""
-import math
 import re
-import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -20,6 +21,9 @@ def zones_of(text):
     """Each `(zone ...)` block's span in `text` (balanced parentheses)."""
     out, i = [], 0
     while (i := text.find("(zone", i)) >= 0:
+        if text[i + 5] not in "\n\t (":  # (zone_connect ...), a pad's setting
+            i += 5
+            continue
         depth, j = 0, i
         while True:
             depth += {"(": 1, ")": -1}.get(text[j], 0)
@@ -36,25 +40,21 @@ fixed = 0
 pieces, last = [], 0
 for m in re.finditer(r'\n\t\(footprint "twin_orbit:([^"]+)"', board):
     lib = LIB / f"{m.group(1)}.kicad_mod"
-    lib_zones = [lib.read_text()[a:b] for a, b in zones_of(lib.read_text())] if lib.exists() else []
+    lib_text = lib.read_text() if lib.exists() else ""
+    lib_zones = [lib_text[a:b] for a, b in zones_of(lib_text)]
     if not lib_zones:
         continue
     end = board.find("\n\t(footprint ", m.end())
     end = len(board) if end < 0 else end
     seg = board[m.start():end]
-    assert '(layer "F.Cu")' in seg[:200], "a back-side footprint would also need its x mirrored"
-    tx, ty = map(float, re.search(r"\(translate (-?[\d.]+) (-?[\d.]+)\)", seg).groups())
-    rot = re.search(r"\(rotate (-?[\d.]+)\)", seg)
-    a = math.radians(float(rot.group(1)) if rot else 0.0)
+    assert "(transform" in seg[:400], "a footprint placed by (at ...), as KiCad 10 wrote it, holds its zones in the board's frame"
+    back = '(layer "B.Cu")' in seg[:200]
     spans = zones_of(seg)
     assert len(spans) == len(lib_zones), (m.group(1), len(spans), len(lib_zones))
     new_seg, k = [], 0
     for (s0, s1), lz in zip(spans, lib_zones):
-        pts = XY.findall(lz)
-        # KiCad's y points down and its rotation is counter-clockwise on screen
-        world = [(tx + float(x) * math.cos(a) + float(y) * math.sin(a), ty - float(x) * math.sin(a) + float(y) * math.cos(a)) for x, y in pts]
-        it = iter(world)
-        zone = XY.sub(lambda _m: "(xy %.6f %.6f)" % next(it), seg[s0:s1])
+        it = iter([(x, f"{-float(y):g}" if back else y) for x, y in XY.findall(lz)])
+        zone = XY.sub(lambda _m: "(xy %s %s)" % next(it), seg[s0:s1])
         new_seg += [seg[k:s0], zone]
         k = s1
         fixed += 1
