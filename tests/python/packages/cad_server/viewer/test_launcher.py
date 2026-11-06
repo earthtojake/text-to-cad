@@ -59,8 +59,11 @@ class LauncherTest(unittest.TestCase):
         done = subprocess.run([sys.executable, '-m', 'cad_server.viewer', '--json', '--dist', str(self.dist), *args],
                               env=self.env, cwd=cwd or self.root, capture_output=True, text=True, timeout=60)
         if not ok:
+            # The launch answers in JSON: its failure is its one document on stdout, the contract's.
             self.assertNotEqual(done.returncode, 0)
-            return done.stderr
+            found = json.loads(done.stdout)
+            self.assertEqual((found['ok'], found['reason']), (False, 'failed'))
+            return found['error']
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
 
