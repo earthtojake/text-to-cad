@@ -22,9 +22,10 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description="Show or change automatic updates. While they are on (by default), the engine reads the version "
-                    "feed once an hour and, when a newer release is out, installs it in the background and switches to "
-                    "it once nothing has run for a minute, as the update button does. `off` leaves every update to you: "
-                    "the update button, `cad update` or the install command.",
+                    "feed once an hour and, when a newer release that breaks nothing is out (a patch release below 1.0, "
+                    "a patch or minor release from 1.0), installs it in the background and switches to it once nothing "
+                    "has run for a minute, as the update button does; one that may break something waits for you. "
+                    "`off` leaves every update to you: the update button, `cad update` or the install command.",
     )
     parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
     return parser

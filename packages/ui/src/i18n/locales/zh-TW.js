@@ -239,7 +239,7 @@ export default {
   "consent.telemetryInfo": "匿名使用資料與當機報告，用於改善 text-to-cad。你的提示詞、模型與檔案絕不會被傳送。",
   "update.automatic": "自動更新",
   "update.automaticEnvironment": "自動更新（由你的環境關閉）",
-  "update.automaticInfo": "自動安裝 text-to-cad 的修補版本（修正），並在沒有工作執行時重新啟動 CAD 伺服器。新的次要版本不會自動安裝：請透過更新按鈕或安裝指令更新。",
+  "update.automaticInfo": "自動安裝 text-to-cad 不破壞相容性的版本（修正與新增功能），並在沒有工作執行時重新啟動 CAD 伺服器。可能破壞相容性的版本不會自動安裝：請透過更新按鈕或安裝指令更新。",
 
   "appearance.system": "跟隨系統",
   "appearance.light": "淺色",

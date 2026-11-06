@@ -379,8 +379,11 @@ No plugin for your agent yet?
 
 ## Updates
 
-text-to-cad updates itself with its patch releases: fixes, like 0.11.0 to 0.11.1. Once an
-hour the CAD server checks whether a newer release is out, and when it is a patch release, it
+text-to-cad updates itself with every release that breaks nothing: fixes and additions,
+which need nothing of you. Its version numbers follow [Semantic Versioning](https://semver.org),
+so the number says which kind a release is: before 1.0, a patch release, like 0.11.0 to
+0.11.1; from 1.0, a patch or minor release, like 1.4.2 to 1.4.3 or 1.5.0. Once an hour the
+CAD server checks whether a newer release is out, and when it is one of those, it
 installs it in the background at once, then, once nothing
 has run for a minute (no build, picture, export or agent's request underway), updates
 text-to-cad in every agent app on your computer as the install command does and
@@ -389,7 +392,8 @@ itself into it. Should an update fail, the server stays on, or goes back to, the
 release it ran, and that release is not tried again by itself for a day; a newer one
 is tried when it comes out. With no network nothing happens, and nothing waits.
 
-A new minor or major release, like 0.11 to 0.12, never installs itself: it can rename a
+A release that may break something never installs itself: before 1.0, a new minor or major
+release, like 0.11 to 0.12; from 1.0, a new major release, like 1.5 to 2.0. It can rename a
 command or change how a model is written (its migration guide says what), so it waits for
 you. CAD shows its update button for it, and `cad update auto` says it is out; click the
 button or run `cad update` when you are ready.
