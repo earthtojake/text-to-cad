@@ -18,9 +18,11 @@ belong to apps through the [host contract](viewer-host.md).
 
 FileViewer owns the navbar — the logo's app menu ([Settings](#settings)) included, built from
 the host's `links` and the `appSettings` `CadViewer` hands it — and the name menu (a popover
-under the file's name: Models and Files, the file explorer). RendererShell owns the scene's chrome: the tool strip and
-the view's controls at its end (Projection, Display, Preview), the sub-toolbar of the tool in hand under
-it, the view's panel, Quick Edit, the view cube and Preview, with Preview's own bar in the navbar's place. Renderers supply
+under the file's name: Models and Files, the file explorer). The view's one frame (`kit/shell/ViewFrame.jsx`, which
+every renderer mounts, 2D or 3D) owns the scene's chrome: the tool strip and Preview at its end, the sub-toolbar of
+the tool in hand under it, the update status, the view's panel, Quick Edit, the view's corner (the cube with
+Display, Projection and Home over it, or a flat view's zoom pill and its bottom row) and Preview, with Preview's own
+bar in the navbar's place. Renderers supply
 their tools, their tools' rows, their panel's sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
 
@@ -102,9 +104,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   *Design note: the navbar carries nothing the view needs.* What a host or the file adds (the
   update, an alert's icon, the host's actions) is the navbar's right end; what can be done with
   the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name. The view's own
-  controls are the strip's, in every host, with or without a navbar: **Projection**, **Display**
-  and **Preview** end it; they act on the whole view, whatever tool is in hand, so they are no
-  tools, and a new per-file button that is no tool goes with them. In Preview, Preview's own
+  controls are the view's, in every host, with or without a navbar: **Preview** ends the strip, and
+  how the model is looked at — **Display**, **Projection**, Home, a flat view's zoom — is the view's
+  corner (below); they act on the whole view, whatever tool is in hand, so they are no tools, and a
+  new per-file button that is no tool goes with them. In Preview, Preview's own
   controls, **Preview settings** and **Exit preview**, are its bar's. So a host may leave the
   navbar out (`chrome: "bare"`), and Preview hides it.
 
@@ -321,11 +324,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
 | File | Tool strip, left to right |
 | --- | --- |
-| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, Projection, Display and Preview |
-| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
-| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, Projection, Display and Preview |
-| 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
-| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
+| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, then Preview; the corner's Display, Projection and Home |
+| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, then Preview; the corner's Display, Projection and Home |
+| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, then Preview; the corner's Display, Projection and Home |
+| 3MF | Select, Pencil, Shapes, Measure; Clip, then Preview; the corner's Display, Projection and Home |
+| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Preview; the corner's Display, Projection and Home |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; the corner’s Display, 2D \| 3D and Front \| Back |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
@@ -681,8 +684,8 @@ file.
   rested on it a moment (450ms), gone the moment it leaves; it takes no pointer.
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
-  making it the active layer (a filled dot after its name), drawn on top. How the board is drawn is
-  the strip's (below), not the panel's.
+  making it the active layer (a filled dot after its name), drawn on top. Which preset draws the board
+  is the corner's Display (below); under the layers, the rest of how it is drawn, its layer display.
 - **A drawing's Layers** (`dxf/LayersSection.jsx`): each layer drawn on, in the drawing's order, its
   pen, name, entity count and eye (hidden: not drawn, picked or snapped to), and under a layer the
   block references placed on it, open, a press on one picking it as a tap on the drawing does
@@ -763,8 +766,9 @@ Its panels follow these rules:
   gives way first, down to 128px or its content, then the `"details"` panels together, each in
   proportion to its height, down to 96px or its content; a `"fixed"` panel keeps its height.
   If what cannot give way still does not fit, the column itself scrolls — a panel is never cut.
-- **Headings.** A panel's heading row reads as Display's section headings do (11px, regular,
-  `TOOL_PANEL_HEADING_TEXT_CLASS`), 28px tall, 8px in: a title, a summary where there is one,
+- **Headings.** A stack panel's heading row (a section of the view's panel has none: its tab names
+  it) reads as the settings form's section headings do (11px, regular, `TOOL_PANEL_HEADING_TEXT_CLASS`,
+  `FileSheet.js`'s `FILE_SHEET_SECTION_HEADING_CLASSES`), 28px tall, 8px in: a title, a summary where there is one,
   then at its right end its own actions, the chevron where it folds (up while open, down while
   folded) and an X where it has something to remove. Every small button in a heading is 20px,
   2px apart and 4px from the edge.
@@ -839,8 +843,7 @@ not a 16px font, stops a phone zooming in on a field); menu, select and tree row
 navbar, and Preview's bar in its place, a 48px row of 36px controls; the strip and the sub-toolbars 36px tiles (the strip one row,
 **More tools** holding what does not fit; the drawing tools' row the same single row, wrapping where it must — Shapes' does
 at 375px, its style group under its tools, and a row that wrapped draws no rule between its groups, the line
-break parting them, `SubToolbar`'s `data-wrapped`). An SDF's counts are two tiles a row in a phone's panel (three on a desktop), so
-their labels read whole.
+break parting them, `SubToolbar`'s `data-wrapped`).
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
 portalled menu, select or hint is the same size as the chrome it opened from. There is no view
 cube and no view's panel; and
@@ -856,7 +859,7 @@ pick.
 **2D | 3D** shows the same view of a board in 3D (`board/Board3dView.jsx`, a lazy chunk): the board as a
 slab cut to its outline, its two faces the 2D drawer's own pictures of the two sides, in the Layers
 tab's Display and the view's theme, on the 2D canvas's colour. It is the view's other canvas in the same
-frame (`FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
+frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
 selection, the ink and the measurements are the same mounted components, with the same names, in both;
 the one change is the corner, whose zoom pill becomes the 3D views' cube with their Projection and Home
 over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's Alt+3 opens its 3D view.
@@ -881,8 +884,9 @@ library card's picture is the flat board in either mode. On a phone, **3D view**
 
 ## Display settings and section primitives
 
-Display is not a tool. Its tile ends the strip after the strip's rule, between Projection and
-Preview, and shows the current mode's sphere icon. It opens a stock shadcn dropdown menu
+Display is not a tool. Its button is the view's corner's — a 3D view's at the top of the column over
+the cube, over Projection and Home; a board's on its corner's bottom row — and shows the current mode's
+sphere icon. It opens a stock shadcn dropdown menu
 (`DisplayPopover.jsx`): a muted **Display** label, the modes as a `DropdownMenuRadioGroup`,
 a separator, then **Grid**, a `DropdownMenuCheckboxItem`. On a phone the strip's **More**
 menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`), with no
@@ -890,8 +894,9 @@ label. Checks sit at the row's right end. Choosing a mode closes the menu; ticki
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
-settings are its corner's side and its Layers tab's preset and layer display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)),
-and it has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
+settings are its corner's — Display (its presets), 2D | 3D and the side — and its Layers tab's layer
+display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); it has Projection and Home only
+in 3D, over the cube, and no Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
@@ -1267,7 +1272,7 @@ or not, and for nothing else: a renderer declares it (`useRendererShell`'s `prev
 GLB, STL/3MF, URDF/SRDF/SDF), and a view whose renderer does not (a DXF, 2D) has no Preview
 button, not a disabled one, and never enters it, whatever asks. It is the shell's own state;
 hosts neither start nor observe it. Its button is a play triangle ("Preview"), the strip's last
-tile after Display, in every host. A press covers the view at once
+tile, after its rule, in every host. A press covers the view at once
 ("Preparing preview…", on the canvas) and enters Preview under the cover,
 which lifts once Preview's view has presented its first frame, its published mesh is complete
 and the studio frame's picture has converged
@@ -1391,9 +1396,10 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
 - **Ctrl+H** (⌘H) on a KiCad board cycles Display's Others, Shown, Dimmed, Hidden and round, as
   KiCad's high-contrast key does, while the board has the keyboard (as Escape's viewer, above); no
   other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
-- **⌘\\** (Ctrl+\\) on a KiCad board or schematic shows and hides its panel, and **/** opens it with
-  the keyboard in its search, while the view has the keyboard; in the search box, Escape clears what is
-  typed. A phone has no panel, and neither key opens one there.
+- **⌘\\** (Ctrl+\\) shows and hides the view's panel, in every view that has one (a board, a schematic,
+  a drawing with Layers, a STEP assembly, a robot), and **/** opens it with the keyboard in its search,
+  while the view has the keyboard; in the search box, Escape clears what is typed. A phone has no
+  panel, and neither key opens one there.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.
@@ -1419,11 +1425,13 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
 Every hint is a `TooltipHint`: compact text, one surface and arrow, a 400ms
 delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
-strip's buttons (Display and Preview among them; a tool with a key shows it after its name,
-muted), the drawing row's tools (each with its key), the navbar's right-hand controls (the
+strip's buttons (Preview among them; a tool with a key shows it after its name,
+muted), the drawing row's tools (each with its key), the corner's buttons (Display, Projection,
+Home, the zoom's), the navbar's right-hand controls (the
 update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
-settings, Exit preview) are hinted by name — the strip's hints above their buttons, the
-others' below; there is no hint on the navbar's left (the logo,
+settings, Exit preview) are hinted by name — the strip's and the corner's row's hints above their
+buttons, the column's over the cube beside them, away from the corner, the others' below; a
+corner switch's words say it all, with no hint; there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,
 the transport (play, pause, the scrubber), the drawing row's settings or labelled text
 buttons (Quick Edit's alone say what they do). A disabled, selected or expanded control has none; pressing or leaving cancels a
