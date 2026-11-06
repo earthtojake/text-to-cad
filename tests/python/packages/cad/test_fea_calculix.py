@@ -32,9 +32,11 @@ def _program(folder: Path, said: str) -> str:
 class FindCcx(unittest.TestCase):
     def test_a_setting_naming_no_file_says_so_and_how_to_install(self):
         with mock.patch.dict(os.environ, {calculix.CCX_ENV: "/no/such/ccx"}):
-            with self.assertRaisesRegex(calculix.CalculixMissingError, r"CAD_CCX names /no/such/ccx, which is not a file.*"
-                                                                       r"conda install"):
+            with self.assertRaises(calculix.CalculixMissingError) as caught:
                 calculix.find_ccx()
+        said = str(caught.exception)
+        self.assertIn(f"CAD_CCX names {Path('/no/such/ccx')}, which is not a file", said)  # Windows prints its own slashes
+        self.assertIn("conda install", said)
 
     def test_a_setting_naming_anything_but_ccx_is_refused_and_never_run(self):
         with tempfile.TemporaryDirectory() as name:
