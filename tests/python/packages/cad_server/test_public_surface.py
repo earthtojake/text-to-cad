@@ -84,8 +84,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "serve": frozenset({"document", "port"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
-    "delete": frozenset({"documents", "json"}),
-    "server": frozenset({"port", "rotate_token"}),
+    # A command that destroys asks first, or takes --yes (cad_server._internal.consent); a delete says its plan alone.
+    "delete": frozenset({"documents", "dry_run", "yes", "json"}),
+    "server": frozenset({"port", "rotate_token", "yes"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
     # for which apps; and `uninstall`, which takes it out again.
     "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
@@ -94,7 +95,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # Automatic updates, the person's setting: status, on or off (a verb of its own, as `update`'s options
     # are what every release hands its newer one).
     "update auto": frozenset({"action"}),
-    "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
+    "uninstall": frozenset({"dry_run", "only", "purge", "yes", "json"}),
     # The plugin folder written from the current installation, and the apps' copies of it with --refresh.
     "plugin": frozenset({"refresh", "json"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.
@@ -198,10 +199,18 @@ class Manifest(unittest.TestCase):
                     self.assertEqual("", out)
                     # The NOUN is right: it is never reported as the unknown thing.
                     self.assertNotIn(f"unknown command {noun!r}", err)
-                    self.assertIn(f"usage: cad {noun} <operation>", err)
+                    # Its verbs and no other: in the one line said of a verb it does not have, which points at
+                    # the type's help, never prints it; in that help after a command line that names none.
+                    listed = (err.partition("; it has ")[2].partition(";")[0] if rest
+                              else err.split("operations:")[1])
                     for verb in verbs:
-                        self.assertIn(verb, err)
-                    self.assertNotIn("export", err.split("operations:")[1])
+                        self.assertIn(verb, listed)
+                    self.assertNotIn("export", listed)
+                    if rest:
+                        self.assertNotIn("usage:", err)
+                        self.assertIn(f"'cad {noun} --help' says what each does", err)
+                    else:
+                        self.assertIn(f"usage: cad {noun} <operation>", err)
 
     def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
         code, out, err = self._dispatch("urdf", "--help")
@@ -209,12 +218,15 @@ class Manifest(unittest.TestCase):
         self.assertIn("\n  validate ", out)
         self.assertNotIn("export", out.split("operations:")[1])
 
-    def test_an_unknown_noun_lists_every_command(self):
+    def test_an_unknown_noun_names_it_and_where_the_commands_are(self):
+        # Never the whole list: the word, at most one suggestion, and the help that lists them.
         code, out, err = self._dispatch("frobnicate", "export")
+        self.assertEqual((2, ""), (code, out))
+        self.assertEqual("cad: unknown command 'frobnicate'; 'cad --help' lists the commands\n", err)
+        code, out, err = self._dispatch("stauts")
         self.assertEqual(2, code)
-        self.assertIn("unknown command 'frobnicate'", err)
-        for command in ("model ", "xbf ", "urdf ", "snapshot, validate", "viewer", "serve"):
-            self.assertIn(command, err)
+        self.assertEqual("cad: unknown command 'stauts' (did you mean 'status'?); 'cad --help' lists the commands\n",
+                         err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):
         # No retired-surface recognition: the answer is Python's own error, not a note about history.

@@ -43758,7 +43758,7 @@
 			)
 			(polygon
 				(pts
-					(xy -102.325 8.574999) (xy -74.325 8.574999) (xy -74.325 19.574999) (xy -102.325 19.574999)
+					(xy -14 7.1) (xy 14 7.1) (xy 14 18.1) (xy -14 18.1)
 				)
 			)
 		)
@@ -53052,7 +53052,7 @@
 	(zone
 		(net "GND")
 		(layer "F.Cu")
-		(uuid "4ea45500-081c-4d56-beb5-4112656d0a49")
+		(uuid "05b6bb38-f56d-4b6c-a2a7-0c77a7910d74")
 		(name "front GND pour")
 		(hatch edge 0.5)
 		(connect_pads yes
@@ -57446,40 +57446,9 @@
 		)
 	)
 	(zone
-		(layers "F.Cu" "B.Cu" "In1.Cu" "In2.Cu")
-		(uuid "16169737-7255-4613-add3-a7db91d0f6d1")
-		(name "antenna keep-out")
-		(hatch edge 0.5)
-		(connect_pads
-			(clearance 0)
-		)
-		(min_thickness 0.25)
-		(keepout
-			(tracks not_allowed)
-			(vias not_allowed)
-			(pads not_allowed)
-			(copperpour not_allowed)
-			(footprints allowed)
-		)
-		(placement
-			(enabled no)
-			(sheetname "")
-		)
-		(fill
-			(thermal_gap 0.5)
-			(thermal_bridge_width 0.5)
-			(island_removal_mode 0)
-		)
-		(polygon
-			(pts
-				(xy 88.6 35.7) (xy 116.6 35.7) (xy 116.6 47.3) (xy 88.6 47.3)
-			)
-		)
-	)
-	(zone
 		(net "GND")
 		(layer "B.Cu")
-		(uuid "971be965-4371-4416-8c5f-966f4dbb597d")
+		(uuid "6b46e0a0-5e93-470b-93e3-1240d7945073")
 		(name "back GND pour")
 		(hatch edge 0.5)
 		(connect_pads yes
@@ -59544,7 +59513,7 @@
 	(zone
 		(net "GND")
 		(layer "In1.Cu")
-		(uuid "14952d4a-0047-4610-bd43-93d55d455dfe")
+		(uuid "f561ee16-436c-44f6-8d7b-69c3dd96694c")
 		(name "GND plane")
 		(hatch edge 0.5)
 		(connect_pads
@@ -61019,7 +60988,7 @@
 	(zone
 		(net "+5V")
 		(layer "In2.Cu")
-		(uuid "62fc122d-1300-4131-a6fa-92604534cae7")
+		(uuid "062ac33c-cb28-43d3-abce-292918283a0c")
 		(name "+5V plane")
 		(hatch edge 0.5)
 		(connect_pads

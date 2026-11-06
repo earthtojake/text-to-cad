@@ -201,7 +201,8 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
             command you or your agent run says, once, in its output, that text-to-cad sends usage stats and
-            crash reports and how to turn them off, and nothing is sent before that. If we ever send more than this
+            crash reports and how to turn them off, and nothing is sent before that. A command&rsquo;s help, and a
+            command whose answer is JSON for a program to read, say nothing of it: the next one does. If we ever send more than this
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and

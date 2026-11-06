@@ -725,13 +725,14 @@ def _can_keep(path: Path) -> bool:
     return True
 
 
-def status(*, path: Path | None = None, probe: bool = True) -> dict[str, Any]:
+def status(*, path: Path | None = None, probe: bool = True, keep: bool = True) -> dict[str, Any]:
     """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
 
     ``reason`` is ``environment``, ``choice``, ``default`` (the person was told and chose nothing),
     ``untold`` (nothing is sent: nobody has been told yet, or not here -- ``_here``) or
     ``unavailable`` (nothing is sent, and nothing said: no answer could be kept). Sharing makes the
-    install's id where it is missing. ``probe=False`` takes no answer that could be kept for
+    install's id where it is missing -- but with ``keep`` false (``cad doctor --check``, which writes
+    nothing), which says the id as it is, none. ``probe=False`` takes no answer that could be kept for
     ``unavailable`` without trying the state directory (``_can_keep``): a sender's question, which
     either way sends nothing.
     """
@@ -744,6 +745,8 @@ def status(*, path: Path | None = None, probe: bool = True) -> dict[str, Any]:
     sharing, reason = _decide(kept, forced, here)
     if reason is None:  # a telling that could not be kept would be said again on every command
         return {"sharing": False, "reason": "untold" if not probe or _can_keep(path) else "unavailable", "id": None}
+    if sharing and not _identified(kept) and not keep:
+        return {"sharing": sharing, "reason": reason, "id": None}
     if sharing and not _identified(kept):
         def identify(section: dict[str, Any]) -> dict[str, Any]:
             if not _decide(section, forced, here)[0] or _identified(section):  # changed meanwhile: as it is now

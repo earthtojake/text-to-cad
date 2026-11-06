@@ -1,7 +1,7 @@
 """``cad.model``: the model document type, a model built from code and held in the engine's memory
 (``cad.registry``).
 
-A model has no file behind it: it is addressed by its document id (``python SCRIPT.py`` prints it) or
+A model has no file behind it: it is addressed by its document id (``cad run SCRIPT.py`` prints it) or
 the handle its call returns. ``@model`` declares one (``@model(name=...)``; ``model(shape, name=...)`` hands
 a shape over), with no file of its own; the files it declares are the other types' decorators
 (``@xbf("XBF/arm.xbf")``, ``@step("arm.step")``). Its operations are the ``cad model <operation>`` commands':

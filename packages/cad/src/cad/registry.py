@@ -207,7 +207,7 @@ _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "e
 _TYPES = (
     DocumentTypeEntry(
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
-                          "addressed by its document id (python SCRIPT.py prints it) or the handle its call returns",
+                          "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True),
     DocumentTypeEntry(

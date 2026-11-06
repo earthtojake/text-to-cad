@@ -43,7 +43,9 @@ it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
-"seconds", "written"}]}`), and a failure as `{"ok": false, "error": ...}` with exit status 1.
+"seconds", "written"}]}`), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
+the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
+`usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
 An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
 mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's

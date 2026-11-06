@@ -73,8 +73,10 @@ it is on that sheet's page. Errors fail it; warnings are said. Fix the cause, ne
 - `different_unit_net`, `multiple_net_names`: two names on one net; keep one.
 
 `libraries_not_checked` is a note, not a finding: the check runs KiCad with private settings, so it
-cannot see your global symbol and footprint library tables (a project's own `sym-lib-table` and
-`fp-lib-table` it reads).
+cannot see your global symbol and footprint library tables (it reads a project's own `sym-lib-table` and
+`fp-lib-table`, a row of them naming a stock library by KiCad's variable in the KiCad you installed:
+[SKILL.md](../SKILL.md#setup)). `lib_symbol_issues` saying a library "was not found" at a stock path is
+such a row with no KiCad installed: copy the library into the project.
 
 ## Edit it
 
@@ -125,8 +127,10 @@ Then read it back (`kicad_sch.read`: the pins and their nets), draw it and check
 
 **Libraries.** A symbol is placed from the project's own symbol libraries: the rows of its `sym-lib-table`,
 beside the `.kicad_pro` (`${KIPRJMOD}` is that folder). The script runs KiCad with private settings, so no
-global library table, and none of KiCad's stock libraries, is there: copy each library a design needs (its
-`.kicad_sym`) into the project and list it:
+global library table is there. A row may name a stock library as KiCad's own tables do
+(`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`), read in the KiCad you installed ([SKILL.md](../SKILL.md#setup));
+for a project that opens anywhere, copy each library a design needs (its `.kicad_sym`) into the project and
+list it:
 
 ```
 (sym_lib_table
@@ -136,8 +140,7 @@ global library table, and none of KiCad's stock libraries, is there: copy each l
 ```
 
 A placement from a library the table does not list fails in one line naming it and the row to add; a
-listed library that did not load is said when the block starts. (`KICAD10_SYMBOL_DIR`, set to a copy of
-KiCad's libraries, is what a row of `${KICAD10_SYMBOL_DIR}/Device.kicad_sym` reads.)
+listed library that did not load is said when the block starts.
 
 **Fragile on this nightly** (KiCad 10.99 over IPC; check the saved file after each):
 

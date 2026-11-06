@@ -349,8 +349,8 @@ stop`, a crash, a reboot and an update until the token is rotated, the session i
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, with no
-engine running (it refuses while one runs), and every link and session
-made before stops working. `cad status` says the
+engine running (it refuses while one runs) and once the person says yes (**Consent**, `--yes`), and
+every link and session made before stops working. `cad status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
 
@@ -469,8 +469,9 @@ verbosity) key nothing. What it adds is two things:
   one on PATH; one an integration declares runs through that integration's `_command` module in the
   environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
   script; with a kicode that has none, `kicode.executable()`), headless in private homes
-  (`cad.kicad._program.private_run`, a typed command's, KiCad's 3D library variables naming the first
-  library a board's 3D view reads), its arguments, stdio and exit code kicad-cli's, and never the one
+  (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
+  libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
+  the person's), its arguments, stdio and exit code kicad-cli's, and never the one
   `CAD_KICAD_CLI` names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
@@ -711,17 +712,22 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
                                              #sheet:/Power/, #wire:<uuid>), what that names
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display light|dark|JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
-cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
-cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
+cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
+                                             each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
-                                             file of yours
+                                             file of yours. Asked first; --dry-run says what and how many
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
 (`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
 has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
-before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`). A model's document
+before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
+file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
+there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
+names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
+schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
 is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
 one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
 the same way. The commands are the server's
@@ -742,13 +748,48 @@ one, nor does an MCP host closing its session.
 and debugging only: it runs in this process, cold, and no document is served: no page, and
 nothing for `inspect` to read by its id.
 
-A verb's `--json` (`export`, `snapshot`, `status`, `stop`, `delete`) prints its answer as one JSON object
-on stdout, and a failure as `{"ok": false, "error": ...}` there too, exit status 1, so a caller
-reading stdout always finds an answer (`cli.answered`); without `--json` a failure is its words
-on stderr, exit 2 for a request refused by name before anything ran and 1 for one that failed.
-A refusal keeps its type across the daemon: the worker answers its kind beside its words
-(`worker.refusal`) and the caller raises it as that type (`api._failed`), so a pose a document
-lacks is refused the same, exit 2, whether a worker or the caller's own process refused it.
+**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help step export`) -- prints
+the help on stdout and exits 0, and does nothing else: it moves no earlier release's state, writes nothing
+and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
+person reads, and nothing is sent by default until it is said.
+
+**Consent.** A command that destroys -- `cad uninstall` (and `--purge`), `cad delete`, `cad doctor --prune`,
+`cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
+says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
+nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
+without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
+(`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
+installing is what was asked, and the install command passes `--yes` to an uninstall, which a person asked
+for by `--uninstall`.
+
+**The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
+sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
+command or an option it does not take, an argument missing or out of range, a file of another type, an
+input that is not there, a destructive command where no one can be asked and no `--yes` -- which fails
+the same way until the call changes; 1 for a failure of the work (a build, a render, an export, a tool,
+the engine out of reach, a mistake of ours, a destructive command the person said no to); 130 for an
+interrupt (Ctrl-C). A command's `--json` prints
+its answer as one JSON object on stdout, and every failure as one JSON document there too, so a caller
+reading stdout always finds an answer, with nothing else on stdout and no traceback (`--verbose`, where
+a command takes it, puts one on stderr):
+
+```
+{"ok": false, "error": "part.glb is a glb, not a stl: use cad glb snapshot", "reason": "wrong_type"}
+```
+
+`reason` is one of a fixed set, added to and never renamed (`cli_errors.REASONS`): `usage` (a command,
+option or argument the command line got wrong), `invalid_argument` (a value refused by name before
+anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
+there, a document the engine has no record of or does not hold), `confirmation_required` (with
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`,
+`engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
+failure is its words on stderr. A
+command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are
+read by the one parser, which takes no abbreviation of an option -- `--js` is no `--json` -- and suggests
+at most one option, choice or command it is closest to, never running it). A refusal keeps its type
+across the daemon: the worker answers its kind beside its words (`worker.refusal`) and the caller raises
+it as that type (`api._failed`), so a pose a document lacks is refused the same, exit 2, whether a worker
+or the caller's own process refused it.
 
 `python SCRIPT.py` executes normal Python. Decoration only registers a model;
 imports and definitions build nothing. A call such as `arm()` asks the daemon to
@@ -943,7 +984,13 @@ declared, and nothing is written from the edited file but what explicit calls af
 runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
 without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
-repeats). `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
+repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
+choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
+parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
+`ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
+(`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
+reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
+its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`: the
@@ -2981,7 +3028,7 @@ below holds it, so a document of one part takes its elements by the document's n
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
 JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
-path, or a document's id (a model's, which `python SCRIPT.py` prints, or a file's), and must be the
+path, or a document's id (a model's, which `cad run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds
 it. A canonical ref -- what `inspect` answers --

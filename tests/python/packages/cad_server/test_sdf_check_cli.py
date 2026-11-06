@@ -78,7 +78,10 @@ class SdfValidateCliTests(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = cli.main(list(argv))
+            try:
+                exit_code = cli.main(list(argv))
+            except SystemExit as exited:  # a command line its parser refuses: the file of no type, not there
+                exit_code = exited.code
         return exit_code, stdout.getvalue() + stderr.getvalue()
 
     def test_valid_model_passes_with_summary(self) -> None:
@@ -287,14 +290,22 @@ class SdfValidateCliTests(unittest.TestCase):
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.sdf"), "--gz-check", "never")
-        self.assertEqual(exit_code, 1)
-        self.assertIn("file not found", output)
+        self.assertEqual(exit_code, 2)  # the command line's, before anything is read
+        self.assertIn("no such file", output)
 
     def test_non_sdf_suffix_fails(self) -> None:
         path = self._write("model.xml", VALID_MODEL_SDF)
         exit_code, output = self._run(str(path), "--gz-check", "never")
-        self.assertEqual(exit_code, 1)
-        self.assertIn("must be a .sdf file", output)
+        self.assertEqual(exit_code, 2)
+        self.assertIn("is not a sdf file: cad sdf takes .sdf", output)
+
+    def test_a_gz_check_mode_it_does_not_take_is_refused_by_its_flag(self) -> None:
+        # An enumeration's values are the generated flag's choices: the parser's usage error, naming the flag.
+        path = self._write("model.sdf", VALID_MODEL_SDF)
+        exit_code, output = self._run(str(path), "--gz-check", "maybe")
+        self.assertEqual(exit_code, 2)
+        self.assertIn("argument --gz-check: invalid choice: 'maybe' (choose from 'auto', 'required', 'never')", output)
+        self.assertNotIn("gz_check", output)
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
                                   "with the integrations its imports use"),
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
-    "doctor": ("cad_server.cli.doctor", "install: register, write the cad command, start the engine"),
+    "doctor": ("cad_server.cli.doctor", "set the server up and report it (--check: report only)"),
     # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
@@ -153,6 +153,7 @@ def _harden_std_stream_errors() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     try:
         code = _main(argv)
         if sys.stdout is not None:
@@ -164,6 +165,13 @@ def main(argv: list[str] | None = None) -> int:
         if not stdout_closed():
             raise  # another pipe it wrote to (a child's stdin): a failure like any other
         return _output_closed()
+    except KeyboardInterrupt:
+        # Ctrl-C: said in a word, never as a traceback, and the status a shell gives an interrupt
+        # (``cad_server._internal.cli_errors``: ``canceled``, 130). A build it waited for goes on in the
+        # engine; the same command waits for it again.
+        from cad_server._internal.cli_errors import Failure, wants_json, write
+
+        return write(Failure("canceled", "canceled"), prog="cad", as_json=wants_json(argv))
 
 
 def _output_closed() -> int:
@@ -186,13 +194,14 @@ def _output_closed() -> int:
     return 128 + signal.SIGPIPE if hasattr(signal, "SIGPIPE") else 1  # what a shell reports for `yes | head`
 
 
-def _main(argv: list[str] | None) -> int:
+def _main(argv: list[str]) -> int:
     _harden_std_stream_errors()
-    argv = list(sys.argv[1:] if argv is None else argv)
 
-    if not argv or argv[0] in {"-h", "--help", "help"}:
+    if not argv or argv[0] in {"-h", "--help"}:
         sys.stdout.write(_usage())
         return 0
+    if argv[0] == "help":  # `cad help step export` is `cad step export --help`, at any depth
+        return _main([*argv[1:], "--help"]) if argv[1:] else _main([])
 
     if argv[0] in {"-V", "--version"}:
         # The installation's own version, as doctor's header says it: a development install's
@@ -211,17 +220,25 @@ def _main(argv: list[str] | None) -> int:
     else:
         entry = _COMMANDS.get(command)
     if entry is None:
-        sys.stderr.write(f"cad: unknown command {command!r}\n\n" + _usage())
-        return 2
+        return _unknown(command, rest)
 
+    # Help does no work: it moves nothing, writes nothing and says nothing but the help. Nor does a report
+    # asked for read-only (`cad doctor --check`).
+    from cad_server._internal.cli_errors import options
+
+    helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
-    if command in _REGISTERS:
+    if command in _REGISTERS and not helping:
         _adopt()
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
     # with, so the CAD app and the CAD Viewer say it (`cad_server/updates.py`). What a command does say,
-    # once and before its work, is what those two send by default (`cad_server/analytics.py`).
-    if command not in _UNTOLD:
+    # once and before its work, is what those two send by default (`cad_server/analytics.py`) -- to a
+    # person: an answer in JSON is a program's, so the notice waits for a later run a person reads, and
+    # nothing is sent by default until it is said.
+    from cad_server._internal.cli_errors import wants_json
+
+    if command not in _UNTOLD and not helping and not wants_json(rest):
         _tell()
     try:
         return _run(command, entry[0], rest)
@@ -233,7 +250,33 @@ def _main(argv: list[str] | None) -> int:
         raise
     except Exception as error:
         _report(error)
-        raise
+        if command == "run" or not wants_json(rest):  # `run`'s words are its program's: never its own --json
+            raise  # its traceback the person's
+        return _crashed(command, rest, error)
+
+
+def _unknown(word: str, rest: list[str]) -> int:
+    """A command that is none of the table's: the command line's failure (``usage``, exit 2), naming it,
+    the one command it is closest to, if any, and where the commands are listed -- never the whole list."""
+    from cad_server._internal.cli_errors import Failure, wants_json, write
+    from cad_server._internal.cli_parser import suggest
+
+    close = suggest(word, [*(name.split()[0] for name in _COMMANDS), *TYPE_COMMANDS])
+    words = (f"unknown command {word!r}" + (f" (did you mean {close!r}?)" if close else "")
+             + "; 'cad --help' lists the commands")
+    return write(Failure(words, "usage"), prog="cad", as_json=wants_json(rest))
+
+
+def _crashed(command: str, rest: list[str], error: Exception) -> int:
+    """A crash past the command's own report, under ``--json``: its one JSON document (``internal_error``,
+    exit 1) and no traceback, but with ``--verbose``, on stderr."""
+    from cad_server._internal.cli_errors import Failure, wants_verbose, write
+
+    if wants_verbose(rest):
+        import traceback
+
+        traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+    return write(Failure(f"{type(error).__name__}: {error}", "internal_error"), prog=f"cad {command}", as_json=True)
 
 
 def _report(error: Exception) -> None:
@@ -255,6 +298,19 @@ _UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run
 
 # The told commands that register this installation (``cad_server._internal.installations.setup``).
 _REGISTERS = frozenset({"doctor"})
+
+
+def _asks_help(command: str, rest: list[str]) -> bool:
+    """Whether a command line asks for its help -- ``-h`` or ``--help`` among its options, or a type's ``help``
+    -- which its parser prints and exits on; for ``run``, only its own first word, since what follows is the
+    program's."""
+    from cad_server._internal.cli_errors import options
+
+    if command == "run":
+        return rest[:1] in (["-h"], ["--help"])
+    if command in TYPE_COMMANDS and rest[:1] == ["help"]:
+        return True
+    return bool({"-h", "--help"} & set(options(rest)))
 
 
 def _adopt() -> None:

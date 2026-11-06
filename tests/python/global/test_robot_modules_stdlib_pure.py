@@ -70,6 +70,7 @@ ALLOWED_CADGEN = {
     # is imported in the function that measures.
     "cad._internal.manufacturing",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
+    "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,
     # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.
     "cad.engine",

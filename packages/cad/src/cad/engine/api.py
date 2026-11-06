@@ -728,7 +728,13 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     path = key(os.fspath(source))
     if isinstance(path, Path):
         if path.suffix.lower() not in (".xbf", ".step", ".stp"):
-            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a document id")
+            # A script is the commonest such source, as for an export (``_source``): its run makes the document.
+            from cad.engine.said import COMMAND
+
+            run = (f"; run `{COMMAND} run {os.fspath(source)}` first, then {verb} its document by id"
+                   if path.suffix.lower() == ".py" else "")
+            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a "
+                             f"document id{run}")
         if not path.is_file():
             raise ValueError(f"no document {named or source}")
     return path

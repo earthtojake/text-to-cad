@@ -341,13 +341,15 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     no file this run wrote; an earlier file stays byte for byte.
 18. **Nothing waits on the network.** *The package.* Once installed, text-to-cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
-    counts under a random id, sent by default once a `cad` command has said so, and never
+    counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
+    answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. An automatic update (on by default, `cad update auto off` to
+    and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
+    feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
     background and switches only once it has been idle for a minute. It takes a release that breaks
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release

@@ -57,8 +57,8 @@ from typing import Iterable, Mapping, Sequence
 
 from cad.engine.formats.kicad import sexpr
 
-__all__ = ["MAX_BYTES", "MAX_MODELS", "MAX_TOTAL_BYTES", "REASONS", "Resolved", "library_roots", "model_names", "resolve_models",
-           "standard_libraries"]
+__all__ = ["MAX_BYTES", "MAX_MODELS", "MAX_TOTAL_BYTES", "REASONS", "Resolved", "installations", "library_roots",
+           "model_names", "resolve_models", "standard_libraries"]
 
 #: The largest STEP a board's part is drawn from: KiCad's largest library model is a few megabytes.
 MAX_BYTES = 64 * 1024 * 1024
@@ -98,27 +98,41 @@ class Resolved:
     under: str | None = None
 
 
-def standard_libraries(platform: str | None = None, environ: Mapping[str, str] | None = None) -> list[str]:
-    """Where an installation of KiCad keeps its 3D library on this platform: the folders that exist."""
+def installations(platform: str | None = None, environ: Mapping[str, str] | None = None) -> list[str]:
+    """Where each installation of KiCad on this platform keeps its own libraries, newest first: the folder that
+    holds its ``3dmodels``, ``footprints``, ``symbols``, ``template`` and ``blocks`` (on macOS ``/Applications/
+    KiCad*/KiCad.app/Contents/SharedSupport``; on Linux ``/usr/share/kicad``, ``/usr/local/share/kicad`` and the
+    Flatpak's; on Windows ``<Program Files>/KiCad/<version>/share/kicad``). The folders that exist."""
     platform = platform or sys.platform
     environ = os.environ if environ is None else environ
     if platform == "darwin":
-        patterns = ["/Applications/KiCad*/KiCad.app/Contents/SharedSupport/3dmodels",
-                    "/Applications/KiCad*.app/Contents/SharedSupport/3dmodels"]
+        patterns = ["/Applications/KiCad*/KiCad.app/Contents/SharedSupport",
+                    "/Applications/KiCad*.app/Contents/SharedSupport"]
     elif platform.startswith("win"):
         programs = [environ.get(name) for name in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)")]
-        patterns = [os.path.join(folder, "KiCad", "*", "share", "kicad", "3dmodels") for folder in programs if folder]
+        patterns = [os.path.join(folder, "KiCad", "*", "share", "kicad") for folder in programs if folder]
     else:
-        patterns = ["/usr/share/kicad/3dmodels", "/usr/local/share/kicad/3dmodels",
-                    "/var/lib/flatpak/app/org.kicad.KiCad/current/active/files/share/kicad/3dmodels",
-                    "/app/share/kicad/3dmodels"]
+        patterns = ["/usr/share/kicad", "/usr/local/share/kicad",
+                    "/var/lib/flatpak/app/org.kicad.KiCad/current/active/files/share/kicad", "/app/share/kicad"]
     found: list[str] = []
     for pattern in patterns:
-        # The newest installation first: KiCad 10's library before KiCad 9's.
-        for folder in sorted(glob.glob(pattern), reverse=True):
+        # The newest installation first: KiCad 10's before KiCad 9's (``KiCad/10.0`` after ``KiCad/9.0`` by number).
+        for folder in sorted(glob.glob(pattern), key=_numbered, reverse=True):
             if os.path.isdir(folder) and folder not in found:
                 found.append(folder)
     return found
+
+
+def _numbered(folder: str) -> list[str | int]:
+    """``folder`` to sort by, each run of digits in it a number: ``KiCad/10.0`` after ``KiCad/9.0``."""
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", folder)]
+
+
+def standard_libraries(platform: str | None = None, environ: Mapping[str, str] | None = None) -> list[str]:
+    """Where an installation of KiCad keeps its 3D library on this platform (:func:`installations`' ``3dmodels``):
+    the folders that exist."""
+    return [library for library in (os.path.join(folder, "3dmodels") for folder in installations(platform, environ))
+            if os.path.isdir(library)]
 
 
 def library_roots(environ: Mapping[str, str] | None = None, platform: str | None = None) -> list[str]:

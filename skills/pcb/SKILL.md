@@ -18,8 +18,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
-explains any other failure.
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
 kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
@@ -29,7 +29,14 @@ time a board command needs it (some 100 MB, once; nothing for you to install), a
 script that edits a board its environment. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
 another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for an
 edit). It runs headless, with private settings, and never opens KiCad's app; never open a
-board in KiCad's app to check it.
+board in KiCad's app to check it. Its library variables name KiCad's own libraries, never your
+variables or KiCad settings: a project's `sym-lib-table` or `fp-lib-table` row that names a stock
+library as KiCad's own tables do (`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`,
+`${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty`, any major's spelling) reads it in the libraries of the
+KiCad you installed (the newest, if several; or the installation whose `3dmodels` folder
+`CAD_KICAD_3DMODELS` names): nothing to set. With no KiCad installed, ERC warns `lib_symbol_issues` that
+each such library was not found and DRC `lib_footprint_issues` that it is not enabled; a project that
+carries its libraries (`${KIPRJMOD}`) needs no KiCad.
 
 kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
 stable KiCad app refuses; viewing and snapshots still work.

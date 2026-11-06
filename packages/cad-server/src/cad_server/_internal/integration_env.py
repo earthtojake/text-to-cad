@@ -22,7 +22,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
-__all__ = ["Failed", "call", "carries", "environment"]
+__all__ = ["Failed", "call", "carries", "environment", "found"]
 
 # The library's runner of one operation (``cad._internal.operation``).
 RUNNER = "cad._internal.operation"
@@ -43,6 +43,21 @@ def carries(integration: str) -> bool:
         return bool(modules) and all(importlib.util.find_spec(name) is not None for name in modules)
     except (ImportError, ValueError):
         return False
+
+
+def found(integration: str) -> tuple[str, str, str]:
+    """Where ``integration``'s operations run, read and nothing made or marked used (``cad doctor``):
+    ``(state, folder, release)`` -- ``carried`` (this process's environment holds it; no folder), ``made`` or
+    ``not made`` (made on first need, by the first command that needs it), the folder of its environment
+    either way, and the release of ``cad[<integration>]`` there."""
+    from cad_server._internal import base, extras
+
+    installation = base.Installation.here()
+    if carries(integration):
+        return "carried", "", installation.release
+    spec = extras.Spec(integrations=(integration,))
+    folder = extras.where(installation, spec)
+    return ("made" if extras._complete(folder, spec) is not None else "not made"), str(folder), installation.release
 
 
 def environment(integration: str, told: Callable[[str], None], *, engine: bool = True) -> str:
