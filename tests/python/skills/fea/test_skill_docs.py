@@ -29,12 +29,12 @@ class SkillDocs(unittest.TestCase):
         self.assertEqual(re.findall(r"^\| `([a-z_]+)` \|", checks, re.M)[1:], list(CHECK_KEYS))  # past the header
 
     def test_the_setup_names_the_mesher_and_the_installed_solver(self):
-        from cad._internal.fea.calculix import CCX_ENV, MINIMUM, install_hint
+        from cad.calculix._program import CCX, CCX_ENV, install_hint
 
         text = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
         setup = text.split("## Setup", 1)[1].split("## Workflow", 1)[0]
         self.assertIn(f"`{CCX_ENV}`", setup)
-        self.assertIn(f"{MINIMUM[0]}.{MINIMUM[1]} or newer", setup)
+        self.assertIn(f"{CCX.minimum[0]}.{CCX.minimum[1]} or newer", setup)
         self.assertIn("conda install -c conda-forge calculix", install_hint())
         self.assertIn("conda install -c conda-forge calculix", setup)
         self.assertIn("calculix-ccx", setup)
