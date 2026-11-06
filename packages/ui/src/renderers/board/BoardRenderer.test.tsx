@@ -167,9 +167,11 @@ const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('
 // 2D/3D and Flip, each by what its name says it is ("View: 2D", "Side: Top").
 const dimensionButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^View: / });
 const flipButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^Side: / });
-// A button's state as the screen shows it: its name, its Lucide icon, its fill (`secondary`: the strip's pressed fill).
-const shown = (button: HTMLElement) => [button.getAttribute('aria-label'), [...button.querySelector('svg')!.classList].find(name => name.startsWith('lucide-')),
-  button.getAttribute('data-variant')];
+// An icon by name: Lucide's by its class, a board's side by its own (`boardSideIcons.jsx`: `side-top`, `side-bottom`).
+const iconName = (svg: SVGElement | null) => (svg ? [...svg.classList].find(name => name.startsWith('lucide-'))
+  ?? (svg.dataset.boardSideIcon ? `side-${svg.dataset.boardSideIcon}` : null) : null);
+// A button's state as the screen shows it: its name, its icon, its fill (`secondary`: the strip's pressed fill).
+const shown = (button: HTMLElement) => [button.getAttribute('aria-label'), iconName(button.querySelector('svg')), button.getAttribute('data-variant')];
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
 const panel = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-flat-panel]')!;
@@ -964,15 +966,15 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; a p
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const more = async () => { await user.click(within(phone.pane).getByRole('button', { name: 'More tools' })); return openMenu('More tools'); };
   // A row's own icon: its Lucide glyph, not the menu's tick or submenu chevron.
-  const glyph = (row: HTMLElement) => [...row.querySelectorAll('svg')].flatMap(svg => [...svg.classList])
-    .find(name => name.startsWith('lucide-') && !['lucide-check', 'lucide-chevron-right'].includes(name)) ?? null;
+  const glyph = (row: HTMLElement) => [...row.querySelectorAll<SVGElement>('svg')].map(iconName)
+    .find(name => name && !['lucide-check', 'lucide-chevron-right'].includes(name)) ?? null;
   const rows = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLElement>('[role^=menuitem]')]
     .map(row => [row.textContent, row.getAttribute('aria-checked'), glyph(row)]);
-  expect(rows(await more())).toEqual([['Display', null, null], ['3D view', 'false', 'lucide-box'], ['View from bottom', 'false', 'lucide-arrow-up-to-line'],
+  expect(rows(await more())).toEqual([['Display', null, null], ['3D view', 'false', 'lucide-box'], ['View from bottom', 'false', 'side-bottom'],
     ['Zoom', null, 'lucide-scan-search']]);
   await user.click(within(await openMenu('More tools')).getByRole('menuitemcheckbox', { name: 'View from bottom' }));
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
-  expect(rows(await more())[2]).toEqual(['View from bottom', 'true', 'lucide-arrow-up-to-line']);
+  expect(rows(await more())[2]).toEqual(['View from bottom', 'true', 'side-bottom']);
   phone.dispose();
 });
 
@@ -1110,7 +1112,7 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
   for (const button of [dimensionButton(pane), flipButton(pane)]) expect(button.hasAttribute('aria-pressed')).toBe(false);
   expect([dimensionButton(pane).getAttribute('aria-keyshortcuts'), flipButton(pane).getAttribute('aria-keyshortcuts')]).toEqual(['3', 'Shift+F']);
   expect([shown(dimensionButton(pane)), await hint(dimensionButton(pane))]).toEqual([['View: 2D', 'lucide-square', 'ghost'], 'Switch to 3D3']);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Top', 'lucide-arrow-down-to-line', 'ghost'], 'View from bottom⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Top', 'side-top', 'ghost'], 'View from bottom⇧F']);
   // Moved off the fit (a middle-button pan), so F's fit would show.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
   const fitted = { ...frames.at(-1)! };
@@ -1121,11 +1123,18 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
   const moved = { ...frames.at(-1)! };
+  // Flip's glyph: the board's two layers, the solid one at 85%, set as the side it shows.
+  const glyph = () => { const svg = flipButton(pane).querySelector('svg')!; return { place: svg.querySelector('g')!.getAttribute('transform'),
+    paths: [...svg.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('fill-opacity')]) }; };
+  const top = glyph();
+  expect(top.paths.map(([, fill]) => fill)).toEqual(['0.85', null]);
   // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it, lit, its hint the way back.
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
   expect(frames.at(-1)).toEqual(moved);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary'], 'View from top⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'secondary'], 'View from top⇧F']);
+  // The same drawing mirrored top to bottom, so the two sides weigh the same: the top's set 0.75 down, the bottom's 0.75 up.
+  expect([top.place, glyph().place, glyph().paths]).toEqual(['translate(0 0.75)', 'matrix(1 0 0 -1 0 23.25)', top.paths]);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.side).toBe('bottom'));
   // F is the fit, still, not a flip; ⇧F again, and the top is back, unlit.
   fireEvent.keyDown(canvas, { key: 'f', code: 'KeyF' });
@@ -1133,7 +1142,7 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom' });
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'top' }));
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   dispose();
 });
 
@@ -1151,12 +1160,12 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   viewport3d.calls.length = 0;
   fireEvent.click(flipButton(pane));
   expect(viewport3d.calls).toEqual(['setPerspective [10,40,-30]']);
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   report(true);
-  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
   // Turned back over by hand (an orbit past the board's plane): the icon follows.
   report(false);
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   // ⇧F is Flip's key in 3D too.
   viewport3d.calls.length = 0;
   fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: 'F', code: 'KeyF', shiftKey: true });
@@ -1171,7 +1180,7 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   cleanup();
   const again = await open('blinky.kicad_pcb', { state: stored });
   await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
-  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary']);
+  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
   again.dispose();
 });
 

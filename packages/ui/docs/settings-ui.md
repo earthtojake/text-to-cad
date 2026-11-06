@@ -766,8 +766,9 @@ file.
   after a rule, the camera's **Projection**, changed seldom, so here and not on the screen);
   **2D/3D** (below, [A board in 3D](#a-board-in-3d)), a state button, a square while the board is flat and
   a box in 3D ("View: 2D", its hint "Switch to 3D 3"); and **Flip**, the side it is seen from (KiCad's View ▸
-  Flip Board View), a state button too, an arrow down onto the board while it is seen from the top and up
-  under it from the bottom ("Side: Top", its hint "View from bottom ⇧F"), lit in the strip's pressed fill
+  Flip Board View), a state button too, the board as two stacked layers (Lucide's `layers-2`), the side it is
+  seen from solid: the upper layer while it is seen from the top, the same glyph mirrored, the lower layer
+  solid, from the bottom (`board/boardSideIcons.jsx`; "Side: Top", its hint "View from bottom ⇧F"), lit in the strip's pressed fill
   while it is seen from the bottom, the view a person loses track of; a press or ⇧F turns it over. From the bottom the board is mirrored, its back layers on top. The rest of how a
   board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
   in the settings form's rows: under the layers, **Layer display**: **Others** (KiCad's high-contrast
