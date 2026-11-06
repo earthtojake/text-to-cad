@@ -23,31 +23,29 @@ export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CU
 // its top vertex this far down from the box's top (the box is wider and taller for its axis labels).
 export const VIEWPORT_CUBE_FACE_RIGHT_PX = 20;
 export const VIEWPORT_CUBE_FACE_TOP_PX = 19;
-// The gap between the view corner's controls. The lowest stands on the top of the cube's box, not
-// on the cube: the cube turns with the camera and may reach almost to its box's top, so only the box
-// keeps the gap under the column clear at every angle.
+// The gap between the view corner's controls. Over the cube the lowest stands on the top of the cube's
+// box, not on the cube: the cube turns with the camera and may reach almost to its box's top, so only
+// the box keeps the gap under the column clear at every angle. Over the pill, which never turns, the
+// lowest stands this gap above it.
 export const VIEWPORT_CORNER_GAP_PX = 6;
 // The corner's controls (`ViewCorner.jsx`): the strip's 24px tiles 4px inside their box and 4px apart
 // (`tools/stripTouch.js`), so a one-button toolbar is 32px square, without the strip's border.
 export const VIEWPORT_CORNER_TILE_PX = 24;
 export const VIEWPORT_CORNER_PAD_PX = 4;
 export const VIEWPORT_CORNER_CONTROL_PX = VIEWPORT_CORNER_TILE_PX + 2 * VIEWPORT_CORNER_PAD_PX;
-// The pill (`ZoomControl.jsx`'s): −, the 48px percentage and +, 32px tall and 112px wide, and the column over it.
-const PILL_PERCENT_PX = 48;
+// The pill (`ZoomControl.jsx`'s): −, the 48px percentage and +, 32px tall and 112px wide.
 export const VIEWPORT_PILL_PX = VIEWPORT_CORNER_CONTROL_PX;
-// Its two tiles and the percentage, the box's 4px either end and the 4px either side of the percentage.
-export const VIEWPORT_PILL_WIDTH_PX = 2 * VIEWPORT_CORNER_TILE_PX + PILL_PERCENT_PX + 4 * VIEWPORT_CORNER_PAD_PX;
 // The corner's controls stand off the cube's box, wherever the host anchors it: the cube's right (or
-// left) face 20px inside its box, the pill's outer edge where the cube's drawing ends (14px inside it),
-// and the bottom row a gap past the pill (its 112px), 132px from the box's edge. At the default
-// bottom-right, whose box overhangs the edge by 6px, those are 14px, 8px and 126px from the right edge.
-// The cube's box ends 90px from the right edge (96px wide), so the row clears it by 36px and stands where
-// it stands whether the pill or the cube is in the corner; its controls are the pill's height, so their
-// bottoms are the pill's.
+// left) face 20px inside its box, the pill's outer edge where the cube's drawing ends (14px inside it).
+// At the default bottom-right, whose box overhangs the edge by 6px, those are 14px and 8px from the
+// right edge. A column stands over its anchor flush with the anchor's outer edge, its controls a gap
+// apart: a 3D view's over the cube on the box's top, a flat view's over the pill a gap above it (the
+// pill 8px off the bottom, its 32px, then the gap: 46px), so a view that draws its picture flat or in 3D
+// keeps one corner, and not one control moves when it switches.
 // The cube's drawing, its axes' labels included, ends this far inside its box.
 const CORNER_PILL_PX = 14;
-const CORNER_ROW_PX = CORNER_PILL_PX + VIEWPORT_PILL_WIDTH_PX + VIEWPORT_CORNER_GAP_PX;
 const CORNER_BOTTOM = `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-bottom, 0px))`;
+const PILL_COLUMN_BOTTOM = `calc(${VIEWPORT_INSET_PX + VIEWPORT_PILL_PX + VIEWPORT_CORNER_GAP_PX}px + var(--cad-viewport-corner-bottom, 0px))`;
 
 /**
  * Where the corner's controls stand (`ViewCorner.jsx`): at the bottom-right, from the cube's box
@@ -55,7 +53,7 @@ const CORNER_BOTTOM = `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-b
  * the bottom-left (`--cad-viewport-corner-left`, `ViewPlaneControl`), mirrored there as one group, from
  * the box's left; lifted by `--cad-viewport-corner-bottom` either way. `side`: "right" or "left"
  * (`viewCornerSide`).
- * @returns {{ cubeColumn: object, pill: object, row: object }}
+ * @returns {{ cubeColumn: object, pill: object, pillColumn: object }}
  */
 export function viewCornerLayout(side = "right") {
   const edge = side === "left" ? "var(--cad-viewport-corner-left, 0px)" : `var(--cad-viewport-corner-right, ${VIEWPORT_CORNER_INSET_PX}px)`;
@@ -65,7 +63,7 @@ export function viewCornerLayout(side = "right") {
     cubeColumn: { ...at(VIEWPORT_CUBE_FACE_RIGHT_PX), bottom: `calc(${VIEWPORT_CUBE_BOTTOM} + ${VIEWPORT_CUBE_SIZE})` },
     // A flat view's zoom pill, where the cube would stand, lifted as the cube is.
     pill: { ...at(CORNER_PILL_PX), bottom: CORNER_BOTTOM },
-    // The bottom row, past the pill: read from the corner outwards, so mirrored it runs the other way.
-    row: { ...at(CORNER_ROW_PX), bottom: CORNER_BOTTOM, flexDirection: side === "left" ? "row-reverse" : "row" }
+    // A flat view's column over the pill: flush with the pill's outer edge, a gap above it.
+    pillColumn: { ...at(CORNER_PILL_PX), bottom: PILL_COLUMN_BOTTOM }
   };
 }

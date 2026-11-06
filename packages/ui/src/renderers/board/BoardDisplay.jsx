@@ -18,12 +18,13 @@ import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
  * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
  * changed often, in the panel or behind a menu what is changed now and then):
  *
- * - **On the screen** (`boardViewControls`), the corner's bottom row, left of the zoom pill or the cube
+ * - **On the screen** (`boardViewControls`), the corner's column over the zoom pill
  *   (`kit/shell/ViewCorner.jsx`; on a phone, rows of the strip's More): **Display**, the presets (the
  *   modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board, Copper, Assembly,
  *   Placement, and **Custom** while the Layers tab's eyes have left the mode's set: choosing a mode goes
- *   back to it); **2D | 3D**; and **Front** | **Back** (KiCad's F and B layers; KiCad's View ▸ Flip Board
- *   View), the side the board is seen from raised: from the back the board is mirrored, its back layers on top.
+ *   back to it), and in 3D the camera's projection under them; **2D | 3D**; and **Front** | **Back**
+ *   (KiCad's F and B layers; KiCad's View ▸ Flip Board View), the side the board is seen from raised:
+ *   from the back the board is mirrored, its back layers on top.
  * - **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), under its layers, as KiCad's
  *   Appearance panel has them, KiCad's Layer
  *   Display Options: **Others**, every layer but the active one (a press on its row chooses it) **Shown**,
@@ -117,11 +118,13 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
 
 /**
  * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
- * switched often enough to keep there: on the corner's bottom row, left of the zoom pill or the cube
- * (`kit/shell/ViewCorner.jsx`), the same row in 2D and in 3D, and on a phone rows of the strip's More —
+ * switched often enough to keep there: in the corner's column over the zoom pill, from the top down
+ * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, and on a phone rows
+ * of the strip's More —
  *
  * - **Display**, the corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
- *   on a phone More's submenu);
+ *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
+ *   there and not a button of its own;
  * - **2D | 3D**, the board drawn flat or as a board in 3D (on a phone More's ticked row, 3D view; the key 3);
  * - **Front | Back**, the side it is seen from (KiCad's F and B layers; KiCad's View ▸ Flip Board View):
  *   from the back the board is mirrored, its back layers on top; in 3D the camera turns to the other
@@ -131,19 +134,23 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
  * (`LayersSection.jsx`), opened now and then.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
  *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
- *   onSide?: ((side: "top" | "bottom") => void) | null, disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
+ *   onSide?: ((side: "top" | "bottom") => void) | null, projection?: { value: string, onChange(value: string): void } | null,
+ *   disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
  *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
+ *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
-export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, disabled = false,
-  boundary = null, t = english }) {
+export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
+  disabled = false, boundary = null, t = english }) {
   const below = display.side === "bottom";
   const side = next => (onSide ? onSide(next) : onChange({ ...display, side: next }));
   const presets = boardPresetMode({ display, sheet, onChange, t });
   return [
-    { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null, submenu: () => <DisplayMenuItems mode={presets} />,
-      // Its menu opens up and away from the corner, whichever side the host anchors it at.
-      corner: <ViewCornerTile><ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
-        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align={viewCornerAway(corner).align} />}</ViewCornerSided></ViewCornerTile> },
+    { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null,
+      submenu: () => <DisplayMenuItems mode={presets} projection={projection} />,
+      // Its tooltip and menu open beside it, away from the corner, as a 3D view's column's Display does.
+      corner: <ViewCornerTile><ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
+        icon={SolidModeIcon} className={VIEW_CORNER_BUTTON_CLASS} tooltipSide={viewCornerAway(corner).side} side={viewCornerAway(corner).side}
+        align="end" />}</ViewCornerSided></ViewCornerTile> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: dimension === "3d", tile: null,
       onSelect: () => onDimensionChange(dimension === "3d" ? "2d" : "3d"),

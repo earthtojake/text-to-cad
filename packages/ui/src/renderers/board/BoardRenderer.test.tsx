@@ -161,8 +161,8 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The view's corner's bottom row (`ViewCorner.jsx`): Display, 2D | 3D and the side, left of the zoom pill or the cube.
-const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-corner-row]')!;
+// The view's corner's column over the zoom pill (`ViewCorner.jsx`'s `ViewPillColumn`): Display, 2D | 3D and the side, from the top down.
+const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-pill-column]')!;
 const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent);
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
@@ -231,7 +231,7 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // Its view controls on the screen are the corner's row, left of the zoom pill: Display, 2D | 3D and the side; the strip has none.
+  // Its view controls on the screen are the corner's column over the zoom pill: Display, 2D | 3D and the side; the strip has none.
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
   expect(cornerButtons(pane)).toEqual(['Display mode: Board', '2D', '3D', 'Front', 'Back']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
@@ -289,7 +289,7 @@ it('a board without its index is the picture, its corner, and its Layers (with t
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  // No tools, so no strip; Display, 2D | 3D and the side in the corner, left of the zoom pill.
+  // No tools, so no strip; Display, 2D | 3D and the side in the corner's column over the zoom pill.
   expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(cornerButtons(pane)).toEqual(['Display mode: Board', '2D', '3D', 'Front', 'Back']);
   // Its one list, with no row of tabs over it.
@@ -985,7 +985,7 @@ it("a panel docking beside a board is a resize of its pane: a board still at its
   dispose();
 });
 
-it("2D | 3D is one view: the strip and the panel stay the same mounted controls, only the pill becomes the cube, and what is picked and measured stays; 3 switches; the file keeps it", async () => {
+it("2D | 3D is one view: the strip, the panel and the corner stay the same mounted controls, Projection is Display's in 3D, and what is picked and measured stays; 3 switches; the file keeps it", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
@@ -999,14 +999,18 @@ it("2D | 3D is one view: the strip and the panel stay the same mounted controls,
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Select' }));
   const controller = await controllerOf(view);
   expect(selected(controller)).toEqual(['#R1.2']);
-  // What the strip, the panel and the corner's row are, by their names and by the elements themselves.
+  // What the strip, the panel and the corner (its column and its pill) are, by their names and by the elements themselves.
   const controls = () => ({
-    strip: strip(pane), panel: panel(pane), row: corner(pane),
-    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-view-corner-row] button')]
+    strip: strip(pane), panel: panel(pane), column: corner(pane), pill: pane.querySelector<HTMLElement>('[data-zoom-pill]'),
+    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-view-pill-column] button, [data-zoom-pill] button')]
       .map(button => button.getAttribute('aria-label') || button.textContent)
   });
   const flat = controls();
-  expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
+  expect(flat.pill).not.toBeNull();
+  // In 2D Display's menu is the presets alone: a flat board has no projection.
+  expect((await presetMenu(user, pane)).querySelector('[data-display-projection]')).toBeNull();
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(menuShown('Display')).toBeNull());
 
   await user.click(within(corner(pane)).getByRole('radio', { name: '3D' }));
   await waitFor(() => expect(pane.querySelector('[data-board-3d]')).not.toBeNull());
@@ -1015,28 +1019,32 @@ it("2D | 3D is one view: the strip and the panel stay the same mounted controls,
   await waitFor(() => expect(viewport3d.calls).toContain('goHome'));
   const solid = controls();
   expect(solid.names).toEqual(flat.names);
-  for (const key of ['strip', 'panel', 'row'] as const) expect(solid[key], key).toBe(flat[key]);
+  for (const key of ['strip', 'panel', 'column', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
   expect(within(corner(pane)).getByRole('radio', { name: '3D' }).getAttribute('aria-checked')).toBe('true');
-  // The pill is the cube now, with every 3D view's Projection and Home over it.
-  expect(pane.querySelector('[data-zoom-pill]')).toBeNull();
-  expect(viewport3d.props.viewCube).toBe(true);
-  expect(within(pane).getByRole('button', { name: 'Projection: Orthographic' })).toBeTruthy();
-  fireEvent.click(pane.querySelector('[data-view-home]')!);
+  // The corner is the one it was: the pill (the 3D camera's zoom now), and no cube, Projection or Home of a 3D view's.
+  expect(viewport3d.props.viewCube).toBe(false);
+  expect(within(pane).queryByRole('button', { name: /^Projection/ })).toBeNull();
+  expect(pane.querySelector('[data-view-home]')).toBeNull();
   // The pick and the measurement are where they were; a camera is the 3D view's to pose.
   expect(selected(controller)).toEqual(['#R1.2']);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
   expect(within(pane).getByRole('button', { name: 'Measurement 1: 1.65 mm' })).toBeTruthy();
   await controller.setCamera({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0] });
   expect(viewport3d.calls.at(-1)).toBe('setPerspective [0,0,100]');
-  // Display's presets, in 3D as in 2D.
+  // Display's presets, in 3D as in 2D, and under them the camera's projection, the one on screen ticked.
+  const menu = await presetMenu(user, pane);
+  expect([...menu.querySelectorAll('[data-display-projection]')].map(item => [item.textContent, item.getAttribute('aria-checked')]))
+    .toEqual([['Orthographic', 'true'], ['Perspective', 'false']]);
+  await user.click(within(menu).getByRole('menuitemradio', { name: 'Perspective' }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.projection).toBe('perspective'));
   await user.click(within(await presetMenu(user, pane)).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.mode).toBe('copper'));
   // The file keeps it: 3D, opened again in 3D.
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value).toMatchObject({ mode: '3d', projection: 'orthographic' }));
-  // 3, as KiCad's Alt+3: back to 2D, the pill back, the flat canvas shown.
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value).toMatchObject({ mode: '3d', projection: 'perspective' }));
+  // 3, as KiCad's Alt+3: back to 2D, the same pill, the flat canvas shown.
   fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: '3' });
   await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
-  expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
+  expect(pane.querySelector('[data-zoom-pill]')).toBe(flat.pill);
   expect(pane.querySelector('[data-board-surface] canvas[role=img]')!.classList.contains('invisible')).toBe(false);
   expect(selected(controller)).toEqual(['#R1.2']);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('2d'));

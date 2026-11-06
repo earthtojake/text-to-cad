@@ -70,21 +70,23 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * controls are the view's corner's (`kit/shell/ViewCorner.jsx`), on its bottom row left of the zoom
- * pill (`BoardDisplay.jsx`): Display (the preset), 2D | 3D and Front | Back; the Layers tab has the
+ * controls are the view's corner's (`kit/shell/ViewCorner.jsx`), in its column over the zoom pill
+ * (`BoardDisplay.jsx`): Display (the preset), 2D | 3D and Front | Back; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  *
  * The same view, drawn in 3D (2D | 3D, or the key 3): the board as a slab with its two faces, each the
  * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
- * measurements and Quick Edit are the same mounted components either way, and only the corner's zoom
- * pill becomes the 3D views' cube (with Projection and Home over it). A press picks what the 2D view
- * picks where the pointer's ray meets the face it enters; a drag turns the view (naming an area by a
- * drag is the 2D view's); Front | Back turns the camera over and follows it. Entering 3D opens head on,
- * on the window the 2D view shows, and eases to Home (or the camera this file was left at in 3D);
- * leaving it frames the 2D view on what the camera was centred on, from its side. Which of the two is
- * up, and the 3D camera and projection, are the file's view (`board3d`).
+ * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
+ * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
+ * camera's projection; there is no cube and no Home button (Zoom to fit frames the board). A press
+ * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
+ * (naming an area by a drag is the 2D view's); Front | Back turns the camera over and follows it.
+ * Entering 3D opens head on, on the window the 2D view shows, and eases to the 3D views' Home, the board
+ * framed whole from the opening direction (or to the camera this file was left at in 3D); leaving it
+ * frames the 2D view on what the camera was centred on, from its side. Which of the two is up, and the
+ * 3D camera and projection, are the file's view (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -676,16 +678,18 @@ function BoardSurface({ view, data }) {
   const cursor = measuring ? "cursor-crosshair"
     : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 
-  // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`): the flat canvas's, or in 3D the 3D views' own.
-  const zoom3d = useMemo(() => viewportZoom(viewer3dRef), []);
+  // The corner's pill, and the zoom's keys (`useFlatHandover`'s `zoomKeys`): the flat canvas's, or in 3D the
+  // 3D views' own, made again once the 3D view is up, so the pill hears its camera from then on.
+  const zoom3d = useMemo(() => viewportZoom(viewer3dRef), [shown3d]);
   const zoom = { ...(dimension === "3d" ? zoom3d : boardView.zoom), zoomToSelection: () => frameSelectors(selectionRef.current.selected),
     selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
+  const solid = dimension === "3d" && layered && plot;
   // Front | Back: the Display's side in 2D; in 3D the camera turns over to it, and the side follows the camera.
   const chooseSide = side => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.turnTo(side) : setDisplay(current => ({ ...current, side })));
+  // In 3D, Display's menu ends with the camera's projection, a setting changed seldom (`settings-ui.md`).
   const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
-    onSide: chooseSide }) : [];
-  const solid = dimension === "3d" && layered && plot;
+    onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null }) : [];
   // The parts the 3D view stands models on: the index's (page millimetres, as the stage's outline is), each with its models.
   const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   return (
@@ -695,7 +699,7 @@ function BoardSurface({ view, data }) {
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}
-      zoom={zoom} inspect={inspect} corner={solid ? "cube" : "pill"} cube={solid ? { projection: { value: projection, onChange: setProjection }, onHome: () => view3dRef.current?.home() } : null}>
+      zoom={zoom} inspect={inspect}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
         className={cn("absolute inset-0 block touch-none select-none", cursor, solid && shown3d && "invisible")} />
       {/* The board in 3D, over the flat canvas until its first frame is up, which then lets its rasters go. */}

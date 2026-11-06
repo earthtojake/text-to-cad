@@ -215,7 +215,7 @@ the board is drawn: Other layers (KiCad's high-contrast modes: the layers but th
 **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and vias
 through an active copper layer, always stay at full strength), the copper pours and the zones' and
 tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
-tabs, the picked part's or net's pads. The view's corner, left of the zoom, has **Display** (the
+tabs, the picked part's or net's pads. The view's corner, over the zoom, has **Display** (the
 preset: the mode), **2D | 3D** and **Front | Back**. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).

@@ -1,6 +1,7 @@
 /**
  * A board in 3D: the 3D views' own viewport (`kit/shell/ShellViewport.jsx`: its camera, its gestures,
- * its cube, its keys) around the bare board (`@cad/core/lib/board3d/boardStage.js`: a slab cut to the
+ * its keys, but no cube: the board's corner is its zoom pill in 3D as in 2D, which zooms this camera)
+ * around the bare board (`@cad/core/lib/board3d/boardStage.js`: a slab cut to the
  * outline, its two faces the 2D drawer's pictures of the two sides). A lazy chunk of the board's view
  * (`BoardRenderer.jsx`): a board on screen in 2D loads no three.js.
  *
@@ -249,7 +250,6 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     },
     requestPaint,
     fit: () => viewerRef.current?.resetZoom?.(),
-    home: () => viewerRef.current?.goHome?.(),
     /** A page box framed, the camera's direction kept. */
     frameSheet: ([x0, y0, x1, y1]) => viewerRef.current?.zoomToBounds?.({ min: [x0, -y1, -thickness], max: [x1, -y0, 0] }),
     /** The camera turned to `side`, eased: Front | Back. */
@@ -284,7 +284,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   }, [stage, picking, viewerRef]);
   return <div ref={frameRef} className="absolute inset-0 z-0" data-board-3d="">
     <ShellViewport ref={viewerRef} scene={stage} modelKey={modelKey} sceneScaleMode={SCALE} perspective={initial} {...props}
-      viewCube onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
+      viewCube={false} onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>
   </div>;
 }
 
