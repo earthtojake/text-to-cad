@@ -46,7 +46,7 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   expect(listeners.size).toBe(0);
 });
 
-// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`, Codex's views) moves every
+// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves every
 // corner control there, as one group, the bottom row reading from the corner outwards.
 it('every corner control follows the corner the host anchors the cube at', async () => {
   const { ViewCornerRow, ViewCornerSideProvider, ViewCubeColumn, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');

@@ -40,7 +40,7 @@ export const ViewCornerSideProvider = ViewCornerSideContext.Provider;
 export const useViewCornerSide = () => useContext(ViewCornerSideContext);
 /**
  * The side the host anchors the corner at, read off the frame's root: "left" where it sets
- * `--cad-viewport-corner-left` (Codex's views), else "right".
+ * `--cad-viewport-corner-left` (a host that anchors the corner at the left), else "right".
  * @param {Element | null} element
  */
 export function viewCornerSide(element) {
