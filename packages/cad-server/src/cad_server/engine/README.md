@@ -869,7 +869,14 @@ A served STEP is read in a reader process of the server's, never in the daemon
 (the XCAF reader's working memory is many times its result's, and its allocator
 keeps it): one read per process, the next process started and warm meanwhile,
 answering the structure and each part's shape bytes, which are all the daemon
-keeps. The read is held by the file's bytes, so the same bytes served again --
+keeps. Reads that come while one is under way (a board's part models: 22 files at once on
+KiCad's "video" demo) are read beside it by up to three helper processes (`serve.READERS`: four
+reads at once at most, and never every core), each reading up to 16 files before it goes: only
+files of at most 8 MB (what such a parse leaves in a process is about 100 MB), never under memory
+pressure, and the helpers go once no read has been under way for 10 seconds, so with no page
+reading the daemon's children are what they were. A larger file waits for the one reader. Measured
+on a 10-core Mac, that board's 22 models: 19.0 s to read one at a time in fresh processes, 3.0 s
+so. The read is held by the file's bytes, so the same bytes served again --
 the file touched, copied, or put back -- are not parsed again while the daemon
 lives, and a part's key is made from those bytes and its label, so its mesh is
 not made again either. A STEP is read outside the server's lock (every other
@@ -1087,8 +1094,8 @@ answers in frames; today's children keep their bulk in frames as they always hav
 document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
 STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
 which run with no daemon too) and the processes that outlive the engine (the telemetry sender, an
-update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's,
-count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
+update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's
+and its helpers', count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
 machine, below; 2.3 GB parsing a 354 MB STEP).
 
 **The protocol** (`cad.engine.frames`), every service's: requests are one JSON object per line on the

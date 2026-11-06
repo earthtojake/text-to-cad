@@ -65,6 +65,14 @@ test("every placement of a model shares its one geometry; a missing model is a b
   parts.dispose();
 });
 
+test("the models are asked for the largest parts' first, each once", () => {
+  const parts = createBoardParts(THREE, { thickness: 1.6 });
+  const table = { ...TABLE, "q.step": { file: "q.step", document: "d2", api: "/api/v1/documents/step/d2", stamp: "1-20" } };
+  parts.setParts([...PARTS, { ref: "U2", at: [40, 10], rotation: 0, side: "top", outline: rect(40, 10, 14, 14), models: [{ name: "q.step" }] }], table);
+  assert.deepEqual(parts.wanted().map(item => item.key), ["d2@1-20", "d1@1-10"]);
+  parts.dispose();
+});
+
 test("a moved part is placed again alone; a model no part uses any more is let go", () => {
   const parts = createBoardParts(THREE, { thickness: 1.6 });
   parts.setParts(PARTS, TABLE);

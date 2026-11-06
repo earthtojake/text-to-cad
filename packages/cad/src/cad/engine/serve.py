@@ -51,7 +51,13 @@ key the new version shares with the old keeps its tessellation (one cache, by ke
 times the memory of what it makes and its allocator keeps most of it, so the server never
 parses a ``.step``/``.stp`` itself: a reader process of its own does (``_read_foreign``, one
 read per process, the next one started and warm meanwhile) and answers the structure and each
-part's shape bytes, which are all the server keeps. The read is held by the file's bytes
+part's shape bytes, which are all the server keeps. Reads asked while one is under way (a board's
+part models, many small files at once) are read beside it, by at most ``READERS - 1`` helper
+processes, each of which reads up to ``HELPER_READS`` files before it goes (a warm reader parses a
+small file in a tenth of the time a fresh one takes to start): only files of at most
+``HELPER_BYTES`` (what a parse leaves in a helper's memory stays small), never under memory
+pressure, and the helpers go once no read has been under way for ``HELPERS_LINGER`` seconds; a
+larger file waits for the one reader, as every read did before. The read is held by the file's bytes
 (``FOREIGN_HELD`` of them): the same bytes served again -- the file touched, copied, or put
 back -- are not parsed again while the server lives, and their parts' keys (and so their
 meshes) are the same. A STEP is read outside the server's lock, so every other document is
@@ -128,6 +134,13 @@ FOREIGN = (".step", ".stp")
 # How many STEP reads are held by their bytes: a read a served document holds stays in memory
 # with it whatever this says; past it, the least recently served read goes.
 FOREIGN_HELD = 8
+# Reads at once (the module docstring): the reader and its helpers, at most four and never all of
+# the machine's cores; the largest file a helper reads, how many it reads before it goes, and how
+# long the helpers stay once no read is under way.
+READERS = max(1, min(4, (getattr(os, "process_cpu_count", os.cpu_count)() or 2) - 1))
+HELPER_BYTES = 8 << 20
+HELPER_READS = 16
+HELPERS_LINGER = 10.0
 
 
 class MeshCache:
@@ -1046,6 +1059,11 @@ class Server:
         self.foreign_reads: dict[str, concurrent.futures.Future] = {}
         self.foreign_lock = threading.Lock()
         self.reader: concurrent.futures.ProcessPoolExecutor | None = None
+        # The reader's helpers while reads come at once (``_reading``), the reads under way in the
+        # reader and in all, and the let-go of the helpers the last read's end set off.
+        self.helpers: concurrent.futures.ProcessPoolExecutor | None = None
+        self.reading = {"reader": 0, "all": 0}
+        self.helpers_idle: threading.Timer | None = None
         # A served STEP being read again in the background, and one whose file could not be read
         # as it stands (by its state): it is read again once the file changes.
         self.rereading: set[str] = set()
@@ -1114,9 +1132,12 @@ class Server:
         self.on_close()
         self.mesher.stop()
         with self.foreign_lock:
-            reader, self.reader = self.reader, None
-        if reader is not None:
-            reader.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
+            pools, self.reader, self.helpers = (self.reader, self.helpers), None, None
+            if self.helpers_idle is not None:
+                self.helpers_idle.cancel()
+        for pool in pools:
+            if pool is not None:
+                pool.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
 
     # --- documents -------------------------------------------------------------------
 
@@ -1362,6 +1383,53 @@ class Server:
                 self.reader = _process_pool(1, initializer=_reader_ready, max_tasks_per_child=1)
             return self.reader
 
+    def _helpers(self) -> concurrent.futures.ProcessPoolExecutor:
+        """The reader's helpers (the module docstring): ``READERS - 1`` processes, started as reads
+        need them, each gone after ``HELPER_READS`` reads."""
+        with self.foreign_lock:
+            if self.helpers is not None and getattr(self.helpers, "_broken", False):
+                self.helpers.shutdown(wait=False, cancel_futures=True)
+                self.helpers = None
+            if self.helpers is None:
+                self.helpers = _process_pool(max(1, READERS - 1), initializer=_reader_ready,
+                                             max_tasks_per_child=HELPER_READS)
+            return self.helpers
+
+    def _reading(self, size: int) -> str:
+        """Where a read of a file of ``size`` bytes goes, counted as under way: the reader when it is
+        free, a file too large for a helper, or under memory pressure; else a helper."""
+        under = READERS > 1 and size <= HELPER_BYTES and self.pressure.under()
+        with self.foreign_lock:
+            lane = "helpers" if READERS > 1 and self.reading["reader"] and size <= HELPER_BYTES and not under else "reader"
+            if lane == "reader":
+                self.reading["reader"] += 1
+            self.reading["all"] += 1
+            if self.helpers_idle is not None:
+                self.helpers_idle.cancel()
+                self.helpers_idle = None
+        return lane
+
+    def _read_done(self, lane: str) -> None:
+        """A read's end: once none is under way, the helpers go ``HELPERS_LINGER`` seconds later unless
+        another read comes first."""
+        with self.foreign_lock:
+            if lane == "reader":
+                self.reading["reader"] -= 1
+            self.reading["all"] -= 1
+            if self.reading["all"] or self.helpers is None or self.stopping.is_set():
+                return
+            self.helpers_idle = threading.Timer(HELPERS_LINGER, self._let_helpers_go)
+            self.helpers_idle.daemon = True
+            self.helpers_idle.start()
+
+    def _let_helpers_go(self) -> None:
+        with self.foreign_lock:
+            if self.reading["all"]:
+                return
+            helpers, self.helpers, self.helpers_idle = self.helpers, None, None
+        if helpers is not None:
+            helpers.shutdown(wait=False, cancel_futures=True)
+
     def _foreign(self, path: Path, ident: str | None = None) -> tuple[dict[str, Any], tuple]:
         """The read of the STEP at ``path`` and the file state it is of: held by the file's
         bytes, else read by a reader process -- once, however many ask for it meanwhile. With
@@ -1388,13 +1456,17 @@ class Server:
             last = self._import_frame(path, started, "read", f"{path.name} ({_megabytes(stat[1])})")
             self.importing(ident, last)
         try:
+            lane = self._reading(stat[1])
             try:
-                future = self._readers().submit(_read_foreign, str(path), digest, counts)
+                pool = self._readers() if lane == "reader" else self._helpers()
+                future = pool.submit(_read_foreign, str(path), digest, counts)
                 read, last = self._await_import(future, ident, path, started, counts, last)
             except concurrent.futures.BrokenExecutor:  # the reader died mid-read
                 with self.foreign_lock:
-                    self.reader = None  # the next read starts a reader afresh
+                    setattr(self, lane, None)  # the next read starts one afresh
                 raise ValueError(f"the STEP reader exited reading {path.name}") from None
+            finally:
+                self._read_done(lane)
         except BaseException as error:
             with self.foreign_lock:
                 self.foreign_reads.pop(digest, None)

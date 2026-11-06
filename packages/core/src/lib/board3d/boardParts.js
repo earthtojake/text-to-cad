@@ -35,6 +35,13 @@ const DEFAULT_SURFACE = [0.48, 0.5, 0.54, 1];
 const BLOCK_INK = Object.freeze({ dark: { fill: 0x9aa3ad, edge: 0xc3cad2, opacity: 0.22 }, light: { fill: 0x6b7280, edge: 0x4b5563, opacity: 0.18 } });
 
 const finite = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+// The area of a part's outline's box, in square millimetres: how big it stands on the board.
+const outlineArea = part => {
+  const ring = Array.isArray(part?.outline) ? part.outline : [];
+  if (!ring.length) return 0;
+  const xs = ring.map(point => finite(point?.[0], 0)), ys = ring.map(point => finite(point?.[1], 0));
+  return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+};
 const colorKey = rgba => (rgba ? rgba.map(value => Math.round(finite(value, 0) * 1000)).join(",") : "");
 
 /**
@@ -276,17 +283,22 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       table = nextTable && typeof nextTable === "object" ? nextTable : null;
       update();
     },
-    /** The models a placement waits on and nobody has asked for: `{ key, document, api }`, each once. */
+    /**
+     * The models a placement waits on: `{ key, document, api }`, each once, the largest parts' first
+     * (by the area of their outlines' boxes), so the board fills in from its biggest bodies.
+     */
     wanted() {
       const found = new Map();
       for (const entry of placed.values()) {
+        const size = outlineArea(entry.part);
         for (const body of entry.bodies) {
-          if (!body.mesh && !models.has(body.key) && !failed.has(body.key) && !found.has(body.key)) {
-            found.set(body.key, { key: body.key, document: body.entry.document, api: body.entry.api, file: body.entry.file });
-          }
+          if (body.mesh || models.has(body.key) || failed.has(body.key)) continue;
+          const had = found.get(body.key);
+          if (!had) found.set(body.key, { key: body.key, document: body.entry.document, api: body.entry.api, file: body.entry.file, size });
+          else had.size = Math.max(had.size, size);
         }
       }
-      return [...found.values()];
+      return [...found.values()].sort((a, b) => b.size - a.size).map(({ size, ...item }) => item);
     },
     /** A model baked (`bakeModel`): every placement waiting on it takes it. */
     addModel(key, baked) {
