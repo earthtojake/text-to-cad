@@ -26,7 +26,8 @@ import numpy as np
 __all__ = ["Held", "paint_ink", "plan_view", "refusals"]
 
 REFUSED = {"mode": "display.mode", "grid": "the grid", "clip": "Clip", "exploded": "Explode",
-           "camera": "display.camera (a lens)", "hidden": "display.hidden", "isolated": "display.isolated"}
+           "camera": "display.camera (a lens)", "hidden": "display.hidden", "isolated": "display.isolated",
+           "tint": "display.tint"}
 PLAN_KEYS = frozenset({"position", "target", "up", "orthographicHalfHeight"})
 PLAN_TOLERANCE = 1e-6  # how far off straight down, or off +Y up, a plan view may be: rounding, never a tilt
 TEXT_LINE_HEIGHT = 1.25  # a text mark's line pitch, of its words' size (``marks.js``)

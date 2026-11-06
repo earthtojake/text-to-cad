@@ -60,7 +60,7 @@ build123d = [
   # renderer. The add-on also imports Pillow at module level and ezdxf declares neither, so a module
   # of the library would otherwise import packages it does not depend on -- and the drawing IS the
   # PDF, so neither is optional. It runs in model code, where the server cannot know before the run
-  # that a script wants it: so it is the kernel's.
+  # that a script wants it: so it is the kernel's. @work_instruction draws its pages with matplotlib too.
   "matplotlib",
   "shapely",
   # The engine's DXF export writes a drawing through build123d's ExportDXF and checks it with ezdxf,

@@ -42,8 +42,8 @@ cad inspect XBF/arm.xbf                    # what it holds, then its build closu
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
-engineering drawings (`@eng_drawing`).
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators;
+engineering drawings (`@eng_drawing`); and work instructions (`@work_instruction`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -285,8 +285,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
     and leaves everything as it was. Nothing updates on its own.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
-    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
-    crash; a model's own process, where only the library is installed, counts nothing -- is kept
+    snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing or a
+    work instruction, a crash; a model's own process, where only the library is installed, counts nothing -- is kept
     in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command that finds it has waited more than a
     window, with no other process sending, starts a sender detached that sends it and exits
@@ -443,6 +443,10 @@ src/cad/
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
   results.py             # what a `validate` verb returns: the JSON line protocol, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
+  work_instruction.py    # @work_instruction: the steps that build one assembly, one PDF;
+                         #   its pages and figures in _internal/work_instruction_pages.py,
+                         #   a simple one's picture guide in _internal/work_instruction_guide.py
+                         #   and its 3D page in _internal/work_instruction_player.py
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties

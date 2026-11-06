@@ -9,7 +9,8 @@ counts.
 
 from __future__ import annotations
 
-from typing import Any
+import functools
+from typing import Any, Callable
 
 # The server's telemetry (``cad_server.analytics``: ``report`` and ``hand_over``), or None: nothing is counted.
 TELEMETRY: Any = None
@@ -34,3 +35,21 @@ def hand_over(counts: dict[str, Any]) -> None:
         TELEMETRY.hand_over(counts)
     except Exception:  # noqa: BLE001 - a count never fails what it counts
         pass
+
+
+def counted(run: Callable[..., Any], feature: str) -> Callable[..., Any]:
+    """``run``, a script's document decorator (``@eng_drawing``, ``@work_instruction``), counted as
+    ``feature`` (the server's ``FEATURES``): a document made (``hand_over``), or a mistake in cadgen's own
+    code making one (``report``). Neither ever changes what the document does."""
+
+    @functools.wraps(run)
+    def made(*args: Any, **kwargs: Any) -> Any:
+        try:
+            document = run(*args, **kwargs)
+        except Exception as error:
+            report(error, "build", bugs_only=True)  # the person's own mistakes are theirs
+            raise
+        hand_over({"features": [feature]})
+        return document
+
+    return made

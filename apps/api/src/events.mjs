@@ -86,7 +86,8 @@ const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf'
 const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model']);
 const VIAS = new Set(['script', 'command']);
-const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
+const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'work_instruction',
+  'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
 // `usage/controls.js`): a closed list of names the page chose, never a value typed or a file's.
 export const CONTROLS = new Set([

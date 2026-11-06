@@ -40,7 +40,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 - ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
   the snapshot failed (``cad_server._internal.engine_telemetry``);
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
-  played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
+  played an animation, engineering drawings and work instructions were made, and CAD views' Quick Edits were sent
   (``FEATURES``);
 - ``health`` (the engine's daemon, told by the verb it answered): warm workers started, crashed and
   retired (``refusals``, builds refused for want of memory, is always 0: nothing is refused);
@@ -365,8 +365,10 @@ SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser
                                "bug", "other"})
 # What a person used: a model with children (an engine model of several parts too), a model declaring mesh
 # exports (``@stl``, ``@glb``, ``@threemf``), a snapshot (or an engine export) that posed joints or played an
-# animation, an engineering drawing (``@eng_drawing``), and a CAD view's Quick Edit sending its prompt.
-FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation", "drawing", "quick_edit"})
+# animation, an engineering drawing (``@eng_drawing``), a work instruction (``@work_instruction``), and a CAD
+# view's Quick Edit sending its prompt.
+FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation", "drawing", "work_instruction",
+                      "quick_edit"})
 # What a person used in a CAD view, as its page names it (``@cad/ui``'s ``usage/controls.js``; the
 # receiver's ``CONTROLS``): the strip's tools and Preview, each a mode that stays on (Explode and Clip, popovers
 # from their tiles, a use each time one opens), their modes and settings,
