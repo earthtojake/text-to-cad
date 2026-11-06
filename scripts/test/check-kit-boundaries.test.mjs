@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, checkSharedSceneBuilders, FILE_VIEWER_ROOT, HEADLESS_ENTRY, HEADLESS_SCENE,
-  KIT_ROOT, RENDERERS_ROOT, SHARED_SCENE_PIECES
+  checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, checkSharedSceneBuilders, checkViewFrame, FILE_VIEWER_ROOT, HEADLESS_ENTRY, HEADLESS_SCENE,
+  KIT_ROOT, RENDERERS_ROOT, SHARED_SCENE_PIECES, VIEW_FRAME
 } from './check-kit-boundaries.mjs';
 
 function fixture(files, run, allowlist = []) {
@@ -165,3 +165,17 @@ test('the snapshot entry routes families through the shared scenes and reaches f
   `${HEADLESS_ENTRY} does not route a family's job through headlessSceneFamily (${HEADLESS_SCENE})`,
   'packages/core/src/common/renderMeshScene.js imports buildMeshDataFromGlbBuffer: the snapshot draws a family with its shared builder, never a copy flattened for it'
 ])));
+
+test('only the one frame draws the panel, its pill, the strip\'s column, the top-right and the cards', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'text-to-cad-view-frame-'));
+  const write = (name, code) => { fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); fs.writeFileSync(path.join(root, name), code); };
+  try {
+    write(VIEW_FRAME, 'const flat = useFlatPanelState({});\nuseStageReach(a, b);\n<div data-cad-tool-groups="">\n<FlatPanelPill />\n<ViewportTopRight />\n<ViewerLoadingOverlay />\n<ViewerAlertCard />\n');
+    write(`${KIT_ROOT}/shell/FlatPanel.jsx`, 'export function useFlatPanelState() {}\n');
+    write(`${RENDERERS_ROOT}/board/Board.jsx`, 'return <ViewerAlertCard alert={a} />;\n');
+    write(`${RENDERERS_ROOT}/board/Board.test.tsx`, 'render(<ViewerAlertCard />);\n');
+    assert.deepEqual(checkViewFrame(root).errors.map(error => error.split(' which ')[0]), [`${RENDERERS_ROOT}/board/Board.jsx:1 renders ViewerAlertCard,`]);
+    write(VIEW_FRAME, 'useStageReach(a, b);\n');
+    assert.equal(checkViewFrame(root).errors.filter(error => error.startsWith(`${VIEW_FRAME} no longer`)).length, 6);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

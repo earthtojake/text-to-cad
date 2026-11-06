@@ -77,7 +77,7 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('a phone\'s tools centre on the viewport, with no panel and no pill, as space runs out', async (t) => {
+test('a phone\'s tools centre on the viewport as space runs out, and what does not fit is More\'s', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel.harness`);
@@ -97,12 +97,69 @@ test('a phone\'s tools centre on the viewport, with no panel and no pill, as spa
       const expected = view.left + Math.max(8, (view.width - tools.width) / 2);
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
-    if (width < 600) assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a phone has no panel');
   }
   await pane.getByRole('button', { name: 'More tools', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Preview', exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
+
+// ONE FRAME (`kit/shell/ViewFrame.jsx`), over a 3D view (the harness) and a flat one (a drawing with
+// layers): toggling the view's panel leaves the strip's centre on the view's centre, the picture is
+// drawn in what the panel leaves, centred on it, and on a phone the strip is centred with no panel.
+const LAYERED = JSON.parse(await readFile(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url), 'utf8'));
+const drawingRoute = (url, root, response) => {
+  if (url.pathname.endsWith('/drawing')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(LAYERED)); return true; }
+  if (!url.pathname.endsWith('/api/v1/documents')) return false;
+  response.setHeader('Content-Type', 'application/json');
+  response.end(JSON.stringify({ id: 'layered.dxf', kind: 'dxf', api: '/api/v1/documents/dxf/layered.dxf',
+    documents: [{ entry: { kind: 'dxf', file: '/models/layered.dxf', url: '/layered.dxf', hash: `${root}-layered`, bytes: 4096 }, revision: `${root}-layered` }] }));
+  return true;
+};
+for (const [what, file, route] of [['a 3D view', 'panel.harness', undefined], ['a flat view', 'layered.dxf', drawingRoute]]) {
+  test(`${what}: the strip stays at the view's centre as the panel opens and shuts, the picture is centred in what the panel leaves, and a phone has no panel`, async (t) => {
+    const origin = await serve(t, route);
+    const { page, errors } = await newPage(t);
+    await page.addInitScript(() => { window.Worker = undefined; });
+    await page.goto(`${origin}/?file=${file}`);
+    const pane = page.getByTestId('one');
+    const strip = pane.getByRole('group', { name: 'Interaction tools' });
+    await strip.waitFor();
+    // The strip's centre against the view's, the canvas's box against the stage's, the panel's width.
+    const measure = () => page.evaluate(() => {
+      const pane = document.querySelector('[data-testid="one"]');
+      const box = element => element?.getBoundingClientRect() ?? null;
+      const view = box(pane.querySelector('[data-slot="cad-file-view"]')), stage = box(pane.querySelector('[data-cad-canvas]'));
+      const tools = box(pane.querySelector('[aria-label="Interaction tools"]'));
+      const canvas = [...pane.querySelectorAll('[data-cad-canvas] canvas')].map(box).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      const panel = pane.querySelector('aside[data-flat-panel]');
+      return { view: view.left + view.width / 2, strip: tools.left + tools.width / 2, stage: stage.left + stage.width / 2, stageWidth: stage.width,
+        canvas: canvas.left + canvas.width / 2, canvasWidth: canvas.width, panel: panel && !panel.hidden ? box(panel).width : 0 };
+    });
+    // Opened from its pill (the 800px view starts it collapsed), then shut again from its own button.
+    const shut = await measure();
+    await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('[data-testid="one"] aside[data-flat-panel]')?.hidden);
+    await settle(page);
+    const open = await measure();
+    await pane.getByRole('button', { name: 'Hide panel', exact: true }).click();
+    await settle(page);
+    const again = await measure();
+    assert.ok(open.panel > 0 && shut.panel === 0, `the panel opens and shuts: ${shut.panel} -> ${open.panel}`);
+    for (const [state, at] of [['shut', shut], ['open', open], ['shut again', again]]) {
+      assert.ok(Math.abs(at.strip - at.view) <= 1, `${state}, the strip is at the view's centre: ${at.strip} of ${at.view}`);
+      assert.ok(Math.abs(at.canvas - at.stage) <= 1 && Math.abs(at.canvasWidth - at.stageWidth) <= 1, `${state}, the picture fills the stage, centred on it: ${JSON.stringify(at)}`);
+    }
+    assert.ok(Math.abs(open.stageWidth - (shut.stageWidth - open.panel)) <= 1, 'the open panel takes its width out of the canvas');
+    // A phone: no panel, no pill, the strip centred in the view.
+    await page.locator('#root > div').evaluate(element => element.style.setProperty('width', '390px', 'important'));
+    await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-cad-tool-groups]')?.hasAttribute('data-mobile'));
+    await settle(page);
+    const phone = await measure();
+    assert.ok(Math.abs(phone.strip - phone.view) <= 1, `on a phone the strip is at the view's centre: ${phone.strip} of ${phone.view}`);
+    assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a phone has no panel');
+    assert.deepEqual(errors, []);
+  });
+}
 
 test('a shell renderer restores isolated view state on a remount', async (t) => {
   const requests = [];

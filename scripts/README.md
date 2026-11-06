@@ -106,7 +106,8 @@ where those files ship, so these scripts are what produces them.
   gates, exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
-  `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness, and every
+  `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
+  every renderer draws its chrome through the one frame, `kit/shell/ViewFrame.jsx`), and every
   string the CAD Viewer and the CAD app show read through the locale files. Run by `test-js.sh`
   (the first two also as `npm run check:boundaries`).
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
