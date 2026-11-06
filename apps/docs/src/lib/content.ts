@@ -89,7 +89,7 @@ export const features = [
     id: "parts",
     name: "Parts and assemblies",
     path: "skills/cad/SKILL.md",
-    summary: "Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms, and shown live in the CAD viewer.",
+    summary: "Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the CAD viewer.",
     file: "bracket.py",
   },
   {
@@ -110,7 +110,7 @@ export const features = [
     id: "drawings",
     name: "Engineering drawings",
     path: "skills/engineering-drawing/SKILL.md",
-    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block, plus DXF flat patterns for laser and waterjet cutting.",
+    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
     file: "bracket.pdf",
   },
   {
