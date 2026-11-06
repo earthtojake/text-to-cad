@@ -341,7 +341,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     no file this run wrote; an earlier file stays byte for byte.
 18. **Nothing waits on the network.** *The package.* Once installed, text-to-cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
-    counts under a random id, sent by default once a `cad` command has said so, and never
+    counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
+    answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
     An update waits on the network because a person asked for it -- the update button, `cad

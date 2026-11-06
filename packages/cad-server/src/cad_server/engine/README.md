@@ -741,6 +741,11 @@ one, nor does an MCP host closing its session.
 and debugging only: it runs in this process, cold, and no document is served: no page, and
 nothing for `inspect` to read by its id.
 
+**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help step export`) -- prints
+the help on stdout and exits 0, and does nothing else: it moves no earlier release's state, writes nothing
+and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
+person reads, and nothing is sent by default until it is said.
+
 **The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
 sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
 command or an option it does not take, an argument missing or out of range, a file of another type, an

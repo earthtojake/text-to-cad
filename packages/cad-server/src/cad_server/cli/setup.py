@@ -702,14 +702,16 @@ class Installer:
 
     def _telemetry(self) -> str:
         """The telemetry line: the notice the first time, else what is sent and why; ``--no-telemetry``
-        turns it off first, as ``cad telemetry off`` does."""
+        turns it off first, as ``cad telemetry off`` does. Under ``--json`` the notice is not said: an answer
+        a program reads tells no person, so it waits for a run a person reads, and nothing is sent by
+        default until then."""
         from cad_server import analytics
         from cad_server.cli.telemetry import describe
 
         if self.args.no_telemetry:
             chosen = analytics.choose(False, by="cli", forget=analytics.request_deletion)
             said = describe() if chosen.get("saved") else "unchanged: the choice could not be saved in the state folder"
-        elif analytics.notify(self.out):
+        elif not self.args.json and analytics.notify(self.out):
             return describe()
         else:
             said = describe()
