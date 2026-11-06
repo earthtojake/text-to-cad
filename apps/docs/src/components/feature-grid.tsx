@@ -7,7 +7,7 @@ import { siteConfig } from "@/lib/site";
 
 /**
  * The homepage's Features (`features`, the README's Features): one tile per feature, each a picture of
- * the file it makes over that file's name, framed as the hero's demo is, then its name, linking to the
+ * the file it makes over that file's name in a caption bar, then its name, linking to the
  * page that documents it, and what it does (its summary's links are markdown, as the README's are).
  * Two columns from a tablet up, one on a phone.
  */

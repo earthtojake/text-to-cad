@@ -1,15 +1,10 @@
 import { ExternalLink, LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { AgentCarousel } from "@/components/agent-carousel";
 import { FeatureGrid } from "@/components/feature-grid";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import {
-  contributing,
-  featuresIntro,
-  pluginRequestUrl,
-} from "@/lib/content";
+import { contributing, featuresIntro } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import { withCode } from "@/lib/with-code";
 
@@ -120,26 +115,12 @@ export default function Home() {
       />
       <SiteHeader />
 
+      {/* The first screen: the wordmark, the tagline, the two calls to action and the one-line
+          install (the page's Install, `#install`) over the turning gear, then the agents. */}
+      <HeroSection />
+
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
         <div className="min-w-0 space-y-2">
-          {/* Centred: the wordmark, the tagline, the two calls to action, the one-line install (the
-              page's Install, `#install`), the framed CAD demo. */}
-          <HeroSection />
-
-          {/* Right under the hero's demo, a label over the agents' logos, no section title. */}
-          <div id="agents" className="scroll-mt-20 space-y-3 py-6">
-            <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              WORKS WITH THESE AGENTS
-            </p>
-            <AgentCarousel />
-            <p className="mt-5 text-center text-sm leading-6 text-muted-foreground">
-              No plugin for your agent yet?{" "}
-              <a href={pluginRequestUrl} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
-                Request one
-              </a>
-            </p>
-          </div>
-
           <section id="features" aria-labelledby="features-title" className="scroll-mt-20 space-y-4 py-6">
             <SectionIntro section="features" title="Features" description={featuresIntro} />
             <FeatureGrid />
