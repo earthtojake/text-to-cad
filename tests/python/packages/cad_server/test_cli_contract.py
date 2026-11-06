@@ -194,6 +194,21 @@ class TheDispatcher(unittest.TestCase):
             with self.assertRaises(RuntimeError):  # without --json, its traceback the person's
                 _cad(["status"])
 
+    def test_a_failure_s_words_are_on_stderr_and_stdout_keeps_the_answers(self) -> None:
+        # A choice that could not be kept is the work's failure (exit 1), said on stderr as every command's is.
+        from cad_server import analytics, auto_updates
+
+        with mock.patch.object(analytics, "choose", return_value={"saved": False}), mock.patch.object(cli, "_tell"):
+            code, out, err = _cad(["telemetry", "on"])
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("cad telemetry: could not save the choice: the state directory ("), err)
+        with mock.patch.object(auto_updates, "change", side_effect=PermissionError(13, "Permission denied")), \
+                mock.patch.object(cli, "_tell"):
+            code, out, err = _cad(["update", "auto", "off"])
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("cad update auto: could not save the choice: ") and
+                        err.endswith("(Permission denied). Automatic updates are unchanged.\n"), err)
+
     def test_an_interrupt_is_canceled_with_the_shell_s_status(self) -> None:
         with mock.patch.object(cli, "_main", side_effect=KeyboardInterrupt):
             self.assertEqual(_cad(["status"]), (130, "", "cad: canceled\n"))

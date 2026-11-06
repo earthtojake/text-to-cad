@@ -65,9 +65,12 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         # An off is kept before the receiver is asked to delete (a person at a terminal waits for that).
         chosen = choose(args.action == "on", by="cli", forget=request_deletion if args.action == "off" else None)
         if not chosen["saved"]:
-            print(f"Could not save the choice: the state directory ({settings_path().parent}) could not be written. "
-                  "Telemetry is unchanged; DO_NOT_TRACK=1 in an app's environment keeps it off there.")
-            return 1
+            # A failure of the work, said as every command's is (``cad_server._internal.cli_errors``): on stderr.
+            from cad_server._internal.cli_errors import Failure, write
+
+            return write(Failure(f"could not save the choice: the state directory ({settings_path().parent}) could not "
+                                 "be written. Telemetry is unchanged; DO_NOT_TRACK=1 in an app's environment keeps it "
+                                 "off there."), prog=prog, as_json=False)
         if args.action == "off":
             print("Telemetry is off; the install id was deleted"
                   + (" and the data sent under it was deleted." if chosen.get("forgotten")

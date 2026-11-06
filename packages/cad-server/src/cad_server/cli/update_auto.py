@@ -42,9 +42,12 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         try:
             auto_updates.change({"automatic": args.action == "on"})
         except OSError as error:
-            print(f"Could not save the choice: the state directory ({settings_path().parent}) could not be written "
-                  f"({error.strerror or error}). Automatic updates are unchanged.")
-            return 1
+            # A failure of the work, said as every command's is (``cad_server._internal.cli_errors``): on stderr.
+            from cad_server._internal.cli_errors import Failure, write
+
+            return write(Failure(f"could not save the choice: the state directory ({settings_path().parent}) could not "
+                                 f"be written ({error.strerror or error}). Automatic updates are unchanged."),
+                         prog=prog, as_json=False)
     engine = None
     try:
         from cad.engine.client import request
