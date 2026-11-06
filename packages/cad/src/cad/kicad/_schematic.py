@@ -163,9 +163,11 @@ def check(schematic: Path) -> CheckResult:
         findings = run_erc(cli, target)
     except KicadRunError as error:  # KiCad refused the schematic (a newer format, a broken file): its own words
         return failed(target, str(error), code="kicad_failed")
-    errors = sum(1 for finding in findings if finding.severity == "error")
-    warnings = sum(1 for finding in findings if finding.severity == "warning")
-    return CheckResult(ok=not errors, path=target, findings=issues(findings),
+    shown = issues(findings)
+    errors = sum(1 for finding in shown if finding.severity == "error")
+    # The warnings it lists: a library check KiCad could not make is its one note, never a warning.
+    warnings = sum(1 for finding in shown if finding.severity == "warning")
+    return CheckResult(ok=not errors, path=target, findings=shown,
                        summary="" if errors else f"OK {display_path(target)}: ERC clean ({warnings} warning(s))")
 
 

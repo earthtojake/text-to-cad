@@ -290,6 +290,24 @@ class TheType(SchematicFixture):
         with self.assertRaisesRegex(ValueError, "is a kicad_pcb, not a kicad_sch"):
             cad.kicad_sch.snapshot("board.kicad_pcb", "out.png")
 
+    def test_erc_counts_the_warnings_it_lists(self) -> None:
+        # KiCad, in homes of its own, cannot see the person's global libraries: those checks are one note,
+        # and the summary counts the one warning it lists, not the 220 library checks of the demos.
+        from unittest import mock
+
+        import cad
+        from cad.kicad import _schematic
+
+        unseen = [_schematic.ErcFinding("warning", "lib_symbol_issues", f"The current configuration does not include "
+                                        f"the symbol library 'Device{index}'", "/", (), None) for index in range(220)]
+        real = _schematic.ErcFinding("warning", "label_dangling", "Label not connected", "/", ("MID",), (90.0, 51.0))
+        with mock.patch.object(_schematic, "ready", lambda: Path("kicad-cli")), \
+                mock.patch.object(_schematic, "run_erc", lambda cli, target: [*unseen, real]):
+            checked = cad.kicad_sch.erc(self.root)
+        self.assertEqual([(finding.severity, finding.code) for finding in checked.findings],
+                         [("warning", "label_dangling"), ("info", "libraries_not_checked")])
+        self.assertTrue(checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
+
     def test_a_file_that_is_no_schematic_is_refused(self) -> None:
         folder = Path(self.folder.name)
         (folder / "board.kicad_sch").write_text("(kicad_pcb (version 1))", encoding="utf-8")
