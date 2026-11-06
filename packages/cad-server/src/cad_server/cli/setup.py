@@ -80,8 +80,11 @@ back, and a line says where to install it from again; with no receipt, every cop
 but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the engine (``cad
 stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
 removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
-command, the engine, the releases and the plugin folder alone). Neither asks: the plan is printed and
-done, and ``--dry-run`` prints it alone.
+command, the engine, the releases and the plugin folder alone). ``cad setup`` asks nothing: the plan is
+printed and done -- installing is what was asked. ``cad uninstall`` destroys, so after its plan it asks
+(``cad_server._internal.consent``): at a terminal ``Take text-to-cad out as planned? (y/N)``, and where no
+one can be asked it changes nothing without ``--yes`` (``confirmation_required``, exit 2); the install
+command's ``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
 command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
@@ -172,7 +175,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
                         help=f"only these apps: {', '.join(APPS)}; and the agents the skills go to through "
                              f"the Skills CLI: {', '.join(SKILLS_AGENTS)}")
     if uninstall:
+        from cad_server._internal.consent import add_yes
+
         parser.add_argument("--purge", action="store_true", help="remove text-to-cad's state and cache folders too")
+        add_yes(parser, "take it out as planned")
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cad telemetry off` does")
@@ -1005,6 +1011,20 @@ class Installer:
         if self.args.dry_run:
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
+        # The plan above is what it does: asked of a person at a terminal, else said yes to by --yes
+        # (``cad_server._internal.consent``).
+        from cad_server._internal.cli_errors import Failure, write
+        from cad_server._internal.consent import confirm, retry
+
+        try:
+            confirm("taking text-to-cad out" + (f" of {', '.join(self.only)}" if self.only else " of this computer")
+                    + (" and removing its state and cache folders" if self.args.purge else ""),
+                    "Take text-to-cad out as planned?", yes=bool(self.args.yes), as_json=bool(self.args.json),
+                    command=retry(self.prog, self.argv),
+                    preview=["This cannot be undone: --purge removes text-to-cad's state folder (your settings, the "
+                             "documents' records, Recents) and its cache folder."] if self.args.purge else [])
+        except Failure as failure:
+            return write(failure, prog=self.prog, as_json=bool(self.args.json))
         failed, changed = False, set()
         from cad_server._internal.file_lock import exclusive
 

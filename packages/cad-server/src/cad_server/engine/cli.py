@@ -7,8 +7,9 @@ ordinary Python scripts call decorated models explicitly.
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
-    cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
-    cad delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
+    cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+    cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, cached document, the
+                                                  engine's copy; asked first, or --yes
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad xbf``, ``cad step``, ...), or a
@@ -97,20 +98,29 @@ def _stop_arguments(stop: argparse.ArgumentParser) -> None:
 
 
 def _delete_arguments(delete: argparse.ArgumentParser) -> None:
+    from cad_server._internal.consent import add_yes
+
     delete.add_argument("documents", nargs="+", metavar="DOC",
                         help="a document's id, a model's script (every document recorded of it), or a CAD file "
                              "a page opened; your own files -- a script, its declared files, an opened file -- "
                              "are never touched")
-    delete.add_argument("--json", action="store_true", help="what was deleted as JSON")
+    delete.add_argument("--dry-run", action="store_true",
+                        help="say which documents would be deleted, and how many, and delete nothing")
+    add_yes(delete, "delete them")
+    delete.add_argument("--json", action="store_true", help="what was deleted (or would be) as JSON")
 
 
 def _server_arguments(server: argparse.ArgumentParser) -> None:
+    from cad_server._internal.consent import add_yes
+
     server.add_argument("--port", type=int, default=None,
                         help="the HTTP port the engine takes, refused when another process holds it (else "
                              "CAD_ENGINE_PORT, else 3245 or the port this installation rolled to); 0 takes "
                              "any free port")
     server.add_argument("--rotate-token", action="store_true",
-                        help="replace this installation's page token first: every link shared before stops working")
+                        help="replace this installation's page token first: every link shared before stops working; "
+                             "asked first")
+    add_yes(server, "with --rotate-token, replace the token")
 
 
 def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> None:
@@ -600,7 +610,29 @@ def _server(args: argparse.Namespace, prog: str) -> int:
 
     if args.port is not None and not 0 <= args.port <= 65535:
         raise Failed("--port must be between 0 and 65535", 2)
+    if args.rotate_token:
+        _consent_to_rotate(args, prog)
     return daemon([], port=args.port, rotate=args.rotate_token, foreground=True)
+
+
+def _consent_to_rotate(args: argparse.Namespace, prog: str) -> None:
+    """``--rotate-token`` retires every link and session made before, for good: refused first while an engine
+    runs (the daemon refuses it then too), then asked (``cad_server._internal.consent``)."""
+    from cad.engine.client import request
+    from cad_server._internal.consent import confirm, retry
+
+    try:
+        running = request({"op": "status"}, start=False) is not None
+    except (OSError, ValueError):
+        running = False
+    if running:
+        raise Failed("an engine server is running; run cad stop first, then cad server --rotate-token")
+    command = retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])])
+    confirm("replacing this installation's page token", "Replace the page token?", yes=bool(args.yes), as_json=False,
+            command=command,
+            preview=[f"{prog} --rotate-token replaces this installation's page token: every CAD Viewer link and browser "
+                     "session made with the one it has now stops working, and each page needs a new link "
+                     "(cad viewer prints one). This cannot be undone."])
 
 
 def _status(args: argparse.Namespace, _prog: str) -> int:
@@ -660,22 +692,15 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def delete(documents: Any) -> list[dict[str, Any]]:
-    """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
-    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
-    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
-    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
-    person's own files are never touched. One that names nothing recorded is refused (``ValueError``),
-    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
-    the order named."""
+def planned(documents: Any) -> list[dict[str, Any]]:
+    """What ``cad delete`` of ``documents`` deletes, read and nothing deleted: ``{"id", "name", "kind"}`` each,
+    in the order named, from the records (``delete``). One that names nothing recorded is refused
+    (``Failed``, ``not_found``), naming each."""
     from cad_server.engine import registry as registering
-    from cad.engine.api import EngineError
-    from cad.engine.client import request
     from cad.engine.ids import canonical, file_id, is_id
-    from cad_server.engine.models import delete as deleting
 
     held = registering.current()
-    idents: list[str] = []
+    rows: list[dict[str, Any]] = []
     unknown: list[str] = []
     listed: list[dict[str, Any]] | None = None
     for named in [str(document) for document in documents]:
@@ -693,24 +718,63 @@ def delete(documents: Any) -> list[dict[str, Any]]:
                                and canonical(registering.home(held, row)) == path)
         if not found:
             unknown.append(named)
-        idents.extend(ident for ident in found if ident not in idents)
+        for ident in found:  # found only where a registry is
+            if held is not None and ident not in [row["id"] for row in rows]:
+                record = held.get(ident) or {}
+                name = record.get("entry") or os.path.basename(str(record.get("home") or "")) or ident
+                rows.append({"id": ident, "name": name, "kind": record.get("kind")})
     if unknown:
-        raise ValueError(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
-                         "script or a CAD file a page opened (`cad status` lists the documents); nothing "
-                         "was deleted")
+        raise Failed(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
+                     "script or a CAD file a page opened (`cad status` lists the documents); nothing "
+                     "was deleted", 2, "not_found")
+    return rows
+
+
+def delete(documents: Any) -> list[dict[str, Any]]:
+    """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
+    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
+    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
+    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
+    person's own files are never touched. One that names nothing recorded is refused (``planned``),
+    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
+    the order named."""
+    from cad_server.engine import registry as registering
+    from cad.engine.api import EngineError
+    from cad.engine.client import request
+    from cad_server.engine.models import delete as deleting
+
+    idents = [row["id"] for row in planned(documents)]
     answer = request({"op": "delete", "ids": idents}, start=False)
     if answer is not None:
         if not answer.get("ok"):
             raise EngineError(str(answer.get("failed") or answer.get("error") or answer))
         return list(answer.get("deleted") or [])
+    held = registering.current()
     return [found for found in (deleting(held, ident) for ident in idents) if found is not None]
 
 
-def _delete(args: argparse.Namespace, _prog: str) -> int:
-    try:
-        deleted = delete(args.documents)
-    except ValueError as error:
-        raise _refusal(error) from None
+def _delete(args: argparse.Namespace, prog: str) -> int:
+    """``cad delete``: its plan said (``planned``), asked (``cad_server._internal.consent``), then done; with
+    ``--dry-run`` the plan alone, as the answer."""
+    from cad_server._internal.consent import confirm, retry
+
+    rows = planned(args.documents)
+    count = f"{len(rows)} document{'' if len(rows) == 1 else 's'}"
+    if args.dry_run:
+        if args.json:
+            print(json.dumps({"ok": True, "dryRun": True, "planned": rows}, indent=2))
+            return 0
+        print(f"would delete {count}: each one's record, its document in the engine's cache and what the engine "
+              "holds of it (your own files stay)")
+        for row in rows:
+            print(f"  {row['name']} {row['id']}")
+        return 0
+    confirm(f"deleting {count}", f"Delete {'it' if len(rows) == 1 else 'them'}?", yes=bool(args.yes),
+            as_json=bool(args.json), command=retry(prog, [*map(str, args.documents), *(["--json"] if args.json else [])]),
+            preview=[f"{prog} deletes {count}: each one's record, its document in the engine's cache and what the "
+                     "engine holds of it; your own files -- a script, its declared files, an opened file -- stay, and "
+                     "a model's next run makes its document again:", *(f"  {row['name']} {row['id']}" for row in rows)])
+    deleted = delete(args.documents)
     if args.json:
         print(json.dumps({"ok": True, "deleted": deleted}, indent=2))
         return 0

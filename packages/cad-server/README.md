@@ -129,7 +129,9 @@ made on first need -- and moves the device's engine to its release; `cad update`
 `cad setup`, as the update button does, and `cad update auto on|off` turns automatic updates on or off
 (on by default: the engine installs a newer patch release in the background and switches to it once
 idle; a minor or major release waits for the update button or `cad update`);
-`cad uninstall` takes text-to-cad out; `cad plugin` writes
+`cad uninstall` takes text-to-cad out, asked first as every command that destroys is (`cad delete`, `cad
+doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`);
+`cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
 

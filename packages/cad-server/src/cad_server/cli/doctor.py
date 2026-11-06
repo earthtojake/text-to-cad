@@ -373,11 +373,12 @@ def _cache() -> str:
         return f"unknown ({type(error).__name__}: {error})"
 
 
-def _leftovers():
+def _leftovers(gone=frozenset()):
     """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders, and each class found in them. What 0.8 and 0.7 kept outside what 0.10
-    moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for cadgen
-    (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
+    the state and cache folders, and each class found in them -- read as if the installations whose prefixes
+    are ``gone`` were no longer registered (``--prune``'s plan, before it removes them). What 0.8 and 0.7 kept
+    outside what 0.10 moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for
+    cadgen (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` name them)."""
     from cad_server._internal import installations, leftovers
     from cad.engine.places import (appdata_cache_dir, appdata_state_dir, cache_dir, earlier_cache_dir,
@@ -385,7 +386,7 @@ def _leftovers():
 
     state, cache = state_dir(), cache_dir()
     before, before_cache = earlier_state_dir(), earlier_cache_dir()
-    prefixes = [record["prefix"] for record in installations.records()]
+    prefixes = [record["prefix"] for record in installations.records() if record["prefix"] not in gone]
     return (state, cache, leftovers.engine_records(state),
             leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
             leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache),
@@ -441,6 +442,43 @@ def _report_leftovers() -> list[str]:
     for path in appdata.recent:
         lines.append(f"0.10     {path}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
                      f"nothing has written it for {leftovers.QUIET_DAYS} days")
+    return lines
+
+
+def _prune_plan(all_versions: bool = False) -> list[str]:
+    """What ``--prune`` removes, a line per kind with its count, read and nothing removed: what it asks
+    consent for (``cad_server._internal.consent``). The leftovers are read as they will be once the records
+    and release folders it removes first are gone (``_leftovers``' ``gone``): the bytecode of an installation
+    it takes out is among them."""
+    from cad_server._internal import installations, leftovers, releases
+    from cad_server._internal.leftovers import count
+
+    lines = []
+    records = installations.records()
+    dangling = [record for record in records if not installations.alive(record)]
+    if dangling:
+        lines.append(f"{count(len(dangling), 'installation record', 'installation records')} whose interpreter is gone")
+    folders: list[dict] = []
+    if installations.current_version():
+        kept = releases.kept()
+        folders = [found for found in releases.listing() if found["version"] not in kept]
+        if folders:
+            lines.append(f"{count(len(folders), 'release folder', 'release folders')} but the current release's and "
+                         f"the one before's: {', '.join(found['version'] for found in folders)}")
+    legacy = installations.legacy_launchers()
+    if legacy:
+        lines.append(f"{count(len(legacy), 'launcher', 'launchers')} earlier releases published beside the cad command: "
+                     f"{', '.join(os.path.basename(path) for path in legacy)}")
+
+    def inside(prefix: str) -> bool:
+        return any(os.path.realpath(prefix).startswith(os.path.realpath(found["path"]) + os.sep) for found in folders)
+
+    gone = {record["prefix"] for record in records if record in dangling or inside(record["prefix"])}
+    _state, _cache, engine_records, bytecode, cached, earlier, packages, seven, appdata = _leftovers(gone)
+    lines += _leftover_words(engine_records, bytecode, cached, earlier, packages)
+    if seven.paths and (all_versions or leftovers.quiet(seven)):
+        lines.append(leftovers.seven_text(seven))
+    lines += [f"{path}, a folder 0.10.0 kept on Windows" for path in appdata.paths]
     return lines
 
 
@@ -513,13 +551,29 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
         action="store_true",
         help="Do everything but start the engine and make the CAD kernel environment: say only whether each is there.",
     )
+    from cad_server._internal.consent import add_yes
+
+    add_yes(parser, "with --prune, remove what it lists")
     args = parser.parse_args(argv)
     if args.all_versions and not args.prune:
         parser.error("--all-versions goes with --prune")
 
     if args.prune:
         from cad_server._internal import installations
+        from cad_server._internal.cli_errors import Failure, write
+        from cad_server._internal.consent import confirm, retry
 
+        # What it removes, said and asked first: nothing is asked when there is nothing to remove.
+        plan = _prune_plan(args.all_versions)
+        if plan:
+            try:
+                confirm(f"removing {len(plan)} kind{'' if len(plan) == 1 else 's'} of leftovers", "Remove them?",
+                        yes=bool(args.yes), as_json=False,
+                        command=retry(prog, ["--prune", *(["--all-versions"] if args.all_versions else [])]),
+                        preview=[f"{prog} --prune removes what no release running now needs:",
+                                 *(f"  {line}" for line in plan), "This cannot be undone."])
+            except Failure as failure:
+                return write(failure, prog=prog, as_json=False)
         removed = installations.prune()
         for path in removed:
             sys.stdout.write(f"removed {path}\n")

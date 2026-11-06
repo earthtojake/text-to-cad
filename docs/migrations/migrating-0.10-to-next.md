@@ -70,8 +70,25 @@ the checks are `dfm` (a 3D type's manufacturing check), `drc` (a board's), `erc`
 0.10 answered `issues`, each with `element`. A file of another type is refused by name before anything
 runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 
-These stay as they were: `cad run`, `serve`, `status`, `stop`, `delete`, `server`, `setup`, `update`,
-`uninstall`, `doctor`, `plugin`, `viewer`, `telemetry`.
+These stay as they were, but for how they fail and ask (below): `cad run`, `serve`, `status`, `stop`,
+`delete`, `server`, `setup`, `update`, `uninstall`, `doctor`, `plugin`, `viewer`, `telemetry`.
+
+### A command that destroys asks first
+
+`cad uninstall` (and `--purge`), `cad delete`, `cad doctor --prune` and `cad server --rotate-token` say
+their plan -- what they remove, how many -- and ask, `(y/N)`, at a terminal; anything but `y` or `yes`
+changes nothing (exit 1, `declined`). Where no one can be asked -- an agent's shell, a pipe, `--json`, CI --
+they change nothing without `-y`/`--yes`: exit 2, `confirmation_required`, naming the command with
+`--yes` (under `--json`, `"userActionRequired": true` and `"next"`). A script or an agent that runs one of
+them on a person's word adds `--yes`. `cad delete --dry-run` lists what it would delete, and how many. `cad setup` asks nothing, and the install command's `--uninstall` passes
+`--yes` itself.
+
+| 0.10 | Now |
+| --- | --- |
+| `cad delete <id>` deleted at once | asks; `cad delete <id> --yes` where nothing can ask |
+| `cad uninstall`, `cad uninstall --purge` took text-to-cad out at once | the plan, then asks; `--yes` where nothing can ask |
+| `cad doctor --prune` removed at once | the list, then asks; `cad doctor --prune --yes` where nothing can ask |
+| `cad server --rotate-token` replaced the token at once | asks; `--yes` where nothing can ask |
 
 ### How a command fails
 
@@ -80,8 +97,9 @@ and without -- 2 for the command line and its input (a command or an option it d
 argument missing or out of range, a file of another type), 1 for a failure of the work, 130 for
 Ctrl-C -- and under `--json` it is one JSON document on stdout, `{"ok": false, "error": ..., "reason":
 ...}`, with nothing else there and no traceback. `reason` is one of `usage`, `invalid_argument`,
-`wrong_type`, `not_found` (exit 2), `engine_unavailable`, `failed`, `internal_error` (exit 1) and
-`canceled` (130). Read the exit status, then `reason`; `error` is for a person.
+`wrong_type`, `not_found`, `confirmation_required` (exit 2), `declined`, `engine_unavailable`, `failed`,
+`internal_error` (exit 1) and `canceled` (130). Read the exit status, then `reason`; `error` is for a
+person.
 
 | 0.10 | Now |
 | --- | --- |

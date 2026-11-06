@@ -84,8 +84,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "serve": frozenset({"document", "port"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
-    "delete": frozenset({"documents", "json"}),
-    "server": frozenset({"port", "rotate_token"}),
+    # A command that destroys asks first, or takes --yes (cad_server._internal.consent); a delete says its plan alone.
+    "delete": frozenset({"documents", "dry_run", "yes", "json"}),
+    "server": frozenset({"port", "rotate_token", "yes"}),
     # text-to-cad set up in the agent apps, and `update`, the same command: its plan, what it may do,
     # for which apps; and `uninstall`, which takes it out again.
     "setup": frozenset({"dry_run", "only", "no_telemetry", "json", "engine_update"}),
@@ -94,7 +95,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # Automatic updates, the person's setting: status, on or off (a verb of its own, as `update`'s options
     # are what every release hands its newer one).
     "update auto": frozenset({"action"}),
-    "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
+    "uninstall": frozenset({"dry_run", "only", "purge", "yes", "json"}),
     # The plugin folder written from the current installation, and the apps' copies of it with --refresh.
     "plugin": frozenset({"refresh", "json"}),
     # The exact cad requirement for a Python of a program's own: its integrations, and --json.

@@ -326,7 +326,11 @@ it again.
   (`cad run /work/arm.py`) to update the document and its open pages.
   The cache keeps every document until you delete it (`cad delete <id>`, or a script's
   path for every document of it, or Delete in a card's menu on the home); nothing evicts
-  from it. Deleting removes the record and the cached document, never a file.
+  from it. Deleting removes the record and the cached document, never a file. It asks
+  first: at a terminal `Delete them? (y/N)`; where nothing can ask, it deletes nothing
+  without `--yes` (exit 2, `confirmation_required`, naming the command with it). Delete
+  only what the person asked to delete, with `--yes`; `cad delete <id> --dry-run` lists
+  what it would delete, and how many.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
   shape) is handed over: `model(shape, name="plate")` makes a document of it, held,
   cached, served on its page and exported like any other, and returns the same handle,

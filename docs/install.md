@@ -94,6 +94,11 @@ the receipt records, or, with no receipt, every copy of text-to-cad it finds but
 store's, removes the `cad` command and stops the server. A plugin directory's copy that
 the install command replaced is not put back: install it from the directory again to
 get it back. `--purge` with it also removes text-to-cad's state and cache folders.
+Asking for it is the yes: the install command passes `--yes` to `cad uninstall`. Run
+`cad uninstall` yourself and it prints the same plan and asks before it changes
+anything (`Take text-to-cad out as planned? (y/N)`); where nothing can ask (a script,
+an agent), it changes nothing without `--yes`, and says the command with it.
+`cad delete`, `cad doctor --prune` and `cad server --rotate-token` ask the same way.
 `--version <release>` installs that release instead of the latest; a release from
 before the install command has no `cad setup` to run. To read the script before it
 runs, download it first, then run it:
@@ -428,7 +433,8 @@ Each release is kept in a folder of its own in text-to-cad's state folder
 new one not start, and older ones go at the next update. A release whose update failed
 and went back is removed once the release before is running again (it is still not tried
 again by itself for a day), and `cad doctor --prune` removes any release folder but the
-current one and the one before. `cad doctor` says
+current one and the one before, once you say yes to the list it prints (`--yes` where it
+cannot ask). `cad doctor` says
 which releases are there, which one is current, the release the server runs, the
 plugin folder's, and where each app's plugin comes from and its release.
 

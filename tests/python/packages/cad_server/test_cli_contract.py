@@ -55,7 +55,8 @@ class TheReasons(unittest.TestCase):
     def test_each_reason_has_one_class(self) -> None:
         # The table an agent branches on: a reason is added, never renamed, and its class sets the status.
         self.assertEqual(REASONS, {"usage": 2, "invalid_argument": 2, "wrong_type": 2, "not_found": 2,
-                                   "engine_unavailable": 1, "failed": 1, "internal_error": 1, "canceled": 130})
+                                   "confirmation_required": 2, "declined": 1, "engine_unavailable": 1, "failed": 1,
+                                   "internal_error": 1, "canceled": 130})
         with self.assertRaises(ValueError):
             Failure("words", "no_such_reason")
 
@@ -126,6 +127,49 @@ class TheParser(unittest.TestCase):
                 found = cli.build_parser_for(name)
                 self.assertIsInstance(found, Parser)
                 self.assertFalse(found.allow_abbrev)
+
+
+class Consent(unittest.TestCase):
+    """A command that destroys asks a person at a terminal, and where no one can be asked does nothing without
+    --yes, naming the command with it (``cad_server._internal.consent``)."""
+
+    def test_a_yes_a_question_or_the_command_that_says_yes(self) -> None:
+        from cad_server._internal import consent
+
+        self.assertEqual(consent.retry("cad delete", ["a b", "--yes", "--json"]), "cad delete 'a b' --json --yes")
+        consent.confirm("deleting 1 document", "Delete it?", yes=True, as_json=True, command="unused")
+        with mock.patch.object(consent, "interactive", return_value=False), self.assertRaises(Failure) as asked:
+            consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="cad delete X --yes")
+        self.assertEqual(document(asked.exception), {
+            "ok": False, "reason": "confirmation_required", "userActionRequired": True, "next": ["cad delete X --yes"],
+            "error": "deleting 1 document needs a yes, and no one can be asked here (no terminal, or --json): nothing "
+                     "was changed; `cad delete X --yes` says yes"})
+        for answer, goes_on in (("y\n", True), ("YES\n", True), ("n\n", False), ("\n", False), ("", False)):
+            with self.subTest(answer=answer), mock.patch.object(consent, "interactive", return_value=True), \
+                    mock.patch.object(sys, "stdin", io.StringIO(answer)), contextlib.redirect_stderr(io.StringIO()) as err:
+                try:
+                    consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="x",
+                                    preview=["the plan"])
+                    went = True
+                except Failure as failure:
+                    self.assertEqual((failure.reason, failure.status), ("declined", 1))
+                    went = False
+                self.assertEqual(went, goes_on)
+                self.assertEqual(err.getvalue(), "the plan\nDelete it? (y/N) ")
+
+    def test_no_one_is_asked_under_json_or_in_ci(self) -> None:
+        from cad_server._internal import consent
+
+        class Terminal(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        with mock.patch.object(sys, "stdin", Terminal()), mock.patch.object(sys, "stderr", Terminal()):
+            with mock.patch.dict(os.environ, {"CI": ""}):
+                self.assertTrue(consent.interactive())
+                self.assertFalse(consent.interactive(as_json=True))
+            with mock.patch.dict(os.environ, {"CI": "true"}):
+                self.assertFalse(consent.interactive())
 
 
 class TheDispatcher(unittest.TestCase):

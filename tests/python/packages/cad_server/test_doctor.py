@@ -90,7 +90,7 @@ class DoctorTests(unittest.TestCase):
             for path in found[:2]:
                 Path(path).unlink()
             gone = _run([])[1]
-            pruned = _run(["--prune"])[1]
+            pruned = _run(["--prune", "--yes"])[1]
         self.assertIn(f"registry {record} registered\n", out)
         # Its folder off PATH: the full path to run it by, until the folder is on it.
         folder = os.path.dirname(command)
@@ -199,7 +199,7 @@ class DoctorTests(unittest.TestCase):
              "prefix": str(registered.parent)}), encoding="utf-8")
         into = folder / "cadgen-0.8.3"
         into.symlink_to(registered / "cadgen")
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
         for path in (console, python, gone, earlier, into):
             self.assertIn(f"removed {path}, a launcher the cad command replaces\n", out)
@@ -337,7 +337,7 @@ class DoctorTests(unittest.TestCase):
                       f"in {releases.root()}\n", out)
         self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
         with mock.patch.object(releases, "running", return_value=False):
-            code, out, _ = _run(["--prune"])
+            code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
         self.assertIn(f"removed {releases.where('1.2.0')}\n", out)
         self.assertEqual([release["version"] for release in releases.listing()], ["1.0.0", "1.1.0"])
@@ -544,8 +544,14 @@ class LeftoversTest(PrivateFolders):
         self.assertEqual(self.tree(), before, "nothing is removed without --prune")
         self.assertIn(f"  cache    {self.cache}: 1 document · 1 B, kept until deleted\n", out,
                       "the documents the cache keeps, each a record names, with no cap")
+        # It destroys, so it asks; where no one can be asked, nothing is removed without --yes.
+        code, out, err = _run(["--prune"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "cad doctor: removing 5 kinds of leftovers needs a yes, and no one can be asked here (no "
+                              "terminal, or --json): nothing was changed; `cad doctor --prune --yes` says yes\n")
+        self.assertEqual(self.tree(), before)
 
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
         self.assertEqual(out, "no registered installation has lost its interpreter\n"
                               "removed 1 engine record of an older format\n"
@@ -563,7 +569,7 @@ class LeftoversTest(PrivateFolders):
             self.assertTrue(kept.exists(), kept)
         self.assertFalse((self.cache / "pycache" / "bbbbbbbbbbbb").exists())
         self.assertFalse((self.cache / "documents" / forgotten).exists())
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, "no registered installation has lost its interpreter\n", "nothing is left to remove")
 
 
@@ -599,7 +605,7 @@ class SevenLeftoversTest(PrivateFolders):
         self.assertEqual(code, 0)
         self.assertIn(f"  0.7      {said}: cad doctor --prune removes it\n", out)
         self.assertTrue(all(path.exists() for path in made), "nothing is removed without --prune")
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
         for gone in ("cache/objects", "cache/index", "state/sidebar-views", "state/snapshot-browser.lock",
                      "state/recents/recents.jsonl", "state/install-channels.json.lock"):
@@ -613,21 +619,21 @@ class SevenLeftoversTest(PrivateFolders):
         code, out, _ = _run(["--no-server"])
         self.assertIn(f"  0.7      {said}: cad doctor --prune removes it once nothing has written it for 7 days, "
                       "or now with --all-versions\n", out)
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nkept {said}: a cadgen 0.7 still "
                               "installed may use it; it goes once nothing has written it for 7 days, or now with "
                               "--all-versions\n")
         self.assertTrue(all(path.exists() for path in made), "a 0.7 written this week may be in use")
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             doctor.main(["--all-versions"])  # with --prune alone
-        code, out, _ = _run(["--prune", "--all-versions"])
+        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
         self.assertFalse(any(path.exists() for path in made))
         self.assertTrue(all(path.exists() for path in ours), "0.8's own files stay")
 
     def test_a_folder_of_the_store_s_name_that_is_not_0_7_s_store_is_left_alone(self) -> None:
         theirs = [self.file("cache/objects/notes.txt", "another program's"), self.file("cache/index/README", "")]
-        code, out, _ = _run(["--prune", "--all-versions"])
+        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
         self.assertEqual(out, "no registered installation has lost its interpreter\n")
         self.assertTrue(all(path.exists() for path in theirs))
 
@@ -648,7 +654,7 @@ class TenWindowsLeftoversTest(PrivateFolders):
             self.assertIn(f"  0.10     {state}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it\n", out)
             self.assertIn(f"  0.10     {cache}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
                           "nothing has written it for 7 days\n", out)
-            _code, out, _ = _run(["--prune"])
+            _code, out, _ = _run(["--prune", "--yes"])
         self.assertIn(f"removed {state}, a folder 0.10.0 kept on Windows\n", out)
         self.assertFalse(state.exists())
         self.assertTrue((cache / "base" / "0123" / "pyvenv.cfg").exists(), "written this week: it stays")
