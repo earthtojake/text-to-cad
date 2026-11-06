@@ -115,7 +115,10 @@ cad viewer --host 127.0.0.1 --json [FILE ...]
 The launcher ensures this installation's engine and its one page, registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
-record without opening a browser; `--no-open` prints only the URL. There is no
+record without opening a browser; `--no-open` prints only the URL. A FILE that is not there (`not_found`), or that is
+no CAD file -- a model's script among them, which `cad run` builds and prints the page of (`wrong_type`) -- is refused
+before the engine is asked, exit 2, as an id the engine does not hold is (`not_found`); under `--json` a failure is
+the `cad` command's one `{"ok": false, "error", "reason"}` document on stdout. There is no
 foreground viewer server and no `--detach` or `viewer stop`. `cad stop` stops
 the installation's engine and all its clients; never stop an engine you did not start.
 

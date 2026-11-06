@@ -122,6 +122,14 @@ class TheCommandTable(unittest.TestCase):
                 code, out, err = _run(argv)
                 self.assertEqual((code, out), (2, ""))
                 self.assertEqual(err, f"cad {argv[0]} {argv[1]}: {said}\n")
+        # And the commands that take a document but are no type's: the document it serves, the page it opens.
+        for argv, said in ((["serve", "part.py"], "part.py is no document: serve reads an .xbf, a .step or a document "
+                                                  "id; run `cad run part.py` first, then serve its document by id"),
+                           (["viewer", "part.py"], "part.py is a model's script, not a CAD file: `cad run part.py` "
+                                                   "builds its models and prints each one's page")):
+            with self.subTest(argv=argv):
+                code, out, err = _run(argv)
+                self.assertEqual((code, out, err), (2, "", f"cad {argv[0]}: {said}\n"))
         from cad_server.cli.document_types import OPERATIONS, build_parser, type_usage
 
         helps = [" ".join(text.split()) for text in  # each help as words: argparse wraps its lines
