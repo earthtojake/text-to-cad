@@ -50,6 +50,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from cad.engine.formats.kicad import sexpr
+
 __all__ = ["MAX_BYTES", "MAX_MODELS", "REASONS", "Resolved", "library_roots", "model_names", "resolve_models",
            "standard_libraries"]
 
@@ -68,8 +70,9 @@ _LIBRARY_VARIABLE = re.compile(r"^(KICAD\d*_3DMODEL_DIR|KISYS3DMOD)$")
 # A drive's letter: C:/... is a drive's root; C:... without the slash, the drive's current folder.
 _DRIVE = re.compile(r"^[A-Za-z]:")
 _DRIVE_RELATIVE = re.compile(r"^[A-Za-z]:(?!/)")
-# A footprint's (model "<name>" ...) as the board's text writes it.
-_MODEL = re.compile(r'\(model\s+"((?:[^"\\]|\\.)*)"')
+# A footprint's (model <name> ...) in the board's text: the name a quoted string or, as KiCad 5 wrote it, a
+# bare atom, each in sexpr's own token grammar.
+_MODEL = re.compile(r'\(\s*model\s+(?:"((?:[^"\\]|\\.)*)"|([^\s()"]+))', re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -120,10 +123,19 @@ def library_roots(environ: Mapping[str, str] | None = None, platform: str | None
 
 
 def model_names(text: str) -> list[str]:
-    """Every model a board's text names (its footprints' ``(model "...")``), once each, as first written."""
+    """Every model a board's text names (its footprints' ``(model ...)``), once each, as first written.
+
+    Each name is the one :func:`~cad.engine.formats.kicad.board_index.read_index` reads (a quoted name
+    unescaped as :mod:`.sexpr` unescapes it, KiCad 5's bare one as written), so the table it keys matches
+    the plot payload's ``models``. A scan, not a parse: the board's text is not parsed on a request."""
     seen: dict[str, None] = {}
     for match in _MODEL.finditer(text):
-        seen.setdefault(match.group(1).replace('\\"', '"').replace("\\\\", "\\"), None)
+        quoted, bare = match.groups()
+        if bare is not None and sexpr.is_number(bare):
+            continue  # the parser reads a number, which names no model
+        name = sexpr.unescape(quoted) if quoted is not None else bare
+        if name.strip():
+            seen.setdefault(name, None)
     return list(seen)
 
 

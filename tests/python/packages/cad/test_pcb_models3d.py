@@ -20,7 +20,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 from cad.engine.formats.kicad import models3d  # noqa: E402
-from cad.engine.formats.kicad.board_index import read_board  # noqa: E402
+from cad.engine.formats.kicad.board_index import read_board, read_index  # noqa: E402
 from cad.engine.formats.kicad.models3d import library_roots, model_names, resolve_models  # noqa: E402
 from cad.engine.formats.kicad.plot import build_plot  # noqa: E402
 
@@ -149,9 +149,17 @@ class Resolve(unittest.TestCase):
         self.assertEqual(library_roots({"CAD_KICAD_3DMODELS": named}, platform="none")[0], str(self.library))
         self.assertNotIn(str(self.outside / "none"), library_roots({"CAD_KICAD_3DMODELS": named}, platform="none"))
 
-    def test_the_names_a_board_writes(self) -> None:
-        text = '(footprint "a" (model "${A}/x.wrl" (offset (xyz 0 0 0))) (model "b.step")) (footprint "c" (model "${A}/x.wrl"))'
-        self.assertEqual(model_names(text), ["${A}/x.wrl", "b.step"])
+    def test_the_names_a_board_writes_are_the_ones_its_parts_carry(self) -> None:
+        # The table is keyed by these names and the plot payload's parts by the parser's: KiCad 5's bare
+        # name, a spaced "( model", and a quoted name's escapes (\n, \\, \") read the same on both sides.
+        text = r'''(kicad_pcb (version 20171130)
+ (module R_0603 (layer F.Cu) (at 10 10) (fp_text reference R1 (at 0 0) (layer F.SilkS))
+  (model ${KISYS3DMOD}/Resistor_SMD.3dshapes/R_0603.wrl (at (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0))))
+ (footprint "LED" (layer "F.Cu") (at 20 10) (property "Reference" "D1" (at 0 0) (layer "F.SilkS"))
+  (model "${KIPRJMOD}/models\new\\led \"x\".step" (offset (xyz 0 0 0))) ( model "b.step") (model "b.step")))'''
+        parsed = [model.name for part in read_index(text).parts for model in part.models]
+        self.assertEqual(sorted(model_names(text)), sorted(set(parsed)))
+        self.assertEqual(len(model_names(text)), 3)
 
 
 class Payload(unittest.TestCase):
