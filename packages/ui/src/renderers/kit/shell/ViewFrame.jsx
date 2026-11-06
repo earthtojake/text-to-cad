@@ -158,7 +158,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         </PreviewChrome>
         {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
         {sided && !toolsHidden && !previewing && !flat.open ? <FlatPanelPill touch={mobile} onOpen={() => flat.setOpen(true)} /> : null}
-        {toolsHidden ? null : bottomCentre}
+        {bottomCentre}
         {overlays}
         {/* The view catching up, at the top centre while there is no strip. */}
         {status && (toolsHidden || previewing) ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
