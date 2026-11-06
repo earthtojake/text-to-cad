@@ -1,0 +1,375 @@
+{
+  "schema": "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF {1 0 10303 442 1 1 4 }",
+  "products": [
+    "plate"
+  ],
+  "dimensions": [
+    {
+      "entity": "DIMENSIONAL_SIZE",
+      "name": "diameter",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+          "surface": {
+            "type": "cylinder",
+            "radius": 5.0,
+            "origin": [
+              0.0,
+              0.0,
+              -5.0
+            ],
+            "axis": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate",
+      "nominal": {
+        "value": 10.0,
+        "unit": "mm",
+        "type": "POSITIVE_LENGTH_MEASURE",
+        "role": "nominal value"
+      },
+      "limits": null,
+      "notes": [],
+      "tolerance": {
+        "lower": 0.0,
+        "upper": 0.1,
+        "unit": "mm",
+        "types": [
+          "LENGTH_MEASURE",
+          "LENGTH_MEASURE"
+        ]
+      }
+    },
+    {
+      "entity": "DIMENSIONAL_LOCATION",
+      "name": "linear distance",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.5;M:pmi_plate.body",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        },
+        {
+          "name": "f:pmi_plate.body_make_box1.6;M:pmi_plate.body",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              5.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "T",
+          "product": "plate"
+        }
+      ],
+      "product": "plate",
+      "nominal": {
+        "value": 10.0,
+        "unit": "mm",
+        "type": "POSITIVE_LENGTH_MEASURE",
+        "role": "nominal value"
+      },
+      "limits": null,
+      "notes": [],
+      "tolerance": {
+        "lower": -0.2,
+        "upper": 0.2,
+        "unit": "mm",
+        "types": [
+          "LENGTH_MEASURE",
+          "LENGTH_MEASURE"
+        ]
+      }
+    },
+    {
+      "entity": "DIMENSIONAL_LOCATION",
+      "name": "linear distance",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.3",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        },
+        {
+          "name": "f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+          "surface": {
+            "type": "cylinder",
+            "radius": 5.0,
+            "origin": [
+              0.0,
+              0.0,
+              -5.0
+            ],
+            "axis": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate",
+      "nominal": {
+        "value": 30.0,
+        "unit": "mm",
+        "type": "POSITIVE_LENGTH_MEASURE",
+        "role": "nominal value"
+      },
+      "limits": null,
+      "notes": [
+        [
+          "dimensional note",
+          "theoretical"
+        ]
+      ],
+      "tolerance": null
+    },
+    {
+      "entity": "DIMENSIONAL_LOCATION",
+      "name": "linear distance",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.1",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        },
+        {
+          "name": "f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+          "surface": {
+            "type": "cylinder",
+            "radius": 5.0,
+            "origin": [
+              0.0,
+              0.0,
+              -5.0
+            ],
+            "axis": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate",
+      "nominal": {
+        "value": 50.0,
+        "unit": "mm",
+        "type": "POSITIVE_LENGTH_MEASURE",
+        "role": "nominal value"
+      },
+      "limits": null,
+      "notes": [
+        [
+          "dimensional note",
+          "theoretical"
+        ]
+      ],
+      "tolerance": null
+    }
+  ],
+  "datums": [
+    {
+      "identification": "A",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.5;M:pmi_plate.body",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate"
+    },
+    {
+      "identification": "B",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.3",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              0.0,
+              1.0,
+              0.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate"
+    },
+    {
+      "identification": "C",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.1",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              -5.0
+            ],
+            "normal": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate"
+    }
+  ],
+  "tolerances": [
+    {
+      "entity": "FLATNESS_TOLERANCE",
+      "magnitude": {
+        "value": 0.05,
+        "unit": "mm",
+        "type": "LENGTH_MEASURE"
+      },
+      "datums": [],
+      "zone": null,
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_box1.6;M:pmi_plate.body",
+          "surface": {
+            "type": "plane",
+            "origin": [
+              -50.0,
+              -30.0,
+              5.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "T",
+          "product": "plate"
+        }
+      ],
+      "product": "plate"
+    },
+    {
+      "entity": "POSITION_TOLERANCE",
+      "magnitude": {
+        "value": 0.1,
+        "unit": "mm",
+        "type": "LENGTH_MEASURE"
+      },
+      "datums": [
+        "A",
+        "B",
+        "C"
+      ],
+      "zone": "cylindrical or circular",
+      "features": [
+        {
+          "name": "f:pmi_plate.body_make_cylinder1.1;M:pmi_plate.body",
+          "surface": {
+            "type": "cylinder",
+            "radius": 5.0,
+            "origin": [
+              0.0,
+              0.0,
+              -5.0
+            ],
+            "axis": [
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "same_sense": "F",
+          "product": "plate"
+        }
+      ],
+      "product": "plate"
+    }
+  ],
+  "generalTolerances": [],
+  "ambiguousFaceNames": {
+    "plate": []
+  },
+  "problems": []
+}

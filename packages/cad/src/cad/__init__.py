@@ -7,7 +7,10 @@ documents as functions (``export``, ``snapshot``, ``inspect``) and ``__version__
 control (``cad serve``, ``status``, ``stop``, ``server``) is the ``cad`` command's alone. Two
 namespaces hold the standards' names: ``cad.ap242`` the mechanism's (``mechanism_state``,
 ``configuration_sequence``, ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``, ``posed``) and
-``cad.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cad``
+semantic PMI's (``annotate``, ``datum``, ``dimensional_size``, ``dimensional_location``,
+``plus_minus_tolerance``, ``flatness_tolerance``, ``position_tolerance``,
+``surface_profile_tolerance``, ...), with the notes and named views around it (``note``, ``view``:
+the xbf's, in no STEP), and ``cad.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cad``
 imports no CAD kernel, and ``import build123d`` binds a module the kernel loads into on its
 first attribute (``_internal/lazy_kernel.py``).
 """

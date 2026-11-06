@@ -51,7 +51,8 @@
 /* The file sidebar on a phone, on the Display menu's scale: ONE text size, the panel's (13px), for
  * headings, labels, rows and fields alike — a heading told apart by its colour, never its size —
  * and its rows a finger's. A tree row is 36px (`TREE_ROW_TOUCH_HEIGHT`), its glyphs 16px; the
- * filter a 32px field; a pose or routine dropdown, a value field and the transport's buttons 32px.
+ * filter a 32px field; a pose or routine dropdown, a value field, the transport's buttons and a PMI
+ * frame's datum choices 32px.
  * (Inputs keep the panel's text size: the page's viewport, not a 16px font, stops a phone zooming
  * in on a focused field.) */
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-tree-row] { gap: 6px; }
@@ -71,6 +72,7 @@
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-position-control] [data-slot="slider"]::before { content: ""; position: absolute; inset: -10px 0; }
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-position-control] [data-file-sheet-field-label] { line-height: 16px; }
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-animation-transport] button { width: 32px; height: 32px; }
+[data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-pmi-datum-choice] { min-width: 32px; height: 32px; }
 
 @layer base {
   * {

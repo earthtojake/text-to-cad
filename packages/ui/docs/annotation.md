@@ -1,6 +1,9 @@
 # Annotation
 
-The drawing tools — Pencil and Shapes — are the CAD viewer's own ink, with no drawing SDK behind it. A view has one
+The drawing tools — Pencil and Shapes — are the CAD viewer's own ink, with no drawing SDK behind it.
+Ink is the person's note on a view; an engine document's manufacturing annotations (its dimensions,
+tolerances, datums and GD&T) are the document's own, read from it and asked for in its code, and
+are not ink: see [PMI](pmi.md). A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
 were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot and DXF renderers offer them
 ([Pencil and Shapes](cad-renderer.md#pencil-and-shapes)).

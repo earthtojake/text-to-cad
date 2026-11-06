@@ -130,6 +130,15 @@ export function xbfCopyText({ scene, tree, resource, ids }) {
     .chips.map(chip => chip.copy).filter(Boolean).join("\n");
 }
 
+// What a chip calls a part (`i3`): its Model tree row's label, else its own name, else its id.
+const partNameOf = ({ scene, tree }, id) => tree.nodes.get(id)?.label || scene.describePart(id)?.name || id;
+
+/** What a face or an edge (`i3/face/12`) is called, as its chip calls it alone: "plate · face 12"; "" for none on the page. */
+export function xbfElementLabel({ scene, tree }, id) {
+  const element = scene?.describeElement(id);
+  return element ? `${partNameOf({ scene, tree }, `i${element.instance}`)} · ${element.kind} ${element.ordinal}` : "";
+}
+
 /**
  * What the nodes `ids` (parts `i3`, subassemblies `n0.2`) copy, a string a node, each as its chip
  * copies it -- and nothing else of a chip, so a long list costs no measuring: the part refs a
@@ -162,7 +171,7 @@ function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove
   {
     if (!scene || !selectedIds.length) return { references: EMPTY, chips: EMPTY };
     const { referenceOf, nodeSelector, elementSelector, copyOf, nodeCopy } = referencing({ tree, resource });
-    const partName = id => tree.nodes.get(id)?.label || scene.describePart(id)?.name || id;
+    const partName = id => partNameOf({ scene, tree }, id);
     // A document of one part names it already: its element chips say their kind and number alone.
     const onePart = new Set(tree.roots.flatMap(root => root.leafPartIds || [])).size === 1;
     const chips = [];
@@ -209,7 +218,7 @@ function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove
           onRemove: () => onRemove(ids), onHover: on => onHover(on ? ids : null) };
         if (chip.members.length === 1) {
           const [{ element }] = chip.members;
-          return { ...shared, label: `${name} · ${chip.kind} ${element.ordinal}`,
+          return { ...shared, label: xbfElementLabel({ scene, tree }, element.id),
             compact: onePart ? { kind: chip.kind, number: String(element.ordinal), words: `${chip.kind} ${element.ordinal}` }
               : { name, kind: chip.kind, number: String(element.ordinal) },
             card: <MeasurementRows kind={chip.kind} facts={facts.get(element.id)} /> };

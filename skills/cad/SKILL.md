@@ -24,6 +24,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **See a model, a view or a pose** | `cad snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
+| **Add datums, tolerances, GD&T, notes or named views** (a model-based definition) | `annotate` (`cad.ap242`) on the part, in the body. | [PMI](references/pmi.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
 
 ## Setup and paths

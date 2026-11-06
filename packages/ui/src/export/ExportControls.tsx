@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { ExportRequestError, exportPause, type ExportJob, type ExportRequest, type ExportService } from '@cad/core/client';
 import type { DownloadPort, ExportRecord } from '../host/types.js';
 import { ViewerElementContext } from '../host/context.js';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../primitives/dropdown-menu.jsx';
+import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../primitives/dropdown-menu.jsx';
 import { Toaster } from '../primitives/sonner.jsx';
 import { useI18n } from '../i18n/index.js';
 import { useViewerMobile } from '../file-viewer/responsive.js';
@@ -18,11 +18,33 @@ const retryable = (error: unknown) => !(error instanceof ExportRequestError) || 
 const running = (job: ExportJob) => job.state === 'queued' || job.state === 'running' || job.state === 'cancelling';
 
 /**
+ * What an exported STEP's check of its PMI found (`pmiVerification`, read in the file as written):
+ * every annotation matched, or the check incomplete with what it found, and that no factory's
+ * importer was tried. Null where the job checked none (any other format).
+ */
+function pmiCheck(job: ExportJob, t: Translate) {
+  const check = job.pmiVerification;
+  if (!check) return null;
+  const verified = check.total > 0 && check.matched === check.total && !check.problems.length;
+  const headline = check.total === 0 ? t('export.pmiNone') : verified
+    ? t('export.pmiVerified', { matched: check.matched, total: check.total }) : t('export.pmiInconclusive');
+  return { verified, headline, description: <span className="block space-y-0.5" data-export-pmi-check="">
+    <span className="block">{t(verified ? 'export.pmiMatches' : 'export.pmiReview')}</span>
+    {check.problems.map((problem, i) => <span key={i} className="block">{problem}</span>)}
+    <span className="block">{t('export.pmiImporter')}</span>
+  </span> };
+}
+
+/**
  * One export, as a browser download is: its toast says it is being prepared ("Preparing
  * bracket.step…", spinning) while the job is queued or running, and also while the connection is
  * down and asked again; once the file is ready it is handed to the browser (whose own downloads
  * decide where it goes, and say so) and the toast goes that moment, with no success toast of its
- * own; or the toast is the engine's one-line reason, kept until dismissed. A request made from the menu learns
+ * own -- but a STEP's PMI check, which no browser says, is its toast then (`pmiCheck`; one that
+ * found a problem, which only a document another system wrote is handed over with, kept until
+ * dismissed); or the toast is the engine's one-line reason, kept until dismissed (a STEP of the
+ * code's document whose check found a problem among them: the engine refuses it). A request made
+ * from the menu learns
  * its session's epoch first and is kept with it (`onRequest`), so a reload reconnects to its job
  * by it, and a server restarted since refuses it rather than running it again.
  */
@@ -50,12 +72,19 @@ async function runExport({ record, service, downloads, t, signal, onRequest }: {
       failures = 0;
       if (running(job)) continue;
       const name = job.filename || record.filename;
+      // A STEP's PMI check is its toast once the file is handed over; one that found a problem stays until dismissed.
+      const check = pmiCheck(job, t());
+      const done = () => {
+        if (!check) toast.dismiss(id);
+        else if (check.verified) toast.success(check.headline, { id, description: check.description });
+        else toast.warning(check.headline, { id, description: check.description, duration: Infinity, closeButton: true });
+      };
       if (job.state === 'ready') {
         downloads.save(service.fileUrl(job.id), name);
-        toast.dismiss(id);
+        done();
       } else if (job.fetched) {
         // A request kept across a reload whose file the browser had already fetched whole.
-        toast.dismiss(id);
+        done();
       } else fail(job.error || job.stage);
       return;
     } catch (failure) {
@@ -166,10 +195,21 @@ export function ExportControls({ service, downloads, file, children }: {
   const enabled = Boolean(service && downloads);
   const label = t('export.button');
   // The file menu's Export: a submenu of the formats, a choice closing the menu and starting that export.
+  // Under them, muted, only where the document holds PMI: what its STEP carries of it (`ExportPmi`),
+  // its GD&T checked in the file, and what stays in the XBF.
+  const pmi = choices.find(choice => choice.pmi)?.pmi;
+  const held = new Set(pmi?.kept || []);
+  const kept = held.has('notes') && held.has('views') ? 'export.pmiKeptNotesViews' : held.has('notes') ? 'export.pmiKeptNotes'
+    : held.has('views') ? 'export.pmiKeptViews' : '';
   const menu = enabled && choices.length ? <DropdownMenuSub>
     <DropdownMenuSubTrigger data-export-menu="">{label}</DropdownMenuSubTrigger>
     <DropdownMenuSubContent aria-label={label}>
       {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.label}</DropdownMenuItem>)}
+      {pmi?.gdt || kept ? <>
+        <DropdownMenuSeparator />
+        {pmi?.gdt ? <DropdownMenuLabel className="text-muted-foreground" data-export-pmi="">{t('export.pmiIncluded')}</DropdownMenuLabel> : null}
+        {kept ? <DropdownMenuLabel className="text-muted-foreground" data-export-pmi="">{t(kept)}</DropdownMenuLabel> : null}
+      </> : null}
     </DropdownMenuSubContent>
   </DropdownMenuSub> : null;
   const overlay = enabled ? <ExportToaster /> : null;

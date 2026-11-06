@@ -112,7 +112,7 @@ class SummaryTest(unittest.TestCase):
         lines = shown.stdout.splitlines()
         self.assertEqual(lines[0], f"hinge  {ident}")
         self.assertTrue(lines[1].startswith("state       live, "), lines[1])
-        self.assertEqual(lines[2:18], [
+        self.assertEqual(lines[2:19], [
             "parts       2 in hinge",
             "bounds      210 x 60 x 30 mm, from (-50, -30, 0)",
             "volume      144,000 mm^3",
@@ -127,10 +127,11 @@ class SummaryTest(unittest.TestCase):
             "sequences",
             "  cycle  2.5 s",
             "animations  none",
+            "pmi         none",
             "declared files none",
             "closure",
         ])
-        self.assertEqual(json.loads("\n".join(lines[18:]))["source"]["function"], "hinge")
+        self.assertEqual(json.loads("\n".join(lines[19:]))["source"]["function"], "hinge")
 
         data = self.run_("-m", "cad_server.engine", "inspect", ident, "--json")
         self.assertEqual(data.returncode, 0, data.stderr)
@@ -199,6 +200,19 @@ class CouplingsTest(unittest.TestCase):
 
 
 class SummaryTextTest(unittest.TestCase):
+    def test_each_annotation_is_its_id_kind_and_status_and_a_problem_is_said(self) -> None:
+        from cad_server.engine.cli import summary_text
+
+        summary = {"name": "plate", "id": "x", "state": {"state": "file", "path": "/m/a.xbf"},
+                   "parts": {"occurrences": 1, "distinct": 1, "root": "plate"}, "materials": [], "unweighed": [],
+                   "joints": [], "states": [], "sequences": [], "animations": [], "files": []}
+        self.assertIn("pmi         none", summary_text({**summary, "pmi": []}).splitlines())
+        lines = summary_text({**summary, "pmi": [
+            {"id": "A", "kind": "datum", "status": "ok", "problem": None},
+            {"id": "hole", "kind": "dimension", "status": "missing", "problem": "no such face"}]}).splitlines()
+        at = lines.index("pmi")
+        self.assertEqual(lines[at + 1:at + 3], ["  A  datum  ok", "  hole  dimension  missing: no such face"])
+
     def test_a_named_native_material_without_density_is_listed_as_unweighed(self) -> None:
         from bd_materials import FinishedMaterial
         from bd_materials.core import RangeMaterial

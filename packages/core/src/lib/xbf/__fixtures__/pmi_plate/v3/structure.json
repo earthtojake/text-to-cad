@@ -1,0 +1,449 @@
+{
+ "name": "plate",
+ "path": "pmi_plate.xbf",
+ "version": "1793340163053068520-25170",
+ "units": "mm",
+ "prototypes": [
+  {
+   "index": 0,
+   "key": "e0b5c68b3f6bd8e6632673a239e3ff44",
+   "name": "plate",
+   "color": null,
+   "faceNames": {
+    "1": "f:edit_plate.body_make_box1.1",
+    "2": "f:edit_plate.body_make_box1.3",
+    "3": "f:edit_plate.body_make_box1.6;M:edit_plate.body",
+    "4": "f:edit_plate.body_make_box1.4",
+    "5": "f:edit_plate.body_make_box1.5;M:edit_plate.body",
+    "6": "f:edit_plate.body_make_box1.2",
+    "7": "f:edit_plate.cut.3;M:edit_plate.body",
+    "8": "f:edit_plate.cut.2;M:edit_plate.body",
+    "9": "f:edit_plate.cut.4;M:edit_plate.body",
+    "10": "f:edit_plate.cut.1;M:edit_plate.body"
+   },
+   "edgeNames": {
+    "1": "e:edit_plate.body_make_box1.1",
+    "2": "e:edit_plate.body_make_box1.2",
+    "3": "e:edit_plate.body_make_box1.3",
+    "4": "e:edit_plate.body_make_box1.4",
+    "5": "e:edit_plate.body_make_box1.9",
+    "6": "e:edit_plate.body_make_box1.5",
+    "7": "e:edit_plate.body_make_box1.10",
+    "8": "e:edit_plate.body_make_box1.12",
+    "9": "e:edit_plate.body_make_box1.6",
+    "10": "e:edit_plate.cut.10;M:edit_plate.body",
+    "11": "e:edit_plate.cut.6;M:edit_plate.body",
+    "12": "e:edit_plate.cut.12;M:edit_plate.body",
+    "13": "e:edit_plate.cut.2;M:edit_plate.body",
+    "14": "e:edit_plate.body_make_box1.11",
+    "15": "e:edit_plate.body_make_box1.7",
+    "16": "e:edit_plate.body_make_box1.8",
+    "17": "e:edit_plate.cut.9;M:edit_plate.body",
+    "18": "e:edit_plate.cut.8;M:edit_plate.body",
+    "19": "e:edit_plate.cut.11;M:edit_plate.body",
+    "20": "e:edit_plate.cut.4;M:edit_plate.body",
+    "21": "e:edit_plate.cut.5;M:edit_plate.body",
+    "22": "e:edit_plate.cut.1;M:edit_plate.body",
+    "23": "e:edit_plate.cut.7;M:edit_plate.body",
+    "24": "e:edit_plate.cut.3;M:edit_plate.body"
+   },
+   "vertexNames": {
+    "1": "v:edit_plate.body_make_box1.1",
+    "2": "v:edit_plate.body_make_box1.2",
+    "3": "v:edit_plate.body_make_box1.3",
+    "4": "v:edit_plate.body_make_box1.4",
+    "5": "v:edit_plate.body_make_box1.6",
+    "6": "v:edit_plate.body_make_box1.5",
+    "7": "v:edit_plate.body_make_box1.7",
+    "8": "v:edit_plate.cut.1;M:edit_plate.body",
+    "9": "v:edit_plate.cut.5;M:edit_plate.body",
+    "10": "v:edit_plate.cut.7;M:edit_plate.body",
+    "11": "v:edit_plate.cut.3;M:edit_plate.body",
+    "12": "v:edit_plate.body_make_box1.8",
+    "13": "v:edit_plate.cut.2;M:edit_plate.body",
+    "14": "v:edit_plate.cut.6;M:edit_plate.body",
+    "15": "v:edit_plate.cut.8;M:edit_plate.body",
+    "16": "v:edit_plate.cut.4;M:edit_plate.body"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {},
+   "unmeshed": [],
+   "unmeshedCheck": {}
+  }
+ ],
+ "instances": [
+  {
+   "prototype": 0,
+   "path": "plate/plate",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  }
+ ],
+ "tree": {
+  "name": "plate",
+  "children": [
+   {
+    "name": "plate",
+    "prototype": 0,
+    "instance": 0
+   }
+  ]
+ },
+ "pmi": [
+  {
+   "id": "A",
+   "kind": "datum",
+   "label": null,
+   "status": "ok",
+   "problem": null,
+   "part": 0,
+   "refs": [
+    {
+     "role": "feature",
+     "written": "f:edit_plate.body_make_box1.5;M:edit_plate.body",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.body_make_box1.5;M:edit_plate.body",
+     "candidates": null,
+     "problem": null
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     40.0,
+     -20.0,
+     -6.0
+    ],
+    "offset": [
+     0.0,
+     -15.0,
+     -10.0
+    ]
+   },
+   "xcaf_type": null,
+   "datum": {
+    "letter": "A"
+   }
+  },
+  {
+   "id": "thickness",
+   "kind": "dimension",
+   "label": null,
+   "status": "ok",
+   "problem": null,
+   "part": 0,
+   "refs": [
+    {
+     "role": "from",
+     "written": "f:edit_plate.body_make_box1.5;M:edit_plate.body",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.body_make_box1.5;M:edit_plate.body",
+     "candidates": null,
+     "problem": null
+    },
+    {
+     "role": "to",
+     "written": "f:edit_plate.body_make_box1.6;M:edit_plate.body",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.body_make_box1.6;M:edit_plate.body",
+     "candidates": null,
+     "problem": null
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     50.0,
+     30.0,
+     0.0
+    ],
+    "offset": [
+     15.0,
+     0.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "dimension": {
+    "type": "distance",
+    "basic": false,
+    "nominal": {
+     "value": 12.0,
+     "unit": "mm",
+     "source": "geometry"
+    },
+    "tolerance": {
+     "type": "plus_minus",
+     "upper": 0.2,
+     "lower": -0.2
+    }
+   }
+  },
+  {
+   "id": "hole-diameter",
+   "kind": "dimension",
+   "label": null,
+   "status": "invalid",
+   "problem": "f:edit_plate.cut.1;M:edit_plate.body is a plane face; a diameter is on a cylinder face",
+   "part": 0,
+   "refs": [
+    {
+     "role": "feature",
+     "written": "f:edit_plate.cut.1;M:edit_plate.body",
+     "status": "invalid",
+     "ref": "f:edit_plate.cut.1;M:edit_plate.body",
+     "candidates": null,
+     "problem": "f:edit_plate.cut.1;M:edit_plate.body is a plane face; a diameter is on a cylinder face"
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     6.0,
+     0.0,
+     6.0
+    ],
+    "offset": [
+     15.0,
+     15.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "dimension": {
+    "type": "diameter",
+    "basic": false,
+    "nominal": null,
+    "tolerance": {
+     "lower": 0.0,
+     "type": "plus_minus",
+     "upper": 0.1
+    }
+   }
+  },
+  {
+   "id": "hole-from-front",
+   "kind": "dimension",
+   "label": null,
+   "status": "invalid",
+   "problem": "f:edit_plate.body_make_box1.3 and f:edit_plate.cut.1;M:edit_plate.body are not parallel planes",
+   "part": 0,
+   "refs": [
+    {
+     "role": "from",
+     "written": "f:edit_plate.body_make_box1.3",
+     "status": "ok",
+     "ref": "f:edit_plate.body_make_box1.3",
+     "candidates": null,
+     "problem": null
+    },
+    {
+     "role": "to",
+     "written": "f:edit_plate.cut.1;M:edit_plate.body",
+     "status": "invalid",
+     "ref": "f:edit_plate.cut.1;M:edit_plate.body",
+     "candidates": null,
+     "problem": "f:edit_plate.body_make_box1.3 and f:edit_plate.cut.1;M:edit_plate.body are not parallel planes"
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     0.0,
+     -15.0,
+     6.0
+    ],
+    "offset": [
+     6.0,
+     0.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "dimension": {
+    "type": "distance",
+    "basic": true,
+    "nominal": null,
+    "tolerance": null
+   }
+  },
+  {
+   "id": "hole-from-left",
+   "kind": "dimension",
+   "label": null,
+   "status": "ok",
+   "problem": null,
+   "part": 0,
+   "refs": [
+    {
+     "role": "from",
+     "written": "f:edit_plate.body_make_box1.1",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.body_make_box1.1",
+     "candidates": null,
+     "problem": null
+    },
+    {
+     "role": "to",
+     "written": "f:edit_plate.cut.1;M:edit_plate.body",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.cut.1;M:edit_plate.body",
+     "candidates": null,
+     "problem": null
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     -25.0,
+     0.0,
+     6.0
+    ],
+    "offset": [
+     0.0,
+     6.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "dimension": {
+    "type": "distance",
+    "basic": true,
+    "nominal": {
+     "value": 44.0,
+     "unit": "mm",
+     "source": "geometry"
+    },
+    "tolerance": null
+   }
+  },
+  {
+   "id": "top-flatness",
+   "kind": "geometric_tolerance",
+   "label": null,
+   "status": "ok",
+   "problem": null,
+   "part": 0,
+   "refs": [
+    {
+     "role": "feature",
+     "written": "f:edit_plate.body_make_box1.6;M:edit_plate.body",
+     "status": "ok",
+     "ref": "plate/f:edit_plate.body_make_box1.6;M:edit_plate.body",
+     "candidates": null,
+     "problem": null
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     -30.0,
+     20.0,
+     6.0
+    ],
+    "offset": [
+     0.0,
+     15.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "geometric_tolerance": {
+    "characteristic": "flatness",
+    "value": 0.05,
+    "unit": "mm",
+    "zone": null,
+    "modifier": null,
+    "datums": [],
+    "general": false
+   }
+  },
+  {
+   "id": "hole-position",
+   "kind": "geometric_tolerance",
+   "label": null,
+   "status": "invalid",
+   "problem": "f:edit_plate.cut.1;M:edit_plate.body is a plane face; a position is on a cylinder face",
+   "part": 0,
+   "refs": [
+    {
+     "role": "feature",
+     "written": "f:edit_plate.cut.1;M:edit_plate.body",
+     "status": "invalid",
+     "ref": "f:edit_plate.cut.1;M:edit_plate.body",
+     "candidates": null,
+     "problem": "f:edit_plate.cut.1;M:edit_plate.body is a plane face; a position is on a cylinder face"
+    }
+   ],
+   "presentation": {
+    "anchor": [
+     -6.0,
+     0.0,
+     6.0
+    ],
+    "offset": [
+     -15.0,
+     15.0,
+     0.0
+    ]
+   },
+   "xcaf_type": null,
+   "geometric_tolerance": {
+    "characteristic": "position",
+    "datums": [
+     "A"
+    ],
+    "general": false,
+    "modifier": null,
+    "unit": "mm",
+    "value": 0.1,
+    "zone": "diameter"
+   }
+  }
+ ],
+ "pmi_views": [],
+ "pmi_coverage": [
+  {
+   "part": 0,
+   "uncovered": [
+    "plate/f:edit_plate.body_make_box1.1",
+    "plate/f:edit_plate.body_make_box1.2",
+    "plate/f:edit_plate.body_make_box1.3",
+    "plate/f:edit_plate.body_make_box1.4",
+    "plate/f:edit_plate.cut.1;M:edit_plate.body",
+    "plate/f:edit_plate.cut.2;M:edit_plate.body",
+    "plate/f:edit_plate.cut.3;M:edit_plate.body",
+    "plate/f:edit_plate.cut.4;M:edit_plate.body"
+   ],
+   "conflicts": [],
+   "suggestions": [
+    {
+     "kind": "material",
+     "faces": [],
+     "question": "What is the part made of?",
+     "answer": "the part's material (bd_materials), before annotate()",
+     "why": "a shop makes and quotes it from its material, which also decides which tolerances are sensible"
+    },
+    {
+     "kind": "general",
+     "faces": [],
+     "question": "What holds the faces nothing else controls?",
+     "answer": "general_tolerance(\"general\", \"ISO 2768-mK\")",
+     "why": "ISO 2768-mK (medium sizes, K form) is the usual default for a machined part and holds every size and form nothing else tolerances; general_profile(...) says the same in ASME terms"
+    }
+   ]
+  }
+ ]
+}

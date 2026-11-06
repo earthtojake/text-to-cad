@@ -42,8 +42,10 @@ cad inspect XBF/arm.xbf                    # what it holds, then its build closu
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
-engineering drawings (`@eng_drawing`).
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators;
+engineering drawings (`@eng_drawing`); and semantic PMI with the model-based definition around it
+(`cad.ap242`: datums, dimensions and tolerances on a part's faces, kept in its xbf and exported as
+AP242's; notes, named views and their presentation, kept in the xbf alone).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -134,8 +136,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 4. **XCAF is the document; files are explicit.** A live model holds an XCAF document;
    `@xbf` or `--xbf` serializes it as native BinXCAF. It holds: units in millimetres,
    prototypes and instances with placements, a name on every part and instance, colours and
-   materials per part and per painted face, element names on face, edge and vertex labels, and
-   an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
+   materials per part and per painted face, element names on face, edge and vertex labels, an
+   assembly's mechanism, and each part's semantic PMI as XCAF's own GD&T objects, notes and views
+   (the engine's **PMI**). STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
    of it; `cad export` writes any of them from the xbf alone.
 5. **The memo is the only build cache, and it lives in the worker.** Every kernel operation a model
    runs is keyed by its inputs, and so is every question it asks of what they made: a validity
@@ -236,7 +239,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     receipts, the plugin folder. A release reads what the previous shipped release wrote, writes the
     current form, and migrates on first touch, once: never the old form written, never a downgrade.
     Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
-    because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    because text-to-cad was upgraded: the engine reads `xbf/8`, `xbf/9` and `xbf/10` and converts `xbf/8` in
     memory, without executing model code or changing source or cache bytes, under a migration record
     that leaves the original build closure and toolchain provenance unchanged; an explicit export to
     another XBF path saves the upgraded document atomically, and opening one does not rewrite it;

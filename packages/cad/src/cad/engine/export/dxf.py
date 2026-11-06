@@ -79,17 +79,18 @@ class DxfDeterminismError(RuntimeError):
 # --- the drawing: layers, edges, bytes ---------------------------------------------------------
 
 
-def write(view: Any, path: Path) -> None:
+def write(view: Any, path: Path) -> int:
     """The view's drawing at ``path``: written beside it and moved over it, or, when the file
-    holds these bytes already, left as it is."""
+    holds these bytes already, left as it is. Returns its size."""
     data = dxf_bytes(view)
     path = Path(path)
     try:
         if path.stat().st_size == len(data) and path.read_bytes() == data:
-            return
+            return len(data)
     except OSError:
         pass
     put(path, lambda temporary: temporary.write_bytes(data), compare=False)
+    return len(data)
 
 
 def dxf_bytes(view: Any) -> bytes:
