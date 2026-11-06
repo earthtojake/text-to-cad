@@ -690,10 +690,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
               {sidebar && !toolsHidden && !previewing && !flat.open ? <FlatPanelPill touch={mobile} onOpen={() => flat.setOpen(true)} /> : null}
               {/* On a phone the panel is the whole view. */}
               {flat.mode === "page" && panelNode ? <div className="pointer-events-auto contents">{panelNode}</div> : null}
-              {/* A file with routines: its playbar under the model, in the tools view as in Preview (there
-                  on the strip's surface, with Reset, and on a phone over Quick Edit's peek). */}
+              {/* A file with routines: its playbar under the model, in the tools view as in Preview (the same
+                  transparent row, with Reset first, and on a phone over Quick Edit's peek). */}
               {!previewing && !toolsHidden && hasAnimation ? <PreviewPlaybar key={`tools-${frame.modelKey}`} runtime={playbackRuntime} disabled={viewerLoading || !scene}
-                autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} surfaced phone={mobile} /> : null}
+                autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} toolsView phone={mobile} /> : null}
 
               {/* Preview's playbar, for a file with routines: its own routine, under the model. */}
               {previewing && hasAnimation ? <PreviewPlaybar key={frame.modelKey} runtime={playbackRuntime} disabled={viewerLoading || !scene}

@@ -6,7 +6,7 @@ import { Button } from "@cad/ui/primitives/button";
 import { ToolbarButton, TOOLBAR_ICON_BUTTON_CLASS } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { VIEWPORT_INSET_PX } from "../../shell/viewportLayout.js";
 import { PREVIEW_FADE_CLASS, usePreviewShown } from "../PreviewChrome.jsx";
 import PlaybackMenu from "../PlaybackMenu.jsx";
@@ -49,27 +49,27 @@ function RoutineMenu({ runtime, disabled }) {
  * side of it. It plays Preview's own routine (`runtime`), never the tools view's. It comes and goes
  * with Preview's bar (`idle`, `createPreviewIdle`), its playing untouched by either.
  *
- * The tools view has the same playbar (`surfaced`: a file's routines are its playbar's in both views,
- * never a section of the panel), on the strip's surface, Reset first — the model back at rest, idle
- * while it is — and on a phone (`phone`) over Quick Edit's peek, which keeps the bottom.
+ * The tools view has the same playbar (`toolsView`: a file's routines are its playbar's in both views,
+ * never a section of the panel), the same transparent row on no surface, Reset first — the model back
+ * at rest, idle while it is — and on a phone (`phone`) over Quick Edit's peek, which keeps the bottom.
  *
  * @param {{ runtime: object, autoplay: boolean, onAutoplayChange(value: boolean): void, disabled?: boolean,
- *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, surfaced?: boolean, phone?: boolean }} props
+ *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, toolsView?: boolean, phone?: boolean }} props
  */
-export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, disabled = false, idle = null, surfaced = false, phone = false }) {
+export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, disabled = false, idle = null, toolsView = false, phone = false }) {
   const shown = usePreviewShown(idle);
   const { t } = useI18n();
   if (!animationControlsHaveContent(runtime)) return null;
   const playing = runtime.playing === true;
   const words = playbarWords(runtime, t);
   const atRest = !playing && !(Number(runtime?.elapsedSec) > 0);
-  return <div role="toolbar" aria-label={words.playback} data-preview-playbar={surfaced ? undefined : ""} data-playbar={surfaced ? "tools" : "preview"}
+  return <div role="toolbar" aria-label={words.playback} data-preview-playbar={toolsView ? undefined : ""} data-playbar={toolsView ? "tools" : "preview"}
     data-state={shown ? "visible" : "hidden"} {...idle?.hold("playbar")}
-    style={surfaced ? { bottom: phone ? `calc(var(--cad-quick-edit-peek, 0px) + ${VIEWPORT_INSET_PX}px)` : VIEWPORT_INSET_PX * 2 } : undefined}
+    style={toolsView ? { bottom: phone ? `calc(var(--cad-quick-edit-peek, 0px) + ${VIEWPORT_INSET_PX}px)` : VIEWPORT_INSET_PX * 2 } : undefined}
     className={cn("absolute left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 px-2 py-1",
-      surfaced ? cn("rounded-md", FLOATING_CHROME_SURFACE_CLASS) : "bottom-4", PREVIEW_FADE_CLASS,
+      !toolsView && "bottom-4", PREVIEW_FADE_CLASS,
       shown ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")}>
-    {surfaced ? <ToolbarButton label={words.reset} tooltipSide="top" disabled={disabled || atRest} onClick={() => runtime.onRelease?.()} data-animation-reset="">
+    {toolsView ? <ToolbarButton label={words.reset} tooltipSide="top" disabled={disabled || atRest} onClick={() => runtime.onRelease?.()} data-animation-reset="">
       <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
     </ToolbarButton> : null}
     <RoutineMenu runtime={runtime} disabled={disabled} />

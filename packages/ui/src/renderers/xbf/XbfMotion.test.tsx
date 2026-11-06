@@ -9,7 +9,7 @@ import { useXbfMotion } from '../../../dist/renderers/xbf/useXbfMotion.js';
 import { useMotionExclusion } from '../../../dist/renderers/kit/tools/model-effects/motionExclusion.js';
 
 // An engine document's motions played from the tools view's playbar (`useXbfMotion.js`
-// through the shell's playbar, `PreviewPlaybar` `surfaced`), over Position as the renderer composes them: while a
+// through the shell's playbar, `PreviewPlaybar` `toolsView`), over Position as the renderer composes them: while a
 // motion owns the pose its frames pose the scene and Position shows them read-only. A motion and
 // the pose are one motion at a time (`motionExclusion.js`): taking the motion up puts the pose at
 // rest, nothing set aside, so Reset leaves the model as built. Frames are driven by hand: the
@@ -77,7 +77,7 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
       sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
         preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
       tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
-    {motion ? <PreviewPlaybar runtime={motion} autoplay={false} onAutoplayChange={() => {}} surfaced /> : null}
+    {motion ? <PreviewPlaybar runtime={motion} autoplay={false} onAutoplayChange={() => {}} toolsView /> : null}
   </div>;
 }
 
@@ -96,6 +96,8 @@ it("the playbar lists the document's motions with their durations, and plays, pa
   const scene = { setPose: vi.fn() };
   render(<Harness scene={scene} />);
   const panel = playbar()!;
+  // The tools view's playbar is a transparent row on no surface, as Preview's is.
+  expect(panel.className).not.toMatch(/border|bg-|shadow|backdrop-blur/);
   expect(panel.getAttribute('aria-label')).toBe('Motion playback');
   // At rest as the file opens: nothing to reset, the scene as Position has it.
   expect((screen.getByRole('button', { name: 'Reset motion' }) as HTMLButtonElement).disabled).toBe(true);

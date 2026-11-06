@@ -282,8 +282,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
   back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
-- **A file's routines are a playbar at the bottom centre**, in the tools view (on the strip's
-  surface, Reset first; on a phone over Quick Edit's peek) as in Preview (see
+- **A file's routines are a playbar at the bottom centre**, in the tools view (Reset first; on a
+  phone over Quick Edit's peek) as in Preview, one transparent row on no surface in both (see
   [Preview](#camera-animation-and-preview)). Nothing else sits there.
 - **Model update status** sits under the strip and its sub-toolbar, centred, and where
   there is no strip (Preview, a compact view, a load) at the top centre, in the strip's
@@ -1187,10 +1187,10 @@ a live `setDisplaySettings` refuses it as it refuses any mode it does not know, 
 left in it reads as the defaults. Render settings edited in Preview are the file's Render settings;
 leaving returns the tools view to the file's mode.
 
-**Routines** play from the playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`), in the
-tools view on the strip's surface with **Reset animation** first, which stops the routine and puts
-the model at rest, disabled while it is (on a phone, over Quick Edit's peek), and in Preview on no
-surface: the routines' list where there are two or more, then **Play** or
+**Routines** play from the playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`), one
+transparent row on no surface in both views, in the tools view with **Reset animation** first, which
+stops the routine and puts the model at rest, disabled while it is (on a phone, over Quick Edit's
+peek): the routines' list where there are two or more, then **Play** or
 **Pause**, the scrubber (`AnimationTimeControl`) and **Playback settings** (a cog: the routine's
 Speed, a submenu, then Loop and Autoplay). Each routine in the dropdown says its duration at its
 right, muted, in tabular figures. In the tools view a routine is a motion as a pose is
