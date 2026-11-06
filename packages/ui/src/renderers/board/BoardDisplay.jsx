@@ -148,7 +148,7 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
   return [
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null, submenu: () => <DisplayMenuItems mode={presets} />,
       corner: <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
-        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="start" /> },
+        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="end" /> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: dimension === "3d", tile: null,
       onSelect: () => onDimensionChange(dimension === "3d" ? "2d" : "3d"),
