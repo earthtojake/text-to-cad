@@ -55,9 +55,10 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     change(next: HostContext) { context = { ...context, ...next }; for (const listener of [...listeners]) listener(context); },
   };
   const answers: Record<string, Answer> = {
-    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`).
+    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`, `{updates}`).
     '/api/v1/settings': body => ({ language: { locale: body?.language?.locale ?? null },
-      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY } }),
+      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY },
+      updates: body?.updates ? { automatic: body.updates.automatic, reason: 'choice' } : { automatic: true, reason: 'default' } }),
     '/api/v1/server': () => ({ notice: null }),
     '/api/v1/documents': () => ({ documents: [] }),
     '/api/v1/local/reveal': () => null,
@@ -78,7 +79,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     }),
     answers,
     asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
-    /** The settings' reads (each of the language's and the consent's), and the telemetry answers sent. */
+    /** The settings' reads (each of the language's, the consent's and automatic updates'), and the telemetry answers sent. */
     telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language)
       .map(request => request.body && request.body.telemetry),
   };
@@ -442,9 +443,11 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
-  // The settings read once by each of the language and the consent: no answer sent.
-  expect(server.telemetry()).toEqual([null, null]);
-  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
+  // The settings read once by each of the language, the consent and automatic updates: no answer sent.
+  expect(server.telemetry()).toEqual([null, null, null]);
+  // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
+  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
+    expect.objectContaining({ id: 'automatic-updates', checked: true, label: 'Automatic updates' })]);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
   expect(server.telemetry().at(-1)).toEqual({ share: true });
   expect(viewer.props!.appSettings![0].checked).toBe(true);
