@@ -661,8 +661,9 @@ corner outwards), their tooltips and menus opening away from the corner (`viewpo
 Codex's tab presentation uses the left corner across sidebar, thread and file views.
 The shared viewer consumes these layout values without identifying the host.
 
-A renderer's update status is its own: the CAD renderers show it centred under the tool
-strip and its sub-toolbar. The navbar carries none.
+The update status is the view's own: every renderer's frame (`ViewFrame.jsx`) shows it centred under
+the tool strip and its sub-toolbar, or at the top centre where there is no strip. The navbar carries
+none.
 
 
 A retained predecessor is useful for a Quick Edit's note and references, but does not prove

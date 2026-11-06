@@ -310,8 +310,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   [Preview](#camera-animation-and-preview)). Nothing else sits there.
 - **Model update status** sits under the strip and its sub-toolbar, centred, and where
   there is no strip (Preview, a compact view, a load) at the top centre, in the strip's
-  34px row, in every host. It is renderer chrome: the navbar carries no status. On mobile
-  it is a tappable progress icon whose popover names what is loading.
+  34px row, in every host and every view, 2D or 3D: the one frame draws it (`ViewFrame.jsx`'s
+  `status`) from what the view says — a newer revision loading behind the picture, a Display change
+  being prepared, or that change's failure with its **Retry** (a flat view's Display needs no
+  preparing, so it has none to offer: a failed update is the alert card's, whose Retry reloads) — and
+  nothing while the alert card says why the view's chrome is gone. It is renderer chrome: the navbar
+  carries no status. On mobile it is a tappable progress icon whose popover names what is loading.
 
 ## Tools and lifecycle
 

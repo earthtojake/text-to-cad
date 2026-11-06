@@ -3,6 +3,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
+import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
@@ -27,7 +28,12 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   (`useStageReach.js`), so opening or shutting the panel never moves it, and it draws over the panel
  *   where they meet; on a phone, the same. In it the strip (`tools`, and its view controls `views`),
  *   the tool in hand's row (`toolRow`), the view catching up (`status`), and the tool stack
- *   (`toolStack`). With no strip (a compact host, Preview) `status` stands at the top centre alone.
+ *   (`toolStack`).
+ * - **The update status** (`status`: what the view says while it catches up, `ViewUpdateStatus`'s
+ *   `status` as `update`, its Retry where the update offers one, `onRetry`, and whether what is drawn is
+ *   a build's preview, `preview`), one rule for every view: under the strip, or where there is no strip
+ *   (Preview, a compact host, a load) at the top centre in the strip's row; none while the alert card
+ *   says why the view's chrome is gone.
  * - **One measure** of that column, onto the frame's root: `--cad-tools-bottom` (what a flat canvas's
  *   fit keeps clear of) and `--cad-top-right-left` (where the top-right column starts, clear of the
  *   strip), again whenever the column, the stage or what stands in the top-right corner changes.
@@ -62,6 +68,7 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {boolean} props.compact  A compact host: the picture alone.
  * @param {boolean} props.chromeHidden  The view loads, or has failed to: none of the frame's own chrome.
  * @param {boolean} [props.selecting]  Select is the tool in hand (or the view has no tools).
+ * @param {{ update?: object | null, onRetry?: (() => void) | null, preview?: boolean } | null} [props.status]
  * @param {object[]} props.tools
  * @param {object[]} [props.views]
  * @param {{ kind: string, label: string, searchLabel: string, tabs?: object[], sections?: import("react").ReactNode,
@@ -74,6 +81,11 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   contextMenu = null, onCanvasPress = null }) {
   const { t } = useI18n();
   const toolsHidden = chromeHidden || compact;
+  // The view catching up, said as every view says it, unless the card says why the chrome is gone.
+  const statusNode = !status || (chromeHidden && alert?.alert) ? null : <div className="pointer-events-none flex max-w-full items-center gap-2" data-viewport-status="">
+    {status.preview ? <ViewPreviewLabel /> : null}
+    <ViewUpdateStatus status={status.update ?? IDLE_STATUS} onRetry={status.onRetry ?? undefined} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
+  </div>;
   const ownRoot = useRef(null);
   const root = rootRef ?? ownRoot;
   const stageRef = useRef(null);
@@ -155,7 +167,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               <div ref={topControls} className="relative flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
                 <FloatingToolBar tools={tools} views={views} touch={mobile} />
                 {previewing ? null : toolRow}
-                {previewing ? null : status}
+                {previewing ? null : statusNode}
               </div>
               {toolStack}
             </StripTouchProvider>
@@ -171,8 +183,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
         {bottomCentre}
         {overlays}
         {/* The view catching up, at the top centre while there is no strip. */}
-        {status && (toolsHidden || previewing) ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
-          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }}>{status}</div> : null}
+        {statusNode && (toolsHidden || previewing) ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }}>{statusNode}</div> : null}
         {chromeHidden || previewing || !contextMenu ? null : <ViewportContextMenu {...contextMenu} />}
         <ViewerLoadingOverlay loading={loading} operationKey={file} />
         {/* The alert card, last: over the tools, which a warning the view survives keeps on screen. */}
@@ -191,3 +203,5 @@ const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, 
 // What stands in the top-right corner: the host's notice and Quick Edit's box (not its column).
 const CORNER_BOXES = "[data-viewport-top-right] :is([data-viewport-notice], [data-quick-edit-box])";
 const MEASURED = ["--cad-tools-bottom", "--cad-top-right-left"];
+// Nothing to say: the status draws nothing.
+const IDLE_STATUS = Object.freeze({ pending: false });

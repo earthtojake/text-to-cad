@@ -1,7 +1,6 @@
 import { english, useI18n } from "@cad/ui/i18n";
 import { MousePointer2 } from "lucide-react";
 import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolVariant, drawingToolLabel } from "../../../annotation/toolbar.jsx";
-import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import { MeasureIcon } from "../tools/measure/SceneMeasure.jsx";
 import { MeasurementsBar } from "../tools/measure/measurementChips.jsx";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
@@ -88,9 +87,9 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null,
   corner = "pill", cube = null }) {
   const { t } = useI18n();
-  const status = updating && !alert ? <div className="pointer-events-none flex max-w-full items-center" data-viewport-status="">
-    <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-  </div> : null;
+  // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
+  // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
+  const status = { update: updating ? updateStatus : null };
   // The view's corner: its own controls on the bottom row, then its zoom pill, or, while the picture
   // is shown in 3D, the cube (the 3D view's own) with Projection and Home over it. The row stands where
   // it stands either way. A phone's are More's.
