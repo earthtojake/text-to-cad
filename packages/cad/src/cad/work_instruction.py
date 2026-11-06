@@ -71,7 +71,6 @@ from __future__ import annotations
 
 import functools
 import math
-import os
 import re
 import tempfile
 from dataclasses import KW_ONLY, dataclass, field
@@ -1164,14 +1163,15 @@ def work_instruction(func: Callable[..., Any] | None = None, *, out: str | Path 
                     f"@work_instruction {fn.__name__} is released with {len(items)} open item(s); "
                     "state them or keep it a draft:\n  " + "\n  ".join(items)
                 )
+            from cad._internal.atomic_replace import write_bytes_atomic
             from cad._internal.work_instruction_pages import write_pdf
 
             written = [target]
             with tempfile.TemporaryDirectory(prefix="cad-wi-") as folder:
                 beside = _write_player(wi, target, Path(folder)) if wi.animated else {}
                 pages = write_pdf(wi, target, open_items=items)
-                for staged, final in beside.items():
-                    os.replace(staged, final)  # only now: a failed run leaves earlier files as they were
+                for staged, final in beside.items():  # only now: a failed run leaves earlier files as they were
+                    write_bytes_atomic(final, staged.read_bytes())
                     written.append(final)
             for item in items:
                 print(f"{fn.__name__}: open item: {item}")
