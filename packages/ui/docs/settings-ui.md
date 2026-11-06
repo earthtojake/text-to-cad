@@ -254,7 +254,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   column (**The view's corner**, below). A host whose own
   control floats over that corner lifts it clear with `--cad-viewport-corner-bottom`, the
   room that control takes from the bottom edge. A host can instead anchor it at bottom-left
-  with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`.
+  with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`, and the whole
+  corner follows it there (**The corner's bottom row**, below).
   Codex's tab presentation uses this for all its views to avoid the floating composer.
   Preview omits it, and so does a phone.
 - **Preview** ends the tool strip, for a 3D file (`data-view-controls`, `FloatingToolBar`'s
@@ -287,7 +288,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
   back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
-- **The corner's bottom row** (`ViewCorner.jsx`'s `ViewCornerRow`, `VIEWPORT_CORNER_ROW_POSITION`): a
+- **The corner's bottom row** (`ViewCorner.jsx`'s `ViewCornerRow`, `viewportLayout.js`'s `viewCornerLayout`): a
   view's own controls for how it is looked at, side by side on the pill's line, right-aligned 6px left of
   the pill (126px from the right edge), each of a fixed width and the pill's 32px height, so their
   bottoms are its, lifted by `--cad-viewport-corner-bottom` as the pill is. The cube's box ends 90px
@@ -298,7 +299,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   and away from the corner; the two switches small toolbars on the corner's surface
   (`ViewCornerSwitch`, `VIEW_CORNER_SURFACE_CLASS`, the one surface every corner control shares), 72px
   and 104px wide. A host that anchors the cube at the bottom-left
-  (`--cad-viewport-corner-left`) moves neither the pill nor the row today.
+  (`--cad-viewport-corner-left`) moves all of the corner there, as one group mirrored: the cube's column
+  flush with its left face, the pill where the cube's drawing ends (14px inside its box, as at the right),
+  the row 6px right of the pill (132px from the box's edge) and in the order it reads from the corner
+  outwards (`[pill or cube] [Front | Back] [2D | 3D] [Display]`), the tooltips and menus opening to
+  the right; `--cad-viewport-corner-bottom` lifts it all either way.
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
   Quick Edit's peek) as in Preview, one transparent row on no surface, the same row in both;
   the tools view's Reset is an item of its Playback settings (see

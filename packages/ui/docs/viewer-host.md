@@ -651,9 +651,13 @@ Nothing of the tools view sits at the bottom centre (Preview's playbar does). A 
 that edge (a chat's composer) sets `--cad-host-bottom-inset` on an ancestor to the height it
 covers: the model library scrolls its last rows clear of it. A host whose own control
 floats over the view's bottom-right corner sets `--cad-viewport-corner-bottom` to the room
-it takes from the bottom edge, and the view cube sits that much higher. To choose the
+it takes from the bottom edge, and the view's whole corner sits that much higher. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
-`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset.
+`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset. All of the
+corner follows, as one group mirrored at the bottom-left: the cube, the column over it, a flat
+view's zoom pill and its bottom row (a board's Display, 2D | 3D and Front | Back, reading from the
+corner outwards), their tooltips and menus opening away from the corner (`viewportLayout.js`'s
+`viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views.
 The shared viewer consumes these layout values without identifying the host.
 

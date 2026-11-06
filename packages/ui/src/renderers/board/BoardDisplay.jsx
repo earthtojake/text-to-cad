@@ -11,7 +11,7 @@ import {
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
-import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSwitch, ViewCornerTile } from "../kit/shell/ViewCorner.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerSwitch, ViewCornerTile, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 
 /**
@@ -141,8 +141,9 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
   const presets = boardPresetMode({ display, sheet, onChange, t });
   return [
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null, submenu: () => <DisplayMenuItems mode={presets} />,
-      corner: <ViewCornerTile><DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
-        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align="end" /></ViewCornerTile> },
+      // Its menu opens up and away from the corner, whichever side the host anchors it at.
+      corner: <ViewCornerTile><ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} icon={SolidModeIcon}
+        className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="top" side="top" align={viewCornerAway(corner).align} />}</ViewCornerSided></ViewCornerTile> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: dimension === "3d", tile: null,
       onSelect: () => onDimensionChange(dimension === "3d" ? "2d" : "3d"),

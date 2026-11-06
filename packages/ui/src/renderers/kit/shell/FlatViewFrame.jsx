@@ -10,7 +10,6 @@ import { FLAT_TOOL } from "./useFlatView.js";
 import ViewFrame from "./ViewFrame.jsx";
 import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
 import { ViewCornerRow, ViewCubeColumn } from "./ViewCorner.jsx";
-import { VIEWPORT_CUBE_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewportLayout.js";
 
 /**
  * A FLAT view's frame — a picture on a canvas, head on (a board, a schematic, a drawing) — which is
@@ -99,8 +98,8 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
     {views?.some(view => view.corner) ? <ViewCornerRow>
       {views.map(view => (view.corner ? <span key={view.id} className="contents">{view.corner}</span> : null))}
     </ViewCornerRow> : null}
-    {corner === "cube" && cube ? <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION} projection={cube.projection} onHome={cube.onHome} />
-      : <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />}
+    {corner === "cube" && cube ? <ViewCubeColumn projection={cube.projection} onHome={cube.onHome} />
+      : <ZoomPill zoom={zoom} />}
   </>;
   return (
     <ViewFrame surface={surface} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden}

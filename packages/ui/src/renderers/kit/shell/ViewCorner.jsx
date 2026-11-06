@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react";
 import { House } from "lucide-react";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
@@ -5,7 +6,7 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_FILL_CLASS } from "../../../lib/floatingSurface.js";
 import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS } from "../tools/stripTouch.js";
 import ProjectionToggle from "./ProjectionToggle.jsx";
-import { VIEWPORT_CORNER_GAP_PX, VIEWPORT_CORNER_ROW_POSITION } from "./viewportLayout.js";
+import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
 
 /**
  * The view's corner: how you look at the model, at the bottom-right, where the cube is (Blender's
@@ -24,7 +25,37 @@ import { VIEWPORT_CORNER_GAP_PX, VIEWPORT_CORNER_ROW_POSITION } from "./viewport
  * their hover, pressed, open and on states and their tooltips. Over an empty canvas they stand a step
  * off it, as the strip does; over the picture or the model the fill, nearly opaque and blurred, keeps
  * their glyphs at full contrast. Their menus open to the left and up.
+ *
+ * A host may anchor the cube at the bottom-left (`--cad-viewport-corner-left`, `viewer-host.md`): then
+ * the whole corner stands there, mirrored as one group (`viewCornerLayout`): the column flush with the
+ * cube's left face, the pill 8px from the left, the row right of it in the order it reads from the
+ * corner outwards, tooltips and menus to the right. The frame reads the side (`viewCornerSide`) and says
+ * it to everything in the corner (`ViewCornerSideProvider`, `useViewCornerSide`).
  */
+
+const ViewCornerSideContext = createContext("right");
+/** The side the frame's corner stands at, for everything drawn in it: "right" or "left". */
+export const ViewCornerSideProvider = ViewCornerSideContext.Provider;
+/** @returns {"right" | "left"} */
+export const useViewCornerSide = () => useContext(ViewCornerSideContext);
+/**
+ * The side the host anchors the corner at, read off the frame's root: "left" where it sets
+ * `--cad-viewport-corner-left` (Codex's views), else "right".
+ * @param {Element | null} element
+ */
+export function viewCornerSide(element) {
+  if (!element || typeof getComputedStyle !== "function") return "right";
+  const left = getComputedStyle(element).getPropertyValue("--cad-viewport-corner-left").trim();
+  return left && left !== "auto" ? "left" : "right";
+}
+/** Which way a corner control's tooltip and menu open, away from the corner's edge, and how a menu aligns on it. */
+export function viewCornerAway(side) {
+  return side === "left" ? { side: "right", align: "start" } : { side: "left", align: "end" };
+}
+/** A corner control that needs the side to draw: `children(side)`. */
+export function ViewCornerSided({ children }) {
+  return children(useViewCornerSide());
+}
 
 /** The corner's one surface: the strip's (`FLOATING_CHROME_SURFACE_CLASS`) without its border and shadow. */
 export const VIEW_CORNER_SURFACE_CLASS = FLOATING_CHROME_FILL_CLASS;
@@ -40,20 +71,24 @@ export function ViewCornerTile({ children }) {
   return <div className={VIEW_CORNER_TOOLBAR_CLASS} data-view-corner-tile="">{children}</div>;
 }
 
-/** The corner's column: its buttons stacked, right-aligned, a gap between them. */
+/** The corner's column: its buttons stacked, aligned on the corner's edge, a gap between them. */
 export function ViewCornerColumn({ children, style, className }) {
-  return <div className={cn("pointer-events-auto absolute z-20 flex flex-col items-end", className)}
+  const side = useViewCornerSide();
+  return <div className={cn("pointer-events-auto absolute z-20 flex flex-col", side === "left" ? "items-start" : "items-end", className)}
     style={{ gap: VIEWPORT_CORNER_GAP_PX, ...style }} data-view-corner="">{children}</div>;
 }
 
 /**
- * The corner's bottom row, left of the pill or the cube: its controls side by side, right-aligned at a
- * fixed place (`VIEWPORT_CORNER_ROW_POSITION`), each of a fixed width, so none moves when the pill
- * becomes the cube.
+ * The corner's bottom row, beside the pill or the cube: its controls side by side, from a fixed place
+ * by the pill (`viewCornerLayout`'s `row`), each of a fixed width, so none moves when the pill becomes
+ * the cube. Its controls are given in the order they read from the corner's far side inwards (at the
+ * bottom-right, left to right); at the bottom-left the row runs the other way, so it reads from the
+ * corner outwards there too.
  */
 export function ViewCornerRow({ children, style = null }) {
-  return <div className="pointer-events-auto absolute z-20 flex flex-row items-center" style={{ gap: VIEWPORT_CORNER_GAP_PX, ...VIEWPORT_CORNER_ROW_POSITION, ...style }}
-    data-view-corner="" data-view-corner-row="">{children}</div>;
+  const side = useViewCornerSide();
+  return <div className="pointer-events-auto absolute z-20 flex items-center" style={{ gap: VIEWPORT_CORNER_GAP_PX, ...viewCornerLayout(side).row, ...style }}
+    data-view-corner="" data-view-corner-row="" data-side={side}>{children}</div>;
 }
 
 // A switch's segments: the strip's buttons drawn out to share its width, words in place of a glyph.
@@ -79,19 +114,25 @@ export function ViewCornerSwitch({ label, options, value, onChange, disabled = f
 
 /**
  * A 3D view's column over the cube: what it is displayed as (`display`, the view's own Display button,
- * where it has one), Projection, then Home nearest the cube, the view it opened with. Every 3D view's,
- * a renderer's own frame or a flat view's frame showing a 3D view alike, so they never differ.
+ * where it has one: a node, or `display(away)` given which way its tooltip and menu open,
+ * `viewCornerAway`), Projection, then Home nearest the cube, the view it opened with. Every 3D view's,
+ * a renderer's own frame or a flat view's frame showing a 3D view alike, so they never differ. It stands
+ * over the cube wherever the host anchors it (`viewCornerLayout`'s `cubeColumn`).
  *
- * @param {{ projection: { value: string, onChange(value: string): void }, onHome(): void, display?: import("react").ReactNode,
- *   disabled?: boolean, style: object }} props
+ * @param {{ projection: { value: string, onChange(value: string): void }, onHome(): void,
+ *   display?: import("react").ReactNode | ((away: { side: string, align: string }) => import("react").ReactNode),
+ *   disabled?: boolean }} props
  */
-export function ViewCubeColumn({ projection, onHome, display = null, disabled = false, style }) {
+export function ViewCubeColumn({ projection, onHome, display = null, disabled = false }) {
   const { t } = useI18n();
-  return <ViewCornerColumn style={style}>
-    {display ? <ViewCornerTile>{display}</ViewCornerTile> : null}
-    <ViewCornerTile><ProjectionToggle disabled={disabled} projection={projection} tooltipSide="left" className={VIEW_CORNER_BUTTON_CLASS} /></ViewCornerTile>
+  const side = useViewCornerSide();
+  const away = viewCornerAway(side);
+  const shown = typeof display === "function" ? display(away) : display;
+  return <ViewCornerColumn style={viewCornerLayout(side).cubeColumn}>
+    {shown ? <ViewCornerTile>{shown}</ViewCornerTile> : null}
+    <ViewCornerTile><ProjectionToggle disabled={disabled} projection={projection} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} /></ViewCornerTile>
     <ViewCornerTile>
-      <ToolbarButton label={t("view.home")} tooltipSide="left" disabled={disabled} className={VIEW_CORNER_BUTTON_CLASS} onClick={onHome} data-view-home="">
+      <ToolbarButton label={t("view.home")} tooltipSide={away.side} disabled={disabled} className={VIEW_CORNER_BUTTON_CLASS} onClick={onHome} data-view-home="">
         <House aria-hidden="true" />
       </ToolbarButton>
     </ViewCornerTile>

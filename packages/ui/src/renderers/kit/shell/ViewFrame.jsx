@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
@@ -7,6 +7,7 @@ import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
+import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
@@ -31,7 +32,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   fit keeps clear of) and `--cad-top-right-left` (where the top-right column starts, clear of the
  *   strip), again whenever the column, the stage or what stands in the top-right corner changes.
  * - **The top-right** (`ViewportTopRight`): the host's notice once the view is up, and `quickEdit`.
- * - **The corner** (`corner`, the view's bottom-right), **the bottom centre** (`bottomCentre`, a
+ * - **The corner** (`corner`, the view's bottom-right, or its bottom-left where the host anchors the
+ *   cube there: the side read off the root with the measure, `viewCornerSide`, and said to everything in
+ *   the corner, `ViewCornerSideProvider`), **the bottom centre** (`bottomCentre`, a
  *   playbar), the renderer's `underlay` (between the canvas and the chrome: Preview's view) and its
  *   `overlays` (over everything but the cards: Preview's cover).
  * - **Loading** (`loading`, `ViewerLoadingOverlay`'s) and **the alert card** (`alert`,
@@ -72,6 +75,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   const root = rootRef ?? ownRoot;
   const stageRef = useRef(null);
   const topControls = useRef(null);
+  const [cornerSide, setCornerSide] = useState("right");
 
   // ---- the panel: docked, open at first in a wide view; none on a phone --------------------------
   const sided = Boolean(panel && (panel.sections || panel.tabs?.length)) && !mobile;
@@ -89,6 +93,9 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     const controls = topControls.current, stage = stageRef.current, frame = root.current;
     if (!controls || !stage || !frame) return undefined;
     const measure = () => {
+      // Where the host anchors the corner (its variables are its own, on an ancestor), read as the
+      // rest is: whenever the view's box or what stands in it changes.
+      setCornerSide(viewCornerSide(frame));
       // The rows with something in them: an empty one (no update under way) still takes the
       // column's gap, which would leave a wider gap under the strip than at its sides.
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
@@ -150,7 +157,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
               {toolStack}
             </StripTouchProvider>
           </div>}
-          {toolsHidden || previewing || mobile ? null : corner}
+          {toolsHidden || previewing || mobile ? null : <ViewCornerSideProvider value={cornerSide}>{corner}</ViewCornerSideProvider>}
           {/* The host's notice once the view is up, and Quick Edit under it — hidden, not unmounted,
               while the view loads: a note being written outlives a reload. On a phone Quick Edit is a
               bottom sheet, portalled out of this corner. */}

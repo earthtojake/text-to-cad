@@ -45,3 +45,33 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   view.unmount();
   expect(listeners.size).toBe(0);
 });
+
+// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`, Codex's views) moves every
+// corner control there, as one group, the bottom row reading from the corner outwards.
+it('every corner control follows the corner the host anchors the cube at', async () => {
+  const { ViewCornerRow, ViewCornerSideProvider, ViewCubeColumn, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
+  const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
+  const corner = (side: string) => {
+    const view = render(<ViewCornerSideProvider value={side}>
+      <ViewCornerRow><span /></ViewCornerRow>
+      <ViewCubeColumn projection={{ value: 'orthographic', onChange: () => {} }} onHome={() => {}} />
+      <ZoomControl zoom={zoom} />
+    </ViewCornerSideProvider>);
+    const style = (selector: string) => (view.container.querySelector(selector) as HTMLElement).style;
+    const placed = (selector: string) => [style(selector).left, style(selector).right];
+    const column = [...view.container.querySelectorAll('[data-view-corner]')].find(el => !el.hasAttribute('data-view-corner-row')) as HTMLElement;
+    const result = { pill: placed('[data-zoom-pill]'), row: placed('[data-view-corner-row]'), order: style('[data-view-corner-row]').flexDirection,
+      column: [column.style.left, column.style.right] };
+    view.unmount();
+    return result;
+  };
+  expect(corner('right')).toEqual({ pill: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)'],
+    row: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 132px)'], order: 'row', column: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 20px)'] });
+  expect(corner('left')).toEqual({ pill: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto'],
+    row: ['calc(var(--cad-viewport-corner-left, 0px) + 132px)', 'auto'], order: 'row-reverse', column: ['calc(var(--cad-viewport-corner-left, 0px) + 20px)', 'auto'] });
+  const host = document.body.appendChild(document.createElement('div'));
+  expect(viewCornerSide(host)).toBe('right');
+  host.style.setProperty('--cad-viewport-corner-left', '2px');
+  expect(viewCornerSide(host)).toBe('left');
+  host.remove();
+});

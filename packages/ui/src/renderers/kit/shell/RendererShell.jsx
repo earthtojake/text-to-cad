@@ -14,7 +14,6 @@ import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
 import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
 import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
 import { VIEW_CORNER_BUTTON_CLASS, ViewCubeColumn } from "./ViewCorner.jsx";
-import { VIEWPORT_CUBE_COLUMN_POSITION } from "./viewportLayout.js";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
@@ -393,10 +392,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} prompt={frame.quickEditPrompt}
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
   // The cube's column (`ViewCorner.jsx`): Display, Projection, then Home, nearest the cube.
-  const corner = failed || !shell.previewable ? null : <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION}
+  const corner = failed || !shell.previewable ? null : <ViewCubeColumn
     projection={frame.projection} onHome={() => frame.viewerRef.current?.goHome?.()} disabled={shell.idle}
-    display={<DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid}
-      className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="left" side="left" align="end" />} />;
+    display={away => <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid}
+      className={VIEW_CORNER_BUTTON_CLASS} tooltipSide={away.side} side={away.side} align="end" />} />;
   // The strip ends with Preview, after a rule; the view's own controls are the corner's, over the cube.
   // A phone has no corner: Projection, Display and the zoom are rows of its More, with Preview.
   const views = shell.previewable && !previewing ? [...(mobile ? [

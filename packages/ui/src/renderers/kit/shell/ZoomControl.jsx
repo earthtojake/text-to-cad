@@ -9,7 +9,8 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
-import { VIEW_CORNER_BUTTON_CLASS, VIEW_CORNER_TOOLBAR_CLASS } from "./ViewCorner.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, VIEW_CORNER_TOOLBAR_CLASS, useViewCornerSide, viewCornerAway } from "./ViewCorner.jsx";
+import { viewCornerLayout } from "./viewportLayout.js";
 
 export { ZOOM_FACTOR };
 
@@ -25,6 +26,8 @@ export { ZOOM_FACTOR };
  * tells it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders. Its
  * digits are tabular and its width is fixed, so the pill never shifts as it changes.
  *
+ * It stands in the corner wherever the host anchors it (`viewCornerLayout`'s `pill`), unless `style` places it.
+ *
  * @param {{ zoom: ViewZoom, style?: object }} props
  * @typedef {{ read(): number, subscribe(listener: () => void): () => void, zoomBy(factor: number): void, fit(): void,
  *   zoomTo100?: (() => void) | null, zoomToSelection?: (() => void) | null, selectionAvailable?: boolean }} ViewZoom
@@ -34,7 +37,8 @@ export default function ZoomPill({ zoom, style = null }) {
   const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   const percent = useZoomPercent(zoom);
   const shown = `${Math.round(percent).toLocaleString()}%`;
-  return <div className={cn("absolute z-20", VIEW_CORNER_TOOLBAR_CLASS)} style={style ?? undefined} data-zoom-pill="">
+  const side = useViewCornerSide();
+  return <div className={cn("absolute z-20", VIEW_CORNER_TOOLBAR_CLASS)} style={style ?? viewCornerLayout(side).pill} data-zoom-pill="">
     <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={VIEW_CORNER_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>
@@ -45,7 +49,7 @@ export default function ZoomPill({ zoom, style = null }) {
           <span className="w-full text-center">{shown}</span>
         </ToolbarButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="end" sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
+      <DropdownMenuContent side="top" align={viewCornerAway(side).align} sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
         className={cn(FLOATING_SURFACE_CLASS, "w-48 data-[state=closed]:animate-none!")}>
         <ZoomMenuItems zoom={zoom} />
       </DropdownMenuContent>
