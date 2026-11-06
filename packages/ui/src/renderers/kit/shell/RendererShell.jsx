@@ -373,7 +373,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   frame.zoomKeys.current = zoom;
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
-    {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} active={frame.selecting} viewerRef={frame.viewerRef} />}
+    {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} viewerRef={frame.viewerRef} />}
     {/* The ink Select has picked, its bar: restyle, fill, delete. */}
     {frame.selecting && frame.annotation.selected.length ? <AnnotationSelectionBar annotation={frame.annotation} colorScheme={colorScheme} runtimeRef={viewport.runtimeRef}
       viewerReadyTick={viewport.viewerReadyTick} onDelete={frame.deletePicked} disabled={viewerLoading || !scene} /> : null}
@@ -471,7 +471,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       speed={frame.previewOrbitSpeed || 1} onSpeedChange={frame.setPreviewOrbitSpeed}
       onClose={() => setPreviewPanelOpen(false)} render={frame.previewSettings} /> };
   const body = (
-    <ViewFrame rootRef={frame.hostRef} className={pointing ? "cursor-pointer" : ""} rootHandlers={rootHandlers} onCanvasPress={pressCanvas}
+    <ViewFrame rootRef={frame.hostRef} className={pointing ? "cursor-pointer" : ""} rootHandlers={rootHandlers} onCanvasPress={pressCanvas} selecting={frame.selecting}
       stageColor={frame.stageColor} file={frame.modelKey} mobile={mobile} compact={compact} chromeHidden={chromeHidden} previewing={previewing}
       preview={preview} tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}

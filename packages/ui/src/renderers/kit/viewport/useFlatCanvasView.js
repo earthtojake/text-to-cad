@@ -42,6 +42,7 @@ import {
 } from "@cad/core/lib/drawing2d/transform.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "./pixelRatio.js";
 import { createWheelGesture } from "./wheelGesture.js";
+import { doubleClickFits } from "./dom.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 
 /** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
@@ -73,7 +74,7 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
  *   release are the tool's too, and the view does not pan.
  * @param {(point: { x: number, y: number }, event: MouseEvent) => boolean | void} [options.onDoubleTap]  Asked first what a
- *   double-click is (a schematic's sheet symbol entered, answering true); else it fits.
+ *   double-click is (a schematic's sheet symbol entered, answering true); else, under Select, it fits (`doubleClickFits`).
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
  * @param {boolean} [options.orbitPan]  The 3D views' pans: a right-button drag, and a primary drag with Ctrl, Cmd or Shift.
  * @param {(bounds: readonly number[], width: number, height: number, options: { top: number }) => object} [options.fitBox]
@@ -387,7 +388,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onDoubleClick = (event) => {
       event.preventDefault();
       if (doubleTapRef.current?.(local(event), event) === true) return;
-      fit();
+      // A fit is Select's double-click, as in every view: under Pencil, Shapes or Measure it is theirs.
+      if (doubleClickFits(canvas)) fit();
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);

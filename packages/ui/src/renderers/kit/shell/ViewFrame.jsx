@@ -42,6 +42,8 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   handed (`contextMenu`: `ViewportContextMenu`'s props).
  * - A press on a canvas focuses the frame, so the view's keys are its own (`onCanvasPress` is told
  *   after).
+ * - **Select in hand** (`selecting`), said on the root (`data-cad-selecting`): a double-click fits only
+ *   then, in every view (`viewport/dom.js`'s `doubleClickFits`, which the canvas hooks read).
  *
  * `preview`: Preview's chrome (`PreviewChrome`'s `active`, `name`, `controls`, `panel`, `panelOpen`
  * and `idle`), which wraps exactly the strip's column, the top-right and the corner. While it is
@@ -59,13 +61,14 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  * @param {boolean} props.mobile
  * @param {boolean} props.compact  A compact host: the picture alone.
  * @param {boolean} props.chromeHidden  The view loads, or has failed to: none of the frame's own chrome.
+ * @param {boolean} [props.selecting]  Select is the tool in hand (or the view has no tools).
  * @param {object[]} props.tools
  * @param {object[]} [props.views]
  * @param {{ kind: string, label: string, searchLabel: string, tabs?: object[], sections?: import("react").ReactNode,
  *   detail?: import("react").ReactNode } | null} [props.panel]
  */
 export default function ViewFrame({ rootRef = null, surface = null, className = "", rootHandlers = null, stageColor = undefined,
-  canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, previewing = false,
+  canvasBoxRef = null, busy = undefined, children, underlay = null, overlays = null, file, mobile, compact, chromeHidden, previewing = false, selecting = false,
   preview = null, tools, views = [], toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
   layout, onLayoutChange, corner = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null }) {
@@ -131,7 +134,7 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
 
   return (
     <div ref={root} className={cn("relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground", className)}
-      data-slot="cad-file-view" data-cad-surface="" {...surface} tabIndex={-1} {...rootHandlers}
+      data-slot="cad-file-view" data-cad-surface="" data-cad-selecting={selecting ? "" : undefined} {...surface} tabIndex={-1} {...rootHandlers}
       onPointerDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest("canvas")) return;
         event.currentTarget.focus({ preventScroll: true });

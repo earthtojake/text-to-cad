@@ -36,11 +36,11 @@ const SCALE = VIEWER_SCENE_SCALE.CAD;
  *   layout: object, outline: number[][][] | null, display: object, colorScheme: "light" | "dark",
  *   opening: { camera: object, then: object | null }, projection: string,
  *   pickAt(located: object): object | null, onTap(point: object, event: object): void, onHover(point: object | null, event: object | null): void,
- *   picking: boolean, selecting: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
+ *   picking: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
  *   onCamera(camera: object, side: "top" | "bottom"): void, onShown(): void }} props
  */
 export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, display, colorScheme, opening, projection, pickAt, onTap, onHover,
-  picking, selecting, overlay, onCamera, onShown }) {
+  picking, overlay, onCamera, onShown }) {
   const thickness = BOARD_THICKNESS_MM;
   const live = useRef(null);
   live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme };
@@ -215,9 +215,9 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       <PointerPick viewport={viewport} scene={stage} enabled={picking} sameHit={() => false}
         onPick={(_hit, { multiSelect }, pointer) => live.current.onTap({ x: pointer.x, y: pointer.y }, { shiftKey: multiSelect, pointerType: "mouse" })}
         onHover={(_hit, pointer) => live.current.onHover(pointer ? { x: pointer.x, y: pointer.y } : null, pointer ? { pointerType: "mouse" } : null)} />
-      <DoubleClickFit viewport={viewport} scene={stage} active={selecting} viewerRef={viewerRef} />
+      <DoubleClickFit viewport={viewport} scene={stage} viewerRef={viewerRef} />
     </>;
-  }, [stage, picking, selecting, viewerRef]);
+  }, [stage, picking, viewerRef]);
   return <div ref={frameRef} className="absolute inset-0 z-0" data-board-3d="">
     <ShellViewport ref={viewerRef} scene={stage} modelKey={modelKey} sceneScaleMode={SCALE} perspective={initial} {...props}
       viewCube onPerspectiveChange={perspectiveChange} onPresentationChange={presentation} onCameraSettled={requestPaint}>{children}</ShellViewport>

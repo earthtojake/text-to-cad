@@ -863,7 +863,7 @@ over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's 
 | Select: a drag | turns the view, as in every 3D view; naming an area is the 2D view's, and an area named stays selected and drawn |
 | Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other |
 | Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
-| Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits |
+| Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw |
 | Front \| Back | turns the camera over about the board's upright axis, eased; follows the camera when it is turned over by hand |
 | Zoom pill | replaced by the cube; the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) are the 3D views' |
@@ -1221,7 +1221,10 @@ selected.
 Zoom to Fit recenters and frames the whole original model at the current angle, in the room under
 the tool strip and centred in it, as a flat view's fit keeps clear of the strip (every 3D fit does:
 Home, the first frame, a board's 3D view);
-Zoom to Selection frames the selection and is unavailable without one. Both are
+Zoom to Selection frames the selection and is unavailable without one. A double-click on empty space fits
+only while Select is in hand, in every view, 2D or 3D: under Pencil, Shapes or Measure a double-click is
+the tool's (the frame says Select is up, `data-cad-selecting`, and `kit/viewport/dom.js`'s
+`doubleClickFits` is the one rule the canvases keep). Both are
 every view's context-menu items and the zoom's menu's (below); the live `resetCamera` command takes
 the same fit path.
 
@@ -1230,7 +1233,7 @@ pill (`kit/shell/ZoomControl.jsx`), − and + either side of the zoom as a perce
 a fixed width, and the percentage, pressed, its menu — Zoom in, Zoom out (half again, and back), Zoom to
 100%, then Zoom to fit and Zoom to selection, each with its key, as Figma's: ⌘+ and ⌘- (Ctrl+= and
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
-tools do not: its corner's Home, F, a double-click on empty space and the view's menu frame it, and the
+tools do not: its corner's Home, F, a double-click on empty space under Select and the view's menu frame it, and the
 same keys zoom it. On a phone the zoom is More's Zoom submenu. **100% is the model as authored,
 framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`) at the camera's angle — a
 fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which

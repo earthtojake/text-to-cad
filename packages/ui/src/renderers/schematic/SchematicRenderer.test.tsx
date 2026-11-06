@@ -193,6 +193,25 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   view.dispose();
 });
 
+// A double-click fits under Select alone, as in every view: under Measure (or Pencil, Shapes) it is the tool's.
+it('a double-click on bare paper fits under Select, and under Measure leaves the view where it is', async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const fitted = { ...frames.at(-1)! };
+  await zoomIn(pane);
+  const zoomed = { ...frames.at(-1)! };
+  await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getByRole('button', { name: /^Measure/ }));
+  fireEvent.dblClick(canvasOf(pane), point([20, 20]));
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(frames.at(-1)!.scale).toBe(zoomed.scale);
+  await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getAllByRole('button', { name: /^Select/ })[0]);
+  fireEvent.dblClick(canvasOf(pane), point([20, 20]));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
+  view.dispose();
+});
+
 it('a press picks what is under it and reveals its row; a net from the Nets lights, its pins under the lists; a part on another sheet shows that sheet', async () => {
   const user = userEvent.setup();
   const view = await open();

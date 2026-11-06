@@ -665,7 +665,7 @@ function BoardSurface({ view, data }) {
       {solid ? <Suspense fallback={null}>
         <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
           display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
-          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating} selecting={toolMode === BOARD_TOOL.SELECT}
+          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating}
           overlay={overlay} onCamera={onCamera3d} onShown={() => setShown3d(true)} />
       </Suspense> : null}
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}

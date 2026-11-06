@@ -103,6 +103,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   </>;
   return (
     <ViewFrame surface={surface} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden}
+      selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)}
       tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} toolRow={toolRow} status={status}
       panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
       corner={cornerNode} notice={notice}
