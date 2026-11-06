@@ -71,11 +71,15 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   useEffect(() => () => stage.dispose(), [stage]);
 
   // ---- the parts: bodies where their models are, blocks where they are missing ------------------
-  const bodies = useMemo(() => createBoardParts(THREE, { thickness, theme: colorScheme }), [stage]);
+  // Held across the board's revisions (a new plot is a new stage): the models baked stay, and a revision
+  // that moved a part moves its matrix; only the stage they stand on is new.
+  const bodies = useMemo(() => createBoardParts(THREE, { thickness, theme: colorScheme }), [thickness]);
   bodiesRef.current = bodies;
+  useEffect(() => () => bodies.dispose(), [bodies]);
   useEffect(() => {
     stage.object3D.add(bodies.object3D);
-    return () => { stage.object3D.remove(bodies.object3D); bodies.dispose(); };
+    render();
+    return () => { stage.object3D.remove(bodies.object3D); };
   }, [stage, bodies]);
   const loader = useMemo(() => createModelLoader(THREE, {
     open: (document, options) => live.current.client.engineDocument(document, options),

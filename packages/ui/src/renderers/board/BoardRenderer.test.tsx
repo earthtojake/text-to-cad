@@ -106,13 +106,18 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); while 
 /** One pane: a host, a workspace with one board, a live binding, and the tab. */
 async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
   const file = `/models/${name}`;
+  let revision = 'one';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
+    // A model the models table names, opened by its document id, and its (empty) structure.
+    const opened = init?.method === 'POST' ? JSON.parse(String(init.body || '{}')).id : null;
+    if (url.pathname.endsWith('/api/v1/documents') && opened) return json({ id: opened, kind: 'step', api: `/api/v1/documents/step/${opened}` }, 201);
+    if (url.pathname.includes('/api/v1/documents/step/') && url.pathname.endsWith('/structure')) return json({ prototypes: [], instances: [] });
     if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
       return json({ id: 'board', kind: 'kicad_pcb', api: '/api/v1/documents/kicad_pcb/board' }, 201);
     }
     if (url.pathname.endsWith('/api/v1/documents')) {
-      return json({ documents: [{ entry: { kind: 'kicad_pcb', file, url: `/${name}`, hash: 'one', bytes: 4096 }, revision: 'one' }] });
+      return json({ documents: [{ entry: { kind: 'kicad_pcb', file, url: `/${name}`, hash: revision, bytes: 4096 }, revision }] });
     }
     if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
     if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/plot')) return readPlot();
@@ -146,7 +151,9 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
   render(strict ? <StrictMode><Pane /></StrictMode> : <Pane />);
   const pane = screen.getByTestId('pane');
   return { pane, get controller() { return controller; }, get state() { return latest; }, scheme: (next: 'light' | 'dark') => act(() => setScheme(next)),
-    dispose: () => client.dispose() };
+    dispose: () => client.dispose(), fetch,
+    // The board saved again: a new revision, read as the catalog's next answer says.
+    saved: async () => { revision = `${revision}+`; await act(() => client.refresh()); } };
 }
 
 const opened = async (pane: HTMLElement) => {
@@ -1076,5 +1083,25 @@ it("a part's card says its 3D model, or why it has none, and the Parts end with 
   expect(row.textContent).toBe('3D models1');
   fireEvent.click(within(row).getByRole('button', { name: 'Hide 3D models' }));
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.models).toBe(false));
+  dispose();
+});
+
+it("in 3D each part's model is opened once by its document id, and a revision of the board keeps it rather than asking again", async () => {
+  const id = 'b4ac0e70-0000-4000-8000-000000000002';
+  const view = await open('blinky.kicad_pcb', { models: {
+    '${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl': { file: 'R_0603_1608Metric.step', document: id, api: `/api/v1/documents/step/${id}`, stamp: '1-2' } } });
+  const { pane, dispose, fetch } = view;
+  await opened(pane);
+  fireEvent.click(pane.querySelector('[data-board-dimension="3d"]')!);
+  const reads = (end: string) => fetch.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith(end)).length;
+  await waitFor(() => expect(reads(`/step/${id}/structure`)).toBe(1));
+  const plots = reads('/kicad_pcb/board/plot');
+  await view.saved();
+  await waitFor(() => expect(reads('/kicad_pcb/board/plot')).toBeGreaterThan(plots));
+  await waitFor(() => expect(reads('/kicad_pcb/board/models')).toBeGreaterThan(1));
+  await waitFor(() => expect(pane.querySelector('[data-board-surface] [aria-busy="false"]')).not.toBeNull());
+  // The revision's board in 3D holds the model, placed, and asked for nothing more.
+  await waitFor(() => expect(pane.querySelector('[data-board-3d][data-board-models="1"][data-board-models-waiting="0"]')).not.toBeNull());
+  expect(reads(`/step/${id}/structure`)).toBe(1);
   dispose();
 });
