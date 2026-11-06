@@ -132,26 +132,49 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("first 300", result.stderr)
 
+    def released(self, version: str) -> None:
+        """main released at ``version``, its tag the latest, and the feature branch up to date with it."""
+        self.release_on_main(version)
+        self.git("switch", "feature")
+        self.git("merge", "--no-edit", "main")
+
     def migration_guide(self) -> None:
         self.git("switch", "feature")
         (self.root / "docs" / "migrations").mkdir(parents=True)
         (self.root / "docs" / "migrations" / "migrating-0.5-to-0.6.md").write_text("Renamed.\n", encoding="utf-8")
         self.commit("A migration guide")
 
-    def test_a_patch_release_may_carry_no_migration_guide_a_minor_may(self) -> None:
-        # A patch release installs itself on every device (automatic updates take patches only).
+    def test_below_1_0_a_migration_guide_takes_a_minor_release(self) -> None:
+        # Below 1.0 a patch release installs itself on every device; a minor or major one waits.
+        self.released("0.10.4")
         self.migration_guide()
-        self.bump_feature("0.5.1")
+        self.bump_feature("0.10.5")
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("is a patch release, which installs itself on every device", result.stderr)
+        self.assertIn("VERSION 0.10.5 is a patch release, which installs itself on every device", result.stderr)
         self.assertIn("docs/migrations/migrating-0.5-to-0.6.md", result.stderr)
-        self.git("switch", "main")
-        self.git("reset", "--hard", "v0.5.0")
-        self.bump_feature("0.6.0")
+        self.assertIn("a minor release below 1.0: scripts/release/bump-version.sh minor", result.stderr)
+        for version in ("0.11.0", "1.1.0"):
+            self.bump_feature(version)
+            result = self.check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"releases {version}", result.stdout)
+
+    def test_from_1_0_a_migration_guide_takes_a_major_release(self) -> None:
+        # From 1.0 a patch or minor release installs itself on every device; a major one waits.
+        self.released("1.2.3")
+        self.migration_guide()
+        for version, part in (("1.2.4", "patch"), ("1.3.0", "minor")):
+            self.bump_feature(version)
+            result = self.check()
+            self.assertNotEqual(result.returncode, 0, version)
+            self.assertIn(f"VERSION {version} is a {part} release, which installs itself on every device",
+                          result.stderr)
+            self.assertIn("a major release from 1.0: scripts/release/bump-version.sh major", result.stderr)
+        self.bump_feature("2.0.0")
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("releases 0.6.0", result.stdout)
+        self.assertIn("releases 2.0.0", result.stdout)
 
     def test_it_refuses_anything_but_a_merge_commit(self) -> None:
         result = subprocess.run(
@@ -160,6 +183,38 @@ class PrVersionGuardTests(unittest.TestCase):
             env={**os.environ, "GITHUB_REPOSITORY": REPOSITORY},
         )
         self.assertNotEqual(result.returncode, 0)
+
+
+# Releases on both sides of 1.0, and across it.
+VERSIONS = ("0.0.1", "0.9.9", "0.10.4", "0.10.5", "0.11.0", "0.11.12", "1.0.0", "1.0.1", "1.2.3", "1.2.4",
+            "1.3.0", "1.9.3", "2.0.0", "2.1.0", "10.0.0")
+
+
+class TheGuardKeepsTheUpdatersRuleTests(unittest.TestCase):
+    """Version Check's copy of the rule (release-tags.sh: the release scripts import nothing of the
+    packages, and its job installs no Python) answers as the automatic updater's
+    (cad_server.auto_updates.takes): a release refused a migration guide is exactly one a device takes
+    by itself."""
+
+    def test_every_pair_of_releases_bumps_and_installs_itself_as_the_updater_says(self) -> None:
+        from cad_server import auto_updates
+
+        pairs = [(have, want) for have in VERSIONS for want in VERSIONS]
+        script = ('source "$1"; while read -r have want; do '
+                  'bump="$(version_bump "$have" "$want")" || bump=none; '
+                  'if version_installs_itself "$have" "$want"; then takes=yes; else takes=no; fi; '
+                  'echo "$have $want $bump $takes"; done')
+        result = subprocess.run(
+            ["bash", "-c", script, "bash", str(repo_path("scripts/release/release-tags.sh"))],
+            input="".join(f"{have} {want}\n" for have, want in pairs),
+            text=True, capture_output=True, check=True,
+        )
+        answered = {(have, want): (bump, takes)
+                    for have, want, bump, takes in (line.split() for line in result.stdout.splitlines())}
+        self.assertEqual(sorted(answered), sorted(pairs))
+        for have, want in pairs:
+            expected = (auto_updates.bump(have, want) or "none", "yes" if auto_updates.takes(have, want) else "no")
+            self.assertEqual(answered[have, want], expected, (have, want))
 
 
 if __name__ == "__main__":
