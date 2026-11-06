@@ -25,9 +25,14 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
+// The value of the slider control (`SliderField.jsx`): no border, outline or ring in any state; plain
+// right-aligned text at rest, the view's corner buttons' soft wash under the pointer and the keyboard.
+const FILE_SHEET_QUIET_INPUT_CLASSES = [
+  "m-0 box-border min-w-0 shrink-0 rounded-sm border-0 bg-transparent px-1 text-right text-tiny leading-4 tabular-nums text-foreground",
+  "shadow-none outline-none ring-0 theme-none transition-colors hover:bg-foreground/[0.09] focus:bg-foreground/[0.09] focus-visible:ring-0",
+  "disabled:opacity-50 disabled:hover:bg-transparent"
+].join(" ");
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
-// A joint's slider: in its row's 16px band, filled from the joint's rest (`Slider`'s `origin`).
-export const FILE_SHEET_PRECISION_SLIDER_CLASSES = "h-4";
 
 /** A section heading: 24px, regular 11px, never a disclosure (`docs/settings-ui.md`). */
 export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-6 min-w-0 items-center gap-2 px-2 text-tiny font-normal leading-4 text-foreground";
@@ -178,7 +183,10 @@ export function FileSheetValueInput({
   disabled = false,
   ariaLabel,
   inputMode = "decimal",
-  className
+  quiet = false,
+  className,
+  style,
+  ...props
 }) {
   const inputRef = useRef(null);
   const displayValue = String(value ?? "");
@@ -221,6 +229,7 @@ export function FileSheetValueInput({
 
   return (
     <input
+      {...props}
       ref={inputRef}
       type="text"
       inputMode={inputMode}
@@ -284,42 +293,13 @@ export function FileSheetValueInput({
         }
       }}
       className={cn(
-        FILE_SHEET_VALUE_BADGE_INPUT_CLASSES,
+        quiet ? FILE_SHEET_QUIET_INPUT_CLASSES : FILE_SHEET_VALUE_BADGE_INPUT_CLASSES,
         className
       )}
-      style={{ borderColor: editing ? "var(--ring)" : undefined }}
+      style={quiet ? style : { borderColor: editing ? "var(--ring)" : undefined, ...style }}
       aria-label={ariaLabel}
     />
   );
-}
-
-// The value box's width: as narrow as a joint's figure allows — an angle ("-102°", "0.00°") fits
-// five characters, a length with its unit ("0.00 mm") seven — so a unit is never cut off.
-const valueInputWidth = value => {
-  const length = String(value ?? "").length;
-  return length <= 5 ? "w-[calc(5ch+0.75rem)]" : length <= 7 ? "w-[calc(7ch+0.75rem)]" : "w-[calc(9ch+0.75rem)]";
-};
-
-/**
- * A slider row (a joint of Position), Figma's property row: its first line the joint's kind (`icon`:
- * a turn or a slide), its name, and its value at the right, a committed field with no box until the
- * pointer or the keyboard is on it (as wide as its figure and unit need, its figures tabular); its
- * second line the slider, under the name, the line its name starts on: the icon 12px, the name 4px
- * after it, as a tree row's glyph and name stand (`docs/settings-ui.md`). The
- * slider fills from the joint's rest to its value (`Slider`'s `origin`), so how far it is from rest
- * reads at a glance.
- */
-export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, icon = null, children }) {
-  return <div className="min-w-0 px-2" data-position-control="">
-    <div className="flex h-5 min-w-0 items-center gap-1">
-      {icon ? <span className="grid size-3 shrink-0 place-items-center text-muted-foreground [&_svg]:size-3" aria-hidden="true">{icon}</span> : null}
-      {label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span data-file-sheet-field-label=""
-        className="block min-w-0 flex-1 truncate text-tiny leading-4 text-foreground">{label}</span></TooltipHint> : <span className="flex-1" />}
-      {onValueCommit ? <FileSheetValueInput value={value} onValueCommit={onValueCommit} {...valueInputProps}
-        className={cn("-mr-1 h-5 border-transparent bg-transparent px-1 shadow-none hover:border-input dark:bg-transparent", valueInputWidth(value), valueInputProps?.className)} /> : null}
-    </div>
-    <div className={cn("min-w-0", icon && "pl-4")}>{children}</div>
-  </div>;
 }
 
 // An empty or info line. The one style for every in-sheet message.

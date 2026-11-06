@@ -394,7 +394,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     toolStack: frame.toolStack, onToolStackChange: frame.changeToolStack });
   if (frame.panelControl) frame.panelControl.current = previewing ? null : flat.control;
   const panelNode = sidebar && !toolsHidden ? <FlatPanel mode={flat.mode} open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
-    label={t("flatPanel.modelPanel")} searchLabel={t("flatPanel.searchModel")} searchPlaceholder={t("flatPanel.searchModelPlaceholder")}
+    label={t("flatPanel.modelPanel")} searchLabel={t("flatPanel.searchModel")}
     sections={sidebar} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
     onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).

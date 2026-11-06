@@ -74,7 +74,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
   const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, groupNamesByLink, meshPath, resource: { kind: 'workspace-file', path: '/work/arm.urdf' }, onOpenFile });
   return <>
     {/* In the view's panel, as it ships: its Links tab, searched by the panel's search box. */}
-    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" searchPlaceholder="Search"
+    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
       sections={<LinksSection robot={payload} components={components} parts={parts} selection={observed} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>}
       tab="tree" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     {chips.length ? <section aria-label="Reference details" data-references={JSON.stringify(references.map((reference: any) => reference.target.selectors))}>

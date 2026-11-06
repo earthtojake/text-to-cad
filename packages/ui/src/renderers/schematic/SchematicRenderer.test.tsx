@@ -135,7 +135,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   // The panel: one search over every tab, the Parts open first.
   const panel = pane.querySelector<HTMLElement>('[data-flat-panel]')!;
-  expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Parts, nets, sheets');
+  expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Search');
   expect(within(panel).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Hierarchy', 'false']]);
   fireEvent.click(within(panel).getByRole('tab', { name: 'Hierarchy' }));
   // The Hierarchy: the root by its file's name, Load under it, the root shown.

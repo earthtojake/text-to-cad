@@ -14,7 +14,7 @@ afterEach(cleanup);
 
 // As the shell draws it: the Position tab of the view's panel, open.
 const render = (controls: React.ReactElement) => mount(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
-  searchPlaceholder="Search" sections={<ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>}
+  sections={<ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>}
   tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
 const poseLabel = () => screen.getByRole('button', { name: /^Pose: / }).getAttribute('aria-label');
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;

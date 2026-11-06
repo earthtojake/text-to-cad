@@ -530,7 +530,7 @@ function SchematicSurface({ view, data }) {
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
   const detail = useSchematicDetail(index, selection, { onSelect: takeSelect, onShow: showSelectors, onFrame: frameSelectors });
   const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
-    searchPlaceholder: t("schematic.text.search_schematic_placeholder"), detail, tabs: [
+    detail, tabs: [
       { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") },
       ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}

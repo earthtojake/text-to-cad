@@ -1,5 +1,5 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { Eye, EyeOff, Focus } from 'lucide-react';
+import { Eye, EyeOff, Focus, X } from 'lucide-react';
 import { Button } from '@cad/ui/primitives/button';
 import { cn } from '@cad/ui/utils';
 import { TreeRowActions } from '@cad/ui/primitives/tree-row';
@@ -7,13 +7,13 @@ import { useControlUsage } from '../../usage/controls.js';
 import { useI18n } from "@cad/ui/i18n";
 
 // A row's actions show on hover (or keyboard focus) and stay shown while they are ON: an
-// isolated row keeps its lit Isolate, a hidden row its crossed-out eye, so what is isolated
-// or hidden can be read down the tree without hovering. Isolate is an assembly's; a single
+// isolated row's Isolate is its way out, an X, a hidden row keeps its crossed-out eye, so what is
+// isolated or hidden can be read down the tree without hovering. Isolate is an assembly's; a single
 // part has nothing to isolate it from.
 const REVEAL_ON_HOVER = 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100';
 
 /**
- * Whether a row's actions are showing without a hover — an isolated row's lit Isolate, a hidden
+ * Whether a row's actions are showing without a hover — an isolated row's X, a hidden
  * row's crossed-out eye — and how many of them there are, which is how much of the row's right end
  * they take (the row's `actions`): the row's name fades out under them (`ROW_NAME_UNDER_ACTIONS`),
  * never a backing drawn behind them.
@@ -39,10 +39,11 @@ export default function ModelPartActions({ node, controls, disabled }) {
   // the buttons, so the row reads in its own (hover) colour throughout.
   const persistent = focused || hidden;
   return <TreeRowActions persistent={persistent}>
-    {canIsolate && <TooltipHint content={focused ? t("tree.exitIsolate") : t("tree.isolate")}><Button variant="ghost" size="icon-xs" disabled={disabled || hidden} aria-label={isolateLabel} aria-pressed={focused}
-      className={cn('h-5 w-4', focused ? 'text-foreground' : cn('text-muted-foreground', REVEAL_ON_HOVER))}
+    {/* Isolated, the row's Isolate is the way out: an X, there the whole time, which leaves isolation. */}
+    {canIsolate && <TooltipHint content={focused ? t("tree.exitIsolate") : t("tree.isolate")}><Button variant="ghost" size="icon-xs" disabled={disabled || hidden} aria-label={isolateLabel}
+      className={cn('h-5 w-4', focused ? 'text-foreground' : cn('text-muted-foreground', REVEAL_ON_HOVER))} data-isolate-exit={focused ? '' : undefined}
       onClick={() => { if (!focused) usage.used('isolate'); return focused ? onUnfocusTreeNode?.(node.selectionId) : onFocusTreeNode(node.selectionId); }}>
-      <Focus className="size-3"/>
+      {focused ? <X className="size-3"/> : <Focus className="size-3"/>}
     </Button></TooltipHint>}
     <TooltipHint content={hidden ? t("tree.reveal") : t("tree.hide")}><Button variant="ghost" size="icon-xs" disabled={disabled || focused} aria-label={t(hidden ? "tree.revealNamed" : "tree.hideNamed", { name: node.label })}
       className={cn('h-5 w-4 text-muted-foreground', !hidden && REVEAL_ON_HOVER)}

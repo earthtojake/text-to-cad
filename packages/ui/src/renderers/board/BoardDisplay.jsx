@@ -5,12 +5,11 @@ import {
 } from "@cad/core/lib/plot2d/index.js";
 import { Checkbox } from "@cad/ui/primitives/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
-import { Slider } from "@cad/ui/primitives/slider";
 import { cn } from "@cad/ui/utils";
 import {
-  FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, FileSheetValueInput, parseFileSheetNumberInput
+  FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
-import { SUB_TOOLBAR_SLIDER_CLASS } from "../kit/tools/SubToolbar.jsx";
+import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { VIEW_CORNER_SURFACE_CLASS } from "../kit/shell/ViewCorner.jsx";
 
 /**
@@ -67,7 +66,7 @@ function Choice({ label, name, value, options, onChange, data }) {
   </FileSheetSettingRow>;
 }
 
-/** An opacity's row: shadcn's slider and its committed percentage, which a draft changes only on Enter or blur. */
+/** An opacity: the slider control, its committed percentage, which a draft changes only on Enter or blur. */
 function Opacity({ id, label, name, value, onChange }) {
   const { t } = useI18n();
   const commit = draft => {
@@ -75,13 +74,8 @@ function Opacity({ id, label, name, value, onChange }) {
     const next = parseFileSheetNumberInput(draft, { fallback: value * 100, min: 0, max: 100 }) / 100;
     if (next !== value) onChange(next);
   };
-  return <FileSheetSettingRow label={label} className={ROW_CLASS}>
-    <div className="contents" data-board-opacity={id}>
-      <Slider className={cn(SUB_TOOLBAR_SLIDER_CLASS, "px-1")} value={[value]} min={0} max={1} step={0.01}
-        thumbProps={{ "aria-label": name }} onValueChange={([next]) => onChange(next)} />
-      <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={percent(value)} onValueCommit={commit} className="h-6 w-11 shrink-0 px-1.5" />
-    </div>
-  </FileSheetSettingRow>;
+  return <SliderField data-board-opacity={id} label={label} name={name} value={value} min={0} max={1} step={0.01}
+    onValueChange={onChange} text={percent(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
 }
 
 /**

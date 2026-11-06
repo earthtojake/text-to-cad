@@ -1,11 +1,6 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { MoveHorizontal, RotateCw } from "lucide-react";
-import { cn } from "@cad/ui/utils";
-import { Slider } from "@cad/ui/primitives/slider";
-import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import {
-  FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
-} from "../kit/inspector/FileSheet.js";
+import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
+import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
@@ -143,38 +138,32 @@ const ControlRow = memo(function ControlRow({ control, value, rest, onValueChang
   };
 
   return (
-    <FileSheetSliderField
+    <SliderField
       label={label || t("position.joint")}
-      icon={isAngular(control) ? <RotateCw /> : <MoveHorizontal />}
-      value={formatControlValue(liveValue, control)}
-      onValueCommit={(nextValue) => {
+      name={label || t("position.jointValue")}
+      text={formatControlValue(liveValue, control)}
+      onTextCommit={(nextValue) => {
         // What is typed is in the field's unit (a slide's millimetres).
         commitValue(parseFileSheetNumberInput(nextValue, { fallback: liveValue * scale, min: min * scale, max: max * scale }) / scale);
       }}
-      valueInputProps={{ ariaLabel: t("position.valueIn", { name: label || t("position.joint"), unit: unitLabel }) }}
-    >
-        <TooltipHint content={t("position.range", { min: formatControlValue(min, control), max: formatControlValue(max, control) })}>
-          <Slider
-            className={cn(FILE_SHEET_PRECISION_SLIDER_CLASSES, "min-w-0")}
-            min={min}
-            max={max}
-            step={sliderStep}
-            value={[liveValue]}
-            origin={clampInputValue(rest, min, max, 0)}
-            onValueChange={(nextValue) => {
-              const next = clampInputValue(nextValue?.[0], min, max, liveValue);
-              if (controlValuesClose(next, pendingValueRef.current)) {
-                return;
-              }
-              setLiveValue(next);
-              holdLocalValueUntilParentSettles(next);
-              scheduleValueChange(next);
-            }}
-            onValueCommit={(nextValue) => { commitValue(nextValue?.[0]); }}
-            thumbProps={{ "aria-label": label || t("position.jointValue") }}
-          />
-        </TooltipHint>
-    </FileSheetSliderField>
+      textLabel={t("position.valueIn", { name: label || t("position.joint"), unit: unitLabel })}
+      hint={t("position.range", { min: formatControlValue(min, control), max: formatControlValue(max, control) })}
+      min={min}
+      max={max}
+      step={sliderStep}
+      value={liveValue}
+      origin={clampInputValue(rest, min, max, 0)}
+      onValueChange={(nextValue) => {
+        const next = clampInputValue(nextValue, min, max, liveValue);
+        if (controlValuesClose(next, pendingValueRef.current)) {
+          return;
+        }
+        setLiveValue(next);
+        holdLocalValueUntilParentSettles(next);
+        scheduleValueChange(next);
+      }}
+      onValueCommit={(nextValue) => { commitValue(nextValue); }}
+    />
   );
 });
 
@@ -215,7 +204,7 @@ export default function PositionControls({ pose }) {
   const { t } = useI18n();
   if (!pose.controls.length) return <FileSheetStatusText className="py-2">{t("position.noJoints")}</FileSheetStatusText>;
   return (
-    <div className="space-y-2 pb-2 pt-0.5">
+    <div className="space-y-1 pb-2 pt-0.5">
       {/* A pose is a way of SETTING the controls, so it leads them: Default for any robot, the
           named states where an SRDF declares them. */}
       <PoseGroupStateRow pose={pose} />

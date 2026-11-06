@@ -448,11 +448,11 @@ under the strip, centred, 8px below it, on the strip's surface, its buttons the 
 thin rule. It stays up for as long as its tool does, and has no heading: the tool's lit
 button above names it. Explode's and Clip's rows are the same component in a popover under their
 own tile (`model-effects/ModelTools.jsx`'s `EffectPopover`, shadcn's Popover as it ships, the row
-bringing its own surface), never under the strip: one shape — what leads
-the slider, the slider, its value right beside it and only as wide as
-its text, the tool's actions (neither has any), then Reset, last, at the same spot in both,
-with no rules — and one width (`SLIDER_SUB_TOOLBAR_CLASS`, 202px; a phone's 320px). The slider
-takes the rest of the row. A tool's options never sit in the row as checkboxes, labels or
+bringing its own surface), never under the strip: one shape — the
+[slider control](#the-slider-control) on one line (what leads it, its slider, its value), the
+tool's actions (neither has any), then Reset, last, at the same spot in both, with no rules — and
+one width (`SLIDER_SUB_TOOLBAR_CLASS`, 202px; a phone's 320px). The slider takes the rest of the
+row. A tool's options never sit in the row as checkboxes, labels or
 buttons of their own, which would squeeze the slider: they are the dropdown of what leads it
 (Clip's axis).
 
@@ -582,13 +582,17 @@ drawing with nothing for its Layers to say (fewer than four layers drawn on and 
 reference: a flat pattern's CUT and BEND). The strip is for using tools, the panel for reading the
 file.
 
-- **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
-  the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; "Search the
-  drawing", "Layers, blocks"; "Search the model", "Search"; then **Hide
-  panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
+- **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border), its
+  placeholder "Search" in every file, its accessible name what it searches ("Search the board",
+  "Search the schematic", "Search the drawing", "Search the model"); then **Hide panel** at its
+  right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\). Its inside is a row's: the
+  search icon a row's 12px glyph in the rows' glyph box (16px in, 8px inside the box), its text on
+  the rows' labels' line (32px), the clear button a row action whose glyph ends 8px inside the
+  box's right edge; a phone's 16px glyphs keep the same anatomy.
 - **One tab is no tabs.** A panel with a single tab (an assembly's Model with nothing to Position, a
-  drawing's Layers, a board read without its index) draws no row of tabs and no name over its search hits: the head's
-  rule sits over its list, which is labelled by the tab's name for assistive technology.
+  drawing's Layers, a board read without its index) draws no row of tabs and no name over its search
+  hits, and no rule: the rule goes with the tab row, so its list starts 6px under the search box. The
+  list is labelled by the tab's name for assistive technology.
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
   weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
@@ -677,7 +681,7 @@ file.
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed values. On a phone the side is a row of the strip's More, View from the back, ticked while it is on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the side is a row of the strip's More, View from the back, ticked while it is on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
@@ -774,11 +778,13 @@ fix to it lands in every list. In the panel's numbers (216px wide, its body padd
   height, so the rows under an open branch draw its line unbroken.
 - **The actions** (`TreeRowActions`), shown on hover and kept while one is on, float over the row's
   right end: each a 16x20 button with a 12px glyph, 2px apart, the last one's glyph ending 16px from
-  the panel's right edge (`--tree-row-actions-pad`, 6px, and its button's 2px). The row's `actions`
+  the panel's right edge (`--tree-row-actions-pad`, 6px, and its button's 2px; a phone's 16px glyphs
+  fill their buttons, so its pad is 8px): 8px inside the background, as the slot is at the left. The row's `actions`
   says how many, so its name, which runs the row's full width, fades out half a rem before them (a
   mask, `ROW_NAME_UNDER_ACTIONS`): nothing is drawn behind the buttons and the row keeps its own
   colour. An assembly row's are **Isolate** then the **Hide/Reveal** eye (a part file has no
-  Isolate); a part's or a net's, and a layer's, the eye alone. A Links row that draws something — a
+  Isolate); while the row is isolated its Isolate is the way out, an X (**Exit isolate**), shown the
+  whole time, and its eye is off; a part's or a net's, and a layer's, the eye alone. A Links row that draws something — a
   link with visuals, or one visual — has the eye alone, in its search hit too: a link's hides its
   own visuals, never its child links, and on a partly hidden link hides the rest.
 
@@ -859,10 +865,9 @@ separate row for it. While the feature is off its section is that heading alone.
 setting is one 24px row: its label in a 4rem muted column, its control filling the rest, so
 a form's controls start on one line. A label is short under its heading ("Colour",
 "Opacity" under Floor); the control's accessible name stays whole ("Floor opacity"). A
-dropdown or colour is as wide as its value, at the row's right end. Sliders are shadcn's,
-as everywhere, with a committed value field after them. By part's palette is a row of
-swatches, then add and remove. Choices use Select controls. Continuous values use compact
-slider and committed-number fields; their keyboard input stays with the field. Colours
+dropdown or colour is as wide as its value, at the row's right end. A continuous value is the
+[slider control](#the-slider-control), its two lines in place of the row. By part's palette is a
+row of swatches, then add and remove. Choices use Select controls. Colours
 retain swatches and a custom colour picker. Floor is on by default, at the model's lowest
 point (its Placement, **Lowest point**; **Model origin** stands it at Z=0). A long form scrolls within the available viewer height. A nested Select or colour
 picker owns Escape and outside interaction before its parent surface. The last item is
@@ -883,12 +888,35 @@ children never pad again. Menu, select and context-menu typography comes from
 the primitives, portals included. Selected values show their icon where it
 means something.
 
-Use `FileSheetSliderField` for a useful bounded range with a committed number
-input, `FileSheetNumberProperty` for other scalars, `FileSheetColorProperty` for
-color with opacity, and ordinary Select controls for choices. Drafts stay local
-until Enter or blur; Escape cancels. Clamp at the owner's write boundary, which
-sliders and number inputs share. Omit a visible label only where the value or
-icon is unambiguous, and always keep the accessible name.
+Use the slider control for a useful bounded range, `FileSheetNumberProperty` for other scalars,
+`FileSheetColorProperty` for color with opacity, and ordinary Select controls for choices. Drafts
+stay local until Enter or blur; Escape cancels. Clamp at the owner's write boundary, which sliders
+and number inputs share. Omit a visible label only where the value or icon is unambiguous, and
+always keep the accessible name.
+
+### The slider control
+
+A number a slider sets is ONE control everywhere (`kit/inspector/SliderField.jsx`), shadcn's
+labelled slider: no site brings its own slider and number (`src/designSystem.test.js`; the
+playbar's scrubber, a timeline, is the one other slider).
+
+- **In a panel**, two lines. The first (16px): the label at the left, in the foreground, and the
+  value at the right. The second: the slider (a 12px band) the control's full width, from the
+  label's left edge to the value's right edge. No icon before the label, no indent. The label
+  line's text stands 5px over the track; 4px above and below the control keep 16px between a
+  track and the next label, so each label reads with the slider under it. In the view's panel it
+  stands on the panel's lines: the label and the track from 16px in, the value's text and the
+  track ending 16px from the right.
+- **In a toolbar row** (Explode's, Clip's), one line: the tool's button or name as its label,
+  the slider, the value.
+- **The value** is the editable number it is (typed, Enter or blur commits, Escape cancels, its
+  unit kept), with no border, outline or ring in any state: plain right-aligned text in tabular
+  figures, as wide as its text and one figure more; under the pointer and the keyboard the view's
+  corner wash (the foreground at 9%) with the caret and the selection.
+- **The slider** is shadcn's (`primitives/slider.jsx`) as the control draws it: a 6px track a shade
+  darker than muted, the primary range (from `origin` where there is one), a 12px white thumb with
+  a primary border and a ring on hover and focus. On a phone the band is 16px in the panel, 36px
+  of touch reaching over the label's foot, and the thumb 16px.
 
 ## Settings
 
@@ -974,17 +1002,11 @@ the right 16px line, idle while the joints are at their default; nothing sits ab
 dropdown holds
 **Default**, which puts the joints back, then the named poses, and Custom while the joints are
 set by hand. No divider under the pose row and no Reset footer.
-Each joint is Figma's property row (`FileSheetSliderField`): its first line (20px) the joint's
-kind — a turn (lucide's RotateCw) or a slide (MoveHorizontal), muted, 12px, 16px in as a row's
-glyph is — its name 4px after it (32px in), and its
-value at the line's right, a committed field with no box until the pointer or the keyboard is on
-it (about five characters wide, tabular figures; degrees read "90.0°", a robot's slides in
-millimetres, "12.5 mm", typed in millimetres too); its second line the slider, under the name, on
-the line the name starts on. Joint rows are 8px apart. Long names truncate with a full-name hint and
-never take the value's room. Every slider in the viewer is shadcn's slider
-(`primitives/slider.jsx`), with a 12px thumb (16px on a phone, in a 36px band) and a track a
-shade darker than muted, for these dense, see-through panels: a row sizes and places it, never
-restyles its track or thumb. A joint's fills from its rest — as built, or the description's
+Each joint is the [slider control](#the-slider-control): its name and value (degrees read
+"90.0°", a robot's slides in millimetres, "12.5 mm", typed in millimetres too; the unit says
+whether it turns or slides, so no kind icon), then its slider, its range in the slider's hint.
+Joints are 4px apart. Long names truncate with a full-name hint and never take the value's room.
+A joint's fills from its rest — as built, or the description's
 default — to its value, a tick at the rest where it is inside the range (`origin`): a joint's zero
 is mostly mid-range, so a bar from the left end would mean nothing, and the fill says at a glance
 which joints are moved and how far. Slider thumbs are named after their
@@ -1020,8 +1042,9 @@ by absolute path; resting on it lights its picks; its X drops them.
 Viewport picks reach individual faces and edges, every one to hand from the start.
 Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click, or a row's Isolate,
-isolates a component or subassembly; double-click on empty space leaves
-isolation, as do the isolation bar's Exit and the lit Isolate. A double-click on a face,
+isolates a component or subassembly, and the tree brings its row into view (its owners opened);
+double-click on empty space leaves isolation, as do the isolated row's X and the menu's Exit all
+isolates. No bar over the tree says what is isolated: its row does. A double-click on a face,
 an edge or ink turns the view square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
 selects nothing: the selection is as its first click found it.
 

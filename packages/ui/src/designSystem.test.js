@@ -121,6 +121,16 @@ test("a panel row is padded by the row primitive alone: no list pads one, reads 
   assert.deepEqual(found, []);
 });
 
+// A number a slider sets is the ONE slider control (docs/settings-ui.md, "The slider control"): its
+// label, its quiet value and its slider. Only it and the playbar's scrubber, a timeline, draw the
+// slider primitive; no site brings its own slider and number.
+const SLIDER_OWNERS = ["renderers/kit/inspector/SliderField.jsx", "renderers/kit/tools/playbar/AnimationTimeControl.js"];
+test("only the slider control and the scrubber import the slider primitive", () => {
+  const found = sources(root).map(file => relative(root, file))
+    .filter(name => !SLIDER_OWNERS.includes(name) && /primitives\/slider["'/]/.test(readFileSync(join(root, name), "utf8")));
+  assert.deepEqual(found, []);
+});
+
 // A size of the scale given to a primitive replaces the primitive's own (a button's text-xs), and
 // survives a colour after it: cn() knows the scale's names as sizes.
 test("cn() merges the scale's sizes as font sizes", async () => {

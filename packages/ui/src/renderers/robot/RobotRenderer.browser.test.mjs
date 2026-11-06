@@ -278,17 +278,28 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   const position = robot.position();
   const poseSelect = position.locator('[data-tool-panel-body] [data-pose-row] [data-pose-menu]');
   assert.equal(await poseSelect.getAttribute('aria-label'), 'Pose: Default');
-  // Compact joint rows: a small value field on the name's line, as wide as its text needs (a
-  // length "0 mm" as a turn "0°"), never clipping it; rows 8px apart.
-  const fields = await position.locator('[data-position-control] input').evaluateAll(inputs => inputs.map(input => {
+  // The slider control: a small value field on the label's line, as wide as its text needs (a
+  // length "0 mm" as a turn "0°"), never clipping it; the slider under them from the label's left
+  // edge to the value's right edge; the controls 4px apart.
+  const fields = await position.locator('[data-slider-field] input').evaluateAll(inputs => inputs.map(input => {
     const box = input.getBoundingClientRect();
     return { value: input.value, width: box.width, height: box.height, fits: input.scrollWidth <= input.clientWidth };
   }));
   assert.ok(fields.length >= 3 && fields.every(field => field.height <= 24 && field.width <= 80), `small value fields: ${JSON.stringify(fields)}`);
   assert.ok(fields.every(field => field.fits), `every value fits its field: ${JSON.stringify(fields)}`);
-  const rowTops = await position.locator('[data-position-control]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect()));
-  assert.ok(rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom - 8) <= 0.5),
-    `rows 8px apart: ${JSON.stringify(rowTops.slice(1).map((row, index) => row.top - rowTops[index].bottom))}`);
+  const lines = await position.locator('[data-slider-field]').evaluateAll(controls => controls.map(control => {
+    const label = control.querySelector('[data-slider-field-label]'), input = control.querySelector('input');
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const track = control.querySelector('[data-slot=slider-track]').getBoundingClientRect();
+    const valueRight = input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight);
+    return { label: range.getBoundingClientRect().left, valueRight, track: [track.left, track.right] };
+  }));
+  assert.ok(lines.every(line => Math.abs(line.track[0] - line.label) <= 0.5 && Math.abs(line.track[1] - line.valueRight) <= 0.5),
+    `each track runs from its label's left to its value's right: ${JSON.stringify(lines)}`);
+  const rowTops = await position.locator('[data-slider-field]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect()));
+  assert.ok(rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom - 4) <= 0.5),
+    `controls 4px apart: ${JSON.stringify(rowTops.slice(1).map((row, index) => row.top - rowTops[index].bottom))}`);
   // A longer value widens its field rather than being cut.
   await robot.type('lift', 0.25, 'm');
   assert.equal(await robot.jointField('lift', 'm').evaluate(input => [input.value, input.scrollWidth <= input.clientWidth].join()), '250 mm,true');
@@ -466,10 +477,20 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.pickLinks();
   await robot.linksPanel().waitFor();
   await robot.pressed([]);
-  // Its rows stand on the panel's lines, as every list's do: the first row's glyph slot under the search icon.
-  const [searchIcon, firstGlyph] = await pane.locator('[data-flat-panel]').evaluate(panel => [panel.querySelector('[data-flat-panel-search] svg'),
-    panel.querySelector('[data-flat-panel-section]:not([hidden]) [data-tree-row-glyph]')].map(element => Math.round(element.getBoundingClientRect().left)));
-  assert.equal(firstGlyph, searchIcon, 'a row\'s glyph slot starts on the search icon\'s line');
+  // Its rows stand on the panel's lines, as every list's do: the search icon is a row's glyph, in the
+  // first row's glyph box (its left and its width, so their centres too, to the half pixel), and the
+  // search's text starts on the rows' labels' line.
+  const head = await pane.locator('[data-flat-panel]').evaluate(panel => {
+    const icon = panel.querySelector('[data-flat-panel-search] svg').getBoundingClientRect();
+    const input = panel.querySelector('[data-flat-panel-search] input');
+    const row = panel.querySelector('[data-flat-panel-section]:not([hidden]) [data-tree-row]');
+    const slot = row.querySelector('[data-tree-row-glyph]').getBoundingClientRect();
+    const glyph = row.querySelector('[data-tree-row-glyph] svg').getBoundingClientRect();
+    const name = row.querySelector('[data-tree-row-glyph] ~ *').getBoundingClientRect();
+    return { icon: [icon.left, icon.width], slot: [slot.left, glyph.width], text: input.getBoundingClientRect().left + parseFloat(getComputedStyle(input).paddingLeft), name: name.left };
+  });
+  assert.ok(Math.abs(head.icon[0] - head.slot[0]) <= 0.5 && Math.abs(head.icon[1] - head.slot[1]) <= 0.5 && Math.abs(head.text - head.name) <= 0.5,
+    `the search icon in the rows' glyph box, its text on their labels' line: ${JSON.stringify(head)}`);
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
   assert.equal(await pane.getByRole('button', { name: 'Select base_footprint', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Collapse base', exact: true }).count(), 0);

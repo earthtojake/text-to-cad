@@ -553,7 +553,7 @@ function DxfSurface({ view, data }) {
     content: <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
   }] : []), [layered, drawing, hiddenLayers, toggleLayer, selection, t]);
   const panelNode = layered && !toolsHidden ? <FlatPanel mode={flat.mode} open={flat.open} onClose={() => flat.setOpen(false)} label={t("drawing.panel")}
-    searchLabel={t("drawing.search")} searchPlaceholder={t("drawing.searchPlaceholder")} tabs={panelTabs} tab={flat.tab} onTabChange={flat.changeTab}
+    searchLabel={t("drawing.search")} tabs={panelTabs} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
 
   // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).

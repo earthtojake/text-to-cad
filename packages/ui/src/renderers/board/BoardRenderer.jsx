@@ -498,7 +498,7 @@ function BoardSurface({ view, data }) {
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
-    searchPlaceholder: t("board.text.search_board_placeholder"), tabs: panelTabs, detail } : null;
+    tabs: panelTabs, detail } : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps a crosshair (Annotate's layer has its own).

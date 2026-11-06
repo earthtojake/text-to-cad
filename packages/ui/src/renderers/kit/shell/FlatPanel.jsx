@@ -152,12 +152,12 @@ export function FlatPanelPill({ onOpen, touch = false }) {
 
 /**
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
- *   searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean }[],
+ *   searchLabel: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
  *   focusSearch: number, detail?: import("react").ReactNode }} props
  *   `focusSearch`: a count; each new value puts the keyboard in the search box (/). `detail`: what is picked, under the lists.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false,
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false,
   detailHeight = null, onDetailHeightChange = null }) {
   const { t } = useI18n();
   const platform = useContext(ViewerHostContext)?.environment?.platform;
@@ -320,15 +320,15 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     {/* The head: the search, then the collapse button at its right (Back before it, on a phone). */}
     <div className="flex shrink-0 items-center gap-1.5" style={{ padding: `${SURFACE_PX}px ${SURFACE_PX}px 6px` }} data-flat-panel-head="">
       {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
-      <TreeFilterInput label={searchLabel} placeholder={searchPlaceholder} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
+      <TreeFilterInput label={searchLabel} placeholder={t("flatPanel.searchPlaceholder")} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
         inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border pl-px pr-0.5 shadow-none" data-flat-panel-search="" />
       {page ? null : <ToolbarButton label={t("flatPanel.hide")} shortcut={flatPanelShortcut(platform)} tooltipSide="bottom" className={STRIP_BUTTON_CLASS} aria-expanded onClick={onClose} data-flat-panel-toggle="">
         <PanelLeftClose aria-hidden="true" />
       </ToolbarButton>}
     </div>
-    {/* The tabs, buttons as Figma's: the open one raised on the accent. While a search is up they step
-        aside; a panel of one tab has none, its head's rule alone over its list. */}
-    {single ? <div className="shrink-0 border-b border-border" style={{ paddingTop: 2 }} data-flat-panel-rule="" /> : null}
+    {/* The tabs, buttons as Figma's: the open one raised on the accent, their rule under them. While a
+        search is up they step aside; a panel of one tab has none, and no rule: its list starts under the
+        head's 6px. */}
     <div role="tablist" aria-label={label} hidden={searching || single} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
       {tabs.map(entry => {
         const on = entry.id === active;
@@ -355,7 +355,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     </div>
     <ScrollArea className="min-h-0 flex-1" viewportRef={scroller} viewportProps={{ "data-flat-panel-scroller": "" }}>
       <FlatPanelContext.Provider value={panel}>
-        <div ref={body} className="group/body flex flex-col px-2 pt-1 pb-2" data-flat-panel-body="">
+        <div ref={body} className={cn("group/body flex flex-col px-2 pb-2", single ? "pt-0" : "pt-1")} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = searching || entry.id === active;
             return <section key={entry.id} role={single ? "region" : "tabpanel"} id={ids(entry.id).panel} aria-label={entry.label}

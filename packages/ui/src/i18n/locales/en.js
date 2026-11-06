@@ -463,7 +463,6 @@ export default {
   "status.buildPreview": "Preview",
   "status.buildPreviewHint": "A preview of the build result. The saved file replaces it after this revision is saved.",
   "tree.showAll": "Show all",
-  "tree.exitIsolation": "Exit",
   "robot.none": "None",
   "robot.meshObject": "Mesh object",
 
@@ -738,7 +737,6 @@ export default {
   "drawing.empty": "This drawing has no geometry in its modelspace, so there is nothing to show.",
   "drawing.panel": "Drawing panel",
   "drawing.search": "Search the drawing",
-  "drawing.searchPlaceholder": "Layers, blocks",
 
   // The trees, their rows and menus, and the details panels (a robot's, an SDF's, a drawing's).
   "tree.collapse": "Collapse {name}",
@@ -760,8 +758,6 @@ export default {
   "tree.filterModel": "Filter model",
   "tree.modelingTree": "Modeling tree",
   "tree.modelTreeArea": "Model tree area",
-  "tree.isolation": "Isolation",
-  "tree.isolated": "Isolated: {names}",
   "tree.hiddenCount": "{count} hidden",
   "tree.hiddenParts": "Hidden parts",
   "tree.searchResults": "Model search results",
@@ -929,15 +925,13 @@ export default {
   "flatPanel.nothingMatches": "Nothing matches “{query}”",
   "board.text.board_panel": "Board panel",
   "board.text.search_board": "Search the board",
-  "board.text.search_board_placeholder": "Parts, nets, layers",
   "schematic.text.schematic_panel": "Schematic panel",
   "schematic.text.search_schematic": "Search the schematic",
-  "schematic.text.search_schematic_placeholder": "Parts, nets, sheets",
   "board.text.preset": "Preset",
   "board.text.layer_display": "Layer display",
   "board.text.others": "Others",
   "board.text.pours": "Pours",
   "flatPanel.modelPanel": "Model panel",
   "flatPanel.searchModel": "Search the model",
-  "flatPanel.searchModelPlaceholder": "Search",
+  "flatPanel.searchPlaceholder": "Search",
 };

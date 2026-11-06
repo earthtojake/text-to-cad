@@ -1,14 +1,11 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
-import { MoveHorizontal, RotateCw } from "lucide-react";
-import { Slider } from "@cad/ui/primitives/slider";
 import {
   xbfCoupledPairs, xbfCouplingControls, xbfCouplingValues, xbfCouplingWrite, xbfCouplings, xbfPoseControls,
   xbfPoseValues, xbfSamePose, xbfUnposable, xbfOtherWarnings
 } from "@cad/core/lib/xbf/xbfKinematics.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
-import {
-  FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
-} from "../kit/inspector/FileSheet.js";
+import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
+import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { DEFAULT_POSE_VALUE, KinematicsPoseRow, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
@@ -191,18 +188,16 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
   // A joint a person moves, counted once a drag (`usage/controls.js`).
   const slider = (control, currentValue, writeValue, title, rest = 0) => {
     const write = (...args) => { usage.changed("position_joint"); return writeValue(...args); };
-    const angular = unitSuffix(control.unit) === "°";
-    return <FileSheetSliderField key={control.id} label={control.label} icon={angular ? <RotateCw /> : <MoveHorizontal />}
-    labelTitle={title} value={`${formatControlNumber(currentValue)}${unitSuffix(control.unit)}`}
-    onValueCommit={text => write(control, parseFileSheetNumberInput(text, { fallback: currentValue, min: control.min, max: control.max }))}
-    valueInputProps={{ ariaLabel: t("position.sliderValue", { name: control.label }), disabled: readOnly }}>
-    <Slider className={FILE_SHEET_PRECISION_SLIDER_CLASSES} disabled={readOnly} value={[Number(currentValue) || 0]} min={control.min} max={control.max}
+    return <SliderField key={control.id} label={control.label} labelTitle={title} name={control.label} disabled={readOnly}
+      text={`${formatControlNumber(currentValue)}${unitSuffix(control.unit)}`}
+      onTextCommit={text => write(control, parseFileSheetNumberInput(text, { fallback: currentValue, min: control.min, max: control.max }))}
+      textLabel={t("position.sliderValue", { name: control.label })}
+      value={currentValue} min={control.min} max={control.max} step={controlStep(control)}
       origin={Math.min(Math.max(Number(rest) || 0, control.min), control.max)}
-      step={controlStep(control)} onValueChange={next => write(control, next?.[0] ?? currentValue)} thumbProps={{ "aria-label": control.label }} />
-  </FileSheetSliderField>;
+      onValueChange={next => write(control, next ?? currentValue)} />;
   };
   return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
-    <div className="space-y-2 pb-2 pt-0.5">
+    <div className="space-y-1 pb-2 pt-0.5">
       {poseNames.length || controls.length || coupled.length ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
         activeValue={preset} onSelect={onPreset} onReset={onReset} disabled={readOnly} /> : null}
       {coupled.map(control => slider(control, Number(shown[control.coupling]) || 0, couple,

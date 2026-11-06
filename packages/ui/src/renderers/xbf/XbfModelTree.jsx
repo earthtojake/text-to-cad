@@ -1,6 +1,6 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Boxes, EyeOff, Focus } from 'lucide-react';
+import { Box, Boxes, EyeOff } from 'lucide-react';
 import { Button } from '@cad/ui/primitives/button';
 import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight } from '@cad/ui/primitives/tree-row';
 import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-filter';
@@ -63,15 +63,6 @@ function visibleRows(roots, expanded, availability, owner) {
   visit(roots, 0, owner.hiddenByOwner, owner.outsideFrontier);
   return rows;
 }
-function findNodeLabel(nodes, selectionId) {
-  for (const node of nodes || []) {
-    if (node.selectionId === selectionId) return node.label;
-    const found = findNodeLabel(node.children, selectionId);
-    if (found) return found;
-  }
-  return '';
-}
-
 // The disclosure a row shows: a button, or — while Select's filter decides the tree's shape —
 // the same chevron as a mark nobody can press.
 function Disclosure({ node, open, locked, toggle }) {
@@ -129,8 +120,8 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
 }
 
 /**
- * A line at the top of the tree saying in words what is set aside — what is isolated, how many parts
- * are hidden — and the way back: a box on the panel's 8px lines, its glyph on the 16px line and its
+ * A line at the top of the tree saying in words how many parts are hidden, and Show all, the way back
+ * (a bulk action no single row has; an isolated row's way out is its own X): a box on the panel's 8px lines, its glyph on the 16px line and its
  * words where the rows' names start, its action's text ending on the right 16px line.
  */
 function TreeStatusBar({ label, icon: Icon, text, title = text, action, onAction, disabled, ...props }) {
@@ -217,13 +208,22 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   latest.current={partControls};
   // A selected part or assembly at its row; a picked face or edge at its part's.
   const paths=useMemo(()=>xbfSelectionPaths(tree,selectedIds),[tree,selectedIds]);
-  const revealKey=JSON.stringify(selectedIds);
+  // What the tree brings into view: the selection, or what was isolated when isolation is the last
+  // to change (from the model, a menu or a key): its owners opened and its row scrolled to, as a pick's.
+  const focusedIds=partControls.focusedNodeIds || EMPTY;
+  const selectionKey=JSON.stringify(selectedIds),focusKey=JSON.stringify(focusedIds);
+  const revealFrom=useRef({selection:selectionKey,focus:focusKey,from:'selection'});
+  if(revealFrom.current.selection !== selectionKey)revealFrom.current={...revealFrom.current,selection:selectionKey,from:'selection'};
+  if(revealFrom.current.focus !== focusKey)revealFrom.current={...revealFrom.current,focus:focusKey,from:focusedIds.length ? 'focus' : revealFrom.current.from};
+  const revealing=revealFrom.current.from === 'focus';
+  const revealPaths=useMemo(()=>revealing ? xbfSelectionPaths(tree,focusedIds) : paths,[revealing,tree,focusedIds,paths]);
+  const revealKey=revealing ? `focus:${focusKey}` : selectionKey;
   const reveal=useRef({key:null,complete:false});
   useEffect(()=>{
     if(reveal.current.key !== revealKey)reveal.current={key:revealKey,complete:false};
-    if(!active || reveal.current.complete || !paths.length)return;
-    const target=paths.at(-1).at(-1);
-    const missing=paths.flatMap(path=>path.slice(0,-1)).filter(node=>!expanded.has(node.id));
+    if(!active || reveal.current.complete || !revealPaths.length)return;
+    const target=revealPaths.at(-1).at(-1);
+    const missing=revealPaths.flatMap(path=>path.slice(0,-1)).filter(node=>!expanded.has(node.id));
     // A locked tree does not open for a pick: what the mode shows is what there is to scroll to.
     if(missing.length && locked){reveal.current.complete=true;return;}
     if(missing.length){
@@ -238,7 +238,7 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     if(searching)return;
     const row=rowElements.current.get(target.id);
     if(row){revealRow(row);reveal.current.complete=true;}
-  },[active,revealKey,paths,expanded,locked,partControls.onToggleTreeNode,searching]);
+  },[active,revealKey,revealPaths,expanded,locked,partControls.onToggleTreeNode,searching]);
 
   // The rows' callbacks never change; each reads the tree as it is when pressed.
   const choose=useCallback((node,event)=>{
@@ -267,8 +267,7 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     for(const node of foldedRows)if(node.memberSelectionIds.every(id=>selectedNodeIds.includes(id)))ids.add(node.id);
     return ids;
   },[paths,foldedRows,selectedNodeIds]);
-  const isolatedLabels=useMemo(()=>(partControls.focusedNodeIds||EMPTY).map(id=>findNodeLabel(visibleRoots,id)||id),[partControls.focusedNodeIds,visibleRoots]);
-  const revealIndex=paths.length ? rowIndex.get(paths.at(-1).at(-1).id) : undefined;
+  const revealIndex=revealPaths.length ? rowIndex.get(revealPaths.at(-1).at(-1).id) : undefined;
   const treePinned=useMemo(()=>revealIndex === undefined ? EMPTY : [revealIndex],[revealIndex]);
   const matches=found.matches;
   const cursorIndex=searching ? matches.findIndex(match=>match.entry.node.id === cursorId) : -1;
@@ -300,10 +299,8 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
         {hiddenCount > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>{t("tree.showAll")}</Button>}
       </>}/>}>
     <div className="flex flex-col text-tiny" aria-label={t("tree.modelingTree")}>
-      <div ref={listRef} className="py-1" aria-label={t("tree.modelTreeArea")}
+      <div ref={listRef} className={flatPanel ? "pb-1" : "py-1"} aria-label={t("tree.modelTreeArea")}
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))onClearSelection?.();}}>
-        {isolatedLabels.length > 0 && <TreeStatusBar label={t("tree.isolation")} icon={Focus} text={t("tree.isolated", { names: isolatedLabels.join(', ') })}
-          title={isolatedLabels.join(', ')} action={t("tree.exitIsolation")} onAction={partControls.onExitAllIsolate} disabled={disabled}/>}
         {flatPanel && hiddenCount > 0 && <TreeStatusBar label={t("tree.hiddenParts")} icon={EyeOff} text={t("tree.hiddenCount", { count: hiddenCount.toLocaleString() })}
           action={t("tree.showAll")} onAction={partControls.showAllHiddenParts} disabled={disabled} data-tree-hidden-status=""/>}
         {searching && !(flatPanel && !found.matches.length) && <p role="status" className="px-2 py-1 text-micro text-muted-foreground" data-tree-status="" data-flat-panel-hit={found.matches.length ? "" : undefined}>{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}

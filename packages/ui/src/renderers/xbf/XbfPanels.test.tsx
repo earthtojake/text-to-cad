@@ -38,7 +38,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); while (restores.length) rest
 
 // A section as the shell draws it: a tab of the view's panel, open.
 function InPanel({ tab, children }: { tab: string, children: React.ReactNode }) {
-  return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" searchPlaceholder="Search"
+  return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
     sections={children} tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
 }
 
