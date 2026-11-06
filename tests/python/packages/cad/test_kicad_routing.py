@@ -1,5 +1,5 @@
 """The router's core (``cad.kicad._routing``), with no KiCad: exact distances, the search, the pull-tight pass, and
-the custom rules kept the safe way.
+the plan read and checked before anything is routed.
 
 The boards are written here, small, in KiCad 11's syntax (footprints placed by a ``transform``), and read the way
 ``cad.kicad.route`` reads the open board's text; the rules are given as KiCad would give them. The routes are held
@@ -20,6 +20,7 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
+from cad.kicad._route import _entries, _wants  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing.plan import Router, Want  # noqa: E402
@@ -224,7 +225,46 @@ class Routes(unittest.TestCase):
         self.assertTrue(done[0].routed, done[0].line())
 
 
-class Rule(unittest.TestCase):
+class Plans(unittest.TestCase):
+    """A plan is read and checked whole before anything is routed: each mistake said in one line, naming what
+    to give."""
+
+    def setUp(self) -> None:
+        self.copper = read_copper(board(resistor("R1", 5, 10, 0, "A", "B"), resistor("R2", 25, 10, 0, "A", "C"),
+                                        resistor("R3", 15, 15, 0, "B", "C", side="B")))
+
+    def wants(self, plan, **options):
+        return _wants(_entries(plan, {"layers": None, **options}), self.copper, RULES)
+
+    def refused(self, plan, said: str, **options) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self.wants(plan, **options)
+        self.assertIn(said, str(caught.exception))
+
+    def test_no_plan_is_refused_naming_what_to_give(self) -> None:
+        for plan in ([], None, "A"):
+            self.refused(plan, "route needs a plan")
+        self.refused(["A"], "has no layers")
+
+    def test_an_entry_is_a_net_a_pair_of_pads_or_a_dict_of_known_keys(self) -> None:
+        self.refused([{"net": "A", "layer": ["F.Cu"]}], "unknown key 'layer'")
+        self.refused([{"net": "A", "pads": ("R1.1", "R2.1"), "layers": ["F.Cu"]}], "a net or a pair of pads")
+        self.refused([("R1.1", "R1.2")], "a connection joins two pads of one net", layers=["F.Cu"])
+        self.refused(["Z"], "no pad of the board is on a net 'Z'", layers=["F.Cu"])
+        self.refused(["A"], "'In1.Cu' is not a copper layer of this board", layers=["In1.Cu"])
+        self.refused(["B"], "R3.1 is on no layer it may use", layers=["F.Cu"])
+        self.refused([{"net": "A", "layers": ["F.Cu"], "clearance": 0.1}], "under the 0.2 mm DRC holds A to")
+        self.refused([{"net": "A", "layers": ["F.Cu"], "width": 0.1}], "under the board's least track width")
+        self.refused([{"net": "A", "layers": ["F.Cu"], "vias": 1.5}], "vias is a whole number")
+
+    def test_the_options_and_their_defaults(self) -> None:
+        (a, b, c) = self.wants(["#net:A", ("#R3.1", "R1.2"), {"net": "C", "layers": {"F.Cu": 1, "B.Cu": 3}, "vias": 0}],
+                               layers=["F.Cu", "B.Cu"], via_cost=3)
+        self.assertEqual(("A", None, (("F.Cu", 1.0), ("B.Cu", 1.0)), 0.25, 0.2, 3.0), (a.net, a.pads, a.layers, a.width,
+                                                                                     a.clearance, a.via_cost))
+        self.assertEqual(("B", ("R3.1", "R1.2")), (b.net, b.pads))
+        self.assertEqual(((("F.Cu", 1.0), ("B.Cu", 3.0)), 0), (c.layers, c.vias))
+
     def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
         limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
                                          ("no", "CRCT_DISALLOW", 0.0), ("len", "CRCT_LENGTH", 10.0)])

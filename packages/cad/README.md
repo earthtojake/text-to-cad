@@ -609,7 +609,8 @@ src/cad/
                          #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
                          #   a board or a schematic through its headless api-server and KiPy
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
-                         #   and exports (_schematic)
+                         #   and exports (_schematic), and route, copper for the connections a
+                         #   plan names, inside an edit (_route; its search, _routing: numpy)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -688,6 +689,18 @@ project, one inside the other, share it, each saved at its own block's end. A sc
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
 made is removed. Exports and checks of the edited file are explicit calls after the block.
+
+Inside a board's edit, `cad.kicad.route(board, plan)` writes copper for the connections a plan names, in its
+order: each a net or a pair of pads, with the copper layers it may use (required; there is no default plan),
+its width and clearance (the net's netclass's by default, never under the board's rules), its via limit and
+via cost. It reads the open board (`get_as_string`) and KiCad's rules for it (each net's netclass, the board's
+minimums, the custom rules, kept the safe way or refused by name), searches each connection on a grid whose
+free nodes are worked out from the exact shapes (a move between two free nodes is clear along its whole
+length), pulls each path tight in continuous geometry, checks every segment and via once more, exactly, and
+writes the tracks and vias in one commit: nothing on the board is moved or deleted, nothing else is written,
+and the block's save writes the file. Octolinear and deterministic: the same board and plan give the same
+copper. A connection it cannot route is answered by name with why (`Routed.failed`, and a line on stderr);
+copper pours are not obstacles (KiCad refills them round the new copper). It runs in the script's process.
 
 ## Manufacturing checks
 
