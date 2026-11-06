@@ -382,6 +382,12 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("  releases 1.0.0 (the release before), 1.1.0 (current), 1.2.0 (cad doctor --prune removes it) "
                       f"in {releases.root()}\n", out)
         self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
+        # What it asks a yes for names the folder, with how many, as its help says it removes them.
+        self.assertIn("1 release folder but the current release's and the one before's: 1.2.0", doctor._prune_plan())
+        with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
+            doctor.main(["--help"])
+        self.assertIn("every release folder but the current release's and the one before's",
+                      " ".join(helped.getvalue().split()))
         with mock.patch.object(releases, "running", return_value=False):
             code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)

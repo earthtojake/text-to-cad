@@ -567,11 +567,12 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     parser.add_argument(
         "--prune",
         action="store_true",
-        help="Remove the record of every registered installation whose interpreter is gone, the "
-             "per-version launchers earlier builds published beside the cad command, engine records of an "
-             "older format, the bytecode folders of installations no longer registered, cache folders with "
-             "no record, environments of models' packages and cadgen 0.7's store and state files (none written "
-             "or used in the last 7 days), and exit.",
+        help="Remove the record of every registered installation whose interpreter is gone, every release folder "
+             "but the current release's and the one before's, the per-version launchers earlier builds published "
+             "beside the cad command, engine records of an older format, the bytecode folders of installations no "
+             "longer registered, cache folders with no record, environments of models' packages and cadgen 0.7's "
+             "store and state files (none written or used in the last 7 days), and exit: listed, with how many of "
+             "each, and asked first.",
     )
     parser.add_argument(
         "--all-versions",
