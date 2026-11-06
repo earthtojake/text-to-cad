@@ -12,6 +12,7 @@ from pathlib import Path
 
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import BoardView, canonical_copper, read_index
+from cad.engine.formats.kicad.models3d import resolve_models
 
 __all__ = ["inspect_board"]
 
@@ -49,7 +50,14 @@ def inspect_board(path: Path | str) -> dict:
                     "side": "top", "at": [35.0, 15.0], "rotation": 0.0, "pads": 2, "dnp": False,
                     "in_bom": True}, ...],     # by reference, natural order
          "nets": [{"name": "GND", "class": "Default", "pads": 2, "tracks": 1, "vias": 1, "zones": 1}, ...],
-         "counts": {"parts": 3, "pads": 6, "nets": 3, "tracks": 2, "vias": 1, "zones": 1, "holes": 0}}
+         "counts": {"parts": 3, "pads": 6, "nets": 3, "tracks": 2, "vias": 1, "zones": 1, "holes": 0},
+         "models": {"found": [{"name": "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl",
+                               "path": "/.../R_0603_1608Metric.step", "parts": ["R1"]}, ...],
+                    "missing": [{"name": "...", "reason": "not-found", "parts": ["U1"]}, ...],
+                    "without": ["H1"]}}   # the parts that name no model (none hidden)
+
+    ``models`` is each 3D model the footprints name, answered as the CAD Viewer's 3D view reads it
+    (:mod:`cad.engine.formats.kicad.models3d`: the STEP on this computer it is, or why there is none).
 
     Raises ``FileNotFoundError`` for a missing file and ``ValueError`` for one that is not a KiCad
     board (a name that does not end in ``.kicad_pcb``, text that is not UTF-8 or not a board).
@@ -75,6 +83,18 @@ def inspect_board(path: Path | str) -> dict:
     version = sexpr.value(tree, "version")
     generator = sexpr.value(tree, "generator")
     generator_version = sexpr.value(tree, "generator_version")
+    named: dict[str, list[str]] = {}
+    for part in view.parts:
+        for model in part.models:
+            if not model.hidden:
+                named.setdefault(model.name, []).append(part.ref)
+    resolved = resolve_models(board, named)
+    models = {
+        "found": [{"name": name, "path": answer.path, "parts": named[name]} for name, answer in resolved.items() if answer.path],
+        "missing": [{"name": name, "reason": answer.reason, "parts": named[name]} for name, answer in resolved.items()
+                    if not answer.path],
+        "without": [part.ref for part in view.parts if not any(not model.hidden for model in part.models)],
+    }
     return {
         "file": board.name,
         "format": {
@@ -105,4 +125,5 @@ def inspect_board(path: Path | str) -> dict:
             "parts": len(view.parts), "pads": len(view.pads), "nets": len(view.nets), "tracks": len(view.tracks),
             "vias": len(view.vias), "zones": len(view.zones), "holes": len(view.holes),
         },
+        "models": models,
     }

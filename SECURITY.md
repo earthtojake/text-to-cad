@@ -94,7 +94,10 @@ The page answers only messages from its host's window.
 **Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF, SRDF, KiCad board or
 schematic written by someone else is untrusted input. The server reads it in separate
 processes (a KiCad file off its request threads, its refill in KiCad's own process) and bounds its work: assembly, node and block expansion, archive
-unpacking, and buffer reads. It fetches nothing a file names over the network.
+unpacking, and buffer reads. It fetches nothing a file names over the network. The 3D models a KiCad
+board names are read only as STEP files, and only inside the board's own folder, KiCad's installed 3D
+library and the folders `CAD_KICAD_3DMODELS` names, every symlink followed first; any other file a board
+names is shown as missing, and the page asks for a model's mesh by an id, never by a path.
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 

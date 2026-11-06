@@ -211,6 +211,15 @@ position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2.
 KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's
 `Vector2.from_xy_mm`.
 
+What a 3D view of the board reads: `thickness`, the board's (its stack-up's `(general (thickness ..))`,
+millimetres; absent when the file says none), and a part's `models`, each of its footprint's 3D models as
+the file writes them: `name` (as written: `${KICAD9_3DMODEL_DIR}/…/R_0603.wrl`, `${KIPRJMOD}/…`, a
+relative or absolute path, `kicad-embed://…`), and where it differs from KiCad's default `offset`
+(millimetres), `rotate` (degrees about x, y, z), `scale`, `hidden: true` and `opacity`. Which file on the
+computer a name is, if any, is not the payload's (it is a function of the board's bytes alone): the board's
+`GET /api/v1/documents/kicad_pcb/<id>/models` answers it, each name a STEP by its document id (its mesh
+read through `GET /api/v1/documents/step/<id>/structure` and `/parts/<key>`), or the reason it has none.
+
 ## The schematic payload
 
 `GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic

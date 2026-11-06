@@ -67,6 +67,7 @@ __all__ = [
     "Dimension",
     "FootprintFrame",
     "Hole",
+    "Model3d",
     "Net",
     "Pad",
     "Part",
@@ -139,6 +140,23 @@ class Pad:
 
 
 @dataclass(frozen=True)
+class Model3d:
+    """One of a footprint's 3D models (``(model "<name>" (offset ..) (scale ..) (rotate ..))``), as its file
+    writes it: ``name`` the file as written (``${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.wrl``,
+    ``${KIPRJMOD}/...``, a relative or absolute path, ``kicad-embed://...``); ``offset`` in millimetres
+    (a KiCad 5 board's ``(at ..)``, in inches, read into millimetres), ``rotate`` in degrees about x, y and
+    z, ``scale`` per axis, in the footprint's frame, as KiCad places them; ``hidden`` for a model KiCad
+    does not draw. Which file on this computer the name is, if any, is :mod:`.models3d`'s."""
+
+    name: str
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    rotate: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    hidden: bool = False
+    opacity: float = 1.0
+
+
+@dataclass(frozen=True)
 class Part:
     """A footprint on the board, by its reference designator."""
 
@@ -155,6 +173,7 @@ class Part:
     in_bom: bool = True  # False when the footprint is excluded from the BOM (or on the board only)
     locked: bool = False  # KiCad's lock: its pads, texts and graphics are locked with it
     sheet: str | None = None  # the schematic sheet that placed it (``(sheetname ...)``), its name alone
+    models: tuple[Model3d, ...] = ()  # its 3D models, as the file writes them
 
     kind = "part"
 
@@ -568,6 +587,7 @@ class BoardIndex:
                     "at": xy(part.at), "rotation": num(part.rotation), "fields": dict(part.fields),
                     "dnp": part.dnp, "outline": path(part.outline), **({"locked": True} if part.locked else {}),
                     **({"sheet": part.sheet} if part.sheet else {}),
+                    **({"models": [_model_json(model, num) for model in part.models]} if part.models else {}),
                 }
                 for part in self.parts
             ],
@@ -1317,8 +1337,47 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
         in_bom=in_bom,
         locked=locked(node),
         sheet=sheet_name(node),
+        models=tuple(model for model in map(_read_model, sexpr.find_all(node, "model")) if model is not None),
     )
     return part, holes, edges
+
+
+def _xyz(node: list, name: str) -> tuple[float, float, float] | None:
+    """A model's ``(name (xyz x y z))``; ``None`` when it has none."""
+    found = sexpr.find(node, name)
+    xyz = sexpr.find(found, "xyz") if found is not None else None
+    if xyz is None:
+        return None
+    values = list(xyz[1:4]) + [0.0] * 3
+    return sexpr.number(values[0]), sexpr.number(values[1]), sexpr.number(values[2])
+
+
+def _read_model(node: list) -> Model3d | None:
+    """One ``(model ...)`` of a footprint: its name and its placement in the footprint's frame."""
+    if len(node) < 2 or not isinstance(node[1], str) or not node[1].strip():
+        return None
+    offset = _xyz(node, "offset")
+    if offset is None:
+        inches = _xyz(node, "at")  # KiCad 5 wrote the offset as (at (xyz ..)), in inches
+        offset = (inches[0] * 25.4, inches[1] * 25.4, inches[2] * 25.4) if inches is not None else (0.0, 0.0, 0.0)
+    hide = sexpr.find(node, "hide")
+    hidden = any(isinstance(item, Sym) and str(item) == "hide" for item in node[2:]) or (
+        hide is not None and (len(hide) < 2 or str(hide[1]) != "no"))
+    opacity = sexpr.number(sexpr.value(node, "opacity"), 1.0)
+    return Model3d(name=str(node[1]), offset=offset, scale=_xyz(node, "scale") or (1.0, 1.0, 1.0),
+                   rotate=_xyz(node, "rotate") or (0.0, 0.0, 0.0), hidden=hidden, opacity=min(max(opacity, 0.0), 1.0))
+
+
+def _model_json(model: Model3d, num: Callable[[float], float]) -> dict:
+    """A model as the plot payload's part carries it (``models``): what differs from KiCad's default, written."""
+    return {
+        "name": model.name,
+        **({"offset": [num(value) for value in model.offset]} if any(model.offset) else {}),
+        **({"scale": [num(value) for value in model.scale]} if model.scale != (1.0, 1.0, 1.0) else {}),
+        **({"rotate": [num(value) for value in model.rotate]} if any(model.rotate) else {}),
+        **({"hidden": True} if model.hidden else {}),
+        **({"opacity": num(model.opacity)} if model.opacity < 1 else {}),
+    }
 
 
 def _counted(pads: list[Pad]) -> tuple[Pad, ...]:

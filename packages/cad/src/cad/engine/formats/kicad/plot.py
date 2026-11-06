@@ -968,6 +968,11 @@ def _build(path: Path, tree: list) -> dict:
         layers.append({"id": layer, "kind": kind, "side": _side(layer) if kind not in ("area", "names") else "both",
                        "items": [_shifted(item, left, top) for item in items]})
     moved = index.mapped(lambda x, y: (x - left, y - top))
+    board = moved.as_json(_DIGITS)
+    # How thick the board is (its stack-up's, ``(general (thickness ..))``): what a 3D view stands it at.
+    thickness = sexpr.value(sexpr.find(tree, "general") or [], "thickness")
+    if isinstance(thickness, (int, float)) and 0 < thickness < 100:
+        board["thickness"] = _num(thickness)
     return {
         "schemaVersion": PLOT_SCHEMA_VERSION,
         "kind": "board",
@@ -976,7 +981,7 @@ def _build(path: Path, tree: list) -> dict:
         "sheets": [{
             "name": path.stem, "width": _num(right - left), "height": _num(bottom - top), "background": BOARD_BACKGROUND, "layers": layers,
         }],
-        "board": moved.as_json(_DIGITS),
+        "board": board,
     }
 
 

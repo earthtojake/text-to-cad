@@ -20,7 +20,8 @@ script frame is the same x and y up), 40 x 30 mm, its outline from (0, 0):
   (19.5, 28.5), which J1.2 and the via land in;
 - the LED net is unrouted: D1.2 to R1.2 is the one ratsnest line;
 - the text ``blinky`` on the top silkscreen at (20, 5), and each part's
-  reference and value.
+  reference and value;
+- R1's 3D model named in KiCad's library, D1's in the project's folder (``MODELS``); J1's none.
 
 Every item carries the uuid KiCad saves it with, which board references name items by: the
 board's own (the tracks, the via, the pour, the text, the outline) are the ``UUIDS``, a
@@ -32,7 +33,7 @@ from __future__ import annotations
 import itertools
 from pathlib import Path
 
-__all__ = ["BOARD", "SCHEMATIC", "UUIDS", "write_board", "write_schematic"]
+__all__ = ["BOARD", "MODELS", "SCHEMATIC", "UUIDS", "write_board", "write_schematic"]
 
 #: The board's own items' uuids, by what they are.
 UUIDS = {
@@ -44,6 +45,13 @@ UUIDS = {
     "outline": "7a1c0000-0000-4000-8000-000000000006",
 }
 _NUMBERS = itertools.count(1)
+#: The parts' 3D models, as KiCad writes them: R1's from KiCad's library (a VRML name, its STEP beside it there),
+#: D1's from the project's own folder, offset and turned. J1 names none.
+MODELS = {
+    "R1": '(model "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl" (offset (xyz 0 0 0)) '
+          '(scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))',
+    "D1": '(model "${KIPRJMOD}/models/led.step" (offset (xyz 0.1 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 90)))',
+}
 
 
 def uuid_of() -> str:
@@ -74,14 +82,16 @@ def _numbered(body: str) -> str:
     return body
 
 
-def _footprint(name: str, at: str, rotate: int, ref: str, value: str, body: str) -> str:
+def _footprint(name: str, at: str, rotate: int, ref: str, value: str, body: str, model: str = "") -> str:
     return (
         f'(footprint "{name}" (layer "F.Cu") (uuid "{uuid_of()}") (transform (translate {at}) (rotate {rotate}) (scale 1 1))\n'
         f'  {_property("Reference", ref, "0 -1.43 " + str(rotate % 360), "F.SilkS")}\n'
         f'  {_property("Value", value, "0 1.43 " + str(rotate % 360), "F.Fab")}\n'
         f'  {_property("Datasheet", "", "0 0 0", "F.Fab", hidden=True)}\n'
         f'  {_property("Description", "", "0 0 0", "F.Fab", hidden=True)}\n'
-        f"{_numbered(body)}\n)"
+        f"{_numbered(body)}\n"
+        + (f"  {model}\n" if model else "")
+        + ")"
     )
 
 
@@ -141,8 +151,10 @@ BOARD = f"""(kicad_pcb
   )
   (setup (pad_to_mask_clearance 0) (allow_soldermask_bridges_in_footprints no))
   {_footprint("Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical", "5 15", 0, "J1", "Conn_01x02", _HEADER)}
-  {_footprint("Resistor_SMD:R_0603_1608Metric", "35 15", 0, "R1", "10k", _R0603.replace("ROT", "0").replace("NET1", "VBUS").replace("NET2", "LED"))}
-  {_footprint("LED_SMD:LED_0603_1608Metric", "20 24", 90, "D1", "LED", _R0603.replace("ROT", "90").replace("NET1", "GND").replace("NET2", "LED"))}
+  {_footprint("Resistor_SMD:R_0603_1608Metric", "35 15", 0, "R1", "10k", _R0603.replace("ROT", "0").replace("NET1", "VBUS").replace("NET2", "LED"),
+              MODELS["R1"])}
+  {_footprint("LED_SMD:LED_0603_1608Metric", "20 24", 90, "D1", "LED", _R0603.replace("ROT", "90").replace("NET1", "GND").replace("NET2", "LED"),
+              MODELS["D1"])}
   (gr_rect (start 0 0) (end 40 30) (stroke (width 0.1) (type default)) (fill no) (layer "Edge.Cuts") (uuid "{UUIDS['outline']}"))
   (gr_text "blinky" (at 20 5 0) (layer "F.SilkS") (uuid "{UUIDS['blinky']}") (effects (font (size 1.5 1.5) (thickness 0.3))))
   {_segment("5 15", "34.175 15", 1, "VBUS", UUIDS["vbus track"])}

@@ -1,4 +1,4 @@
-"""``GET /api/v1/documents/kicad_pcb/<id>/plot`` and ``.../drc``: a KiCad board drawn as geometry per layer,
+"""``GET /api/v1/documents/kicad_pcb/<id>/plot``, ``.../models`` and ``.../drc``: a KiCad board drawn as geometry per layer,
 and KiCad's design rule check of it, each kept by the board's bytes.
 ``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files, every
 sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`), read again on each request; with
@@ -15,6 +15,11 @@ with the reason (``PlotError``).
 * ``plot``: the payload (``cad.engine.formats.kicad.poured.payload``) with the pours KiCad refills on a
   copy (``cad_server._internal.boards.refill``: kicode, in the environment of ``cad[kicad]``); without
   KiCad, or when the refill fails, the board as saved, the payload's ``pours`` saying so.
+* ``models``: the board's 3D models table (``BoardAnswers.models``): each model its footprints name, the STEP on
+  this computer it is (by a document id the engine's STEP routes serve its mesh by: no path is answered or taken)
+  or why it has none -- read by the rules of ``cad.engine.formats.kicad.models3d`` (the board's folder, KiCad's 3D
+  library, ``CAD_KICAD_3DMODELS``; STEP alone), afresh on every request (``stat`` alone), so a model file
+  added, edited or removed is the next answer's.
 * ``drc``: ``cad kicad_pcb drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
   ``findings`` (each a severity, a code, a message and a location) and ``measurements.drc``, every finding
   as KiCad reported it -- ``check`` (violation, unconnected, parity), ``severity``, ``type``,
@@ -212,6 +217,8 @@ class BoardAnswers:
         self._work: dict[tuple[str, str], _Work] = {}
         self._held: OrderedDict[tuple[str, str], _Work] = OrderedDict()
         self._keys: dict[str, tuple[tuple[int, int, int], str]] = {}
+        # The model names each board key's text writes (``models``): the last ``HELD``.
+        self._names: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
 
     def key(self, path: str) -> str:
         """The board's key (``poured.key``), worked out again when its stat changes."""
@@ -261,6 +268,51 @@ class BoardAnswers:
         if work.done.wait(self.hold_seconds):
             return work.status, work.body, board_key
         return 202, {"state": "plotting" if product == "plot" else "checking", "retryMs": self.retry_ms}, board_key
+
+    def models(self, file_ref, remember) -> tuple[int, dict]:
+        """``(status, body)``: the board's 3D models table (``GET .../models``), as the file is now.
+
+        Each model a footprint names (``models3d.model_names``, read from the board's text once per board key and
+        kept with its other answers) is answered as this computer has it NOW (``models3d.resolve_models``: only
+        ``stat`` and ``realpath``, every request): ``{"file", "document", "api", "stamp"}`` for a STEP inside the
+        board's folder or KiCad's 3D library -- ``remember``-ed, so the engine's STEP routes serve its mesh by
+        that id, and no path leaves -- else ``{"file", "missing": <reason>}``. Nothing is read but the board and
+        nothing is written."""
+        from cad.engine.formats.kicad.models3d import model_names, resolve_models
+
+        from .kinds import document_api
+
+        candidate = resolve_plot_path(file_ref)
+        if candidate is None:
+            return 404, {"error": "Not found"}
+        if not candidate.lower().endswith(".kicad_pcb"):
+            raise ValueError(f"a board's models are a .kicad_pcb's; {node_basename(candidate)} is not one")
+        try:
+            board_key = self.key(candidate)
+            slot = ("models", board_key)
+            with self._lock:
+                names = self._names.get(slot)
+                if names is not None:
+                    self._names.move_to_end(slot)
+            if names is None:
+                with open(candidate, encoding="utf-8", errors="replace") as handle:
+                    names = model_names(handle.read())
+                with self._lock:
+                    self._names[slot] = names
+                    while len(self._names) > HELD:
+                        self._names.popitem(last=False)
+        except OSError as error:
+            return 400, {"error": f"{node_basename(candidate)} could not be read ({error}); "
+                                  "check that it is a file this user may read"}
+        table: dict[str, dict] = {}
+        for name, answer in resolve_models(candidate, names).items():
+            if answer.path is None:
+                table[name] = {"file": answer.file, "missing": answer.reason}
+                continue
+            ident = remember(answer.path)
+            table[name] = {"file": os.path.basename(answer.path), "document": ident, "api": document_api("step", ident),
+                           "stamp": answer.stamp}
+        return 200, {"models": table}
 
     def _make(self, work: _Work, slot: tuple[str, str], board: Path) -> None:
         from cad.engine.formats.kicad import PlotError
