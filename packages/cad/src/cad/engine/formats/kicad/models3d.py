@@ -30,7 +30,13 @@ of the folders above, end in ``.step`` or ``.stp`` and be at most ``MAX_BYTES``;
 ``too-many``              past the ``MAX_MODELS``-th distinct model
 ========================  ==========================================================
 
-Only ``stat`` and ``realpath`` touch the file system; nothing is read or written. Pure standard library.
+A place is first read as text: it must lie inside one of the folders above before any file system call is
+made for it, and a name that is a network share (``\\\\server\\share``, ``//server/share``), a device
+(``\\\\?\\``, ``\\\\.\\``) or drive-relative (``C:model.step``) is ``outside`` on every platform, looked for
+nowhere: on Windows, opening a share connects to its server and offers it the person's credentials.
+
+Only ``stat``, ``realpath`` and ``isfile`` touch the file system, inside those folders; nothing is read or
+written. Pure standard library.
 """
 
 from __future__ import annotations
@@ -59,6 +65,9 @@ _VRML = (".wrl", ".wrz")
 # ${NAME} or $(NAME), KiCad's two spellings.
 _VARIABLE = re.compile(r"\$\{([^}]*)\}|\$\(([^)]*)\)")
 _LIBRARY_VARIABLE = re.compile(r"^(KICAD\d*_3DMODEL_DIR|KISYS3DMOD)$")
+# A drive's letter: C:/... is a drive's root; C:... without the slash, the drive's current folder.
+_DRIVE = re.compile(r"^[A-Za-z]:")
+_DRIVE_RELATIVE = re.compile(r"^[A-Za-z]:(?!/)")
 # A footprint's (model "<name>" ...) as the board's text writes it.
 _MODEL = re.compile(r'\(model\s+"((?:[^"\\]|\\.)*)"')
 
@@ -129,18 +138,41 @@ def _project_variables(board: Path) -> dict[str, str]:
 
 
 def _inside(path: str, roots: Sequence[str]) -> bool:
+    """Whether ``path`` lies in one of ``roots``, read as text: their ``commonpath`` (case folded where the
+    platform folds it) is the root. A path on another drive, share or device, or a relative one, is in none."""
+    path = os.path.normcase(path)
     for root in roots:
+        root = os.path.normcase(root)
         try:
             if os.path.commonpath([path, root]) == root:
                 return True
-        except ValueError:  # another drive on Windows
+        except ValueError:  # another drive, a share, a device or a relative path
             continue
     return False
 
 
-def _candidates(name: str, folder: str, libraries: Sequence[str], variables: Mapping[str, str]) -> Iterable[str]:
+def _refused(name: str) -> bool:
+    r"""Whether a name is one no file system call is made for, on any platform: a share (``\\server\share``,
+    ``//server/share``), a device (``\\?\``, ``\\.\``) or a drive-relative name (``C:model.step``).
+    Windows opens a share by connecting to its server and offering it the person's credentials."""
+    slashed = name.replace("\\", "/")
+    return "\0" in name or slashed.startswith("//") or _DRIVE_RELATIVE.match(slashed) is not None
+
+
+def _local(candidate: str, roots: Sequence[str]) -> str | None:
+    """``candidate`` normalised when, read as text, it lies inside one of ``roots``; else None. This runs
+    before any file system call; the real path is checked against ``roots`` again once it is known."""
+    if "\0" in candidate:
+        return None
+    path = os.path.normpath(candidate)
+    return path if os.path.isabs(path) and _inside(path, roots) else None
+
+
+def _candidates(name: str, folder: str, libraries: Sequence[str],
+                variables: Mapping[str, str]) -> Iterable[str | None]:
     """Every place a name may be, in KiCad's order: its variables expanded (a library's against each
-    library), else the board's folder and then each library for a relative name."""
+    library), else the board's folder and then each library for a relative name. ``None`` stands for a
+    name that is a share, a device or drive-relative (:func:`_refused`): it is looked for nowhere."""
     name = name.strip().replace("\\", "/")
     library_named = [match.group(1) or match.group(2) for match in _VARIABLE.finditer(name)]
     if any(_LIBRARY_VARIABLE.match(variable or "") for variable in library_named):
@@ -149,9 +181,10 @@ def _candidates(name: str, folder: str, libraries: Sequence[str], variables: Map
                                 else _value(match, folder, variables), name)
         return
     expanded = _VARIABLE.sub(lambda match: _value(match, folder, variables), name)
-    if "\0" in expanded:
+    if _refused(expanded):
+        yield None
         return
-    if os.path.isabs(expanded) or re.match(r"^[A-Za-z]:/", expanded):
+    if expanded.replace("\\", "/").startswith("/") or _DRIVE.match(expanded):
         yield expanded
         return
     yield os.path.join(folder, expanded)
@@ -177,9 +210,14 @@ def _resolve(name: str, folder: str, libraries: Sequence[str], roots: Sequence[s
         return Resolved(name, file, reason="not-step")
     vrml = outside = large = False
     for candidate in _candidates(name, folder, libraries, variables):
-        stem = os.path.splitext(os.path.normpath(candidate))[0]
+        # Inside a root as text first: nothing outside the roots is ever stat-ed, opened or resolved.
+        place = None if candidate is None else _local(candidate, roots)
+        if place is None:
+            outside = True
+            continue
+        stem = os.path.splitext(place)[0]
         tries = [stem + ending for ending in _STEP + tuple(ending.upper() for ending in _STEP)] if suffix in _VRML \
-            else [os.path.normpath(candidate)]
+            else [place]
         for attempt in tries:
             try:
                 real = os.path.realpath(attempt)

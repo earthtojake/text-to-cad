@@ -106,6 +106,37 @@ class Resolve(unittest.TestCase):
         if link is not None:
             self.assertEqual(found["${KIPRJMOD}/models/link.step"][1], "outside")  # the real path is outside
 
+    def test_a_share_a_device_or_a_drive_relative_name_is_outside_and_never_touched(self) -> None:
+        # Windows opens \\server\share by connecting to the server with the person's credentials: such a
+        # name, written by the board or made by a project variable, is refused before any file system call.
+        self.board.with_suffix(".kicad_pro").write_text(
+            '{"text_variables": {"SHARE": "\\\\\\\\evil.example\\\\share", "DEVICE": "\\\\\\\\?\\\\C:\\\\x"}}',
+            encoding="utf-8")
+        names = ["\\\\evil.example\\share\\a.step", "//evil.example/share/a.step", "\\\\?\\C:\\x\\a.step",
+                 "\\\\.\\pipe\\a.step", "//?/UNC/evil.example/share/a.step", "C:a.step", "c:models\\own.step",
+                 "${SHARE}/a.step", "$(SHARE)\\a.wrl", "${DEVICE}/a.step", "${KIPRJMOD}/../../../../evil/a.step"]
+        touched: list[str] = []
+
+        def recording(real):
+            def call(path, *args, **kwargs):
+                touched.append(os.fspath(path))
+                return real(path, *args, **kwargs)
+            return call
+
+        roots = [str(self.project), str(self.library)]
+        with mock.patch("os.stat", recording(os.stat)), mock.patch("os.lstat", recording(os.lstat)), \
+                mock.patch("os.path.realpath", recording(os.path.realpath)), \
+                mock.patch("os.path.isfile", recording(os.path.isfile)), \
+                mock.patch("os.path.exists", recording(os.path.exists)):
+            found = {name: (answer.path, answer.reason) for name, answer in
+                     resolve_models(self.board, names, libraries=roots).items()}
+        for name in names:
+            self.assertEqual(found[name], (None, "outside"), name)
+        # The only places touched are the board's folder and the libraries (resolving them), never a name's.
+        for path in touched:
+            self.assertTrue(any(root.startswith(path) for root in roots), path)
+        self.assertFalse([path for path in touched if "evil" in path or "a.step" in path or "pipe" in path])
+
     def test_the_caps(self) -> None:
         with mock.patch.object(models3d, "MAX_BYTES", 4):
             self.assertEqual(self.resolve("${KIPRJMOD}/models/own.step")["${KIPRJMOD}/models/own.step"], (None, "too-large"))

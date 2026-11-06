@@ -97,7 +97,10 @@ processes (a KiCad file off its request threads, its refill in KiCad's own proce
 unpacking, and buffer reads. It fetches nothing a file names over the network. The 3D models a KiCad
 board names are read only as STEP files, and only inside the board's own folder, KiCad's installed 3D
 library and the folders `CAD_KICAD_3DMODELS` names, every symlink followed first; any other file a board
-names is shown as missing, and the page asks for a model's mesh by an id, never by a path.
+names is shown as missing, and the page asks for a model's mesh by an id, never by a path. A name is
+checked against those folders as text before any file system call is made for it, and one that is a
+network share (`\\server\share`), a device (`\\?\`, `\\.\`) or drive-relative is refused outright, on
+every platform: on Windows, opening a share would offer its server the person's credentials.
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 
