@@ -181,9 +181,9 @@ in once, as its tile first scrolls into view (`features-reveal.tsx` and the `fea
 `globals.css`); the server's page has them drawn, so without scripts, for reduced motion, or for a tile
 already on screen, nothing moves. No image file: nothing to regenerate, nothing heavy.
 
-The grid gives Parts and Circuit boards the first row, then rows of three and four; two columns on a
-tablet, one on a phone. A new feature is an entry in `features` and in the README's list, a drawing
-in `feature-art.tsx` and its place in `feature-grid.tsx`'s `LAYOUT`.
+The grid is two columns from a tablet up and one on a phone, one tile per feature in `features`'s
+order (six: three rows of two). A new feature is an entry in `features` and in the README's list and
+a drawing in `feature-art.tsx`.
 
 ## Social previews
 

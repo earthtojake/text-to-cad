@@ -251,8 +251,8 @@ the app, with no source alias or JSX loader. Web supplies its file source (`crea
 from `@cad/ui/catalog`, over its CAD client), URL navigation (`onShow`, the `/<id>` path
 and history), browser persistence, the document title and appearance, the viewer's links
 (`ViewerHost.links`: its version, its build's GitHub and Discord, `src/host/viewerLinks.js`) and
-the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the file
-sidebar and Preview are the shared package's. Native file operations are host capabilities: the
+the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the view's
+panel and Preview are the shared package's. Native file operations are host capabilities: the
 web offers Copy path and Reveal in the file manager of the machine the server runs on, and has
 no filesystem-writing or editing endpoint. The host boundary is
 [the shared host contract](../../packages/ui/docs/viewer-host.md); browser persistence is
