@@ -4,7 +4,7 @@ import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, T
 import { TreeFilterHighlight, TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
-import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
+import { useFlatPanel, useFlatPanelSection } from "../kit/shell/FlatPanel.jsx";
 import RobotVisibilityButton from "./RobotVisibilityButton.jsx";
 import { robotVisibilityState } from "./visibility.js";
 import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
@@ -146,6 +146,9 @@ export default function LinksSection({ robot = null, components = EMPTY, parts =
   // the tree's rows unmount so a large open robot is not re-rendered per keystroke.
   // In a view's panel the panel's search box searches it (its arrows and Enter walk the hits); alone, its own filter.
   const flatPanel = useFlatPanel();
+  // On screen: Select's tool, and in a view's panel the panel open on this tab. A pick made while it is
+  // not opens its owners at once and waits to be scrolled to until it is.
+  const onScreen = useFlatPanelSection("tree") && active;
   const external = useMemo(() => (flatPanel ? { query: flatPanel.query } : null), [flatPanel?.query]);
   const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown: onSearchKeyDown } = useTreeSearch(tree.roots, external);
   const searchKeys = useRef(onSearchKeyDown);
@@ -163,10 +166,10 @@ export default function LinksSection({ robot = null, components = EMPTY, parts =
     if (!active || reveal.current.complete) return;
     const missing = selectedNodeIds.flatMap(id => robotTreeAncestorIds(tree, id)).filter(id => !expanded.has(id));
     if (missing.length) { setUserExpanded(new Set([...expanded, ...missing])); return; }
-    if (searching) return;
+    if (searching || !onScreen) return;
     const row = rowRefs.current.get(selectedNodeIds.at(-1));
-    if (row) { revealRow(row); reveal.current.complete = true; }
-  }, [active, revealKey, selectedNodeIds, tree, expanded, searching]);
+    if (row && !row.closest("[hidden]")) { revealRow(row); reveal.current.complete = true; }
+  }, [active, onScreen, revealKey, selectedNodeIds, tree, expanded, searching]);
 
   const clearSelection = () => selection.select("");
 

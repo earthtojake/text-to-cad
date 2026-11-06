@@ -8,7 +8,7 @@ import { cn } from '@cad/ui/utils';
 import XbfPartMenu from './XbfPartMenu.jsx';
 import XbfPartActions, { rowActionsLayout } from './XbfPartActions.jsx';
 import ToolPanel from '../kit/tools/ToolPanel.jsx';
-import { useFlatPanel } from '../kit/shell/FlatPanel.jsx';
+import { useFlatPanel, useFlatPanelSection } from '../kit/shell/FlatPanel.jsx';
 import { modelTreeSearchChain, useTreeSearch } from '../kit/inspector/modelTreeSearch.js';
 import VirtualRows, { revealRow } from '../kit/inspector/VirtualRows.jsx';
 import { implicitXbfRoots, xbfSelectionPaths } from './xbfTree.js';
@@ -198,6 +198,9 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   // Search is a second view of the same tree. Typing never touches expansion.
   // In a view's panel the panel's search box searches it (its arrows and Enter walk the hits); alone, its own filter.
   const flatPanel=useFlatPanel();
+  // On screen: Select's tool, and in a view's panel the panel open on this tab. A pick made while it is
+  // not opens its owners at once and waits to be scrolled to until it is.
+  const onScreen=useFlatPanelSection('tree') && active;
   const external=useMemo(()=>flatPanel ? { query: flatPanel.query } : null,[flatPanel?.query]);
   const {query,searching,deferredQuery,index:searchIndex,found,cursorId,listRef,changeQuery,onKeyDown:onSearchKeyDown}=useTreeSearch(tree,external);
   const searchKeys=useRef(onSearchKeyDown);
@@ -235,10 +238,10 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
       if(local.length)setLocalExpanded(current=>new Set([...current,...local]));
       return;
     }
-    if(searching)return;
+    if(searching || !onScreen)return;
     const row=rowElements.current.get(target.id);
-    if(row){revealRow(row);reveal.current.complete=true;}
-  },[active,revealKey,revealPaths,expanded,locked,partControls.onToggleTreeNode,searching]);
+    if(row && !row.closest('[hidden]')){revealRow(row);reveal.current.complete=true;}
+  },[active,onScreen,revealKey,revealPaths,expanded,locked,partControls.onToggleTreeNode,searching]);
 
   // The rows' callbacks never change; each reads the tree as it is when pressed.
   const choose=useCallback((node,event)=>{

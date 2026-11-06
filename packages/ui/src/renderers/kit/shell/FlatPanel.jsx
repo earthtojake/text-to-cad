@@ -149,6 +149,17 @@ const FlatPanelContext = createContext(null);
  */
 export const useFlatPanel = () => useContext(FlatPanelContext);
 
+/**
+ * Whether the panel section `id` (a `ToolPanel` drawn as one of the panel's tabs) is on screen: the panel
+ * open, and its tab the one open or the search listing every tab's hits. A tab's own content reads
+ * `useFlatPanel().shown`; a section reads this, as it is drawn above the tab it names. True outside a panel.
+ */
+export function useFlatPanelSection(id) {
+  const panel = useContext(FlatPanelContext), stack = useContext(ToolStackContext);
+  if (!panel) return true;
+  return panel.shown !== false && (!stack?.tabbed || stack.searching || stack.activeSection === id);
+}
+
 // A tab's own view of the panel: its keys registered under its id, and whether it is on screen.
 function FlatPanelTab({ panel, id, shown, children }) {
   const { registerKeys } = panel;

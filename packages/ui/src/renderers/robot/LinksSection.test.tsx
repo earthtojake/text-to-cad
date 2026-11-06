@@ -9,6 +9,7 @@ import { robotLinkItem } from '../../../dist/renderers/robot/LinkDetails.js';
 import { robotLinkFacts } from '../../../dist/renderers/robot/robotTree.js';
 import { InspectContext } from '../../../dist/renderers/kit/inspector/inspect.js';
 import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 
 Object.assign(globalThis, { React });
 afterEach(cleanup);
@@ -358,4 +359,29 @@ it("the hover tip's words for a robot are its link's name and the joint that hol
   render(<Probe/>);
   expect([tip('shoulder_link'), tip('base_footprint'), tip('wrist_link:v1/object/0'), tip('nowhere')])
     .toEqual(['shoulder_link · revolute', 'base_footprint · Root link', 'flange · wrist_link', '']);
+});
+
+// A link picked in the view while the panel shows another tab waits for its tab: opened, the tree
+// scrolls to the pick's row then (a row in a hidden tab has no place to be scrolled to).
+it('scrolls to a link picked while another tab is open once its tab is shown', () => {
+  const scrolled: string[] = [];
+  const scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this.textContent || ''); });
+  Object.assign(Element.prototype, { scrollIntoView });
+  function Tabbed({ tab, pick }: { tab: string, pick: string }) {
+    const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
+    React.useEffect(() => { if (pick) selection.selectLink(pick); }, [pick]);
+    return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+      sections={<><LinksSection robot={robot} components={components} parts={parts} selection={selection}/>
+        <ToolPanel id="other" label="Other"><p>Other</p></ToolPanel></>}
+      tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+  }
+  try {
+    const { rerender } = render(<Tabbed tab="other" pick="" />);
+    rerender(<Tabbed tab="other" pick="wrist_link" />);
+    expect(scrolled).toEqual([]);
+    rerender(<Tabbed tab="tree" pick="wrist_link" />);
+    expect(scrolled.at(-1)).toContain('wrist_link');
+  } finally {
+    delete (Element.prototype as any).scrollIntoView;
+  }
 });
