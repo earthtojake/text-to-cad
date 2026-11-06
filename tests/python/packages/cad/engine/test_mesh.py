@@ -70,6 +70,25 @@ class MeshContractTest(unittest.TestCase):
         off = np.abs(3 - np.hypot(np.hypot(centroids[:, 0], centroids[:, 1]) - 10, centroids[:, 2]))
         self.assertLessEqual(off.max(), part.linear, "every triangle within the deflection of the torus")
 
+    def test_export_tolerance_holds_on_faces_with_loose_edges(self) -> None:
+        import build123d as bd
+        from OCP.ShapeFix import ShapeFix_ShapeTolerance
+        from OCP.TopAbs import TopAbs_EDGE
+
+        band = bd.Sphere(40) & bd.Box(100, 100, 50)
+        ShapeFix_ShapeTolerance().SetTolerance(band.wrapped, 0.1, TopAbs_EDGE)
+        part = mesh.mesh_shape(band.wrapped, tolerance=0.01)
+
+        triangles = part.positions[part.indices.reshape(-1, 3)].astype(float)
+        on_sphere = (np.abs(np.linalg.norm(triangles, axis=2) - 40) < 1e-3).all(axis=1)
+        on_cap = (np.abs(np.abs(triangles[:, :, 2]) - 25) < 1e-3).all(axis=1)
+        spherical = triangles[on_sphere & ~on_cap]
+        self.assertGreater(len(spherical), 0)
+        points = [spherical.mean(axis=1)]
+        points.extend((spherical[:, a] + spherical[:, b]) / 2 for a, b in ((0, 1), (1, 2), (2, 0)))
+        sag = 40 - np.linalg.norm(np.concatenate(points), axis=1)
+        self.assertLessEqual(float(sag.max()), 0.01, "the export's deflection also bounds loose-edge faces")
+
     def test_a_part_is_meshed_from_its_bytes_and_left_as_it_was(self) -> None:
         import build123d as bd
         from OCP.BRep import BRep_Tool
