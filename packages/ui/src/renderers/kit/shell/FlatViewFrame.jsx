@@ -1,57 +1,33 @@
 import { english, useI18n } from "@cad/ui/i18n";
-import { useLayoutEffect, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
-import { cn } from "@cad/ui/utils";
 import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolVariant, drawingToolLabel } from "../../../annotation/toolbar.jsx";
-import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
-import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
-import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js";
-import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { MeasureIcon } from "../tools/measure/SceneMeasure.jsx";
 import { MeasurementsBar } from "../tools/measure/measurementChips.jsx";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
-import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
-import { ViewportTopRight } from "./ViewportTopRight.jsx";
-import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
-import { stripLeft, useStageReach } from "./useStageReach.js";
-import ViewportContextMenu from "./ViewportContextMenu.jsx";
+import ViewFrame from "./ViewFrame.jsx";
 import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
 import { ViewCornerRow, ViewCubeColumn } from "./ViewCorner.jsx";
 import { VIEWPORT_CUBE_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewportLayout.js";
 
 /**
- * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
- * its panel docked at the left (`FlatPanel.jsx`: search, then a tab per list), and on the canvas
- * beside it the strip at the top centre — the view's centre, open panel or not — with the tool's row
- * and the update under it, Quick Edit at
- * the top-right, the loading cover and the alert card, laid out as every view's
- * (`RendererShell.jsx`'s), from the kit's parts. The renderer brings the picture (its canvases and
- * layers, `children`, in the pane the canvas view measures: `containerRef`), its tools
- * (`flatViewTools`), its view controls (`views`: the view's corner's buttons beside its zoom pill,
- * `ViewCorner.jsx`; on a phone, rows of the strip's More with the zoom), its panel's tabs (`panel`)
- * and Quick Edit's props (`useFlatHandover`'s `quickEdit`).
+ * A FLAT view's frame — a picture on a canvas, head on (a board, a schematic, a drawing) — which is
+ * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), its
+ * update under the strip, Quick Edit (`useFlatHandover`'s `quickEdit`), its panel's tabs (`panel`),
+ * and its corner: the view's own controls on the bottom row (`views`' `corner`s, `ViewCorner.jsx`)
+ * beside its zoom pill, or, while the picture is shown in 3D, the 3D views' column over the cube. On a
+ * phone those are rows of the strip's More, with the zoom. The renderer brings the picture (its
+ * canvases and layers, `children`, in the box the canvas view measures: `containerRef`).
  *
- * The panel is docked, the canvas always the narrower for it while it is open, at any width: the
- * picture is drawn in what the panel leaves, never under it, and opening or shutting the panel is
- * a resize of the canvas (`useFlatCanvasView.js`); the strip alone stays at the view's centre, over
- * the panel where they meet. A file's panel opens in a view 1024px wide or more and starts
- * collapsed in a narrower one, until the person opens or closes it; that, its width and its tab
- * are the file's (`useFlatPanelState`, `filePanel.js`). Collapsed, its expand button stands on a pill at the canvas's top-left. A phone
- * has no panel (no pill, no keys for it): the strip alone, at the view's centre.
- * ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search (`useFlatHandover`'s `panelControl`).
- *
- * While the picture loads, or once it has failed to, none of the viewer's own chrome: the load
- * itself, or the card saying why. A compact host gets the picture alone.
+ * The panel, the strip at the view's centre, the measure, the loading cover and the card are the
+ * frame's, the same as a 3D view's: see `ViewFrame.jsx`. ⌘\ (Ctrl+\) shows and hides the panel,
+ * and / opens it on its search (`useFlatHandover`'s `panelControl`, which the frame fills in).
  */
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const MEASURE_ICON = <MeasureIcon className="size-3.5" aria-hidden="true" />;
-const INSET = `${VIEWPORT_INSET_PX}px`;
-// The strip and what hangs under it: one column at the top centre, as every view's (`RendererShell.jsx`).
-const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
 
 
 /**
@@ -113,106 +89,29 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null,
   corner = "pill", cube = null }) {
   const { t } = useI18n();
-  const toolsHidden = chromeHidden || compact;
-  // A phone has no panel: what its lists offer is reached from the canvas.
-  const sided = Boolean(panel?.tabs.length) && !mobile;
-
-  // ---- the panel: docked; open at first in a wide view ----
-  const frameRef = useRef(null);
-  const tabs = panel?.tabs ?? [];
-  const flat = useFlatPanelState({ frameRef, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack, onToolStackChange });
-  const { mode, open, setOpen } = flat;
-  if (panelControl) panelControl.current = flat.control;
-
   const status = updating && !alert ? <div className="pointer-events-none flex max-w-full items-center" data-viewport-status="">
     <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div> : null;
-
-  // The strip's column is measured into the canvas's variables, as every view's is: the top-right
-  // corner (Quick Edit) starts past its right.
-  const stageRef = useRef(null);
-  const topControls = useRef(null);
-  // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).
-  useStageReach(stageRef, frameRef);
-  useLayoutEffect(() => {
-    const controls = topControls.current, viewport = stageRef.current, frame = frameRef.current;
-    if (!controls || !viewport || !frame) return undefined;
-    const measureColumn = () => {
-      const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
-      const top = controls.getBoundingClientRect().top;
-      // On the frame, where the canvas view's fit reads it (`useFlatCanvasView.js`).
-      frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
-      if (mobile || !rows.length) {
-        viewport.style.removeProperty("--cad-top-right-left");
-        return;
-      }
-      const box = viewport.getBoundingClientRect();
-      const right = Math.max(...rows.map(row => row.right)) - box.left;
-      viewport.style.setProperty("--cad-top-right-left", `${Math.round(right + VIEWPORT_INSET_PX)}px`);
-    };
-    measureColumn();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const resized = new ResizeObserver(measureColumn);
-    resized.observe(controls);
-    resized.observe(viewport);
-    return () => {
-      resized.disconnect();
-      frame.style.removeProperty("--cad-tools-bottom");
-      viewport.style.removeProperty("--cad-top-right-left");
-    };
-  }, [toolsHidden, mobile, sided, open, mode]);
-
-  const panelNode = sided && !toolsHidden ? <FlatPanel mode={mode} open={open} onClose={() => setOpen(false)} label={panel.label}
-    searchLabel={panel.searchLabel} tabs={tabs} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={panel.detail ?? null}
-    detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
-
+  // The view's corner: its own controls on the bottom row, then its zoom pill, or, while the picture
+  // is shown in 3D, the cube (the 3D view's own) with Projection and Home over it. The row stands where
+  // it stands either way. A phone's are More's.
+  const cornerNode = !shown || !zoom ? null : <>
+    {views?.some(view => view.corner) ? <ViewCornerRow>
+      {views.map(view => (view.corner ? <span key={view.id} className="contents">{view.corner}</span> : null))}
+    </ViewCornerRow> : null}
+    {corner === "cube" && cube ? <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION} projection={cube.projection} onHome={cube.onHome} />
+      : <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />}
+  </>;
   return (
-    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-canvas text-foreground"
-      data-slot="cad-file-view" {...surface} data-cad-canvas="" tabIndex={-1}
-      onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
-      {panelNode}
-      <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">
-        <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={busy ? "true" : "false"}>{children}</div>
-        <PreviewChrome active={false}>
-          {toolsHidden ? null : <div className="pointer-events-none absolute z-20 flex flex-col items-center gap-2"
-            style={{ ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
-            <StripTouchProvider value={mobile}>
-              <div ref={topControls} className="flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
-                <FloatingToolBar tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} touch={mobile} />
-                {toolRow}
-                {status}
-              </div>
-            </StripTouchProvider>
-          </div>}
-          {/* The top-right: the host's notice once the picture is on screen, and Quick Edit under it —
-              hidden, not unmounted, while the picture loads: a note being written outlives a reload. */}
-          <ViewportTopRight notice={chromeHidden ? null : notice}>
-            {compact || !quickEdit ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} />}
-          </ViewportTopRight>
-        </PreviewChrome>
-        {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
-        {sided && !toolsHidden && !open ? <FlatPanelPill touch={mobile} onOpen={() => setOpen(true)} /> : null}
-        {/* Where there is no strip (a compact host), the picture catching up says so at the top centre. */}
-        {toolsHidden && updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
-          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
-          <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-        </div> : null}
-        {/* The view's corner (`ViewCorner.jsx`): its own controls on the bottom row, then its zoom pill, or,
-            while the picture is shown in 3D, the cube (the 3D view's own) with Projection and Home over it.
-            The row stands where it stands either way. A phone's are More's. */}
-        {toolsHidden || mobile || !shown || !zoom ? null : <>
-          {views?.some(view => view.corner) ? <ViewCornerRow>
-            {views.map(view => (view.corner ? <span key={view.id} className="contents">{view.corner}</span> : null))}
-          </ViewCornerRow> : null}
-          {corner === "cube" && cube ? <ViewCubeColumn style={VIEWPORT_CUBE_COLUMN_POSITION} projection={cube.projection} onHome={cube.onHome} />
-            : <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />}
-        </>}
-        {chromeHidden || !canvasRef || !contextMenuItems ? null
-          : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
-        <ViewerLoadingOverlay loading={{ opening: loading && !alert, progress: { label: loadingLabel } }} operationKey={file} />
-        <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={onReload} file={file} />
-      </div>
-    </div>
+    <ViewFrame surface={surface} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden}
+      tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} toolRow={toolRow} status={status}
+      panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
+      corner={cornerNode} notice={notice}
+      quickEdit={quickEdit ? <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} /> : null}
+      contextMenu={canvasRef && contextMenuItems ? { viewport: { hostRef: containerRef, canvasRef }, items: contextMenuItems } : null}
+      loading={{ opening: loading && !alert, progress: { label: loadingLabel } }}
+      alert={{ alert: cardAlert, hasContent: shown, dismissed: alertDismissal.dismissed, onDismiss: alertDismissal.dismiss, onReload }}>
+      {children}
+    </ViewFrame>
   );
 }

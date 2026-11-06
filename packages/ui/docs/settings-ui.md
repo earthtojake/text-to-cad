@@ -223,7 +223,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
   ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
   20px wide, in one row that never wraps. It is centred in the whole view, on a phone as on a
-  desktop and in every renderer (`kit/shell/FlatViewFrame.jsx`, `RendererShell.jsx`), 8px from the
+  desktop and in every renderer (all of them mount `kit/shell/ViewFrame.jsx`), 8px from the
   edges at the least; what does not fit goes into
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
@@ -574,8 +574,8 @@ Model (`STEP_PART_VIEW_FEATURES`).
 
 ## The view's panel and the tool stack
 
-**The view's panel** (`kit/shell/FlatPanel.jsx`; a board's and a schematic's `FlatViewFrame.jsx`, a
-3D view's `RendererShell.jsx`, a drawing's `FlatViewFrame.jsx` too, one state, `useFlatPanelState`) holds what there is to read of the
+**The view's panel** (`kit/shell/FlatPanel.jsx`, placed by every view's one frame, `kit/shell/ViewFrame.jsx`,
+one state, `useFlatPanelState`) holds what there is to read of the
 file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 `bg-canvas`, the content area behind every view, 2D and 3D, which sits darker than the chrome in
@@ -1112,7 +1112,7 @@ and its state kept. It is essential, so no setting turns it off.
 
 Quick Edit keeps its corner, 8px in, and never reaches under the tool strip or its tool's row:
 the top-right column starts past the strip's right edge (`--cad-top-right-left`), measured by
-the frame (`RendererShell.jsx`, `FlatViewFrame.jsx`), so the strip is never
+the one frame every view mounts (`ViewFrame.jsx`), so the strip is never
 covered. The view's panel is docked beside the canvas, never over it.
 
 On a phone Quick Edit is a bottom sheet, shadcn's drawer as it ships (`primitives/drawer.jsx`,
