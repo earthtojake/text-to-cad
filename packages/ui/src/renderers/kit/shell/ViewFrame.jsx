@@ -105,7 +105,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // What is picked, under the panel's lists; what a press would pick, beside the pointer.
   const selectedDetail = useSelectedDetail(sided ? inspect : null);
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
-  const flat = useFlatPanelState({ frameRef: root, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange });
+  const flat = useFlatPanelState({ frameRef: root, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange,
+    compact: Boolean(compact) });
   if (panelControl) panelControl.current = previewing ? null : flat.control;
   const panelNode = sided && !toolsHidden ? <FlatPanel mode="docked" open={flat.open} hidden={previewing} onClose={() => flat.setOpen(false)}
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}

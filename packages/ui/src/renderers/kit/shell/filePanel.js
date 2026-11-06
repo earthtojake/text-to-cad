@@ -14,9 +14,10 @@ import { createContext } from "react";
 //   detailHeight  the height they dragged the Selected pane to.
 //
 // The tab once kept these for every file alike (`settings.toolStack`: `collapsed.flat`,
-// `panels.flat.width`, `panels.flatDetail.height` and `tabs` by the kind of file): that form is
-// read once, as the starting value of a file that has none (`legacyFilePanel`), then dropped
-// from the tab's record (`withoutLegacyFilePanel`) and never written again.
+// `panels.flat.width` and `tabs` by the kind of file; the Selected pane's height it never kept, as
+// the tool stack's panel ids are lower case): that form is read once, as the starting value of a
+// file that has none (`legacyFilePanel`), then dropped from the tab's record
+// (`withoutLegacyFilePanel`) and never written again.
 
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const MAX_PX = 4000;
@@ -48,7 +49,7 @@ export function withFilePanel(record, panel) {
 
 /** Whether the tab's settings still carry the panel's old, shared form. */
 export function hasLegacyFilePanel(toolStack) {
-  return Boolean(toolStack?.panels?.flat || toolStack?.panels?.flatDetail || toolStack?.collapsed?.flat !== undefined || toolStack?.tabs);
+  return Boolean(toolStack?.panels?.flat || toolStack?.collapsed?.flat !== undefined || toolStack?.tabs);
 }
 
 /**
@@ -61,8 +62,7 @@ export function legacyFilePanel(toolStack) {
   if (!hasLegacyFilePanel(toolStack)) return { panel: {}, tabs: null };
   const panel = readFilePanel({
     ...(toolStack.collapsed?.flat === true ? { open: false } : {}),
-    width: toolStack.panels?.flat?.width,
-    detailHeight: toolStack.panels?.flatDetail?.height
+    width: toolStack.panels?.flat?.width
   });
   return { panel, tabs: plainObject(toolStack.tabs) ? { ...toolStack.tabs } : null };
 }
@@ -72,7 +72,7 @@ export const legacyFilePanelTab = (tabs, kind) => readFilePanel({ tab: kind ? ta
 
 /** A patch over the tab's tool stack that drops the old shared form (`changeToolStack`'s). */
 export function withoutLegacyFilePanel(toolStack) {
-  const { flat: _flat, flatDetail: _detail, ...panels } = toolStack?.panels ?? {};
+  const { flat: _flat, ...panels } = toolStack?.panels ?? {};
   const { flat: _collapsed, ...collapsed } = toolStack?.collapsed ?? {};
   return { panels, collapsed, tabs: undefined };
 }

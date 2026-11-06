@@ -54,11 +54,13 @@ export const FLAT_PANEL_OPEN_PX = 1024;
  * keeps nothing. `control` is what ⌘\ and / reach (`toggle()`, `search()`).
  *
  * A file with no panel of its own starts from the tab's old shared one, where the tab still carries it
- * (`legacyFilePanel`), which is then dropped from the tab's settings and never written there again.
+ * (`legacyFilePanel`), which is then dropped from the tab's settings and never written there again; a
+ * `compact` view (a picture taken out of sight, a host's inline card) only reads it, as its panel is
+ * never shown and its file's view is not the one kept.
  * @param {{ frameRef: { current: HTMLElement | null }, mobile: boolean, enabled: boolean, kind: string,
- *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void }} options
+ *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void, compact?: boolean }} options
  */
-export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, onToolStackChange }) {
+export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, onToolStackChange, compact = false }) {
   const [frameWidth, setFrameWidth] = useState(0);
   useLayoutEffect(() => {
     const element = frameRef.current;
@@ -93,6 +95,7 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   }, []);
   useEffect(() => {
     // A starting value taken from the old shared form is the file's from now on; the shared form goes.
+    if (compact) return;
     if (initial.adopted && Object.keys(initial.panel).length) fileRef.current?.change(initial.panel);
     if (hasLegacyFilePanel(toolStack)) onToolStackChange(withoutLegacyFilePanel);
   }, []);

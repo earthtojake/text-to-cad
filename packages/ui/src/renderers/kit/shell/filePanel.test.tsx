@@ -27,9 +27,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); Element.prototype.getBoundin
 // The tab's settings as the renderer reads them, and what it writes back.
 let toolStack: any = { panels: {}, collapsed: {} };
 const stackWrites: any[] = [];
+// A compact view (`appearance.compact`: a picture taken out of sight), as the frame tells the panel.
+let compact = false;
 function Panelled() {
   const frameRef = useRef<HTMLDivElement>(null);
-  const flat = useFlatPanelState({ frameRef, mobile: false, enabled: true, kind: 'board', toolStack,
+  const flat = useFlatPanelState({ frameRef, mobile: false, enabled: !compact, compact, kind: 'board', toolStack,
     onToolStackChange: (patch: any) => { stackWrites.push(patch); toolStack = { ...toolStack, ...(typeof patch === 'function' ? patch(toolStack) : patch) }; } });
   return <div ref={frameRef} data-frame="">
     <output data-testid="panel">{JSON.stringify({ open: flat.open, width: flat.width, tab: flat.tab ?? null, detail: flat.detailHeight })}</output>
@@ -103,14 +105,30 @@ it("each file keeps its own panel — open or closed, its width, its tab — and
 });
 
 it("a file with no panel of its own starts from the tab's old shared one, which is then the file's and gone from the tab's settings", async () => {
-  toolStack = { panels: { flat: { width: 280 }, flatDetail: { height: 200 }, tree: { width: 240 } }, collapsed: { flat: true, tree: true }, tabs: { board: 'nets', model: 'tree' } };
+  toolStack = { panels: { flat: { width: 280 }, tree: { width: 240 } }, collapsed: { flat: true, tree: true }, tabs: { board: 'nets', model: 'tree' } };
   stackWrites.length = 0;
   const kept = { state: {} };
   tab(kept);
-  expect(await panel()).toEqual({ open: false, width: 280, tab: 'nets', detail: 200 });
-  expect((kept.state as any).renderers[JSON.stringify([A, 'panelled'])].panel).toEqual({ open: false, width: 280, tab: 'nets', detailHeight: 200 });
+  expect(await panel()).toEqual({ open: false, width: 280, tab: 'nets', detail: null });
+  expect((kept.state as any).renderers[JSON.stringify([A, 'panelled'])].panel).toEqual({ open: false, width: 280, tab: 'nets' });
   // The shared form is dropped, the other panels' sizes and folds kept.
   expect(toolStack).toEqual({ panels: { tree: { width: 240 } }, collapsed: { tree: true }, tabs: undefined });
+});
+
+it("a compact view (a picture taken out of sight) leaves the tab's old shared panel for the file the person opens", async () => {
+  const shared = { panels: { flat: { width: 280 } }, collapsed: { flat: true }, tabs: { board: 'nets' } };
+  toolStack = shared;
+  stackWrites.length = 0;
+  compact = true;
+  try {
+    const kept = { state: {} };
+    tab(kept);
+    await screen.findByTestId('panel');
+    expect(stackWrites).toEqual([]);
+    expect(toolStack).toBe(shared);
+  } finally {
+    compact = false;
+  }
 });
 
 it("a panel the person opened or closed stays so while the view is resized across 1024px, either way, and when the renderer mounts again; until then the width decides", async () => {
