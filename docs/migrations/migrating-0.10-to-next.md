@@ -95,6 +95,7 @@ Ctrl-C -- and under `--json` it is one JSON document on stdout, `{"ok": false, "
 | a manufacturing check's option refused (`--samples 0`, `--pull` beside `--candidates`, the other process's option) exited 1 | exits 2, `invalid_argument`, measuring nothing |
 | a file that is not there: `cad urdf validate missing.urdf` exited 1 with an `invalid_target` finding, `cad stl snapshot missing.stl` 2, `cad kicad_pcb inspect` 2 with its own words | every type's every operation: `no such file: missing.urdf`, exit 2, `not_found`, before anything runs |
 | a file of no type given to a type's command (`cad urdf validate robot.xml`) exited 1 with a finding | `robot.xml is not a urdf file: cad urdf takes .urdf`, exit 2, `wrong_type` |
+| a model's script where its document is wanted (`cad model inspect part.py`) was refused saying `python SCRIPT.py` prints the id, and the help said the same | ``part.py is a model's script, not a document id: `cad run part.py` builds its models and prints each one's id``, exit 2, `wrong_type`; the help says `cad run SCRIPT.py` |
 
 ## The manufacturing measurements
 

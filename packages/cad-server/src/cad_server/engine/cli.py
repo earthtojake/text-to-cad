@@ -1,7 +1,7 @@
 """The engine's verbs as commands -- a thin argparse over the functions of ``api`` -- and
 ordinary Python scripts call decorated models explicitly.
 
-    python SCRIPT.py                                 the models the script explicitly calls
+    cad run SCRIPT.py                                the models the script explicitly calls
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
@@ -12,7 +12,7 @@ ordinary Python scripts call decorated models explicitly.
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad xbf``, ``cad step``, ...), or a
-model's document id (``ids``), for ``cad model``: the id ``python SCRIPT.py`` prints for it. A script is never
+model's document id (``ids``), for ``cad model``: the id ``cad run SCRIPT.py`` prints for it. A script is never
 a source: no verb imports or builds one.
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
@@ -48,7 +48,7 @@ def _source_help(document_type: str | None, generic: str) -> str:
 
     entry = DOCUMENT_TYPES[document_type]
     if not entry.has_file:
-        return ("a model's document id, which python SCRIPT.py prints: the document the engine holds of it, "
+        return ("a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, "
                 "never built")
     return f"the {' or '.join(entry.extensions)} file"
 
@@ -64,7 +64,7 @@ def _meshes(document_type: str | None) -> bool:
 
 def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
     export.add_argument("source", metavar="SRC", help=_source_help(
-        document_type, "an .xbf, a .step, a document id (a model's, which python SCRIPT.py prints), or a mesh "
+        document_type, "an .xbf, a .step, a document id (a model's, which cad run SCRIPT.py prints), or a mesh "
                        "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
     if _meshes(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
@@ -142,7 +142,7 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
         document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
                        "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
-                       "model's, which python SCRIPT.py prints: drawn from what the engine holds)")
+                       "model's, which cad run SCRIPT.py prints: drawn from what the engine holds)")
         + "; with --job, drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
                         help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "

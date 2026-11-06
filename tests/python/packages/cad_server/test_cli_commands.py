@@ -106,6 +106,30 @@ class TheCommandTable(unittest.TestCase):
         code, _, err = _run(["urdf", "validate", "robot.xml"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
 
+    def test_a_script_where_a_document_is_wanted_says_cad_run_builds_it(self) -> None:
+        """A model's script is never a source: the refusal says the command that builds it and prints its id,
+        the skills' own form, and the help says the same -- never ``python SCRIPT.py``."""
+        for argv, said in (
+                (["model", "inspect", "part.py"], "part.py is a model's script, not a document id: `cad run part.py` "
+                                                  "builds its models and prints each one's id, which cad model inspect "
+                                                  "takes"),
+                (["step", "snapshot", "src/my part.py::part", "out.png"],
+                 "src/my part.py::part is a model's script, not a step file: `cad run 'src/my part.py'` builds its "
+                 "models and prints each one's id, which cad model snapshot takes"),
+                (["urdf", "validate", "robot.py"], "robot.py is a model's script, not a urdf file: `cad run robot.py` "
+                                                   "builds its models and prints each one's id")):
+            with self.subTest(argv=argv):
+                code, out, err = _run(argv)
+                self.assertEqual((code, out), (2, ""))
+                self.assertEqual(err, f"cad {argv[0]} {argv[1]}: {said}\n")
+        from cad_server.cli.document_types import OPERATIONS, build_parser, type_usage
+
+        helps = [" ".join(text.split()) for text in  # each help as words: argparse wraps its lines
+                 [type_usage(name) for name in TYPES] + [build_parser(*key).format_help() for key in sorted(OPERATIONS)]]
+        self.assertEqual([text for text in helps if "python SCRIPT" in text], [])
+        self.assertIn("a model's document id, which cad run SCRIPT.py prints",
+                      " ".join(build_parser("model", "export").format_help().split()))
+
     def test_a_model_is_its_id_and_a_file_is_its_types(self) -> None:
         """``cad model`` takes a model's document id and no file; a file's type takes its file and no id."""
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"

@@ -530,7 +530,7 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 ## Live models
 
-A model's page is `/<id>`, its document's id, which `python SCRIPT.py` prints (`view:`). The
+A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
 page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
 imports a script, and no folder lists one. A model has no file of its own: no file menu; its
 name menu opens on Models, and its Files lists the folder the explorer was last in this tab

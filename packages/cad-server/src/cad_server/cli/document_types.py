@@ -542,12 +542,20 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         if entry.has_file:
             raise Failure(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}", "wrong_type")
         return
+    script = given.partition("::")[0]
+    if script.lower().endswith(".py"):
+        # A model's script where its document is wanted: what builds the document, and what takes it.
+        import shlex
+
+        then = (f", which cad model {operation} takes" if ("model", operation) in OPERATIONS else "")
+        raise Failure(f"{source} is a model's script, not {'a document id' if not entry.has_file else f'a {document_type} file'}"
+                      f": `cad run {shlex.quote(script)}` builds its models and prints each one's id{then}", "wrong_type")
     suffix = Path(given).suffix
     found = by_extension(suffix) if suffix else None
     if found is not None and found.id != document_type:
         raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
     if not entry.has_file:
-        raise Failure(f"cad model takes a model's document id (python SCRIPT.py prints it), not {source!r}",
+        raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
     if found is None:
         raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
