@@ -90,7 +90,7 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
 // (which pads its own rows) read the old constants.
 const ROW_OWNERS = ["primitives/tree-row.jsx", "file-viewer/navigation/FolderExplorer.jsx", "file-viewer/navigation/ModelList.jsx"];
 const ROW_CONSTANTS = /\b(TREE_ROW_INSET_PX|TREE_INDENT_PX|LAYER_ROW_INSET_PX|TreeRowGuides)\b/;
-const ROW_PADDING = /paddingLeft|paddingInline|(?<![\w-])p[lx]-/;
+const ROW_PADDING = /padding(?:Left|Right|Inline|InlineStart|InlineEnd)?\b|(?<![\w-])p[lrxse]?-/;
 // The opening tag at `from`, to its closing `>`: braces and quotes skipped.
 const openingTag = (text, from) => {
   let depth = 0, quote = "";
@@ -125,9 +125,12 @@ test("a panel row is padded by the row primitive alone: no list pads one, reads 
 // label, its quiet value and its slider. Only it and the playbar's scrubber, a timeline, draw the
 // slider primitive; no site brings its own slider and number.
 const SLIDER_OWNERS = ["renderers/kit/inspector/SliderField.jsx", "renderers/kit/tools/playbar/AnimationTimeControl.js"];
+// The primitive's module by any spelling (`@cad/ui/primitives/slider`, `../primitives/slider.jsx`), or
+// Radix's slider under it, which only the primitive itself wraps.
+const SLIDER_IMPORT = /primitives\/slider(?:\.jsx)?["'/]|@radix-ui\/react-slider/;
 test("only the slider control and the scrubber import the slider primitive", () => {
   const found = sources(root).map(file => relative(root, file))
-    .filter(name => !SLIDER_OWNERS.includes(name) && /primitives\/slider["'/]/.test(readFileSync(join(root, name), "utf8")));
+    .filter(name => ![...SLIDER_OWNERS, "primitives/slider.jsx"].includes(name) && SLIDER_IMPORT.test(readFileSync(join(root, name), "utf8")));
   assert.deepEqual(found, []);
 });
 
