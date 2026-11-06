@@ -14,7 +14,7 @@ const valueWidth = text => ({ width: `calc(${Math.max(2, String(text ?? "").leng
  * In a panel (the default) it is two lines, shadcn's: the label at the left and the value at the
  * right, then the slider the control's full width, from the label's left edge to the value's right
  * edge. `inline`: a toolbar row's, one line: the label (the tool's own button or name), the slider,
- * the value. The value is an editable number (Enter or blur commits, Escape cancels) with no box in
+ * the value. The value is an editable number (Enter or blur commits a changed one, Escape cancels) with no box in
  * any state: plain right-aligned text, a soft fill under the pointer or the keyboard.
  *
  * @param {{
@@ -36,7 +36,10 @@ export function SliderField({
     thumbProps={{ "aria-label": name, ...thumbProps }}
     onValueChange={next => onValueChange?.(next?.[0] ?? value)}
     onValueCommit={onValueCommit ? next => onValueCommit(next?.[0] ?? value) : undefined} />;
-  const field = <FileSheetValueInput quiet value={text} onValueCommit={onTextCommit} disabled={disabled} ariaLabel={textLabel}
+  // A value left as it shows commits nothing: a tab through it or a click on it must not write the
+  // rounded text back over the value it rounds (123.4° as 123).
+  const commitText = draft => { if (String(draft ?? "").trim() !== String(text ?? "").trim()) onTextCommit?.(draft); };
+  const field = <FileSheetValueInput quiet value={text} onValueCommit={commitText} disabled={disabled} ariaLabel={textLabel}
     className={inline ? "h-6" : "-my-0.5 -mr-1 h-5"} style={valueWidth(text)} data-slider-field-value="" />;
   if (inline) {
     return <div data-slider-field="" data-inline="" className={cn("flex min-w-0 flex-1 items-center gap-1", className)} {...props}>

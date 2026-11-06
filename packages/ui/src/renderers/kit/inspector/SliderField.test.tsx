@@ -35,3 +35,21 @@ it('is a label, a quiet editable value and a slider, in that order, with no icon
   fireEvent.keyDown(thumb, { key: 'ArrowRight' });
   expect(onValueChange).toHaveBeenCalledWith(0.61);
 });
+
+// A value tabbed through or clicked and left as it shows writes nothing back: its text is rounded
+// (a joint at 123.4° shows 123°), and committing it would move the value and drop a named pose.
+it('commits only a value that was changed', () => {
+  const onTextCommit = vi.fn();
+  render(<SliderField label="Elbow" name="Elbow" value={123.4} min={0} max={180}
+    onValueChange={() => {}} text="123°" onTextCommit={onTextCommit} textLabel="Elbow value" />);
+  const value = screen.getByRole('textbox', { name: 'Elbow value' });
+  fireEvent.focus(value);
+  fireEvent.blur(value);
+  fireEvent.click(value);
+  fireEvent.blur(value);
+  expect(onTextCommit).not.toHaveBeenCalled();
+  fireEvent.focus(value);
+  fireEvent.change(value, { target: { value: '90' } });
+  fireEvent.blur(value);
+  expect(onTextCommit).toHaveBeenCalledWith('90');
+});

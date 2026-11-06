@@ -1026,7 +1026,7 @@ playbar's scrubber, a timeline, is the one other slider).
 - **In a toolbar row** (Explode's, Clip's), one line: the tool's button or name as its label,
   the slider, the value.
 - **The value** is the editable number it is (typed, Enter or blur commits, Escape cancels, its
-  unit kept), with no border, outline or ring in any state: plain right-aligned text in tabular
+  unit kept; a value left as it shows commits nothing), with no border, outline or ring in any state: plain right-aligned text in tabular
   figures, as wide as its text and one figure more; under the pointer and the keyboard the view's
   corner wash (the foreground at 9%) with the caret and the selection.
 - **The slider** is shadcn's (`primitives/slider.jsx`) as the control draws it: a 6px track a shade
