@@ -6,6 +6,7 @@ the table to the tree, and pin how each kind of change is routed.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import re
@@ -191,6 +192,15 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         self.assertIn("exit 1", guard)
         self.assertTrue(all(route(path)["skills"] == "true" for path in ("README.md", "skills/cad/SKILL.md", "VERSION")))
 
+    def test_contributing_lists_every_job(self):
+        # CONTRIBUTING.md's CI table says what each job runs and when: a job missing from it (cam was) is one
+        # nobody reading the guide knows runs.
+        text = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        table = text.split("| Check | Runs when a change reaches | What it runs |", 1)[1].split("\n\n", 1)[0]
+        rows = {line.split("|")[1].strip().split(" (")[0] for line in table.splitlines()[2:] if line.startswith("|")}
+        names = {re.search(r"^    name: (.+)$", JOBS[job], re.M)[1].split(" (")[0] for job in GATED | {"version"}}
+        self.assertEqual(names - rows, set())
+
     def test_required_check_names_are_the_jobs(self):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
@@ -242,12 +252,59 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
                      "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs"})
+                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "cam"})
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
                 self.assertEqual(set(chosen["skills_policy"]), {f"{POLICY}/{name}" for name in selector.HEAVY_POLICY})
                 self.assertEqual((route(path)["web_ui"], route(path)["web_viewer"]), ("false", "true"))
+
+    def test_cam_runs_its_own_job_with_freecad_installed(self):
+        job = JOBS["cam"]
+        self.assertIn("FreeCAD.AppImage --appimage-extract", job)
+        self.assertIn("sha256sum -c", job)                  # the download is the release's, checked
+        self.assertIn("CAD_FREECAD=", job)
+        self.assertIn(f"{LIBRARY}/cam", job)
+        self.assertIn("timeout-minutes: 5", job)             # twice its slowest run, about 2 minutes
+        library, server = "packages/cad/src/cad", "packages/cad-server/src/cad_server"
+        for path in (f"{library}/_internal/cam/run.py", f"{library}/freecad/_program.py", f"{library}/_internal/programs.py", f"{library}/cam.py", f"{library}/results.py",
+                     f"{server}/cli/cam_plan.py", f"{server}/_internal/kernel_verb.py", f"{LIBRARY}/cam/test_cam_plan.py",
+                     "tests/python/support/cam_fixtures.py", "skills/cam/SKILL.md"):
+            with self.subTest(path=path):
+                self.assertIn("cam", jobs_for(path))
+        self.assertNotIn("cam", jobs_for("packages/cad/src/cad/geometry.py"))
+        # Every module of the packages CAM's code imports, and the read a part goes through, reaches its plans too,
+        # the engine's final rule notwithstanding; the rest of the engine does not.
+        sources = {"cad": REPO_ROOT / "packages/cad/src", "cad_server": REPO_ROOT / "packages/cad-server/src"}
+        cam = [*sorted((sources["cad"] / "cad/_internal/cam").glob("*.py")), *sorted((sources["cad"] / "cad/freecad").glob("*.py")),
+               sources["cad"] / "cad/cam.py",
+               *sorted((sources["cad_server"] / "cad_server/cli").glob("cam_*.py")),
+               sources["cad_server"] / "cad_server/_internal/kernel_verb.py"]
+        imported = set()
+        for file in cam:
+            for node in ast.walk(ast.parse(file.read_text(encoding="utf-8"))):
+                names = [node.module] if isinstance(node, ast.ImportFrom) and node.module else \
+                    [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
+                for name in (n for n in names if n.split(".")[0] in sources and "." in n):
+                    module = sources[name.split(".")[0]] / Path(*name.split("."))
+                    if module.with_suffix(".py").is_file():
+                        imported.add(module.with_suffix(".py"))
+                    for alias in getattr(node, "names", ()):        # from cad.engine import executables
+                        if (module / f"{alias.name}.py").is_file():
+                            imported.add(module / f"{alias.name}.py")
+        read = {sources["cad"] / "cad/engine" / name for name in ("document.py", "reader.py")}
+        paths = sorted(file.relative_to(REPO_ROOT).as_posix() for file in imported | read)
+        self.assertIn("packages/cad/src/cad/engine/kernel/imported.py", paths)
+        self.assertIn("packages/cad/src/cad/engine/executables.py", paths)
+        self.assertIn("packages/cad/src/cad/engine/export/glb.py", paths)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertIn("cam", jobs_for(path))
+        for path in ("packages/cad/src/cad/engine/model.py", "packages/cad/src/cad/engine/document.py",
+                     "packages/cad/src/cad/_internal/atomic_replace.py"):
+            with self.subTest(path=path):
+                self.assertEqual(tests_for(path)["cadgen_tests"], [CADGEN])
+        self.assertNotIn("cam", jobs_for("packages/cad/src/cad/engine/api.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
@@ -324,10 +381,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-js.sh": {"core-js", "web", "mcp", "skills"},
             "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "skills"},
             "scripts/test/test-global.sh": {"skills"},
-            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
+            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "cam", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "cam"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

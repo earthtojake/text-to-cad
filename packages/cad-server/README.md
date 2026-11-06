@@ -60,7 +60,8 @@ src/cad_server/
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, the
                          #   install channel, file locks (the state folder's one lock:
-                         #   `file_lock.state`), the CLI derivation
+                         #   `file_lock.state`), the CLI derivation, and a library verb that
+                         #   needs the kernel run in its environment (kernel_verb)
   _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
                          #   plugin (its manifests and skills) -- produced when the wheel is
                          #   packaged, never committed, never edited
@@ -70,7 +71,9 @@ src/cad_server/
 
 `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
 engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them);
-`cad urdf|sdf|srdf validate` the validators; `cad doctor` the setup (the installation registered,
+`cad urdf|sdf|srdf validate` the validators; `cad cam features|plan` CAM (a part and a job in, a
+`.cam.glb` and G-code out: the library's `cad.cam`, run in the CAD kernel environment by
+`_internal/kernel_verb.py`); `cad doctor` the setup (the installation registered,
 the `cad` command written, the CAD kernel environment made, the engine started; the releases on
 disk, the current one, the engine's and each app's plugin's) and what earlier releases left behind
 that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of

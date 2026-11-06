@@ -441,8 +441,13 @@ src/cad/
   urdf.py, sdf.py,       # the robot validators: one public namespace per format, its
   srdf.py                #   `validate` verb, and the checks behind it (*_source.py,
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
-  results.py             # what a `validate` verb returns: the JSON line protocol, typed
+  results.py             # what a `validate` or `cam` verb returns: the JSON line protocol, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
+  cam.py                 # CAM: features (what a job can name) and plan (FreeCAD's toolpaths
+                         #   and G-code, checked against the part, one result GLB); behind it
+                         #   _internal/cam
+  freecad/               # our support for FreeCAD: freecadcmd found, checked and run headless
+                         #   (_program), and the script it runs (_job)
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties
@@ -453,10 +458,26 @@ src/cad/
                          #   build123d` binds, the kernel loads on first use;
                          #   cad-lazy-kernel.pth, at the root of site-packages, installs it
                          #   at interpreter start), the font guard (font_scan), what the library
-                         #   counts (counts), atomic replace, the validators' door, the version
+                         #   counts (counts), atomic replace, the validators' door, a verb run for
+                         #   a server command in the kernel's environment (kernel_run), the version
 src/cadgen/              # the earlier import name: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
 
 The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
 their own READMEs.
+
+## CAM
+
+`cad.cam` (`features` and `plan`, which `cad cam features` and `cad cam plan` run) reads a part from
+its file -- a STEP or an xbf through `read_step`/`read_xbf` -- never through the engine, and resolves a
+job's face refs in that file by the engine's grammar (`engine/refs.py`), so a ref `cad inspect` answers
+or the CAD Viewer copies names the same face. It reads the part's exact faces with OCCT, so it is the
+library's and runs in the CAD kernel environment: the server's commands run it there
+(`cad_server._internal.kernel_verb`, by `python -m cad._internal.kernel_run`). FreeCAD, installed by the
+person (1.1 or newer; `CAD_FREECAD` names its `freecadcmd`), plans and posts each setup in a process of
+its own; `src/cad/freecad/` runs it, and `src/cad/_internal/cam/` checks what it plans against the part, reads back what FreeCAD holds
+and what its post wrote against what it set, and posts nothing a check refuses. A plan writes
+`<stem>.cam.glb`, an ordinary GLB the viewer's GLB renderer draws the job of, and the G-code for each
+setup. `cad cam plan --help` names the job's keys, and a key or value a job cannot take is refused with
+the ones it can.

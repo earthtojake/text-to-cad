@@ -46,6 +46,14 @@ describe("viewer renderer registrations", () => {
     }
   });
 
+  it("opens a CAM result (part.cam.glb) in the GLB renderer, which draws its job", () => {
+    const glb = createGlbRenderer({ client: {} as never });
+    const mesh = createMeshRenderer({ client: {} as never });
+    const xbf = createXbfRenderer({ client: {} as never });
+    expect(selectRenderer([xbf, mesh, glb], file("part.cam.glb", "cad"))).toBe(glb);
+    expect(selectRenderer([xbf, mesh, glb], file("/work/out/Bracket.CAM.GLB", "cad"))).toBe(glb);
+  });
+
   it("prepares every workspace file from its catalog entry alone, and its document releases the render session it opened", async () => {
     let disposed = 0;
     // What opening a file reads: its catalog entry, and a render session.

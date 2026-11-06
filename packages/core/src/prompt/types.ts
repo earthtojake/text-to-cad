@@ -10,7 +10,9 @@ export type ReferenceTarget =
   | { kind: 'whole-resource' }
   | { kind: 'text-range'; start: TextPosition; end: TextPosition }
   | { kind: 'cad-selector'; selectors: readonly string[] };
-export interface PromptReference { resource: ResourceRef; target: ReferenceTarget; label?: string }
+export interface PromptReference { resource: ResourceRef; target: ReferenceTarget; label?: string;
+  /** A sentence saying what the selection is about (a result's check, finding or load), written before its references. */
+  summary?: string }
 export type PromptPart =
   | { id: string; kind: 'text'; text: string }
   | { id: string; kind: 'reference'; reference: PromptReference }

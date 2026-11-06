@@ -2,7 +2,7 @@
 
 Three properties that only hold if something checks them:
 
-* **The manifest.** Exactly the declared names are public on each robot namespace, and every
+* **The manifest.** Exactly the declared names are public on each robot namespace and on CAM's, and every
   public verb is fully annotated -- annotation is what makes a CLI derivable, so an unannotated
   parameter is a silently undispatchable flag.
 * **Signature sync.** For every command, the parser's options ARE the function's parameters
@@ -26,12 +26,15 @@ import unittest
 from cad_server import cli
 from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable, cli_from_function, function_parameters, parser_dests)
 
-# The manifest: robot namespace -> exactly the verbs it exports. A robot description is an
+# The manifest: robot or CAM namespace -> exactly the verbs it exports. A robot description is an
 # authored file, so there is nothing to declare; each format's snapshot is the engine's.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
+    # Not a format: a part and a job go in, a result GLB and G-code come out. Run by its commands in
+    # the CAD kernel's environment (cad_server._internal.kernel_verb).
+    "cad.cam": ("features", "plan"),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
@@ -39,6 +42,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad.sdf", "validate"),
     "srdf validate": ("cad.srdf", "validate"),
+    "cam features": ("cad.cam", "features"),
+    "cam plan": ("cad.cam", "plan"),
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
