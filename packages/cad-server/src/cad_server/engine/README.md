@@ -2749,7 +2749,8 @@ measures nothing: the lists alone.
 **What an inspection costs.** It meshes nothing: it reads the structure through the engine's door
 (`Server.read`), which sends no part to the mesher, where a page's read sends every part not held
 yet, as it is about to ask for them all. What it measures of a part as a whole -- its volume, its
-solids and its box in its own frame (`mesh.measured`) -- are the part's facts, kept by its geometry
+solids, how many of them are inside out (`inverted`) and its box in its own frame (`mesh.measured`)
+-- are the part's facts, kept by its geometry
 key beside its tessellation (`serve.FactCache`), under the same memory budget and evicted after the
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
 in the cache folder would be a derived file (law 2), and the cache holds a document's bytes alone.

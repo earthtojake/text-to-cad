@@ -225,6 +225,26 @@ class SummaryTextTest(unittest.TestCase):
                 self.assertNotIn("no material:", summary_text(summary))
                 self.assertEqual(summary["materials"], [row])
 
+    def test_a_part_inside_out_is_named(self) -> None:
+        # A solid whose faces point inward (a build123d boolean can make one) has a negative volume; the
+        # kernel measures it as its size, and the summary names the part that is inside out.
+        import build123d as bd
+
+        from cad.engine.api import _summary
+        from cad.engine.mesh import measured, shape_bytes
+        from cad_server.engine.cli import summary_text
+
+        facts = {"right": measured(shape_bytes(bd.Box(10, 10, 10).wrapped)),
+                 "inside out": measured(shape_bytes(bd.Box(10, 10, 10).wrapped.Reversed()))}
+        self.assertEqual([(round(row["volume"]), row["inverted"]) for row in facts.values()], [(1000, 0), (1000, 1)])
+        structure = {"name": "knob", "prototypes": [{"key": "right"}, {"key": "inside out"}],
+                     "instances": [{"prototype": 0, "path": "knob/body", "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+                                   {"prototype": 1, "path": "knob/cap", "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 20, 0, 0, 1]}],
+                     "tree": {"name": "knob"}}
+        summary = _summary(structure, Path("knob.xbf"), lambda *_: facts, "id")
+        self.assertEqual(summary["inverted"], ["knob/cap"])
+        self.assertIn("inside out  knob/cap: a solid whose faces point inward", summary_text(summary).splitlines())
+
     def test_names_a_file_carries_are_printed_without_their_control_characters(self) -> None:
         # A third-party STEP's product names reach the terminal: OCCT keeps an ESC in them.
         from cad_server.engine.cli import summary_text

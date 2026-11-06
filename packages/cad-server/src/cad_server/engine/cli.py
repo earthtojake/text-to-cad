@@ -511,6 +511,8 @@ def summary_text(summary: dict[str, Any]) -> str:
         else:
             lines.append("bounds      none: no geometry")
         lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
+        if summary.get("inverted"):  # a solid inside out: its faces point inward, its volume below zero
+            lines.append(f"inside out  {', '.join(summary['inverted'])}: a solid whose faces point inward")
     if summary["materials"]:
         mass = summary.get("mass")
         lines.append("materials" + (f"   {_said.number(mass)} kg in all" if mass is not None else ""))

@@ -572,7 +572,8 @@ before starting. An agent's explicit host path is a different destination contra
 documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
-`cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
+`cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
+inside out, a solid's faces pointing inward), materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
 `--query closure`, and `cad.<type>.inspect()` with no reference, the closure alone);
