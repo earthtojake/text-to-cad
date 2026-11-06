@@ -151,6 +151,10 @@ def place(footprint, x_mm, y_mm, degrees):
         zone.proto.outline.CopyFrom(outline)
 ```
 
+A zone already off its part (a board placed without this) goes back to its library footprint's outline, in the
+footprint's frame: each point as the library has it, its y negated on the back (KiCad's flip mirrors it), never
+turned and moved onto the board by hand, which KiCad then places a second time.
+
 KiPy also turns a footprint's pads and drawings itself, truncating to the nanometre: after a quarter or
 half turn some are 1 nm off (`7.499999`), and DRC warns `lib_footprint_mismatch` ("does not match copy in
 library") on a footprint nobody changed. On a turned part that warning is this rounding; KiCad's flip and
