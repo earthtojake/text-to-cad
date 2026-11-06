@@ -778,7 +778,7 @@ file.
   to half the view and never so wide that the strip, at the view's centre, covers its head: 8px short
   of the strip's left edge; from a grip on its right edge, Left/Right by 16px). **All of the panel's state is
   the file's**, as its camera and its layers are: open or collapsed, the width, the tab and the Selected
-  pane's height are kept in the file's view (`panel`, `kit/shell/filePanel.js`), written by the panel's
+  pane's height are kept in the file's view (`panel`, `file-viewer/filePanel.js`), written by the panel's
   own state (`useFlatPanelState`) for every view that has a panel, 2D and 3D alike, and merged into the
   file's record by the file viewer whatever the renderer writes. A reload brings each file's back;
   another file starts at its own, or at the defaults.

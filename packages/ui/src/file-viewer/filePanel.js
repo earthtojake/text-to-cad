@@ -1,8 +1,8 @@
 import { createContext } from "react";
 
-// The view's panel (`FlatPanel.jsx`), kept per file: one more field of the file's view
-// (`fileView.js`), `panel`, beside the renderer's own, and written by the panel itself rather
-// than by any renderer. The file viewer (`file-viewer/FileViewer.tsx`) holds it for the file on
+// The view's panel (`renderers/kit/shell/FlatPanel.jsx`), kept per file: one more field of the
+// file's view (`renderers/kit/shell/fileView.js`), `panel`, beside the renderer's own, and written by
+// the panel itself rather than by any renderer. The file viewer (`FileViewer.tsx`) holds it for the file on
 // screen and merges it into every record the renderer writes, so a renderer that writes its
 // view wholesale never drops it; `useFlatPanelState` reads it and writes it through
 // `FilePanelContext`. Four things, each absent until the person sets it:

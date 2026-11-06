@@ -142,7 +142,7 @@ DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer
 file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
 beside the appearance and the home's layout; the view's panel — open or collapsed, its width,
-its tab — is the file's, kept in its view as its camera is (`kit/shell/filePanel.js`, merged
+its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
 into the renderer's record by `FileViewer`).
 
 ## Preview and renderer navigation actions

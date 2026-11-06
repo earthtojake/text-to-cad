@@ -11,7 +11,7 @@ import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
 import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { FLAT_DETAIL_MIN_HEIGHT, flatDetailHeight } from "../tools/toolStackLayout.js";
-import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "./filePanel.js";
+import { FilePanelContext, hasLegacyFilePanel, legacyFilePanel, legacyFilePanelTab, readFilePanel, withoutLegacyFilePanel } from "../../../file-viewer/filePanel.js";
 import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 /**

@@ -13,7 +13,7 @@ import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
-import { FilePanelContext, filePanelOf, withFilePanel } from "../renderers/kit/shell/filePanel.js";
+import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -77,7 +77,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const openedKey = `${String(key)}\u0000${rendererStateKey}`;
   if (openedState.current.key !== openedKey) openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
   const rendererState = openedState.current.value;
-  // The view's panel, the file's (`kit/shell/filePanel.js`): held here for the file on screen, from
+  // The view's panel, the file's (`filePanel.js`): held here for the file on screen, from
   // its record as it opened, and merged into every record its renderer writes, so a renderer that
   // writes its view wholesale never drops it. One holder per file opened: a departing renderer's last
   // write carries its own file's panel.

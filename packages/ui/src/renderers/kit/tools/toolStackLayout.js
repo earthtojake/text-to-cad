@@ -8,7 +8,7 @@
 //              stack's height);
 //   collapsed  which panels are folded to their first row, by id.
 //
-// The view's panel (`kit/shell/FlatPanel.jsx`) is the file's, not the tab's (`kit/shell/filePanel.js`).
+// The view's panel (`kit/shell/FlatPanel.jsx`) is the file's, not the tab's (`file-viewer/filePanel.js`).
 // It was once kept here, for every file alike — `panels.flat`, `panels.flatDetail`, `collapsed.flat`
 // and `tabs` (its tab by the kind of file) — and a record that still carries those keeps them, read
 // as they always were, until the panel adopts them for a file and drops them; nothing writes them now.
