@@ -918,6 +918,7 @@ export default {
   "flatPanel.back": "返回视图",
   "flatPanel.resize": "调整面板大小",
   "flatPanel.resizeDetail": "调整详情大小",
+  "flatPanel.resizeDetailHint": "双击使详情适应所选内容",
   "flatPanel.nothingMatches": "没有与“{query}”匹配的内容",
   "board.text.board_panel": "电路板面板",
   "board.text.search_board": "搜索电路板",

@@ -52,9 +52,14 @@ test("every resizable panel opens capped at the whole stack, on desktop and phon
   assert.equal(toolPanelDefaultHeight(0), null, "an unmeasured stack sets no cap yet");
 });
 
-test("the Selected pane opens 320px tall, or half a short panel, and a person's height wins within the bounds", () => {
-  assert.equal(flatDetailHeight({ panelHeight: 900 }).height, 320);
-  assert.equal(flatDetailHeight({ panelHeight: 500 }).height, 250);
+test("the Selected pane fits its content up to min(320px, 40% of the panel), and a person's height wins within the bounds", () => {
+  assert.equal(flatDetailHeight({ panelHeight: 900 }).height, 320, "content not measured: the cap");
+  assert.equal(flatDetailHeight({ panelHeight: 500 }).height, 200);
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 131 }).height, 131, "content under the cap: fitted");
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 50 }).height, 96, "never under the minimum");
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 700 }).height, 320, "past the cap it scrolls");
+  assert.equal(flatDetailHeight({ panelHeight: 500, content: 700 }).height, 200);
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200, content: 131 }).height, 200, "a kept height is not resized by content");
   assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200 }).height, 200);
   assert.deepEqual(flatDetailHeight({ panelHeight: 400, kept: 300 }), { height: 240, max: 240 }, "the lists keep 160px");
   assert.equal(flatDetailHeight({ panelHeight: 0 }).height, 96, "unmeasured: the minimum");

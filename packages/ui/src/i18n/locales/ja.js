@@ -917,6 +917,7 @@ export default {
   "flatPanel.back": "ビューに戻る",
   "flatPanel.resize": "パネルのサイズを変更",
   "flatPanel.resizeDetail": "詳細のサイズを変更",
+  "flatPanel.resizeDetailHint": "ダブルクリックで選択内容の高さに合わせます",
   "flatPanel.nothingMatches": "「{query}」に一致するものはありません",
   "board.text.board_panel": "基板パネル",
   "board.text.search_board": "基板を検索",

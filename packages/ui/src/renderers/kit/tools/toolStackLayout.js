@@ -94,18 +94,23 @@ export function toolPanelDefaultHeight(stackHeight) {
   return Math.round(Number(stackHeight)) || null;
 }
 
-export const FLAT_DETAIL_DEFAULT_HEIGHT = 320;
+export const FLAT_DETAIL_MAX_FIT_HEIGHT = 320;
+export const FLAT_DETAIL_FIT_FRACTION = 0.4;
 export const FLAT_DETAIL_MIN_HEIGHT = 96;
 export const FLAT_LISTS_MIN_HEIGHT = 160;
 
 /**
  * The height of the 2D views' Selected pane, and the most it may have. A person's (`kept`, or `draft`
- * during a drag) is used as it is; else 320px, or half the panel where that is less. Always within
- * 96px and what leaves the lists above it 160px; 96px where the panel is not measured yet.
+ * during a drag) is used as it is; else the pane fits its content (`content`, the whole height the
+ * content needs), up to the smaller of 320px and 40% of the panel, past which it scrolls; with the
+ * content not measured yet, that cap. Always within 96px and what leaves the lists above it 160px;
+ * 96px where the panel is not measured yet.
  */
-export function flatDetailHeight({ panelHeight = 0, kept = null, draft = null } = {}) {
+export function flatDetailHeight({ panelHeight = 0, kept = null, draft = null, content = null } = {}) {
   const panel = Number(panelHeight) || 0;
   const max = Math.max(FLAT_DETAIL_MIN_HEIGHT, panel - FLAT_LISTS_MIN_HEIGHT);
-  const wanted = draft ?? kept ?? Math.min(FLAT_DETAIL_DEFAULT_HEIGHT, panel / 2);
+  const cap = Math.min(FLAT_DETAIL_MAX_FIT_HEIGHT, panel * FLAT_DETAIL_FIT_FRACTION);
+  const fit = typeof content === "number" && Number.isFinite(content) ? Math.min(cap, content) : cap;
+  const wanted = draft ?? kept ?? fit;
   return { height: Math.round(Math.min(max, Math.max(FLAT_DETAIL_MIN_HEIGHT, wanted))), max };
 }
