@@ -7,9 +7,37 @@ from cad.work_instruction import (
 )
 ```
 
+## A picture guide
+
+The default. Everything but the model's name and the `<...>` is the shape to copy:
+
+```python
+from cad.work_instruction import Instruction, work_instruction
+from desk_lamp import desk_lamp  # the assembly's model, beside this script
+
+
+@work_instruction(out="../PDF/desk_lamp_guide.pdf")
+def desk_lamp_guide():
+    wi = Instruction(
+        desk_lamp(),
+        title="Desk lamp",
+        scope="<one friendly line about what this is>",
+        tools=["Screwdriver"],
+        names={"Base": ["base_plate"], "Screw post": ["post_1", "post_2"]},  # what a person calls each part
+    )
+    wi.step("Lay the base flat", install=["base_plate"])
+    wi.step("Push a post into each hole", install=["post_1", "post_2"], arrow="down").caution(
+        "<one sentence, where someone could get hurt or break something>")
+    return wi
+
+
+if __name__ == "__main__":
+    desk_lamp_guide()
+```
+
 ## Template
 
-Every document, product and value below is a PLACEHOLDER showing the script's
+For a shop's work instruction. Every document, product and value below is a PLACEHOLDER showing the script's
 shape: `PS-XXXX`, `ADHESIVE-X` and the `<...>` values are not real, and none
 of them is a default. A real script carries only what the user's documents
 state, each value copied from the section it cites. A value they do not state
@@ -88,12 +116,14 @@ writes one PDF at `out` (relative to the script), prints every open item, and
 returns `[path]`. A refused or failed run writes no file at `out`; an earlier one
 there is left as it was.
 
-## `Instruction(assembly, *, title, number, revision, ...)`
+## `Instruction(assembly, *, title, ...)`
 
 | Argument | Meaning |
 | --- | --- |
 | `assembly` | the assembly's document: what calling its model returns, or an `.xbf` or `.step` path; a single part is refused |
-| `title`, `number`, `revision` | the instruction's own; on every page |
+| `title` | the instruction's own; on every page |
+| `number`, `revision` | the instruction's identity: required from `production` up, in a picture guide's footer if given |
+| `names` | what a person calls each part: `{"Pin": ["pin_1", "pin_2"]}`, each name to the labels or refs it covers; parts sharing a name share a line, with their count |
 | `part_number`, `author` | optional; the author signs "prepared by" |
 | `drawing` | the assembly `Drawing`, first under APPLICABLE DOCUMENTS |
 | `status` | `draft` (default, DRAFT on every page) or `released` (refused while anything is open) |
@@ -104,7 +134,7 @@ there is left as it was.
 | `safety` | lines of PPE and hazards, as the user's documents state them |
 | `tools` | fixtures and tooling the user names, listed under EQUIPMENT |
 | `revisions` | `(rev, date, change)` rows |
-| `rigor` | `prototype`, `production` (default) or `controlled`; see below |
+| `rigor` | `simple` (default), `production` or `controlled`; see below |
 | `emphasis` | `visual` (default) or `process`; see below |
 | `format` | a `Format` read from the user's template or example; see below |
 
@@ -112,16 +142,18 @@ there is left as it was.
 after it and a line in the front pages' overview. Steps keep one sequence
 across operations.
 
-`wi.step(title, *, install=(), camera=None, picture=True, frame="step")` adds
-the next step and returns it. One step is one action. `install` names the
+`wi.step(title, *, install=(), camera=None, picture=True, frame=None, arrow=None)`
+adds the next step and returns it. One step is one action. `install` names the
 parts the step puts in place: a label (every part carrying it), or a
 subassembly's label or ref (`wheel`, `cart/wheel.2`), which installs it as ONE unit
 (one line in the parts list) and every part under it in the figure. The parts
-list puts parts on one line only when they carry the same label: give copies
-of one part one label (`pin`), not numbered names (`pin_1`, `pin_2`). A part is
-installed by one step only. `frame="step"` fits the figure to the parts the
-step installs with room around them; `frame="assembly"` fits the whole
-assembly. A step that installs nothing (a cure, an inspection) still has a
+list puts parts on one line only when they carry the same name: give copies
+of one part one label (`pin`) or one name in `names=`. A part is
+installed by one step only. `frame="step"` (a work instruction's default) fits
+the figure to the parts the step installs with room around them;
+`frame="assembly"` (a picture guide's) fits the whole assembly. `arrow` is the
+way the parts travel into place, drawn on a picture guide's picture: `down`
+(−Z), `up` (+Z), `left` (−X), `right` (+X), `forward` (−Y) or `back` (+Y). A step that installs nothing (a cure, an inspection) still has a
 figure of what is installed so far, and none while nothing is.
 
 `wi.tree()` returns every part and subassembly, indented, by its ref (the
@@ -137,7 +169,7 @@ source (below), and each part no step installs.
 
 | `rigor` | Sign-off columns | Paperwork | Inspections |
 | --- | --- | --- | --- |
-| `prototype` | DONE | none: no work order, lot, actual-reading or calibration blanks, no approvals, no close-out | a row like any other |
+| `simple` | none: a tick box on each step | none: a picture guide (with `pictures=False`, a table with a DONE column) | a line under the step's picture, "Check: ..." |
 | `production` | TECH | work order, serial and start; lot and expiry; actual readings; equipment ID and cal due; prepared and approved; a close-out | a row like any other; a criterion's source is printed when given |
 | `controlled` | TECH, QA | production's, with reviewed by | a hold point (HOLD in the last sign-off column); a criterion with no source is an open item |
 
@@ -234,15 +266,16 @@ under EQUIPMENT with ID and calibration-due blanks.
 
 ## The figures
 
-One snapshot job draws every step's figure through the engine. Each shows the
+One snapshot job draws every picture through the engine: every step's figure,
+and a picture guide's finished assembly and part pictures. Each shows the
 assembly as it stands after the step, as hidden-line art (black edges): parts
 a later step installs are left out, parts installed earlier are lines only,
 the step's own parts are filled blue, and named surfaces are outlined purple.
 Each figure looks from the instruction's `camera` (or the step's own) and is
-placed exactly, never fitted to what is visible. `frame="step"` (the default)
-centres it on the step's parts, so the view moves from step to step;
-`frame="assembly"` fits the whole assembly, one camera for every such figure,
-so a part stays in place across them.
+placed exactly, never fitted to what is visible. `frame="step"` centres it on
+the step's parts, so the view moves from step to step; `frame="assembly"` fits
+the whole assembly, one camera for every such figure, so a part stays in place
+across them. A picture guide's fit leaves room for its arrows.
 
 ## What the run prints
 

@@ -41,14 +41,16 @@ from the section of the user's document it cites)::
     if __name__ == "__main__":
         bracket_assembly_wi()
 
-How much paperwork the pages carry is the instruction's ``rigor``: a
-``prototype`` build order, ``production`` (the default) traceability, or
-``controlled`` QA hold points for audited work. Its ``emphasis`` is ``visual``
+How much paperwork the pages carry is the instruction's ``rigor``: ``simple``
+(the default, a picture guide anyone can follow), ``production`` traceability,
+or ``controlled`` QA hold points for audited work. Its ``emphasis`` is ``visual``
 (a figure per step) or ``process`` (text-led, with a map of which steps apply
 which document). A company's own template or example becomes a :class:`Format`
 that renames or replaces the layout's title, columns, numbering and sign-offs.
 
-Running the script writes one PDF at ``out``: front pages (documents, parts,
+Running the script writes one PDF at ``out``. At ``simple`` it is a picture guide:
+the finished assembly, what you need with a picture of each part, then a big
+picture of each step. From ``production`` up: front pages (documents, parts,
 materials, equipment, open items, approvals) and the procedure as a ruled
 table, one row per step with its values, a figure of the assembly as it stands
 after the step (line art, the step's own parts filled, parts still to come left
@@ -72,7 +74,7 @@ import math
 import re
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 __all__ = [
     "work_instruction", "Instruction", "Step",
@@ -85,10 +87,13 @@ __all__ = [
 TORQUE_UNITS = ("in-lbf", "ft-lbf", "N-m")
 CAMERAS = ("iso", "front", "back", "left", "right", "top", "bottom")
 PAGE_SIZES = ("LETTER", "A4")
-RIGORS = ("prototype", "production", "controlled")
+RIGORS = ("simple", "production", "controlled")
 EMPHASES = ("visual", "process")
 NUMBERINGS = ("sequential", "by-ten")
 FRAMES = ("step", "assembly")
+# The way a step's parts travel into place, along the model's axes: the arrow on a picture guide's picture.
+ARROWS = {"down": (0, 0, -1), "up": (0, 0, 1), "left": (-1, 0, 0), "right": (1, 0, 0),
+          "forward": (0, -1, 0), "back": (0, 1, 0)}
 NOTICES = ("WARNING", "CAUTION", "NOTE")
 STATUSES = ("draft", "released")
 NOT_STATED = "NOT STATED"
@@ -473,15 +478,16 @@ class Layout:
     holds: bool  # an inspection is a hold point in the last sign-off column
     close_out: bool
     cite_inspections: bool  # an inspection criterion with no source is an open item
+    guide: bool = False  # a picture guide (one big picture a step), not a front page and a table
 
 
-# What each rigor lays out. A prototype is a build order to follow; production adds
+# What each rigor lays out. Simple is a picture guide anyone can follow; production adds
 # the traceability a shop keeps; controlled (aerospace, medical) adds QA hold
 # points, calibration and a cited criterion for every inspection.
 RIGOR_LAYOUTS = {
-    "prototype": Layout("WORK INSTRUCTION", "", "STEP", "sequential", ("DONE",), (), "INSTRUCTION", True,
-                        traceability=False, calibration=False, holds=False, close_out=False,
-                        cite_inspections=False),
+    "simple": Layout("WORK INSTRUCTION", "", "STEP", "sequential", ("DONE",), (), "INSTRUCTION", True,
+                     traceability=False, calibration=False, holds=False, close_out=False,
+                     cite_inspections=False, guide=True),
     "production": Layout("WORK INSTRUCTION", "", "STEP", "sequential", ("TECH",), ("Prepared by", "Approved by"),
                          "INSTRUCTION", True,
                          traceability=True, calibration=True, holds=False, close_out=True,
@@ -554,7 +560,8 @@ class Step:
 
     def __init__(self, instruction: "Instruction", number: int, title: str, install: tuple[str, ...],
                  camera: str | None, picture: bool, operation: int | None,
-                 units: tuple[tuple[str, str], ...] = (), frame: str = "step") -> None:
+                 units: tuple[tuple[str, str], ...] = (), frame: str = "step",
+                 arrow: str | None = None) -> None:
         self._instruction = instruction
         self.number = number
         self.label = str(number * 10 if instruction.layout.numbering == "by-ten" else number)
@@ -562,6 +569,7 @@ class Step:
         self.install = install  # every leaf occurrence, for the figure
         self.units = units  # (ref, name) at the level the step names them: a subassembly is one
         self.frame = frame
+        self.arrow = arrow
         self.camera = camera
         self.picture = picture
         self.operation = operation
@@ -876,12 +884,15 @@ class Instruction:
     its own). ``pictures=False`` writes the document with no pictures, so
     the engine draws nothing.
 
-    ``rigor`` is one of :data:`RIGORS`: ``prototype`` (a build order to follow:
-    figures, a done column, no paperwork), ``production`` (the default: tech
-    stamps, work order, serial, lot and actual-reading blanks, calibration,
-    approvals, a close-out) or ``controlled`` (aerospace, medical: production
-    plus a QA column, inspections as hold points and a cited criterion for every
-    inspection). ``emphasis`` is ``visual`` (a figure per step) or ``process``
+    ``rigor`` is one of :data:`RIGORS`: ``simple`` (the default: a picture guide,
+    with no paperwork, for anyone to follow), ``production`` (tech stamps, work
+    order, serial, lot and actual-reading blanks, calibration, approvals, a
+    close-out) or ``controlled`` (aerospace, medical: production plus a QA column,
+    inspections as hold points and a cited criterion for every inspection).
+    ``number`` and ``revision`` are the instruction's identity, required from
+    ``production`` up. ``names`` gives parts the names a reader knows, each
+    name to the labels or refs it covers: ``{"Planet pin": ["pin_1", "pin_2"]}``.
+    Parts that share a name share a line, with their count. ``emphasis`` is ``visual`` (a figure per step) or ``process``
     (text-led steps, no figure column, and a table of which steps apply which
     section of which document). ``format`` is the company's own layout as a
     :class:`Format`, read from a template or example the user supplied; it
@@ -895,16 +906,17 @@ class Instruction:
     imply) and ``revisions`` (``(rev, date, change)`` rows), each only if given.
     """
 
-    def __init__(self, assembly: Any, *, title: str, number: str, revision: str,
+    def __init__(self, assembly: Any, *, title: str, number: str = "", revision: str = "",
                  part_number: str = "", drawing: Drawing | None = None, author: str = "",
                  status: str = "draft", size: str = "LETTER", camera: str = "iso", pictures: bool = True,
                  scope: str | Cited = "", safety: Sequence[str | Cited] = (), tools: Sequence[str] = (),
-                 revisions: Sequence[tuple[str, str, str]] = (), rigor: str = "production",
-                 emphasis: str = "visual", format: Format | None = None) -> None:  # noqa: A002
+                 revisions: Sequence[tuple[str, str, str]] = (), rigor: str = "simple",
+                 emphasis: str = "visual", format: Format | None = None,  # noqa: A002
+                 names: Mapping[str, Sequence[str]] | None = None) -> None:
         shape, self.source, self.source_name = _assembly(assembly)
         self.title = _text("title", title)
-        self.number = _text("number", number)
-        self.revision = _text("revision", revision)
+        self.number = _text("number", number or None, required=False) or ""
+        self.revision = _text("revision", revision or None, required=False) or ""
         self.part_number = _text("part_number", part_number or None, required=False) or ""
         self.author = _text("author", author or None, required=False) or ""
         if drawing is not None and not isinstance(drawing, Drawing):
@@ -916,6 +928,8 @@ class Instruction:
         self.rigor = _one_of("rigor", rigor, RIGORS)
         self.emphasis = _one_of("emphasis", emphasis, EMPHASES)
         self.layout = _layout(rigor, format)
+        if not self.layout.guide and not (self.number and self.revision):
+            raise ValueError(f"a {rigor} instruction needs its number= and revision=, as the user states them")
         self.pictures = bool(pictures) and self.emphasis == "visual" and self.layout.figures
         # The front page's free text, held to the steps' rule: a value it states cites a source
         # (``Cited(text, per=...)``), or that source is an open item (``missing``, as (where, what)).
@@ -937,6 +951,15 @@ class Instruction:
         if len(self.scene.leaves()) < 2:  # refused before any step
             raise TypeError(f"{self.source_name} is a single part: work instructions are for an assembly; "
                             "instructions for machining or processing one detail part are not supported yet")
+        self.names: dict[str, str] = {}  # a part's or subassembly's ref -> the name the pages give it
+        if isinstance(names, (str, bytes)) or (names is not None and not isinstance(names, Mapping)):
+            raise TypeError('names takes {"Planet pin": ["pin_1", "pin_2"]}, each name to what it covers')
+        for name, keys in (names or {}).items():
+            if isinstance(keys, (str, bytes)):
+                raise TypeError(f"names[{name!r}] takes a list of labels or refs, not one string: [{keys!r}]")
+            for key in keys:
+                units, leaves = self._resolve(key)
+                self.names.update({ref: _text("names name", name) for ref in [*(unit for unit, _ in units), *leaves]})
 
     def _front(self, where: str, value: str | Cited) -> _Line:
         text, source = _cited(f"{where} line", value)
@@ -969,7 +992,11 @@ class Instruction:
                 raise KeyError(f"{key!r} names no one part or subassembly of {self.source_name} ({exc}); "
                                f"its parts are: {listing}{more}. wi.tree() lists the subassemblies too.") from None
         parts = [part.ref for unit in named for part in self.scene.parts_under(unit)]
-        return [(unit.ref, unit.label or UNNAMED) for unit in named], parts
+        return [(unit.ref, self.name(unit.ref, unit.label)) for unit in named], parts
+
+    def name(self, ref: str, label: str | None) -> str:
+        """What the pages call a part or subassembly: the name ``names`` gives it, else its label."""
+        return self.names.get(ref) or label or UNNAMED
 
     def tree(self) -> str:
         """The assembly's occurrences, indented: every ref and name ``install=`` takes,
@@ -991,13 +1018,16 @@ class Instruction:
         return self
 
     def step(self, title: str, *, install: Iterable[str] = (), camera: str | None = None,
-             picture: bool = True, frame: str = "step") -> Step:
+             picture: bool = True, frame: str | None = None, arrow: str | None = None) -> Step:
         """Add the next step. ``install`` names the parts this step puts in place
         (labels, or refs such as ``bracket`` or ``arm/pin.2``; a label several parts share
         installs every one of them; a subassembly's ref or label installs it as one
         unit). A part is installed by one step only. ``frame`` is ``step`` (the
         figure fits the parts the step installs, with what is around them) or
-        ``assembly`` (the figure fits the whole assembly, as every such figure does)."""
+        ``assembly`` (the figure fits the whole assembly, as every such figure does); a
+        picture guide keeps the whole assembly in view unless told otherwise, and every other
+        layout frames the step. ``arrow`` is one of :data:`ARROWS`: the way the parts travel
+        into place, drawn on a picture guide's picture."""
         if isinstance(install, (str, bytes)):
             raise TypeError(f"install takes a sequence of part names or refs, not one string: install=({install!r},)")
         number = len(self.steps) + 1
@@ -1005,7 +1035,8 @@ class Instruction:
         # step leaves the parts free for the next one.
         title = _text("step title", title)
         camera = None if camera is None else _one_of("camera", camera, CAMERAS)
-        frame = _one_of("frame", frame, FRAMES)
+        frame = _one_of("frame", frame or ("assembly" if self.layout.guide else "step"), FRAMES)
+        arrow = None if arrow is None else _one_of("arrow", arrow, tuple(ARROWS))
         refs: list[str] = []
         units: list[tuple[str, str]] = []
         for key in install:
@@ -1020,7 +1051,7 @@ class Instruction:
         for ref in refs:
             self._installed[ref] = number
         step = Step(self, number, title, tuple(refs), camera, bool(picture),
-                    len(self.operations) if self.operations else None, tuple(units), frame)
+                    len(self.operations) if self.operations else None, tuple(units), frame, arrow)
         self.steps.append(step)
         return step
 

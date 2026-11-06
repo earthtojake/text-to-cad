@@ -444,7 +444,8 @@ src/cad/
   results.py             # what a `validate` verb returns: the JSON line protocol, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
   work_instruction.py    # @work_instruction: the steps that build one assembly, one PDF;
-                         #   its pages and figures in _internal/work_instruction_pages.py
+                         #   its pages and figures in _internal/work_instruction_pages.py,
+                         #   a simple one's picture guide in _internal/work_instruction_guide.py
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties

@@ -13,6 +13,8 @@ instruction's number, revision and ``PAGE n OF m``.
 ``write_pdf`` lays the document out as pages of draw commands first, so every
 page's header can say ``PAGE n OF m``, then renders them with matplotlib to a
 temporary file renamed into place: a failed run leaves no document behind.
+A ``simple`` instruction is laid out as a picture guide instead
+(:mod:`cad._internal.work_instruction_guide`), from the same pictures.
 
 The pictures are one snapshot job, drawn by the engine: for each step the
 assembly as it stands after the step, as hidden-line art -- black edges on
@@ -35,11 +37,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from cad.work_instruction import UNNAMED, Source
+from cad.work_instruction import ARROWS, UNNAMED, Source
 
 FILL = "#79a9f3"  # the parts a step installs: a light blue the black edges read over
 SURFACE = "#8250df"
+ARROW = "#1f5fd6"  # a picture guide's arrow: the fill's blue, deep enough to read over black edges
 PICTURE_PX = (800, 600)
+GUIDE_PX = (1600, 720)  # a picture guide's picture, two to a page
+COVER_PX, PART_PX = (1600, 760), (480, 480)  # its finished assembly, and each part of what you need
 PAGE_MM = {"A4": (210.0, 297.0), "LETTER": (215.9, 279.4)}
 MARGIN = 12.0
 PT = 25.4 / 72.0  # millimetres per point
@@ -62,6 +67,7 @@ class Picture:
     camera: str
     frame: str = "step"
     focus: tuple[str, ...] = ()  # what a step-framed figure fits: its parts, else its marked faces' parts
+    arrow: str | None = None
 
 
 def picture_plan(wi) -> list[Picture]:
@@ -84,7 +90,8 @@ def picture_plan(wi) -> list[Picture]:
         plan.append(Picture(step.number, tuple(ref for ref in leaves if ref not in installed),
                             step.install, surfaces, step.camera or wi.camera, step.frame,
                             step.install or tuple(dict.fromkeys(owner for op in step.ops
-                                                                for _ref, owner in op.surfaces))))
+                                                                for _ref, owner in op.surfaces)),
+                            step.arrow if wi.layout.guide else None))
     return plan
 
 
@@ -123,6 +130,91 @@ def _fit_step(leaves, picture, diagonal: float) -> tuple[list[float], float]:
     return centre, min(max(size, 0.1 * diagonal), 0.5 * diagonal)
 
 
+def _axes(preset: str) -> tuple[list[float], list[float], list[float]]:
+    """A preset's unit vectors: towards the camera, then the picture's right and up."""
+    from cad.engine.render.occt import PRESETS
+
+    def unit(v) -> list[float]:
+        norm = math.sqrt(sum(c * c for c in v))
+        return [c / norm for c in v]
+
+    def cross(a, b) -> list[float]:
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+    direction, up = PRESETS[preset]
+    view = unit(direction)
+    right = unit(cross(up, view))
+    return view, right, cross(view, right)
+
+
+def fit_points(points: list[list[float]], preset: str, aspect: float, *,
+               room: float = 1.12) -> tuple[list[float], float]:
+    """The target and orthographic half-height that show every point from ``preset`` with a picture
+    ``aspect`` wide: fitted to what the picture shows, so a flat assembly fills it."""
+    view, right, up = _axes(preset)
+    across = [sum(p * r for p, r in zip(point, right)) for point in points]
+    down = [sum(p * u for p, u in zip(point, up)) for point in points]
+    depth = sum(sum(p * v for p, v in zip(point, view)) for point in points) / len(points)
+    x, y = (max(across) + min(across)) / 2, (max(down) + min(down)) / 2
+    target = [round(x * r + y * u + depth * v, 4) for r, u, v in zip(right, up, view)]
+    half = max((max(down) - min(down)) / 2, (max(across) - min(across)) / 2 / aspect) * room
+    return target, round(max(half, 1e-3), 4)
+
+
+def corners(box) -> list[list[float]]:
+    return [[x, y, z] for x in (box.min.X, box.max.X) for y in (box.min.Y, box.max.Y)
+            for z in (box.min.Z, box.max.Z)]
+
+
+def _arrow_ends(shape, travel: str, preset: str, diagonal: float) -> tuple[list[float], list[float]]:
+    """Where an arrow stops, just short of the parts of ``shape``, and where it starts, back along the
+    way they travel. It aims at their middle; where that is mostly air, as in a ring, at the wall to the
+    picture's right, whose arrow crosses nothing else."""
+    way = ARROWS[travel]
+    box = shape.bounding_box()
+    lows, highs = (box.min.X, box.min.Y, box.min.Z), (box.max.X, box.max.Y, box.max.Z)
+    centre = [(lo + hi) / 2 for lo, hi in zip(lows, highs)]
+    across = max(abs(1 - abs(w)) * (hi - lo) / 2 for w, lo, hi in zip(way, lows, highs))
+    hollow = shape.distance_to(tuple(centre))
+    if hollow > 0.5 * across:
+        view, right, _up = _axes(preset)
+        toward = right if abs(sum(r * w for r, w in zip(right, way))) < 0.9 else view
+        along = sum(t * w for t, w in zip(toward, way))
+        aside = [t - along * w for t, w in zip(toward, way)]
+        norm = math.sqrt(sum(c * c for c in aside))
+        centre = [c + a / norm * (hollow + across) / 2 for c, a in zip(centre, aside)]
+    reach = sum(abs(w) * (hi - lo) / 2 for w, lo, hi in zip(way, lows, highs)) + 0.015 * diagonal
+    tip = [c - w * reach for c, w in zip(centre, way)]
+    return tip, [t - w * 0.2 * diagonal for t, w in zip(tip, way)]
+
+
+def _arrow_shapes(leaves, picture) -> list:
+    """What a picture's arrows point at: each part of its step, or all of them as one past six."""
+    from build123d import Compound
+
+    shapes = [leaves[ref].shape() for ref in picture.tint]
+    return shapes if len(shapes) <= 6 else [Compound(shapes)]
+
+
+def _arrow(mark_id: str, shape, picture, diagonal: float) -> list[dict]:
+    """An arrow as two strokes, in the document's frame: its shaft, and its head turned to face the camera."""
+    tip, tail = _arrow_ends(shape, picture.arrow, picture.camera, diagonal)
+    way = ARROWS[picture.arrow]
+    view, right, _up = _axes(picture.camera)
+    side = [way[1] * view[2] - way[2] * view[1], way[2] * view[0] - way[0] * view[2],
+            way[0] * view[1] - way[1] * view[0]]
+    norm = math.sqrt(sum(c * c for c in side))
+    side = [c / norm for c in side] if norm > 1e-6 else right
+    size = 0.035 * diagonal
+    barbs = [[t - w * size + s * size * sign * 0.6 for t, w, s in zip(tip, way, side)] for sign in (1, -1)]
+
+    def stroke(name: str, points: list[list[float]]) -> dict:
+        return {"id": f"{mark_id}-{name}", "kind": "stroke", "color": ARROW, "width": 7,
+                "points": [round(c, 4) for point in points for c in point]}
+
+    return [stroke("shaft", [tail, tip]), stroke("head", [barbs[0], tip, barbs[1]])]
+
+
 def _camera(preset: str, target: list[float], half: float, diagonal: float) -> dict:
     """The snapshot's own camera object for a preset direction, placed exactly: the position
     along the preset's direction from the target, its up, and the orthographic half-height."""
@@ -142,11 +234,26 @@ def picture_jobs(wi, folder: Path) -> dict[int, dict]:
     leaves = {leaf.ref: leaf for leaf in wi.leaves()}
     centre, diagonal = _extent(wi)
     tolerance = max(diagonal * 0.002, 0.01)
+    guide = wi.layout.guide
+    size = GUIDE_PX if guide else PICTURE_PX
+    plan = picture_plan(wi)
+    shown: dict[str, list[list[float]]] = {}  # a guide's camera -> all its pictures show, arrows too
+    if guide:
+        from build123d import Compound
+
+        whole = corners(Compound(list(leaf.shape() for leaf in leaves.values())).bounding_box())
+        for picture in plan:
+            seen = shown.setdefault(picture.camera, list(whole))
+            if picture.arrow:
+                seen += [end for shape in _arrow_shapes(leaves, picture)
+                         for end in _arrow_ends(shape, picture.arrow, picture.camera, diagonal)]
     jobs = {}
-    for picture in picture_plan(wi):
+    for picture in plan:
         target, half = centre, 0.5 * diagonal
         if picture.frame == "step" and picture.focus:
             target, half = _fit_step(leaves, picture, diagonal)
+        elif guide:
+            target, half = fit_points(shown[picture.camera], picture.camera, size[0] / size[1])
         display: dict = {"mode": "hidden-line"}
         if picture.hide:
             display["hidden"] = list(picture.hide)
@@ -154,25 +261,52 @@ def picture_jobs(wi, folder: Path) -> dict[int, dict]:
             display["tint"] = {"parts": list(picture.tint), "color": FILL}
         job = {"input": wi.source, "camera": _camera(picture.camera, target, half, diagonal), "display": display,
                "output": {"tightFrame": False, "transparent": True},
-               "outputs": [{"path": str(folder / f"step-{picture.step}.png"), "width": PICTURE_PX[0],
-                            "height": PICTURE_PX[1]}]}
+               "outputs": [{"path": str(folder / f"step-{picture.step}.png"), "width": size[0],
+                            "height": size[1]}]}
         marks = [_outline(f"step{picture.step}-{ref}", wi.scene.face_shape(ref), SURFACE, tolerance)
                  for ref in picture.surfaces]
+        if picture.arrow:
+            marks += [mark for index, shape in enumerate(_arrow_shapes(leaves, picture))
+                      for mark in _arrow(f"step{picture.step}-arrow{index}", shape, picture, diagonal)]
         if marks:
             job["annotation"] = {"units": "mm", "marks": marks}
         jobs[picture.step] = job
     return jobs
 
 
-def render_pictures(wi, folder: Path) -> dict[int, Path]:
-    """Render every step's picture in one snapshot job; {step number: PNG}."""
+def guide_jobs(wi, folder: Path) -> dict[str, dict]:
+    """A picture guide's other pictures: the finished assembly (``cover``), then each line of
+    what you need on its own (``part-<index>``, in :func:`parts` order)."""
+    from build123d import Compound
+
+    leaves = {leaf.ref: leaf for leaf in wi.leaves()}
+    _centre, diagonal = _extent(wi)
+
+    def job(name: str, shapes: list, display: dict, preset: str, size: tuple[int, int]) -> dict:
+        target, half = fit_points(corners(Compound(shapes).bounding_box()), preset, size[0] / size[1], room=1.05)
+        return {"input": wi.source, "camera": _camera(preset, target, half, diagonal), "display": display,
+                "output": {"tightFrame": False, "transparent": True},
+                "outputs": [{"path": str(folder / f"{name}.png"), "width": size[0], "height": size[1]}]}
+
+    jobs = {"cover": job("cover", [leaf.shape() for leaf in leaves.values()], {"mode": "shaded"}, wi.camera, COVER_PX)}
+    for index, (_name, refs, _steps) in enumerate(parts(wi)):
+        under = [part.ref for part in wi.scene.parts_under(wi.scene.occurrences(refs[0])[0])]
+        jobs[f"part-{index}"] = job(f"part-{index}", [leaves[ref].shape() for ref in under],
+                                    {"mode": "hidden-line", "isolated": under,
+                                     "tint": {"parts": under, "color": FILL}}, wi.camera, PART_PX)
+    return jobs
+
+
+def render_pictures(wi, folder: Path) -> dict[int | str, Path]:
+    """Render every picture in one snapshot job; {step number, or a guide's own name: PNG}."""
     jobs = picture_jobs(wi, folder)
     if not jobs:
         return {}
+    extra = guide_jobs(wi, folder) if wi.layout.guide else {}
     import cad
 
-    cad.snapshot(job={"jobs": list(jobs.values())}, progress=False)
-    return {step: Path(job["outputs"][0]["path"]) for step, job in jobs.items()}
+    cad.snapshot(job={"jobs": [*jobs.values(), *extra.values()]}, progress=False)
+    return {key: Path(job["outputs"][0]["path"]) for key, job in {**jobs, **extra}.items()}
 
 
 # --- layout ------------------------------------------------------------------
@@ -409,7 +543,7 @@ def _header(ax, measure: _Measure, wi, w, h, page: int, count: int, open_count: 
     layout = wi.layout
     top = h - MARGIN
     ax.add_patch(_rect(MARGIN, top - 15.0, w - 2 * MARGIN, 15.0, lw=0.6, edge="black"))
-    number = f"{wi.number}  REV {wi.revision}"
+    number = f"{wi.number}  REV {wi.revision}" if wi.number else ""
     room = w - 2 * MARGIN - 10.0 - measure.width(number, HEAD, "bold")
     title, size = _fit(measure, wi.title, HEAD + 1, room)
     ax.text(MARGIN + 2.5, top - 6.5, title, fontsize=size, weight="bold", va="baseline")
@@ -469,7 +603,7 @@ def parts(wi) -> list[tuple[str, list[str], list[str]]]:
             members.setdefault(_same(ref, name), []).append((ref, step.label))
     for leaf in wi.leaves():
         if leaf.ref not in wi._installed:
-            name = leaf.label or UNNAMED
+            name = wi.name(leaf.ref, leaf.label)
             members.setdefault(_same(leaf.ref, name), []).append((leaf.ref, None))
     return [(name, [ref for ref, _label in found],
              list(dict.fromkeys(label for _ref, label in found if label is not None)))
@@ -482,7 +616,8 @@ def _front(flow: _Flow, wi, open_items: list[str]) -> None:
     flow.cell(_text_cell(m, layout.title, flow.inner, SMALL, "bold"), "the title")
     flow.cell(_text_cell(m, wi.title, flow.inner, TITLE, "bold"), "the title")
     flow.y -= 2.0
-    info = [["Number", f"{wi.number} Rev {wi.revision}"], ["Assembly", wi.source_name]]
+    info = [["Number", f"{wi.number} Rev {wi.revision}"]] if wi.number else []
+    info.append(["Assembly", wi.source_name])
     if wi.part_number:
         info.append(["Part number", wi.part_number])
     if wi.drawing is not None:
@@ -616,7 +751,7 @@ def _instruction(flow: _Flow, wi, step, width: float) -> _Cell:
         cell.text("Install: " + ", ".join(
             f"{name} ×{len(refs)} ({_refs(refs)})" if len(refs) > 1 else f"{name} ({refs[0]})"
             for name, refs in _group(step.units)), SMALL, color="#333333")
-    names = {leaf.ref: leaf.label or UNNAMED for leaf in wi.leaves()}
+    names = {leaf.ref: wi.name(leaf.ref, leaf.label) for leaf in wi.leaves()}
     for op in step.ops:
         shown: Source | None = None  # a citation prints once for the lines of one operation it covers
         cell.gap(0.8)
@@ -642,15 +777,20 @@ def _instruction(flow: _Flow, wi, step, width: float) -> _Cell:
     return cell
 
 
-def _figure(path: Path | None, width: float):
-    if path is None:
-        return 0.0, None
+def read_pixels(path: Path):
     import matplotlib.image as mpimg
 
     pixels = mpimg.imread(str(path))
     if pixels.shape[-1] == 4:  # over white: a page has no use for an alpha mask beside each picture
         alpha = pixels[..., 3:4]
         pixels = pixels[..., :3] * alpha + (1.0 - alpha)
+    return pixels
+
+
+def _figure(path: Path | None, width: float):
+    if path is None:
+        return 0.0, None
+    pixels = read_pixels(path)
     w = width - 3.0
     h = w * PICTURE_PX[1] / PICTURE_PX[0]
 
@@ -776,8 +916,17 @@ def _records(kind: str) -> tuple[str, ...]:
 # --- the PDF -----------------------------------------------------------------
 
 
-def layout(wi, open_items: list[str], pictures: dict[int, Path]) -> _Flow:
-    """The pages as draw commands: the front pages, then the procedure table."""
+def guided(wi) -> bool:
+    """Whether the pages are a picture guide: a layout that asks for one, with pictures to show."""
+    return wi.layout.guide and wi.pictures
+
+
+def layout(wi, open_items: list[str], pictures: dict) -> _Flow:
+    """The pages as draw commands: the front pages, then the procedure table, or a picture guide."""
+    if guided(wi):
+        from cad._internal.work_instruction_guide import layout as guide
+
+        return guide(wi, open_items, pictures)
     flow = _Flow(wi, len(open_items))
     _front(flow, wi, open_items)
     _procedure(flow, wi, pictures)
@@ -786,7 +935,12 @@ def layout(wi, open_items: list[str], pictures: dict[int, Path]) -> _Flow:
 
 def draw_page(ax, flow: _Flow, index: int, open_count: int) -> None:
     """Page ``index`` (from 1), its header first, onto a matplotlib axes in millimetres."""
-    _header(ax, flow.measure, flow.wi, flow.w, flow.h, index, len(flow.pages), open_count)
+    if guided(flow.wi):
+        from cad._internal.work_instruction_guide import footer
+
+        footer(ax, flow, index)
+    else:
+        _header(ax, flow.measure, flow.wi, flow.w, flow.h, index, len(flow.pages), open_count)
     for draw in flow.pages[index - 1]:
         draw(ax)
 
