@@ -96,7 +96,8 @@ check_generated_path() {
 #     root is the plugin, and claude.ai's plugin directory refuses one whose installs
 #     could differ from the files it validated; installers clone without git-lfs anyway;
 #   * every tracked file under 5 MiB: every installer clones the whole repository, with
-#     no LFS to carry heavyweight media, and claude.ai's directory stops at 5 MiB;
+#     no LFS to carry heavyweight media, and claude.ai's directory stops at 5 MiB (a
+#     submodule's gitlink is a commit of another repository, not a file here);
 #   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
 #     the Skills CLI installs skills/<name> alone, so the sibling is not there.
 check_tree_has_no_symlinks() {
@@ -127,7 +128,7 @@ check_gitattributes_keep_files_as_stored() {
 check_no_large_files() {
   local big
   big="$(git -C "$REPO_ROOT" ls-files -s |
-    awk -F'\t' '{ split($1, entry, " "); print entry[2] " " $2 }' |
+    awk -F'\t' '{ split($1, entry, " "); if (entry[1] != "160000") print entry[2] " " $2 }' |
     git -C "$REPO_ROOT" cat-file --batch-check='%(objectsize) %(rest)' |
     awk -v limit=$((5 * 1024 * 1024)) '$1 + 0 >= limit')"
   if [ -n "$big" ]; then

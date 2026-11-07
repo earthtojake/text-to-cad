@@ -1,0 +1,5 @@
+[submodule "apps/t3code"]
+	path = apps/t3code
+	url = https://github.com/amywork777/t3code.git
+	branch = amy/text-to-cad
+	update = none

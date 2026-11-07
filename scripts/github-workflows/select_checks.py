@@ -255,6 +255,13 @@ RULES: tuple[Rule, ...] = (
     # that changes the installer; no test reads it and no test.yml job runs it.
     Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
 
+    # T3 Code with this plugin is its own repository, pinned as a submodule that no job checks out.
+    # The text-bytes contract reads .gitmodules to leave a local checkout of it alone, and the
+    # submodules contract holds every entry out of a recursive clone.
+    Rule(("apps/t3code",), NOTHING, final=True),
+    Rule((".gitmodules",), select(policy=[f"{POLICY_SUITE}/{name}" for name in (
+        "test_source_text_bytes.py", "test_submodules.py")]), final=True),
+
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole

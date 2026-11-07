@@ -122,6 +122,12 @@ which points both at the checkout.
   hosts `cad_server.viewer`'s HTTP app).
 - `apps/mcp/` ([README](apps/mcp/README.md)): the CAD app agent hosts render: tabs in
   Codex, cards in Claude Desktop (its server is `cad-mcp`).
+- `apps/t3code/`: a git submodule pinning [T3 Code](https://github.com/pingdotgg/t3code) with
+  this plugin built in ([amywork777/t3code](https://github.com/amywork777/t3code/tree/amy/text-to-cad),
+  branch `amy/text-to-cad`): a coding agent that designs with the skills, the CAD app beside the
+  thread. App changes go to that branch (its `TEXT-TO-CAD.md`); CAD stays here as the plugin.
+  `git submodule update --init --checkout apps/t3code` fetches it; plain and recursive clones and
+  plugin installs leave it empty (`update = none`).
 - `packages/` ([README](packages/README.md)): the published distributions and the shared JS
   packages. `packages/cad` ([README](packages/cad/README.md)) is the library: the
   engine's library half (`cad/engine`: models built into documents, and the XBF, STEP, GLB, STL,
