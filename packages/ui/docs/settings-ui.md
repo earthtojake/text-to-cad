@@ -771,8 +771,10 @@ file.
   mirrored, the lower layer solid, from the bottom (`board/boardSideIcons.jsx`; "Side: Top", its hint "View from
   bottom ⇧F"); like Projection it has no selected state, its icon the side on screen and no pressed or lit fill
   from either side; a press or ⇧F turns it over. From the bottom the board is mirrored, its back layers on top.
-  **2D/3D** (below, [A board in 3D](#a-board-in-3d)), a state button too, a square while the board is flat and
-  a box in 3D ("View: 2D", its hint "Switch to 3D 3"). **Display**, the tile every 3D view has for it
+  **2D/3D** (below, [A board in 3D](#a-board-in-3d)), a state button too, its glyph the words: **2D** while the
+  board is flat and **3D** in 3D, as KiCad, EasyEDA and the maps apps label their 3D switch (a square would read
+  as the strip's Shapes; `kit/shell/TextGlyph.jsx`, a word drawn as an icon on Lucide's grid, semibold, its
+  figures tabular, in the tile's colour; "View: 2D", its hint "Switch to 3D 3"). **Display**, the tile every 3D view has for it
   (`kit/shell/DisplayPopover.jsx`, its menu the presets as one radio group — Board, Copper, Assembly,
   Placement — the one on screen ticked, and Custom, ticked and not a choice, while the Layers tab's eyes have
   left the preset's set; in 3D, after a rule, the camera's **Projection**, changed seldom, so here and not on
