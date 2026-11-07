@@ -701,9 +701,10 @@ made is removed. Exports and checks of the edited file are explicit calls after 
 ## Manufacturing checks
 
 A 3D document's `dfm` says whether a part can be made by a process, and what to change where it cannot:
-`cad.step.dfm`, `cad.xbf.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one with
-`cad <type> dfm SRC --process cnc|sheet|molding|printing`, and a DXF's, `cad dxf dfm FILE --process
-sheet`, as a sheet's cut file. The source is a file of the type or, for `model`, a model's document the engine
+`cad.model.dfm`, `cad.step.dfm`, `cad.xbf.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
+with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `molding` or
+`printing` alone: CNC and sheet need exact geometry), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
+(its one process, `sheet`, the default). The source is a file of the type or, for `model`, a model's document the engine
 holds (its id, or the handle its call returns), so a check script measures the model it builds:
 
 ```python
@@ -750,12 +751,15 @@ xbf's or a model's parts' declared process is read too (a STEP keeps no process)
 `plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
 `bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
 `cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's alone, the
-other types declaring their own; an option of another process is refused by name. Every family, its JSON, every rule with its source and what
+other types declaring their own; an option of another process, and a value of another kind (`axes=3.7`,
+`turning="no"`), is refused by name, never coerced. Every family, its JSON, every rule with its source and what
 each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
 
 The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
 `cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
 `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
 `cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
-gets the other; one that only calls `cad.<type>.dfm` names the integration in its header (`cad[trimesh]`
-for a mesh), and a check without it says so in one line.
+gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`, `cad.threemf.dfm` and
+`cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm` and `cad.dxf.dfm` build123d -- found by
+`cad run`'s scan of its source, with nothing in its header; a name the scan cannot see (imported by name at
+run time) the run says it lacks, in one line.

@@ -449,7 +449,8 @@ verbosity) key nothing. What it adds is two things:
   build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
-  build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
+  build123d; an operation the calling process runs its integration, a mesh's `dfm` trimesh, a STEP's, an xbf's,
+  a model's and a DXF's build123d; one the engine
   runs, an `export`, none; a type's edit its integration, `kicad_pcb.edit` kicad; a type alone, `from cad
   import step`, none) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
@@ -694,20 +695,24 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
-cad model|xbf|step dfm SRC --process cnc [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
-cad model|xbf|step dfm SRC --process sheet [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+cad model|xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
+cad model|xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
-cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
-                [--zero-tol DEG] [--cavities N] [--units U] [--candidates]
-cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--technology fdm|sls|sla|mjf|pbf]
-                [--build-volume XxYxZ] [--angle-limit DEG] [--layer-height H] [--nozzle D]
-                [--samples N] [--units U] [--candidates]
-cad dxf dfm FILE --process sheet [--thickness T] [--kerf W] [--sheet-size XxY]
+cad model|xbf|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
+                [--cavities N] [--candidates]
+cad model|xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
+                [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
+cad stl|glb|threemf dfm FILE --process molding|printing [the process's options as above] [--units U]
+cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+                [--sheet-size XxY]
       ... [--rules generic|protolabs|hubs|xometry|sendcutsend|none] [--material M] [--json]
                                              the manufacturing check: SRC a file or a document id;
-                                             exact geometry the build123d integration's (findings at
-                                             face refs), a mesh the trimesh integration's (at x, y, z);
-                                             the rule set's verdicts and every measurement
+                                             --process, given none, the parts' declared one (a model,
+                                             an xbf; a STEP keeps none) or a DXF's sheet; --units an
+                                             STL's alone; exact geometry and a DXF the build123d
+                                             integration's (findings at face refs, layers), a mesh the
+                                             trimesh integration's (at x, y, z); the rule set's
+                                             verdicts and every measurement
 cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
@@ -992,7 +997,7 @@ runners) for `export`, `snapshot` and `inspect`, each with its source said as th
 without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
-choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
+choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
@@ -1002,13 +1007,17 @@ its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` di
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library
-makes for each type (`cad._internal.manufacturing.check_for`, bound by `DocumentType`); the operation names
+makes for each type (`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`), its signature the
+type's: its processes the `--process` choices (a mesh's `molding` and `printing`, a DXF's `sheet`, its
+default), and their options alone; the operation names
 the integration that measures the type: `build123d` for `model`, `step`, `xbf` and `dxf`, `trimesh` for the meshes.
 Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a module of
 `cad._internal.dfm` with its options, rule sets, findings and summary -- or to all (`rules`, `material`,
 `units`), and are resolved there, the standard library alone: an option of another process, a process the
 type cannot be measured for (CNC or sheet of a mesh), a pull beside `--candidates`, a unit for a type that
-declares its own and a rule set the process lacks are refused before anything is read. A STEP or an xbf is
+declares its own, a value of another kind and a rule set the process lacks are refused before anything is
+read, as a STEP given no process is (it keeps none). An xbf or a model given none is checked for the one
+its parts declare, its process's options refused once the document is read. A STEP or an xbf is
 read by `document.Loaded`, the engine's own loader, in the check's process; a document id or a handle is
 exported by the engine to an xbf in a temporary folder and read the same way, so every finding's location
 is a ref `inspect` resolves. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
@@ -1020,7 +1029,10 @@ command runs it in its own process when its environment holds the type's integra
 integration's environment at the installation's release -- `cad[build123d]` is the base the engine's kernel
 processes already run in, `cad[trimesh]` one the engine makes once, as `cad run` makes a program's
 (`extras.ensure`) -- whose Python runs the library's runner of one operation (`cad._internal.operation`: the
-call on stdin, the result on stdout), the result printed as it would be here. The families, the JSON and
+call on stdin, the result on stdout), the result printed as it would be here. A refusal there -- an option
+the declared process does not take, an id the engine does not hold -- comes back with its reason
+(`invalid_argument`, `not_found`: `integration_env.Refused`), the command line's mistake, exit 2, as it is
+here. The families, the JSON and
 every rule are the library's `src/cad/_internal/dfm/README.md`.
 
 **The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's

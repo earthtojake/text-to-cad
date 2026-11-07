@@ -6,7 +6,7 @@
 # last published release from PyPI instead of the checkout -- this file is the development door.
 # The library with its build123d extra: this environment runs models itself, so it is its own base
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
-# its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
+# its trimesh extra, so `cad <type> dfm` measures in this environment and the server makes no
 # environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py).
 --editable ./packages/cad[build123d,trimesh]
 --editable ./packages/cad-server

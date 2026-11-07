@@ -194,7 +194,7 @@ def _shim_change(path: str) -> Select:
 
 # The manufacturing checks are a leaf of the library: their type side (cad._internal.dfm and the check's
 # signature, manufacturing), their exact measurements (the build123d integration's _dfm_* modules) and their
-# mesh measurements (the trimesh integration) are imported by the 3D types' `check` alone. A change to them
+# mesh measurements (the trimesh integration) are imported by the 3D types' `dfm` alone. A change to them
 # reaches the tests that name them, and those that read every command (the generated command lines).
 DFM_CODE = (f"{LIBRARY_SRC}/_internal/dfm/**", f"{LIBRARY_SRC}/_internal/manufacturing.py",
             f"{LIBRARY_SRC}/_internal/meshops_*.py", f"{LIBRARY_SRC}/build123d/_dfm_*.py", f"{LIBRARY_SRC}/trimesh/**")
