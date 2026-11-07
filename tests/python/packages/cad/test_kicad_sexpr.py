@@ -50,6 +50,27 @@ class KicadSexprTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             sexpr.format_number(True)
 
+    def test_a_string_is_escaped_and_read_as_kicad_does(self) -> None:
+        # KiCad's reader (DSNLEXER): a backslash before anything it does not name is itself, so a path
+        # written by hand reads as written; the named escapes, hex and octal bytes are its own.
+        cases = {
+            r"C:\Users\RUNNER~1\x.step": "C:\\Users\\RUNNER~1x.step",
+            r"C:\Users\me\outside.step": "C:\\Users\\me\\outside.step",
+            r"say \"hi\" \\ \q": 'say "hi" \\ \\q',
+            r"\a\b\f\n\r\t\v": "\a\b\f\n\r\t\v",
+            r"\x41\x4a2 \xg \101\0 \8": "AJ2 xg A\x00 \\8",
+            r"caf\303\251 \xc3\xa9": "café é",
+        }
+        for written, read in cases.items():
+            with self.subTest(written=written):
+                self.assertEqual(sexpr.unescape(written), read)
+                self.assertEqual(sexpr.parse(f'(model "{written}")')[1], read)
+        # It writes what KiCad writes (OUTPUTFORMATTER::Quotes), and every string reads back as itself.
+        self.assertEqual(sexpr.quote('C:\\Users\\"x"\r\n\t'), r'"C:\\Users\\\"x\"\r\n' + '\t"')
+        for text in ['C:\\Users\\x\\"evil".step', "\\\\server\\share\\a.step", "line\r\nnext", "\\x41 \\101"]:
+            with self.subTest(text=text):
+                self.assertEqual(sexpr.parse(sexpr.dumps([Sym("model"), text]))[1], text)
+
     def test_malformed_text_is_refused(self) -> None:
         for text in ("(a (b)", "(a))", "(a) (b)", "", "x"):
             with self.subTest(text=text), self.assertRaises(sexpr.SexprError):

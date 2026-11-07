@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote
 
+from cad.engine.formats.kicad import sexpr
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 
@@ -243,10 +244,12 @@ class ABoardsModelsReadNothingOutsideItsFolders(SecurityTestCase):
             os.symlink(outside, link)
         except (OSError, NotImplementedError):
             pass
+        # Each name is written as KiCad writes a string (a backslash and a quote escaped): the Windows path
+        # and a share's backslashes, and the quotes, are read back as the names, on every platform.
         names = ["/etc/passwd", "../../outside.step", "${KIPRJMOD}/../outside.step", outside, "${KIPRJMOD}/models/link.step",
-                 "${KIPRJMOD}/secrets.json", "${KIPRJMOD}/.env"]
+                 "${KIPRJMOD}/secrets.json", "${KIPRJMOD}/.env", 'C:\\Users\\x\\"evil".step', "\\\\server\\share\\x41.step"]
         board = self.fixture.write("hostile.kicad_pcb", "(kicad_pcb (version 20240108) (footprint \"x\" (at 0 0) "
-                                   + " ".join(f'(model "{name}")' for name in names) + "))")
+                                   + " ".join(f"(model {sexpr.quote(name)})" for name in names) + "))")
         opened = json.dumps({"path": board}).encode()
         status, _, body = self.fixture.request("POST", "/api/v1/documents", body=opened, headers={
             "x-cad-viewer": "1", "content-type": "application/json", "content-length": str(len(opened))})
@@ -261,7 +264,8 @@ class ABoardsModelsReadNothingOutsideItsFolders(SecurityTestCase):
             self.assertNotIn("document", answer, name)
         self.assertNotIn(SECRET.encode("ascii"), body)
         # The names are the board's own words, answered as keys; no answer carries a path the server found.
-        self.assertNotIn(self.fixture.base, json.dumps(list(table.values())))
+        # (As JSON writes the folder: a Windows path's backslashes are doubled there.)
+        self.assertNotIn(json.dumps(self.fixture.base)[1:-1], json.dumps(list(table.values())))
 
 
 class MalformedPercentEncoding(SecurityTestCase):

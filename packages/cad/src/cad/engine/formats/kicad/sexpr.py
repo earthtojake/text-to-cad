@@ -48,6 +48,7 @@ __all__ = [
     "number",
     "pair",
     "parse",
+    "quote",
     "unescape",
     "value",
 ]
@@ -69,14 +70,35 @@ class SexprError(ValueError):
 _TOKEN = re.compile(r'\s*(?:(\()|(\))|"((?:[^"\\]|\\.)*)"|([^\s()"]+))', re.DOTALL)
 _NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?\Z")
 _INTEGER = re.compile(r"[-+]?\d+\Z")
-_UNESCAPE = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
+_ESCAPE = re.compile(r"\\(?:x([0-9A-Fa-f]{1,2})|([0-7]{1,3})|(.))", re.DOTALL)
+_UNESCAPE = {'"': '"', "\\": "\\", "a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v",
+             "x": "x"}
 
 
 def unescape(text: str) -> str:
-    """A quoted atom's text (between its quotes, as the file writes it) as :func:`parse` reads it."""
+    r"""A quoted atom's text (between its quotes, as the file writes it) as :func:`parse` reads it.
+
+    The rules are KiCad's own reader's (``DSNLEXER``): ``\"`` and ``\\`` are the character, ``\a \b \f \n \r
+    \t \v`` the control characters, ``\x`` with one or two hex digits and ``\`` with one to three octal
+    digits a byte (bytes in a row are UTF-8), ``\x`` with no digit an ``x``, and any other backslash is
+    itself: ``C:\Users`` reads as written.
+    """
     if "\\" not in text:
         return text
-    return re.sub(r"\\(.)", lambda match: _UNESCAPE.get(match.group(1), match.group(1)), text, flags=re.DOTALL)
+    out = bytearray()
+    position = 0
+    for match in _ESCAPE.finditer(text):
+        out += text[position:match.start()].encode("utf-8")
+        hexadecimal, octal, char = match.groups()
+        if hexadecimal is not None:
+            out.append(int(hexadecimal, 16))
+        elif octal is not None:
+            out.append(int(octal, 8) & 0xFF)
+        else:
+            out += _UNESCAPE.get(char, "\\" + char).encode("utf-8")
+        position = match.end()
+    out += text[position:].encode("utf-8")
+    return out.decode("utf-8", errors="replace")
 
 
 def is_number(text: str) -> bool:
@@ -197,8 +219,10 @@ def format_number(number: float | int) -> str:
     return text
 
 
-def _quote(text: str) -> str:
-    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+def quote(text: str) -> str:
+    """``text`` as a quoted atom, escaped as KiCad writes one (``OUTPUTFORMATTER::Quotes``): a backslash, a
+    double quote, a newline and a carriage return; :func:`unescape` reads it back as ``text``."""
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
     return f'"{escaped}"'
 
 
@@ -206,7 +230,7 @@ def _atom_text(atom) -> str:
     if isinstance(atom, Sym):
         return str(atom)
     if isinstance(atom, str):
-        return _quote(atom)
+        return quote(atom)
     if isinstance(atom, (int, float)):
         return format_number(atom)
     raise TypeError(f"not a KiCad atom: {atom!r}")
