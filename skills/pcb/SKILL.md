@@ -21,12 +21,17 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
-Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
+text-to-cad reads a board or schematic itself, so inspecting either, and viewing a schematic or taking
+its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
 kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
 (`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
-script that edits a board its environment. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
+script that edits a board its environment. Showing a board or taking its snapshot needs it too: KiCad
+refills the board's copper pours on a copy before they are drawn, so the first board shown starts that
+download. `CAD_KICAD_REFILL=0` in the server's environment turns the refill off (no download; set
+it as `CAD_KICAD_3DMODELS` below), and the pours are drawn as the file saved them, as they are when the
+download or the refill fails. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
 another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for an
 edit). It runs headless, with private settings, and never opens KiCad's app; never open a
 board in KiCad's app to check it. Its library variables name KiCad's own libraries, never your
