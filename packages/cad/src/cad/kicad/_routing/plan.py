@@ -30,6 +30,7 @@ Nothing here touches KiCad or a file: the caller (``cad.kicad._route``) reads th
 from __future__ import annotations
 
 import math
+from array import array
 from dataclasses import dataclass, replace
 from typing import Iterable, Sequence
 
@@ -49,12 +50,15 @@ XY = tuple[float, float]
 
 #: The most memory the region's fields and its largest search may take together: the fields 28 bytes a node on each
 #: copper layer and 16 more (``field``); a search 17 bytes a node of its window on each layer its entry allows, once
-#: more for each via its limit allows (``search``), its last window the whole region. A 100 x 100 mm region of a
-#: four-layer board at 0.075 mm is some 230 MB of fields and 120 MB of search on four layers with no via limit.
+#: more for each via its limit allows, and some 60 more a node (``SEARCH_BYTES``), its last window the whole region. A 100 x 100 mm region of a
+#: four-layer board at 0.075 mm is some 230 MB of fields and 260 MB of search on four layers with no via limit.
 #: Past it, the plan is refused before anything is routed: route it in parts, or lower its via limits.
 MAX_BYTES = 600_000_000
-#: What a search keeps for each state (``search``): its cost (8 bytes), its parent (8) and whether it is closed (1).
-SEARCH_BYTES = 17
+#: What a search keeps for each state (``search``): its cost (8 bytes), its parent (8) and whether it is closed (1);
+#: and for each node of its window: its heuristic (8) and the numpy arrays it is worked out from (40), where a via
+#: fits (1), and for each layer its entry allows, the free nodes, the free layer changes and the goals (1 each) and
+#: its room (4).
+SEARCH_BYTES, NODE_BYTES, LAYER_BYTES = 17, 49, 7
 #: How far past the box round a plan's pads its region reaches: at least this, or a quarter of the box's size.
 REGION_MARGIN = 5.0
 #: A pad with no free node of its own (a fine-pitch pin whose free lane is narrower than the grid) escapes to a
@@ -286,8 +290,9 @@ class Router:
         self.i0, self.j0 = math.floor(x0 / g), math.floor(y0 / g)
         self.nx, self.ny = math.ceil(x1 / g) - self.i0 + 1, math.ceil(y1 / g) - self.j0 + 1
         fields = self.nx * self.ny * (28 * len(self.copper) + 16)
-        states = max(((want.vias or 0) + 1) * len(want.layers) for want in self.wants)
-        searching = (self.nx + 2) * (self.ny + 2) * states * SEARCH_BYTES
+        searching = (self.nx + 2) * (self.ny + 2) * max(
+            ((want.vias or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES + len(want.layers) * LAYER_BYTES
+            for want in self.wants)
         if fields + searching > MAX_BYTES:
             raise ValueError(f"the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
                              f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
@@ -633,7 +638,7 @@ class Router:
         said = [f"{what} (routed first in this plan)" if what in self.routed else what for what in ranked]
         return ", ".join(said[:-1]) + (" and " if len(said) > 1 else "") + said[-1] if said else ""
 
-    def _heuristic(self, window: _Window, boxes: Sequence[tuple[float, float, float, float]], cheapest: float) -> list[float]:
+    def _heuristic(self, window: _Window, boxes: Sequence[tuple[float, float, float, float]], cheapest: float) -> array:
         g = self.pitch
         x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
         x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
@@ -641,7 +646,9 @@ class Router:
         dx = np.maximum(np.maximum(x0 - X, X - x1), 0.0)
         dy = np.maximum(np.maximum(y0 - Y, Y - y1), 0.0)
         octile = np.maximum(dx, dy) + (math.sqrt(2.0) - 1.0) * np.minimum(dx, dy)
-        return (octile * (cheapest * WEIGHT)).ravel().tolist()
+        found = array("d")  # 8 bytes a node, where a list of floats takes 32
+        found.frombytes((octile * (cheapest * WEIGHT)).astype(np.float64).ravel().tobytes())
+        return found
 
     # --- the path found, as copper ------------------------------------------------------------------------------
 
