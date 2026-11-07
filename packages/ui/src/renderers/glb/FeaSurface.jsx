@@ -35,9 +35,9 @@ const EXPLODE_OFF = Object.freeze({ exploded: { enabled: false, amount: 0 } });
 const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: false } });
 
 /**
- * A GLB that carries an FEA result (`cad fea solve`), drawn on the same shell as any GLB (`GlbRenderer.jsx`) and with
+ * A GLB that carries an FEA result (`cad step fea --study`), drawn on the same shell as any GLB (`GlbRenderer.jsx`) and with
  * its tools (Select, Annotate, Measure, Clip): the field in colour on the deformed shape, Study and an assembly's Parts
- * in the file sidebar, a face picked under Select as Quick Edit's chip (a reference into the STEP it was solved from),
+ * as tabs of the view's panel, a face picked under Select as Quick Edit's chip (a reference into the STEP it was solved from),
  * where the study holds and loads it on the model, and its Load ramp in the sidebar's Animation and in Preview.
  * `fv`: the FEA viewer's chunk (`feaView.jsx`).
  */
@@ -46,7 +46,7 @@ export default function FeaSurface({ view, document, loaded, fv }) {
   const host = useViewerHost();
   const scene = loaded.scene;
 
-  // An FEA result (cad fea solve) carries its fields and true displacement in the file; what is
+  // An FEA result (cad step fea --study) carries its fields and true displacement in the file; what is
   // shown of it is chosen in Study's What you see (`feaControls`: the field, the deformation and the load),
   // per tab. That choice is this renderer's one slice of the file's view (`kit/shell/fileView.js`), written
   // against the result's own fields and scale: a re-solved result opens at its own defaults. A result that
@@ -272,7 +272,7 @@ export default function FeaSurface({ view, document, loaded, fv }) {
       text: fv.markerGateText(markers?.kinds?.length ? markers.kinds : MARKER_GATE_KINDS) } : null,
   };
 
-  // ---- the file sidebar: Study, and an assembly's Parts above it ---------------------------
+  // ---- the view's panel: Study, and an assembly's Parts after it -------------------------
   const sidebar = fea ? <fv.FeaStudyPanel parts={parts} openPart={fv.weakestPartIndex(fea)} setup={sections.setup} details={sections.details}
     verdict={verdict} chosen={faces.id} onChoose={chooseFaces} result={resultControls} /> : null;
 
@@ -285,8 +285,8 @@ export default function FeaSurface({ view, document, loaded, fv }) {
     const face = single ? { ref: single, role: faces.summary && !faces.picked ? faces.summary : fv.faceRole(fea, single),
       part: fv.facePartDetail(fea, single, loadScale) } : null;
     return [{ key: `fea:${faces.id}`, label: faces.summary && !faces.picked ? faces.summary : single ? fv.faceTitle(fea, single) : faces.summary || faces.id, glyph: "face", id: single || faces.id,
-      copy: formatPromptReference(references[0]), card: face ? <fv.FaceCard face={face} /> : null, onRemove: clearChoice }];
-  }, [fea, references, single, faces, loadScale, clearChoice]);
+      copy: formatPromptReference(references[0]), detail: face ? fv.faceDetail(face, t) : undefined, onRemove: clearChoice }];
+  }, [fea, references, single, faces, loadScale, clearChoice, t]);
   const nameReference = useCallback((reference) => {
     const selector = reference?.resource?.path === source && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
     const ref = selector ? `#${selector.replace(/^#/, "")}` : "";

@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
@@ -105,7 +105,8 @@ function mount(extras: Record<string, unknown> | null, state?: unknown, { action
 // Where the study holds and loads the part, drawn or not: What you see's checkbox.
 const markersGate = (name: string) => screen.getByRole('checkbox', { name });
 const toggleMarkers = (name: string) => act(() => { fireEvent.click(markersGate(name)); });
-const studyPanel = () => screen.queryByRole('region', { name: 'Study' });
+// Study: the panel's one section (a region) for one part, its first tab's page (a tabpanel) beside Parts.
+const studyPanel = () => screen.queryByRole('region', { name: 'Study' }) ?? screen.queryByRole('tabpanel', { name: 'Study' });
 const rowTexts = (panel: HTMLElement) => Array.from(panel.querySelectorAll('[data-study-row]')).map(row => row.textContent);
 
 it('puts the field and deformation in Study, the file sidebar\'s, and on the view a colour bar that is only the scale', () => {
@@ -120,9 +121,9 @@ it('puts the field and deformation in Study, the file sidebar\'s, and on the vie
   // The field in plain words: the file's own name is the colour bar's.
   expect(study.querySelector('[role="combobox"][aria-label="Result field"]')!.textContent).toBe('Stress');
   expect(study.querySelector('[role="slider"][aria-label="Deformation scale"]')).toBeTruthy();
-  // A section of the file sidebar, its tile named for it; one field select, Study's.
-  expect(study.hasAttribute('data-sidebar-section')).toBe(true);
-  expect(screen.getByRole('group', { name: 'File sidebar' }).querySelector('button[aria-label="Study"]')).toBeTruthy();
+  // The view's panel holds it: one part's result has Study alone, so no tabs; one field select, Study's.
+  expect(study.closest('[data-flat-panel]')).toBe(container.querySelector('[data-flat-panel]'));
+  expect(within(container.querySelector<HTMLElement>('[data-flat-panel]')!).queryAllByRole('tab')).toEqual([]);
   expect(screen.getAllByRole('combobox', { name: 'Result field' })).toHaveLength(1);
 });
 
@@ -190,20 +191,18 @@ it('a result with findings raises no alert card and puts no findings icon in the
   expect(actions.mock.calls.flat(2).filter((action: any) => action?.label)).toEqual([]);
 });
 
-it('lays the deformation slider out as Display\'s sliders are: under its label, never on its row', () => {
+it('lays the deformation slider out as Display\'s sliders are: the slider control, its label and value over its slider', () => {
   mount(RESULT);
-  const label = screen.getByText('Deformation');
   const thumb = screen.getByRole('slider', { name: 'Deformation scale' });
-  const slider = thumb.closest('[data-slot="slider"]')!;
-  const column = label.closest('[data-position-control] > div')!;
-  // Same silhouette as FileSheetSliderField's other uses: label and slider are separate blocks in one column ...
-  expect(slider.contains(label) || label.contains(slider)).toBe(false);
-  expect(column.contains(slider)).toBe(true);
-  expect(label.parentElement).toBe(column);
-  expect(slider.parentElement!.parentElement).toBe(column);
-  expect(slider.parentElement!.previousElementSibling).toBe(label);
-  // ... and the slider carries the precision-slider height (h-4), so it is no taller than the gap pulled up under the label.
-  expect(slider.classList.contains('h-4')).toBe(true);
+  const field = thumb.closest<HTMLElement>('[data-slider-field]')!;
+  // THE slider control (settings-ui.md), in a panel's two lines: the label and its value, then the slider the row's width.
+  expect(field.hasAttribute('data-inline')).toBe(false);
+  const label = field.querySelector('[data-slider-field-label]')!;
+  const track = field.querySelector('[data-slider-field-track]')!;
+  expect(label.textContent).toBe('Deformation');
+  expect(track.contains(label) || label.contains(track)).toBe(false);
+  expect(label.compareDocumentPosition(track) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(field.querySelector('[data-slider-field-value]')!.getAttribute('aria-label')).toBe('Deformation scale value');
 });
 
 // The study's faces, and the face each vertex lies on.
@@ -221,8 +220,8 @@ const clipboardHost = (copied: string[]) => testHost({ clipboard: { writeText: a
 it('Study reads in plain words: where it is held, what pushes it and what it is made of, then What you see, then Details, shut', () => {
   mount(STUDIED, undefined, { faces: FACES });
   const study = studyPanel()!;
-  expect(study.querySelector('h3')!.textContent).toBe('Study');
-  expect(study.querySelector('button[aria-label="Close study"]')).toBeTruthy();
+  // A tab of the view's panel draws no heading of its own: the panel names it.
+  expect(study.querySelector('h3')).toBeNull();
   // Each heading with the glyph its marker is drawn as, each face by name under it, a load as how much and
   // which way with its faces shut under it, the material's name; the mesh is Details', shut.
   const plain = () => rowTexts(study).map(text => text!.replace(/\u2011/g, '-'));
@@ -355,15 +354,22 @@ function mountAssembly(copied: string[], extras: Record<string, unknown> = { par
   return mount({ ...ASSEMBLED, ...extras }, undefined, { faces: [0, 0, 2, 1], host: clipboardHost(copied) });
 }
 
-const partsPanel = () => screen.queryByRole('region', { name: 'Parts' });
+const partsPanel = () => screen.queryByRole('tabpanel', { name: 'Parts' });
+// An assembly's Parts is the view panel's second tab, after Study: shown once its tab is chosen.
+const partsTab = () => screen.queryByRole('tab', { name: 'Parts' });
+const openTab = (name: string) => act(() => { fireEvent.click(screen.getByRole('tab', { name })); });
 
-it('an assembly has a Parts panel above Study, each part with its joints, the weakest open, and Study holds only the study', () => {
+it('an assembly has a Parts tab after Study, each part with its joints, the weakest open, and Study holds only the study', () => {
   mountAssembly([]);
-  const parts = partsPanel()!;
+  // Study opens first, with the verdict; Parts is the tab after it.
+  expect(screen.getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')]))
+    .toEqual([['Study', 'true'], ['Parts', 'false']]);
   const study = studyPanel()!;
-  expect(parts.querySelector('h3')!.textContent).toBe('Parts');
-  expect(parts.querySelector('button[aria-label="Close parts"]')).toBeTruthy();
-  expect(parts.compareDocumentPosition(study) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Study no longer lists parts or joints; what the parts are made of, which differ, each with its part.
+  expect(study.querySelector('[data-study-row="material:name"]')!.textContent!.replace(/\u00a0/g, ' ')).toBe('6061-T6 post, Steel (5 parts)');
+  expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
+  openTab('Parts');
+  const parts = partsPanel()!;
   // The weakest part (post) opens with its joint under it, naming only the other part; base starts shut.
   const plain = (panel: HTMLElement) => rowTexts(panel).map(text => text!.replace(/\u2011/g, '-').replace(/\u00a0/g, ' '));
   expect(plain(parts)).toEqual(['post6061-T6 · holds 1.4×', '↔ basebonded · 100 mm²', 'baseSteel · holds 2.5×',
@@ -372,24 +378,22 @@ it('an assembly has a Parts panel above Study, each part with its joints, the we
   // Opened, base lists the same joint, naming post.
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
   expect(plain(parts).slice(2, 4)).toEqual(['baseSteel · holds 2.5×', '↔ postbonded · 100 mm²']);
-  // Study no longer lists parts or joints; what the parts are made of, which differ, each with its part.
-  expect(study.querySelector('[data-study-row="material:name"]')!.textContent!.replace(/\u00a0/g, ' ')).toBe('6061-T6 post, Steel (5 parts)');
-  expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
 });
 
-it('an assembly\'s Parts and Study are two sections of the file sidebar, each with its own tile', () => {
-  mountAssembly([]);
-  const tiles = Array.from(screen.getByRole('group', { name: 'File sidebar' }).querySelectorAll('button')).map(tile => tile.getAttribute('aria-label'));
-  expect(tiles).toEqual(expect.arrayContaining(['Parts', 'Study']));
-  expect(partsPanel()!.hasAttribute('data-sidebar-section')).toBe(true);
-  expect(studyPanel()!.hasAttribute('data-sidebar-section')).toBe(true);
+it('an assembly\'s Study and Parts are two tabs of the view\'s panel', () => {
+  const { container } = mountAssembly([]);
+  const panel = container.querySelector<HTMLElement>('[data-flat-panel]')!;
+  expect(within(panel).getAllByRole('tab').map(tab => tab.querySelector('[data-flat-panel-tab-name]')!.textContent)).toEqual(['Study', 'Parts']);
+  expect(studyPanel()!.closest('[data-flat-panel]')).toBe(panel);
+  openTab('Parts');
+  expect(partsPanel()!.closest('[data-flat-panel]')).toBe(panel);
 });
 
 it('an assembly shows Parts from six parts up', () => {
   const more = (count: number) => Array.from({ length: count }, (_, index) => ({ ...ASSEMBLED.parts[index % 2], ref: `bracket.${index + 1}`, name: `part ${index + 1}` }));
   for (const [count, shown] of [[4, false], [5, false], [6, true]] as const) {
     mountAssembly([], { parts: more(count) });
-    expect(Boolean(partsPanel())).toBe(shown);
+    expect(Boolean(partsTab())).toBe(shown);
     expect(studyPanel()).toBeTruthy();
     cleanup();
   }
@@ -414,6 +418,7 @@ it('with Parts hidden, a face picked on an assembly names its part, and its chip
 it('choosing a part tints its triangles and carries it into Quick Edit', async () => {
   const copied: string[] = [];
   const { mesh } = mountAssembly(copied);
+  openTab('Parts');
   const plain = colourBytes(mesh);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select post' })); });
   const tinted = colourBytes(mesh);
@@ -425,6 +430,7 @@ it('choosing a part tints its triangles and carries it into Quick Edit', async (
 it('choosing a joint tints both sides\' interface faces and carries both parts into Quick Edit', async () => {
   const copied: string[] = [];
   const { mesh } = mountAssembly(copied);
+  openTab('Parts');
   const plain = colourBytes(mesh);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select post ↔ base' })); });
   const joint = colourBytes(mesh);
@@ -440,6 +446,7 @@ it('choosing a joint tints both sides\' interface faces and carries both parts i
 it('a joint chosen under either of its parts is the same choice: both copies pressed, the same refs', async () => {
   const copied: string[] = [];
   mountAssembly(copied);
+  openTab('Parts');
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
   const copies = screen.getAllByRole('button', { name: 'Select post ↔ base' });
   expect(copies).toHaveLength(2);
@@ -448,7 +455,7 @@ it('a joint chosen under either of its parts is the same choice: both copies pre
   expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#part1/face 1,part2/face 1");
 });
 
-const resultRows = () => Array.from(studyPanel()!.querySelectorAll('[data-study-result] [data-position-control], [data-study-result] [role="combobox"]'));
+const resultRows = () => Array.from(studyPanel()!.querySelectorAll('[data-study-result] [data-slider-field], [data-study-result] [role="combobox"]'));
 const setValue = (name: string, value: string) => act(() => {
   const box = screen.getByRole('textbox', { name });
   fireEvent.change(box, { target: { value } });
@@ -470,19 +477,14 @@ it('What you see is the field, the deformation and the load', () => {
   expect(screen.getByRole('textbox', { name: 'Load value' }).getAttribute('value')).toBe('×1.0');
 });
 
-it('shows each multiple to its slider\'s step, in boxes of one width that keep it as the value moves', () => {
+it('shows each multiple to its slider\'s step', () => {
   mount(RESULT);
   const box = (name: string) => screen.getByRole('textbox', { name: `${name} value` });
-  const width = (name: string) => box(name).className.split(/\s+/).find(name => name.startsWith('w-'));
-  const before = [width('Load'), width('Deformation scale')];
-  // One width for both, so their sliders end together.
-  expect(width('Load')).toBe(width('Deformation scale'));
-  // The Load's step is 0.1: half the load is "×0.5", never "×0.500", and its box stays as it was.
+  // The Load's step is 0.1: half the load is "×0.5", never "×0.500".
   setValue('Load value', '0.5');
   expect(box('Load').getAttribute('value')).toBe('×0.5');
   setValue('Deformation scale value', '2.5');
   expect(box('Deformation scale').getAttribute('value')).toBe('×2.5');
-  expect([width('Load'), width('Deformation scale')]).toEqual(before);
   // A value typed between the steps keeps its own figures: the box never shows a load that is not drawn.
   setValue('Load value', '0.55');
   expect(box('Load').getAttribute('value')).toBe('×0.550');
@@ -492,15 +494,11 @@ it('sizes What you see\'s value boxes to hold the whole value, its padding and i
   // "×6000" read "×600C" and "×9500000" crowded the box: its width left out the 1px borders and the × glyph.
   for (const scale of [10, 6000, 42000, 9500000, 120000000, 95000000000]) {
     mount({ ...RESULT, deformation_scale: scale });
-    const box = screen.getByRole('textbox', { name: 'Deformation scale value' });
+    const box = screen.getByRole<HTMLInputElement>('textbox', { name: 'Deformation scale value' });
     const value = box.getAttribute('value')!;
-    const widths = box.className.split(/\s+/).filter(name => name.startsWith('w-'));
-    expect(widths, value).toHaveLength(1);
-    const [, ch, rem, px] = /^w-\[calc\((\d+)ch\+([\d.]+)rem\+(\d+)px\)\]$/.exec(widths[0]) || [];
-    // A figure and the × are 1ch each with tabular figures, a point half of one; half a ch is spare.
-    const needed = [...value].reduce((sum, glyph) => sum + (glyph === '.' ? 0.5 : 1), 0.5);
-    expect(Number(ch), `${value}: ${widths[0]}`).toBeGreaterThanOrEqual(Math.min(Math.ceil(needed), 14));
-    expect([rem, px], value).toEqual(['0.75', '2']);
+    // The slider control's value is as wide as its text and a figure more (tabular figures, 1ch each).
+    const [, ch] = /^calc\((\d+)ch \+ 0\.5rem\)$/.exec(box.style.width) || [];
+    expect(Number(ch), `${value}: ${box.style.width}`).toBeGreaterThan([...value].length);
     cleanup();
   }
 });
@@ -525,7 +523,12 @@ it('at twice the load, the bar and the deformation are twice the solved ones, wh
   const { container, mesh } = mount({ ...RESULT, parts: [...parts, ...pins], weakest_part: 'base' });
   const colours = colourBytes(mesh);
   const tip = mesh.geometry.getAttribute('position').getZ(2);
-  const partDetails = () => Array.from(screen.getByRole('region', { name: 'Parts' }).querySelectorAll('[data-study-detail]')).map(detail => detail.textContent!.replace(/\u00a0/g, ' ')).slice(0, 2);
+  const partDetails = () => {
+    openTab('Parts');
+    const said = Array.from(screen.getByRole('tabpanel', { name: 'Parts' }).querySelectorAll('[data-study-detail]')).map(detail => detail.textContent!.replace(/\u00a0/g, ' ')).slice(0, 2);
+    openTab('Study');
+    return said;
+  };
   expect(partDetails()).toEqual(['Steel · holds 5.8×', 'Steel · holds 1.5×']);
   setValue('Load value', '2');
   expect(container.querySelector('[data-fea-max]')!.textContent).toBe('94.6 MPa');
