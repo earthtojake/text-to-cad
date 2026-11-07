@@ -38,8 +38,20 @@ class SkillDocs(unittest.TestCase):
         self.assertIn("conda install -c conda-forge calculix", install_hint())
         self.assertIn("conda install -c conda-forge calculix", setup)
         self.assertIn("calculix-ccx", setup)
-        self.assertIn("netgen", setup)
-        self.assertIn("downloads nothing", setup)
+        # netgen is an integration the cad command installs; the solver is the person's, never fetched.
+        self.assertIn("`netgen` integration (`cad[netgen]`)", setup)
+        self.assertIn("downloads no solver", setup)
+
+    def test_every_command_is_a_types_fea_operation(self):
+        from cad.registry import DOCUMENT_TYPES
+
+        studied = {entry.id for entry in DOCUMENT_TYPES.values() if "fea" in entry.operation_names}
+        for path in _pages():
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(page=path.name):
+                self.assertNotRegex(text, r"`cad fea\b", "a study is an operation of its document's type")
+                for document_type in re.findall(r"`cad (\w+) fea\b", text):
+                    self.assertIn(document_type, studied)
 
     def test_the_nodal_peak_is_the_one_documented_as_usually_higher(self):
         for path in (SKILL / "SKILL.md", SKILL / "references" / "linear-static.md"):

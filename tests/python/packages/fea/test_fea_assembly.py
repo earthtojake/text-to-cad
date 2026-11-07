@@ -17,6 +17,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.fea_fixtures import (
+    notes, kinds,
     class_directory, glb_array, glb_attribute_names, glb_extras, needs_fea, quiet, reported, solve,
 )
 from tests.python.support.fea_fixtures import AL6061_NUMBERS, STEEL_NUMBERS  # noqa: E402
@@ -344,7 +345,7 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.tmp = _temporary(self)
 
     def _parts(self, **kwargs):
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
         with quiet():
             return fea.parts(_write_assembly(self.tmp, **kwargs))
@@ -359,11 +360,11 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertIn("post ↔ base · 100 mm² · bonded", result.human_lines())
 
     def test_it_says_each_stage_at_default_verbosity(self):
-        from cad_server.cli.fea_parts import main
+        from cad_server.cli.step import main
 
         err = io.StringIO()
         with redirect_stderr(err), redirect_stdout(io.StringIO()):
-            main([str(_write_assembly(self.tmp))])
+            main(["fea", str(_write_assembly(self.tmp))])
         lines = err.getvalue().splitlines()
         self.assertTrue(any(line.endswith("reading the parts") for line in lines), lines)
         self.assertTrue(any("read 2 parts" in line for line in lines), lines)
@@ -411,11 +412,11 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertEqual([pair.type for pair in result.pairs], ["bonded"])
 
     def test_json_output(self):
-        from cad_server.cli.fea_parts import main
+        from cad_server.cli.step import main
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = main([str(_write_assembly(self.tmp)), "--json"])
+            code = main(["fea", str(_write_assembly(self.tmp)), "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertTrue(payload["ok"])
@@ -448,7 +449,7 @@ class DuplicateNamesTest(unittest.TestCase):
         }
 
     def test_the_listing_tells_the_two_bars_apart_by_their_refs(self):
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
         with quiet():
             lines = fea.parts(self.step).human_lines()
@@ -459,9 +460,9 @@ class DuplicateNamesTest(unittest.TestCase):
         study = self.study(parts={self.first: {"material": STEEL_NUMBERS}, self.second: {"material": AL6061_NUMBERS}, "base": {"material": AL6061_NUMBERS}})
         result = solve(self.step, self.tmp / "refs.glb", study)
         self.assertIsNotNone(result.glb)  # solved; ok is the part's verdict (a bar yields under this load)
-        names = [part["name"] for part in result.summary["parts"]]
+        names = [part["name"] for part in result.measurements["parts"]]
         self.assertEqual(names, ["base", f"bar ({self.first})", f"bar ({self.second})"])
-        materials = {part["ref"]: part["material"] for part in result.summary["parts"]}
+        materials = {part["ref"]: part["material"] for part in result.measurements["parts"]}
         self.assertTrue(materials[self.first].startswith("Steel"))  # the ref chose the material
 
     def test_sentences_name_a_shared_name_with_its_ref(self):
@@ -483,8 +484,8 @@ class DuplicateNamesTest(unittest.TestCase):
         result = solve(self.step, self.tmp / "free.glb", self.study(connections=[{"between": [self.second, "base"], "type": "free"}]))
         self.assertFalse(result.ok)
         (finding,) = result.findings
-        self.assertEqual(finding["type"], "not_connected")
-        self.assertTrue(finding["summary"].startswith(f"'bar' ({self.second}) isn't connected"), finding["summary"])
+        self.assertEqual(finding.code, "not_connected")
+        self.assertTrue(finding.message.startswith(f"'bar' ({self.second}) isn't connected"), finding.message)
 
 
 class AssemblyStudyFileTest(unittest.TestCase):
@@ -512,15 +513,15 @@ class AssemblyStudyFileTest(unittest.TestCase):
         self.assertEqual(parsed.contact_tolerance_mm, 0.2)
 
     def test_the_tolerance_is_set_in_the_study_alone(self):
-        # The study is the document of record: `fea parts` lists against the default and takes no tolerance of its own.
+        # The study is the document of record: its setup lists against the default and takes no tolerance of its own.
         import inspect
 
-        from cad import fea
-        from cad_server.cli.fea_parts import build_parser
+        from cad import step
+        from cad_server.cli.document_types import build_parser
 
-        self.assertNotIn("contact_tolerance_mm", inspect.signature(fea.parts).parameters)
+        self.assertNotIn("contact_tolerance_mm", inspect.signature(step.fea).parameters)
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            build_parser().parse_args(["a.step", "--contact-tolerance-mm", "0.2"])
+            build_parser("step", "fea").parse_args(["a.step", "--contact-tolerance-mm", "0.2"])
 
     def test_a_study_without_them_is_a_one_part_study(self):
         parsed = self._parse()
@@ -572,12 +573,13 @@ class SolveAssemblyTest(unittest.TestCase):
     @classmethod
     def solve_parts(cls, materials, name, **extra):
         """The study of the base and post solved, its progress lines left on stderr."""
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
-        return fea.solve(cls.step, cls.tmp / f"{name}.glb", study=cls.study(materials, **extra))
+        # Not quiet: a test of what a study says reads its stderr.
+        return fea.study_of(cls.step)(cls.step, study=cls.study(materials, **extra), out=cls.tmp / f"{name}.glb")
 
     def _types(self, result) -> list[str]:
-        return [finding["type"] for finding in result.findings]
+        return [finding.code for finding in result.findings]
 
     def test_a_study_says_its_planning_stages_at_default_verbosity(self):
         err = io.StringIO()
@@ -588,20 +590,20 @@ class SolveAssemblyTest(unittest.TestCase):
             self.assertIn(stage, text)
 
     def test_the_reactions_balance_the_load(self):
-        self.assertEqual(self.mixed.warnings, ())
-        np_sum = self.mixed.summary["reaction_force_N"]
+        self.assertEqual(notes(self.mixed), ())
+        np_sum = self.mixed.measurements["reaction_force_N"]
         self.assertAlmostEqual(np_sum[0], -1000.0, delta=0.5)
         self.assertAlmostEqual(np_sum[1], 0.0, delta=0.5)
         self.assertAlmostEqual(np_sum[2], 0.0, delta=0.5)
-        self.assertEqual(self.mixed.summary["applied_force_N"][0], 1000.0)
+        self.assertEqual(self.mixed.measurements["applied_force_N"][0], 1000.0)
 
     def test_the_tip_moves_between_all_steel_and_all_aluminium(self):
-        stiff, soft = self.steel.summary["max_displacement_mm"], self.aluminium.summary["max_displacement_mm"]
-        self.assertLess(stiff, self.mixed.summary["max_displacement_mm"])
-        self.assertLess(self.mixed.summary["max_displacement_mm"], soft)
+        stiff, soft = self.steel.measurements["max_displacement_mm"], self.aluminium.measurements["max_displacement_mm"]
+        self.assertLess(stiff, self.mixed.measurements["max_displacement_mm"])
+        self.assertLess(self.mixed.measurements["max_displacement_mm"], soft)
 
     def test_each_part_has_its_own_peak_and_safety_factor_against_its_own_yield(self):
-        parts = {part["name"]: part for part in self.mixed.summary["parts"]}
+        parts = {part["name"]: part for part in self.mixed.measurements["parts"]}
         self.assertEqual(set(parts), {"base", "post"})
         self.assertEqual((parts["base"]["yield_MPa"], parts["post"]["yield_MPa"]), (276.0, 250.0))
         for part in parts.values():
@@ -611,7 +613,7 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertGreater(parts["post"]["peak_MPa"], parts["base"]["peak_MPa"])
 
     def test_the_headline_is_the_weakest_part(self):
-        summary = self.mixed.summary
+        summary = self.mixed.measurements
         weakest = min(summary["parts"], key=lambda part: part["safety_factor"])
         self.assertEqual(summary["weakest_part"], weakest["name"])
         self.assertEqual(summary["weakest_part"], "post")
@@ -634,8 +636,8 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertTrue(any(line.startswith("  'base' (Aluminum 6061-T6): peak ") for line in lines))
 
     def test_the_stress_check_is_the_weakest_parts_and_a_displacement_check_may_span_parts(self):
-        stress, both = self.mixed.summary["checks"]
-        summary = self.mixed.summary
+        stress, both = self.mixed.measurements["checks"]
+        summary = self.mixed.measurements
         self.assertEqual((stress["part"], stress["value"], stress["limit"]), ("post", summary["weakest_part_peak_MPa"], 250.0))
         self.assertEqual(stress["ratio"], round(1 / summary["safety_factor"], 6))
         self.assertEqual(stress["status"], "fails" if summary["safety_factor"] < 1 else "close" if summary["safety_factor"] < 2 else "passes")
@@ -647,17 +649,17 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertEqual(glb_extras(self.mixed.glb)["checks"], summary["checks"])
 
     def test_each_part_that_falls_short_is_named_in_its_findings(self):
-        (yields,) = [f for f in self.mixed.findings if f["type"] == "yields"]
-        self.assertTrue(yields["summary"].startswith("'post' yields: peak stress "), yields["summary"])
+        (yields,) = [f for f in self.mixed.findings if f.code == "yields"]
+        self.assertTrue(yields.message.startswith("'post' yields: peak stress "), yields.message)
         self.assertEqual(self.mixed.findings[0], yields)
-        (low,) = [f for f in self.mixed.findings if f["type"] == "low_margin"]
-        self.assertTrue(low["summary"].startswith("'base' holds, but only 1."), low["summary"])
+        (low,) = [f for f in self.mixed.findings if f.code == "low_margin"]
+        self.assertTrue(low.message.startswith("'base' holds, but only 1."), low.message)
 
     def test_a_peak_at_the_foot_of_a_joint_is_the_edge_of_the_bonded_joint(self):
-        edges = {f["summary"].split(":")[0]: f for f in self.mixed.findings if f["type"] == "bonded_edge_peak"}
+        edges = {f.message.split(":")[0]: f for f in self.mixed.findings if f.code == "bonded_edge_peak"}
         self.assertEqual(set(edges), {"In 'post'", "In 'base'"})
-        self.assertIn("the edge of the bonded joint with 'base'", edges["In 'post'"]["summary"])
-        self.assertEqual(edges["In 'post'"]["severity"], "warning")
+        self.assertIn("the edge of the bonded joint with 'base'", edges["In 'post'"].message)
+        self.assertEqual(edges["In 'post'"].severity, "warning")
 
     def test_a_part_with_no_material_anywhere_is_refused(self):
         # The study names the post's alone and gives no material of its own, and the model gives the base none: no
@@ -669,10 +671,10 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_the_result_records_the_joint(self):
         written = reported(self.mixed)
-        (joint,) = written["connections"]
+        (joint,) = written["measurements"]["connections"]
         self.assertEqual((joint["between"], joint["type"]), (["post", "base"], "bonded"))
         self.assertAlmostEqual(joint["area_mm2"], 100.0, places=3)
-        self.assertEqual(written["summary"]["parts"], self.mixed.summary["parts"])
+        self.assertEqual(written["measurements"]["parts"], self.mixed.measurements["parts"])
 
     def test_the_glb_tags_every_vertex_with_its_part(self):
         import numpy as np
@@ -707,7 +709,7 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_the_glb_parts_match_the_result(self):
         extras = glb_extras(self.mixed.glb)
-        summary = reported(self.mixed)["summary"]
+        summary = reported(self.mixed)["measurements"]
         keys = ("ref", "name", "material", "yield_MPa", "peak_MPa", "safety_factor", "max_displacement_mm")
         self.assertEqual(extras["parts"], [{k: part[k] for k in keys} for part in summary["parts"]])
         self.assertEqual(extras["weakest_part"], "post")
@@ -725,17 +727,21 @@ class SolveAssemblyTest(unittest.TestCase):
         # The post's bottom and the base's top, as the GLB's own face list names them.
         self.assertEqual(set(joint["faces"]), {_face_at(self.scene, self.refs["post"], 10.0), _face_at(self.scene, self.refs["base"], 10.0)})
         self.assertTrue(set(joint["faces"]) <= set(extras["faces"]))
-        self.assertEqual(reported(self.mixed)["connections"][0]["faces"], joint["faces"])
+        self.assertEqual(reported(self.mixed)["measurements"]["connections"][0]["faces"], joint["faces"])
 
     def test_solve_picks_no_part_and_sizes_no_mesh(self):
-        # A part on its own is its own model (law 22), and the mesh's size is the study's: the options that did either
-        # are gone, and refused as any argument the command never had (law 15).
-        from cad_server.cli.fea_solve import main
+        # A part on its own is its own model (law 22), and the mesh's size is the study's: no option sizes a mesh,
+        # refused as any argument the command never had (law 15), and the setup's --occurrence, which lists one
+        # part's faces, is refused beside a study by name, before anything is read.
+        from cad_server.cli.step import main
 
-        for option, value in (("--occurrence", self.refs["post"]), ("--mesh-size", "2")):
-            with self.subTest(option=option), redirect_stderr(io.StringIO()) as said, self.assertRaises(SystemExit):
-                main([str(self.step), str(self.tmp / "cli.glb"), "--study", json.dumps(self.alone), option, value])
-            self.assertIn(f"unrecognized arguments: {option}", said.getvalue())
+        solve = ["fea", str(self.step), "--study", json.dumps(self.alone), "--out", str(self.tmp / "cli.glb")]
+        with redirect_stderr(io.StringIO()) as said, self.assertRaises(SystemExit):
+            main([*solve, "--mesh-size", "2"])
+        self.assertIn("unrecognized arguments: --mesh-size", said.getvalue())
+        with redirect_stderr(io.StringIO()) as said, redirect_stdout(io.StringIO()):
+            self.assertEqual(main([*solve, "--occurrence", self.refs["post"]]), 2)
+        self.assertIn("--occurrence lists one part's faces for a study's setup", said.getvalue())
         self.assertFalse((self.tmp / "cli.glb").exists())
 
     def _first_solve_only(self, name):
@@ -762,7 +768,7 @@ class SolveAssemblyTest(unittest.TestCase):
         import numpy as np
 
         result, volume, outcome = self._first_solve_only("once")
-        self.assertIsNone(reported(result)["refined"])
+        self.assertIsNone(reported(result)["measurements"]["refined"])
         fields = outcome.von_mises_parts
         # A node in the middle of the joint: z = 10, inside the post's footprint.
         at = outcome.dof_locations
@@ -771,35 +777,35 @@ class SolveAssemblyTest(unittest.TestCase):
         base, post = fields[0, joint], fields[1, joint]
         self.assertTrue((abs(base - post) > 0.01 * np.maximum(base, post)).any())
         # Each part's peak is the maximum of its own field over its own elements.
-        for index, part in enumerate(result.summary["parts"]):
+        for index, part in enumerate(result.measurements["parts"]):
             own = np.unique(outcome.element_dofs[volume.domain == index])
             self.assertEqual(part["peak_MPa"], round(float(fields[index][own].max()), 4))
         # The field is zero where the part is not.
         self.assertEqual(fields[1][np.unique(outcome.element_dofs[volume.domain == 0]).tolist()].min(), 0.0)
         # The assembly-wide peak is the larger of the two.
-        self.assertEqual(result.summary["max_von_mises_MPa"], round(float(fields.max()), 4))
+        self.assertEqual(result.measurements["max_von_mises_MPa"], round(float(fields.max()), 4))
 
     def test_a_close_call_is_solved_again_and_the_record_compares_one_part_with_itself(self):
         from cad._internal.fea.checks import _number
 
         coarse, _, _ = self._first_solve_only("coarse")
-        before = {part["name"]: part["peak_MPa"] for part in coarse.summary["parts"]}
-        weakest = coarse.summary["weakest_part"]
-        refined = reported(self.mixed)["refined"]
+        before = {part["name"]: part["peak_MPa"] for part in coarse.measurements["parts"]}
+        weakest = coarse.measurements["weakest_part"]
+        refined = reported(self.mixed)["measurements"]["refined"]
         self.assertEqual(refined["part"], weakest)
         self.assertEqual(refined["from_max_von_mises_MPa"], before[weakest])
-        after = {part["name"]: part["peak_MPa"] for part in self.mixed.summary["parts"]}
+        after = {part["name"]: part["peak_MPa"] for part in self.mixed.measurements["parts"]}
         self.assertEqual(refined["max_von_mises_MPa"], after[weakest])
         self.assertEqual(refined["size_mm"], 2.0)
         # Each part's convergence finding quotes that part's own coarser and finer peaks.
-        moved = {f["summary"].split(":")[0]: f["summary"] for f in self.mixed.findings if f["type"] == "mesh_not_converged"}
+        moved = {f.message.split(":")[0]: f.message for f in self.mixed.findings if f.code == "mesh_not_converged"}
         for name in ("base", "post"):
             self.assertIn(f"({_number(before[name])} to {_number(after[name])} MPa)", moved[f"In '{name}'"])
 
     def test_a_result_that_stopped_before_the_solve_serializes_through_the_cli(self):
         from unittest import mock
 
-        from cad_server.cli.fea_solve import main
+        from cad_server.cli.step import main
 
         step = _write_assembly(self.tmp, far_block=20.0, name="stopped")
         study = {
@@ -809,20 +815,20 @@ class SolveAssemblyTest(unittest.TestCase):
         }
         out = io.StringIO()
         with mock.patch("cad._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out), quiet():
-            code = main([str(step), str(self.tmp / "stopped.glb"), "--study", json.dumps(study), "--json"])
+            code = main(["fea", str(step), "--study", json.dumps(study), "--out", str(self.tmp / "stopped.glb"), "--json"])
         self.assertEqual(code, 1)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertFalse(payload["ok"])
-        self.assertIsNone(payload["glb"])
-        self.assertEqual(payload["findings"][0]["type"], "not_connected")
+        self.assertEqual(payload["written"], [])
+        self.assertEqual(payload["findings"][0]["code"], "not_connected")
 
     def _closed(self, lift: float, name: str, **extra):
         """The post lifted (or, below 0, pressed into the base) by ``lift``, glued anyway: the study solves."""
         step = _write_assembly(self.tmp, lift=lift, name=name)
         result = solve(step, self.tmp / f"{name}.glb", _pushed(step, "post", 40.0 + lift, mesh=MESH, **extra))
-        (finding,) = [f for f in result.findings if f["type"] == "gap_closed"]
-        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
-        return result, finding["summary"]
+        (finding,) = [f for f in result.findings if f.code == "gap_closed"]
+        self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -1000.0, delta=0.5)
+        return result, finding.message
 
     def test_a_gap_that_is_closed_to_bond_is_said(self):
         _, said = self._closed(0.08, "lifted", parts={"base": {"material": AL6061_NUMBERS}, "post": {"material": STEEL_NUMBERS}})
@@ -833,7 +839,7 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertIsNotNone(result.glb)  # solved; ok is the part's verdict
         self.assertNotIn("overlapping_parts", self._types(result))
         self.assertEqual(said, "Closed a 0.01 mm interference between 'post' and 'base' to bond them")
-        (joint,) = reported(result)["connections"]
+        (joint,) = reported(result)["measurements"]["connections"]
         self.assertEqual(joint["type"], "bonded")
 
     def test_a_press_fit_just_inside_the_tolerance_is_closed_to_bond(self):
@@ -844,9 +850,9 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_a_corner_sunk_on_every_axis_is_refused_as_an_overlap(self):
         step = _write_assembly(self.tmp, corner_block=0.25, name="corner")
         (error,) = self._not_solved(step, _pushed(step, "block", 19.75, mesh=MESH)).findings
-        self.assertEqual(error["type"], "not_connected")
+        self.assertEqual(error.code, "not_connected")
         self.assertEqual(
-            error["summary"],
+            error.message,
             "'block' isn't connected to anything that is held: it overlaps 'base' by 0.0156 mm³ instead of touching it, "
             "so it isn't bonded to it; fix the geometry or move them apart",
         )
@@ -877,12 +883,12 @@ class SolveAssemblyTest(unittest.TestCase):
         step = _write_assembly(self.tmp, far_block=20.0, name="floating")
         result = self._not_solved(step, _pushed(step, "post", 40.0))
         (finding,) = result.findings
-        self.assertEqual((finding["severity"], finding["type"]), ("error", "not_connected"))
+        self.assertEqual((finding.severity, finding.code), ("error", "not_connected"))
         self.assertEqual(
-            finding["summary"], "'block' isn't connected to anything that is held: nearest part 'base' is 20 mm away"
+            finding.message, "'block' isn't connected to anything that is held: nearest part 'base' is 20 mm away"
         )
-        self.assertEqual(finding["items"][0]["ref"], _scene(step)[1]["block"])
-        self.assertIn("error: 'block' isn't connected", result.human_lines()[1])
+        self.assertEqual(finding.location, _scene(step)[1]["block"])
+        self.assertIn(f"error: not_connected at {finding.location}: 'block' isn't connected", result.human_lines()[1])
 
     def _with_sunk_block(self, held_block: bool, **extra):
         step = _write_assembly(self.tmp, overlap_block=True, name=f"sunk{held_block}")
@@ -895,15 +901,15 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_overlapping_parts_are_not_bonded_and_the_study_suggests_fixing_them(self):
         step, study = self._with_sunk_block(held_block=True)
         result = solve(step, self.tmp / "sunk.glb", study)
-        (finding,) = [f for f in result.findings if f["type"] == "overlapping_parts"]
-        self.assertEqual(finding["severity"], "warning")
+        (finding,) = [f for f in result.findings if f.code == "overlapping_parts"]
+        self.assertEqual(finding.severity, "warning")
         self.assertEqual(
-            finding["summary"],
+            finding.message,
             "'block' and 'base' overlap by 100 mm³: real parts can't, so the model may be wrong; fix the geometry or mark them free",
         )
         written = reported(result)
-        self.assertEqual([c["between"] for c in written["connections"]], [["post", "base"]])
-        self.assertEqual([o["between"] for o in written["overlaps"]], [["block", "base"]])
+        self.assertEqual([c["between"] for c in written["measurements"]["connections"]], [["post", "base"]])
+        self.assertEqual([o["between"] for o in written["measurements"]["overlaps"]], [["block", "base"]])
 
     def test_marking_an_overlapping_pair_free_silences_the_suggestion(self):
         step, study = self._with_sunk_block(held_block=True, connections=[{"between": ["block", "base"], "type": "free"}])
@@ -918,9 +924,9 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_a_part_an_overlap_leaves_unheld_says_so(self):
         result = self._not_solved(*self._with_sunk_block(held_block=False))
         (finding,) = result.findings
-        self.assertEqual(finding["type"], "not_connected")
+        self.assertEqual(finding.code, "not_connected")
         self.assertEqual(
-            finding["summary"],
+            finding.message,
             "'block' isn't connected to anything that is held: it overlaps 'base' by 100 mm³ instead of touching it, "
             "so it isn't bonded to it; fix the geometry or move them apart",
         )
@@ -929,9 +935,9 @@ class SolveAssemblyTest(unittest.TestCase):
         study = self.study({"base": "6061", "post": "steel"}, connections=[{"between": ["post", "base"], "type": "free"}])
         result = self._not_solved(self.step, study)
         (finding,) = result.findings
-        self.assertEqual(finding["type"], "not_connected")
+        self.assertEqual(finding.code, "not_connected")
         self.assertEqual(
-            finding["summary"], "'post' isn't connected to anything that is held: it touches 'base' but isn't bonded to it"
+            finding.message, "'post' isn't connected to anything that is held: it touches 'base' but isn't bonded to it"
         )
 
     def test_a_fixture_or_load_on_a_face_wholly_a_joint_is_a_study_error(self):
@@ -943,8 +949,8 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_a_face_partly_covered_by_a_joint_loads_its_exposed_area(self):
         study = self.study(None, loads=[{"faces": [_face_at(self.scene, self.refs["base"], 10.0)], "type": "force", "vector_N": [0, 0, -100]}])
         result = solve(self.step, self.tmp / "exposed.glb", study)
-        self.assertEqual(result.summary["applied_force_N"], [0.0, 0.0, -100.0])
-        self.assertAlmostEqual(result.summary["reaction_force_N"][2], 100.0, delta=0.1)
+        self.assertEqual(result.measurements["applied_force_N"], [0.0, 0.0, -100.0])
+        self.assertAlmostEqual(result.measurements["reaction_force_N"][2], 100.0, delta=0.1)
 
     def test_the_parts_the_study_names_must_exist(self):
         with self.assertRaisesRegex(ValueError, r"parts\['lid'\]: no part named 'lid'; the parts are 'base', 'post'"):
@@ -981,9 +987,9 @@ class SolveAssemblyTest(unittest.TestCase):
         result = solve(step, self.tmp / "capped.glb", study)
         self.assertTrue(result.ok)
         self.assertNotIn("not_connected", self._types(result))
-        self.assertEqual({c["between"][0]: c["type"] for c in reported(result)["connections"]}, {"post": "bonded", "cap": "free"})
+        self.assertEqual({c["between"][0]: c["type"] for c in reported(result)["measurements"]["connections"]}, {"post": "bonded", "cap": "free"})
         # The 100 N is held by the base alone: the cap carries nothing across the free joint.
-        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -100.0, delta=0.5)
+        self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -100.0, delta=0.5)
 
     def test_two_parts_that_overlap_and_are_bonded_through_a_third_are_refused(self):
         step = self._two_posts("overlapping-posts", 8)  # right 2 mm into left
@@ -1038,7 +1044,7 @@ class RoundPartTest(unittest.TestCase):
             }
             result = solve(step, tmp / "pin.glb", study)
         self.assertTrue(result.ok)
-        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -100.0, delta=0.5)
+        self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -100.0, delta=0.5)
 
 
 if __name__ == "__main__":

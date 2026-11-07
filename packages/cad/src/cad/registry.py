@@ -11,8 +11,8 @@ objects, producers and operations), and a process kind. A **producer** is code t
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
-``dfm`` a 3D type's manufacturing check, ``drc`` a board's design rule check, ``erc`` a schematic's electrical
-rules check, ``validate`` a robot description's conformance check.
+``dfm`` a 3D type's manufacturing check, ``fea`` a B-rep type's stress study, ``drc`` a board's design rule check,
+``erc`` a schematic's electrical rules check, ``validate`` a robot description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
@@ -40,7 +40,7 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIE
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "fea", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -100,6 +100,9 @@ class Integration:
     #: download's size, never the installed environment's, which is two to three times that.
     holds: str = ""
     download_mb: int = 0
+    #: The integrations its operations need in the same environment (netgen's: a stress study reads the B-rep with
+    #: the kernel, build123d's, beside the mesher), so the environment the ``cad`` command makes for it holds them too.
+    alongside: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -207,6 +210,13 @@ _DFM = Operation("dfm", "measure it for manufacturing: injection molding (--proc
                         "projected area) or 3D printing (--process printing: walls, overhangs, support); "
                         "--candidates ranks the pulls or orientations", "trimesh")
 
+# The stress study a B-rep type shares (``cad._internal.fea``): netgen meshes the part's own faces, CalculiX solves.
+# A mesh type has no faces a study can hold or load by, so it has none.
+_FEA = Operation("fea", "a linear static stress study of a part or a bonded assembly: with no --study, the parts, the "
+                        "pairs that touch and a part's faces a study names; with --study and --out, the solve, its "
+                        "result GLB written, each part's peak stress and safety factor, and a part that yields failing it",
+                 "netgen")
+
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
 
@@ -220,12 +230,12 @@ _TYPES = (
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _FEA), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _FEA), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
@@ -290,7 +300,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
         modules=("build123d", "OCP"),
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
-                       "ezdxf", "pillow"),
+                       "ezdxf", "pillow", "scipy"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
         holds="the CAD kernel", download_mb=240),
     "kicad": Integration(
@@ -315,6 +325,22 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
+    "netgen": Integration(
+        "netgen", "netgen, the tetrahedral mesher: a stress study (fea) meshes a part's own faces with it, curved "
+                  "second-order elements, every face kept under its ref, always in a process of its own (its "
+                  "OpenCascade and the kernel's cannot share one)",
+        extra="netgen", process="separate",
+        modules=("netgen",), distributions=("netgen-mesher",), identity=("netgen-mesher",), alongside=("build123d",),
+        holds="the netgen mesher", download_mb=11),
+    "calculix": Integration(
+        "calculix", "CalculiX's solver, ccx, a program the person installs: a stress study (fea) writes its input, "
+                    "runs it headless on one thread in a private folder, and reads its answer",
+        extra=None, process="separate",
+        # No extra: CalculiX ships no package cad can install, so the person installs it (or uses the one their
+        # FreeCAD carries) and the probe finds it -- CAD_CCX, then PATH, then FreeCAD's (cad.calculix._program).
+        probe=Probe("ccx", "2.20", "install CalculiX 2.20 or newer -- conda install -c conda-forge calculix, the "
+                                   "calculix-ccx package on Debian and Ubuntu, or FreeCAD 1.0 or newer, which carries "
+                                   "one -- or set CAD_CCX to its ccx program", "CAD_CCX")),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

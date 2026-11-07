@@ -53,7 +53,12 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertIn(integration.process, registry.PROCESS_KINDS)
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
-                self.assertTrue(integration.modules and integration.distributions)
+                if integration.extra is None:
+                    # A program the person installs, which ships no package: found by its probe alone.
+                    self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
+                    self.assertFalse(integration.modules or integration.distributions)
+                else:
+                    self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
@@ -69,6 +74,16 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        # A stress study needs netgen in the caller's process (and the kernel, which reads the B-rep: a script
+        # that imports build123d gets it); CalculiX, a program, has no extra and no namespace of cad run's.
+        self.assertEqual("netgen", integrations.for_name("cad.step.fea"))
+        self.assertEqual(("fea",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
+                                         if registry.DOCUMENT_TYPES["step"].operation(name).integration == "netgen"))
+        self.assertNotIn("calculix", integrations.INTEGRATIONS)
+        # Its environment holds the kernel beside netgen: what an integration runs alongside is registered ones'.
+        self.assertEqual(("build123d",), registry.INTEGRATIONS["netgen"].alongside)
+        for integration in registry.INTEGRATIONS.values():
+            self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 

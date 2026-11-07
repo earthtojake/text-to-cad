@@ -5,13 +5,17 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
+wrote; ``dfm``, ``fea``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
 <id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
+environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A B-rep
+type's ``fea`` (``xbf``, ``step``) is the stress study: ``cad step fea part.step`` lists the parts, the pairs
+that touch and a part's faces a study names, and ``cad step fea part.step --study study.json --out
+result.glb`` solves it; it runs here when this environment holds the kernel and netgen, else in the
+environment of ``cad[build123d,netgen]``, and CalculiX, the person's, is found by its probe. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
 environment of ``cad[kicad]``.
@@ -184,6 +188,58 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
                            summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
 
     return emit(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+
+
+# --- a B-rep type's stress study: the kernel's and netgen's, solved by the person's CalculiX -------------
+
+
+def _fea(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> fea SOURCE [--study STUDY --out RESULT.glb]``: the library's stress study (``cad.<type>.fea``),
+    run here when this environment holds the kernel and netgen, else in the environment of
+    ``cad[build123d,netgen]`` (``cad_server._internal.integration_env``), its options refused here first, before one
+    is made. CalculiX is the person's program, found by its probe wherever the study runs."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad._internal.fea.operation import INTEGRATION
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import _verb, generated_parser, run_cli
+
+        target = (f"cad.{document_type}", "fea")
+        if integration_env.carries(INTEGRATION):
+            parser = _typed(generated_parser(target, prog=prog), document_type, "fea", "source")
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        return _fea_elsewhere(document_type, target, INTEGRATION, argv, prog)
+
+    return run
+
+
+def _fea_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str], prog: str) -> int:
+    from cad._internal.fea.operation import options
+    from cad.results import FeaResult
+    from cad_server._internal import integration_env
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, emit, generated_parser)
+
+    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+    parsed = parser.parse_args(argv)
+    positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    def studied() -> FeaResult:
+        options(study=keywords.get("study"), out=keywords.get("out"), occurrence=keywords.get("occurrence"),
+                vtu=bool(keywords.get("vtu")))
+        python = integration_env.environment(integration, said)
+        # Paths as absolute text: the runner's process reads them as the command would, in this folder.
+        plain = {name: str(Path(value).expanduser().resolve()) if isinstance(value, Path) else value
+                 for name, value in keywords.items()}
+        found = integration_env.call(python, document_type, target[1],
+                                     [str(Path(value).expanduser().resolve()) for value in positional], plain)
+        return FeaResult.from_data(found)
+
+    return emit(studied, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
+                verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=True)
 
 
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
@@ -502,6 +558,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif _name == "fea" and getattr(_entry.operation(_name), "integration", None) == "netgen":
+            OPERATIONS[(_entry.id, _name)] = _fea(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:

@@ -55,7 +55,7 @@ Vibration, buckling, heat, flow, fatigue, impact, contact and the rest are not i
 | Task | First action | Reference |
 | --- | --- | --- |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
-| **Check an assembly** | `cad fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
+| **Check an assembly** | `cad step fea assembly.step` (the setup) first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Compare variants of a design** | Get the study right on one variant, then map its faces onto each other variant and solve each. | [Compare variants](#compare-variants) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`/work/bracket.step#bracket/face 17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
 | **Write or edit a study** | One JSON object: material, fixtures, loads, mesh; for an assembly also parts and connections. | [Study file](references/study-file.md) |
@@ -68,31 +68,37 @@ result GLB in the CAD Viewer beside the STEP, so the user sees the colour map.
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
-Solving needs one thing `fea faces` and `fea parts` do not; netgen, which meshes, comes with text-to-cad
-on macOS, Linux x86_64 and Windows x86_64, where netgen publishes wheels (anywhere else, Linux on ARM
-among them, `fea solve` refuses, naming the platform). A solve reads the document in its own
-process, so it needs no engine running:
+A study is an operation of the document's type: `cad step fea` for a `.step`, `cad xbf fea` for an
+`.xbf`. With no `--study` it lists the study's setup and needs nothing else; a solve needs two tools:
 
-- **The solver.** CalculiX (`ccx`) 2.20 or newer, installed by the person: `conda install -c
-  conda-forge calculix`, the `calculix-ccx` package on Debian and Ubuntu, or FreeCAD 1.0 or newer
-  on macOS or Windows, which carries one. text-to-cad runs `CAD_CCX` when it is set
-  (the file itself, named `ccx` or `ccx_2.2x`: `CAD_CCX=/path/to/ccx`), else the first `ccx` (or `ccx_2.2x`) on PATH, else the one inside
-  FreeCAD where its installer puts it. A missing
-  or older one stops the solve with an error that says how to install it. text-to-cad downloads nothing
-  and has no other solver: ask the user to install CalculiX, or install it yourself with their
-  permission, then run the study again. Every result names the CalculiX version that solved it.
+- **netgen**, which meshes, is text-to-cad's `netgen` integration (`cad[netgen]`): the `cad` command
+  installs it, with the CAD kernel the study reads the part with, the first time a study needs it
+  (about 10 MB, once; nothing for you to install), and `cad run` gives a script that calls
+  `cad.step.fea` its environment when its header names `cad[netgen]`. netgen publishes it for
+  macOS, Linux x86_64 and Windows x86_64 alone; anywhere else (Linux on ARM among them) a solve
+  refuses, naming the platform.
+- **CalculiX** (`ccx`) 2.20 or newer, which solves, is the `calculix` integration's program, installed
+  by the person: `conda install -c conda-forge calculix`, the `calculix-ccx` package on Debian and
+  Ubuntu, or FreeCAD 1.0 or newer on macOS or Windows, which carries one. text-to-cad runs `CAD_CCX`
+  when it is set (the file itself, named `ccx` or `ccx_2.2x`: `CAD_CCX=/path/to/ccx`), else the first
+  `ccx` (or `ccx_2.2x`) on PATH, else the one inside FreeCAD where its installer puts it. A missing or
+  older one stops the solve with an error that says how to install it. text-to-cad downloads no solver
+  and has no other: ask the user to install CalculiX, or install it yourself with their permission,
+  then run the study again. It runs headless, on one thread, in a private folder, and every result
+  names the CalculiX version that solved it.
+
+A study reads the document in its own process, so it needs no model built and no engine document.
 
 Units are fixed: mm for geometry, N for forces, MPa for pressure, modulus and stress, t/mm³ for
 density, and g (9.81 m/s²) for gravity and acceleration. Restate every load in those units before
@@ -103,13 +109,14 @@ you write it down ([study-file.md](references/study-file.md#units)).
 1. **List the faces.** Every study names faces by the engine's refs, the ones the Viewer copies.
 
    ```bash
-   cad fea faces part.step
+   cad step fea part.step
    ```
 
-   Each line is one face: ref, area, centre, surface type and a hint such as `plane, normal -Z,
-   largest`. Use the hint and the centre to match the user's words ("the mounting face", "the top of
-   the upright") to a ref. A document with several parts refuses with the parts it holds;
-   pass the one to list, `cad fea faces assembly.step --occurrence post`, or for a whole assembly
+   With no study it is the study's setup, and writes nothing: the parts, the pairs that touch, and
+   then each face of the part, one a line: ref, area, centre, surface type and a hint such as `plane,
+   normal -Z, largest`. Use the hint and the centre to match the user's words ("the mounting face",
+   "the top of the upright") to a ref. A document with several parts lists no faces and says how;
+   name the part to list, `cad step fea assembly.step --occurrence post`, or for a whole assembly
    follow [Assemblies](#assemblies). When two faces fit equally, ask, quoting both refs. A face
    the user selected in the Viewer arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
@@ -141,13 +148,15 @@ you write it down ([study-file.md](references/study-file.md#units)).
 3. **Solve.**
 
    ```bash
-   cad fea solve part.step FEA/part.bracket-load.glb --study study.json --json
+   cad step fea part.step --study study.json --out FEA/part.bracket-load.glb --json
    ```
 
-   This writes the GLB it names (the colour map on the deformed shape), and nothing else: one per
-   study, so name each for its study. `--json` prints the result as one JSON line: every number,
-   the study as given, the material, the faces it named, each fixture's reaction, the mesh and the
-   timings. Without it the same result prints as lines.
+   This writes the GLB `--out` names (it must end in `.glb`) (the colour map on the deformed shape), and nothing else: one per
+   study, so name each for its study. `--json` prints the result as one JSON line, a check's
+   shape: `ok`, `findings` (each with its `severity`, `code`, `message`, `location` and `hint`), and
+   `measurements`, every number -- the study as given, the material, the faces it named
+   (`named_faces`), each fixture's reaction, the mesh and the timings -- with `written`, the files the
+   solve wrote. Without it the same result prints as lines.
 
    When the safety factor comes out under 3 the run meshes again finer (half the element size,
    less on a big model) and solves again, by itself, and reports the finer result
@@ -165,7 +174,8 @@ you write it down ([study-file.md](references/study-file.md#units)).
    result either way.
 
 4. **Read the findings.** Every solve prints them after the numbers, one line each, `error:` or
-   `warning:` and then what is wrong and what to do (`findings` in `--json`). Read
+   `warning:`, the finding's code and where, then what is wrong and, after `Hint:`, why (`findings`
+   in `--json`). Read
    them before reporting; see [Read the findings](#read-the-findings).
 
 5. **Report**, in this order, with units: max von Mises (MPa) and where (`max_von_mises_at_mm`;
@@ -189,10 +199,10 @@ fixed. The keys are in [study-file.md](references/study-file.md#assemblies).
 1. **List the parts and joints first.**
 
    ```bash
-   cad fea parts assembly.step
+   cad step fea assembly.step
    ```
 
-   It prints each part (ref, name, volume), then each touching pair with its contact area and gap
+   The setup prints each part (ref, name, volume), then each touching pair with its contact area and gap
    and what it will be: `bonded`, or `not connected` for a near miss (up to 1 mm apart, beyond
    `contact_tolerance_mm`), or `overlapping · N mm³` when the solids share volume (such parts are
    never bonded). An overlap no thicker than `contact_tolerance_mm` (a thin layer, where a face
@@ -248,15 +258,15 @@ configuration. Run the same study on each, with the faces mapped, and compare.
    solved and checked.
 2. **Map its faces onto every other variant.** Face numbers are not stable between versions: an
    edit renumbers faces, and a ref reused unchecked can land on a different face with no
-   error. Run `cad fea faces variant.step` and match each face the study names by what it is,
+   error. Run `cad step fea variant.step` and match each face the study names by what it is,
    never by its number: the same surface type and normal, a centre where the edit would move it,
    an area that changed only as the edit explains. When two faces fit equally, or the edit removed
    the face, ask, quoting the candidates. Write one study per variant (`study.<variant>.json`):
    the mapped refs, everything else identical.
 3. **Hold the mesh still.** Accuracy follows the mesh, so a difference between variants is only
    the design's when they are meshed alike: give every study the baseline's `mesh.size_mm`.
-4. **Solve each to its own result:** `cad fea solve variant.step FEA/variant.fea.glb --study
-   study.<variant>.json`.
+4. **Solve each to its own result:** `cad step fea variant.step --study study.<variant>.json --out
+   FEA/variant.fea.glb`.
 5. **Report one table**, a row per variant: max von Mises and where, safety factor, max
    displacement, whether a finer re-solve ran, and the face mapping used (`baseline bracket/face 17
    → bracket/face 21, the mounting face`) so the user can check it. Say which variant answers their
@@ -309,6 +319,6 @@ under 10 % settles it); above the margin they would not change the answer.
 | `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. In an assembly, only for a part whose safety factor is under 3: a part far from failing is not worth distrusting. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
 | `large_displacement` | warning | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
 
-A `warning:` line that is not a finding (a slow solve past 150 000 degrees of freedom, a finer
-solve that was skipped or failed) is about the run itself: read it, and mention it when it bears on
+A `solver_note` warning (a slow solve past 150 000 degrees of freedom, a finer solve that was
+skipped or failed) is about the run itself: read it, and mention it when it bears on
 the answer.

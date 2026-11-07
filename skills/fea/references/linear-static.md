@@ -43,7 +43,7 @@ good answer from a bad one. The keys are in [study-file.md](study-file.md).
 
 1. Prefer references the user selected in the Viewer: they arrive as `/work/bracket.step#bracket/face 17` and are
    exact.
-2. Otherwise run `cad fea faces part.step` and match by the hint (`plane, normal -Z, largest`),
+2. Otherwise run `cad step fea part.step` (the setup) and match by the hint (`plane, normal -Z, largest`),
    the centre, and the area. "The base", "the mounting face" and "the bottom" usually mean the
    largest planar face with a downward normal; "the top of the upright" is a small planar face at
    the highest Z. A hole is a `cylinder`.

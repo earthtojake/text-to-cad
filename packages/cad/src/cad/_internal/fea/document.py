@@ -7,7 +7,7 @@ them (``cad.engine.refs``): ``bracket/face 17``, ``hand/finger.2/face 7``, an el
 (``bracket/f:plate.relief.3``), or any of those after the document's path and ``#``. So a face a person
 picks in the viewer and copies is the face a study names, and a face is numbered as the engine numbers it
 (``TopExp.MapShapes``, its ``face N``). Every ref this module hands out is the canonical one (``refs.Hit.ref``):
-what ``cad fea faces`` prints and the result names.
+what a study's setup (``cad <type> fea`` with no study) prints and the result names.
 
 An occurrence here is a part where it stands in the document: its prototype's geometry moved by its instance's
 placement. A part placed twice is two occurrences with the same faces, each named under its own path.

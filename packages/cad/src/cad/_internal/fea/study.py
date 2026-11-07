@@ -1,4 +1,4 @@
-"""The study file: what ``cad fea solve`` is asked to compute.
+"""The study file: what a stress study (``cad <type> fea --study``) is asked to compute.
 
 A study is JSON (a path, an inline JSON string, or a dict from a library
 caller) of this shape::
@@ -381,7 +381,7 @@ def parse_study(study: str | dict | Path | None) -> Study:
     if study is None:
         raise ValueError(
             "a study is required: --study study.json (or inline JSON) naming the fixed faces and the "
-            "loads; run `cad fea faces IN.step` to list face refs"
+            "loads; run `cad step fea IN.step` (no study) to list face refs"
         )
     document = _load_document(study)
     unknown = set(document) - set(STUDY_KEYS)

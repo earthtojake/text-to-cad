@@ -47,7 +47,7 @@ def _block(directory: Path, angle: float):
     """The block turned ``angle`` degrees about Z, its faces by outward normal in its own axes (-x, -y, -z, +z)."""
     from build123d import Align, Box, Rotation, export_step
 
-    from cad import fea
+    from tests.python.support import fea_fixtures as fea
 
     step = directory / f"block{angle:g}.step"
     export_step(Rotation(0, 0, angle) * Box(*SIZE, align=Align.MIN), str(step))
@@ -115,14 +115,14 @@ class UniaxialBlock(unittest.TestCase):
                 at, moved, von_mises, extras = _glb(result.glb)
                 # Every node: von Mises F/A, in the free uniaxial state (no clamp spoils it).
                 self.assertLess(float(np.abs(von_mises - stress).max()), 1e-4 * stress)
-                self.assertAlmostEqual(result.summary["max_von_mises_MPa"], stress, delta=1e-4 * stress)
+                self.assertAlmostEqual(result.measurements["max_von_mises_MPa"], stress, delta=1e-4 * stress)
                 # In the block's own axes: stretched ε along the pull, narrowed ν ε across it, from the rollers' corner.
                 c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
                 own = np.c_[at[:, 0] * c + at[:, 1] * s, -at[:, 0] * s + at[:, 1] * c, at[:, 2]]
                 own_moved = np.c_[moved[:, 0] * c + moved[:, 1] * s, -moved[:, 0] * s + moved[:, 1] * c, moved[:, 2]]
                 expected = np.c_[-NU * strain * own[:, 0], -NU * strain * own[:, 1], strain * own[:, 2]]
                 self.assertLess(float(np.abs(own_moved - expected).max()), 1e-4 * strain * SIZE[2])
-                self.assertAlmostEqual(result.summary["reaction_force_N"][2], -FORCE, delta=1e-6 * FORCE)
+                self.assertAlmostEqual(result.measurements["reaction_force_N"][2], -FORCE, delta=1e-6 * FORCE)
                 self.assertEqual([fixture["type"] for fixture in extras["study"]["fixtures"]], ["roller"])
 
     def test_rollers_on_one_face_leave_the_part_free_and_say_so(self):
@@ -142,8 +142,9 @@ class UniaxialBlock(unittest.TestCase):
                 "material": STEEL_NUMBERS, "mesh": {"size_mm": 6.0},
                 "fixtures": [{"faces": [faces[side]], "type": "roller"} for side in ("-x", "-y", "-z")],
                 "loads": [_pull(faces)]}))
-        self.assertFalse([w for w in written["warnings"] if "do not balance" in w], written["warnings"])
-        reactions = [fixture["reaction_N"] for fixture in written["fixtures"]]
+        said = [f["message"] for f in written["findings"] if f["code"] == "solver_note"]
+        self.assertFalse([w for w in said if "do not balance" in w], said)
+        reactions = [fixture["reaction_N"] for fixture in written["measurements"]["fixtures"]]
         self.assertEqual(len(reactions), 3)
         for c in range(3):
             self.assertAlmostEqual(sum(r[c] for r in reactions), -FORCE if c == 2 else 0.0, delta=1e-6 * FORCE)
@@ -160,7 +161,7 @@ class ConfinedCylinder(unittest.TestCase):
         import numpy as np
         from build123d import Align, Box, Cylinder, export_step
 
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
         pressure, radius, height = 10.0, 10.0, 10.0
         with tempfile.TemporaryDirectory() as name:

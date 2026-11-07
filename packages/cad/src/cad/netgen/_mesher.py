@@ -36,7 +36,7 @@ NETGEN_PLATFORMS = "macOS, Linux x86_64 and Windows x86_64"
 NETGEN_EDGES = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
 
 #: The longest one mesh may take (s): past it the child is stopped and the study says so, rather than a
-#: mesher that never returns holding ``cad fea solve`` (and the engine or MCP server it runs in) for good.
+#: mesher that never returns holding a stress study (and the engine or MCP server it runs in) for good.
 TIMEOUT_S = 3600.0
 
 

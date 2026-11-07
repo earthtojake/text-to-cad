@@ -151,8 +151,9 @@ class SidesTest(unittest.TestCase):
 
 # Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
-                               "PIL"},
+                               "PIL", "scipy"},
                  "kicad": {"kicode"},
+                 "netgen": {"netgen"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
@@ -186,7 +187,7 @@ class IntegrationsTest(unittest.TestCase):
                          for requirement in extras.get(integration.extra or "", [])}
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
-                self.assertTrue(set(integration.modules) <= EXTRA_MODULES[integration.extra or ""])
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))

@@ -33,8 +33,6 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
-    # Not a format: a part goes in, a result GLB comes out.
-    "cad.fea": ("faces", "parts", "solve"),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
@@ -49,6 +47,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+    # A B-rep type's stress study: netgen's and the kernel's, one signature for every B-rep type.
+    **{f"{document_type} fea": (f"cad.{document_type}", "fea") for document_type in ("xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
