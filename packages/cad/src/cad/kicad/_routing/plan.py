@@ -472,15 +472,16 @@ class Router:
         return free, via_ok, rooms
 
     def _swaps(self, items: Sequence[_Item], window: _Window, allowed: Sequence[int]) -> bytearray:
-        """Where a route changes layer for nothing: inside the net's own through-hole pads and vias, on allowed
-        layers both."""
-        swap = bytearray(window.nx * window.ny)
+        """Where a route changes layer for nothing, per allowed layer then node: inside the net's own through-hole
+        pads and vias, on each allowed layer each has copper on (a blind via's, its span), so a change for nothing
+        is between two layers one piece of copper joins."""
+        swap = bytearray(len(allowed) * window.nx * window.ny)
         if len(allowed) < 2:
             return swap
         names = {self.copper[k] for k in allowed}
         multi = [item for item in items if item.kind in ("pad", "via") and len(names & set(item.layers)) >= 2]
-        for node in self._terminals(multi, window, allowed):
-            swap[node % (window.nx * window.ny)] = 1
+        for state in self._terminals(multi, window, allowed):
+            swap[state] = 1
         return swap
 
     def _join(self, want: Want, source: Sequence[_Item], target: Sequence[_Item], between: tuple[str, str],

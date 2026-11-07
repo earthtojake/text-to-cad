@@ -286,6 +286,27 @@ class ViaLimit(unittest.TestCase):
         self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
 
 
+class LayerChanges(unittest.TestCase):
+    def test_a_blind_via_changes_layer_only_between_the_layers_it_joins(self) -> None:
+        """A blind via of the net joins F.Cu to In1.Cu, so a route may change between those two there for nothing,
+        never to B.Cu: with no via of its own allowed, a pad on the back is out of reach; allowed vias, it places
+        one."""
+        text = board(resistor("R1", 3, 3, 0, "A", "N1"), resistor("R2", 11, 3, 0, "A", "N2", side="B"),
+                     segment("", "A", (2.175, 3.0), (2.175, 5.0)), segment("", "A", (2.175, 5.0), (6.0, 5.0)),
+                     f'(via blind (at 6 5) (size 0.8) (drill 0.4) (layers "F.Cu" "In1.Cu") (net "A") (uuid "{_uuid()}"))',
+                     width=14.0, height=7.0)
+        copper = read_copper(text.replace('(layers (0 "F.Cu" signal) (2 "B.Cu" signal)',
+                                          '(layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal)'))
+        self.assertEqual(("F.Cu", "In1.Cu"), copper.vias[0].layers)
+        layers = (("F.Cu", 1.0), ("In1.Cu", 1.0), ("B.Cu", 1.0))
+        done = Router(copper, RULES, [want("A", layers=layers, vias=0)]).run()
+        self.assertFalse(done[0].routed, done[0].line())
+        router = Router(copper, RULES, [want("A", layers=layers)])
+        done = router.run()
+        self.assertTrue(done[0].routed, done[0].line())
+        self.assertEqual(1, len(router.vias))
+
+
 class FinePitch(unittest.TestCase):
     def test_a_pin_whose_lane_is_narrower_than_the_grid_escapes_exactly(self) -> None:
         """The middle pin of a 0.5 mm-pitch row, off the grid by half its pitch, reaches a resistor 8 mm away: its

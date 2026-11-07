@@ -3,8 +3,8 @@
 A state is a node on a layer (and, under a via limit, how many vias the path has placed so far). From each
 state the search may move to the eight neighbouring nodes on its layer, costing the move's length times the
 layer's cost per millimetre, where the next node is free for the track; change layer where a via fits, costing
-``via_cost``; and change layer for nothing inside the net's own through-hole copper (a through-hole pad or a via
-already there), where no via is placed. Its heuristic is the octile distance to the box round the targets
+``via_cost``; and change layer for nothing inside the net's own copper that joins both layers (a through-hole pad or a via
+already there, between the layers it spans), where no via is placed. Its heuristic is the octile distance to the box round the targets
 (never more than the cheapest way there), weighted a little, so it settles for a path at most that factor
 longer and looks at far fewer nodes.
 
@@ -30,7 +30,7 @@ INF = math.inf
 @dataclass(frozen=True)
 class Found:
     """A path: each step's (layer, node), from a source to a target, and where a via was placed (the node of
-    each layer change that is not inside the net's own through-hole copper). ``cost`` is the search's."""
+    each layer change that the net's own copper there does not join). ``cost`` is the search's."""
 
     steps: tuple[tuple[int, int], ...]
     vias: tuple[int, ...]
@@ -44,8 +44,9 @@ def search(free: bytes | bytearray, layers: int, nx: int, ny: int, pitch: float,
            budget: int) -> tuple[Found | None, int, bool]:
     """The cheapest path (within the heuristic's weight) from any of ``sources`` to any of ``targets``.
 
-    ``free``: per layer then node, 1 where a track centreline may be; ``via_ok`` and ``swap_ok``: per node, where a
-    via fits and where the layer changes for nothing; ``sources``: the starting (layer * nodes + node) numbers;
+    ``free``: per layer then node, 1 where a track centreline may be; ``via_ok``: per node, where a via fits;
+    ``swap_ok``: per layer then node, 1 where the net's own copper joins that layer, so that the layer changes for
+    nothing between two layers both marked at a node; ``sources``: the starting (layer * nodes + node) numbers;
     ``targets``: per layer then node, 1 at a target; ``heuristic``: per node, the weighted estimate to the targets.
     Answers (the path or None, how many states were expanded, whether the budget ran out)."""
     nodes = nx * ny
@@ -92,17 +93,18 @@ def search(free: bytes | bytearray, layers: int, nx: int, ny: int, pitch: float,
                 g[to] = cost
                 parent[to] = state
                 heappush(heap, (cost + heuristic[nxt], to))
-        changes = []
-        if swap_ok[node]:
-            changes.append((level, 0.0))
-        if via_ok[node] and (via_limit is None or level < via_limit):
-            changes.append((level if via_limit is None else level + 1, via_cost))
-        for into, cost in changes:
-            cost += here
-            for other in range(layers):
-                if other == layer or not free[other * nodes + node]:
-                    continue
-                to = into * plane + other * nodes + node
+        swap = swap_ok[rest]
+        via = via_ok[node] and (via_limit is None or level < via_limit)
+        if not (swap or via):
+            continue
+        for other in range(layers):
+            there = other * nodes + node
+            if other == layer or not free[there]:
+                continue
+            for into, cost in (((level, 0.0),) if swap and swap_ok[there] else ()) + (
+                    ((level if via_limit is None else level + 1, via_cost),) if via else ()):
+                cost += here
+                to = into * plane + there
                 if closed[to] or cost >= g[to]:
                     continue
                 g[to] = cost
@@ -120,7 +122,7 @@ def _path(state: int, parent: array, nodes: int, plane: int, swap_ok: bytes | by
     chain.reverse()
     steps = tuple(divmod(s % plane, nodes) for s in chain)
     vias = tuple(node for (layer, node), (after, again) in zip(steps, steps[1:])
-                 if layer != after and node == again and not swap_ok[node])
+                 if layer != after and node == again and not (swap_ok[layer * nodes + node] and swap_ok[after * nodes + node]))
     return Found(steps, vias, cost, expanded)
 
 
@@ -152,10 +154,10 @@ def flood(free: bytes | bytearray, layers: int, nx: int, ny: int, via_ok: bytes 
             if free[to] and not seen[to]:
                 seen[to] = 1
                 queue.append(to)
-        if via_ok[node] or swap_ok[node]:
+        if via_ok[node] or swap_ok[state]:
             for other in range(layers):
                 to = other * nodes + node
-                if other != layer and free[to] and not seen[to]:
+                if other != layer and free[to] and not seen[to] and (via_ok[node] or swap_ok[to]):
                     seen[to] = 1
                     queue.append(to)
     return queue, False
