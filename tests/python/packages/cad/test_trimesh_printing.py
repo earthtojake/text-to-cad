@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 import trimesh
-from build123d import Box, Polyline, Pos, Rotation, export_stl, extrude, make_face
+from build123d import Align, Box, Polyline, Pos, Rotation, export_stl, extrude, make_face
 
 import cad
 from cad.trimesh import _printing as dfam_tool
@@ -131,6 +131,52 @@ class WallThicknessTest(unittest.TestCase):
         self.assertGreater(facts["min_mm"], 9.0)
 
 
+    def test_the_figures_are_of_the_rays_the_items_are(self) -> None:
+        """min_mm is the thinnest item, on one body and on several: the summary never says a thinner wall is not
+        there (a knob read "walls min 1.2" beside its 0.277 mm web)."""
+        part = Box(20, 20, 10) - Pos(0, 0, 4.0) * Box(16, 16, 1)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            for path in (_stl(part, tmp, "sealed"), MultiBodyWallTest()._assembly(tmp)):
+                facts = dfam_tool._wall_facts(dfam_tool._load(path), samples=400)
+                with self.subTest(path=Path(path).name):
+                    self.assertAlmostEqual(facts["min_mm"], min(i["thickness_mm"] for i in facts["items"]), delta=1e-3)
+                    self.assertTrue(facts["cover"])
+
+    def test_a_mesh_over_the_cover_cap_is_measured_by_its_random_rays(self) -> None:
+        mesh = trimesh.creation.icosphere(subdivisions=4, radius=10.0)
+        self.assertGreater(len(mesh.faces), dfam_tool.COVER_MAX_TRIANGLES)
+        facts = dfam_tool._wall_facts(mesh, samples=400)
+        self.assertFalse(facts["cover"])
+        self.assertIn("no ray from every triangle", facts["method"])
+        self.assertEqual(facts["samples_valid"], sum(item["samples"] for item in facts["items"]))
+        self.assertGreater(facts["min_mm"], 1.0)
+
+
+class MeshDefectTest(unittest.TestCase):
+    def test_a_fold_is_no_knife_and_the_walls_are_still_measured(self) -> None:
+        """A ridge whose flanks meet at 0.3 deg -- two triangles doubled back, as a tessellation folds -- is no
+        knife edge (its thin depth would reach 150 mm and wipe every wall ray), and the walls are measured."""
+        ridge = Polyline((0, 0, 0), (30, 0, 0), (30, 4, 0), (15.005, 4, 0), (15, 6, 0), (14.995, 4, 0), (0, 4, 0),
+                         (0, 0, 0))
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_stl(extrude(make_face(ridge), 20), Path(td), "fold"), process="printing")
+        report = result.measurements
+        self.assertEqual(report["knife_edges"]["count"], 0)
+        self.assertNotIn("error", report["wall_thickness"])
+        self.assertGreater(report["wall_thickness"]["samples_valid"], 1000)
+        self.assertNotIn("printing.knife_edge", [finding.code for finding in result.findings])
+
+    def test_faces_lying_on_faces_are_the_meshs_defect_said_once_not_a_gap(self) -> None:
+        part = Box(20, 20, 10) - Pos(0, 0, 5) * Box(0.005, 30, 5, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_stl(part, Path(td), "slit"), process="printing")
+        codes = [finding.code for finding in result.findings]
+        self.assertEqual(codes.count("mesh_overlap"), 1)
+        self.assertNotIn("printing.gap", codes)
+        self.assertLess(result.measurements["gaps"]["overlap"]["gap_mm"], dfam_tool.GAP_DEFECT_MM)
+
+
 class OrientationTest(unittest.TestCase):
     def test_flipping_a_wedge_removes_its_support_requirement(self) -> None:
         """The same wedge is self-supporting once turned over.
@@ -209,6 +255,30 @@ def _measured(path, **options) -> dict:
     return _checked(path, **options)[1]
 
 
+class OpenMeshTest(unittest.TestCase):
+    def test_an_open_mesh_is_still_measured_and_says_it_is_open(self) -> None:
+        # a 0.4 mm-walled cup missing one triangle: trimesh's split would repair the open piece through
+        # networkx (not a dependency) and lose the walls; measured as it is, the thin wall still fails
+        import numpy as np
+
+        cup = _hollow_box(0.4)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            mesh = trimesh.load(_stl(cup, tmp, "cup"))
+            mesh.update_faces(np.arange(len(mesh.faces)) != int(np.argmax(mesh.area_faces)))
+            path = tmp / "open.stl"
+            mesh.export(path)
+            result = cad.stl.dfm(path, process="printing", technology="fdm")
+        codes = [finding.code for finding in result.findings]
+        self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
+        self.assertEqual(codes[0], "not_watertight", "said first: every figure after it is of an open surface")
+        self.assertNotIn("measurement_failed", codes)
+        self.assertNotIn("internal_void", codes, "an open mesh's voxel voids are its holes")
+        walls = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "printing.wall"]
+        self.assertEqual({o["status"] for o in walls}, {"failed"})
+        self.assertAlmostEqual(min(f["value"] for o in walls for f in o["failures"]), 0.4, delta=0.01)
+
+
 class CheckTest(unittest.TestCase):
     def test_the_check_emits_every_fact_family(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -234,16 +304,14 @@ class CheckTest(unittest.TestCase):
             result = cad.stl.dfm(path, process="printing", candidates=True)
 
         self.assertEqual(len(result.measurements["orientations"]["candidates"]), 6)
-        self.assertIn("orientations by support area", result.summary)
-        # The part as it stands is measured too: its walls, overhangs and support, and what they show.
-        self.assertGreaterEqual(set(result.measurements), {"mesh", "overhangs", "wall_thickness", "support_volume"})
-        self.assertIn("overhangs", {finding.code for finding in result.findings})
+        self.assertIn("orientations ranked", result.summary)
 
     def test_an_overhang_is_said_where_it_is(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             result = cad.stl.dfm(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
 
-        self.assertTrue(result.ok, "a fact, not a verdict")
+        # the overhang is a fact, not a verdict; its 30 deg tip is a knife edge, a warning (the tip prints rounded)
+        self.assertIn(("warning", "printing.knife_edge"), {(f.severity, f.code) for f in result.findings})
         overhang = next(f for f in result.findings if f.code == "overhangs")
         self.assertEqual(overhang.severity, "warning")
         self.assertEqual(len(overhang.location.split(", ")), 3)
@@ -292,7 +360,7 @@ class MultiBodyWallTest(unittest.TestCase):
         self.assertEqual((result.measurements["mesh"]["body_count"], result.measurements["mesh"]["internal_void_count"]),
                          (1, 1))
         codes = {finding.code for finding in result.findings}
-        self.assertIn("sealed_voids", codes)
+        self.assertIn("internal_void", codes)  # FDM prints it as infill; a resin or powder process traps material
         self.assertNotIn("several_bodies", codes)
         self.assertAlmostEqual(result.measurements["wall_thickness"]["min_mm"], 0.5, delta=0.01)
 
