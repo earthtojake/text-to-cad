@@ -272,6 +272,20 @@ class Ends(unittest.TestCase):
         independent_check(self, copper, RULES, router, [want("A")])
 
 
+class ViaLimit(unittest.TestCase):
+    def test_a_via_limit_holds_for_the_whole_entry(self) -> None:
+        """Three pads of a net on the front, each between walls of another net there: each connection takes two
+        vias, so a net limited to two joins two of its pads and says the third has no way within the vias left."""
+        walls = [segment("", "W", (x, -1.0), (x, 7.0), width=1.0) for x in (6.0, 12.0)]
+        pads = [resistor(f"R{k}", 6 * k - 3, 3, 0, "A", f"N{k}") for k in (1, 2, 3)]
+        copper = read_copper(board(*walls, *pads, width=18.0, height=6.0))
+        router = Router(copper, RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)), vias=2)])
+        done = router.run()
+        self.assertEqual([True, False], [c.routed for c in done], [c.line() for c in done])
+        self.assertEqual(2, len(router.vias))
+        self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
+
+
 class FinePitch(unittest.TestCase):
     def test_a_pin_whose_lane_is_narrower_than_the_grid_escapes_exactly(self) -> None:
         """The middle pin of a 0.5 mm-pitch row, off the grid by half its pitch, reaches a resistor 8 mm away: its

@@ -12,8 +12,8 @@ checker (``tighten.Obstacles``) once, then ``run()`` routes each wanted connecti
 
 Each connection is searched in a window round its two ends (``search``), wider each time it fails (a margin,
 a larger margin, the whole region), on the layers its entry allows, at its width and clearance, under its via
-limit. A pad whose free lane is narrower than the grid (a fine-pitch pin) starts or ends at a free node just
-outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
+limit (the entry's: the vias its earlier connections placed count against it). A pad whose free lane is narrower
+than the grid (a fine-pitch pin) starts or ends at a free node just outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
 flood and said as such, with what walls it in (the nets nearest the rim of its room, a keep-out, the edge): an
 earlier entry of the plan is said so, for the agent to reorder. A path found is turned into copper: its runs
 on each layer, its vias; each end carried onto its anchor (a pad's position, in its copper; a via's centre; the
@@ -30,7 +30,7 @@ Nothing here touches KiCad or a file: the caller (``cad.kicad._route``) reads th
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Sequence
 
 import numpy as np
@@ -366,10 +366,14 @@ class Router:
         islands.sort(key=lambda island: (-sum(item.kind == "pad" for item in island), _natural(_island_name(island))))
         tree, apart = islands[0], islands[1:]
         done = []
+        spent = 0  # the vias this entry has placed: its limit is the entry's, not each connection's
         while apart:
             nearest = min(range(len(apart)), key=lambda k: (self._gap(tree, apart[k]), _natural(_island_name(apart[k]))))
             island = apart.pop(nearest)
-            outcome = self._join(want, tree, island, (self._nearest_name(tree, island), _island_name(island)))
+            left = want if want.vias is None else replace(want, vias=max(want.vias - spent, 0))
+            outcome = self._join(left, tree, island, (self._nearest_name(tree, island), _island_name(island)),
+                                 spent if want.vias is not None else 0)
+            spent += outcome.vias
             done.append(outcome)
             if outcome.routed:
                 tree = tree + island + self._last
@@ -479,7 +483,10 @@ class Router:
             swap[node % (window.nx * window.ny)] = 1
         return swap
 
-    def _join(self, want: Want, source: Sequence[_Item], target: Sequence[_Item], between: tuple[str, str]) -> Connection:
+    def _join(self, want: Want, source: Sequence[_Item], target: Sequence[_Item], between: tuple[str, str],
+              spent: int = 0) -> Connection:
+        """One connection from ``source`` to ``target``, under ``want.vias``: what is left of its entry's limit once
+        ``spent`` vias are placed."""
         self._last = []
         net = self._net(want.net)
         allowed = [self.layer_of[layer] for layer, _ in want.layers]
@@ -492,6 +499,8 @@ class Router:
         reason = None
         own = self._own.get(want.net, [])
         layers = " and ".join(self.copper[k] for k in allowed)
+        limit = (f" with at most {want.vias} via{'s' if want.vias != 1 else ''}"
+                 + (f" left of the entry's {want.vias + spent}" if spent else "") if want.vias is not None else "")
         for margin in (*MARGINS, None):
             window = self._window(boxes, margin)
             sources = self._terminals(source, window, allowed)
@@ -510,7 +519,7 @@ class Router:
                 continue
             swap = self._swaps(own, window, allowed)
             if margin is None:  # the last window, the whole region: an end walled in is said before a long search
-                walled = self._walled(want, window, free, via_ok, swap, sources, targets, between, layers)
+                walled = self._walled(want, window, free, via_ok, swap, sources, targets, between, layers + limit)
                 if walled:
                     reason = walled
                     break
@@ -522,7 +531,6 @@ class Router:
                                           want.via_cost, want.vias, list(sources), goal, heuristic, BUDGET)
             if found is not None:
                 return self._land(want, net, found, window, allowed, sources, targets, rooms, between)
-            limit = f" with at most {want.vias} via{'s' if want.vias != 1 else ''}" if want.vias is not None else ""
             reason = f"the search gave up after {expanded:,} steps" if out else f"no way through on {layers}{limit}"
         return Connection(want.net, between, False, reason)
 
