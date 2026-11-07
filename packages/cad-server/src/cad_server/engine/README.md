@@ -694,13 +694,19 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
-cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
+cad model|xbf|step|stl|glb|threemf|scad dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
                 [--zero-tol DEG] [--units U] [--candidates] [--json]
-cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG] [--samples N]
+cad model|xbf|step|stl|glb|threemf|scad dfm SRC --process printing [--angle-limit DEG] [--samples N]
                 [--units U] [--candidates] [--json]
                                              the manufacturing check, the trimesh integration's: SRC a
                                              file of the type, or a model's id; its findings and every
-                                             measurement
+                                             measurement (a .scad rendered first, by OpenSCAD)
+cad scad export PROGRAM DST [DST ...] [--json] | snapshot PROGRAM OUT.png [...] | inspect PROGRAM [--json]
+                                             an OpenSCAD program rendered by the person's OpenSCAD,
+                                             headless (the openscad integration): its mesh written as
+                                             .stl, .3mf or .glb (no B-rep: a .step is refused), drawn
+                                             as the viewer draws it, or said -- the OpenSCAD that
+                                             rendered it, the files it includes, its triangles, bounds
 cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
@@ -1021,6 +1027,27 @@ is found by the library's helper (`cad._internal.programs`: the override, then `
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
 schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
 run the same way.
+
+**An OpenSCAD program's render.** A `.scad` (`cad.scad`, the `scad` type: a mesh view, authored, no decorator
+and no edit) is rendered by the person's OpenSCAD, the `openscad` integration's program (`cad.openscad._program`:
+found by the library's helper for external programs -- `CAD_OPENSCAD`, `PATH`, its installer's places -- and
+run headless in a private folder, the person's libraries kept reachable through `OPENSCADPATH`), to a binary
+STL (`cad.openscad._render.render`: `openscad -o render.stl --export-format binstl -d render.d PROGRAM`, moved
+into place atomically; a failure in OpenSCAD's words, a 2D program refused). There is no extra and no
+environment to make: the command runs OpenSCAD in its own process, and a computer with none fails in one line
+with the install hint. Then the engine's mesh code takes the STL as an `.stl`'s own operations take one:
+`scad.export` copies it to an `.stl` destination and translates it to a `.3mf` or a `.glb` (`api.export`;
+a `.step`, an `.xbf` or a `.dxf` is refused by name, there being no B-rep), `scad.snapshot` draws it
+(`api.snapshot`), `scad.inspect` reads its triangles and bounds, `scad.read` is it as mesh data
+(`reader.Mesh`, unmemoized: the render runs at every build that reaches it, and the program's bytes and its
+includes' are read into the closure), and `scad.dfm` measures it (`trimesh._check` renders first). The
+viewer serves a program as a mesh whose bytes the server renders (`viewer/scads.py`, `GET
+/api/v1/documents/scad/<id>/mesh`: the STL, `model/stl`, kept by key, 202 while it renders, 304 by etag; the
+page reads it as an STL's source, and `source` stays the text), the render kept in the document cache under
+the program's document (`_internal/scads.py`: `documents/<id>/openscad/<key>/mesh.stl`, the key the program's
+bytes, the bytes of every file OpenSCAD's dependency file names, OpenSCAD's version and the render code's;
+the includes recorded beside the keys, so the next lookup reads them, and an edited library alone is a new
+key). The viewer offers no Export for a program yet: its mesh is written by `cad scad export`.
 
 ## Profiling
 
@@ -1498,7 +1525,8 @@ folder. The bytes are the hold's (`document.to_bytes`: the document, its closure
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. A file's document has no bytes there, but the views
 derived from its bytes go under it, keyed by them: a KiCad board's plot, refilled pours, DRC and kept exports,
-`documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), regenerable, and removed with the document
+`documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), and an OpenSCAD program's rendered mesh,
+`documents/<id>/openscad/<key>/` (the server's `_internal/scads.py`), regenerable, and removed with the document
 (`Registry.delete` removes `documents/<id>` whole). The folder is shared with any 0.7 install's
 store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
 bytecode is under `pycache/`), and lists, counts and removes nothing else there (`cad doctor

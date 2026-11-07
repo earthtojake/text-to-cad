@@ -24,7 +24,7 @@ const NO_REFERENCES = Object.freeze([]);
 function MeshSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useMeshScene({ entry: document.entry, resources: document.client.resources });
+  const loaded = useMeshScene({ entry: document.entry, resources: document.client.resources, client: document.client });
   const scene = loaded.scene;
   const loadAlert = useMemo(() => workspaceLoadAlert({
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene), t

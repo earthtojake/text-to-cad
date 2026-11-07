@@ -14,7 +14,11 @@ check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pul
 environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``.
+environment of ``cad[kicad]``. An OpenSCAD program's ``export``, ``snapshot`` and ``inspect`` are the openscad
+integration's: the program is rendered by the person's OpenSCAD, headless, in its own process -- no extra, no
+environment to make; a computer with none fails in one line with the install hint -- then the engine's mesh
+code writes, draws or measures the mesh (``cad scad export part.scad part.3mf``, ``cad scad snapshot part.scad
+out.png``, ``cad scad inspect part.scad``; its ``dfm`` every 3D type's).
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -480,6 +484,118 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
     return answered(VERBS["snapshot"][2], args, prog)
 
 
+# --- the OpenSCAD program's own operations: the openscad integration's render, then the engine's mesh code -----
+
+
+def _scad_parser(prog: str) -> argparse.ArgumentParser:
+    """``cad scad inspect``'s parser: the program, and ``--json``."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(prog, description="What an OpenSCAD program renders to, rendered by OpenSCAD headless: the "
+                                              "OpenSCAD that rendered it, the files it includes, its triangles and "
+                                              "its bounds.")
+    parser.add_argument("source", metavar="FILE", type=Path, help="the .scad program")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="print the answer as one JSON line on stdout")
+    return parser
+
+
+def _scad_failed(error: BaseException):
+    """A render that failed as the command says it: OpenSCAD missing or refusing the program, exit 1 in its
+    words (``Failed``); a destination or an option refused by name, exit 2 (``_refusal``)."""
+    from cad.engine.export import ExportRefused
+    from cad.openscad._program import OpenscadMissing
+    from cad.openscad._render import RenderError
+    from cad_server.engine.cli import Failed, _refusal
+
+    if isinstance(error, (OpenscadMissing, RenderError)):
+        return Failed(str(error))
+    if isinstance(error, (ExportRefused, ValueError)):
+        return _refusal(error)
+    return Failed(f"{type(error).__name__}: {error}")
+
+
+def _scad_export(argv: list[str], prog: str) -> int:
+    """``cad scad export FILE DST [DST ...]``: the program rendered by OpenSCAD, its mesh written to each
+    destination (``cad.scad.export``); said as every type's export is."""
+    import json
+
+    from cad_server.engine import cli as engine_cli
+    from cad_server.engine.cli import answered, parser_for
+
+    parser = _typed(parser_for("export", prog, document_type="scad"), "scad", "export", "source")
+    args = parser.parse_args(argv)
+
+    def run(parsed: argparse.Namespace, _prog: str) -> int:
+        from cad import scad
+
+        try:
+            written = scad.export(parsed.source, *parsed.destinations, log=lambda text: print(text, file=sys.stderr))
+        except Exception as error:  # noqa: BLE001 - said once by the contract, in the failure's class
+            raise _scad_failed(error) from None
+        if parsed.json:
+            print(json.dumps({"ok": True, "source": str(Path(parsed.source).expanduser().resolve()),
+                              "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes,
+                                         "seconds": row.seconds, "written": row.written} for row in written]}))
+            return 0
+        engine_cli._said.written(written, parsed.destinations)  # noqa: SLF001 - the engine's own line per file
+        return 0
+
+    return answered(run, args, prog)
+
+
+def _scad_snapshot(argv: list[str], prog: str) -> int:
+    """``cad scad snapshot FILE OUT.png [...]``: the program rendered by OpenSCAD, its mesh drawn by the engine's
+    snapshot with the snapshot's own flags (``cad.scad.snapshot``): the verb's run, its document the rendered STL."""
+    import tempfile
+
+    from cad_server.engine.cli import VERBS, answered, parser_for
+
+    parser = _typed(parser_for("snapshot", prog, document_type="scad"), "scad", "snapshot", "document")
+    args = parser.parse_args(argv)
+    if args.document is None:
+        return answered(VERBS["snapshot"][2], args, prog)  # the verb's own usage error
+
+    def run(parsed: argparse.Namespace, run_prog: str) -> int:
+        from cad.openscad._render import render
+
+        program = Path(parsed.document).expanduser()
+        with tempfile.TemporaryDirectory(prefix="cad-scad-") as folder:
+            try:
+                found = render(program, Path(folder) / f"{program.stem}.stl")
+            except Exception as error:  # noqa: BLE001 - said once by the contract, in the failure's class
+                raise _scad_failed(error) from None
+            parsed.document = str(found.mesh)
+            return VERBS["snapshot"][2](parsed, run_prog)
+
+    return answered(run, args, prog)
+
+
+def _scad_inspect(argv: list[str], prog: str) -> int:
+    """``cad scad inspect FILE``: what the program renders to (``cad.scad.inspect``), as lines or ``--json``."""
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    args = _typed(_scad_parser(prog), "scad", "inspect", "source").parse_args(argv)
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    from cad import scad
+
+    try:
+        found = scad.inspect(args.source)
+    except Exception as error:  # noqa: BLE001 - said once by the contract
+        failure = _scad_failed(error)
+        return _failed(as_json, prog, str(failure), failure.reason)
+    bounds = found.get("bounds")
+    lines = [f"{found['file']}: OpenSCAD {found['openscad']}, {found['triangles']} triangles"
+             + (f", {bounds['size'][0]:g} x {bounds['size'][1]:g} x {bounds['size'][2]:g} mm" if bounds else ", no geometry")]
+    if bounds:
+        lines.append("bounds: " + ", ".join(f"{low:g} to {high:g}" for low, high in zip(bounds["min"], bounds["max"], strict=True)))
+    lines.append("includes:" + ("" if found["includes"] else " none"))
+    lines += [f"  {path}" for path in found["includes"]]
+    lines += found.get("said") or []
+    return _answer(as_json, found, lines)
+
+
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
@@ -489,6 +605,11 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
+    # An OpenSCAD program's: rendered by OpenSCAD first (the openscad integration, in its own process, no
+    # environment to make), then the engine's mesh code; dfm is every 3D type's.
+    ("scad", "export"): _scad_export,
+    ("scad", "snapshot"): _scad_snapshot,
+    ("scad", "inspect"): _scad_inspect,
 }
 
 
@@ -522,6 +643,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return _board_parser(prog, operation)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
+    if document_type == "scad" and operation == "inspect":
+        return _scad_parser(prog)
     if operation in _ENGINE_SOURCES:
         from cad_server.engine.cli import parser_for
 

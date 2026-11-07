@@ -133,6 +133,23 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "decorator": true
     },
     {
+      "id": "scad",
+      "title": "OpenSCAD",
+      "wire": "scad",
+      "extensions": [
+        ".scad"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "mesh",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "dfm"
+      ],
+      "decorator": false
+    },
+    {
       "id": "urdf",
       "title": "URDF",
       "wire": "urdf",

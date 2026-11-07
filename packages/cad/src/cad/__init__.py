@@ -3,16 +3,18 @@ declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
 (``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
-``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
-``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
+``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb``, ``kicad_sch``
+and ``scad``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
-has one (``step.read``) and its
+has one (``step.read``; ``scad.read``, the program rendered by OpenSCAD as mesh data) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
 ``.inspect``, and those named for what they do (``.dfm``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
-``orientations``). Process control (``cad serve``, ``status``, ``stop``,
+``orientations``); the openscad integration, ``cad.openscad``, holds no helper a model calls: our code for
+it finds and runs OpenSCAD's command line headless, which ``cad.scad``'s reader and operations run. Process
+control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
@@ -52,10 +54,12 @@ del _install_font_guard
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch",
+          "scad")
 
-# The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad", "trimesh")
+# The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects, and
+# our code that runs a tool's program (``openscad``).
+_INTEGRATIONS = ("build123d", "kicad", "trimesh", "openscad")
 
 __all__ = [
     "__version__",
@@ -92,7 +96,7 @@ def __dir__() -> list[str]:
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, kicad_sch, model, sdf, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, kicad_pcb, kicad_sch, model, scad, sdf, srdf, step, stl, threemf, urdf, xbf
 
 
 @_cache

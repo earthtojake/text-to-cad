@@ -180,7 +180,9 @@ class IntegrationsTest(unittest.TestCase):
                          for requirement in extras.get(integration.extra or "", [])}
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
-                self.assertTrue(set(integration.modules) <= EXTRA_MODULES[integration.extra or ""])
+                # An integration with no extra (openscad: a program the person installs) imports no third-party
+                # module at all, so it has none to name.
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))

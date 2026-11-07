@@ -277,6 +277,12 @@ export interface CadWorkspaceService {
    * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
    */
   boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
+  /**
+   * An OpenSCAD program's mesh (`GET <program>/mesh`): the STL the server renders of it with OpenSCAD, kept by the
+   * program's bytes; answered once the server has it, as where the STL loader reads it (`url`) and its key
+   * (`revision`). A host without one cannot show a `.scad`.
+   */
+  renderedMesh?(file: string, options?: CadRequestOptions): Promise<{ url: string; revision: string }>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */

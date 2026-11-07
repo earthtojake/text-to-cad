@@ -291,7 +291,7 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (8, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (9, "app", "claude-directory", "tabs", "codex-mcp-client"))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -327,7 +327,7 @@ class ServerCountsTest(_Tmp):
         # The agent cannot speak for the person's hands.
         self.assertTrue(self.agent(server, "POST", "/api/v1/local/activity", report)["isError"])
         self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[-1]["schema"], 8)
+        self.assertEqual(sent[-1]["schema"], 9)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
             {"name": "control", "control": "display_xray", "count": 1, "seconds": 0},
             {"name": "control", "control": "pencil", "count": 2, "seconds": 395},

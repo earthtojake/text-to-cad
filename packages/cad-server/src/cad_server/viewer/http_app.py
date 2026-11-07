@@ -41,7 +41,7 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entr
 from .documents import EngineDocuments
 from cad.registry import DOCUMENT_TYPES
 
-from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, RENDERED_KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
     "ApiError",
@@ -227,8 +227,10 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
-# A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+# A model's document has no file, so no source. A mesh view whose bytes the server renders (``RENDERED_KINDS``:
+# an OpenSCAD program, ``scads.py``) answers its ``mesh``, the STL made of it, beside its ``source``, the text.
+_KIND_ROUTES = {entry.wire: "mesh, source" if entry.wire in RENDERED_KINDS
+                else _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
@@ -287,11 +289,14 @@ class CadApp:
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
         from .prompt_files import PromptFiles
+        from .scads import ScadAnswers
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # A board's plot and DRC, made with KiCad off the request and kept by its bytes (``plots.py``).
         self.boards = BoardAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
+        # An OpenSCAD program's mesh, rendered by OpenSCAD off the request and kept by its bytes (``scads.py``).
+        self.scads = ScadAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -906,6 +911,8 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._handle_board_models(response, path)})
         if kind == "kicad_sch" and rest == ["plot"]:
             return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
+        if kind in RENDERED_KINDS and rest == ["mesh"]:
+            return self._methods(request, {"GET": lambda: self._handle_scad_mesh(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None
             return self._methods(request, {"GET": lambda: self._handle_robot(request, response, path, mesh,
@@ -1383,6 +1390,28 @@ class CadApp:
             return
         if isinstance(body, Coded):
             send(request, response, status, body, "application/json; charset=utf-8", tag)
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_scad_mesh(self, request, response, path):
+        """``GET /api/v1/documents/scad/<id>/mesh``: the binary STL OpenSCAD renders of the program (``scads.py``
+        owns the rules): made off the request and kept by the program's bytes, streamed as data
+        (``RAW_FILE_HEADERS``, ``model/stl``), answered 202 while it is rendered, 304 for the key a request names
+        (``If-None-Match``), 400 in OpenSCAD's words for a program it refuses, 503 with the install hint where
+        there is no OpenSCAD."""
+        status, body, key = self.scads.response(path or "", if_none_match=request.header("if-none-match"))
+        tag = (("etag", f'"{key}"'),) if key else ()
+        if status == 304:
+            response.send_bytes(304, b"", "", tag)
+            return
+        if isinstance(body, Path):
+            try:
+                stat_result = os.stat(body)
+            except OSError:
+                raise ApiError(404, f"the rendered mesh of {node_basename(path)} is gone", "open the program again") from None
+            response.stream_file(str(body), stat_result, "model/stl", (*RAW_FILE_HEADERS, *tag))
             return
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}

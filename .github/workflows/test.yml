@@ -78,6 +78,7 @@ jobs:
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      openscad: ${{ steps.select.outputs.openscad }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -352,6 +353,39 @@ jobs:
       - name: Run the KiCad suite
         # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
         run: scripts/test/test-kicad.sh
+
+  # OpenSCAD programs rendered by the real OpenSCAD, as on a person's computer: Ubuntu's package (2021.01, the
+  # stable release and the oldest the integration takes), run headless by the `cad` command and the engine --
+  # the reader, inspect, export, dfm, the engine's kept mesh and a snapshot (the engine's OCCT still, on Xvfb
+  # as the package suite's). Only OpenSCAD's code, its suite and its runner select it (and a full run): the
+  # package suites render with a stand-in. apt installs OpenSCAD and its libraries in about a minute.
+  openscad:
+    name: OpenSCAD programs
+    needs: changes
+    if: needs.changes.outputs.openscad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Install OpenSCAD and the display the engine's stills draw on
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openscad xvfb libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Run the OpenSCAD suite
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-openscad.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.

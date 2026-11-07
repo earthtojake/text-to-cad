@@ -45,6 +45,10 @@ test("the mesh format predicate stays narrow", () => {
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.STL), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.THREE_MF), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.GLB), true);
+  // An OpenSCAD program is a mesh view: the STL the server renders of it.
+  assert.equal(isMeshRenderFormat(RENDER_FORMAT.SCAD), true);
+  assert.equal(renderFormatFromPath("parts/bracket.SCAD"), RENDER_FORMAT.SCAD);
+  assert.equal(meshAssetKeyForEntry({ kind: "scad" }), "scad");
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.STEP), false);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.URDF), false);
 });

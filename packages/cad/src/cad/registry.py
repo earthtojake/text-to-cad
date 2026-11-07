@@ -16,7 +16,9 @@ rules check, ``validate`` a robot description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
-``.xbf`` file the engine writes of one.
+``.xbf`` file the engine writes of one. ``scad`` is an OpenSCAD program, a file authored as text whose
+every view is the mesh the ``openscad`` integration renders of it: an integration with no extra, an
+external program the person installs, found by its probe.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -75,7 +77,9 @@ class Probe:
 class Integration:
     """Our support for one third-party tool: its extra, its process kind, the top-level modules a script
     imports it by (``modules``: a script that imports one uses the integration), the distributions its
-    extra installs (``distributions``) and, for an external program, its probe."""
+    extra installs (``distributions``) and, for an external program, its probe. An integration with an extra
+    has modules and distributions; one with none (``openscad``: a program the person installs, nothing of
+    it on PyPI) has a probe alone, and ``cad run`` has nothing to install for it."""
 
     name: str
     summary: str
@@ -235,6 +239,17 @@ _TYPES = (
     DocumentTypeEntry(
         "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
         ("2D geometry", "layers"), (_SNAPSHOT,), decorator=True),
+    # An OpenSCAD program: SOURCE, edited as text, with no decorator and no edit; what a person reviews is the
+    # mesh OpenSCAD renders of it (binary STL, in a private folder), so every operation and its reader run the
+    # openscad integration first, then the engine's mesh code: its exports are a mesh's, its still the mesh's.
+    DocumentTypeEntry(
+        "scad", "OpenSCAD", "an OpenSCAD program, rendered to a triangle mesh by OpenSCAD", (".scad",),
+        "text/plain; charset=utf-8", "mesh", ("triangles",),
+        (Operation("export", "render it with OpenSCAD, then write the mesh to .stl, .3mf or .glb", "openscad"),
+         Operation("snapshot", "render it with OpenSCAD, then draw the mesh as the CAD Viewer does, into a PNG",
+                   "openscad"),
+         Operation("inspect", "render it with OpenSCAD: its bounds, triangles and the files it includes", "openscad"),
+         _DFM), reader=True, reader_integration="openscad"),
     DocumentTypeEntry(
         "urdf", "URDF", "a robot description (ROS's Unified Robot Description Format)", (".urdf",),
         "application/xml; charset=utf-8", "robot", ("links", "joints", "inertials", "mesh references"),
@@ -306,6 +321,16 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",)),
+    "openscad": Integration(
+        "openscad", "OpenSCAD, the script-based CSG modeller: a .scad program is rendered headless to a triangle "
+                    "mesh by its command line, and every view, export, still and manufacturing check of one reads "
+                    "that mesh; it has no B-rep, so no STEP of exact geometry", extra=None, process="separate",
+        # No package carries the program: the person installs OpenSCAD, and the probe finds it -- CAD_OPENSCAD
+        # first (refused unless it names an openscad), then PATH, then where its installer puts it (the macOS
+        # bundle's binary, Program Files). 2021.01, the stable release, is the oldest with --export-format binstl
+        # and a dependency file (-d), which the rendered mesh's key reads.
+        probe=Probe("openscad", "2021.01", "install OpenSCAD 2021.01 or newer (openscad.org, or your system's "
+                                            "package manager), or set CAD_OPENSCAD to its executable", "CAD_OPENSCAD")),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

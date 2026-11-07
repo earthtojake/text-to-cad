@@ -31,6 +31,7 @@ TYPES = {
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
     "dxf": ("snapshot",),
+    "scad": ("export", "snapshot", "inspect", "dfm"),
     "urdf": ("snapshot", "validate"),
     "srdf": ("snapshot", "validate"),
     "sdf": ("snapshot", "validate"),

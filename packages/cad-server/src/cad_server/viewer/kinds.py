@@ -16,12 +16,14 @@ a document of that kind, and the same id under another kind is a 404 that names 
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
+* ``scad``: ``mesh`` (the binary STL OpenSCAD renders of the program, kept by its bytes: ``scads.py``), which
+  the page parses as an STL's source, and ``source``, the program's own text.
 """
 from __future__ import annotations
 
 import os
 
-from cad.registry import DOCUMENT_TYPES
+from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 
 API = "/api/v1"
 
@@ -33,6 +35,13 @@ KINDS = tuple(entry.wire for entry in DOCUMENT_TYPES.values())
 # The documents the engine itself serves: their structure, parts and version are its reads.
 ENGINE_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")
 ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
+# The mesh views whose bytes the server renders: a mesh-view type read by an integration that is a separate
+# program (an OpenSCAD program, rendered by OpenSCAD: ``scads.py``), as against one the page parses itself
+# (an STL, read by the kernel in process). Its routes are ``mesh`` and ``source``, and its page offers no
+# Export: its files are written by ``cad <type> export``.
+RENDERED_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values()
+                           if entry.view == "mesh" and entry.reader_integration
+                           and INTEGRATIONS[entry.reader_integration].process == "separate")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
 # (``exports.FORMATS``); ``dxf`` only where the view draws the document flat. A KiCad board's are KiCad's
@@ -44,6 +53,8 @@ EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID,
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 # A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
 EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]
+# A rendered mesh's page offers none yet (``RENDERED_KINDS``): its mesh is written by ``cad <type> export``.
+EXPORTS.update({kind: [] for kind in RENDERED_KINDS})
 
 
 def file_kind(path) -> str | None:

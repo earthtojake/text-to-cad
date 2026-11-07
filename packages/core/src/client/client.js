@@ -30,6 +30,9 @@ function abortError() {
 const DRAWING_RETRY_MAX_MS = 5000;
 // The longest an engine document's 202 (the engine still reading it) may have the client wait.
 const ENGINE_RETRY_MAX_MS = 5000;
+// How long the client waits between asks for an OpenSCAD program's mesh the server is still rendering: a HEAD
+// carries no `retryMs`, and the server holds each ask up to its own hold before it says 202.
+const SCAD_RETRY_MS = 250;
 
 /** `ms` of waiting that `signal` ends early, as an AbortError. */
 function pause(ms, signal) {
@@ -428,6 +431,35 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         const reply = await request(route, { signal, timeoutMs: 10_000, operation: 'plotting' });
         if (reply?.state !== 'plotting') return reply;
         await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
+    async renderedMesh(file, { signal } = {}) {
+      // An OpenSCAD program's mesh (`GET <program>/mesh`, `cad_server.viewer.scads`): the binary STL OpenSCAD renders
+      // of it on the SERVER, kept by the program's bytes and its includes'; the client only parses, as an STL's
+      // bytes. Bytes the server has not rendered yet it renders off the request, answering 202 until it has, and
+      // the client asks again -- a HEAD, so the mesh travels once, when the STL loader reads it. The answer is
+      // where that loader reads it, its key in the query (a new render is a new URL to the asset caches), and the
+      // key as the revision. A program OpenSCAD refuses, or a computer with none, is the route's error, read once.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'scad-mesh' });
+      const route = viewerOriginUrl(origin, `${api}/mesh`);
+      for (;;) {
+        if (disposed || signal?.aborted) throw abortError();
+        const response = await fetchImpl(route, { method: 'HEAD', signal, cache: 'no-store' });
+        if (response.status === 200) {
+          const key = String(response.headers.get('etag') || '').replace(/^W\//, '').replace(/^"|"$/g, '');
+          return { url: key ? `${route}?key=${encodeURIComponent(key)}` : route, revision: key };
+        }
+        if (response.status !== 202) {
+          let detail = `${response.status} ${response.statusText}`.trim();
+          try {
+            const said = await (await fetchImpl(route, { signal, cache: 'no-store' })).json();
+            if (said?.error) detail = said.hint ? `${said.error} (${said.hint})` : said.error;
+          } catch { /* the status is the detail */ }
+          throw new Error(detail);
+        }
+        await pause(SCAD_RETRY_MS, signal);
         if (disposed) throw abortError();
       }
     },
