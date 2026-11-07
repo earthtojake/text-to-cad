@@ -32,6 +32,15 @@ test("every release's notes are one to three items, each a title and a body of a
   }
 });
 
+test("every locale says the notes' items and no other: an item taken out takes its words with it", () => {
+  const named = new Set(Object.entries(WHATS_NEW).flatMap(([release, items]) =>
+    items.flatMap(item => [`whatsNew.${release}.${item}.title`, `whatsNew.${release}.${item}.body`])));
+  for (const [locale, table] of Object.entries(TABLES)) {
+    const said = Object.keys(table).filter(key => /^whatsNew\.\d+\.\d+\./.test(key));
+    assert.deepEqual(said.sort(), [...named].sort(), `${locale}'s notes are the entries' items`);
+  }
+});
+
 test("an update shows the newest notes at or before its release, once; a new person, a release with none, and notes seen show nothing", () => {
   const notes = { "0.11": ["a"], "0.13": ["b"] };
   assert.equal(whatsNewEntry("0.11", [], notes), "0.11");  // updated to 0.11: its notes
