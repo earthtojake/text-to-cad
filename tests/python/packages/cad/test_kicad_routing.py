@@ -406,6 +406,40 @@ class Edges(unittest.TestCase):
                 self.assertEqual(ok, clear(a, b), (gap, a, b))
 
 
+class CustomPads(unittest.TestCase):
+    @staticmethod
+    def pad(primitives: str) -> str:
+        pad = (f'(pad "1" smd custom (at 0 0) (size 0.5 0.5) (layers "F.Cu") (net "A") (options (clearance outline) '
+               f'(anchor circle)) (primitives {primitives}) (uuid "{_uuid()}"))')
+        return board(f'(footprint "C" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate 10 10) (rotate 0) (scale 1 1)) '
+                     f'(property "Reference" "U1" (at 0 -2 0) (layer "F.SilkS") (uuid "{_uuid()}") '
+                     f'(effects (font (size 1 1) (thickness 0.15)))) {pad})')
+
+    def test_a_curve_is_copper_all_along_and_a_primitive_it_cannot_read_is_refused(self) -> None:
+        """A custom pad's Bezier stroke is copper the router sees, to its true curve's edge (its chords grown by
+        how far the curve strays from them); a proxy (the number's box) draws none; a primitive the router does not
+        know is refused naming the pad, never copper left out."""
+        controls = ((0.0, 0.0), (1.0, -2.0), (3.0, 2.0), (4.0, 0.0))
+        pts = " ".join(f"(xy {x} {y})" for x, y in controls)
+        copper = read_copper(self.pad(f"(gr_curve (pts {pts}) (width 0.2)) (gr_bbox (start -9 -9) (end 9 9))"))
+        shapes = copper.pad("U1.1").copper
+        for t in np.linspace(0.0, 1.0, 401):
+            u = 1 - t
+            x = 10 + sum(c * k for c, k in zip((u ** 3, 3 * u * u * t, 3 * u * t * t, t ** 3), (p[0] for p in controls)))
+            y = 10 + sum(c * k for c, k in zip((u ** 3, 3 * u * u * t, 3 * u * t * t, t ** 3), (p[1] for p in controls)))
+            dx = 3 * (u * u * (controls[1][0] - controls[0][0]) + 2 * u * t * (controls[2][0] - controls[1][0])
+                      + t * t * (controls[3][0] - controls[2][0]))
+            dy = 3 * (u * u * (controls[1][1] - controls[0][1]) + 2 * u * t * (controls[2][1] - controls[1][1])
+                      + t * t * (controls[3][1] - controls[2][1]))
+            nx, ny = -dy / math.hypot(dx, dy), dx / math.hypot(dx, dy)
+            for side in (0.1, -0.1):  # the stroke's two edges
+                self.assertEqual(0.0, min(s.point_distance(x + side * nx, y + side * ny) for s in shapes), t)
+        self.assertLess(max(s.box[2] for s in shapes), 14.2, "the number's box is no copper")
+        with self.assertRaises(ValueError) as caught:
+            read_copper(self.pad("(gr_squiggle (start 0 0) (end 1 1))"))
+        self.assertIn("pad U1.1: its primitive gr_squiggle", str(caught.exception))
+
+
 class Keepouts(unittest.TestCase):
     def test_a_footprints_own_keepout_is_in_its_frame(self) -> None:
         """A footprint placed by a transform holds its own zones in its frame, as KiCad places them: a keep-out

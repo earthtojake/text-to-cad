@@ -8,8 +8,8 @@ corner radius, offset and turn; a track as a segment or an arc of its width; a v
 spans. A pad whose padstack draws other shapes on other layers is all of them on every layer (more copper,
 never less); a chamfered corner is the square corner (likewise). A copper pour is not read: KiCad refills it round
 the new copper, so it is neither an obstacle nor a connection to the router. The outline and the copper graphics and texts
-(rare) come from the board index (``read_index``), their arcs as chords within ``CHORD_TOLERANCE``, which the
-router adds to their clearance.
+(rare; a footprint's as well as the board's) come from the board index (``read_index``), their arcs as chords
+within ``CHORD_TOLERANCE`` and their curves as chords within ``curve_reach``, which the router grows them by.
 
 Millimetres, KiCad's frame (y down), as the file holds them.
 """
@@ -25,7 +25,7 @@ from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, item_id, item_layers, layer_of,
     net_of, net_table, points_of, read_index, zone_outline,
 )
-from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, rotate
+from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, rotate
 
 from .shapes import Shape
 
@@ -174,9 +174,28 @@ def _rect_core(hw: float, hh: float, radius: float) -> Shape:
     return Shape.polygon(((-iw, -ih), (iw, -ih), (iw, ih), (-iw, ih)), radius)
 
 
+def curve_reach(points: Sequence[XY]) -> float:
+    """How far a cubic Bezier strays from its chords, sampled at even steps of its parameter (``points``, as
+    ``bezier_points`` samples it): each chord is within h^2/8 |B''| of the curve, and a cubic's second difference
+    is h^2 B'' exactly, which is linear along the curve, so its largest is at an end."""
+    if len(points) < 4:
+        return 0.0
+    second = [(a[0] - 2 * b[0] + c[0], a[1] - 2 * b[1] + c[1]) for a, b, c in zip(points, points[1:], points[2:])]
+    first, step = second[0], (second[1][0] - second[0][0], second[1][1] - second[0][1])
+    ends = ((first[0] - step[0], first[1] - step[1]),
+            (first[0] + (len(points) - 2) * step[0], first[1] + (len(points) - 2) * step[1]))
+    return max(math.hypot(*end) for end in ends) / 8
+
+
+#: A custom pad's primitives that draw no copper: KiCad's proxies, its number's box and its thermal spoke's
+#: direction.
+_PROXIES = ("gr_bbox", "gr_vector")
+
+
 def _primitive(node: list) -> list[Shape]:
     """One of a custom pad's primitives, in the pad's frame, grown by its stroke: a polygon, a rectangle and a
-    circle are filled (KiCad fills a custom pad's primitives), a line and an arc are strokes."""
+    circle are filled (KiCad fills a custom pad's primitives), a line, an arc and a curve are strokes. A primitive
+    it does not know is a ``ValueError``: copper the router would not see."""
     head = sexpr.head(node) or ""
     reach = sexpr.number(sexpr.value(node, "width"), 0.0) / 2
     stroke = sexpr.find(node, "stroke")
@@ -185,6 +204,12 @@ def _primitive(node: list) -> list[Shape]:
     if head == "gr_poly":
         points = points_of(sexpr.find(node, "pts"), CHORD_TOLERANCE)
         return [Shape.polygon(points, reach + CHORD_TOLERANCE)] if points else []
+    if head == "gr_curve":
+        points = bezier_points(points_of(sexpr.find(node, "pts")))
+        grown = reach + curve_reach(points)
+        return [Shape.segment(a, b, grown) for a, b in zip(points, points[1:])]
+    if head in _PROXIES:
+        return []
     if head in ("gr_line", "gr_rect", "gr_arc", "gr_circle"):
         start, end = sexpr.pair(sexpr.find(node, "start")), sexpr.pair(sexpr.find(node, "end"))
         if head == "gr_line" and start and end:
@@ -197,7 +222,8 @@ def _primitive(node: list) -> list[Shape]:
         center = sexpr.pair(sexpr.find(node, "center"))
         if head == "gr_circle" and center and end:
             return [Shape.point(center[0], center[1], math.hypot(end[0] - center[0], end[1] - center[1]) + reach)]
-    return []
+        return []
+    raise ValueError(f"its primitive {head}" if head else f"its primitive {node!r}")
 
 
 def _shapes_of(fields: dict[str, Any], node: list) -> tuple[list[Shape], list[Shape]]:
@@ -294,11 +320,15 @@ def _read_pads(footprint: list, table, copper: Sequence[str]) -> tuple[list[Pad]
         if not layers:
             continue  # paste or mask only: no copper
         fields = _local(node)
-        made, inner = _shapes_of(fields, node)
-        for spec in sexpr.find_all(sexpr.find(node, "padstack") or [], "layer"):  # other layers' shapes: all, everywhere
-            made += _shapes_of(_local(spec), spec)[0]
-        offset = fields["offset"]
         number = str(node[1]) if len(node) > 1 else ""
+        try:
+            made, inner = _shapes_of(fields, node)
+            for spec in sexpr.find_all(sexpr.find(node, "padstack") or [], "layer"):  # other layers' shapes: all, everywhere
+                made += _shapes_of(_local(spec), spec)[0]
+        except ValueError as error:
+            raise ValueError(f"route cannot see all the copper of pad {ref or 'of a part'}.{number}: {error} is no shape "
+                             "it reads, so it routes nothing on this board") from None
+        offset = fields["offset"]
         inside = tuple(_placed(shape, offset, angle, center) for shape in inner)
         middle = _placed(Shape.point(0.0, 0.0, 0.0), offset, angle, center).points[0]
         pads.append(Pad(
@@ -395,7 +425,8 @@ def read_copper(text: str | list) -> BoardCopper:
                 keepouts.append(keepout)
     index = read_index(tree)
     graphics = [Graphic(shape.net, shape.layer, _drawn(shape.points, shape.closed, shape.filled, shape.width / 2 + (
-                        CHORD_TOLERANCE if shape.shape in ("arc", "circle", "curve", "poly") else 0.0)))
+                        curve_reach(shape.points) if shape.shape == "curve"
+                        else CHORD_TOLERANCE if shape.shape in ("arc", "circle", "poly") else 0.0)))
                 for shape in index.shapes if shape.layer in copper]
     graphics += [Graphic(None, text.layer, (Shape.polygon(text.polygon),))
                  for text in index.texts if text.layer in copper and len(text.polygon) >= 3]
