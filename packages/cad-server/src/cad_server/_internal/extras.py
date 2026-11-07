@@ -738,22 +738,23 @@ def _named(spec: Spec) -> str:
     return ", ".join(every)
 
 
-def _called(spec: Spec, kernel: str) -> tuple[str, str]:
-    """An environment with no packages of its program's, in words: what it is called and what it holds -- its
-    integrations' (``cad.registry``: what each extra brings, and about how much of the disk it takes), or the
-    library alone."""
+def _called(spec: Spec, kernel: str) -> tuple[str, str, str]:
+    """An environment with no packages of its program's, in words: what it is called, the line that makes it and
+    the line that downloads it -- its integrations' (``cad.registry``: what each extra brings, and about how much
+    of it is downloaded), or the library alone."""
     from cad.registry import INTEGRATIONS as REGISTERED
 
     known = [REGISTERED[name] for name in spec.integrations if name in REGISTERED]
     if not known:
-        return f"the environment of {kernel}", kernel
+        called = f"the environment of {kernel}"
+        return called, f"making {called}, once: {kernel}", f"downloading {kernel}, once"
     names = " and ".join(spec.integrations)
     called = f"the {names} integration's environment" if len(spec.integrations) == 1 else \
         f"the environment of the {names} integrations"
-    holds = ", ".join(each.holds for each in known if each.holds)
-    size = sum(each.size_mb for each in known)
-    said = ", ".join(word for word in (holds, f"about {size} MB" if size else "") if word)
-    return called, f"{kernel} ({said})" if said else kernel
+    holds = ", ".join(each.holds for each in known)
+    size = sum(each.download_mb for each in known)
+    return (called, f"making {called}, once: {kernel} ({holds}, about {size} MB to download)",
+            f"downloading {kernel} ({holds}, about {size} MB), once")
 
 
 def _distributions(path: list[str], prefix: Path) -> set[str]:
@@ -800,9 +801,8 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
                   else f"making {WHAT}, once: {named} beside {kernel}")
         downloading, unsatisfiable = f"downloading what {named} needs, once", f"{named} cannot be resolved beside {kernel}"
     else:
-        what, holding = _called(spec, kernel)
-        making = f"making {what}, once: {holding}"
-        downloading, unsatisfiable = f"downloading {holding}, once", f"{kernel} cannot be resolved here"
+        what, making, downloading = _called(spec, kernel)
+        unsatisfiable = f"{kernel} cannot be resolved here"
     rest = (*spec.requirements, *(word for each in spec.editable for word in ("-e", each)),
             *(word for each in spec.files for word in ("-r", each)))
 

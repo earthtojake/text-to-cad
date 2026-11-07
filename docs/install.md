@@ -49,7 +49,7 @@ checksum. It:
    Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
    `cad-launcher`), as the CAD server does when it starts.
 7. Installs no CAD kernel: the environment a model runs in, the release with its CAD
-   kernel (OCP, build123d and what they need, about 220 MB the first time), is made on
+   kernel (OCP, build123d and what they need, about 240 MB the first time), is made on
    first need -- the first model, or the first view that needs the kernel -- in
    text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
    you run makes none either; an automatic update makes its release's before it restarts

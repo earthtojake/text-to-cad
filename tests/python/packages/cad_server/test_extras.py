@@ -164,12 +164,12 @@ class NamingTest(unittest.TestCase):
         release = here.release
         kicad = extras.recipe(here, extras.Spec(integrations=("kicad",)))
         self.assertEqual(kicad.making, f"making the kicad integration's environment, once: cad[kicad] {release} "
-                                       "(KiCad's kicad-cli, about 310 MB)")
-        self.assertEqual(kicad.downloading, f"downloading cad[kicad] {release} (KiCad's kicad-cli, about 310 MB), once")
+                                       "(KiCad's kicad-cli, about 100 MB to download)")
+        self.assertEqual(kicad.downloading, f"downloading cad[kicad] {release} (KiCad's kicad-cli, about 100 MB), once")
         self.assertEqual(kicad.what, "the kicad integration's environment")
         both = extras.recipe(here, extras.Spec(integrations=("kicad", "trimesh")))
         self.assertEqual(both.making, "making the environment of the kicad and trimesh integrations, once: "
-                                      f"cad[kicad,trimesh] {release} (KiCad's kicad-cli, trimesh, about 460 MB)")
+                                      f"cad[kicad,trimesh] {release} (KiCad's kicad-cli, trimesh, about 140 MB to download)")
         bare = extras.recipe(here, extras.Spec(integrations=()))
         self.assertEqual(bare.making, f"making the environment of cad {release}, once: cad {release}")
         packages = extras.recipe(here, extras.Spec(requirements=("pandas",), integrations=("kicad",)))
