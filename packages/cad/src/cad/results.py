@@ -1,9 +1,13 @@
-"""What the robot validators and CAM return: the JSON line protocol, typed.
+"""The operations' shared result types: what every check returns, typed.
 
-Every ``validate`` verb (``cad.urdf``, ``cad.sdf``, ``cad.srdf``) and every ``cad.cam`` verb answers with one
-of these frozen dataclasses rather than a loose dict, so the library call and the generated
-CLI carry the SAME shape -- ``--json`` is just ``dataclasses.asdict`` of the value the
-library already returned.
+Every check -- ``dfm``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``, ``cad.kicad_pcb.drc``, ...) --
+answers with a ``CheckResult`` (a CAM job's, ``CamResult``, one with what a job can name and the files its plan
+wrote) -- whether it passed, the file, its findings, each with a severity, a code
+and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
+and the CLI carry the SAME shape: ``cad <type> dfm --json`` is ``dataclasses.asdict`` of the value the library returned.
+``ValidationResult`` and ``ValidationIssue``, their 0.10 names, are aliases that take the 0.10 call shapes
+(``ValidationIssue(severity, message, element=, code=, hint=)``, ``ValidationResult(ok, path, issues=,
+summary=)``) and make these.
 
 Stdlib only, on purpose: importing a result type must never pull in the CAD kernel.
 """
@@ -12,8 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-__all__ = ["CamFeaturesResult", "CamPlanResult", "ValidationIssue", "ValidationResult"]
+__all__ = ["CamResult", "CheckFinding", "CheckResult", "ExportResult"]
 
 
 def _display(path: Path | None) -> str:
@@ -27,8 +32,8 @@ def _display(path: Path | None) -> str:
 
 
 @dataclass(frozen=True)
-class ValidationIssue:
-    """One conformance finding against a robot description.
+class CheckFinding:
+    """One finding of a check (``dfm``, ``drc``, ``erc``, ``validate``).
 
     ``code`` and ``hint`` carry what the checkers already produce: the skills
     teach fixing findings BY CODE, so dropping the code at the result boundary
@@ -36,39 +41,52 @@ class ValidationIssue:
     """
 
     severity: str  # "error" | "warning" | "info"
-    message: str
-    #: The offending element or reference, when the checker knows it.
-    element: str | None = None
     #: The checker's stable identifier for this class of finding.
-    code: str | None = None
+    code: str | None
+    message: str
+    #: Where in the file: the offending element or reference, when the checker knows it.
+    location: str | None = None
     #: How to fix it, when the checker has something specific to say.
     hint: str | None = None
 
+    @property
+    def element(self) -> str | None:
+        """Its location, by the name it had before checks shared one shape."""
+        return self.location
+
     def human_line(self) -> str:
         code = f"{self.code}" if self.code else ""
-        element = f" at {self.element}" if self.element else ""
+        element = f" at {self.location}" if self.location else ""
         hint = f" Hint: {self.hint}" if self.hint else ""
         return f"{self.severity}: {code}{element}: {self.message}{hint}"
 
 
 @dataclass(frozen=True)
-class ValidationResult:
-    """The outcome of one ``validate`` verb."""
+class CheckResult:
+    """The outcome of one check (``dfm``, ``drc``, ``erc``, ``validate``)."""
 
     ok: bool
     path: Path
-    issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
+    findings: tuple[CheckFinding, ...] = field(default_factory=tuple)
     #: One line describing what was validated (link/joint counts and so on).
     #: Empty when the document did not parse far enough to describe.
     summary: str = ""
+    #: What the check measured, by family, as plain data (a manufacturing check's draft, undercuts,
+    #: walls, ...); empty for a check that measures nothing.
+    measurements: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def issues(self) -> tuple[CheckFinding, ...]:
+        """Its findings, by the name they had before checks shared one shape."""
+        return self.findings
 
     def human_lines(self) -> list[str]:
-        lines = [issue.human_line() for issue in self.issues]
+        lines = [finding.human_line() for finding in self.findings]
         if self.ok:
             lines.append(self.summary or f"OK {_display(self.path)}")
         else:
-            blocking = sum(1 for issue in self.issues if issue.severity == "error")
-            lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.issues)} blocking finding(s)")
+            blocking = sum(1 for finding in self.findings if finding.severity == "error")
+            lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
         return lines
 
 
@@ -83,96 +101,134 @@ def _assumed_value(value: object) -> str:
     return str(value)
 
 
-def _finding_lines(findings: tuple[dict, ...]) -> list[str]:
-    return [f"{finding['severity']}: {finding['summary']}" for finding in findings]
-
-
 @dataclass(frozen=True)
-class CamFeaturesResult:
-    """What ``cad cam features`` read off a part: what a CAM job can name.
+class CamResult(CheckResult):
+    """The outcome of a CAM job (``cad.<type>.cam``, ``cad <type> cam``): a check, so ``ok``, the document (``path``),
+    its findings and ``measurements`` are every check's, and ``--json`` is this whole result.
 
-    ``faces`` carries one dict per face (``ref``, ``surface``, ``reading``, ``area_mm2``, ``center_mm``, and for a
-    flat face its ``normal`` and ``z_mm``; for a cylinder its ``axis``, ``diameter_mm`` and whether it is a hole).
-    ``holes`` groups the faces that make one hole (``faces``: its walls first, then a counterbore's wall and
-    shoulder, a drawn point's cone and a blind floor, any of which names the hole; ``diameter_mm``, ``depth_mm``,
-    ``axis``, ``center_mm``, ``through``, ``reach``: the directions that reach it, and when it has them
-    ``counterbore`` and ``point_mm``, a drawn drill point's length). ``floors`` are the flat faces facing an axis (``ref``, ``z_mm``, ``normal``,
-    ``kind``: top, floor or bottom).
+    With no job it is what a job can name on the part, which writes nothing, each with the ref a job names it by:
+    ``faces`` one dict per face (``ref``, ``surface``, ``reading``, ``area_mm2``, ``center_mm``, and for a flat face
+    its ``normal`` and ``z_mm``; for a cylinder its ``axis``, ``diameter_mm`` and whether it is a hole), ``holes`` the
+    faces that make one hole (``faces``: its walls first, then a counterbore's wall and shoulder, a drawn point's cone
+    and a blind floor, any of which names the hole; ``diameter_mm``, ``depth_mm``, ``axis``, ``center_mm``, ``through``,
+    ``reach``: the directions that reach it, and when it has them ``counterbore`` and ``point_mm``, a drawn drill
+    point's length), ``floors`` the flat faces facing an axis (``ref``, ``z_mm``, ``normal``, ``kind``: top, floor or
+    bottom), and ``measurements["bbox_mm"]`` the part's box (``min``, ``max``, ``size``, part coordinates).
+
+    With a job it is the plan: ``written`` the result GLB, then each G-code file, and ``measurements`` the numbers:
+    the ``verdict`` (``status`` ready or fix, ``headline`` "Ready to cut · 42 min · 3 tools", ``errors``, ``warnings``,
+    and where no G-code was written, ``gcode`` saying so), the totals (``duration_s``, ``tools``, ``tool_changes`` with
+    its ``count`` and ``order``, ``setups``, ``post``, ``material``, ``planner``), ``operations`` one row per operation
+    in program order (``setup``, ``index``, ``op``, ``plain``, ``tool``, ``tool_plain``, ``rpm``, ``feed_mm_min``,
+    ``time_s``, ``summary``), ``posts`` one ``{setup, file, post, tool}`` per posted file (``tool`` its id where the
+    post splits a setup by tool, else None), ``assumed`` every value the plan took that the job does not state
+    (``key``, ``value``, ``why``), and ``timings``. ``ok`` is the validators' rule: false when any finding is an error
+    -- a check refused the plan, whose GLB is written all the same since it shows what is wrong and where, and no
+    G-code is -- or the job could not run, which wrote nothing. The GLB keeps each finding in the shape the viewer reads.
     """
 
-    ok: bool
-    document: Path
+    #: The part read, by its occurrence's path.
     occurrence: str = ""
-    #: ``{"min": [x, y, z], "max": [x, y, z], "size": [dx, dy, dz]}`` in mm, part coordinates.
-    bbox_mm: dict = field(default_factory=dict)
-    faces: tuple[dict, ...] = ()
-    holes: tuple[dict, ...] = ()
-    floors: tuple[dict, ...] = ()
-    findings: tuple[dict, ...] = ()
-    warnings: tuple[str, ...] = ()
+    #: The files the plan wrote: the result GLB first, then each posted file; none with no job, or a job that stopped.
+    written: tuple[Path, ...] = field(default_factory=tuple)
+    faces: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    holes: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    floors: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+
+    @property
+    def glb(self) -> Path | None:
+        """The result GLB the plan wrote, or None (no job, or a job that stopped)."""
+        return next((path for path in self.written if Path(path).suffix.lower() == ".glb"), None)
+
+    @classmethod
+    def from_data(cls, data: dict[str, Any]) -> "CamResult":
+        """The result again from its data (``dataclasses.asdict`` of one, as ``--json`` and the runner of one operation
+        carry it)."""
+        return cls(ok=bool(data["ok"]), path=Path(data["path"]),
+                   findings=tuple(CheckFinding(**finding) for finding in data.get("findings") or ()),
+                   summary=str(data.get("summary") or ""), measurements=dict(data.get("measurements") or {}),
+                   occurrence=str(data.get("occurrence") or ""),
+                   written=tuple(Path(path) for path in data.get("written") or ()),
+                   faces=tuple(data.get("faces") or ()), holes=tuple(data.get("holes") or ()),
+                   floors=tuple(data.get("floors") or ()))
 
     def human_lines(self) -> list[str]:
+        planned = self.glb is not None
+        lines = self._plan_lines() if planned else self._part_lines()
+        lines += [finding.human_line() for finding in self.findings]
         if not self.ok:
-            return [f"not read: {_display(self.document)}"] + _finding_lines(self.findings)
-        size = self.bbox_mm.get("size") or []
-        lines = [f"{self.occurrence or 'part'} of {_display(self.document)}: "
-                 + " x ".join(f"{value:g}" for value in size) + " mm"]
-        lines += [f"{face['ref']}  {face['reading']}" for face in self.faces]
-        lines += [f"hole {', '.join(hole['faces'])}: {hole['reading']}" for hole in self.holes]
-        lines += _finding_lines(self.findings)
-        lines += [f"warning: {warning}" for warning in self.warnings]
+            blocking = sum(1 for finding in self.findings if finding.severity == "error")
+            lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
+        if planned:
+            lines.append("safety: the G-code is not proven on a machine; air-cut or single-block it first, "
+                         "and check the work offset and every tool length")
         return lines
 
+    def _part_lines(self) -> list[str]:
+        size = (self.measurements.get("bbox_mm") or {}).get("size")
+        if not size:
+            return [f"not planned: {_display(self.path)}"]
+        lines = [f"{self.occurrence or 'part'} of {_display(self.path)}: " + " x ".join(f"{value:g}" for value in size) + " mm"]
+        lines += [f"{face['ref']}  {face['reading']}" for face in self.faces]
+        lines += [f"hole {', '.join(hole['faces'])}: {hole['reading']}" for hole in self.holes]
+        return lines
 
-@dataclass(frozen=True)
-class CamPlanResult:
-    """The outcome of ``cad cam plan``: the verdict, what was written, and the numbers per operation.
-
-    ``verdict`` is the status (``status`` ready or fix, ``headline`` "Ready to cut · 42 min · 3 tools", ``errors``,
-    ``warnings``). ``operations`` has one dict per planned operation in program order (``setup``, ``index``, ``op``,
-    ``plain``, ``tool``, ``tool_plain``, ``rpm``, ``feed_mm_min``, ``time_s``, ``summary``). ``posts`` has
-    one ``{setup, file, post, tool}`` per posted file: one per setup, or one per tool where the post splits a setup
-    by tool (``tool`` its id, else None). ``findings`` are the checks' findings, errors first, each a dict of
-    ``check``, ``severity``, ``type``, ``summary``, ``description`` and ``items``. ``assumed`` lists every value
-    the plan took that the job does not state (``key``, ``value``, ``why``: a tool's catalogue flute length, the rapid
-    rate the cycle time is worked out at). A job that cannot run has ``ok`` false, a finding that says what to change,
-    and wrote nothing.
-    """
-
-    ok: bool
-    document: Path
-    #: ``None`` when the plan stopped before writing (``ok`` is false; ``findings`` say why).
-    glb: Path | None = None
-    posts: tuple[dict, ...] = ()
-    verdict: dict = field(default_factory=dict)
-    #: Totals: ``duration_s``, ``tools``, ``tool_changes`` (``count``, ``order``), ``setups``, ``operations``,
-    #: ``post``, ``material``, ``planner``.
-    summary: dict = field(default_factory=dict)
-    operations: tuple[dict, ...] = ()
-    findings: tuple[dict, ...] = ()
-    warnings: tuple[str, ...] = ()
-    timings: dict = field(default_factory=dict)
-    assumed: tuple[dict, ...] = ()
-
-    def human_lines(self) -> list[str]:
-        if not self.ok:
-            return [f"not planned: {_display(self.document)}"] + _finding_lines(self.findings)
-        lines = [str(self.verdict.get("headline", ""))]
-        for op in self.operations:
+    def _plan_lines(self) -> list[str]:
+        numbers = self.measurements
+        verdict = numbers.get("verdict") or {}
+        lines = [str(verdict.get("headline", ""))]
+        for op in numbers.get("operations") or ():
             line = f"{op['setup']} {op['index'] + 1}. {op['summary']}"
             if op.get("rpm"):
                 line += f" · {op['rpm']:g} rpm · {op['feed_mm_min']:g} mm/min"
             lines.append(line)
-        changes = self.summary.get("tool_changes") or {}
+        changes = numbers.get("tool_changes") or {}
         if changes.get("count"):
             count = changes["count"]
             lines.append(f"{count} tool change{'s' if count != 1 else ''}: {' then '.join(changes['order'])}")
-        if self.glb is not None:
-            lines.append(f"wrote GLB: {_display(self.glb)}")
-        lines += [f"posted {post['setup']}: {_display(Path(post['file']))} ({post['post']})" for post in self.posts]
-        lines += [f"assumed: {entry['key']} {_assumed_value(entry['value'])} ({entry['why']})" for entry in self.assumed]
-        lines += _finding_lines(self.findings)
-        lines += [f"warning: {warning}" for warning in self.warnings]
-        lines.append("safety: the G-code is not proven on a machine; air-cut or single-block it first, "
-                     "and check the work offset and every tool length")
+        lines.append(f"wrote GLB: {_display(self.glb)}")
+        lines += [f"posted {post['setup']}: {_display(Path(post['file']))} ({post['post']})"
+                  for post in numbers.get("posts") or ()]
+        lines += [f"assumed: {entry['key']} {_assumed_value(entry['value'])} ({entry['why']})"
+                  for entry in numbers.get("assumed") or ()]
+        if verdict.get("gcode"):
+            lines.append(str(verdict["gcode"]))
         return lines
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    """The outcome of an ``export`` that writes files of its own kinds (``cad.kicad_pcb.export``): the
+    source, what it was exported as, the files written, and what was said beside (a part without its 3D
+    model), one line each."""
+
+    path: Path
+    to: str
+    written: tuple[Path, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+    def human_lines(self) -> list[str]:
+        return [*(f"warning: {line}" for line in self.warnings), *(f"wrote {path}" for path in self.written)]
+
+
+class _ValidationIssue(CheckFinding):
+    """``ValidationIssue``, 0.10's name and call shape for a finding: ``(severity, message, element=None,
+    code=None, hint=None)``, its location read as ``element`` as ever."""
+
+    def __init__(self, severity: str, message: str, element: str | None = None, code: str | None = None,
+                 hint: str | None = None) -> None:
+        super().__init__(severity, code, message, element, hint)
+
+
+class _ValidationResult(CheckResult):
+    """``ValidationResult``, 0.10's name and call shape for a result: ``(ok, path, issues=(), summary="")``, its
+    findings read as ``issues`` as ever."""
+
+    def __init__(self, ok: bool, path: Path, issues: tuple[CheckFinding, ...] = (), summary: str = "") -> None:
+        super().__init__(ok, path, tuple(issues), summary)
+
+
+def __getattr__(name: str):
+    from cad._internal.aliases import lookup
+
+    return lookup(__name__, name)

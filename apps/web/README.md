@@ -20,7 +20,7 @@ family and draws the navbar and the explorer. The catalog exposes CAD
 artifacts only. Explicit exports write only the requested download to temporary server storage.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
-The [shared Model tree](../../packages/ui/docs/cad-renderer.md#engine-document-panels)
+The [shared Model tab](../../packages/ui/docs/cad-renderer.md#engine-document-panels)
 owns expansion-based picking and isolation.
 Web uses the same tree and file-row primitives as the CAD app; its HTTP adapter
 does not decide which model nodes are expanded or selectable.
@@ -66,6 +66,12 @@ and assets, so the app does not scan another package's source.
   (Position); the engine serves the document, never a frame of it.
 - **Loud failure**: a missing entry, an unresolvable ref, or a file the engine
   cannot read surfaces as an alert — never a silently wrong scene.
+- **The viewer is read-only**: it never changes a design. It writes no
+  document's content and no file of one (an export downloads a new file; the
+  home's Delete removes the engine's record and cache of a document, never its
+  file). Changing a design belongs to the agent and the code; every viewer tool
+  (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to
+  show the person the design and to give the agent feedback.
 
 ## Launching
 
@@ -109,7 +115,10 @@ cad viewer --host 127.0.0.1 --json [FILE ...]
 The launcher ensures this installation's engine and its one page, registers each FILE (an
 on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
-record without opening a browser; `--no-open` prints only the URL. There is no
+record without opening a browser; `--no-open` prints only the URL. A FILE that is not there (`not_found`), or that is
+no CAD file -- a model's script among them, which `cad run` builds and prints the page of (`wrong_type`) -- is refused
+before the engine is asked, exit 2, as an id the engine does not hold is (`not_found`); under `--json` a failure is
+the `cad` command's one `{"ok": false, "error", "reason"}` document on stdout. There is no
 foreground viewer server and no `--detach` or `viewer stop`. `cad stop` stops
 the installation's engine and all its clients; never stop an engine you did not start.
 
@@ -236,16 +245,17 @@ This app exports no components. Other hosts use `@cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
 `@cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@cad/ui/renderers/dxf`, for `.glb`
 `@cad/ui/renderers/glb`, for `.stl` and `.3mf` `@cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot` (`CadViewer` registers all
-five with the same client and preferences, as it does for the MCP app); all loading,
+for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot`, for `.kicad_pcb` `@cad/ui/renderers/board`, and for
+`.kicad_sch` `@cad/ui/renderers/schematic` (`CadViewer` registers all seven with the same client and preferences,
+as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package: the root workspace builds UI's ESM, declarations, CSS and worker assets before building
 the app, with no source alias or JSX loader. Web supplies its file source (`createCadFileSource`
 from `@cad/ui/catalog`, over its CAD client), URL navigation (`onShow`, the `/<id>` path
 and history), browser persistence, the document title and appearance, the viewer's links
 (`ViewerHost.links`: its version, its build's GitHub and Discord, `src/host/viewerLinks.js`) and
-the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the file
-sidebar and Preview are the shared package's. Native file operations are host capabilities: the
+the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the view's
+panel and Preview are the shared package's. Native file operations are host capabilities: the
 web offers Copy path and Reveal in the file manager of the machine the server runs on, and has
 no filesystem-writing or editing endpoint. The host boundary is
 [the shared host contract](../../packages/ui/docs/viewer-host.md); browser persistence is
@@ -292,7 +302,7 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
 authoritative contract for the [toolbar](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle),
-[file sidebar and mobile layout](../../packages/ui/docs/settings-ui.md#the-file-sidebar-and-the-tool-stack),
+[view's panel and mobile layout](../../packages/ui/docs/settings-ui.md#the-views-panel-and-the-tool-stack),
 settings controls, selection and
 [Preview](../../packages/ui/docs/settings-ui.md#camera-animation-and-preview).
 Keep those rules there rather than maintaining a separate web layout
@@ -301,14 +311,16 @@ specification.
 The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
-controls are one row under the strip. An assembly's Features (Links for a robot), Position
-and an SDF's metadata are the file sidebar's, a tile each at the top-left, whatever the tool. The
+controls are one row under the strip. An assembly's Model (Links for a robot), Position
+and an SDF's metadata are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
-STEP and robot files have tools on a strip at the top centre; GLB, STL and 3MF have none,
-a GLB's clips or not.
+Every file's tools are on a strip at the top centre (each format's are the
+[design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
 Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
-Preview, with the view cube at the bottom-right and Quick Edit at the top-right. DXF is a
-2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar or file sidebar.
+Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube with
+Home at its upper-left, or a flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
+2D canvas with pan, zoom, snapshot and Quick Edit, with no view controls on its strip; one with
+layers and blocks to read has the view's panel, its Layers tab.
 
 The name menu is a popover under the file's name, two tabs over the explorer's own rows:
 **Models**, the library's eight latest models (no file), by last activity, each its glyph, its
@@ -317,14 +329,13 @@ explorer: the file's folder (a model's, the folder the explorer was last in this
 person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
-FileViewer width (a phone) the chrome is touch-sized and the file sidebar's tiles lead the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
+FileViewer width (a phone) the chrome is touch-sized and the panel's pill leads the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
 its left, Preview settings (Orbit, then Render's settings, a panel sliding in from the right
 edge) and Exit preview at its right, fading with the playbar while the pointer rests. Routines play
-from the sidebar's Animation section in the tools view, and from Preview's playbar under the model
-in Preview (on entry only with Autoplay on); the host passes no Preview props.
+from the playbar under the model, in the tools view and in Preview (on entry only with Autoplay on); the host passes no Preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another or for the home drops it, and opening it again frames it anew (see
@@ -401,7 +412,7 @@ engine's record of the file alone. From a file, Back to home in
 the menu the navbar's C logo opens leads back to it. The home has the same navbar, the same C
 logo (one 16px mark on every page) and the same menu (without Back to home, and with GitHub, Discord and X as
 over a file) at the left and
-the update button at the right while a newer text-to-cad is out. The home is a step of
+the update button at the right while a newer cad-server release is out. The home is a step of
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
@@ -428,6 +439,13 @@ library, a model's record notes the time), and its picture
 once it has settled — the model framed whole from the default direction, whatever the
 camera (`{action: "thumbnail"}`). `cad_server.viewer.recents` keeps the library in the
 user's state directory, shared with the CAD app.
+
+### What's new
+
+After an update to a release whose notes say what it brought, the page shows them once, over the
+home or a file's view once it is up (`@cad/ui/whats-new`): read through the CAD client (`whatsNew`,
+`/api/v1/settings`' `whats_new`) and kept seen in the person's settings for every CAD view. A new
+person is shown nothing new, and nothing shows while the engine is gone or an update restarts.
 
 ### Usage stats (telemetry)
 
@@ -478,17 +496,18 @@ and the web stay consistent without host-specific copies of those controls.
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the logo (the C mark, on the home and over a file alike), which opens the app menu, then the open file's name (no glyph),
-which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer text-to-cad
+which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer cad-server release
 is out, and Export over a file that writes formats. The app menu holds Back to home (the home), the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
-Projection, Display and Preview are the view's, at the tool strip's end, never the navbar's;
+Projection, Display and Preview (a board's Flip, 2D/3D and Display) are the view's, at the tool
+strip's end, never the navbar's;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
+links open in a new tab. A newer cad-server release is the blue update button's, at the navbar's right as in the CAD app: the server's
 hourly version check, read from `/api/v1/server` with the server's description as the page
 starts (`main.tsx`) and again whenever the person comes back to it. A press updates
 (`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,
@@ -516,7 +535,7 @@ composer has no camera action: its note to the agent is Quick Edit.
 
 ## Live models
 
-A model's page is `/<id>`, its document's id, which `python SCRIPT.py` prints (`view:`). The
+A model's page is `/<id>`, its document's id, which `cad run SCRIPT.py` prints (`view:`). The
 page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
 imports a script, and no folder lists one. A model has no file of its own: no file menu; its
 name menu opens on Models, and its Files lists the folder the explorer was last in this tab

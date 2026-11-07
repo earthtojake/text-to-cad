@@ -55,11 +55,12 @@ environment's interpreter for direct CLI calls:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cad_server.cli snapshot --help
+./.venv/bin/python -m cad_server.cli xbf snapshot --help
 ./.venv/bin/python -m cad_server.cli urdf validate --help
 ```
 
-The engine draws every snapshot with OCCT in an OpenGL context. On Linux with no
+The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
+snapshot is painted with Pillow and needs no display. On Linux with no
 screen (a server, a container, CI) that context is an X server's: install Xvfb,
 Mesa's software GL and the font the stills set their text in, and run the package
 suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
@@ -96,18 +97,24 @@ Use the Windows virtual-environment path for direct CLI calls, and the runner fo
 focused test, so the file builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cad_server.cli snapshot --help
-& $gitBash scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
+.\.venv\Scripts\python.exe -m cad_server.cli xbf snapshot --help
+& $gitBash scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 ### Development dependencies
 
 `requirements-dev.txt` installs the source packages from `packages/` and the
-small set of Python extras mirrored from skill runtime requirements. It installs the
+repository's own tooling. It installs the
 library, the server and the shim editable, the library with its `build123d` extra (OCP,
 build123d and the rest; the library's required dependency is numpy alone), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
-makes no base for it (`cad_server/_internal/base.py`). The editable
+makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
+(not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
+<type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
+it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
+cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
+environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
+uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
 does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
@@ -191,10 +198,10 @@ that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no bui
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`
-subcommand (`cad <verb>`, or `python -m cad_server.cli <verb>` when the console
+subcommand (`cad <document_type> <operation>` or `cad <verb>`, or `python -m cad_server.cli ...` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
-their logic lived under `skills/`; that logic is the library's now (`cad.{urdf,sdf,srdf}_*`), run
+their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
 by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
 ## Test In Agent Apps
@@ -364,15 +371,16 @@ diff content: a comment in a module selects what the module's code would.
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
-| cam | CAM (`cad/_internal/cam`, `cad/cam.py`, `cad/results.py`; `cad_server/cli/cam_*` and `_internal/kernel_verb.py`, which run it in the CAD kernel's environment), its suites and their fixtures, `skills/cam`, the modules CAM imports or reads a part through (`cad/engine/model.py`, `document.py`, `reader.py`, `refs.py`, `executables.py`, `kernel/imported.py`, `kernel/memo.py`, `export/glb.py`; `cad/_internal/atomic_replace.py`, `kernel_run.py`; `cad_server/_internal/cli_from_function.py`, `base.py`), `test-python.sh` | the CAM suites (`tests/python/packages/cad/cam`) on Linux, with FreeCAD 1.1.4 installed from its release AppImage (checked by its SHA-256), the one job that installs it: about 2 minutes (20 s of it installing FreeCAD), a 5-minute timeout |
+| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's (the trimesh integration's manufacturing measurements among them), the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`), dfm and dfam-check (their skills) |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the print3d and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
+| cam | CAM's code (the library's `_internal/cam`, `freecad/`, `results.py`, the B-rep types and their binding, the runner of one operation, `_internal/programs.py`, `_internal/integrations.py` and `_internal/refused.py`, `registry.py`; the server's `cli/document_types.py`, `_internal/integration_env.py` and `_internal/base.py`), `tests/python/packages/cam`, `test-cam.sh`, and the modules a job reads a part, finds FreeCAD and writes its result through (`cad/engine/model.py`, `document.py`, `reader.py`, `refs.py`, `executables.py`, `kernel/imported.py`, `kernel/memo.py`, `export/glb.py`; `cad/_internal/atomic_replace.py`; `cad_server/_internal/cli_from_function.py`) | `test-cam.sh`: the CAM suite on Linux, with FreeCAD 1.1.4 installed from its release AppImage (checked by its SHA-256), the one job that installs it: about 2 minutes (20 s of it installing FreeCAD), a 5-minute timeout |
+| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
@@ -490,6 +498,13 @@ to that opens its PR with what it does to the faces left unmeshed and the triang
 counts across the sample corpus, `main` against the branch; the engine's mesh tests
 (`tests/python/packages/cad/engine/test_mesh.py`) assert the contract on small
 fixtures.
+
+## Document Types And Integrations
+
+A new file format is a document type, a new third-party tool our code calls is an integration; the
+words and laws are `packages/cad/README.md`'s. Follow
+[Adding a document type](docs/contributing/adding-a-document-type.md) and
+[Adding an integration](docs/contributing/adding-an-integration.md), each a checklist.
 
 ## Source Boundaries
 
@@ -764,6 +779,63 @@ machine-checked source: `check-version.sh` and `bump-version.sh` (which `Prepare
 `VERSION` on it (1.0.0 too, since a trailing `.0` is insignificant to PyPI), and a test keeps
 this list identical to the file.
 
+### Which number a release bumps
+
+Releases follow [Semantic Versioning](https://semver.org): `VERSION` is `MAJOR.MINOR.PATCH`, and the
+part a release bumps says what it asks of the people who update to it. A breaking change bumps the
+major from 1.0 and, below 1.0, which the standard leaves to the project, the minor: that part is the
+*breaking slot*. Nothing else declares a break, no flag in any config: the number does.
+
+| | Below 1.0 (`0.y.z`) | From 1.0 (`x.y.z`) |
+| --- | --- | --- |
+| A breaking change | the minor: `0.11.4` to `0.12.0` | the major: `1.4.2` to `2.0.0` |
+| An addition, or a deprecation (a rename that keeps the old name working) | the patch: `0.11.4` to `0.11.5` | the minor: `1.4.2` to `1.5.0` |
+| A fix | the patch | the patch: `1.4.2` to `1.4.3` |
+| Installs itself on every device | a patch release | a patch or minor release |
+| Waits for the person's click | a minor or major release | a major release |
+
+With automatic updates on, the default, every device's engine installs a newer release that breaks
+nothing by itself and switches to it once idle, under agent threads that are running, with no click
+(`cad_server.auto_updates.takes`); a release that bumps the breaking slot waits for the person's click
+and reaches each device when its person updates. The release to 1.0 bumps the major, and waits like
+any. So choose the bump by what the release asks of people, not by its size. A change is breaking when
+something that worked stops working: a command, option, tool or file format removed or renamed, a
+Python name removed, an output shape changed (a `--json` key, an exit status, an MCP tool's answer), a
+setting that comes to mean something else, anything a skill or a person's script would have to be
+edited for. A breaking change always comes with a migration guide under `docs/migrations/`, which says
+what to change. An addition that renames nothing (a new command, a new document type, a new option)
+breaks nothing, and neither does a Python name renamed with its earlier spelling kept as its alias
+(tier 2, below). Version Check refuses a release that installs itself and adds or changes a migration
+guide; the rest is the release's author's to judge, and when in doubt it is the breaking slot.
+
+**What breaks, by tier.** [Law 15](packages/cad/README.md#the-design-laws) ("Compatibility, by who
+pays for a break") sorts what a release can change into four tiers and says what compatibility each
+keeps; it is the one statement of them. Which slot a change takes is a separate question, the one this
+table answers: the tier decides what compatibility code a change keeps, the slot whether the release
+installs itself.
+
+| Law 15's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
+| --- | --- | --- |
+| 1. What an agent reads each session | an addition; a doc's wording | a rename, a removal or a changed contract (a flag's meaning, a `--json` key, an exit status), each a hard cutover |
+| 2. The library's public imports | an addition; a rename or a move whose earlier spelling stays an alias of the same object, its interface unchanged (a deprecation, which bumps the minor from 1.0) | the alias's removal; a change to a name's contract (what it takes or returns), including a spelling kept by something that is not the same object with the same interface |
+| 3. A person's data | a new form, with the previous shipped release's read and migrated on first touch | a release that cannot read what the previous shipped release wrote, or reads it as meaning something else |
+| 4. Protocols where two releases meet while both run | an addition within a number; a new number whose newer side keeps answering the previous one | a new number whose newer side stops answering the previous one |
+
+Tier 1 is breaking though the agents adapt within the session (the skills ship with the change):
+a person's own script, or a caller pinned to the old spelling, stops working. Tier 2 changes in two
+steps, and only the second breaks. The rename keeps the earlier spelling an alias of the same object,
+its interface unchanged, for a release at least, so no script stops working: it takes the non-breaking
+slot, and may install itself. Law 15 keeps an alias out of every document but the migration guide, and
+asks for no guide when one is made: the rename is announced by its warning, which names the new
+spelling at the line that spelled the old, and held by the pinned table (`cad._internal.aliases`), and
+it is listed in a migration guide when a breaking release next writes one, at the latest the release
+that removes it, where it must be. That removal, a release or more later, is what stops a script that
+still spells the old name, so it takes the breaking slot. So does a change to a name's contract, which
+no alias keeps, and so does a spelling kept by something other than the same object with the same
+interface. In tier 4 the number is the protocol's, not the release's: a new one makes the release a
+breaking one only where the newer side stops answering the previous number, which the law decides case
+by case; the worker contract keeps no window, so a new worker contract always does.
+
 ### Shipping a release
 
 Merging a pull request that changes `VERSION` releases it: `Publish Release`
@@ -777,8 +849,14 @@ not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 2
 minutes the release took to reach PyPI.
 
 A release pull request comes one of two ways. Choose the bump deliberately for
-every release; if a release request does not specify one, confirm it rather
-than assuming.
+every release, by [Which number a release bumps](#which-number-a-release-bumps); if a
+release request does not specify one, confirm it rather than assuming.
+
+A release with significant user-facing features adds its What's new entry before it ships: its
+minor version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale
+files, user-facing features only, at most three items, each a bold title and one or two sentences
+(the dialog the CAD Viewer and the CAD app's tabs show once after an update; `notes.test.mjs`
+holds the shape). A release with nothing a person would notice adds none.
 
 **Its own pull request**, to release what `main` already has: dispatch
 `Prepare Release` (`release-prepare.yml`).
@@ -817,6 +895,9 @@ The pull request's Version Check says what merging it releases, and refuses:
   a contributor's pull request can never start one;
 - a version that is not past the target branch's and the latest release tag's, or that is on
   the list of [versions a release cannot take](#versions-a-release-cannot-take);
+- a release that installs itself -- below 1.0 a patch, the target's `X.Y`; from 1.0 a patch or
+  minor, the target's `X` -- that adds or changes a migration guide under `docs/migrations/`: see
+  [Which number a release bumps](#which-number-a-release-bumps);
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never
   start. Release such a change after it merges, from its own pull request;
@@ -1193,19 +1274,12 @@ original granular source history remains at `history/0.5.0-source`.
 The old publish transformation and mirror workflow are retired. Use the
 current release workflow above for future releases.
 
-## Iteration Loop
+## Writing A Skill
 
-1. Edit the relevant skill under `skills/<skill-name>/`.
-2. Keep skill instructions narrow and executable: say when the skill applies,
-   what inputs it expects, what it produces, and how to validate the work.
-3. Prefer small files in `references/` and reusable scripts in `scripts/` over
-   long inline instructions.
-4. Add or update focused fixtures or tests when skill behavior changes so
-   regressions are measurable.
-5. Validate with the smallest relevant check before broad repo checks.
-
-Generated artifacts should not become skill logic unless they are intentional
-fixtures. Prefer source files plus deterministic regeneration.
+What a skill is, what goes in it, how it is written and the shared blocks the tests pin are
+[Writing a skill](docs/contributing/writing-a-skill.md). Edit the skill under `skills/<name>/`,
+test it in an agent app ([Test In Agent Apps](#test-in-agent-apps)), and run the smallest check
+that covers the change before the broad ones.
 
 ## Common Dev Checks
 
@@ -1231,7 +1305,7 @@ gives each file an engine daemon of its own (a bare `python -m unittest` would b
 on your own daemon), for example:
 
 ```bash
-scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
+scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:

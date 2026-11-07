@@ -39,12 +39,12 @@ The record is `{ version, settings, files }`:
 
 | Kept | Where | What |
 | --- | --- | --- |
-| Tab settings | `settings` | `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list), `explorer` (the folder the name menu's Files was last in: where a model's Files starts). |
-| File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `preview` (Preview's Render settings: lighting, background, floor, part colours), `playback` (the playback settings: Orbit's speed, Autoplay, and — once chosen in the Animation section's Playback settings — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering Preview; defaults Orbit at 1×, Autoplay off; whether Preview orbits is not kept) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for the home — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
+| Tab settings | `settings` | `toolStack` (the tool stack's resizable panels' sizes and its folded panels, `kit/tools/toolStackLayout.js`; the view's panel is the file's, below), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list), `explorer` (the folder the name menu's Files was last in: where a model's Files starts). |
+| File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a flat view's plane transform with the pane it was framed in), `display` (the Display settings, Clip and Explode included), `preview` (Preview's Render settings: lighting, background, floor, part colours), `playback` (the playback settings: Orbit's speed, Autoplay, and — once chosen in the playbar's Playback settings — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering Preview; defaults Orbit at 1×, Autoplay off; whether Preview orbits is not kept) and `renderer`, the renderer's own slices, each behind the signature it was written against: an engine document's (an `.xbf`'s, a STEP's) expanded rows, hidden parts and isolated assemblies, and its pose; a robot's joint values and hidden components; a board's Display, what it isolates, and whether it is shown in 2D or 3D with its 3D camera, its projection and whether its parts' 3D models show (`board3d`, never the URL). Beside them `panel`, the view's panel ([filePanel.js](../../../packages/ui/src/file-viewer/filePanel.js)), whatever the renderer: open or closed once the person has chosen (unset, it opens in a view 1024px wide or more), its width, its tab and the Selected pane's height, each unset until changed, written by the panel itself and kept in the record by the file viewer whatever the renderer writes. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view in the record: leaving it — for another file, or for the home — sets its view aside in the page's memory, never in `sessionStorage` (`CadViewer`'s `files.retain`, after the view's last write as it unmounts), so showing it again in the same page opens it as it was left, and a reload of the tab, which shows the same file, brings the file on screen's view back; a file left is back at the defaults once the page that left it has gone. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
-| A file the tab left: its whole view | The defaults, when it is opened again |
+| A file left, once the page that left it has gone (a reload keeps the file on screen's alone): its whole view | The defaults, when it is opened again |
 | The tool in hand | The renderer's default tool (Select) |
 | The selection (a STEP's tree and topology, a robot's links), measurements, the drawing tools' ink | Empty |
 | Preview, its camera and its Orbit | Off, opening still; its settings are the file's, above |
@@ -61,11 +61,27 @@ Writes are whole and synchronous: the shell writes a file's view a moment after
 each change and once more on unmount (the page's `pagehide` unmounts the app), the
 store writes the record through at once, so what the tab last saw is what a
 reload restores. When the viewer leaves a file for another, the file's last write
-lands first and `CadViewer` then drops its view (`files.retain`); a view that has
-gone writes nothing more. Storage access is explicit in the host; constructing or
+lands first and `CadViewer` then sets its view aside for the page (`files.retain`), which gives
+it back to the record as the file is shown again; a view that has gone writes nothing more. Storage access is explicit in the host; constructing or
 importing a renderer never chooses a browser storage backend.
+
+The record's `settings.toolStack` once kept the view's panel for every file alike
+(`collapsed.flat`, `panels.flat.width`, `panels.flatDetail.height`, `tabs` by the kind of
+file). A tab that still carries it gives it, once, as the starting value of the first file
+with no panel of its own, which keeps it from then on; the old fields are then dropped and
+never written again.
 
 ## localStorage
 
 Nothing goes in localStorage: a value that depends on a file, a tab or a person's
 choice belongs in the tab record.
+
+## The library's pictures
+
+The home's card pictures are not browser storage: the page draws one when a file's view settles
+(`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in the state
+folder (`cad_server/viewer/recents.py`). They are bounded however often a file is edited: an entry
+keeps at most one picture, and a board one per theme, each replaced in place by the next; only the
+200 entries the home lists first keep theirs, within 64 MiB in all, least recently used out first;
+an entry removed or deleted takes its pictures with it. The page asks for a picture by its name
+(`?v=`), so a new picture is never hidden by an older one in a cache.

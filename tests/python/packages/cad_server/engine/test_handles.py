@@ -113,7 +113,7 @@ import json
 
 import build123d as bd
 from cad import model
-from cad.gltf import animation
+from cad.build123d import animation
 
 lid = bd.Box(10, 10, 2)
 lid.label = "lid"
@@ -129,7 +129,7 @@ print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle
 HINGE = """
 import build123d as bd
 from cad import model
-from cad.ap242 import mechanism_state, posed
+from cad.build123d import mechanism_state, posed
 
 
 @model
@@ -153,7 +153,7 @@ def hinge_open():
 POSER = """
 import json
 
-from cad.ap242 import posed
+from cad.build123d import posed
 from hinge import hinge, hinge_open
 
 

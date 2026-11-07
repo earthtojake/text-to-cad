@@ -922,6 +922,16 @@ export function createXbfScene(THREE, document) {
       if (points) placed.points = (xbfFaceNodes(mesh, parsed.ordinal)?.points || []).map(point => placeXbfPoint(matrix, point));
       return placed;
     },
+    /** The box, where they stand now, of what is shown: every part but the hidden ones and, while some are isolated, those alone. What Zoom to fit frames. */
+    shownBounds() {
+      const box = new THREE.Box3();
+      for (const entry of instances) {
+        if (!entry || hidden.has(entry.index) || dimmed(entry.index)) continue;
+        const placed = instanceBox(entry);
+        if (placed) box.union(placed);
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
+    },
     /** The box, in the scene's coordinates where they stand now, of instances and elements (ids `i3`, `i3/face/12`): what Zoom to selection frames. */
     selectionBounds(ids) {
       const box = new THREE.Box3();

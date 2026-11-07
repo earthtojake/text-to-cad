@@ -666,7 +666,7 @@ class Bench:
         ident = self.ids[model.name]
         inside(model.work, model.document)
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cad_server.cli", "export", ident, str(model.document), "--json"], timeout=1800)
+        done, wall = self.run(model, ["-m", "cad_server.cli", "xbf", "export", ident, str(model.document), "--json"], timeout=1800)
         report = last_json(done.stdout) if done is not None else None
         files = report.get("files") if isinstance(report, dict) else None
         if (done is None or done.returncode or not report or report.get("ok") is not True
@@ -733,7 +733,7 @@ class Bench:
         for step in ("snapshot-first", "snapshot"):
             png = pictures / f"{model.name}{'-first' if step == 'snapshot-first' else ''}.png"
             load = self.quiet(model)
-            done, wall = self.run(model, ["-m", "cad_server.cli", "snapshot", ident, str(png), "--json"],
+            done, wall = self.run(model, ["-m", "cad_server.cli", "xbf", "snapshot", ident, str(png), "--json"],
                                   timeout=1800)
             report = last_json(done.stdout) if done is not None else None
             report = report if isinstance(report, dict) else {}

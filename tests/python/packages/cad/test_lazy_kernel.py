@@ -153,25 +153,24 @@ class PthTest(unittest.TestCase):
         none of the module's own imports, while the kernel and the engine's model stay unloaded."""
         found = self.run_python(textwrap.dedent("""
             import json, sys
-            import cad, cad.ap242, cad.engine, cad.gltf
+            import cad, cad.build123d, cad.engine, cad.step
             seen = {module.__name__: [name for name in dir(module) if not name.startswith("_")]
-                    for module in (cad, cad.ap242, cad.engine, cad.gltf)}
+                    for module in (cad, cad.build123d, cad.engine, cad.step)}
             print(json.dumps([seen, [name for name in ("OCP", "build123d", "cad.engine.model")
                                      if name in sys.modules and type(sys.modules[name]) is type(sys)]]))
         """))
         import json
 
         import cad
-        import cad.ap242
+        import cad.build123d
         import cad.engine
-        import cad.gltf
 
         seen, loaded = json.loads(found)
         self.assertEqual(loaded, [])
-        self.assertEqual(seen["cad.ap242"], sorted(cad.ap242.__all__))
-        self.assertEqual(seen["cad.gltf"], ["animation"])
+        self.assertEqual(seen["cad.build123d"], sorted(cad.build123d.__all__))
+        self.assertEqual(seen["cad.step"], ["cam", "dfm", "export", "inspect", "read", "snapshot"])
         self.assertEqual(seen["cad.engine"], sorted(cad.engine.__all__))
-        self.assertEqual(seen["cad"], sorted({*cad.__all__, "ap242", "engine", "gltf"} - {"__version__"}))
+        self.assertEqual(seen["cad"], sorted({*cad.__all__, "build123d", "engine"} - {"__version__"}))
 
 
 if __name__ == "__main__":

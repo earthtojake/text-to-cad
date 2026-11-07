@@ -41,19 +41,72 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(set(Registry(self.tmp).list()[0]) - {"pinned", "preview"},
                          {"schema", "id", "kind", "root", "home", "opened", "created", "namespace", "name"}, "its path, and when it was opened, first and last")
 
-    def test_a_picture_no_record_shows_goes_once_no_writer_can_still_name_it(self) -> None:
-        # Each rebuilt revision a view pictures adds a PNG; replaced ones must not pile up.
+    def test_twenty_edits_keep_one_picture_per_theme_and_a_forgotten_entry_keeps_none(self) -> None:
+        # Each revision a view pictures replaces the entry's pictures in place: lots of edits are no bloat.
         store = RecentStore(self.tmp)
-        store.opened("/a.step")
-        first = store.thumbnail("/a.step", b"\x89PNG one")
-        second = store.thumbnail("/a.step", b"\x89PNG two")
-        # Replaced, but too fresh to tell from a picture whose record is still on its way.
-        self.assertTrue((store.thumbnails / first).exists())
+        board = str(self.tmp / "a.kicad_pcb")
+        store.opened(board)
+        store.thumbnail(board, b"\x89PNG light 0", b"\x89PNG dark 0")
+        after_one = sorted(path.name for path in store.thumbnails.iterdir())
+        for edit in range(1, 21):
+            store.thumbnail(board, b"\x89PNG light %d" % edit, b"\x89PNG dark %d" % edit)
+        [entry] = store.list()
+        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
+                         sorted([entry.thumbnail, entry.thumbnail_dark]))
+        self.assertEqual(len(after_one), 2)
+        self.assertEqual(store.read_thumbnail(entry.thumbnail_dark), b"\x89PNG dark 20")
+        # Two files with the same picture are two names: forgetting one leaves the other's.
+        other = str(self.tmp / "b.kicad_pcb")
+        store.opened(other)
+        store.thumbnail(other, b"\x89PNG light 20")
+        store.remove(board)
+        [kept] = store.list()
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [kept.thumbnail])
+        self.assertEqual(store.read_thumbnail(kept.thumbnail), b"\x89PNG light 20")
+
+    def test_only_the_most_recently_used_entries_keep_pictures_and_an_orphan_goes_once_old(self) -> None:
+        from unittest import mock
+
+        from cad_server.viewer import recents
+
+        store = RecentStore(self.tmp)
+        paths = [str(self.tmp / f"{index}.step") for index in range(4)]
+        for index, path in enumerate(paths):
+            store.opened(path)
+            store.registry.update(store._ident(path), lambda record, at=index: {**record, "opened": 1_700_000_000.0 + at})
+        store.pin(paths[0], True)  # the oldest, pinned: kept first
+        # A crash's picture no record names: kept while a writer could still name it, then gone.
+        orphan = store.thumbnails / ("f" * 32 + ".png")
+        with mock.patch.object(recents, "LIMIT", 2):
+            for path in paths:
+                store.thumbnail(path, b"\x89PNG " + path.encode())
+                orphan.parent.mkdir(parents=True, exist_ok=True)
+                orphan.write_bytes(b"\x89PNG orphan")
+            self.assertTrue(orphan.exists())
+            old = time.time() - 3600
+            os.utime(orphan, (old, old))
+            store.thumbnail(paths[3], b"\x89PNG again")
+        shown = {os.path.basename(entry.path): entry.thumbnail for entry in store.list()}
+        # Pinned 0, then 3 (pictured last); 1 and 2 lose theirs, which a page takes again.
+        self.assertEqual({name for name, picture in shown.items() if picture}, {"0.step", "3.step"})
+        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
+                         sorted([shown["0.step"], shown["3.step"]]))
+
+    def test_a_picture_may_have_its_dark_theme_s_beside_it_and_one_without_keeps_its_one(self) -> None:
+        store = RecentStore(self.tmp)
+        store.opened("/a.kicad_pcb")
+        store.thumbnail("/a.kicad_pcb", b"\x89PNG light", b"\x89PNG dark")
+        [entry] = store.list()
+        self.assertEqual(store.read_thumbnail(entry.public()["thumbnailDark"]), b"\x89PNG dark")
+        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light")
+        # Both are shown, so neither is swept; a picture taken again without one has none.
         old = time.time() - 3600
-        for name in (first, second):
-            os.utime(store.thumbnails / name, (old, old))
-        third = store.thumbnail("/a.step", b"\x89PNG three")
-        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [third])
+        for path in store.thumbnails.iterdir():
+            os.utime(path, (old, old))
+        store.thumbnail("/a.kicad_pcb", b"\x89PNG light")
+        [entry] = store.list()
+        self.assertIsNone(entry.public()["thumbnailDark"])
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
 
     def test_a_file_is_updated_when_it_last_changed_on_disk_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")

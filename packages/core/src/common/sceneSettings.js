@@ -286,14 +286,24 @@ function applyPartColor(settings, partColor) {
   };
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
+
+/** The theme's background, every stop of it the canvas: one plain colour behind the model. */
+function onCanvas(background, canvas) {
+  return { ...background, type: "solid", solidColor: canvas, linearStart: canvas, linearEnd: canvas, radialInner: canvas, radialOuter: canvas };
+}
+
 /**
  * Public grouped preset policy; historical display modes are draw details. `preview` asks for
  * Preview's photographic look (Render) over the same display, with Preview's own settings
- * (`previewSettings`). No file is in Render.
+ * (`previewSettings`). No file is in Render. `canvas`, a `#rrggbb`, is the app's canvas (the
+ * `--canvas` token, `lib/appTheme.js`): given, the tools view draws on it in place of the theme's
+ * own background, so a 3D view's content area is the 2D views'. Preview keeps its own background
+ * (`previewSettings.background`), and a caller that names no canvas (a snapshot) the theme's.
  */
 export function resolveViewSceneSettings({
   display = {}, appearance = "light", prefersDark = false, camera = null, quality = null,
-  lightingQuality = "final", features = undefined, preview = false, previewSettings = {}
+  lightingQuality = "final", features = undefined, preview = false, previewSettings = {}, canvas = null
 } = {}) {
   const view = resolveViewSettings(display ?? {}, {
     appearance: normalizeSceneAppearance(appearance, { prefersDark }), lightingQuality, features, preview, previewSettings
@@ -313,6 +323,9 @@ export function resolveViewSceneSettings({
   });
   const neutralTheme = applyPartColor(cadSceneSettings(view.appearance), partColor);
   neutralTheme.floor.enabled = false;
+  if (typeof canvas === "string" && HEX_COLOR.test(canvas)) {
+    neutralTheme.background = onCanvas(neutralTheme.background, canvas.toLowerCase());
+  }
   const cameraSettings = resolveCamera(DEFAULT_NORMAL_CAMERA, camera, {
     projection: view.camera.projection, focalLength: view.camera.focalLength
   });

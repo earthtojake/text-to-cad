@@ -9,7 +9,8 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { useMotionExclusion } from "../kit/tools/model-effects/motionExclusion.js";
 import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
-import { useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { useCamChrome, useCamResult, useCamView } from "./cam/useCamResult.jsx";
@@ -28,7 +29,7 @@ function GlbSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
   const loaded = useGlbScene({ entry: document.entry, resources: document.client.resources });
-  // A CAM result (cad cam plan) has a viewer of its own (`cam/useCamResult.jsx`), loaded as its own chunk; it waits
+  // A CAM result (`cad step cam --job`) has a viewer of its own (`cam/useCamResult.jsx`), loaded as its own chunk; it waits
   // for it as the file loading, so it is framed once, as the viewer draws it. A chunk that fails, or a job that is
   // damaged, is the file failing: drawn as a plain GLB, a result would hide its verdict.
   const { kit: cv, cam: job, pending, failed: camFailed } = useCamView(loaded.scene?.document?.scene);
@@ -154,16 +155,35 @@ function GlbSurface({ view, data }) {
     if (hit && !modifiers?.multiSelect) { measureRef.current.select([]); camResultRef.current.clearChoice(); }
   }, [selection.pick]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} previewView={previewView}
-    sidebar={camChrome?.sidebar ?? null}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): the reference, Select, the framing.
+  const viewportRef = useRef(null);
+  const contextMenuItems = scene && !previewing && shell.toolMode === GLB_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null
+  }) : null;
+
+  const zoomToSelection = {
+    available: selection.selected.length > 0 && Boolean(scene?.selectionBounds),
+    run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  const described = useSceneDescribe(scene);
+  const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
+    inspect={inspect} sidebar={camChrome?.sidebar ?? null}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { clearPicked(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
       {camChrome?.overlay(viewport)}
-    </>} />;
+    </>; }} />;
 }
 
 export default function GlbRenderer(props) {

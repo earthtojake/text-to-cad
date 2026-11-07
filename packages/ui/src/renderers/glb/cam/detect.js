@@ -1,5 +1,5 @@
 /**
- * Whether a loaded glTF scene is a CAM result (`cad cam plan`): cad cam wrote it (`generator` in the
+ * Whether a loaded glTF scene is a CAM result (`cad step cam --job`): a plan wrote it (`generator` in the
  * extras of the scene or a node) and it carries the job's extras (`cam`). Its own small module, free of the CAM
  * viewer, so GlbRenderer can ask before that viewer's chunk is fetched.
  */

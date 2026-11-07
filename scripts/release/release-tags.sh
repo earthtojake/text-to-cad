@@ -12,6 +12,9 @@
 #   version_from_release_tag v0.5.0   -> 0.5.0   (bare tags pass through)
 #   latest_release_tag                -> the tag (either spelling) with the highest version, or ""
 #   version_greater 0.5.1 0.5.0       -> succeeds when the first X.Y.Z is the greater
+#   version_bump 0.11.3 0.12.0        -> minor: the part the second moves on (fails when it is no later)
+#   breaking_part 0.11.3              -> minor: the part a breaking change bumps (major from 1.0)
+#   version_installs_itself 1.4.2 1.5.0 -> succeeds when a device at the first takes the second itself
 #
 # shellcheck shell=bash
 
@@ -62,6 +65,39 @@ version_greater() {
     return
   fi
   [ "$((10#$left_patch))" -gt "$((10#$right_patch))" ]
+}
+
+# The part of the first X.Y.Z that the second moves on: major, minor or patch. Prints nothing and
+# fails when the second is not the later.
+version_bump() {
+  local have_major have_minor want_major want_minor
+  version_greater "$2" "$1" || return 1
+  IFS=. read -r have_major have_minor _ <<< "$1"
+  IFS=. read -r want_major want_minor _ <<< "$2"
+  if [ "$((10#$want_major))" -ne "$((10#$have_major))" ]; then
+    echo major
+  elif [ "$((10#$want_minor))" -ne "$((10#$have_minor))" ]; then
+    echo minor
+  else
+    echo patch
+  fi
+}
+
+# The part a breaking change bumps from an X.Y.Z, as Semantic Versioning numbers releases: the major
+# from 1.0, and below 1.0, which the standard leaves to the project, the minor.
+breaking_part() {
+  local major
+  IFS=. read -r major _ <<< "$1"
+  if [ "$((10#$major))" -ge 1 ]; then echo major; else echo minor; fi
+}
+
+# Whether a device at the first X.Y.Z installs the second by itself, with automatic updates on: a later
+# release that keeps the breaking part -- a patch below 1.0, a patch or minor from 1.0. The server's
+# auto_updates.takes is the rule; tests/python/global/test_pr_version_guard.py holds this copy to it.
+version_installs_itself() {
+  local bump
+  bump="$(version_bump "$1" "$2")" || return 1
+  [ "$bump" = patch ] || { [ "$bump" = minor ] && [ "$(breaking_part "$1")" = major ]; }
 }
 
 # A version PyPI will never take: the PyPI project `cad` published it before it was transferred to this

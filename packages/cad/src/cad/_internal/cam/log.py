@@ -1,6 +1,6 @@
 """What a plan says on stderr while it runs: nothing unless asked (``verbose``), then each stage and its time.
 
-``cad cam plan --verbose`` reads the stages back to say where a slow plan spent its time; the result's ``timings``
+``cad <type> cam --verbose`` reads the stages back to say where a slow plan spent its time; the result's ``timings``
 carry the same numbers for a library caller. Stdlib only.
 """
 

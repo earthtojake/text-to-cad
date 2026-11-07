@@ -24,10 +24,10 @@ export function resolveCadEdgeSettings(value = null) {
     }])),
     highlightColor: "#8dc5ff",
     // A picked edge, and a picked face's outline: the highlight's blue, deep enough to read as a
-    // line on the model's light surfaces, which the fill's pale blue barely did.
+    // line on the model's light surfaces, which the fill's pale blue barely did; at 3 pixels, a line, not a band.
     highlightEdgeColor: "#1a73e8",
     highlightOpacity: 1,
-    highlightThickness: 4,
+    highlightThickness: 3,
     silhouetteScale: 0.004,
     ...(value?.visibility ? { depthTest: value.visibility !== "all" } :
       typeof value?.depthTest === "boolean" ? { depthTest: value.depthTest } : {})

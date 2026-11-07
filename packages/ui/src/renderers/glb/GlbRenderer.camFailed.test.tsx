@@ -44,5 +44,5 @@ it('a CAM result whose viewer fails to load is refused, not drawn as a plain GLB
   render(<ViewerHostContext.Provider value={testHost()}><GlbRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const alert = await screen.findByRole('alert', {}, { timeout: 30000 });
   expect(alert.textContent).toBeTruthy();
-  expect(document.querySelector('[data-file-sidebar-tool="job"]')).toBeNull();
+  expect(document.querySelector('[data-tool-panel-id="job"]')).toBeNull();
 }, 30000);

@@ -107,9 +107,8 @@ it('shows a choice in Quick Edit as one chip named for its row, a face glyph in 
   chip.onRemove();
   expect(onRemove).toHaveBeenCalled();
   // The card: the row's sentence, the part and how many faces.
-  const { container } = render(<>{chip.card}</>);
-  expect(container.querySelector('[data-cam-chip-summary]')!.textContent).toBe('Pocket COMPOUND/face 17 with T1 6 mm flat, 19 s');
-  expect([...container.querySelectorAll('[data-info-row]')].map((row) => row.textContent)).toEqual(['Partbracket.step', 'Faces1']);
+  expect(chip.detail).toEqual({ what: 'Pocket COMPOUND/face 17 with T1 6 mm flat, 19 s', facts: [
+    { label: 'Part', value: 'bracket.step', copy: '/work/bracket.step' }, { label: 'Faces', value: '1' }] });
   // A choice of the whole part reads as the part; a setup's glyph takes no one colour.
   const profile = choices.get('op:2')!;
   expect(camChips(profile, camReferences('/work/bracket.step', profile), { colours: { 2: '#abcdef' } })[0]).toMatchObject({ label: 'Profile', glyph: 'solid', glyphColor: '#abcdef' });

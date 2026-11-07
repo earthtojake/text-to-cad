@@ -1,4 +1,4 @@
-"""The part a job machines, read once: exact faces from ``read_step``/``read_xbf`` and one tessellation.
+"""The part a job machines, read once: exact faces from ``step.read``/``xbf.read`` and one tessellation.
 
 :func:`read_part` returns a :class:`Part`:
 
@@ -12,7 +12,7 @@
 
 Stdlib at import; numpy and OCP inside.
 
-A ref is the engine's (``cad.engine.refs``, what ``cad inspect`` answers and the CAD Viewer copies): ``face 12``
+A ref is the engine's (``cad.engine.refs``, what ``cad <type> inspect`` answers and the CAD Viewer copies): ``face 12``
 on a document of one part, ``bracket/face 12`` or ``kit/arm/face 12`` under the part's occurrence, an element's name
 (``bracket/f:bracket.body.3``) where the file names its faces, optionally after the document (``bracket.step#face
 12``). It is resolved in the document as it is read here, never through the engine: CAM reads a file, not a model.
@@ -29,7 +29,7 @@ from cad._internal.cam.job_errors import CamJobError
 
 __all__ = ["PART_SUFFIXES", "FaceInfo", "Part", "read_part"]
 
-#: The documents a part is read from: a STEP, or an engine document (a model's ``@xbf``, or ``cad export ID
+#: The documents a part is read from: a STEP, or an engine document (a model's ``@xbf``, or ``cad model export ID
 #: part.xbf``).
 PART_SUFFIXES = (".step", ".stp", ".xbf")
 #: The default tessellation: fine enough that sections and checks are good to a few hundredths of a millimetre.
@@ -121,7 +121,7 @@ class Part:
         try:
             hit = self._document.resolve(ref)
         except ValueError as exc:
-            raise CamJobError(f"{where}: {ref} is not a face of this part ({exc}); cad cam features lists them"
+            raise CamJobError(f"{where}: {ref} is not a face of this part ({exc}); cad <type> cam lists them"
                               ) from None
         if hit.kind != "face":
             raise CamJobError(f"{where}: {ref} is {'a part' if hit.kind is None else f'a {hit.kind}'} reference; "
@@ -129,8 +129,8 @@ class Part:
         if hit.path != self._path:
             raise CamJobError(f"{where}: {ref} is on {hit.path}, but the job machines {self.occurrence}")
         if not 1 <= hit.ordinal <= len(self.faces):
-            raise CamJobError(f"{where}: {ref} is not a face of this part (it has {len(self.faces)}); cad cam "
-                              "features lists them")
+            raise CamJobError(f"{where}: {ref} is not a face of this part (it has {len(self.faces)}); cad <type> "
+                              "cam lists them")
         return self.faces[hit.ordinal]
 
     def ordinal(self, ref: str) -> int:
@@ -170,10 +170,10 @@ def read_part(document: Path, *, occurrence: str | None = None, deflection_mm: f
     what = "xbf" if suffix == ".xbf" else "STEP"
     if not document.is_file():
         raise CamJobError(f"no {what} at {document}")
-    from cad.engine.model import read_step, read_xbf
+    from cad import step, xbf
 
     try:
-        tree = (read_xbf if suffix == ".xbf" else read_step)(document)
+        tree = (xbf if suffix == ".xbf" else step).read(document)
     except (RuntimeError, ValueError, OSError) as exc:
         # An empty, truncated or foreign file: the reader's first line says why.
         why = (str(exc).strip().splitlines() or [type(exc).__name__])[0]
@@ -220,7 +220,7 @@ def _check_size(what: str, box) -> None:
         raise CamJobError(f"{what} has no finite size; export it again from the CAD tool")
     if max(size) > MAX_PART_MM:
         raise CamJobError(f"{what} is {max(size) / 1000:,.1f} m across; CAM machines parts up to "
-                          f"{MAX_PART_MM / 1000:g} m: check the units (cad cam reads mm)")
+                          f"{MAX_PART_MM / 1000:g} m: check the units (CAM reads mm)")
 
 
 def _surface_name(adaptor) -> str:

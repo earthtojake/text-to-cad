@@ -1,4 +1,4 @@
-"""The checks: what cad cam stands behind in a plan, before and after FreeCAD plans it.
+"""The checks: what CAM stands behind in a plan, before and after FreeCAD plans it.
 
 FreeCAD plans what it is asked to and checks nothing against the part: asked to pocket a floor that lies under an
 overhang, it cuts through the overhang. So every plan is checked here, and a plan with an error posts no G-code:
@@ -90,25 +90,25 @@ class Target:
 
 def finding(check: str, severity: str, kind: str, summary: str, description: str = "", items=()) -> dict:
     if kind not in CHECKS[check] or severity not in _SEVERITY:
-        raise ValueError(f"finding {check}/{kind} ({severity}) is not one cad cam raises")
+        raise ValueError(f"finding {check}/{kind} ({severity}) is not one CAM raises")
     return {"check": check, "severity": severity, "type": kind, "summary": summary, "description": description,
             "items": list(items)}
 
 
-#: What FreeCAD reports it holds of what cad cam set, each beside the operation's value cad cam gave it.
+#: What FreeCAD reports it holds of what CAM set, each beside the operation's value CAM gave it.
 _HELD = {"rpm": ("spindle", "rpm"), "feed_mm_min": ("feed", "mm/min"), "plunge_mm_min": ("plunge", "mm/min"),
          "stepdown_mm": ("step down", "mm"), "peck_mm": ("peck", "mm"), "final_z": ("final depth", "mm")}
 
 
 def _given(spec: dict) -> dict:
-    """What cad cam set of one operation (``spec``, as ``cad/freecad/_job.py`` reads it), by ``_HELD``'s keys."""
+    """What CAM set of one operation (``spec``, as ``cad/freecad/_job.py`` reads it), by ``_HELD``'s keys."""
     given = {**spec["feeds"], "stepdown_mm": spec.get("stepdown_mm"), "peck_mm": spec.get("peck_mm"),
              "final_z": spec.get("final_z")}
     return {key: float(value) for key, value in given.items() if value is not None}
 
 
 def held(setup_id: str, operations, specs, report) -> list[dict]:
-    """An error for each value FreeCAD holds, recomputed, that is not the one cad cam set (``report``: ``result.json``'s
+    """An error for each value FreeCAD holds, recomputed, that is not the one CAM set (``report``: ``result.json``'s
     operations, each with its ``held``): an expression of FreeCAD's own puts its number back over a value, and the
     paths and the posts are then planned to it, whatever the job says."""
     where = {op.index: op.where for op in operations}
@@ -121,13 +121,13 @@ def held(setup_id: str, operations, specs, report) -> list[dict]:
                 what, unit = _HELD[key]
                 found.append(finding(
                     "post", "error", "overridden", f"{where[spec['index']]}: FreeCAD holds a {what} of {value:g} "
-                    f"{unit} where cad cam set {want:g}", "FreeCAD put its own value back over cad cam's on recompute, so "
+                    f"{unit} where CAM set {want:g}", "FreeCAD put its own value back over CAM's on recompute, so "
                     "its paths and the G-code follow FreeCAD's, not the job's. This is a bug in the CAD server with this FreeCAD: "
                     "report it, with the job", [{"setup": setup_id, "operation": spec["index"]}]))
     return found
 
 
-#: A posted word cad cam sets: the spindle, a feed, a drilling cycle's peck.
+#: A posted word CAM sets: the spindle, a feed, a drilling cycle's peck.
 _WORD = re.compile(r"(?<![A-Z])([SFQ])\s*(-?\d*\.?\d+)")
 #: A work offset word: G54 to G59, and the extended ones some controllers take (G54.1 P2, G59.3).
 _OFFSET = re.compile(r"(?<![A-Z\d.])G(5[4-9](?:\.\d+(?:\s*P\d+)?)?)(?![\d.])")
@@ -136,7 +136,7 @@ _AXIS = re.compile(r"(?<![A-Z])[XYZ]\s*[-+]?[\d.\[#]")
 
 
 def posted(setup_id: str, name: str, text: str, specs, work_offset: str) -> list[dict]:
-    """An error for each spindle speed (S), feed (F) or peck (Q) the posted file ``name`` says that cad cam set for none
+    """An error for each spindle speed (S), feed (F) or peck (Q) the posted file ``name`` says that CAM set for none
     of its operations (``specs``), and for its first move in any work offset but the setup's (``work_offset``, or
     before the program selects one): what FreeCAD's post writes is the program a machine runs, so it is read back,
     not taken on trust."""
@@ -159,8 +159,8 @@ def posted(setup_id: str, name: str, text: str, specs, work_offset: str) -> list
             said.add((letter, value))
             known = ", ".join(f"{want:g}" for want in sorted(allowed[letter])) or "none"
             found.append(finding(
-                "post", "error", "posted", f"{name}: the posted program says {letter}{number}, a {words[letter]} cad cam "
-                f"set for none of its operations ({known})", "FreeCAD's post wrote a number cad cam did not give it, so "
+                "post", "error", "posted", f"{name}: the posted program says {letter}{number}, a {words[letter]} CAM "
+                f"set for none of its operations ({known})", "FreeCAD's post wrote a number CAM did not give it, so "
                 "the program would run at a speed, feed or peck nobody checked. This is a bug in the CAD server with this "
                 "FreeCAD and post: report it, with the job", [{"setup": setup_id, "file": name}]))
         for word in _OFFSET.findall(line):
@@ -175,6 +175,24 @@ def posted(setup_id: str, name: str, text: str, specs, work_offset: str) -> list
                 "than the work zero the operator touched off. This is a bug in the CAD server with this FreeCAD and post: report "
                 "it, with the job", [{"setup": setup_id, "file": name}]))
     return found
+
+
+def as_check_finding(found: dict):
+    """One finding as every check's result says it (``cad.results.CheckFinding``): its severity, its type as the code,
+    its summary as the message, the refs, else the places, else the operations its items name as the location, and
+    its description as the hint. The result GLB keeps the finding as it is, the shape the viewer reads."""
+    from cad.results import CheckFinding
+
+    def where(item: dict) -> str:
+        if item.get("face"):
+            return str(item["face"])
+        if item.get("at"):
+            return f"({', '.join(f'{float(c):g}' for c in item['at'])})"
+        return f"operation {item['operation'] + 1}" if "operation" in item else ""
+
+    places = list(dict.fromkeys(where(item) for item in found.get("items") or ()))
+    return CheckFinding(str(found["severity"]), str(found["type"]), str(found["summary"]),
+                        ", ".join(place for place in places if place) or None, str(found.get("description") or "") or None)
 
 
 def by_severity(found) -> list[dict]:
@@ -259,7 +277,7 @@ def reach(op, faces, holes, mesh, face_of_triangle, tool, stock_top: float, dept
             if hole is None:
                 found.append(finding("reach", "error", "not_facing", f"{op.where}: {info.ref} is not a face of a hole",
                                      "drill names a face of a hole (its wall, its counterbore's, its floor), as "
-                                     "cad cam features lists them", [where]))
+                                     "cad <type> cam lists them", [where]))
                 continue
             if hole["faces"][0] in drilled:
                 continue
@@ -296,7 +314,7 @@ def reach(op, faces, holes, mesh, face_of_triangle, tool, stock_top: float, dept
                 "reach", "error", "not_facing",
                 f"{op.where}: an inside profile runs along walls, and {info.ref} is a flat face"
                 + (f"; the walls round it: {', '.join(named)}" if named else ""),
-                "name the walls of the hole, bore, slot or pocket to cut, as cad cam features lists them (one "
+                "name the walls of the hole, bore, slot or pocket to cut, as cad <type> cam lists them (one "
                 "pocket's floor, walled all round with nothing opening in it, stands for its walls): inside any other "
                 "flat face FreeCAD traces its outline and cuts nothing of the part", [where]))
             continue
@@ -713,7 +731,7 @@ def check_moves(setup_id: str, moves, operations, tools, mesh, stock_low, stock_
             found.append(finding("empty_operation", "error", "empty_operation",
                                  f"{op.where}: FreeCAD planned no cut for this {op.op}",
                                  "the faces it names give it nothing to cut with this tool: check the faces "
-                                 "(cad cam features) and that the tool fits them", [{"operation": op.index}]))
+                                 "(cad <type> cam) and that the tool fits them", [{"operation": op.index}]))
     for op in operations:
         what = "drilled nothing down" if op.op == "drill" else "cut nothing at the operation's depth over"
         for ref, share, ridge in _uncut(moves, op, tools[op.tool], (targets or {}).get(op.index, ())):

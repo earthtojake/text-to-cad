@@ -1,0 +1,28 @@
+(version 2)
+# GCT's land pattern for the USB4105 puts its pads 0.17 mm from its own locating pegs (the same rule
+# the repository's usb_uart example carries)
+(rule "J1 land pattern"
+  (constraint hole_clearance (min 0.15mm))
+  (condition "A.memberOfFootprint('J1') && B.memberOfFootprint('J1')"))
+# the receptacle's ground pads and shell tabs sit too close for thermal spokes: solid to the pours
+(rule "J1 solid to pour"
+  (constraint zone_connection solid)
+  (condition "A.memberOfFootprint('J1') && A.NetName == 'GND'"))
+# the encoder's two ground pins sit between its signal pins, where the top pour cannot always reach
+# with two spokes: solid to the pour (a 1 mm THT pin hand-solders fine solid)
+(rule "SW10 ground solid"
+  (constraint zone_connection solid)
+  (condition "A.memberOfFootprint('SW10') && A.NetName == 'GND'"))
+# the SK6812MINI-E's stock land pattern sits 0.247 mm from its own cut-out (the window it shines
+# through); JLCPCB routes copper to 0.2 mm of an edge, so the LEDs alone get 0.2 mm
+(rule "LED cut-out"
+  (constraint edge_clearance (min 0.2mm))
+  (condition "A.memberOfFootprint('D*')"))
+# the RP2040's 0.4 mm pads: its own fan-out runs at the netclass minimum under the package
+(rule "QFN fan-out"
+  (constraint track_width (min 0.15mm))
+  (condition "A.intersectsCourtyard('U1')"))
+# bends at 45 or 90 degrees, none acute (85: a right angle measures 89.9999 after rounding)
+(rule "no acute bends"
+  (constraint track_angle (min 85deg))
+  (condition "A.Type == 'Track'"))

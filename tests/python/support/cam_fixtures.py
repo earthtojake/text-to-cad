@@ -1,4 +1,4 @@
-"""Shared fixtures for the CAM suites (``tests/python/packages/cad/cam/``).
+"""Shared fixtures for the CAM suite (``tests/python/packages/cam/``).
 
 Parts are built with build123d into a temporary directory per test class (never ``models/``), and :func:`mill_job`
 builds the dicts the suites plan. Heavy imports stay inside the helpers. :data:`needs_freecad` skips a test where
@@ -201,8 +201,15 @@ def mill_job(operations: list[dict], *, tools: list[dict] | None = None, stock: 
     }
 
 
+def features_of(path: Path):
+    """What a job can name on a part: ``step.cam`` with no job."""
+    from cad import step
+
+    return step.cam(path)
+
+
 def floor_ref(features, z: float) -> str:
-    """The +Z floor at height ``z`` (a features() result)."""
+    """The +Z floor at height ``z`` (a :func:`features_of` result)."""
     return next(f["ref"] for f in features.floors if f["normal"] == "+Z" and abs(f["z_mm"] - z) < 1e-6)
 
 

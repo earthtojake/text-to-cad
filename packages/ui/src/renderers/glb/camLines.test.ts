@@ -145,7 +145,7 @@ it('sizes the riding tool in mm and stands it along the setup\'s axis, in a scen
 it('draws a ball end mill with a ball at its tip, and refuses a path whose operation or setup the job does not list', () => {
   expect(toolShape({ toolDiameterMm: 4, toolType: 'ball' })).toEqual({ radius: 2, ball: true });
   expect(toolShape({ toolDiameterMm: 6, toolType: 'drill' })).toEqual({ radius: 3, ball: false });
-  // It once stood a 6 mm tool there: no result cad cam writes names either.
+  // It once stood a 6 mm tool there: no plan writes names either.
   const root = camScene();
   const tool = createCamTool(THREE, root, readCamJob(root)!, cadFrame(THREE, root, root));
   expect(() => tool.show({ point: [0, 0, 0], op: 9, setup: 'top' })).toThrow(CamResultError);

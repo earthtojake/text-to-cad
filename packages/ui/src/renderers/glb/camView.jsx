@@ -1,5 +1,5 @@
 /**
- * The CAM result viewer GlbRenderer loads only for a GLB that carries a job (`cad cam plan`): one module,
+ * The CAM result viewer GlbRenderer loads only for a GLB that carries a job (`cad step cam --job`): one module,
  * so the bundler makes it a chunk of its own and a plain GLB never fetches it. Everything GlbRenderer uses of
  * the CAM viewer is here, by name.
  */
@@ -9,8 +9,6 @@ import { formatPromptReference } from "@cad/core/prompt";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@cad/ui/i18n";
-import { InfoRow } from "../kit/inspector/referenceRows.jsx";
 import { camToolpathObjects, createCamPaths } from "./cam/lines.js";
 import { camSceneMeshes, showCamMeshes } from "./cam/playback.js";
 import { createCamTool } from "./cam/tool.js";
@@ -78,15 +76,13 @@ export function camReferences(source, choice) {
 
 const fileName = (path) => String(path || "").split(/[\\/]/).filter(Boolean).at(-1) || String(path || "");
 
-/** A choice's card in Quick Edit: its sentence, then the part it names and how many of its faces. */
-function CamChoiceCard({ choice, reference }) {
-  const { t } = useI18n();
+/** A choice's card in Quick Edit (`inspect.js`'s `DetailItem`): its sentence, then the part it names and how many of its faces. */
+function camDetail(choice, reference, t) {
   const faces = reference.target.kind === "cad-selector" ? reference.target.selectors.length : 0;
-  return <>
-    {choice.summary ? <p className="py-0.5 text-tiny text-muted-foreground [overflow-wrap:break-word]" data-cam-chip-summary="">{choice.summary}</p> : null}
-    <InfoRow label={t("cam.gate.part")} copy={reference.resource.path}>{fileName(reference.resource.path)}</InfoRow>
-    <InfoRow label={t("cam.faces")}>{faces ? faces.toLocaleString("en-US") : t("cam.wholePart")}</InfoRow>
-  </>;
+  return { ...(choice.summary ? { what: choice.summary } : {}), facts: [
+    { label: t("cam.gate.part"), value: fileName(reference.resource.path), copy: reference.resource.path },
+    { label: t("cam.faces"), value: faces ? faces.toLocaleString("en-US") : t("cam.wholePart") },
+  ] };
 }
 
 /**
@@ -102,7 +98,7 @@ export function camChips(choice, references, { colours = {}, onRemove, t = engli
   return [{
     key: `cam:${choice.id}`, label: choice.label || choice.summary || t("cam.job"), glyph: reference.target.kind === "cad-selector" ? "face" : "solid",
     ...(op !== null && colours[op] ? { glyphColor: colours[op] } : {}),
-    copy: formatPromptReference(reference), card: <CamChoiceCard choice={choice} reference={reference} />, onRemove,
+    copy: formatPromptReference(reference), detail: camDetail(choice, reference, t), onRemove,
   }];
 }
 
@@ -188,7 +184,7 @@ export function paintCam({ controller, meshes, job, shown, isolate, moment }) {
   return { changed: changed || Boolean(moment), place };
 }
 
-// A clip plays from the file sidebar's Animation section: the readout sits at the view's bottom centre, clear of
+// A clip plays from the view's Animation section: the readout sits at the view's bottom centre, clear of
 // Quick Edit's sheet on a phone (`--cad-quick-edit-peek`).
 const READOUT_BOTTOM = "calc(var(--cad-quick-edit-peek, 0px) + 1rem)";
 

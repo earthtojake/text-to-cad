@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Mesh } from 'three';
 
 /*
- * Two real results, written by `cad cam plan` (FreeCAD plans, cad cam checks), not by hand:
+ * Two real results, written by `cad step cam --job` (FreeCAD plans, our checks), not by hand:
  * - `ready.cam.glb`: a bracket from `bracket.step`, ready to cut on GRBL: one setup `top` (+Z) of face,
  *   pocket, profile (T1, a 6 mm flat) and drill (T2, a 6 mm drill), 2 min, two G-code files, one per tool.
  * - `fix.cam.glb`: a bridge from `bridge.step` on LinuxCNC, refused: setup `top`'s pocket (op 0) cannot
@@ -44,7 +44,7 @@ const triangle = () => {
 };
 
 /**
- * A scene laid out as `cad cam plan` writes one, in mm, with the ready sample's job (face 0–62.478 s, pocket
+ * A scene laid out as `cad step cam --job` writes one, in mm, with the ready sample's job (face 0–62.478 s, pocket
  * –81.717 s, profile –123.859 s, drill –129.533 s): the part, the stock box, the top setup's feed moves (three
  * segments, written out of time order: the face's first, the pocket's, then the face's second) and its rapids (one,
  * the pocket's).

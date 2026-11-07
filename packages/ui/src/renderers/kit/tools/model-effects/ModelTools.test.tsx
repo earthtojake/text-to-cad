@@ -29,7 +29,7 @@ it('Explode and Clip are popovers from their tiles: a press opens the row under 
   expect([row(), pressed(explode)]).toEqual([null, [null, false, 'ghost']]);
   await user.click(explode);
   // Its row as it was under the strip: its name, the slider, the amount, Reset; the button not pressed.
-  expect([...row()!.querySelectorAll('[data-model-tool-amount], button[aria-label], [role=slider]')].map(node => node.getAttribute('aria-label') || node.textContent))
+  expect([...row()!.querySelectorAll('[data-slider-field-value], button[aria-label], [role=slider]')].map(node => (node as HTMLInputElement).value || node.getAttribute('aria-label')))
     .toEqual(['Explode amount', '0%', 'Reset explode']);
   expect(row()!.closest('[data-radix-popper-content-wrapper]')).not.toBeNull();
   expect(pressed(explode)).toEqual([null, false, 'ghost']);
@@ -62,7 +62,7 @@ it('what an effect sets stays on the model once its popover closes, its dot on t
   expect([store.getSnapshot().scene.view.exploded.amount, explode().hasAttribute('data-changed'), explode().getAttribute('aria-pressed')]).toEqual([amount, true, null]);
   // Opened again, as it was; Reset takes it away, and the popover stays up.
   await user.click(explode());
-  expect(screen.getByRole('toolbar', { name: 'Explode controls' }).querySelector('[data-model-tool-amount]')!.textContent).toBe(`${Math.round(amount * 100)}%`);
+  expect(screen.getByRole('toolbar', { name: 'Explode controls' }).querySelector<HTMLInputElement>('[data-slider-field-value]')!.value).toBe(`${Math.round(amount * 100)}%`);
   await user.click(screen.getByRole('button', { name: 'Reset explode' }));
   expect([store.getSnapshot().scene.view.exploded.enabled, explode().hasAttribute('data-changed'), screen.queryByRole('toolbar', { name: 'Explode controls' }) !== null]).toEqual([false, false, true]);
 });
@@ -120,11 +120,11 @@ it('Clip\'s axis dropdown holds its settings: the axes as one row of radio items
   // What the menu holds, top to bottom: the three axes (one group), then the two settings — no heading.
   const reads = () => [...menu().querySelectorAll('[role=menuitemradio], [role=menuitemcheckbox], [data-slot=dropdown-menu-label]')]
     .map(node => `${node.getAttribute('role')}:${node.getAttribute('aria-label') || node.textContent}:${node.getAttribute('aria-checked')}`);
-  const share = () => screen.getByRole('toolbar', { name: 'Clip controls' }).querySelector('[data-model-tool-amount]')!.textContent;
+  const share = () => screen.getByRole('toolbar', { name: 'Clip controls' }).querySelector<HTMLInputElement>('[data-slider-field-value]')!.value;
   await takeUp('Clip');
   // The row: axis, slider, amount, Reset — Explode's shape, no checkbox and no other button.
   const row = screen.getByRole('toolbar', { name: 'Clip controls' });
-  expect([...row.querySelectorAll('[data-model-tool-amount], button[aria-label]')].map(node => node.getAttribute('aria-label') || node.textContent))
+  expect([...row.querySelectorAll('[data-slider-field-value], button[aria-label]')].map(node => (node as HTMLInputElement).value || node.getAttribute('aria-label')))
     .toEqual(['Clip axis: X', '0%', 'Reset clip']);
   expect(within(row).queryByRole('checkbox')).toBeNull();
   // By keyboard: Enter opens it on the axis in hand; Space on a setting ticks it and leaves it open.

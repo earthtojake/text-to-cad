@@ -9,10 +9,14 @@ from pathlib import Path
 from cad.engine.addresses import document_id
 from cad.engine.ids import is_id
 
+from cad.registry import DOCUMENT_TYPES
+
 from .backend import absolute_path
 from .scanner import node_basename
 
-ENGINE_DOCUMENTS = (".xbf", ".step", ".stp")
+# The files the engine reads into its own documents: every type viewed as one (``cad.registry``).
+ENGINE_DOCUMENTS = tuple(extension for entry in DOCUMENT_TYPES.values() if entry.view == "document"
+                         for extension in entry.extensions)
 SERVE_HOLD_SECONDS = 2.0
 FINISHED_SECONDS = 30.0
 # How often a held request looks for the import's frame to have moved.

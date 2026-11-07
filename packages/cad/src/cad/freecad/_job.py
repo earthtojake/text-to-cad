@@ -3,10 +3,10 @@ imported by the server.
 
 It reads ``plan.json`` from the folder ``CAD_CAM_FOLDER`` names, with the part beside it as ``part.brep``, already
 placed in the setup's work coordinates (the tool comes from +Z, the origin is the work zero). It makes one FreeCAD
-job: the part, a box of stock, a tool controller per tool and feed, and one FreeCAD operation per cad cam operation,
-its faces named ``FaceN`` (the N of cad cam's ``face N``: both number a solid's faces in the same order). It writes
+job: the part, a box of stock, a tool controller per tool and feed, and one FreeCAD operation per CAM operation,
+its faces named ``FaceN`` (the N of CAM's ``face N``: both number a solid's faces in the same order). It writes
 ``result.json``: each operation's path commands, in the order run, with what it and its tool controller hold of what
-cad cam set once FreeCAD has recomputed (``held``: an expression of FreeCAD's own can put its value back over one), and
+CAM set once FreeCAD has recomputed (``held``: an expression of FreeCAD's own can put its value back over one), and
 the files posted, each holding the operations ``plan["files"]`` gives it. Any failure is ``{"error": ...}`` in
 ``result.json``.
 
@@ -18,10 +18,10 @@ import os
 import traceback
 
 FOLDER = os.environ["CAD_CAM_FOLDER"]
-#: cad cam's operation -> the FreeCAD module that makes it (``Path.Op.<module>.Create``).
+#: CAM's operation -> the FreeCAD module that makes it (``Path.Op.<module>.Create``).
 OPERATIONS = {"face": "MillFace", "profile": "Profile", "pocket": "PocketShape", "adaptive": "Adaptive",
               "drill": "Drilling"}
-#: cad cam's tool type -> FreeCAD's built-in tool bit shape.
+#: CAM's tool type -> FreeCAD's built-in tool bit shape.
 SHAPES = {"flat": "endmill.fcstd", "ball": "ballend.fcstd", "bull": "bullnose.fcstd", "drill": "drill.fcstd"}
 COOLANT = {"off": "None", "flood": "Flood", "mist": "Mist"}
 #: Fanuc's post selects G54 in the tool length offset line it writes after every tool change, whatever the job's
@@ -96,13 +96,13 @@ def _operation(model, spec, tc, plan):
         if op.PeckEnabled:
             op.setExpression("PeckDepth", None)       # FreeCAD's is three quarters of the drill, over any value
             op.PeckDepth = f"{spec['peck_mm']} mm"
-        op.AddTipLength = False     # cad cam's depth already takes the point and the break through
+        op.AddTipLength = False     # CAM's depth already takes the point and the break through
     if kind != "drill":
         # FreeCAD sets the step down by an expression (the tool's diameter), which the next recompute puts back over a
         # value: cleared first, as the final depth's below.
         op.setExpression("StepDown", None)
         op.StepDown = f"{spec['stepdown_mm']} mm"
-    # The depth cad cam worked out wins over FreeCAD's own reading of the faces: the expression is cleared first, or the
+    # The depth CAM worked out wins over FreeCAD's own reading of the faces: the expression is cleared first, or the
     # next recompute puts FreeCAD's back.
     if spec.get("final_z") is not None:
         op.setExpression("FinalDepth", None)
@@ -111,7 +111,7 @@ def _operation(model, spec, tc, plan):
 
 
 def _held(spec, tc, op):
-    """What ``op`` and its controller ``tc`` hold of the values cad cam set (``spec``), recomputed: lengths in mm, feeds
+    """What ``op`` and its controller ``tc`` hold of the values CAM set (``spec``), recomputed: lengths in mm, feeds
     in mm/min, the spindle in rpm."""
     held = {"rpm": float(tc.SpindleSpeed), "feed_mm_min": float(tc.HorizFeed.getValueAs("mm/min")),
             "plunge_mm_min": float(tc.VertFeed.getValueAs("mm/min"))}
@@ -207,7 +207,7 @@ def main():
 
 try:
     result = main()
-except Exception as exc:  # noqa: BLE001 - every failure goes back to cad cam as words, never a hang
+except Exception as exc:  # noqa: BLE001 - every failure goes back to CAM as words, never a hang
     result = {"error": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()[-2000:]}
 with open(os.path.join(FOLDER, "result.json"), "w", encoding="utf-8") as handle:
     json.dump(result, handle)

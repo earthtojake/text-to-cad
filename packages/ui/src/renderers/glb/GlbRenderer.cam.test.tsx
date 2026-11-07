@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { camExtras, camScene } from './__tests__/camFile';
 
 // The CAM result viewer is a chunk of its own (`camView.jsx`): a plain GLB never fetches it, and a result loads it
-// before it is drawn, then offers Job in the file sidebar. Only what loads the file and the WebGL viewport are replaced.
+// before it is drawn, then shows Job in the view's panel. Only what loads the file and the WebGL viewport are replaced.
 const loaded = vi.hoisted(() => ({ scene: null as any, requested: 0, overlays: 0 }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
@@ -51,29 +51,20 @@ it('a plain GLB never requests the CAM viewer', async () => {
   mount(root);
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
   expect(loaded.requested).toBe(0);
-  expect(document.querySelector('[data-file-sidebar-tool="job"]')).toBeNull();
   expect(document.querySelector('[data-tool-panel-id="job"]')).toBeNull();
 });
 
-/** Job's tile in the file sidebar, once the result has loaded; pressed, it opens the section. */
-async function openJob() {
-  const tile = await waitFor(() => {
-    const found = document.querySelector<HTMLElement>('[data-file-sidebar-tool="job"]');
-    if (!found) throw new Error('no Job tile yet');
-    return found;
-  }, { timeout: 30000 });
-  expect(tile.getAttribute('aria-label')).toBe('Job');
-  // None is open as a file opens.
-  expect(tile.getAttribute('aria-pressed')).toBe('false');
-  fireEvent.click(tile);
-  expect(tile.getAttribute('aria-pressed')).toBe('true');
-  return screen.getByRole('region', { name: 'Job' });
-}
+/** Job, the view panel's one tab, once the result has loaded. */
+const openJob = () => waitFor(() => {
+  const found = document.querySelector<HTMLElement>('[data-tool-panel-id="job"]');
+  if (!found) throw new Error('no Job yet');
+  return found;
+}, { timeout: 30000 });
 
-it('a CAM result loads the CAM viewer, then offers Job in the file sidebar; a row isolates its operation until it is chosen again', async () => {
+it('a CAM result loads the CAM viewer, then shows Job in the view\'s panel; a row isolates its operation until it is chosen again', async () => {
   mount(camScene(), '/models/part.cam.glb');
   // The model waits as the file loading while the chunk comes in.
-  expect(document.querySelector('[data-file-sidebar-tool="job"]')).toBeNull();
+  expect(document.querySelector('[data-tool-panel-id="job"]')).toBeNull();
   expect(await openJob()).toBeTruthy();
   expect(loaded.requested).toBe(1);
   // A result never explodes: its nodes are the part, the stock and the paths.
@@ -142,5 +133,5 @@ it('a damaged CAM result is refused as a file that failed to load, naming what i
   mount(camScene({ extras }), '/models/part.cam.glb');
   const alert = await screen.findByRole('alert', {}, { timeout: 30000 });
   expect(alert.textContent).toContain('cam.setups[0].operations[0].t0 is not a number');
-  expect(document.querySelector('[data-file-sidebar-tool="job"]')).toBeNull();
+  expect(document.querySelector('[data-tool-panel-id="job"]')).toBeNull();
 }, 30000);

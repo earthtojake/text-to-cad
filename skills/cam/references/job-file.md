@@ -43,7 +43,7 @@ least `surface_m_min` and `chipload_mm` from the tool maker's chart:
 | --- | --- |
 | `name` | A table name, or the material's own name |
 | `surface_m_min` | Cutting speed, m/min: rpm = 1000 × it / (π × diameter); a drill turns at 0.6 of that |
-| `chipload_mm` | Chip load per tooth for a 6 mm tool; `cad cam` scales it with the tool's diameter |
+| `chipload_mm` | Chip load per tooth for a 6 mm tool; `cad <type> cam` scales it with the tool's diameter |
 | `drill_mm_per_rev` | Drill feed per revolution per mm of drill diameter (0.02 in aluminium: a 5 mm drill feeds 0.1 mm/rev). A material that is not in the table needs it for a job that drills: without it a `drill` is refused |
 | `stepdown_fraction` | The default `stepdown_mm` as a fraction of the tool's diameter (0.5 in aluminium, 0.25 in steel) |
 
@@ -99,7 +99,7 @@ cuts and its own keys.
 | --- | --- |
 | `op` | Required. `face`, `profile`, `pocket`, `adaptive` or `drill` |
 | `tool` | Required. A tool's `id`: a `drill` for `drill`, a `flat`, `ball` or `bull` for the rest |
-| `faces` | Face refs as `cad cam features` lists them. Required for `pocket`, `adaptive` and `drill` |
+| `faces` | Face refs as `cad <type> cam` lists them. Required for `pocket`, `adaptive` and `drill` |
 | `feed` | Feed, mm/min (the table's); the plunge scales with it |
 | `speed` | Spindle, rpm (the table's) |
 | `plunge_mm_min` | Plunge feed (0.3 of the table's feed) |

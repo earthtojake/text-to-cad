@@ -17,7 +17,15 @@ test('an engine document reopens with its tree as it was left, and its selection
   // whether it is hidden, its Isolate whether it is isolated.
   const rows = () => pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   await loaded();
-  await pane.getByRole('button', { name: 'Model tree', exact: true }).click();
+  // The Model is the view's panel's first tab (its only one, with no tab row, where nothing has a Position), the panel
+  // opened from its pill (the 800px view starts it collapsed).
+  const openTree = async () => {
+    await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
+    if (await pane.locator('[data-flat-panel-pill] button').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+    const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model', exact: true });
+    if (await tab.count()) await tab.click();
+  };
+  await openTree();
   await pane.getByRole('button', { name: 'Expand peg (2)', exact: true }).click();
   await pane.getByRole('button', { name: 'Hide plate', exact: true }).click();
   await pane.getByRole('button', { name: 'Isolate peg', exact: true }).first().click();
@@ -26,13 +34,12 @@ test('an engine document reopens with its tree as it was left, and its selection
 
   // The view goes and comes back over the same record: the tree is as it was left. It has gone before
   // it comes back: a busy React can take the two calls in one render, and a view that never went keeps
-  // its sidebar open, for the press on Model tree to close.
+  // its panel as it was.
   await page.evaluate(() => window.cadHarness.mounted(false));
-  await pane.getByRole('button', { name: 'Model tree', exact: true }).waitFor({ state: 'detached' });
+  await pane.locator('[data-flat-panel]').waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
-  await pane.getByRole('button', { name: 'Model tree', exact: true }).waitFor();
   await loaded();
-  await pane.getByRole('button', { name: 'Model tree', exact: true }).click();
+  await openTree();
   await pane.getByRole('button', { name: 'Collapse peg (2)', exact: true }).waitFor();
   assert.deepEqual(await rows(), left);
 

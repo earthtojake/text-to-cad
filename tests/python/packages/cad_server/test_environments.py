@@ -126,10 +126,10 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(Path(status["prefix"]).resolve(), self.core.resolve(), "the engine runs the core")
 
         # The engine's own kernel processes: the documents worker exports a file, the pool measures it.
-        exported = self.run_cadgen("export", "XBF/part.xbf", "out.stl", cwd=project)
+        exported = self.run_cadgen("xbf", "export", "XBF/part.xbf", "out.stl", cwd=project)
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertGreater((project / "out.stl").stat().st_size, 0)
-        inspected = self.run_cadgen("inspect", "XBF/part.xbf", "--json", cwd=project)
+        inspected = self.run_cadgen("xbf", "inspect", "XBF/part.xbf", "--json", cwd=project)
         self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)  # --json says a failure on stdout
         self.assertAlmostEqual(json.loads(inspected.stdout)["summary"]["volume"], 120.0, places=3)
 

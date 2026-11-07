@@ -1,7 +1,7 @@
-"""The machining reading of a part: what ``cad cam features`` lists and what operations look up.
+"""The machining reading of a part: what ``cad <type> cam`` lists with no job and what operations look up.
 
 :func:`read_features` returns ``{"faces", "holes", "floors"}`` (lists of dicts, the shapes
-:class:`~cad.results.CamFeaturesResult` documents):
+:class:`~cad.results.CamResult` documents):
 
 * every face, with a plain ``reading`` ("flat floor at Z 12, facing +Z", "hole wall Ø5 along Z");
 * holes: the hole-wall cylinders grouped by axis line and radius, kept where they wrap (nearly) all the way round their

@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
-SKILLS = ("cad", "dxf", "urdf", "sdf", "srdf")
+SKILLS = ("cad", "pcb", "robot-simulation")
 END = "If it fails to launch, say so.\n"
 
 

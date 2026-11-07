@@ -3,7 +3,7 @@ configuration sequences against its build before (``delta``). A first build has 
 an edit that adds parts says how many and the bounds they were; an edit that keeps the bounds says
 how many parts' geometry changed, or that only their materials did; a failed build says none; and
 the report a build returns carries it as data. The bounds are each part's exact box placed where it
-stands, as ``cad inspect`` measures it, where the kernel's quick box is wrong: a free-form
+stands, as ``cad <type> inspect`` measures it, where the kernel's quick box is wrong: a free-form
 face bulging past its edges, a spline edge's poles, a torus's octagons."""
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ class BoundsTest(unittest.TestCase):
     @staticmethod
     def exact(*placed) -> list:
         """The world box's size from each (shape, location) pair's exact box (``AddOptimal``) in the
-        shape's own frame placed at the location, as ``cad inspect`` measures it, to the run line's
+        shape's own frame placed at the location, as ``cad <type> inspect`` measures it, to the run line's
         figures."""
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib

@@ -19,9 +19,9 @@ engine restart the file spares the cold build.
 
 ```
 python radial.py
-cad snapshot "$ID" radial.png                      # ID: the id: line the run printed
-cad snapshot "$ID" bdc.png --pose cylinder1_bdc
-cad export "$ID" GLB/radial.glb                    # the three clips, baked
+cad model snapshot "$ID" radial.png                      # ID: the id: line the run printed
+cad model snapshot "$ID" bdc.png --pose cylinder1_bdc
+cad model export "$ID" GLB/radial.glb                    # the three clips, baked
 ```
 
 ## How it is built

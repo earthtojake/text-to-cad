@@ -1,4 +1,4 @@
-"""`cad snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
+"""`cad <type> snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
 reported, and what an engine document's view does not offer refused by name before anything
 renders, with OUT untouched; the document's own mesh exports drawn by OCCT too, read by their
 readers (`engine/formats`, and `test_formats.py` for every kind), in this process and through the
@@ -254,8 +254,9 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual((Path(drawn.report["output"]), drawn.path.read_bytes()[:4]), (drawn.path, b"\x89PNG"))
 
     def test_a_failure_under_json_is_its_envelope_on_stdout(self) -> None:
-        """Under --json a verb says its failure as ``{"ok": false, "error": ...}`` on stdout, the result's
-        channel, and exits 1; without it, its words on stderr: 2 for a request refused before anything ran."""
+        """Under --json a verb says its failure as ``{"ok": false, "error": ..., "reason": ...}`` on stdout, the
+        result's channel; without it, its words on stderr: either way its class's status, 2 for a request
+        refused before anything ran."""
         import contextlib
         import io
 
@@ -273,7 +274,8 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(argv=argv):
                 code, printed, err = run(lambda: cli.main([*argv, "--json"]))
                 found = json.loads(printed)
-                self.assertEqual((code, set(found), found["ok"], err), (1, {"ok", "error"}, False, ""))
+                self.assertEqual((code, set(found), found["ok"], found["reason"], err),
+                                 (status, {"ok", "error", "reason"}, False, "invalid_argument", ""))
                 self.assertIn(said, found["error"])
                 code, printed, err = run(lambda: cli.main(argv))
                 self.assertEqual((code, printed), (status, ""))
@@ -486,8 +488,10 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(argv=argv):
                 printed = io.StringIO()
                 with contextlib.redirect_stdout(printed):
-                    self.assertEqual(cli.main(["snapshot", *argv, "--json"]), 1)
-                self.assertIn(said, json.loads(printed.getvalue())["error"])
+                    self.assertEqual(cli.main(["snapshot", *argv, "--json"]), 2)  # the command line's, as without --json
+                found = json.loads(printed.getvalue())
+                self.assertEqual(found["reason"], "usage")
+                self.assertIn(said, found["error"])
 
     def drawn(self, path: Path, size: tuple[int, int]) -> None:
         """A picture of something: the size asked, and more than a backdrop."""

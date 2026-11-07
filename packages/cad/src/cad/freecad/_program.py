@@ -1,9 +1,12 @@
-"""FreeCAD (``freecadcmd``), the program every toolpath is planned and posted by: found, checked and run. cad cam reads
-the part, writes the job FreeCAD runs, and checks what comes back; FreeCAD's CAM workbench plans the paths and its post
+"""FreeCAD (``freecadcmd``), the program every toolpath is planned and posted by: found, checked and run. cad reads the
+part, writes the job FreeCAD runs, and checks what comes back; FreeCAD's CAM workbench plans the paths and its post
 processors write the G-code.
 
-FreeCAD is installed by the person: ``CAD_FREECAD`` names the ``freecadcmd`` program, else the first of :data:`NAMES` on
-PATH, else the place each platform's installer puts it (:func:`_installed`). One that is missing, or older than
+The ``freecad`` integration's probe (``cad.registry.INTEGRATIONS["freecad"]``: the program, its minimum, its install hint
+and ``CAD_FREECAD``), run by the library's one helper for the external programs our code runs
+(``cad._internal.programs``). FreeCAD is installed by the person: ``CAD_FREECAD`` names the ``freecadcmd`` program, else
+the first of :data:`NAMES` on PATH, else the place each platform's installer puts it (:func:`_installed`). One that is
+missing, or older than
 :data:`FREECADCMD`'s minimum, is an error naming how to install it; cad downloads nothing and plans with nothing else.
 
 :func:`run` hands ``_job.py`` a plan (JSON: the part as a BREP, the stock, the tools, the operations) in a private
@@ -24,12 +27,15 @@ from pathlib import Path
 
 from cad._internal import programs
 from cad.engine import executables
+from cad.registry import INTEGRATIONS
 
 __all__ = ["FREECADCMD", "FREECAD_ENV", "NAMES", "TIMEOUT_S", "FreeCAD", "FreecadMissingError", "find_freecad",
            "install_hint", "run"]
 
+_PROBE = INTEGRATIONS["freecad"].probe
+assert _PROBE is not None
 #: The environment variable naming the ``freecadcmd`` program.
-FREECAD_ENV = "CAD_FREECAD"
+FREECAD_ENV = _PROBE.override
 #: What it is called on PATH: the name the installers use, then the older capitalised one some packages keep.
 NAMES = ("freecadcmd", "FreeCADCmd")
 #: The longest one plan may take (s): past it FreeCAD is stopped and the plan says so.
@@ -44,10 +50,7 @@ class FreecadMissingError(programs.ProgramMissing):
 
 
 def install_hint() -> str:
-    return ("install FreeCAD 1.1 or newer from https://www.freecad.org/downloads.php (macOS: the .dmg into "
-            "Applications; Windows: the installer; Linux: the AppImage, unpacked with --appimage-extract, its "
-            f"squashfs-root/usr/bin/freecadcmd named by {FREECAD_ENV}), or set {FREECAD_ENV} to a freecadcmd "
-            "program")
+    return _PROBE.install_hint
 
 
 @dataclass(frozen=True)
@@ -97,8 +100,8 @@ class _Freecadcmd(programs.Program):
 #: ``freecadcmd`` as the helper finds it. The oldest FreeCAD cad runs is 1.1: 1.0 renamed the Path workbench CAM and
 #: moved its operations to ``Path.Op``; 1.1 replaced the tool bit files with ``Path.Tool.toolbit``, which ``_job.py``
 #: builds its tools with. ``search_path`` is off because :func:`_installed` searches PATH, as the engine does.
-FREECADCMD = _Freecadcmd("freecadcmd", (1, 1), install_hint(), FREECAD_ENV, NAMES, installed=lambda: _installed(),
-                         homes=_HOMES, title="FreeCAD 1.1", search_path=False)
+FREECADCMD = _Freecadcmd.from_probe(_PROBE, names=NAMES, installed=lambda: _installed(), homes=_HOMES,
+                                    title=f"FreeCAD {_PROBE.minimum}", search_path=False)
 
 
 def find_freecad() -> FreeCAD:

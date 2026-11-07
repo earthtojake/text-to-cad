@@ -1,14 +1,14 @@
 import { CircleCheck, CircleX, Eye, EyeOff } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { Button } from "@cad/ui/primitives/button";
-import { ROW_NAME_UNDER_ACTIONS, TREE_INDENT_PX, TreeRowGuides, TreeRowLabel, TreeRowSurface, treeRowActionsClass } from "@cad/ui/primitives/tree-row";
+import { ROW_NAME_UNDER_ACTIONS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { english } from "../../i18n/core.js";
 import { useI18n } from "@cad/ui/i18n";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { assumedWords, formatDuration, jobSummary, operationDetail, toolSpeeds } from "./cam/extras.js";
 
-// The section's id in the file sidebar: its size is its own (`sidebar:job`), not the Model tree's.
+// The tab's id in the view's panel.
 export const CAM_JOB_SECTION_ID = "job";
 
 // The verdict's status in the theme's own status tones, FEA's verdict's: green to cut, red to fix.
@@ -20,8 +20,6 @@ const TONES = Object.freeze({
 // A count in words: its key's singular or plural form ("1 warning", "3 warnings").
 const counted = (t, count, one, many) => t(count === 1 ? one : many, { count });
 const NONE = Object.freeze(new Set());
-// The room an operation row's eye takes at its right end (its `--row-actions`).
-const ROW_ACTIONS_WIDTH = "1.5rem";
 
 /** A tool's row: how the machine names it and what it is ("T1 6 mm flat"), its speed and feed beside it. */
 export const toolRowLabel = (tool) => [tool.label, tool.plain].filter(Boolean).join(" ");
@@ -82,7 +80,7 @@ function Choosable({ id, label, chosen, onChoose, className, children }) {
  */
 function CamVerdict({ job, chosen, onChoose }) {
   const { t } = useI18n();
-  const tone = TONES[job.verdict.status] || TONES.ready;
+  const tone = TONES[job.verdict.status];
   const Icon = tone.icon;
   const errors = job.findings.map((finding, index) => ({ finding, index })).filter(({ finding }) => finding.level === "error");
   const caption = [job.verdict.gcode, job.verdict.warnings ? counted(t, job.verdict.warnings, "cam.warning", "cam.warnings") : ""]
@@ -120,30 +118,36 @@ function JobRow({ id, label, detail, hint, swatch = null, depth, chosen, onChoos
   const { t } = useI18n();
   const eye = t(hidden ? "tree.reveal" : "tree.hide");
   return <li className="min-w-0">
-    <TreeRowSurface dense active={chosen === id} className={cn("gap-0 pr-0", onToggleHidden && "group/row")}
-      style={{ paddingLeft: depth * TREE_INDENT_PX, ...(onToggleHidden ? { "--row-actions": ROW_ACTIONS_WIDTH } : null) }}
+    <TreeRowSurface dense depth={depth} actions={onToggleHidden ? 1 : 0} active={chosen === id} className={cn(onToggleHidden && "group/row")}
       data-cam-row={id} data-cam-hidden={hidden ? "" : undefined}>
-      <TreeRowGuides depth={depth} column={16} />
-      <span className="grid h-6 w-4 shrink-0 place-items-center" aria-hidden="true">
+      <TreeRowGlyph>
         {swatch ? <span className={cn("size-2 rounded-full", hidden && "opacity-40")} style={{ backgroundColor: swatch }} data-cam-swatch="" /> : null}
-      </span>
+      </TreeRowGlyph>
       <TooltipHint content={hint} overflowOnly={!hint}>
         <Choosable id={id} label={label} chosen={chosen} onChoose={onChoose}
-          className={cn("h-full pr-2", onToggleHidden && (hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover), hidden && "text-muted-foreground")}>
+          className={cn(TREE_ROW_NAME_CLASS, "gap-1.5", onToggleHidden && (hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover), hidden && "text-muted-foreground")}>
           <TreeRowLabel className={detail ? "max-w-full shrink-0" : "flex-1"}>{label}</TreeRowLabel>
           {detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground tabular-nums">{detail}</TreeRowLabel> : null}
         </Choosable>
       </TooltipHint>
-      {onToggleHidden ? <div data-row-actions="" className={treeRowActionsClass(hidden)}>
+      {onToggleHidden ? <TreeRowActions persistent={hidden}>
         <TooltipHint content={eye}>
           <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "tree.revealNamed" : "tree.hideNamed", { name: label })} className="h-5 w-4 text-muted-foreground"
             onClick={(event) => { event.stopPropagation(); onToggleHidden(); }}>
             {hidden ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
           </Button>
         </TooltipHint>
-      </div> : null}
+      </TreeRowActions> : null}
     </TreeRowSurface>
   </li>;
+}
+
+/** A muted heading over a list of rows: Tools, Show. Not a control. */
+function JobHeading({ children }) {
+  return <TreeRowSurface as="h3" dense depth={0} className="text-muted-foreground hover:bg-transparent">
+    <TreeRowGlyph />
+    <TreeRowLabel>{children}</TreeRowLabel>
+  </TreeRowSurface>;
 }
 
 /** The job's tools under a muted heading, each a row with its speed and feed: the speeds a machinist sets. */
@@ -152,7 +156,7 @@ function JobTools({ job, chosen, onChoose }) {
   const tools = job.tools;
   if (!tools?.length) return null;
   return <section aria-label={t("cam.tools")} className="flex flex-col px-1 pb-1 text-tiny" data-cam-tools="">
-    <h3 className="flex h-6 items-center pl-4 text-tiny font-normal text-muted-foreground">{t("cam.tools")}</h3>
+    <JobHeading>{t("cam.tools")}</JobHeading>
     <ul>
       {tools.map((tool) => {
         const speeds = toolSpeeds(tool);
@@ -173,30 +177,28 @@ function JobShow({ gates, onToggleGate }) {
   const { t } = useI18n();
   if (!gates?.length) return null;
   return <section aria-label={t("cam.show")} className="flex flex-col px-1 pb-1 text-tiny" data-cam-show="">
-    <h3 className="flex h-6 items-center pl-4 text-tiny font-normal text-muted-foreground">{t("cam.show")}</h3>
+    <JobHeading>{t("cam.show")}</JobHeading>
     <ul>
       {gates.map((gate) => {
         const away = !gate.on;
         const eye = t(away ? "tree.reveal" : "tree.hide");
         return <li key={gate.id} className="min-w-0">
-          <TreeRowSurface dense className="group/row gap-0 pr-0" style={{ paddingLeft: TREE_INDENT_PX, "--row-actions": ROW_ACTIONS_WIDTH }}
-            data-cam-gate={gate.id} data-cam-hidden={away ? "" : undefined}>
-            <TreeRowGuides depth={1} column={16} />
-            <span className="w-4 shrink-0" aria-hidden="true" />
+          <TreeRowSurface dense depth={1} actions={1} className="group/row" data-cam-gate={gate.id} data-cam-hidden={away ? "" : undefined}>
+            <TreeRowGlyph />
             <TooltipHint content={gate.hint}>
               <span className={cn("flex h-full min-w-0 flex-1 items-center pr-2", away ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover,
                 away && "text-muted-foreground")}>
                 <TreeRowLabel className="flex-1">{gate.title}</TreeRowLabel>
               </span>
             </TooltipHint>
-            <div data-row-actions="" className={treeRowActionsClass(away)}>
+            <TreeRowActions persistent={away}>
               <TooltipHint content={eye}>
                 <Button type="button" variant="ghost" size="icon-xs" aria-label={t(away ? "tree.revealNamed" : "tree.hideNamed", { name: gate.title })} aria-pressed={away}
                   className="h-5 w-4 text-muted-foreground" onClick={() => onToggleGate(gate.id, away)}>
                   {away ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
                 </Button>
               </TooltipHint>
-            </div>
+            </TreeRowActions>
           </TreeRowSurface>
         </li>;
       })}
@@ -205,8 +207,7 @@ function JobShow({ gates, onToggleGate }) {
 }
 
 /**
- * A CAM result's **Job**, a section of the file sidebar (its tile a tree's, named Job), there whatever tool is in
- * hand: the verdict first, its errors under it, then each setup with its operations under it (the plain word, the
+ * A CAM result's **Job**, a tab of the view's panel, there whatever tool is in hand: the verdict first, its errors under it, then each setup with its operations under it (the plain word, the
  * tool, the time), in the job's order, then the job's tools with their speeds, then what the view shows of the job
  * (`gates`), and at its foot the job's safety sentence, always shown. Every setup, operation, tool and error row is a choice (`onChoose(id)`; `chosen` is the row chosen): it
  * isolates its paths, and Quick Edit gets its faces and its sentence as a chip. An operation's swatch is its paths'

@@ -1,4 +1,0 @@
-interface:
-  display_name: "SRDF"
-  short_description: "Author and validate MoveIt2 SRDF semantics."
-  default_prompt: "Use $srdf to author or edit the MoveIt2 SRDF for this URDF as direct XML, validate it against the URDF, and show me the result."

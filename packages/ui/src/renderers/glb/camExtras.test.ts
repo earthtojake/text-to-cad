@@ -41,7 +41,7 @@ it('is no job for a plain GLB, nor for one that only names the generator or only
 });
 
 it('refuses a damaged job, naming what is missing, never drawing a default in its place', () => {
-  // Each a value cad cam always writes: gone, or of the wrong kind.
+  // Each a value a plan always writes: gone, or of the wrong kind.
   const damaged: [string, (extras: any) => void][] = [
     ['cam.safety is not text', (extras) => { delete extras.safety; }],
     ['cam.verdict is not an object', (extras) => { extras.verdict = 'bad'; }],
@@ -60,7 +60,7 @@ it('refuses a damaged job, naming what is missing, never drawing a default in it
     expect(() => readCamJob(camScene({ extras }))).toThrow(CamResultError);
     expect(() => readCamJob(camScene({ extras }))).toThrow(`This CAM result is damaged: ${said}.`);
   }
-  // What cad cam writes only where there is some reads as nothing: an operation's name, a file's one tool.
+  // What a plan writes only where there is some reads as nothing: an operation's name, a file's one tool.
   const extras = camExtras();
   extras.posts[0].tool = null;
   expect(readCamJob(camScene({ extras }))!.posts[0].tool).toBe('');

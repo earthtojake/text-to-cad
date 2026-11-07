@@ -4,7 +4,7 @@ An operation's commands (``[name, {word: value}]``, as ``cad/freecad/_job.py`` h
 rapids, ``G1`` feeds, ``G2``/``G3`` arcs in the XY plane (``I J`` the centre from the start, a helix with ``Z``),
 and the drilling cycles ``G81``/``G82``/``G83`` (to ``Z`` from ``R``, back to ``R`` under ``G99`` or to where the cycle
 began under ``G98``). Coordinates are absolute (``G90``); FreeCAD's feeds are mm/s, as its posts read them. Anything
-else (``G91``, another plane) is an error: a move cad cam cannot read is a move it cannot check.
+else (``G91``, another plane) is an error: a move CAM cannot read is a move it cannot check.
 
 :func:`read` turns them into :class:`Moves`: sample points (arcs within :data:`CHORD_MM`), each with whether the move
 ending there is a rapid, its operation and its time. Stdlib at import; numpy inside.
@@ -97,7 +97,7 @@ def read(operations: list[tuple[int, list]], start: tuple[float, float, float], 
                 go(target, False, op, feed)
             elif name in ("G2", "G02", "G3", "G03"):
                 if "K" in words and abs(words["K"]) > 1e-9 and ("I" not in words and "J" not in words):
-                    raise ValueError(f"operation {op}: an arc outside the XY plane, which cad cam does not read")
+                    raise ValueError(f"operation {op}: an arc outside the XY plane, which CAM does not read")
                 centre = (position[0] + words.get("I", 0.0), position[1] + words.get("J", 0.0))
                 arc_start = tuple(position)
                 for point in _arc(arc_start, target, centre, name in ("G2", "G02")):
@@ -112,7 +112,7 @@ def read(operations: list[tuple[int, list]], start: tuple[float, float, float], 
                 target = [x, y, initial if back_to_start else retract]
                 go(target, True, op, None)
             else:
-                raise ValueError(f"operation {op}: FreeCAD wrote {name}, which cad cam does not read")
+                raise ValueError(f"operation {op}: FreeCAD wrote {name}, which CAM does not read")
             position = list(points[-1]) if name not in _CYCLES else target
     return Moves(points=np.asarray(points, dtype=float), rapid=np.asarray(rapid, dtype=bool),
                  op=np.asarray(ops, dtype=np.int64), t=np.asarray(times, dtype=float))

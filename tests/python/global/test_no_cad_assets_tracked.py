@@ -44,10 +44,10 @@ ALLOWED: tuple[tuple[str, int, str], ...] = (
      "make_fixtures.py writes them and test_robot_payload.py holds them current, for JS tests that cannot "
      "run the engine"),
     ("packages/ui/src/renderers/glb/__tests__/ready.cam.glb", 64 * KIB,
-     "a real `cad cam plan` result, ready to cut (the part, the stock and two tools' toolpaths), the CAM "
+     "a real `cad step cam --job` result, ready to cut (the part, the stock and two tools' toolpaths), the CAM "
      "viewer's JS tests read; a JS test cannot run FreeCAD"),
     ("packages/ui/src/renderers/glb/__tests__/fix.cam.glb", 16 * KIB,
-     "a real `cad cam plan` result refused by a reach check, the CAM viewer's JS tests read; a JS test cannot run "
+     "a real `cad step cam --job` result refused by a reach check, the CAM viewer's JS tests read; a JS test cannot run "
      "FreeCAD"),
     ("packages/ui/src/renderers/dxf/__fixtures__/*.dxf", TINY,
      "the DXF renderer's test drawings; make_fixture.py writes them, and the JS tests that open them "

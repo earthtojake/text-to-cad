@@ -207,8 +207,10 @@ class EnginePortTest(unittest.TestCase):
         port = held_port(self)
         done = self.started(CAD_ENGINE_PORT=str(port))
         self.assertEqual(done.returncode, 1, done.stdout)
-        (said,) = done.stderr.strip().splitlines()[-1:]
-        self.assertRegex(said, rf"^CAD Viewer: port {port} is held by (.+ \(pid (\d+)\)|another process): "
+        found = json.loads(done.stdout)  # the launch answers in JSON: its failure is its one document there
+        said = found["error"]
+        self.assertEqual(found["reason"], "failed")
+        self.assertRegex(said, rf"^port {port} is held by (.+ \(pid (\d+)\)|another process): "
                                r"stop it, or start the server with another CAD_ENGINE_PORT$")
         if os.name != "nt":  # the system names the holder: this process
             self.assertIn(f" (pid {os.getpid()}): ", said)
@@ -226,8 +228,7 @@ class EnginePortTest(unittest.TestCase):
         done = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--api-only", "--json", "--port", str(port)],
                                  env=self.env, cwd=self.root)
         self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertRegex(done.stderr.strip().splitlines()[-1],
-                         rf"^CAD Viewer: port {port} is held by .+: stop it, or pass another --port$")
+        self.assertRegex(json.loads(done.stdout)["error"], rf"^port {port} is held by .+: stop it, or pass another --port$")
         after = engine_daemon.run([sys.executable, "-c", "from cad.engine import client; "
                                    "print((client.request({'op': 'pid'}, start=False) or {}).get('pid'))"], env=self.env)
         self.assertEqual(after.stdout.strip(), before.stdout.strip(), "the same engine answers")
@@ -385,10 +386,15 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(self.ask(moved["port"], f"/api/v1/server?token={link}")[0], 200)
         self.stop()
         # --port on ``cad server`` outranks CAD_ENGINE_PORT; --rotate-token retires every link
-        # and every session: each page then needs a new link.
+        # and every session: each page then needs a new link. It destroys, so it asks first: where no one
+        # can be asked (here), nothing is replaced and nothing starts without --yes.
         other = free_port()
         self.env["CAD_ENGINE_PORT"] = str(named)
-        self.server("--port", str(other), "--rotate-token")
+        asked = self.cli("server", "--port", str(other), "--rotate-token")
+        self.assertEqual(asked.returncode, 2, asked.stderr)
+        self.assertIn(f"`python -m cad_server.engine server --rotate-token --port {other} --yes` says yes", asked.stderr)
+        self.assertEqual(self.token(), first["token"])
+        self.server("--port", str(other), "--rotate-token", "--yes")
         for headers in ({"Cookie": cookie}, {}):
             self.assertEqual(self.ask(other, "/" if headers else f"/?token={link}", Sec_Fetch_Dest="document",
                                       **headers)[::2], (403, TOKEN_NEEDED_PAGE))
@@ -396,7 +402,7 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(rotated["port"], other)
         self.assertNotEqual(rotated["token"], first["token"])
         self.assertEqual(self.token(), rotated["token"])
-        # Refused while an engine runs, which keeps the token it started with.
+        # Refused while an engine runs, which keeps the token it started with -- before anything is asked.
         refused = self.cli("server", "--rotate-token")
         self.assertEqual(refused.returncode, 1)
         self.assertIn("run cad stop first", refused.stderr)

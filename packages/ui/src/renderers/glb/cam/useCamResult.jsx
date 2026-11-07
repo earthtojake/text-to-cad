@@ -5,9 +5,9 @@ import { useI18n } from "@cad/ui/i18n";
 import { carriesCamJob } from "./detect.js";
 
 /**
- * What GlbRenderer needs to show a CAM result (`cad cam plan`): the result's own viewer, loaded as its own chunk
+ * What GlbRenderer needs to show a CAM result (`cad step cam --job`): the result's own viewer, loaded as its own chunk
  * (`camView.jsx`), the job read from the file, what the view shows of its paths, stock and tool, the
- * routines that run the cut, and Job, a section of the file sidebar whose rows are Quick Edit's chips. A GLB that is
+ * routines that run the cut, and Job, a tab of the view's panel whose rows are Quick Edit's chips. A GLB that is
  * not a result gets nulls throughout.
  *
  * `useCamResult` runs before the shell is made (what the shell is given), `useCamChrome` after it (the sidebar
@@ -27,7 +27,7 @@ export const loadCamView = () => import("../camView.jsx").then((module) => { cam
 /**
  * The CAM result viewer for a scene that carries a job (`kit`), loaded the first time one does, and the job read from
  * the scene (`cam`); `pending` while it loads. A plain GLB's `kit` and `cam` are null. Should the chunk fail to load,
- * or the job be damaged (`CamResultError`: something cad cam always writes is missing), `failed` is the error: the
+ * or the job be damaged (`CamResultError`: something a plan always writes is missing), `failed` is the error: the
  * result is not drawn as a plain GLB, which would hide its verdict, but refused as a file that failed to load.
  */
 export function useCamView(root) {
@@ -131,7 +131,7 @@ export function useCamResult({ cv, job, scene, view, shellRef }) {
   };
   const paint = useCallback(() => paintRef.current?.(), []);
   useEffect(() => { paint(); }, [cam, shown, isolate, paint]);
-  // Simulate, and one per setup, among the file's routines (the file sidebar's Animation section): the paths drawn up
+  // Simulate, and one per setup, among the file's routines (the view's Animation section): the paths drawn up
   // to the moment and the tool on them; with motion reduced, one operation a second.
   const ownClips = useMemo(() => (cam ? cv.camClips(cam, (moment) => { momentRef.current = moment; paint(); }, { reducedMotion, t }) : EMPTY),
     [cam, paint, reducedMotion, t]);
@@ -142,7 +142,7 @@ export function useCamResult({ cv, job, scene, view, shellRef }) {
 }
 
 /**
- * A CAM result's chrome, after the shell, or null for any other GLB: Job, its file sidebar section (`sidebar`); the
+ * A CAM result's chrome, after the shell, or null for any other GLB: Job, its tab of the view's panel (`sidebar`); the
  * chosen row as Quick Edit's chip (`chips`, with `references`); and what is drawn over the viewport (`overlay`): the
  * toolpaths and the tool, and the readout while a routine plays.
  */

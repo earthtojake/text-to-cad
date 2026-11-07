@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 
-from cad.sdf_validation import validate_sdf_xml
+from cad.sdf._validation import validate_sdf_xml
 
 
 def _model(body: str, *, name: str = "edge_bot", version: str = "1.12") -> str:

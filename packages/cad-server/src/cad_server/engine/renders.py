@@ -117,6 +117,11 @@ class Renders:
         its reader, asked for a frame. ``progress`` as ``draw`` takes it."""
         if progress is not None:
             progress.stage("scene", detail=path.name)
+        if path.suffix.lower() == ".kicad_pcb":
+            # Its pours KiCad's refill, kept by its bytes for the render process to draw (``boards.prepare``).
+            from cad_server._internal.boards import prepare
+
+            prepare(path)
         render, answer, timings = self._frame(f"file:{path}", str(path), still, lambda held: self._open(held, path),
                                               progress)
         return self._drawn(render, answer, timings)

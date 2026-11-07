@@ -29,7 +29,8 @@ FULL = FinishedMaterial(metals.aluminum().material, pbr=PbrProperties.create(
 SOURCE = '''
 import build123d as bd
 from bd_materials import metals
-from cad import memo, paint, xbf, glb, step
+from cad import xbf, glb, step
+from cad.build123d import memo, paint
 
 FINISH = metals.aluminum()
 FINISH.pbr = FINISH.pbr.override(roughness=ROUGHNESS, anisotropy=0.4,

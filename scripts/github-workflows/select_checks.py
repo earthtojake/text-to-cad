@@ -22,7 +22,7 @@ module's code would.
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
-    cam                           cam (the CAM suites, with FreeCAD installed)
+    cam                           cam (the CAM suite, with FreeCAD installed)
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -61,7 +61,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("cam", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
+FLAGS = ("cam", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,9 +109,8 @@ HEAVY_POLICY = {
 }
 # Skill suites that need nothing installed: they read their skill's files.
 LIGHT_SKILL_TESTS = (
-    f"{SKILL_SUITES}/gcode",
+    f"{SKILL_SUITES}/print3d",
     f"{SKILL_SUITES}/sendcutsend",
-    f"{SKILL_SUITES}/step-parts",
 )
 
 # Whatever runs the packages: their suites on both platforms (the engine's, the viewer backend's
@@ -199,6 +198,36 @@ def _shim_change(path: str) -> Select:
 # (``cad_server.viewer.xbf``), the CAD app's views open them through the viewer's routes, and the
 # library's root names are its. A change to it reaches whatever the packages reach.
 ENGINE_CODE = (f"{LIBRARY_SRC}/engine/**", f"{SERVER_SRC}/engine/**")
+# Native KiCad boards and schematics: the library's readers, their flat stills, their document types
+# (cad.kicad_pcb, cad.kicad_sch) and the kicad integration (kicode's kicad-cli found and run, by the one helper
+# for external programs: DRC, ERC, the exports), and the server's commands and the environment of cad[kicad]
+# it runs them in, `cad run kicad-cli` among them (cad run and the integrations table it reads). Each also reaches what its package reaches (the rules below); the KiCad job, which makes
+# that environment, runs on these, its own suite and runner, and a full run.
+KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/render/board.py",
+              f"{LIBRARY_SRC}/engine/render/schematic.py",
+              f"{LIBRARY_SRC}/kicad_pcb/**", f"{LIBRARY_SRC}/kicad_sch/**", f"{LIBRARY_SRC}/kicad/**",
+              f"{LIBRARY_SRC}/_internal/programs.py",
+              f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/boards.py",
+              f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/cli/run.py",
+              f"{LIBRARY_SRC}/_internal/integrations.py",
+              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
+KICAD_SUITE = "tests/python/packages/kicad"
+# A CAM job (cad <type> cam): its operation and orchestration, the freecad integration, its result type, the two
+# types that answer it, and the server's command and the environment it runs a job in. Each also reaches what its
+# package reaches; the cam job, which installs FreeCAD, runs on these, its own suite and runner, and a full run.
+CAM_CODE = (f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**", f"{LIBRARY_SRC}/results.py",
+            f"{LIBRARY_SRC}/step/**", f"{LIBRARY_SRC}/xbf/**", f"{LIBRARY_SRC}/_internal/document_type.py",
+            f"{LIBRARY_SRC}/_internal/operation.py", f"{LIBRARY_SRC}/_internal/programs.py",
+            f"{LIBRARY_SRC}/_internal/integrations.py", f"{LIBRARY_SRC}/_internal/refused.py", f"{LIBRARY_SRC}/registry.py",
+            f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/_internal/integration_env.py",
+            f"{SERVER_SRC}/_internal/base.py")
+# What a job reads a part, finds FreeCAD and writes its result through, of the engine's and shared modules.
+CAM_SHARED = (f"{LIBRARY_SRC}/engine/model.py", f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/reader.py",
+              f"{LIBRARY_SRC}/engine/refs.py", f"{LIBRARY_SRC}/engine/kernel/imported.py",
+              f"{LIBRARY_SRC}/engine/kernel/memo.py", f"{LIBRARY_SRC}/engine/executables.py",
+              f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/_internal/atomic_replace.py",
+              f"{SERVER_SRC}/_internal/cli_from_function.py")
+CAM_SUITE = "tests/python/packages/cam"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen",)
@@ -255,37 +284,23 @@ RULES: tuple[Rule, ...] = (
         "scripts/build/**",              # core's and ui's library build
     ), EVERYTHING),
 
-    # What CAM imports from the engine and beside it, and the read a part goes through (model's
-    # read_step and read_xbf -> document -> the reader process, held by the kernel's memo): a
-    # change there reaches CAM's plans, which only the cam job (with FreeCAD) runs. Before the
-    # engine's final rule, which would stop here.
-    Rule((
-        f"{LIBRARY_SRC}/engine/model.py", f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/reader.py",
-        f"{LIBRARY_SRC}/engine/refs.py", f"{LIBRARY_SRC}/engine/kernel/imported.py",
-        f"{LIBRARY_SRC}/engine/kernel/memo.py", f"{LIBRARY_SRC}/engine/executables.py",
-        f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/_internal/atomic_replace.py",
-        f"{LIBRARY_SRC}/_internal/kernel_run.py",
-        f"{LIBRARY_SRC}/results.py", f"{SERVER_SRC}/_internal/cli_from_function.py",
-        f"{SERVER_SRC}/_internal/base.py",
-    ), select(flags=["cam"])),
-
     # The packages, and the runtime bundle the server executes. The viewer's backend, the CAD
-    # app's server and the shim reach only what names them (above).
+    # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
+    # job too, beside what its package reaches.
+    Rule(KICAD_CODE, select(flags=["kicad"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(SHIM_CODE, _shim_change, final=True),
+    # What CAM imports from the engine and beside it: a change there runs its plans too. Before the engine's final
+    # rule, which adds the rest.
+    Rule(CAM_SHARED, select(flags=["cam"])),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
          CADGEN_CONSUMERS),
-    # CAM's plans need FreeCAD, which no other job installs: it, its commands, the result types it
-    # returns, its suites and their fixtures, and its skill.
-    Rule((
-        f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**", f"{LIBRARY_SRC}/_internal/programs.py",
-        f"{LIBRARY_SRC}/cam.py", f"{SERVER_SRC}/cli/cam_*",
-        f"{SERVER_SRC}/_internal/kernel_verb.py", f"{CADGEN_SUITE}/cad/cam/**", "tests/python/support/cam_fixtures.py",
-        "skills/cam/**",
-    ), select(flags=["cam"])),
+    # CAM's code runs what its package runs, and the cam job, which installs FreeCAD.
+    Rule(CAM_CODE, select(flags=["cam"])),
+    Rule((f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**"), select(skills=[f"{SKILL_SUITES}/cam"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
@@ -301,23 +316,27 @@ RULES: tuple[Rule, ...] = (
     # the payload suite asserts they are current.
     Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
          select(cadgen=[f"{CADGEN_SUITE}/cad_server/test_robot_payload.py"])),
+    # The board renderer's fixture is the test board's plot payload: the plot suite asserts it is current.
+    Rule(("packages/ui/src/renderers/board/__fixtures__/**",),
+         select(cadgen=[f"{CADGEN_SUITE}/cad/test_pcb_plot.py"])),
     Rule(("tests/browser/**",), select(flags=["web_viewer", "packaging"])),
 
-    # Tests: a test file runs itself.
+    # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
+    # installed), never the package jobs'.
+    Rule((f"{CAM_SUITE}/**", "scripts/test/test-cam.sh", "tests/python/support/cam_fixtures.py"), select(flags=["cam"]),
+         final=True),
+    Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
 
     # Skills. Their prose and metadata are read by the policy contracts (light, always): the
-    # commands a skill documents among them; scripts by their skill's suite.
+    # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
-    Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
-    Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
-    # The cam skill's pages are checked against the job vocabulary the library reads.
-    Rule(("skills/cam/**",), select(cadgen=[f"{CADGEN_SUITE}/cad/cam/test_cam_skill.py"])),
+    Rule(("skills/cam/**",), select(skills=[f"{SKILL_SUITES}/cam"])),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(flags=["cam"], cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
