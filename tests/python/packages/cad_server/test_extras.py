@@ -253,7 +253,10 @@ class ChoosingTest(unittest.TestCase):
         self.write("attribute.py", "import cad.kicad_pcb\n\nwith cad.kicad_pcb.edit('x.kicad_pcb') as b:\n    pass\n")
         self.write("schematic.py", "from cad.kicad_sch import edit\n\nwith edit('d.kicad_sch') as s:\n    pass\n")
         self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
+        self.write("cq.py", "import cadquery as cq\nfrom cad import model\n\nmodel(cq.Workplane().box(1, 1, 1), name='b')\n")
         self.assertEqual(scan.scan(script=self.folder / "model.py"), {"build123d", "kicad"})
+        self.assertEqual(scan.scan(script=self.folder / "cq.py"), {"cadquery"}, "CadQuery alone: no kernel beside it")
+        self.assertEqual(self.spec("cq.py").integrations, ("cadquery",))
         self.assertEqual(scan.scan(script=self.folder / "plain.py"), set(), "the core alone")
         self.assertEqual(scan.scan(script=self.folder / "attribute.py"), {"kicad"})
         self.assertEqual(scan.scan(script=self.folder / "schematic.py"), {"kicad"}, "a schematic's edit, as a board's")
@@ -269,6 +272,13 @@ class ChoosingTest(unittest.TestCase):
         self.assertEqual(self.spec("model.py").integrations, ("build123d", "kicad"))
         self.assertTrue(self.spec("--with", "build123d", "plain.py").integrations == ("build123d",),
                         "a requirement that is an integration's distribution is that integration")
+
+    def test_a_distribution_of_a_given_integration_pulls_no_other_in(self) -> None:
+        # CadQuery's OCP build is CadQuery's and the kernel's both: in an environment made for cadquery it is
+        # CadQuery's own, and the kernel (which could not be installed beside it) is never resolved again for.
+        self.assertEqual(extras.pulled({"cadquery", "cadquery-ocp", "cadquery_ocp_proxy", "numpy"}, ("cadquery",)), [])
+        self.assertEqual(extras.pulled({"cadquery-ocp"}, ()), ["build123d"], "alone, an OCP build is the kernel's")
+        self.assertEqual(extras.pulled({"kicode-pcb", "cadquery-ocp-novtk"}, ("build123d",)), ["kicad"])
 
     def test_a_name_of_cad_s_needs_what_the_registry_and_the_alias_table_say(self) -> None:
         # A model that reads a STEP and never imports build123d itself still needs it (the reader's integration,

@@ -102,7 +102,14 @@ class Producer:
     the values it takes (``accepts``, in words), the code that writes the file (``writer``), and the parts
     of the type's content it provides. A producer regenerates its file from code: the type's decorator is
     the engine's (``cad.engine.model``), the function a model, and its result is checked against the matchers
-    when it is built."""
+    when it is built.
+
+    A ``portable`` producer takes a value of another kernel's build than the engine's (a CadQuery value,
+    whose OCP is not the kernel's): its ``writer`` is the function that describes the value portably,
+    ``(value, name) -> (header, bytes)`` (``cad.engine.portable``), which the integration's own worker (a
+    ``@model`` function's result, ``cad.cadquery._worker``) or ``model(value, name=...)`` hands the engine,
+    whose kernel process makes the document of it. Such a value is never a kernel worker's result: a kernel
+    worker runs the engine's kernel alone."""
 
     document_type: str
     integration: str
@@ -110,6 +117,7 @@ class Producer:
     matcher: Callable[[Any], bool] = field(compare=False, repr=False)
     writer: str
     provides: tuple[str, ...]
+    portable: bool = False
 
 
 @dataclass(frozen=True)
@@ -306,6 +314,20 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",)),
+    # CadQuery pins an OCP build of its own (7.9) and the kernel another (8.0), both the one `OCP` module: a
+    # CadQuery program runs in the environment of cad[cadquery], never in a worker, and hands its result over
+    # (model(value, name=...)) as a portable description the engine's kernel process makes the document of.
+    # `OCP` stays the build123d integration's module: a CadQuery script that imports it directly asks for
+    # both, and uv refuses the resolution in one line. CadQuery's OCP build (cadquery-ocp, with its proxy) is
+    # CadQuery's identity as much as the kernel's: in an environment made for cadquery it is CadQuery's own,
+    # never the kernel pulled in (``cad_server._internal.extras.pulled``).
+    "cadquery": Integration(
+        "cadquery", "CadQuery, a Python CAD library on an OCP build of its own: a Workplane, Shape, Sketch or "
+                    "Assembly a CadQuery program holds is handed over to the engine as a document, "
+                    "model(value, name=...), from the environment of cad[cadquery]",
+        extra="cadquery", process="separate",
+        modules=("cadquery",), distributions=("cadquery",),
+        identity=("cadquery", "cadquery-ocp", "cadquery-ocp-proxy")),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
@@ -336,8 +358,9 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
+    from cad.cadquery._producers import PRODUCERS as cadquery
 
-    return build123d
+    return (*build123d, *cadquery)
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -390,6 +413,10 @@ def help_text(document_type: str) -> str:
     elif producers and not entry.has_file:
         lines.append("made by:")
         for producer in producers:
+            if producer.portable:
+                lines.append(f"  {entry.id}(value, name=...) handing over {producer.accepts} "
+                             f"({producer.integration}: {', '.join(producer.provides)})")
+                continue
             lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "
                          f"({producer.integration}: {', '.join(producer.provides)})")
     elif producers:

@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "for_command", "for_distribution", "for_module", "for_name", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "for_command", "for_distribution", "for_distributions", "for_module",
+           "for_name", "missing"]
 
 
 @dataclass(frozen=True)
@@ -111,10 +112,18 @@ def for_name(name: str) -> str | None:
     return REGISTERED[needed].extra if needed is not None else None
 
 
-def for_distribution(name: str) -> str | None:
-    """The integration a distribution (any spelling of its name) is part of, or None."""
+def for_distributions(name: str) -> tuple[str, ...]:
+    """Every integration a distribution (any spelling of its name) is part of, in the table's order: an OCP
+    build is the kernel's and CadQuery's both (``cadquery-ocp``); most are one's."""
     normal = _normal(name)
-    return next((key for key, found in INTEGRATIONS.items() if normal in found.distributions), None)
+    return tuple(key for key, found in INTEGRATIONS.items() if normal in found.distributions)
+
+
+def for_distribution(name: str) -> str | None:
+    """The integration a distribution (any spelling of its name) is part of -- the first, where it is part of
+    several (``for_distributions``) -- or None."""
+    found = for_distributions(name)
+    return found[0] if found else None
 
 
 def for_command(name: str) -> str | None:

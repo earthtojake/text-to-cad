@@ -850,27 +850,44 @@ class Daemon:
             return None, None
         return executable, f"{os.path.normcase(os.path.realpath(prefix))}\0{named.get('release')}"
 
+    @staticmethod
+    def service_of(request: dict[str, Any]) -> str:
+        """The service a build's worker is: the kernel's (``worker``), or the CadQuery worker (``cadquery``)
+        for an order from an environment whose contract names CadQuery's kernel (``contract.CADQUERY``: a
+        ``cad[cadquery]`` environment ``cad run`` made), whose values the documents worker makes the
+        documents of (``models.Models.embody``)."""
+        from cad.engine.contract import CADQUERY
+
+        contract = (request.get("interpreter") or {}).get("contract")
+        return "cadquery" if isinstance(contract, dict) and contract.get("kernel") == CADQUERY else "worker"
+
+    @staticmethod
+    def kernel_less(worker: Process | None) -> bool:
+        """Whether ``worker`` holds no document of the engine's kernel (the CadQuery worker): what it built
+        is held whole by the daemon, and nothing is asked of it but builds."""
+        return worker is not None and worker.service.name == "cadquery"
+
     def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
               loading: Callable[[str], None] | None = None, python: str | None = None,
-              python_key: str | None = None) -> Process:
+              python_key: str | None = None, service: str = "worker") -> Process:
         """The warm worker of a script (by its path, and the caller's ``python`` and its environment's key
         where its build named one: ``caller``) or of the documents no worker built (``documents``), for one
         request: waiting its turn, started when none is alive (``Supervisor.lease``); ``loading`` as there.
-        ``release`` it after."""
-        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python,
+        ``service``: the kernel's worker, or the CadQuery worker (``service_of``). ``release`` it after."""
+        return self.supervisor.lease(service, script, environment, cwd, loading, python=python,
                                      python_key=python_key)
 
     def release(self, worker: Process) -> None:
         self.supervisor.release(worker)
 
     def behind(self, key: str, send: Callable[[dict[str, Any]], None],
-               python_key: str | None = None) -> tuple[Process, float] | None:
+               python_key: str | None = None, service: str = "worker") -> tuple[Process, float] | None:
         """A build request that will wait for the build of its script already running (a rerun
         after a client its shell's time limit killed: that build goes on): said to its client at
         once, on stderr, and the running build's progress frames sent on to it until its own turn
         (``Supervisor.follow``). The worker and how long its build had run; None when none runs.
         Nothing is cancelled."""
-        found = self.supervisor.follow("worker", key, send, "build", python_key)
+        found = self.supervisor.follow(service, key, send, "build", python_key)
         if found is None:
             return None
         worker, began = found
@@ -886,8 +903,8 @@ class Daemon:
         it (a ``where`` question, ``build.made_by``): None for a document no live worker built -- one
         served cold."""
         worker = self.builders.get(ident)
-        if worker is None or not self.supervisor.holds(worker):
-            return None
+        if worker is None or not self.supervisor.holds(worker) or self.kernel_less(worker):
+            return None  # a CadQuery worker keeps no trace: its documents name no feature (``made_by: null``)
         answer = worker.question({"op": "where", "doc": ident, "key": key, "kind": kind, "ordinal": ordinal})
         return None if answer is None else answer.get("where")
 
@@ -959,6 +976,13 @@ class Daemon:
         if record is not None:
             self.models.cache.touch(ident)  # a read: its idle timer starts again
             worker = record["worker"]
+            if self.kernel_less(worker):
+                # Built by the CadQuery worker: the daemon holds its document whole (``Models.embody``), and
+                # the worker nothing of it -- read as a drained document is, through the documents worker.
+                held = self.held_document(ident)
+                if held is None:
+                    raise self.models.not_held(ident)
+                return held
             if worker is not None and self.supervisor.holds(worker):
                 # Asked of the worker that built it (``via``: a child model's is its parent's script's).
                 return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
@@ -1256,7 +1280,8 @@ class Daemon:
             return self._call(request, order, send)
         if op == "shape":
             # A shape handed over (``api.hand_over``): held as a drained document is, nothing to run; its
-            # document was written in its caller's Python, and is read in the server's.
+            # document was written in its caller's Python, and is read in the server's -- or, from a kernel
+            # that is not the engine's (a CadQuery program's), described portably and made in the server's.
             try:
                 self.contracted(request)
                 send(self.models.hand_over(request))
@@ -1276,15 +1301,16 @@ class Daemon:
             try:
                 script = request["script"]
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
+                service = self.service_of(request)  # the kernel's worker, or the CadQuery worker
                 for attempt in (1, 2):
                     worker = None
-                    ahead = self.behind(key, send, python_key) if attempt == 1 else None
+                    ahead = self.behind(key, send, python_key, service) if attempt == 1 else None
                     waited = time.monotonic()
                     try:
                         try:
                             worker = self.lease(key, request.get("env") or {}, cwd,
                                                 lambda text: send({"log": text, "stream": "notice"}), python,
-                                                python_key)
+                                                python_key, service)
                         finally:
                             if ahead is not None and send in ahead[0].followers:
                                 ahead[0].followers.remove(send)
@@ -1323,7 +1349,13 @@ class Daemon:
                                                         "seconds": round(time.monotonic() - waited, 1)}
                         # The program that asked: what a document it built names to build it again.
                         answer["program"] = request.get("program")
-                        self._built(worker, answer)
+                        built_by = worker
+                        if self.kernel_less(worker):
+                            # Its reports are embodied through the documents worker's lease (``Models.embody``):
+                            # this worker's slot goes first, so a cap of one slot never waits on itself.
+                            self.release(worker)
+                            worker = None
+                        self._built(built_by, answer)
                         send(answer)
                         return
                     except Gone as error:

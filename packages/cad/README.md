@@ -57,7 +57,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `cadquery`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -619,6 +619,12 @@ src/cad/
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_molding,
                          #   _printing), and the dfm every 3D type runs with them (_check)
+  cadquery/              # the cadquery integration: a CadQuery Workplane, Shape, Sketch or Assembly
+                         #   described portably (_bridge: the reader's header and one BinTools dump)
+                         #   for the engine's kernel process to make the document of; its producer of
+                         #   the model type (_producers); the CadQuery memo at CadQuery's topology
+                         #   layer (_memo); and the warm worker the engine runs a CadQuery script's
+                         #   @model functions in, in the environment of cad[cadquery] (_worker)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -692,6 +698,52 @@ project, one inside the other, share it, each saved at its own block's end. A sc
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
 made is removed. Exports and checks of the edited file are explicit calls after the block.
+
+## CadQuery
+
+CadQuery is a Python CAD library on an OCP build of its own: CadQuery 2.8 pins `cadquery-ocp` 7.9, the
+kernel (build123d 0.13) `cadquery-ocp-novtk` 8.0, and both are the one `OCP` module, so CadQuery can never
+share a process with the engine's kernel workers. The `cadquery` integration (`cad[cadquery]`: CadQuery and
+the library's core, no kernel) therefore runs separate: a CadQuery model is a `@model` function as any model
+is, and the engine builds it in a warm worker of its own in that environment:
+
+```python
+import cadquery as cq
+from cad import model
+
+
+@model
+def bracket():
+    return cq.Workplane("XY").box(40, 20, 6).faces(">Z").workplane().hole(8)
+
+
+if __name__ == "__main__":
+    bracket()                               # prints how it built, its id and its page
+```
+
+`cad run bracket.py` makes the environment of `cad[cadquery]` from the script's `import cadquery` and runs
+it there; each `@model` call is a build order whose contract names its kernel `cadquery`, and the engine
+routes it to the CadQuery worker (the server's `engine/services.py`, `cad.cadquery._worker`): one per
+script, kept between runs, running the function under the CadQuery memo (`cad.cadquery._memo`, law 5: an
+interception layer at CadQuery's topology layer, keyed by operation, parameters and the shapes given, a hit
+the first run's kernel objects), so an edit costs what it changed and an unchanged run is warm -- the run
+line says it, `bodies 1 run; 0 misses, 25 hits`. The function returns a `Workplane` (the shapes on its
+stack), a `Shape`, a `Sketch` (its faces) or an `Assembly` (its tree: names, colours and the solved
+locations); the integration's producer of the `model` type is portable (law 27, `cad.cadquery._producers`):
+`cad.cadquery._bridge` describes the value as the engine's STEP reader describes a file -- the assembly tree
+as data, every part's shape and placement in one BinTools dump written by CadQuery's own OCP -- and the
+engine's kernel process makes the document of it (the server's `engine/portable.py`), held whole, cached,
+served and exported under the model's ordinary id (`cad model export <id> bracket.step`, `cad model
+snapshot`, `cad model dfm`). The same description is how `model(value, name=...)` hands a value over from a
+script or a REPL. The document is the engine's XCAF, so every file of it is the same translation a
+build123d model's is, and the viewer never asks which library made it. What a CadQuery model lacks: no
+`made_by` and no Quick Edit back into the code (the worker keeps no trace), no `@memo` bodies and no
+cache take-up of an unchanged model (a run always runs it, warm), no file decorators (its files are exports
+of the document), and a child model its body calls is composed into it, not a document of its own; the
+handle a call returns has no `.shape` in the calling process (the value lives in the worker). `cq.Assembly`
+constraints are taken as CadQuery solved them, and CadQuery's own exporters are not run: the engine writes
+every file. A CadQuery script that imports `OCP` directly asks for the kernel's integration beside
+CadQuery's, which uv refuses in one line.
 
 ## Manufacturing checks
 

@@ -755,14 +755,26 @@ def _distributions(path: list[str], prefix: Path) -> set[str]:
     return found
 
 
-def _pulled(env: Path, extras: Iterable[str]) -> list[str]:
-    """The integrations the environment just installed at ``env`` holds a distribution of but was not given
-    (``cad._internal.integrations.for_distribution``): pulled in through another package."""
-    from cad._internal.integrations import for_distribution
+def pulled(names: Iterable[str], extras: Iterable[str]) -> list[str]:
+    """The integrations the distributions ``names`` are of (``cad._internal.integrations.for_distributions``)
+    that were not given (``extras``): pulled in through another package. A distribution that is a given
+    integration's as well as another's -- CadQuery's OCP build is CadQuery's and the kernel's both -- is the
+    given one's, and pulls nothing in."""
+    from cad._internal.integrations import for_distributions
 
     given = set(extras)
-    return sorted({key for name in _distributions(base._path(env), env)
-                   if (key := for_distribution(name)) is not None and key not in given})
+    found: set[str] = set()
+    for name in names:
+        keys = for_distributions(name)
+        if keys and not given.intersection(keys):
+            found.add(keys[0])
+    return sorted(found)
+
+
+def _pulled(env: Path, extras: Iterable[str]) -> list[str]:
+    """The integrations the environment just installed at ``env`` holds a distribution of but was not given
+    (``pulled``): pulled in through another package."""
+    return pulled(_distributions(base._path(env), env), extras)
 
 
 def recipe(installation: base.Installation, spec: Spec | list[str], changed: list[str] | None = None,

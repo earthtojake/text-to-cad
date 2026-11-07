@@ -20,6 +20,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
 | **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `step.read`, `xbf.read` or `stl.read` in the body. | [Inputs](references/model-contract.md#inputs) |
+| **Work on an existing CadQuery model** | `@model` on its functions, run with `cad run`; a warm CadQuery worker. | [CadQuery](references/cadquery.md) |
 | **Resolve a reference from a prompt** | `cad model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |

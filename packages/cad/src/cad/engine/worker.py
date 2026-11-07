@@ -306,6 +306,18 @@ def _neutral_folder() -> str:
     return tempfile.gettempdir()
 
 
+def stand(cwd: str | None, home: str, neutral: str) -> None:
+    """A request's folder (``cwd``, else the worker's ``home``) entered, or, where that folder is gone -- a
+    project folder deleted since the worker started in it -- the engine's own (``neutral``): a request
+    that names no folder is never failed by one that no longer exists."""
+    try:
+        os.chdir(cwd or home)
+    except FileNotFoundError:
+        if cwd:
+            raise
+        os.chdir(neutral)
+
+
 def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, Any]:
     """An ``export`` request: the document -- one this worker holds (``held``: a document named
     by its id, read as it is and never built), a ``Model`` this program built first (its own
@@ -446,9 +458,21 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     part's shape bytes (``[key, size]`` in ``shapes``, the bytes after the line in order)."""
     from cad.engine import build as engine_build
 
+    made: bytes | None = None
+    embodied: dict[str, Any] = {}
     if request.get("document"):
         # The engine's cache file of a document no worker holds: read as a held document's bytes are.
-        source = engine_build.held_source(request.get("payload") or b"", str(request.get("name") or "document"))
+        payload = request.get("payload") or b""
+        if request.get("portable") is not None:
+            # A value of another kernel's build handed over (``api.hand_over``), or a CadQuery worker's
+            # model: described, not written; its document is made here, in this kernel process
+            # (``portable.embody``), its bytes are what the daemon holds of it (``whole``), and its parts
+            # and facts are what the build's report says of it.
+            from cad.engine import portable
+
+            embodied = portable.embody(request["portable"], payload, str(request.get("name") or "document"))
+            made = payload = embodied["xbf"]
+        source = engine_build.held_source(payload, str(request.get("name") or "document"))
     else:
         source = engine_build.held(Path(request["script"]), request["name"])
     if source is None:
@@ -461,12 +485,15 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     answer = {"structure": source.structure, "closure": json.loads(closure) if closure else None,
               "shapes": [[key, len(part)] for key, part in zip(keys, data)],
               "placements": [[list(path), matrix] for path, matrix in source.locals().items()]}
+    if embodied:
+        answer["parts"], answer["facts"] = embodied["parts"], embodied["facts"]
     if request.get("whole"):
         # The drain's: the whole document as the xbf bytes ``@xbf`` writes, after the shapes -- for
-        # one taken from the engine's cache, the bytes it was taken with (a read is never written).
+        # one taken from the engine's cache, the bytes it was taken with (a read is never written); for a
+        # portable description, the bytes made of it here.
         from cad.engine import document
 
-        whole = (None if request.get("document") else engine_build.taken(Path(request["script"]), request["name"])) \
+        whole = made or (None if request.get("document") else engine_build.taken(Path(request["script"]), request["name"])) \
             or document.to_bytes(source.xcaf, source.shapes.values())
         answer["xbf"] = len(whole)
         data.append(whole)
@@ -612,7 +639,7 @@ def main() -> int:
             try:
                 adopt(request.get("env"), own)
                 cwd = request.get("cwd")
-                os.chdir(cwd or home)
+                stand(cwd, home, neutral)
                 if op == "export":
                     # An export's frames, or a snapshot's for a request that draws (``job_progress``).
                     said = job_progress(lambda frame: send({"id": ident, "progress": frame}), request, cwd=cwd)
@@ -648,7 +675,7 @@ def main() -> int:
         try:
             adopt(request.get("env"), own)
             cwd = request.get("cwd")
-            os.chdir(cwd or home)
+            stand(cwd, home, neutral)
             script = Path(request["script"])
             # Where the build is, frame by frame; each report holds its model's last.
             said = progress(ident, script=script, cwd=cwd)
