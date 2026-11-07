@@ -140,6 +140,27 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "blinky-1-current-view.png"),
                                                          "label": "current view", "width": 1600, "height": 1200}])
 
+    def test_a_schematics_view_is_its_plan_view_with_its_sheet_and_names_no_theme(self) -> None:
+        """A schematic's Quick Edit, as a board's: the window as a plan-view camera and the sheet shown, in a
+        job `cad kicad_sch snapshot` takes. A snapshot is light whatever the viewer's theme, so a view that
+        names one is refused as a key that never was."""
+        schematic = self.tmp / "divider.kicad_sch"
+        schematic.write_text("(kicad_sch (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [114, -65, 60], "target": [114, -65, 0], "up": [0, 1, 0], "orthographicHalfHeight": 20}
+        display = {"sheet": "/Load/", "border": False}
+        request = {"name": "divider.kicad_sch", "input": str(schematic), "annotation": ANNOTATION,
+                   "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, _out, prepared] = job_pictures(packet)[0]
+        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, display))
+        self.assertNotIn("output", packet["jobs"][0])
+        dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", dark)
+        self.assertEqual(status, 400, body)
+        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet:")
+
     def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
         """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""
         board = self.tmp / "blinky.kicad_pcb"
