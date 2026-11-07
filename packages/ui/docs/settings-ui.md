@@ -198,7 +198,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   loading is the spinner. A press on a subfolder opens it
   inline, under itself, its rows 10px further in and hung from a faint line under its
   chevron, read once when it first opens; another press closes it, and Right and Left do the
-  same from the keyboard. A double-click opens it in the explorer's place, as a crumb does —
+  same from the keyboard, as in every tree (Right on an open folder into its first row, Left on a
+  row up to its folder's, Home and End to the first and last rows: [Keyboard](#keyboard)). A
+  double-click opens it in the explorer's place, as a crumb does —
   the breadcrumb then names it. The breadcrumb is
   as many of the last three folders as fit whole: every crumb is its folder's whole name, the
   farthest giving way first to the "…" (an ellipsis icon), which lists every folder above the crumbs to jump to,
@@ -236,7 +238,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
   in hand, Projection's row switches the projection as its tile does, and Display's row opens its
-  choices as a nested submenu (`touchStripFit`).
+  choices under it, in More itself, as the app menu's Language does on a phone
+  ([mobile](#the-views-panel-and-the-tool-stack)) (`touchStripFit`).
 - **Sub-toolbar** under the strip, 8px below it, centred: the tool in hand's one row of
   controls (`SubToolbar`, `data-cad-sub-toolbar`), there for as long as the tool is up (see
   [Tools and lifecycle](#tools-and-lifecycle)). Select and Measure have none. On a phone its
@@ -298,9 +301,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   states and never marks one as selected: no state is drawn in the strip's pressed fill or any other, so a
   board seen from the bottom reads by Flip's icon alone, as an orthographic camera does by Projection's (a
   phone's More row is a menu's, ticked while the state holds). A phone has no corner: its view's controls
-  are rows of the strip's More, in the strip's order (Projection, Display, the zoom's submenu, Preview; a
+  are rows of the strip's More, in the strip's order (Projection, Display, the zoom's, Preview; a
   board's View from bottom and 3D view, ticked while they are, each with the icon its tile shows for that
-  state, then Display, whose submenu in 3D ends with the projection, and the zoom's submenu). A view drawn
+  state, then Display, whose choices in 3D end with the projection, and the zoom's). A view drawn
   as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and
   Preview's own controls are its bar's (see [Preview](#camera-animation-and-preview)).
 - **The corner at the left** (`viewportLayout.js`'s `viewCornerLayout`): a host that anchors the cube at the
@@ -779,7 +782,7 @@ file.
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More, in the strip's order: View from bottom and 3D view ticked while they are on, then Display a submenu of the presets (in 3D, then Projection). All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More, in the strip's order: View from bottom and 3D view ticked while they are on, then Display, its row opening the presets under it (in 3D, then Projection). All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
@@ -809,7 +812,9 @@ file.
   the picture. Showing or hiding it is a resize of the canvas, as a 3D viewport's: a view still at
   its fit refits to the room it has now, and a view the person has moved keeps its zoom against
   the fit and the point of the picture at its centre at the centre of the room left
-  (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). Zoom to fit and 100%
+  (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). A flat view is kept with
+  the pane it was framed in (`kit/viewport/flatView.js`), so a file reopened with its panel open (the
+  canvas the whole view until the panel docks) comes back exactly as it was left. Zoom to fit and 100%
   measure the room beside the panel. A file whose panel the person has not opened or closed opens
   it in a view 1024px wide or more and starts it collapsed under that; once they have, the choice is
   the file's at any width. Opened, it docks as it does on a wide view. **On a phone** (under 600px)
@@ -919,7 +924,12 @@ navbar, and Preview's bar in its place, a 48px row of 36px controls; the strip a
 at 375px, its style group under its tools, and a row that wrapped draws no rule between its groups, the line
 break parting them, `SubToolbar`'s `data-wrapped`).
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
-portalled menu, select or hint is the same size as the chrome it opened from. There is no view
+portalled menu, select or hint is the same size as the chrome it opened from. A phone has no room beside
+the app menu or the strip's More for a submenu (one placed beside More, which a board's rows make wide,
+ran off the screen's edge): there a submenu opens in place, its row showing the choices under it, in the
+menu itself and indented, the chevron turning down while they show; a press on the row, or Left, hides
+them again, and each opening of the menu starts them hidden (`primitives/dropdown-menu.jsx`'s
+`DropdownMenuInlineSub`: the app menu's Language, More's Display and Zoom). There is no view
 cube and no view's panel; and
 Quick Edit is a bottom sheet (see
 [Quick Edit](#quick-edit)). The explorer is the same popover, never wider than the window less
@@ -950,7 +960,7 @@ Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
 | The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
-| Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, eased, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
+| Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right; eased as every camera move is, round its target (`kit/camera/runtimeCamera.js`), never through the board: from straight above or below the board turns over about its own top-to-bottom axis, the one the 2D view mirrors across, its eye passing the side it leans to (the screen's right where it leans to neither), and near there the same way. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
 | Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
 | Projection | Display's menu's, after a rule under the presets: Orthographic or Perspective, kept with the file's view |
 | Home | none: Zoom to fit (F, a double-click on empty space under Select, the pill's or the view's menu) frames the board |
@@ -970,7 +980,7 @@ view entered from the 2D view in the same page: a file reopened in 3D opens on i
 picture under it, so leaving it always frames the 2D view on the camera's window, moved or not. Either way the 3D view stays until the 2D canvas has painted
 the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
 The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
-of More, and in 3D Display's submenu ends with Projection.
+of More, and in 3D Display's choices end with Projection.
 
 ## Display settings and section primitives
 
@@ -979,7 +989,7 @@ Preview; a board's after its Flip and 2D/3D — and shows the current mode's sph
 presets have none, Solid's). It opens a stock shadcn dropdown menu
 (`DisplayPopover.jsx`): a muted **Display** label, the modes as a `DropdownMenuRadioGroup`,
 a separator, then **Grid**, a `DropdownMenuCheckboxItem`. On a phone the strip's **More**
-menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`), with no
+menu has a Display row that opens the same list (`DisplayMenuItems`) under it, in More itself, with no
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
@@ -1093,7 +1103,7 @@ Theme:
   before the chevron, centred on the column Theme's last segment and the checkboxes share. A
   phone has no room beside the menu for a submenu: there a press of the same row opens the
   choices under it, in the menu itself (closed each time the menu opens, the chevron turning
-  down while they show), and a choice closes them again.
+  down while they show: `DropdownMenuInlineSub`, as More's Display and Zoom), and a choice closes them again.
   Automatic is the default: the web infers the language from the browser's languages, the CAD
   app from its host's locale (then the frame's browser languages); Simplified script or
   mainland China and Singapore read 简体中文, Traditional script or Taiwan, Hong Kong and Macau
@@ -1200,8 +1210,10 @@ Viewport picks reach individual faces and edges, every one to hand from the star
 Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click, or a row's Isolate,
 isolates a component or subassembly, and the tree brings its row into view (its owners opened);
-double-click on empty space leaves isolation, as do the isolated row's X and the menu's Exit all
-isolates. No bar over the tree says what is isolated: its row does. A double-click on a face,
+double-click on empty space leaves isolation, as do the isolated row's X, the menu's Exit all
+isolates and Escape, and leaving it shuts again what isolating opened (a folded row double-clicked,
+the owners its reveal opened), so the tree is as it was before; a row open before, or opened or shut
+by the person meanwhile, stays as it is. No bar over the tree says what is isolated: its row does. A double-click on a face,
 an edge or ink turns the view square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
 selects nothing: the selection is as its first click found it.
 
@@ -1313,9 +1325,11 @@ label and path — `Snapshot (cad <type> snapshot --annotation):` — or the com
 Cube face, edge and corner clicks turn the view and keep pan and zoom; dragging
 the cube orbits. Reloading the page restores the camera the file on screen was left
 at, and its Display settings, Explode/Clip, the pose, hidden and isolated parts and
-the tree's expansion come back with it. Only the model on screen keeps that view:
-leaving it — for another file or the home — drops it, so opening a file,
-for the first time or again, fits it at the defaults. An update of the model on
+the tree's expansion come back with it. A file left in the page — for another file or the
+home — has its view kept by the page until it closes, and shown again it opens as it was
+left, as a reload opens the file on screen (the tab's record keeps the file on screen's view
+alone, so a reload brings back that one); a file the page has not shown opens fitted, at
+the defaults. An update of the model on
 screen keeps its Display settings, Explode/Clip, hidden and isolated parts and its
 tree, and the pose while its joints are unchanged. The tool, the selection and
 measurements never come back — every open starts in the default tool with nothing
@@ -1338,7 +1352,7 @@ pill (`kit/shell/ZoomControl.jsx`, a floating toolbar drawn as the strip is: [Th
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
 tools do not: Home at its cube, F, a double-click on empty space under Select and the view's menu frame it, and the
 same keys zoom it. A board in 3D keeps its pill, which reads and steps its 3D camera
-(`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom submenu. **100% is the
+(`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom row, its choices opening under it. **100% is the
 model as authored, framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`; a board's
 slab) at the camera's angle — a
 fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which
@@ -1430,7 +1444,8 @@ model starts its routine at rest. Speed and Loop are the file's, one set,
 chosen in Playback settings and kept in its view once chosen — until then the routine's own
 apply. Orbit's speed (1×) and Autoplay are the file's too, remembered between leaving and
 re-entering Preview and across a reload of the tab; whether it orbits is not kept. Another
-file has its own, and a file the tab left starts at the defaults again. Nothing of the
+file has its own, which a file the page left has back when it is shown again, and a file the
+page has not shown starts at the defaults. Nothing of the
 routine — which one, its time, whether it plays — is saved. Orbit is not an animation
 setting.
 
@@ -1505,6 +1520,12 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held. On the Selected pane's switcher, ← and → (and [ and ]) step through the picks
   instead ([Several picked](#the-views-panel-and-the-tool-stack)).
+- **A tree's rows** (the Model tree, the name menu's Files) walk by the keyboard as the WAI-ARIA tree
+  pattern has it, one rule for every tree that walks its rows (`primitives/tree-keys.js`): from the row
+  with the keyboard, Down and Up the next and the previous row on screen, Home and End the first and the
+  last, Right a shut row's opening and an open one's first row, Left an open row's shutting and any other
+  row's owner; Enter and Space are the row's own press. With the keyboard in a row, the arrows are the
+  tree's, never the viewer's orbit.
 - **Undo and Redo** (⌘Z and ⇧⌘Z, Ctrl+Z and Ctrl+Y) walk the view's one history: each piece of
   ink put down, erased, restyled or cleared, and each measurement taken, deleted or cleared. The
   camera, the selection, Display, Explode, Clip, hiding and isolating, and Position's pose are

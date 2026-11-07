@@ -221,11 +221,12 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // Display is a menu from its tile at the strip's end, the modes and the Grid switch
   // (`DisplayPopover.jsx`), portaled out of the pane: a file never opens with it, and it is not a tool.
   // A pane narrower than a phone's breakpoint (each of two side by side) has a phone's strip: the
-  // view's controls are rows of its More menu, Projection and Display nested submenus, Preview an item.
+  // view's controls are rows of its More menu, Projection and Preview items, Display's and the zoom's
+  // choices opened under their rows in More itself (a phone has no room beside More for a submenu).
   const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
   const moreButton = pane => pane.locator('[data-cad-toolbar] [data-strip-more]');
   const moreMenu = page.getByRole('menu', { name: 'More tools', exact: true });
-  const display = page.getByRole('menu', { name: 'Display', exact: true });
+  const display = moreMenu.getByRole('group', { name: 'Display', exact: true });
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
@@ -254,13 +255,19 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // observer and camera event publish before taking the saved snapshot.
   await settle(page);
 
-  // The file goes with its Display menu open, from More (the first pane is phone-wide now too):
-  // Display's submenu lists the modes, then Grid, which toggles and leaves it open.
+  // The file goes with its Display choices open, from More (the first pane is phone-wide now too):
+  // Display's row opens the modes under it, then Grid, which toggles and leaves them open.
   await moreButton(first).click();
-  assert.deepEqual(await moreMenu.getByRole('menuitem').evaluateAll(items => items.map(item => `${item.textContent.trim()}:${item.getAttribute('aria-haspopup') || 'item'}`)),
-    ['Projection:item', 'Display:menu', 'Zoom:menu', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display and Zoom open their submenus');
+  assert.deepEqual(await moreMenu.getByRole('menuitem').evaluateAll(items => items.map(item => `${item.textContent.trim()}:${item.getAttribute('aria-haspopup') || (item.hasAttribute('aria-expanded') ? 'opens' : 'item')}`)),
+    ['Projection:item', 'Display:opens', 'Zoom:opens', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display and Zoom open their choices under them');
   await moreMenu.getByRole('menuitem', { name: 'Display', exact: true }).click();
   await display.waitFor();
+  // One menu, every row of it on screen: nothing is placed beside More, where a phone has no room.
+  assert.equal(await page.getByRole('menu').count(), 1, 'More alone');
+  assert.deepEqual(await moreMenu.locator('[role^=menuitem]').evaluateAll(items => items.filter(item => {
+    const box = item.getBoundingClientRect();
+    return box.left < 0 || box.top < 0 || box.right > window.innerWidth || box.bottom > window.innerHeight;
+  }).map(item => item.textContent.trim())), [], 'every row on screen');
   assert.deepEqual(await display.getByRole('menuitemradio').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
   assert.equal(await display.getByRole('menuitem').count(), 0, 'no settings page');
   await display.getByRole('menuitemcheckbox', { name: 'Grid', exact: true }).click();

@@ -24,6 +24,7 @@ import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
+import { readFlatView } from "../kit/viewport/flatView.js";
 import { usePlotView } from "../kit/viewport/usePlotView.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import SchematicSection, { useSchematicTrees } from "./SchematicSection.jsx";
@@ -69,19 +70,13 @@ const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
 const surroundOf = scheme => appThemeColors(scheme).canvas;
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
-const finite = value => typeof value === "number" && Number.isFinite(value);
-function readTransform(raw) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const { scale, offsetX, offsetY } = raw;
-  return finite(scale) && scale > 0 && finite(offsetX) && finite(offsetY) ? { scale, offsetX, offsetY } : null;
-}
-/** Each sheet's view as the file kept it: a sheet's path to its transform; a sheet at the fit is not kept. */
+/** Each sheet's view as the file kept it (`kit/viewport/flatView.js`'s record): a sheet's path to its view; a sheet at the fit is not kept. */
 function readSheetViews(raw) {
   const views = raw?.views;
   if (!views || typeof views !== "object" || Array.isArray(views)) return [];
-  return Object.entries(views).map(([path, transform]) => [canonicalSheetPath(path), readTransform(transform)]).filter(([, transform]) => transform);
+  return Object.entries(views).map(([path, view]) => [canonicalSheetPath(path), readFlatView(view)]).filter(([, view]) => view);
 }
-const sheetViewsRecord = views => Object.fromEntries([...views].filter(([, transform]) => transform).map(([path, transform]) => [path, { ...transform }]));
+const sheetViewsRecord = views => Object.fromEntries([...views].filter(([, view]) => view).map(([path, view]) => [path, { ...view }]));
 const readSheet = raw => (typeof raw?.sheet === "string" && raw.sheet ? canonicalSheetPath(raw.sheet) : "/");
 const schematicPacketReferences = (references, file) => [...new Set(references
   .filter(reference => reference?.resource?.path === file && reference.target?.kind === "cad-selector")
@@ -96,7 +91,7 @@ function SchematicSurface({ view, data }) {
 
   // ---- the file's view: the sheet shown, its transform, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
-  const [restored] = useState(() => readTransform(stored.camera));
+  const [restored] = useState(() => readFlatView(stored.camera));
   const [sheet, setSheet] = useState(() => readSheet(stored.renderer.schematic));
   const document = useSchematicDocument({ workspace, path: view.file.path, sheet });
   const { file, plot, index, page, shown, alert } = document;
@@ -124,8 +119,8 @@ function SchematicSurface({ view, data }) {
     saveTimer.current = window.setTimeout(() => stateChangeRef.current?.(record), SAVE_DELAY_MS);
   }, []);
   const lastSheet = useRef(null);
-  const rememberView = useCallback(transform => {
-    const camera = transform ? { ...transform } : null;
+  const rememberView = useCallback(moved => {
+    const camera = readFlatView(moved);
     sheetViews.current.set(lastSheet.current ?? sheet, camera);
     save({ camera });
   }, [save, sheet]);

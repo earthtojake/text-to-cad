@@ -494,6 +494,10 @@ export function cancelCameraTransition(runtime, { scheduleIdle = true } = {}) {
   if (!runtime?.cameraTransition) {
     return;
   }
+  // A turn cut short leaves the camera where it is, with the up the move was going to (the world's, which
+  // the orbit controls turn about), not the turn's own of the moment.
+  const { endUp } = runtime.cameraTransition;
+  if (endUp && runtime.camera?.up) runtime.camera.up.copy(endUp);
   runtime.cameraTransition = null;
   if (runtime.controls) {
     runtime.controls.enableDamping = true;
@@ -539,6 +543,54 @@ export function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = 
   return true;
 }
 
+/**
+ * How an eased camera move turns: the camera's whole orientation, from the one on screen to the one it
+ * ends at (its eye on the destination, looking at its target, with its up), interpolated on the shortest
+ * turn, the eye kept on the camera's own back axis from the moving target at the moving distance. So the
+ * eye goes round its target, never through it: a chord from a camera to the camera turned over (Flip
+ * from straight above, or from any camera square to the board's left-to-right axis) passed through the
+ * target and the view jumped a half turn in one frame, and near it whipped round. And the up turns with
+ * the view, so a camera at a pole, where the world's up gives no direction, keeps the screen's up of
+ * the moment. Null where there is nothing to turn about (an eye on its target).
+ *
+ * A half turn has two ways round: it goes the way that takes the eye toward the screen's right, or, where
+ * the eye goes straight up or down the screen, toward its bottom — never the way the arithmetic's sign
+ * happened to give.
+ */
+function cameraTurn(runtime, endPosition, endTarget, endUp) {
+  const THREE = runtime.THREE;
+  const startDistance = runtime.camera.position.distanceTo(runtime.controls.target);
+  const endDistance = endPosition.distanceTo(endTarget);
+  if (!(startDistance > 1e-9) || !(endDistance > 1e-9) || typeof THREE.Quaternion !== "function") return null;
+  const looking = (eye, target, up) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye, target, up));
+  // From the orientation on screen (a turn cut short by another goes on from where it was), unless the camera
+  // was moved without being turned to its target since: then from looking at it.
+  const back = runtime.camera.position.clone().sub(runtime.controls.target).normalize();
+  const from = new THREE.Vector3(0, 0, 1).applyQuaternion(runtime.camera.quaternion).dot(back) > 1 - 1e-6
+    ? runtime.camera.quaternion.clone() : looking(runtime.camera.position, runtime.controls.target, runtime.camera.up);
+  const to = looking(endPosition, endTarget, endUp);
+  if (from.dot(to) < 0) to.set(-to.x, -to.y, -to.z, -to.w);
+  if (from.dot(to) < 1e-9) {
+    // A half turn: about the axis `to · from⁻¹` names, whose sign is the way round.
+    const half = to.clone().multiply(from.clone().invert());
+    const along = new THREE.Vector3().crossVectors(new THREE.Vector3(half.x, half.y, half.z), new THREE.Vector3(0, 0, 1).applyQuaternion(from));
+    const right = along.dot(new THREE.Vector3(1, 0, 0).applyQuaternion(from));
+    const way = Math.abs(right) > 1e-6 ? right : -along.dot(new THREE.Vector3(0, 1, 0).applyQuaternion(from));
+    if (way < 0) to.set(-to.x, -to.y, -to.z, -to.w);
+  }
+  return { from, to, startDistance, endDistance };
+}
+
+/** The orientation `turn` has at `t` (0 to 1), along the way its end was chosen to go round. */
+function turnAt(THREE, turn, t) {
+  const { from, to } = turn;
+  const cos = Math.min(1, Math.max(-1, from.dot(to)));
+  if (cos > 1 - 1e-12) return from.clone();
+  const angle = Math.acos(cos), sin = Math.sin(angle);
+  const a = Math.sin((1 - t) * angle) / sin, b = Math.sin(t * angle) / sin;
+  return new THREE.Quaternion(from.x * a + to.x * b, from.y * a + to.y * b, from.z * a + to.z * b, from.w * a + to.w * b).normalize();
+}
+
 export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   durationMs = VIEW_PLANE_TRANSITION_MS,
   easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
@@ -576,6 +628,7 @@ export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   ) {
     return false;
   }
+  endUp.normalize();
   runtime.cameraTransition = {
     startTime: performance.now(),
     durationMs,
@@ -584,7 +637,8 @@ export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
     startTarget: runtime.controls.target.clone(),
     endTarget,
     startUp: runtime.camera.up.clone(),
-    endUp: endUp.normalize(),
+    endUp,
+    turn: cameraTurn(runtime, endPosition, endTarget, endUp),
     startZoom: runtime.camera.zoom,
     endZoom,
     startOrthographicHalfHeight,
@@ -728,21 +782,20 @@ export function stepCameraTransition(runtime, timestamp) {
   const durationMs = Math.max(transition.durationMs, 1);
   const progress = clamp((timestamp - transition.startTime) / durationMs, 0, 1);
   const eased = easeCameraTransitionProgress(progress, transition.easing);
-  const position = new runtime.THREE.Vector3().lerpVectors(
-    transition.startPosition,
-    transition.endPosition,
-    eased
-  );
   const target = new runtime.THREE.Vector3().lerpVectors(
     transition.startTarget,
     transition.endTarget,
     eased
   );
-  const up = new runtime.THREE.Vector3().lerpVectors(
-    transition.startUp,
-    transition.endUp,
-    eased
-  );
+  // The camera turns about its target (`cameraTurn`), and lands exactly where it was sent, with the up it was given.
+  const { turn } = transition;
+  const turned = turn && progress < 1 ? turnAt(runtime.THREE, turn, eased) : null;
+  const position = turned
+    ? target.clone().addScaledVector(new runtime.THREE.Vector3(0, 0, 1).applyQuaternion(turned), turn.startDistance + ((turn.endDistance - turn.startDistance) * eased))
+    : new runtime.THREE.Vector3().lerpVectors(transition.startPosition, transition.endPosition, eased);
+  const up = turned
+    ? new runtime.THREE.Vector3(0, 1, 0).applyQuaternion(turned)
+    : new runtime.THREE.Vector3().lerpVectors(transition.startUp, transition.endUp, eased);
   runtime.camera.position.copy(position);
   runtime.controls.target.copy(target);
   if (up.lengthSq() > 1e-6) {
@@ -811,15 +864,17 @@ export function transitionCameraToViewPreset(runtime, preset) {
   }
   const nextDirection = new runtime.THREE.Vector3(...basis.direction);
   const nextUp = new runtime.THREE.Vector3(...basis.up);
+  const endPosition = currentTarget.clone().add(nextDirection.multiplyScalar(distance));
   runtime.cameraTransition = {
     startTime: performance.now(),
     durationMs: VIEW_PLANE_TRANSITION_MS,
     startPosition: runtime.camera.position.clone(),
-    endPosition: currentTarget.clone().add(nextDirection.multiplyScalar(distance)),
+    endPosition,
     startTarget: currentTarget.clone(),
     endTarget: currentTarget.clone(),
     startUp: runtime.camera.up.clone(),
-    endUp: nextUp
+    endUp: nextUp,
+    turn: cameraTurn(runtime, endPosition, currentTarget, nextUp)
   };
   runtime.controls.enableDamping = false;
   runtime.beginInteraction?.();

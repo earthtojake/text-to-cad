@@ -22,7 +22,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
-import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
+import { readFlatView } from "../kit/viewport/flatView.js";
 import { createDrawingScene, describeDrawingPick, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
 import LayersSection from "./LayersSection.jsx";
@@ -76,17 +76,18 @@ function DxfSurface({ view, data }) {
   const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
 
   // ---- the view this file was left at ---------------------------------------
-  // The file's view (`kit/shell/fileView.js`) with the drawing's transform as its camera and
-  // nothing else: a drawing has no Display settings and no slices of its own.
-  const [restored] = useState(() => readDrawingTransform(readFileView(view.state).camera));
-  const storedRef = useRef(JSON.stringify(writeFileView({ camera: drawingTransformCamera(restored, Boolean(restored)) })));
+  // The file's view (`kit/shell/fileView.js`) with the drawing's view as its camera (`kit/viewport/flatView.js`:
+  // the transform and the pane it was framed in) and nothing else: a drawing has no Display settings and
+  // no slices of its own.
+  const [restored] = useState(() => readFlatView(readFileView(view.state).camera));
+  const storedRef = useRef(JSON.stringify(writeFileView({ camera: restored })));
   const saveTimer = useRef(0);
   const stateChangeRef = useRef(onStateChange);
   stateChangeRef.current = onStateChange;
   // A view that is still the fit stores nothing — `null` is "fit me", and it is
   // what a drawing dropped back to the fit must write, not a stale transform.
-  const rememberView = useCallback((transform) => {
-    const record = writeFileView({ camera: drawingTransformCamera(transform, Boolean(transform)) });
+  const rememberView = useCallback((moved) => {
+    const record = writeFileView({ camera: readFlatView(moved) });
     const serialized = JSON.stringify(record);
     if (serialized === storedRef.current) return;
     storedRef.current = serialized;

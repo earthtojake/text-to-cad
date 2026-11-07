@@ -458,13 +458,15 @@ whole record: the web over `sessionStorage`, the CAD app over memory
 `{ toolStack, appearance, library, explorer }`: tab-wide (the tool stack's layout, the
 appearance, the home's layout, the folder the explorer was last in), and what every renderer reads as its preferences;
 `files` holds the view of the file on screen, under `[absolute path, renderer id]`, and no
-other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` drops the view
-of a file it leaves — for another file or for the home — once the
+other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` sets the view
+of a file it leaves — for another file or for the home — aside for the page once the
 departing renderer's last write has landed (`files.retain(path | null)`; `null`, the home,
-drops every view). The store reads and writes a view (`files.read`, `write`, `remove`),
-lists them all (`all()`) and merges a view's changes (`merge`). A reload of the tab shows
-the same file, so it brings that view back; a file opened again after leaving it starts
-at the defaults. In the CAD app there is one record per view: a view the host
+sets every view aside), in the store's memory and never in the host's storage, the newest
+`PAGE_FILE_LIMIT` (32) of them, and gives it back to the record as the file is shown again.
+The store reads and writes a view (`files.read`, `write`, `remove`, which forgets one, from the
+page too), lists them all (`all()`) and merges a view's changes (`merge`). A reload of the tab
+shows the same file, so it brings that view back; a file left and shown again in the same page
+opens as it was left; a file the page has not shown starts at the defaults. In the CAD app there is one record per view: a view the host
 creates again (its frame re-created) starts afresh, since nothing names a view across its
 frames. A view is `{ camera, display, preview, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their

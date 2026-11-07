@@ -223,10 +223,82 @@ function DropdownMenuSubContent({
   );
 }
 
+// A submenu in place, for a menu with no room beside it for one (a phone's: settings-ui.md, Mobile): its
+// row, pressed (or Right), shows its items under it, in the menu itself and indented, its chevron
+// turning down while they show; pressed again (or Left) it hides them, and the menu's next opening starts
+// it hidden (its items go with the menu). The same three parts as a submenu's, and its items are a
+// submenu's own: radio and checkbox items, a label, a separator. Hidden or shown is its own unless the
+// caller holds it (`open`, `onOpenChange`: a choice that hides it again).
+const InlineSubContext = React.createContext({ open: false, setOpen: () => {} });
+
+function DropdownMenuInlineSub({ open: held, onOpenChange, children }) {
+  const [own, setOwn] = React.useState(false);
+  const open = held ?? own;
+  const setOpen = React.useCallback(next => { if (held === undefined) setOwn(next); onOpenChange?.(next); }, [held, onOpenChange]);
+  const value = React.useMemo(() => ({ open, setOpen }), [open, setOpen]);
+  return <InlineSubContext.Provider value={value}>{children}</InlineSubContext.Provider>;
+}
+
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean }} props */
+function DropdownMenuInlineSubTrigger({
+  className,
+  inset,
+  children,
+  onKeyDown,
+  onSelect,
+  ...props
+}) {
+  const { open, setOpen } = React.useContext(InlineSubContext);
+  return (
+    <DropdownMenuPrimitive.Item
+      data-slot="dropdown-menu-inline-sub-trigger"
+      data-inset={inset}
+      data-state={open ? "open" : "closed"}
+      aria-expanded={open}
+      onSelect={event => { onSelect?.(event); event.preventDefault(); setOpen(!open); }}
+      onKeyDown={event => {
+        onKeyDown?.(event);
+        const next = { ArrowRight: true, ArrowLeft: false }[event.key];
+        if (event.defaultPrevented || next === undefined || next === open) return;
+        event.preventDefault();
+        setOpen(next);
+      }}
+      className={cn(
+        "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-tiny leading-4 outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRight className={cn("ml-auto size-4 transition-transform", open && "rotate-90")} aria-hidden="true" />
+    </DropdownMenuPrimitive.Item>
+  );
+}
+
+/** @param {React.ComponentPropsWithoutRef<"div">} props */
+function DropdownMenuInlineSubContent({
+  className,
+  ...props
+}) {
+  const { open } = React.useContext(InlineSubContext);
+  if (!open) return null;
+  return (
+    <div
+      role="group"
+      data-slot="dropdown-menu-inline-sub-content"
+      className={cn("[&_[role^=menuitem]]:pl-5 [&_[data-slot=dropdown-menu-label]]:pl-5", className)}
+      {...props}
+    />
+  );
+}
+
 export {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuInlineSub,
+  DropdownMenuInlineSubContent,
+  DropdownMenuInlineSubTrigger,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,

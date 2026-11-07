@@ -1,9 +1,10 @@
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, EyeOff } from 'lucide-react';
 import { Button } from '@cad/ui/primitives/button';
 import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, TreeRowToggle, useTreeRowHeight } from '@cad/ui/primitives/tree-row';
 import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-filter';
+import { treeKey } from '@cad/ui/primitives/tree-keys';
 import { cn } from '@cad/ui/utils';
 import XbfPartMenu from './XbfPartMenu.jsx';
 import XbfPartActions, { rowActionsLayout } from './XbfPartActions.jsx';
@@ -20,6 +21,7 @@ import { useI18n } from "@cad/ui/i18n";
 
 const EMPTY = [];
 const NO_CONTROLS = {};
+const ROW_KEYS = new Set(['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End']);
 const icons = {part:Box,assembly:Boxes,group:Boxes};
 
 // What hides a row or puts it out of reach, as sets: `availabilityOf(partControls)`.
@@ -84,7 +86,7 @@ function ModelingRow({ node, depth, open, branch, locked, disabled, selected, jo
       <TooltipHint content={node.label} overflowOnly><button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected}
         disabled={disabled || unavailable || !(node.selectionId || node.memberSelectionIds?.length)}
         onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
-        className={cn(TREE_ROW_NAME_CLASS, 'disabled:opacity-40', underActions)}>
+        className={cn(TREE_ROW_NAME_CLASS, 'disabled:opacity-40', underActions)} data-tree-row-name="">
         <TreeRowLabel className="flex-1">{node.label}</TreeRowLabel>
       </button></TooltipHint>
       {node.selectionId && <XbfPartActions node={node} controls={partControls} disabled={disabled}/>}
@@ -202,12 +204,20 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   latest.current={partControls};
   // Rows opened or shut in the one place their expansion lives, which a chevron and a reveal both
   // write: the host's (an assembly by its selection id, a folded row, which selects nothing, by its
-  // own), so whatever opened a row, its chevron shuts it; the tree's own only without a host.
+  // own), so whatever opened a row, its chevron shuts it; the tree's own only without a host. A chevron's
+  // is the person's (`flip`); a reveal opens shut rows as the pick's, or the isolation's, that needs them
+  // (`open`), which the host keeps apart from the person's: only theirs is kept with the file's view, and
+  // leaving isolation shuts what it opened (`xbfExpansion.js`).
   const flip=useCallback(nodes=>{
     const {partControls}=latest.current;
     if(partControls.onToggleTreeNode){for(const node of nodes)partControls.onToggleTreeNode(node.selectionId || node.id);return;}
     setLocalExpanded(current=>{const next=new Set(current);for(const node of nodes)if(!next.delete(node.id))next.add(node.id);return next;});
   },[]);
+  const open=useCallback((nodes,reason)=>{
+    const {partControls}=latest.current;
+    if(partControls.onRevealTreeNodes)partControls.onRevealTreeNodes(nodes.map(node=>node.selectionId || node.id),reason);
+    else flip(nodes);
+  },[flip]);
   // A selected part or assembly at its row; a picked face or edge at its part's. The rows that hold
   // it are those, but a folded row for its parts once all of them are selected: it is lit, and the
   // selection is revealed at it, so a press on any row selects and opens nothing.
@@ -217,7 +227,8 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   // to change (from the model, a menu or a key): its owners opened and its row scrolled to, as a pick's.
   const focusedIds=partControls.focusedNodeIds || EMPTY;
   const selectionKey=JSON.stringify(selectedIds),focusKey=JSON.stringify(focusedIds);
-  const revealFrom=useRef({selection:selectionKey,focus:focusKey,from:'selection'});
+  // An isolation the tree comes up on (a reload's, kept with the file's view) is brought into view as a new one is.
+  const revealFrom=useRef({selection:selectionKey,focus:focusKey,from:focusedIds.length ? 'focus' : 'selection'});
   if(revealFrom.current.selection !== selectionKey)revealFrom.current={...revealFrom.current,selection:selectionKey,from:'selection'};
   if(revealFrom.current.focus !== focusKey)revealFrom.current={...revealFrom.current,focus:focusKey,from:focusedIds.length ? 'focus' : revealFrom.current.from};
   const revealing=revealFrom.current.from === 'focus';
@@ -231,11 +242,11 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
     const missing=revealPaths.flatMap(path=>path.slice(0,-1)).filter(node=>!expanded.has(node.id));
     // A locked tree does not open for a pick: what the mode shows is what there is to scroll to.
     if(missing.length && locked){reveal.current.complete=true;return;}
-    if(missing.length){flip([...new Map(missing.map(node=>[node.id,node])).values()]);return;}
+    if(missing.length){open([...new Map(missing.map(node=>[node.id,node])).values()],revealing ? 'isolation' : 'reveal');return;}
     if(searching || !onScreen)return;
     const row=rowElements.current.get(target.id);
     if(row && !row.closest('[hidden]')){revealRow(row);reveal.current.complete=true;}
-  },[active,onScreen,revealKey,revealPaths,expanded,locked,flip,searching]);
+  },[active,onScreen,revealKey,revealPaths,expanded,locked,open,revealing,searching]);
 
   // The rows' callbacks never change; each reads the tree as it is when pressed.
   const choose=useCallback((node,event)=>{
@@ -245,18 +256,50 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
       if (components && partControls.isAssemblyView) partControls.onFocusTreeNode?.(components);
       return;
     }
-    // A folded row stands for every instance under it, so it selects them all.
+    // A folded row stands for every instance under it, so it selects them all: a plain press as the one row
+    // it is, so pressed again while they are what is selected it lets go of them, as any row does
+    // (`nextSelectionIds`); with Shift, Cmd or Ctrl each instance is added or taken away.
     if(node.memberSelectionIds?.length){
       const additive=event?.shiftKey || event?.metaKey || event?.ctrlKey;
-      node.memberSelectionIds.forEach((id,index)=>partControls.onSelectTreeNode?.(id,{multiSelect:additive || index > 0}));
+      if(!additive){partControls.onSelectTreeNode?.(node.memberSelectionIds,{multiSelect:false});return;}
+      node.memberSelectionIds.forEach(id=>partControls.onSelectTreeNode?.(id,{multiSelect:true}));
       return;
     }
     if(node.selectionId)partControls.onSelectTreeNode?.(node.selectionId,{multiSelect:event?.shiftKey || event?.metaKey || event?.ctrlKey});
   },[]);
   const toggle=useCallback(node=>flip([node]),[flip]);
+  // The rows' keys, every tree's that walks its rows (`primitives/tree-keys.js`): from the row with the
+  // keyboard, Down and Up, Home and End, Right and Left (open, shut, into a row, up to its owner), Enter and
+  // Space its name's button's own press. The row moved to is kept mounted and given the keyboard once drawn
+  // (its name's button, or its chevron where its name selects nothing), scrolled into view as it goes.
+  const [keyRow,setKeyRow]=useState(null);
+  const rowsNow=useRef(rows),lockedNow=useRef(locked);
+  rowsNow.current=rows;
+  lockedNow.current=locked;
+  const onRowsKeyDown=useCallback(event=>{
+    if(event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey)return;
+    const element=event.target instanceof Element ? event.target.closest('[data-virtual-row]') : null;
+    const now=rowsNow.current,at=element ? now.findIndex(row=>row.key === element.dataset.virtualRow) : -1;
+    if(at < 0)return;
+    // While Select's filter holds the tree's shape its rows open and shut for nobody: Left goes up.
+    const action=treeKey(event.key,lockedNow.current ? now.map((row,index)=>(index === at ? {...row,branch:false} : row)) : now,at);
+    // With a row's keyboard the arrows, Home and End are the tree's, at its ends too: never the view's orbit.
+    if(ROW_KEYS.has(event.key))event.preventDefault();
+    if(!action)return;
+    if('toggle' in action)toggle(now[action.toggle].node);
+    else setKeyRow({key:now[action.focus].key});
+  },[toggle]);
+  useLayoutEffect(()=>{
+    const element=keyRow ? rowElements.current.get(keyRow.key) : null;
+    if(!element)return;
+    const control=element.querySelector('[data-tree-row-name]:not(:disabled)') || element.querySelector('button:not(:disabled)');
+    control?.focus({preventScroll:true});
+    element.scrollIntoView?.({block:'nearest'});
+  },[keyRow]);
   const highlighted=useMemo(()=>new Set([...paths,...heldPaths].map(path=>path.at(-1).id)),[paths,heldPaths]);
   const revealIndex=revealPaths.length ? rowIndex.get(revealPaths.at(-1).at(-1).id) : undefined;
-  const treePinned=useMemo(()=>revealIndex === undefined ? EMPTY : [revealIndex],[revealIndex]);
+  const keyIndex=keyRow ? rows.findIndex(row=>row.key === keyRow.key) : -1;
+  const treePinned=useMemo(()=>[revealIndex,keyIndex].filter(index=>index !== undefined && index >= 0),[revealIndex,keyIndex]);
   const matches=found.matches;
   const cursorIndex=searching ? matches.findIndex(match=>match.entry.node.id === cursorId) : -1;
   const searchPinned=useMemo(()=>cursorIndex < 0 ? EMPTY : [cursorIndex],[cursorIndex]);
@@ -298,7 +341,7 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
           : deferredQuery.trim() && !flatPanel && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("tree.noPartMatch", { query: deferredQuery.trim() })}</p>
         : <VirtualRows key="tree" aria-label={t("tree.model")} count={rows.length} rowHeight={rowHeight} pinned={treePinned}
           rowKey={at=>rows[at].key} rowProps={at=>({className:'min-w-0','aria-level':rows[at].depth+1,'data-tree-part':rows[at].node.kind === 'part' ? rows[at].node.id : undefined})}
-          renderRow={renderTreeRow} registerRow={registerRow}/>}
+          renderRow={renderTreeRow} registerRow={registerRow} onKeyDown={onRowsKeyDown}/>}
       </div>
     </div>
   </ToolPanel>;

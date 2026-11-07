@@ -199,8 +199,8 @@ The host owns where state lives; the package owns what it is. Everything the
 viewer keeps is one tab record (`@cad/ui/tab-store`: the tab's settings and
 the view of the file on screen — its camera, Display settings, Preview's Render settings,
 its playback settings and the renderer's own slices), thrown out with the tab and kept across a reload. Leaving a file, for
-another or for the home, drops its view (`CadViewer`), and an update of it keeps what
-still fits the new revision. The web keeps it in `sessionStorage`, the CAD app in
+another or for the home, sets its view aside for the page, which gives it back as the file is
+shown again (`CadViewer`), and an update of it keeps what still fits the new revision. The web keeps it in `sessionStorage`, the CAD app in
 memory, one record per view; both hand `createTabStore` one
 synchronous read/write adapter and take `FileViewer`'s state from it. The tool in
 hand, the selection and measurements are never stored. Capabilities determine menus:
@@ -300,7 +300,8 @@ format is, and the format → icon map it does read.
 Expensive changes use [staged viewport updates](docs/view-updates.md): controls
 remain authoritative, preparation is replaceable, and captures await presentation.
 The camera is part of the file's view: a refresh restores the one the file on screen
-was left at, and opening a file — again after leaving it, too — fits it.
+was left at, a file the page left is shown again at the one it was left at, and opening a file
+the page has not shown fits it.
 
 Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
