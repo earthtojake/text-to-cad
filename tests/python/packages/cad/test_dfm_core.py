@@ -108,6 +108,12 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(record["none_found"], ["hole"])
         self.assertEqual([f.code for f in found], ["mesh_wall"])
 
+    def test_a_warning_says_its_limit_is_recommended(self) -> None:
+        """A recommendation's message never reads as a feasibility limit."""
+        rule = Rule("r", "f", "v", "min", 1.0, "deg", "wall draft", "s", severity="warning")
+        found, _ = evaluate({"f": {"items": [{"v": 0.5, "location": "a"}]}}, _set(rule), {})
+        self.assertIn("wall draft 0.5 deg is under the 1 deg recommended minimum", found[0].message)
+
     def test_a_rule_citing_a_source_its_set_does_not_list_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             _set(Rule("r", "f", "v", "max", 1.0, "mm", "v", "elsewhere"))

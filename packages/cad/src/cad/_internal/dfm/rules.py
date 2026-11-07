@@ -193,6 +193,9 @@ def _message(rule: Rule, rule_set: RuleSet, value: float, limit: float) -> str:
     digits = 4
     while digits < 17 and f"{value:.{digits}g}" == f"{limit:.{digits}g}":
         digits += 1
+    # A warning is a recommendation, and says so: an agent reads "under the 1 deg minimum" as a limit the part
+    # cannot be made under.
+    bound = f"recommended {bound}" if rule.severity == "warning" else bound
     return (f"{rule.what} {value:.{digits}g} {rule.unit} is {relation} the {limit:.{digits}g} {rule.unit} {bound} "
             f"({origin})")
 
