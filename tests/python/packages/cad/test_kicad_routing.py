@@ -503,6 +503,17 @@ class KiCadRules(unittest.TestCase):
                 _rules(board, [])
             self.assertIn("custom rules (b.kicad_dru)", str(caught.exception))
 
+    def test_no_default_netclass_is_guessed(self) -> None:
+        """Where KiCad gives no class for copper of no net and none named Default, the router does not take another."""
+        board = OpenBoard("")
+        power = SimpleNamespace(name="Power", constituents=[], clearance=300_000, track_width=500_000,
+                                via_diameter=800_000, via_drill=400_000)
+        board.get_nets = lambda: [SimpleNamespace(name="VCC")]
+        board.get_netclass_for_nets = lambda nets: {"VCC": power}
+        with self.assertRaises(ValueError) as caught:
+            _rules(board, ["VCC"])
+        self.assertIn("no Default netclass", str(caught.exception))
+
 
 class Keepouts(unittest.TestCase):
     def test_a_footprints_own_keepout_is_in_its_frame(self) -> None:

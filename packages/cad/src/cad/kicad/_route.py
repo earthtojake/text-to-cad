@@ -260,10 +260,10 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
     nets = [net for net in board.get_nets() if net.name in set(names) or net.name == ""]
     found = board.get_netclass_for_nets(nets) if nets else {}
     classes = {name: netclass(value) for name, value in found.items() if name}
-    default = netclass(found[""]) if "" in found else next(
-        (c for c in classes.values() if c.name == "Default"), next(iter(classes.values()), None))
+    default = netclass(found[""]) if "" in found else next((c for c in classes.values() if c.name == "Default"), None)
     if default is None:
-        raise ValueError("route: KiCad gave no netclass for the board's nets")
+        raise ValueError("route: KiCad gave no Default netclass (none for copper of no net, nor a net of it): the "
+                         "router keeps the class of every net KiCad gives, and guesses none")
     constraints = board.get_design_rules().rules.constraints
     rules = Rules(classes, default, min_clearance=constraints.min_clearance * nm,
                   min_track_width=constraints.min_track_width * nm, edge_clearance=constraints.copper_edge_clearance * nm,
