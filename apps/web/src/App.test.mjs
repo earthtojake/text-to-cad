@@ -127,11 +127,10 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().onShown('/m/one.step', ONE));
     assert.equal(window.document.title, 'one.step');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/documents'), [['/api/v1/documents', { action: 'open', path: '/m/one.step' }]]);
-    // CAD's telemetry, as the CAD app's: the person's settings read for the consent (and once for the
-    // language, once for What's new and once for automatic updates), its answer in the app menu. (The model
-    // shown is counted, by its format and only with consent, as it joins the library.)
-    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')),
-      [['/api/v1/settings', null], ['/api/v1/settings', null], ['/api/v1/settings', null], ['/api/v1/settings', null]]);
+    // CAD's telemetry, as the CAD app's: the person's settings, read once for the consent, the language,
+    // What's new and automatic updates together, its answer in the app menu. (The model shown is counted, by
+    // its format and only with consent, as it joins the library.)
+    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')), [['/api/v1/settings', null]]);
     // A Quick Edit copied is counted by this Viewer's server, as a touch is: told nothing of the edit.
     viewer().host.usage.used('quickEdit');
     await new Promise(resolve => setImmediate(resolve));
