@@ -285,9 +285,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   strip's padding, so it is as tall as the strip (34px with its border) and reads as the same object; its
   menu and tooltips open above it. It stands the corner's inset from the right and the bottom edges
   (`chromeInset.js`'s `CORNER_INSET_PX`, 12px): the chrome's 8px and the 4px a floating toolbar's shadow falls
-  under it, so the canvas under the pill's shadow is as clear as the strip's 8px over its border, and the
-  corner's two edges read as one gap. A board in 3D keeps its pill, which zooms its camera: there is no cube
-  and no Home. How the view is looked at is the strip's end, not the corner's (**Tool strip**, above): a
+  under it, so the pill's shadow fades out before the bottom edge instead of running into it, the right edge
+  keeps the strip's 8px of untouched canvas, and the corner's two edges read as one gap. A board in 3D keeps
+  its pill, which zooms its camera: there is no cube and no Home. How the view is looked at is the strip's end, not the corner's (**Tool strip**, above): a
   3D view's Projection and Display, a board's Flip, 2D/3D and Display. A state of how the model is looked at is
   **one state button** (`kit/shell/StateButton.jsx`), the one control every such state is drawn with, as
   Blender's viewport gizmo shows its projection and Flux its flip: Projection, and a board's 2D/3D and Flip,
@@ -1503,7 +1503,8 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   panel, and neither key opens one there.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
-  modifier held.
+  modifier held. On the Selected pane's switcher, ← and → (and [ and ]) step through the picks
+  instead ([Several picked](#the-views-panel-and-the-tool-stack)).
 - **Undo and Redo** (⌘Z and ⇧⌘Z, Ctrl+Z and Ctrl+Y) walk the view's one history: each piece of
   ink put down, erased, restyled or cleared, and each measurement taken, deleted or cleared. The
   camera, the selection, Display, Explode, Clip, hiding and isolating, and Position's pose are
