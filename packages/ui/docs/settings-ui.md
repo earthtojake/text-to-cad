@@ -1319,9 +1319,11 @@ label and path — `Snapshot (cad <type> snapshot --annotation):` — or the com
 Cube face, edge and corner clicks turn the view and keep pan and zoom; dragging
 the cube orbits. Reloading the page restores the camera the file on screen was left
 at, and its Display settings, Explode/Clip, the pose, hidden and isolated parts and
-the tree's expansion come back with it. Only the model on screen keeps that view:
-leaving it — for another file or the home — drops it, so opening a file,
-for the first time or again, fits it at the defaults. An update of the model on
+the tree's expansion come back with it. A file left in the page — for another file or the
+home — has its view kept by the page until it closes, and shown again it opens as it was
+left, as a reload opens the file on screen (the tab's record keeps the file on screen's view
+alone, so a reload brings back that one); a file the page has not shown opens fitted, at
+the defaults. An update of the model on
 screen keeps its Display settings, Explode/Clip, hidden and isolated parts and its
 tree, and the pose while its joints are unchanged. The tool, the selection and
 measurements never come back — every open starts in the default tool with nothing
@@ -1436,7 +1438,8 @@ model starts its routine at rest. Speed and Loop are the file's, one set,
 chosen in Playback settings and kept in its view once chosen — until then the routine's own
 apply. Orbit's speed (1×) and Autoplay are the file's too, remembered between leaving and
 re-entering Preview and across a reload of the tab; whether it orbits is not kept. Another
-file has its own, and a file the tab left starts at the defaults again. Nothing of the
+file has its own, which a file the page left has back when it is shown again, and a file the
+page has not shown starts at the defaults. Nothing of the
 routine — which one, its time, whether it plays — is saved. Orbit is not an animation
 setting.
 

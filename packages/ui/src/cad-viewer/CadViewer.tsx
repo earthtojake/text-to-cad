@@ -38,7 +38,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   host: Omit<ViewerHost, 'navigation'>;
   /**
    * The tab's one store: the renderers' preferences, the viewer's state, the home's layout, and the
-   * view of the file on screen, the only file view it keeps: leaving a file drops its view.
+   * view of the file on screen, the only file view the tab keeps: leaving a file sets its view aside
+   * for the page, which gives it back as the file is shown again.
    */
   tabStore: TabStore;
   /** The host's handle on the mounted view: its agent reads it, and the library's pictures come through it. */
@@ -142,15 +143,18 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   latest.current.shown = shown;
   useEffect(() => { latest.current.onShown?.(shown, shownId); }, [shown, shownId]);
 
-  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a model — for another
-  // file, or for the home — drops its camera, Display settings, pose and the rest, while a reload of
-  // the tab (which shows the same file) brings them back, and an update of the model keeps them. The
-  // departing renderer writes its view once more as it unmounts; that write is a cleanup of the
-  // commit that changed `file`, and every cleanup of a commit runs before its effects, this one
-  // included, so it cannot bring the view back. The tab's settings are not a file's, and stay.
-  // A view is kept under the file's own name (`shown`), and a host may address the file by its
-  // document's id: until the catalog says which file that is (a reload, as the page starts), nothing
-  // is dropped, or the reload would lose the very view it is meant to bring back.
+  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a file — for another
+  // file, or for the home — sets its camera, Display settings, pose and the rest aside for the page,
+  // and showing it again in the same page gives them back, as a reload of the tab (which shows the
+  // same file) brings back the file on screen's; an update of the model keeps them. The departing
+  // renderer writes its view once more as it unmounts; that write is a cleanup of the commit that
+  // changed `file`, and every cleanup of a commit runs before its effects, this one included, so the
+  // view set aside is its last. The file shown has its view back in the record before its renderer
+  // reads it: a file opens only once its document has loaded, after this effect. The tab's settings
+  // are not a file's, and stay. A view is kept under the file's own name (`shown`), and a host may
+  // address the file by its document's id: until the catalog says which file that is (a reload, as
+  // the page starts), nothing is set aside, or the reload would lose the very view it is meant to
+  // bring back.
   useEffect(() => { if (!path || shown) tabStore.files.retain(shown); }, [tabStore, path, shown]);
 
   // Refresh the catalog when the person comes back to the page: a model may have been rebuilt meanwhile.

@@ -311,7 +311,7 @@ export function useRendererShell({
   };
   const saveTimer = useRef(0);
   // A view that has gone writes nothing more: its last write is the flush as it unmounts, and a host
-  // that drops the view of a file it left (`CadViewer`) must not see it written again by a camera
+  // that sets the view of a file it left aside (`CadViewer`) must not see it written again by a camera
   // report or a slice that lands after that.
   const closed = useRef(false);
   const flushSession = useCallback(() => {
