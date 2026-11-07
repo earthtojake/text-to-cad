@@ -187,7 +187,7 @@ export default function ItemDetail({ item, place = "pane", copy = null }) {
 const SWITCH_CLASS = STRIP_BUTTON_CLASS;
 const COUNT_CLASS = cn(STRIP_BUTTON_CLASS, "w-auto min-w-6 px-1.5 text-tiny tabular-nums aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
 // ←/→, and [ and ], step through the picks while the switcher has the keyboard.
-const STEP_KEYS = Object.freeze({ ArrowLeft: -1, ArrowRight: 1, "[": -1, "]": 1 });
+const SWITCH_KEYS = Object.freeze({ ArrowLeft: -1, ArrowRight: 1, "[": -1, "]": 1 });
 
 /**
  * Several picks: one at a time, the active one, chosen here. ‹ and › step through the picks in the order they were
@@ -202,7 +202,7 @@ function PickSwitcher({ picks, active, onActive, glyphs }) {
   const position = { index: (at + 1).toLocaleString(), count: picks.length.toLocaleString() };
   const onKeyDown = event => {
     // The menu's own keys, from its portal, are the menu's.
-    const by = STEP_KEYS[event.key];
+    const by = SWITCH_KEYS[event.key];
     if (!by || event.altKey || event.ctrlKey || event.metaKey || !event.currentTarget.contains(event.target)) return;
     event.preventDefault();
     event.stopPropagation();
