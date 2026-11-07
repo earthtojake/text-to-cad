@@ -306,6 +306,18 @@ def _neutral_folder() -> str:
     return tempfile.gettempdir()
 
 
+def stand(cwd: str | None, home: str, neutral: str) -> None:
+    """A request's folder (``cwd``, else the worker's ``home``) entered, or, where that folder is gone -- a
+    project folder deleted since the worker started in it -- the engine's own (``neutral``): a request
+    that names no folder is never failed by one that no longer exists."""
+    try:
+        os.chdir(cwd or home)
+    except FileNotFoundError:
+        if cwd:
+            raise
+        os.chdir(neutral)
+
+
 def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, Any]:
     """An ``export`` request: the document -- one this worker holds (``held``: a document named
     by its id, read as it is and never built), a ``Model`` this program built first (its own
@@ -627,7 +639,7 @@ def main() -> int:
             try:
                 adopt(request.get("env"), own)
                 cwd = request.get("cwd")
-                os.chdir(cwd or home)
+                stand(cwd, home, neutral)
                 if op == "export":
                     # An export's frames, or a snapshot's for a request that draws (``job_progress``).
                     said = job_progress(lambda frame: send({"id": ident, "progress": frame}), request, cwd=cwd)
@@ -663,7 +675,7 @@ def main() -> int:
         try:
             adopt(request.get("env"), own)
             cwd = request.get("cwd")
-            os.chdir(cwd or home)
+            stand(cwd, home, neutral)
             script = Path(request["script"])
             # Where the build is, frame by frame; each report holds its model's last.
             said = progress(ident, script=script, cwd=cwd)

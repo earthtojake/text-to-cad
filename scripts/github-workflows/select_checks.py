@@ -211,10 +211,16 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{LIBRARY_SRC}/_internal/integrations.py",
               f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
 KICAD_SUITE = "tests/python/packages/kicad"
-# CadQuery handed over: the cadquery integration (its producer and the bridge that describes a value portably),
-# the engine's reading of a portable description, and the server's environment of cad[cadquery] a program runs
-# in (cad run and the integrations table it reads). Each also reaches what its package reaches; the CadQuery
-# job, which makes that environment, runs on these, its own suite and runner, and a full run.
+# CadQuery handed over: the cadquery integration (its producer, the bridge that describes a value portably, the
+# CadQuery memo and the CadQuery worker), the engine's reading of a portable description, the contract that
+# names CadQuery's kernel, and the server's environment of cad[cadquery] a program runs in (cad run and the
+# integrations table it reads). Each also reaches what its package reaches; the CadQuery job, which makes that
+# environment (CadQuery's OCP is some 300 MB from PyPI), runs on these, its own suite and runner, and a full
+# run. The daemon's side of the path -- the service, the routing, Models.embody and register, the documents
+# worker's portable branch (cad_server/engine/daemon.py, models.py, services.py, cad/engine/worker.py) -- is
+# engine code, which every package job runs, and tests/python/packages/cad_server/engine/test_cadquery_worker.py
+# runs that path through an in-process daemon on stand-ins with no CadQuery: a change there is caught by the
+# package jobs, and does not fetch CadQuery (as an engine change does not install KiCad).
 CADQUERY_CODE = (f"{LIBRARY_SRC}/cadquery/**", f"{LIBRARY_SRC}/engine/portable.py",
                  f"{LIBRARY_SRC}/engine/contract.py",  # the kernel a CadQuery environment's orders name
                  f"{LIBRARY_SRC}/_internal/integrations.py",

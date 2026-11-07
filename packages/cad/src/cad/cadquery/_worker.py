@@ -48,34 +48,73 @@ def _digest(path: Path) -> str | None:
         return None
 
 
-def _own_modules(script: Path) -> dict[str, str]:
-    """The script's own modules a build loaded, by file: every module whose file lies outside the
-    interpreter's folders and the library, with its digest."""
-    roots = {os.path.normcase(os.path.realpath(root)) for root in (sys.prefix, sys.base_prefix) if root}
+def _project(script: Path) -> Path:
+    """The folder the script's own modules live under: the root of its package where it is in one (the folder
+    above the topmost ``__init__.py``, ``model.module_of``), else its folder."""
+    from cad.engine.model import module_of
+
+    _name, _package, root = module_of(script)
+    return Path(root) if root is not None else Path(script).resolve().parent
+
+
+def _library_roots() -> tuple[str, ...]:
+    """Where no file is the project's own code or data, however the project's folder contains it: the
+    interpreter's folders (its prefixes and every site-packages, so an environment ``cad run`` made under the
+    project -- a cache folder inside it -- is the libraries', never the script's own modules, which a load
+    would forget and a closure digest) and the library."""
+    import site
+
     import cad
 
-    library = os.path.normcase(os.path.realpath(Path(cad.__file__).resolve().parent.parent))
+    roots = [root for root in (sys.prefix, sys.base_prefix, sys.exec_prefix) if root]
+    try:
+        roots.extend(site.getsitepackages())
+    except AttributeError:  # a virtualenv's site module may lack it
+        pass
+    roots.extend(path for path in sys.path if path.rstrip(os.sep).endswith(("site-packages", "dist-packages")))
+    user = site.getusersitepackages() if hasattr(site, "getusersitepackages") else None
+    if user:
+        roots.append(user)
+    roots.append(str(Path(cad.__file__).resolve().parent.parent))
+    return tuple(dict.fromkeys(os.path.normcase(os.path.realpath(root)) + os.sep for root in roots))
+
+
+def _own_modules(script: Path) -> dict[str, str]:
+    """The script's own modules a build loaded, by file: every module whose file lies under the script's
+    project (``_project``) and not under the interpreter's folders or the library (``_library_roots``), the
+    script itself apart, with its digest. Read after a body ran, so a module the body imported inside itself
+    counts."""
+    project = os.path.normcase(os.path.realpath(_project(script))) + os.sep
+    libraries = _library_roots()
+    own = str(Path(script).resolve())
     found: dict[str, str] = {}
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
         if not isinstance(file, str) or not file.endswith(".py"):
             continue
         real = os.path.normcase(os.path.realpath(file))
-        if real.startswith(library) or any(real.startswith(root) for root in roots):
+        if not real.startswith(project) or real.startswith(libraries) or "__pycache__" in real:
             continue
-        if Path(real) == Path(os.path.realpath(script)):
+        resolved = str(Path(file).resolve())
+        if resolved == own:
             continue
         digest = _digest(Path(file))
         if digest is not None:
-            found[str(Path(file).resolve())] = digest
+            found[resolved] = digest
     return found
+
+
+# Every file a build of this worker found to be a script's own module (``_own_modules``): forgotten before the
+# next load, wherever that script is, so no module of a folder built before stands in for one of the same name.
+_OWN_SEEN: set[str] = set()
 
 
 def _forget_own(script: Path) -> None:
     """Every module of the script's own a build loaded, forgotten, so the next load reads the code as it is
     on disk now (the kernel's ``build.load_script`` does the same through its trace, which this environment
-    has no kernel for): the modules whose files lie outside the interpreter's folders and the library."""
-    files = set(_own_modules(script)) | {str(Path(script).resolve())}
+    has no kernel for): the modules under the script's project, and every own module a build here found
+    before (``_OWN_SEEN``)."""
+    files = set(_own_modules(script)) | _OWN_SEEN | {str(Path(script).resolve())}
     for name, module in list(sys.modules.items()):
         file = getattr(module, "__file__", None)
         if isinstance(file, str) and str(Path(file).resolve()) in files:
@@ -120,6 +159,64 @@ def _load(script: Path) -> Any:
     return module
 
 
+# The files a body opens, heard while a body runs (``_hear``: an audit hook, installed once a process, which
+# does nothing while no body runs): the body's inputs, held to their bytes in its closure, as the kernel
+# worker holds a body's reads.
+_OPENED: list[list[str] | None] = [None]
+_HOOKED: list[bool] = []
+
+
+def _heard(event: str, args: tuple) -> None:
+    opened = _OPENED[0]
+    if opened is None or event != "open" or not args:
+        return
+    path = args[0]
+    if isinstance(path, (str, bytes, os.PathLike)):
+        try:
+            opened.append(os.path.abspath(os.fsdecode(path)))
+        except (TypeError, ValueError):
+            pass
+
+
+def _hear() -> None:
+    if not _HOOKED:
+        sys.addaudithook(_heard)
+        _HOOKED.append(True)
+
+
+# Where no file is an input: the interpreter's folders and the library (what a body imports, never its data),
+# bytecode, the system's virtual files (``/proc``, ``/sys``, ``/dev``: what a thread pool or a clock reads), and
+# the person's cache folders (what a library keeps for itself: a font index, a compiled kernel).
+_VIRTUAL = ("/proc/", "/sys/", "/dev/")
+
+
+def _caches() -> tuple[str, ...]:
+    home = Path.home()
+    named = [os.environ.get("XDG_CACHE_HOME") or str(home / ".cache"), str(home / "Library" / "Caches"),
+             os.environ.get("LOCALAPPDATA") or ""]
+    return tuple(os.path.normcase(os.path.realpath(folder)) + os.sep for folder in named if folder)
+
+
+def _inputs(opened: list[str], script: Path, modules: dict[str, str]) -> dict[str, str]:
+    """The files a body opened that are its inputs, by digest: regular files outside the interpreter's folders
+    and the library (``_library_roots``), the system's virtual files and the person's caches, that are not the
+    script or a module it imported (those are the closure's modules)."""
+    outside = (*_library_roots(), *_caches(), *_VIRTUAL)
+    code = {str(Path(script).resolve()), *modules}
+    found: dict[str, str] = {}
+    for path in dict.fromkeys(opened):
+        real = os.path.normcase(os.path.realpath(path))
+        if real.startswith(outside) or "__pycache__" in real:
+            continue
+        resolved = str(Path(path).resolve())
+        if resolved in code or resolved in found or not os.path.isfile(resolved):
+            continue
+        digest = _digest(Path(resolved))
+        if digest is not None:
+            found[resolved] = digest
+    return found
+
+
 def _kernel() -> str:
     import importlib.metadata
 
@@ -132,14 +229,16 @@ def _kernel() -> str:
     return ", ".join(found) or "cadquery"
 
 
-def _closure(script: Path, name: str, modules: dict[str, str]) -> dict[str, Any]:
-    """What this build is made of: the script's and its own modules' digests, CadQuery's build and the
-    function, keyed; the record a report carries (``located``'s shape) and the document's main label holds
-    (``portable.closure_record``)."""
+def _closure(script: Path, name: str, modules: dict[str, str], inputs: dict[str, str]) -> dict[str, Any]:
+    """What this build is made of: the script's digest, its own modules' (those the body imported inside it
+    too: read after the body ran), the files the body opened (``inputs``), CadQuery's build and the function,
+    keyed together; the record a report carries (``located``'s shape) and the document's main label holds
+    (``portable.closure_record``). An edit to any of them is another key, so another revision."""
     digest = _digest(script)
-    key = hashlib.blake2b(json.dumps([str(script), name, digest, sorted(modules.items()), _kernel()]).encode(),
-                          digest_size=16).hexdigest()
-    return {"script": str(script), "digest": digest, "modules": modules, "key": key, "kernel": _kernel()}
+    key = hashlib.blake2b(json.dumps([str(script), name, digest, sorted(modules.items()), sorted(inputs.items()),
+                                      _kernel()]).encode(), digest_size=16).hexdigest()
+    return {"script": str(script), "digest": digest, "modules": modules, "inputs": inputs, "key": key,
+            "kernel": _kernel()}
 
 
 class _Context:
@@ -174,15 +273,26 @@ def build(request: dict[str, Any], send: Any) -> list[dict[str, Any]]:
     from cad.engine import model as declaring
     from cad.engine.build import BuildError
     from cad.engine.model import models_in
-    from cad.engine.progress import Progress
-    from cad.registry import producer_for
+    from cad.engine.progress import Progress, building
 
     script = Path(request["script"]).resolve()
     cwd = Path(request["cwd"]) if request.get("cwd") else None
     shown = os.path.relpath(script, cwd) if cwd is not None else str(script)
     said = Progress(lambda frame: send({"id": request.get("id"), "progress": frame}), script=script, cwd=cwd)
+    with building(said):  # closed after: no held frame's timer sends one past the answer
+        return _build(request, script, cwd, shown, said)
+
+
+def _build(request: dict[str, Any], script: Path, cwd: Path | None, shown: str, said: Any) -> list[dict[str, Any]]:
+    from cad.cadquery import _bridge, _memo
+    from cad.engine import model as declaring
+    from cad.engine.build import BuildError
+    from cad.engine.model import models_in
+    from cad.registry import producer_for
+
     started = time.perf_counter()
     _memo.install()
+    _hear()
     said.load()
     declaring._MODELS.clear()
     declaring._NAMES.clear()
@@ -207,7 +317,6 @@ def build(request: dict[str, Any], send: Any) -> list[dict[str, Any]]:
     elif not models:
         raise BuildError(f"{shown} defines no model")
     declared = sorted({model.explicit_name for model in models_in(vars(module), script) if model.explicit_name is not None})
-    modules = _own_modules(script)
     reports: list[dict[str, Any]] = []
     context = _Context()
     declaring._CONTEXT.build = context
@@ -225,9 +334,13 @@ def build(request: dict[str, Any], send: Any) -> list[dict[str, Any]]:
                                          "(@model alone); its files are exports of its document (cad model export)"})
                 continue
             body_started = time.perf_counter()
+            _OPENED[0] = []  # the files the body opens, heard while it runs and no longer
             try:
-                with _memo.run() as run:
-                    value = model.function()
+                try:
+                    with _memo.run() as run:
+                        value = model.function()
+                finally:
+                    opened, _OPENED[0] = _OPENED[0] or [], None
                 producer = producer_for("model", value, where=f"model {identity}")
                 if not producer.portable:
                     raise TypeError(f"model {identity} returned {type(value).__name__}: a CadQuery model returns a "
@@ -238,7 +351,12 @@ def build(request: dict[str, Any], send: Any) -> list[dict[str, Any]]:
                                 "error": f"{type(error).__name__}: {error}", "raised": traceback.format_exc()})
                 continue
             body = time.perf_counter() - body_started
-            header["closure"] = _closure(script, model.name, modules)
+            # What the body is made of, read after it ran: the modules it imported, inside the body too, and
+            # the files it opened, each by its bytes.
+            modules = _own_modules(script)
+            _OWN_SEEN.update(modules)
+            inputs = _inputs(opened, script, modules)
+            header["closure"] = _closure(script, model.name, modules, inputs)
             fallbacks = {identity.rpartition(os.sep)[2]: list(run.unkeyable)} if run.unkeyable else {}
             reports.append({
                 "ok": True, "model": name, "id": model.id, "source": source, "kernel": "cadquery",
@@ -248,17 +366,21 @@ def build(request: dict[str, Any], send: Any) -> list[dict[str, Any]]:
                 "timings": {"load": round(loaded, 4), "body": round(body, 4), "total": round(loaded + body, 4)},
                 "retention": {"keys": 0.0, "reads": {}, "fallbacks": fallbacks},
                 "closure": {"key": header["closure"]["key"],
-                            "modules": [[path, digest] for path, digest in sorted(modules.items())], "inputs": []},
+                            "modules": [[path, digest] for path, digest in sorted(modules.items())],
+                            "inputs": [["file", path, digest] for path, digest in sorted(inputs.items())]},
                 "files": {},
                 "portable": {"header": header, "bytes": base64.b64encode(data).decode("ascii")}})
     finally:
         declaring._CONTEXT.build = None
+        _OPENED[0] = None
     said.attach(reports)
     return reports
 
 
 def main() -> int:
-    from cad.engine.worker import adopt, kept, request_cap, resident_after_build, resident_mb, retirement
+    import tempfile
+
+    from cad.engine.worker import adopt, kept, request_cap, resident_after_build, resident_mb, retirement, stand
 
     os.environ["CAD_ENGINE_WORKER"] = "1"
     protocol = os.fdopen(os.dup(1), "wb")
@@ -305,7 +427,7 @@ def main() -> int:
         if op == "build":
             try:
                 adopt(request.get("env"), own)
-                os.chdir(request.get("cwd") or home)
+                stand(request.get("cwd"), home, tempfile.gettempdir())
                 reports = build(request, send)
                 cap = request_cap(request)
                 resident = resident_after_build(cap)
@@ -315,7 +437,7 @@ def main() -> int:
             except Exception as error:  # noqa: BLE001 - said to the daemon, as the kernel's worker says it
                 send({"id": ident, "failed": f"{type(error).__name__}: {error}"})
             finally:
-                os.chdir(home)
+                stand(None, home, tempfile.gettempdir())
                 gc.collect()
         elif op == "save":
             send({"id": ident, "saved": {"ident": request.get("ident"), "generation": request.get("generation"),

@@ -1349,7 +1349,13 @@ class Daemon:
                                                         "seconds": round(time.monotonic() - waited, 1)}
                         # The program that asked: what a document it built names to build it again.
                         answer["program"] = request.get("program")
-                        self._built(worker, answer)
+                        built_by = worker
+                        if self.kernel_less(worker):
+                            # Its reports are embodied through the documents worker's lease (``Models.embody``):
+                            # this worker's slot goes first, so a cap of one slot never waits on itself.
+                            self.release(worker)
+                            worker = None
+                        self._built(built_by, answer)
                         send(answer)
                         return
                     except Gone as error:

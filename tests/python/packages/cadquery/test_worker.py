@@ -50,6 +50,26 @@ if __name__ == "__main__":
     bracket()
 """
 
+# A body that imports a helper inside itself and reads a data file: both are its revision's.
+READING = """
+import json
+import pathlib
+
+import cadquery as cq
+from cad import model
+
+
+@model
+def sized():
+    import helper                                                   # imported inside the body
+    params = json.loads(pathlib.Path(__file__).with_name("params.json").read_text(encoding="utf-8"))
+    return cq.Workplane("XY").box(params["width"], 20, helper.THICKNESS)
+
+
+if __name__ == "__main__":
+    sized()
+"""
+
 WRONG = """
 from cad import model, step
 
@@ -144,6 +164,78 @@ class Worker(unittest.TestCase):
         said = done.stdout + done.stderr
         self.assertIn("returned int; a model document is made of a CadQuery Workplane, Shape, Sketch or Assembly", said)
         self.assertIn("declared is declared by @step: a CadQuery model declares no file", said)
+
+    def test_an_edited_data_file_or_body_imported_module_is_another_revision_the_cache_keeps(self) -> None:
+        folder = self.folder / "reading"
+        folder.mkdir(exist_ok=True)
+        (folder / "reading.py").write_text(textwrap.dedent(READING), encoding="utf-8")
+        (folder / "helper.py").write_text("THICKNESS = 6\n", encoding="utf-8")
+        (folder / "params.json").write_text('{"width": 40}\n', encoding="utf-8")
+        ident = model_id(folder / "reading.py", "sized")
+
+        def size_from_cache() -> list[float]:
+            # The engine restarted: the document comes from the cache alone, as a restart serves it.
+            self.assertEqual(self.cli("stop").returncode, 0)
+            out = folder / f"{os.urandom(3).hex()}.step"
+            exported = self.cli("model", "export", ident, str(out))
+            self.assertEqual(exported.returncode, 0, exported.stderr)
+            from cad import step
+
+            box = step.read(out).bounding_box()
+            return [round(box.size.X, 3), round(box.size.Y, 3), round(box.size.Z, 3)]
+
+        first = self.cli("run", str(folder / "reading.py"))
+        self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+        self.assertIn("bounds 40 × 20 × 6 mm", first.stdout + first.stderr)
+        self.assertEqual(size_from_cache(), [40.0, 20.0, 6.0])
+        (folder / "params.json").write_text('{"width": 50}\n', encoding="utf-8")
+        second = self.cli("run", str(folder / "reading.py"))
+        self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
+        self.assertIn("bounds 50 × 20 × 6 mm", second.stdout + second.stderr)
+        self.assertEqual(size_from_cache(), [50.0, 20.0, 6.0], "the edited data file is another revision")
+        (folder / "helper.py").write_text("THICKNESS = 8\n", encoding="utf-8")
+        third = self.cli("run", str(folder / "reading.py"))
+        self.assertEqual(third.returncode, 0, third.stderr + third.stdout)
+        self.assertIn("bounds 50 × 20 × 8 mm", third.stdout + third.stderr)
+        self.assertEqual(size_from_cache(), [50.0, 20.0, 8.0], "the edited module imported inside the body too")
+
+
+class WorkerAtOneSlot(unittest.TestCase):
+    """With one worker slot (``CAD_ENGINE_WORKERS=1``), a CadQuery build still completes: the CadQuery worker
+    is let go before its reports are embodied through the documents worker's lease, so the lease never waits
+    on the build that holds it. An engine of its own, started with the cap (the file's engine is the other
+    class's, started without it), its cache folder -- with the environment of ``cad[cadquery]`` it makes --
+    under the script's folder, which the worker must take for the libraries', never the script's own modules."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="cadquery-one-slot-")))
+        cls.engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
+        cls.addClassCleanup(shutil.rmtree, cls.folder, True)
+        cls.addClassCleanup(shutil.rmtree, cls.engine, True)
+        cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_WORKERS": "1",
+                                         "CAD_ENGINE_DIR": str(cls.engine), "CAD_STATE_DIR": str(cls.folder / "state"),
+                                         "CAD_CACHE_DIR": str(cls.folder / "cache")}, cls.addClassCleanup)
+        cls.addClassCleanup(cls.cli, "stop")
+        engine_daemon.register(cls.folder / "state")  # this interpreter as the installation its engine runs
+        (cls.folder / "models.py").write_text(textwrap.dedent(MODELS), encoding="utf-8")
+
+    @classmethod
+    def cli(cls, *args: str):
+        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", *args], cwd=cls.folder, env=cls.env)
+
+    def test_a_build_completes_and_its_document_is_held_with_one_slot(self) -> None:
+        done = self.cli("run", "models.py")
+        self.assertEqual(done.returncode, 0, done.stderr + done.stdout)
+        said = done.stdout + done.stderr
+        self.assertRegex(said, r"^built models\.py::plate cold in", said)
+        self.assertIn("bounds 40 × 20 × 16 mm", said)
+        out = self.folder / "bracket.glb"
+        exported = self.cli("model", "export", model_id(self.folder / "models.py", "bracket"), str(out))
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertTrue(out.is_file())
+        again = self.cli("run", "models.py")
+        self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
 
 
 if __name__ == "__main__":

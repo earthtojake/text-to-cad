@@ -57,11 +57,22 @@ CONTRACT: dict[str, Any] = {"protocol": PROTOCOL, "format": FORMAT, "kernel": f"
 
 def kernel_here() -> str:
     """The kernel this process's environment speaks: CadQuery's in an environment ``cad run`` made with the
-    cadquery integration and not the kernel's (``places.INTEGRATIONS``), else the engine's own."""
+    cadquery integration and not the kernel's (``places.INTEGRATIONS``), or in one of the person's own that
+    holds CadQuery and no build123d (``pip install cad cadquery``, ``python model.py``); else the engine's
+    own. Found, never loaded: neither library is imported to ask."""
     from cad.engine import places
 
     made_with = places.INTEGRATIONS
-    return CADQUERY if CADQUERY in made_with and "build123d" not in made_with else CONTRACT["kernel"]
+    if made_with:
+        return CADQUERY if CADQUERY in made_with and "build123d" not in made_with else CONTRACT["kernel"]
+    import importlib.util
+
+    try:
+        cadquery = importlib.util.find_spec("cadquery") is not None
+        build123d = importlib.util.find_spec("build123d") is not None
+    except (ImportError, ValueError):
+        return CONTRACT["kernel"]
+    return CADQUERY if cadquery and not build123d else CONTRACT["kernel"]
 
 
 def release() -> str:
@@ -112,14 +123,20 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
     theirs = named.get("contract")
     # One protocol and one format, and a kernel the server speaks with: its own, or CadQuery's (``KERNELS``),
     # whose worker describes its shapes portably for the server's kernel to make the documents of.
-    kernels = KERNELS if ours is CONTRACT else (ours.get("kernel"),)
-    if isinstance(theirs, dict) and all(theirs.get(key) == value for key, value in ours.items() if key != "kernel") \
-            and theirs.get("kernel") in kernels:
+    kernels = KERNELS if ours.get("kernel") == CONTRACT["kernel"] else (ours.get("kernel"),)
+    same_words = isinstance(theirs, dict) and all(theirs.get(key) == value for key, value in ours.items()
+                                                  if key != "kernel")
+    if same_words and theirs.get("kernel") in kernels:
         return None
     here = named.get("release")
     known = isinstance(here, str) and _order(here) is not None
     said = (f"cad here is {here if known else 'unknown'}, worker {spelled(theirs)}; {SERVER} {server} speaks "
             f"{spelled(ours)}")
+    if same_words and isinstance(theirs, dict):
+        # One protocol and format, another kernel: no update mends it; the kernels the server speaks with, and
+        # how a CadQuery script gets its own (``cad run``, which makes the environment of the cadquery integration).
+        return (f"{said}: the server builds with {' or '.join(kernels)}, not {theirs.get('kernel')}; a CadQuery "
+                f"script runs with `{COMMAND} run`, in the environment of cad's cadquery integration")
     newer = _compared(here, server) if known else -1
     if newer == 0:
         # One release of two contracts: a build of it changed what its worker says (a checkout that moved

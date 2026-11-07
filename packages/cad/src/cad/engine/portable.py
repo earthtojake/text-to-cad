@@ -84,9 +84,9 @@ def tree(header: dict[str, Any], data: bytes) -> Any:
     return reader.assemble(found, shapes, locations)
 
 
-def shape_bytes(shape: Any, name: str) -> bytes:
-    """The document's bytes of a shape handed over, named ``name``, made here as a build makes a document
-    (``document.collect``, ``to_xcaf``) and serialised (``document.to_bytes``)."""
+def collected(shape: Any, name: str) -> Any:
+    """The tree a shape handed over makes, as a build makes a document's (``document.collect``): each part's
+    shape made direct and keyed by its geometry, and the parts merged. Ready for ``document.to_xcaf``."""
     from cad.engine import document
 
     made = document.collect(shape, name)
@@ -94,8 +94,20 @@ def shape_bytes(shape: Any, name: str) -> bytes:
         part.shape = document.direct(part.shape)
         part.key = document.geometry_key(part.shape)
     document.merge(made)
+    return made
+
+
+def _bytes_of(made: Any) -> bytes:
+    from cad.engine import document
+
     doc = document.to_xcaf(made, document.Kept())
     return document.to_bytes(doc, [part.shape for part in made.parts])
+
+
+def shape_bytes(shape: Any, name: str) -> bytes:
+    """The document's bytes of a shape handed over, named ``name``, made here as a build makes a document
+    (``collected``, ``document.to_xcaf``) and serialised (``document.to_bytes``)."""
+    return _bytes_of(collected(shape, name))
 
 
 def document_bytes(header: dict[str, Any], data: bytes, name: str) -> bytes:
@@ -111,28 +123,23 @@ def embody(header: dict[str, Any], data: bytes, name: str) -> dict[str, Any]:
     a CadQuery worker's: the script's and its modules' digests and the key made of them (``closure_record``)
     -- is written on the document's main label as a build writes its closure, so the document says what
     made it, and ``cad model inspect`` reads it."""
-    from cad.engine import delta, document
+    from cad.engine import delta
 
-    shape = tree(header, data)
-    made = document.collect(shape, name)
-    for part in made.parts:
-        part.shape = document.direct(part.shape)
-        part.key = document.geometry_key(part.shape)
-    document.merge(made)
+    made = collected(tree(header, data), name)
     closure = header.get("closure")
     if isinstance(closure, dict):
         made.closure = closure_record(closure, header, name)
     signature = (("portable", header.get("kernel"), header.get("shapes")), tuple(part.key for part in made.parts))
     facts = delta.facts(made, f"portable::{name}", signature)
-    doc = document.to_xcaf(made, document.Kept())
-    return {"xbf": document.to_bytes(doc, [part.shape for part in made.parts]), "parts": len(made.parts), "facts": facts}
+    return {"xbf": _bytes_of(made), "parts": len(made.parts), "facts": facts}
 
 
 def closure_record(closure: dict[str, Any], header: dict[str, Any], name: str) -> str:
     """The closure a CadQuery model's document carries, as text for its main label (``previous.text``): the
     engine's record shape -- the schema, the engine, the libraries (CadQuery's OCP build among them), the
-    platform, the source and the modules by digest -- with the worker's key, which has no bodies and no
-    inputs (a CadQuery worker runs the body under its own memo and reads no file the engine tracks)."""
+    platform, the source, the modules by digest (those imported inside the body too) and the inputs, the files
+    the body opened, by digest (``["file", path, digest]`` rows, as a kernel build's) -- with the worker's key,
+    which has no bodies (a CadQuery worker runs the body under its own memo, and replays none)."""
     from pathlib import Path
 
     from cad.engine import previous
@@ -140,11 +147,14 @@ def closure_record(closure: dict[str, Any], header: dict[str, Any], name: str) -
     script = str(closure.get("script") or "")
     folder = Path(script).parent if script else Path.cwd()
     modules = closure.get("modules") if isinstance(closure.get("modules"), dict) else {}
+    inputs = closure.get("inputs") if isinstance(closure.get("inputs"), dict) else {}
     record = {
         "schema": previous.SCHEMA, "engine": previous._engine(),
         "libs": {**previous._libraries(), "cadquery": str(header.get("kernel") or "cadquery")},
         "platform": previous._platform(),
         "source": {"kind": "script", "path": previous._relative(script, folder) if script else None, "function": name},
         "modules": sorted([previous._relative(str(path), folder), str(digest)] for path, digest in modules.items()),
-        "symbols": {}, "inputs": None, "bodies": None, "key": closure.get("key")}
+        "symbols": {},
+        "inputs": sorted(["file", previous._relative(str(path), folder), digest] for path, digest in inputs.items()),
+        "bodies": None, "key": closure.get("key")}
     return previous.text(record)

@@ -102,6 +102,13 @@ def at(x: float, y: float, z: float) -> Location:
     return Location(TopLoc_Location(moved))
 
 
+def box(length: float, width: float, height: float) -> Workplane:
+    """A box on the stack, as ``cq.Workplane("XY").box(...)`` leaves one."""
+    import build123d as bd
+
+    return Workplane(Shape(bd.Box(length, width, height).wrapped))
+
+
 def plate() -> Workplane:
     """A 40 x 20 x 6 plate with an 8 mm hole through it, as a CadQuery chain would leave it on the stack."""
     import build123d as bd
