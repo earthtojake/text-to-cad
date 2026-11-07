@@ -748,10 +748,14 @@ def _instance(shape: Any, copied: dict[int, Any]) -> Any:
     if joints:
         from build123d import Joint
 
+        from cad.engine.kernel.memo import own_joints
+
+        joints = attrs["joints"] = own_joints(joints, made)
         for label, joint in joints.items():
             if isinstance(joint, Joint):
-                joints[label] = copied[id(joint)] = copy.copy(joint)
-                joints[label].parent = made
+                own = copied[id(joint)] = copy.copy(joint)
+                dict.__setitem__(joints, label, own)  # as a dict is: a JointDict's own would move it
+                own.parent = made
     made.__dict__.update(attrs)
     if children:
         copies = [_instance(child, copied) for child in children]
