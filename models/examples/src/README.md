@@ -10,7 +10,7 @@ exports the two STEPs it reads.
 | `electronics_enclosure_base.py` | — | Open-top enclosure with rounded corners and standoffs |
 | `basic_shape_mating_test_fixture.py` | — | Seven parts and a sub-assembly seated on a base plate by build123d joints |
 | `electronics_enclosure_base_import.py` | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` (its `__main__` exports them) | The enclosure's and the fixture's STEP read back with `read_step` |
-| `electronics_enclosure_base_drawing.py` | `PDF/electronics_enclosure_base_drawing.pdf` | **Engineering drawing** (`@eng_drawing`) of the enclosure, calling its model: three views with hidden lines and centre marks, measured dimensions, hole callouts, title block. Build the enclosure first. |
+| `electronics_enclosure_base_drawing.py` | `PDF/electronics_enclosure_base_drawing.pdf` | **Engineering drawing** (`@eng_drawing`) of the enclosure, calling its model: a section through the standoffs, measured dimensions, hole and boss callouts read off the part, title block. |
 | `cam_follower_roller.py` | — | Cam follower roller with central bearing bore and rounded outer profile (Steel 4140) |
 | `centrifugal_impeller.py` | — | Single solid centrifugal impeller (Aluminum 6061-T6) |
 | `circular_flange.py` | — | Circular flange with a six-hole bolt circle (Steel 1018) |
@@ -78,6 +78,25 @@ It read the STEP the enclosure wrote; it calls the enclosure's model now, which 
 engine builds (a replay when current) and hands back as a shape, and takes every
 dimension's constants from the model module. Its PDF (`../PDF/`, gitignored) carries no
 date: an unchanged drawing writes the same bytes.
+
+More drawings, each `<part>_drawing.py` calling the model beside it, as the enclosure's
+does, and writing its PDF to `../PDF/`; four parts are here for the drawing feature each
+shows:
+
+| Script | Files | What it is |
+| --- | --- | --- |
+| `angle_bracket.py` | — | Base plate with a tab leaning 30 degrees, a hole square through the tab (Steel 1018) |
+| `angle_bracket_drawing.py` | `PDF/angle_bracket_drawing.pdf` | An auxiliary view (VIEW C) square onto the inclined tab, its hole called out there; the sheet chooses its own size and scale |
+| `circular_flange_drawing.py` | `PDF/circular_flange_drawing.pdf` | The flange on A4: the bolt circle (count, size and pitch circle) and bore called out from the part, a section through the holes, the edge radius called out where the section shows it |
+| `guide_bar.py` | — | 600 mm round bar with an end spigot, a cross hole near each end and a chamfered end (Steel 4140) |
+| `guide_bar_drawing.py` | `PDF/guide_bar_drawing.pdf` | Front and top views broken, the overall length still stated true, diameters on the profile, the end chamfer called out |
+| `l_bracket_drawing.py` | `PDF/l_bracket_drawing.pdf` | Both hole patterns called out in the views that look down them, plate and gusset sizes |
+| `mounting_plate_drawing.py` | `PDF/mounting_plate_drawing.pdf` | Its holes and slot called out from the part, the hole pitch, the slot's position and the corner radius (calling the plate also writes its declared STL, 3MF and GLB) |
+| `perforated_plate.py` | — | Plate with two rows of holes, dowel holes, a bore, a slot and rounded corners (Aluminum 6061-T6) |
+| `perforated_plate_drawing.py` | `PDF/perforated_plate_drawing.pdf` | A hole table: each hole and the slot tagged, positioned from the corner, sized from the part; the corner radius called out |
+| `pivot_mount_plate.py` | — | A plate with four bolt holes and a bore, the lined bushing pressed in it: a sleeve and its PTFE fabric liner, each a part (Aluminum 7075-T6, Stainless 303, PTFE) |
+| `pivot_mount_plate_drawing.py` | `PDF/pivot_mount_plate_drawing.pdf` | GD&T on an aerospace company's own `Profile` (ASME Y14.5, a company's release category, CAGE CODE and DISTRIBUTION): the bushing installed, in a section hatched by material, its layers in a note, and the installed bore's limits as a key characteristic; then the plate, datums A, B and C on its faces, the bolt holes and the bore at true position from basic dimensions, flatness and perpendicularity qualifying the datums |
+| `stepped_shaft_keyway_drawing.py` | `PDF/stepped_shaft_keyway_drawing.pdf` | Diameters on the profile, the keyway located, a section through it, a 5:1 detail of the end chamfer |
 
 `electronics_enclosure_base_import.py` keeps the drawing's old read: `read_step` of
 the enclosure's STEP, plus a read of the fixture's STEP to exercise an imported

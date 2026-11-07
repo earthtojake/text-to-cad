@@ -14,10 +14,12 @@ Single-tube coilover damper in its static design pose.
   coil spring is seated on the body's lower perch and bears on the rod's
   upper perch where it stands.
 
-`inspect interfere` reports overlaps at every threaded/blind joint (collar
-on tube, gland cap, eye shank, rod entering the tube, spring ends on the
-seats). Those are accepted static-assembly interpenetrations, not defects;
-the only moving joint (rod stroke along Z) stays coaxial and clear.
+`inspect interfere` reports overlaps only where the simplified coil spring's
+ends bear on the seats. The gland cap sits on the tube's end, its spigot in
+the tube's bore; the eye shank butts the tube's other end, where the weld
+joins them; the collar threads onto the tube, its bore the tube's outside
+diameter. The only moving joint (rod stroke along Z) stays coaxial and clear:
+the rod runs in the gland cap's and both spring seats' bores.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ EYE_OD = 30.0               # eye outside diameter
 EYE_WIDTH = 25.0            # eye width along the bore axis (Y)
 
 BODY_OD = 50.0              # pressure tube outside diameter
+TUBE_WALL = 2.0             # pressure tube wall; its bore holds the oil and the piston
 BODY_BOTTOM_Z = -140.0
 BODY_TOP_Z = 10.0
 
@@ -77,7 +80,7 @@ LOWER_EYE_Z = -EYE_TO_EYE / 2
 UPPER_EYE_Z = EYE_TO_EYE / 2
 
 SHANK_BOTTOM_Z = LOWER_EYE_Z + EYE_OD / 2 - 1.0   # forging from eye to tube
-SHANK_TOP_Z = BODY_BOTTOM_Z + 3.0
+SHANK_TOP_Z = BODY_BOTTOM_Z
 
 KNOB_D = 11.0               # rebound adjuster clicker on the tube wall
 KNOB_AXIS_Z = BODY_BOTTOM_Z + 14.0
@@ -168,27 +171,36 @@ def _coil_spring(bottom_z, height, mean_d, wire_d, turns, segments_per_turn=24):
 def _damper_body_children():
     """Fixed root module: pressure tube, lower eye, shank, adjusters."""
 
-    tube = _axis_cylinder(
+    tube = _axis_ring(
         (0.0, 0.0, (BODY_BOTTOM_Z + BODY_TOP_Z) / 2), (0.0, 0.0, 1.0),
-        BODY_OD / 2, BODY_TOP_Z - BODY_BOTTOM_Z,
+        BODY_OD / 2, BODY_OD / 2 - TUBE_WALL, BODY_TOP_Z - BODY_BOTTOM_Z,
     )
 
-    # forged shank flaring from the eye into the tube weld
+    # forged shank flaring from the eye to the tube's end, welded there
     shank = bd.Cone(
         bottom_radius=12.0, top_radius=BODY_OD / 2,
         height=SHANK_TOP_Z - SHANK_BOTTOM_Z,
     ).moved(bd.Location((0.0, 0.0, (SHANK_BOTTOM_Z + SHANK_TOP_Z) / 2)))
 
-    gland_cap = _axis_ring(
+    # the gland cap's head sits on the tube's end; its spigot locates in the bore
+    gland_head = _axis_cylinder(
+        (0.0, 0.0, (BODY_TOP_Z + GLAND_CAP_TOP_Z) / 2), (0.0, 0.0, 1.0),
+        GLAND_CAP_OD / 2, GLAND_CAP_TOP_Z - BODY_TOP_Z,
+    )
+    gland_spigot = _axis_cylinder(
+        (0.0, 0.0, (GLAND_CAP_BOTTOM_Z + BODY_TOP_Z) / 2), (0.0, 0.0, 1.0),
+        BODY_OD / 2 - TUBE_WALL, BODY_TOP_Z - GLAND_CAP_BOTTOM_Z,
+    )
+    gland_cap = (gland_head + gland_spigot) - _axis_cylinder(
         (0.0, 0.0, (GLAND_CAP_BOTTOM_Z + GLAND_CAP_TOP_Z) / 2), (0.0, 0.0, 1.0),
-        GLAND_CAP_OD / 2, ROD_D / 2 + 0.5, GLAND_CAP_TOP_Z - GLAND_CAP_BOTTOM_Z,
+        ROD_D / 2 + 0.5, GLAND_CAP_TOP_Z - GLAND_CAP_BOTTOM_Z + 2.0,
     )
 
-    # threaded preload adjuster with two grip grooves
+    # threaded preload adjuster with two grip grooves, threaded onto the tube
     collar_center_z = (PRELOAD_COLLAR_BOTTOM_Z + PRELOAD_COLLAR_TOP_Z) / 2
-    collar = _axis_cylinder(
+    collar = _axis_ring(
         (0.0, 0.0, collar_center_z), (0.0, 0.0, 1.0),
-        PRELOAD_COLLAR_OD / 2,
+        PRELOAD_COLLAR_OD / 2, BODY_OD / 2,
         PRELOAD_COLLAR_TOP_Z - PRELOAD_COLLAR_BOTTOM_Z,
     )
     for groove_z in (collar_center_z - 6.0, collar_center_z + 6.0):
@@ -200,6 +212,10 @@ def _damper_body_children():
         bottom_radius=LOWER_SEAT_OD / 2, top_radius=SPRING_MEAN_D / 2 - 1.0,
         height=LOWER_SEAT_TOP_Z - LOWER_SEAT_BOTTOM_Z,
     ).moved(bd.Location((0.0, 0.0, (LOWER_SEAT_BOTTOM_Z + LOWER_SEAT_TOP_Z) / 2)))
+    lower_seat = lower_seat - _axis_cylinder(  # the rod strokes through it
+        (0.0, 0.0, (LOWER_SEAT_BOTTOM_Z + LOWER_SEAT_TOP_Z) / 2), (0.0, 0.0, 1.0),
+        ROD_D / 2 + 0.5, LOWER_SEAT_TOP_Z - LOWER_SEAT_BOTTOM_Z + 2.0,
+    )
 
     # rebound clicker knob on the tube wall, pointing out along +X
     knob = _axis_cylinder(
@@ -240,6 +256,10 @@ def _piston_rod_children():
         UPPER_SEAT_LOCK_OD / 2, ROD_D / 2, 6.0,
     )
     upper_seat = upper_seat + lock_ring
+    upper_seat = upper_seat - _axis_cylinder(  # locked on the rod, which runs through it
+        (0.0, 0.0, (UPPER_SEAT_BOTTOM_Z + UPPER_SEAT_TOP_Z) / 2), (0.0, 0.0, 1.0),
+        ROD_D / 2, UPPER_SEAT_TOP_Z - UPPER_SEAT_BOTTOM_Z + 2.0,
+    )
 
     return [
         _part(rod, "piston_rod", "chrome", color_name="chrome"),
