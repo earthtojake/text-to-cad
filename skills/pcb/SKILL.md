@@ -95,8 +95,10 @@ ERC and look at each sheet ([schematic](references/schematic.md)) before laying 
 to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
-group at a time ([placement](references/placement.md) says in what order and where), route
-octolinear by hand (never an autorouter) with widths for each net's current, and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
+group at a time ([placement](references/placement.md) says in what order and where), route the nets
+whose path matters by hand and direct the router (`cad.kicad.route` in the edit, with the plan you
+give it) through the rest, octolinear, with widths for each net's current, and check each step with
+`cad kicad_pcb drc`, the copper stills and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
