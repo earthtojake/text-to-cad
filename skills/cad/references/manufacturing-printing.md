@@ -21,15 +21,18 @@ is named; the reference's table and a machine datasheet move them):
   question.
 - **Walls, pins and holes.** Walls 0.8 mm or more (two nozzle widths; SLA 0.5 supported / 1.0 free,
   SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
-  can be; pins 5 mm (FDM, a recommendation; SLS 0.8, SLA 0.5); embossed text 1 mm high (FDM) and
-  engraving 0.4 mm deep.
+  can be; pins 0.8 mm (SLS, a recommendation; SLA 0.5; FDM gives no minimum, a pin under 5 mm being
+  perimeters alone); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule).
 - **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
-  its last millimetres: blunt it to the wall minimum.
+  its last millimetres: blunt it to the wall minimum (`printing.knife_edge`, a warning: the tip prints
+  rounded). Two surfaces meeting at a glancing angle (a sphere emerging from a cone) leave a feather of
+  material the wall rule fails: blend them, or cut the feather back.
 - **Hollow parts.** SLS, MJF and PBF need an escape hole of 3.5 mm or more per cavity for the powder;
   SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
 - **Fits.** Mating parts 0.3 mm apart for FDM in practice (the generic rule warns under 0.76), SLS 0.3,
   SLA 0.5; walls are judged per part, clearances per pair.
-- Within the printer: `--build-volume 256x256x256` for the person's machine. The material and the
+- Within the printer: `--build-volume 256x256x256` for the person's machine (without it the fit is
+  judged against the rule set's assumed machine, a warning naming it, never an error). The material and the
   process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
   `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad model dfm "$ID"` then needs no
   `--process`, `--technology` or `--layer-height`.
@@ -67,14 +70,17 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
 - Report `not_watertight` or `not_sound` first: it blocks slicing for every technology.
 - Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum.
   A mesh cannot say which, so it is judged against the supported minimum (`printing.wall`). On a mesh
-  the field is `--samples` rays (2000) from random points over the surface, plus one from every
-  triangle, each straight in to the face it leaves through: a thin `min_mm` beside a thick `p05_mm` is
-  a small thin place (a web between two cuts, a chamfered rim), never noise; name it from its item's
-  `xyz`. A place smaller than the rays' spacing is found by chance: before a print, check the file that
-  will be sliced with `--samples 20000`.
+  the field is `--samples` rays (2000) from random points over the surface (plus one from every
+  triangle on a mesh of 5000 triangles or fewer), each straight in to the face it leaves through, a
+  knife edge's own sliver left to the knife family: a thin `min_mm` beside a thick `p05_mm` is a small
+  thin place (a web between two cuts, a feather where two surfaces meet at a glancing angle); name it
+  from its item's `xyz` and judge it there. Every reading is sampled, on the B-rep too (`sampled`): a
+  place smaller than the rays' spacing can be missed, and more rays find false thin places as well as
+  true ones, so a mesh's thin reading is confirmed on the STEP or the model before the design changes.
 - `printing.knife_edge` is a convex edge under 45 degrees of material, which thins to nothing:
-  `thin_depth_mm` says how far in it stays under the minimum wall. Blunt it, chamfer it at 45 degrees
-  or more, or move the cut that made it.
+  `thin_depth_mm` says how far in it stays under the minimum wall. A warning (text-to-cad's own rule;
+  no guide defines a knife edge, and the tip prints rounded): blunt it, chamfer it at 45 degrees or
+  more, or move the cut that made it.
 - The powder processes (SLS, MJF) need no support: their overhangs are facts, not verdicts, and
   trapped powder and its escape holes (`trapped_volumes`) are the check instead. A sealed cavity in
   SLA traps resin; in FDM it prints as infill (`internal_void`).
