@@ -473,9 +473,10 @@ def _turn(loop: Loop, at: int) -> float:
 
 def tabs(loop: Loop, material_left: bool) -> list[Tab]:
     """The loop's straight-sided protrusions: two facing straight sides with the material between them,
-    joined beyond their overlap by a tip no longer than a half round across them plus their width, at
-    least one of them meeting the body at an inside corner at the other end (outside corners at both
-    make the strip a bar, not a tab)."""
+    joined beyond their overlap by a tip no longer than a half round across them plus their width, both
+    meeting the body at an inside corner at the other end: the tip stands proud of the body on three sides
+    (an outside corner at either makes the strip a lobe of the outline -- an L plate's leg, a shoulder --
+    not a tab)."""
     n = len(loop.points)
     sides = _sides(loop)
     found: dict[tuple[int, int], Tab] = {}
@@ -516,7 +517,7 @@ def tabs(loop: Loop, material_left: bool) -> list[Tab]:
                 continue
             inside_i = sign * _turn(loop, fi) < -1e-9
             inside_j = sign * _turn(loop, (lj + 1) % n) < -1e-9
-            if not (inside_i or inside_j):
+            if not (inside_i and inside_j):
                 continue
             key = (min(i, j), max(i, j))
             base = si + ui * lo + inward * (width / 2)

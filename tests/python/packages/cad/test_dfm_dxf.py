@@ -146,6 +146,26 @@ class CutFileTest(unittest.TestCase):
         self.assertNotIn("sheet.hole_diameter", codes)
         self.assertFalse(unset.ok)
 
+    def test_a_cut_file_with_no_thickness_says_its_rules_waited(self) -> None:
+        def build(msp, _):
+            _plate(msp)
+            msp.add_circle((20, 20), 3)
+        result = self.check(self.write("bare", build))
+        (waited,) = [f for f in result.findings if f.code == "sheet.thickness_unknown"]
+        self.assertEqual(waited.severity, "warning")
+        self.assertIn("hole_to_edge", waited.message)
+        self.assertIn("no --thickness", result.summary)  # an OK that does not read as a pass of them
+
+    def test_inch_geometry_declared_in_millimetres_is_suspect(self) -> None:
+        def build(msp, _):
+            _plate(msp, 4.0, 3.0)
+            msp.add_circle((1.0, 1.0), 0.0625)
+        result = self.check(self.write("inch_as_mm", build), thickness=2.0)
+        (suspect,) = [f for f in result.findings if f.code == "units_suspect"]
+        self.assertIn("read as inches it is 101.6 x 76.2 mm", suspect.message)
+        self.assertIn("$INSUNITS to 1", suspect.message)
+        self.assertEqual(result.measurements["parts"]["items"][0]["flat_length_mm"], 4.0)  # judged as declared
+
     def test_features_against_the_thickness_the_kerf_and_the_sheet(self) -> None:
         def build(msp, _):
             _plate(msp, 300, 100)

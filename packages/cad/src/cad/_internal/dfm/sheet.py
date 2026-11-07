@@ -60,6 +60,8 @@ SCS_5052 = Source("scs-5052", "SendCutSend", "5052 aluminum material page",
                   "https://sendcutsend.com/materials/5052-aluminum/", ACCESSED)
 SCS_MINMAX = Source("scs-minmax", "SendCutSend", "Min/max part sizes",
                     "https://sendcutsend.com/materials/min-max/", ACCESSED)
+SCS_RELIEF = Source("scs-relief", "SendCutSend", "How to design bend reliefs and corner reliefs",
+                    "https://sendcutsend.com/blog/guide-to-designing-bend-reliefs/", "2026-11-06")
 
 # --- tables the rules read through ``context`` ------------------------------------------------------------
 
@@ -75,7 +77,16 @@ _PROTOLABS_GROUP = {"aluminum": "al", "copper": "al", "steel": "crs", "galvanize
 
 #: SendCutSend's bending calculator, per material and thickness (inches): K factor, effective inside bend
 #: radius at 90 degrees, die width, minimum formed flange at 90 degrees (measured from the bend's apex).
+#: ``aluminum`` is 5052 H32, the one aluminum it bends; ``stainless`` is 304; ``titanium`` grade 2. The
+#: bending page lists a 0.032 in copper the calculator gives no row for: no gauge here.
 SCS_BEND_TABLE: dict[str, dict[float, tuple[float, float, float, float]]] = {
+    "4130": {0.050: (0.38, 0.050, 0.472, 0.302), 0.063: (0.41, 0.050, 0.472, 0.308),
+             0.125: (0.43, 0.090, 0.984, 0.723), 0.190: (0.37, 0.125, 0.984, 0.782),
+             0.250: (0.36, 0.170, 1.575, 1.367)},
+    "stainless_316": {0.060: (0.34, 0.070, 0.472, 0.314), 0.125: (0.38, 0.150, 0.984, 0.740),
+                      0.187: (0.35, 0.130, 0.984, 0.784), 0.250: (0.34, 0.225, 1.575, 1.381)},
+    "pc": {0.118: (0.33, 0.040, 0.472, 0.386), 0.177: (0.33, 0.085, 0.984, 0.848),
+           0.220: (0.33, 0.100, 0.984, 0.884)},
     "aluminum": {0.040: (0.45, 0.024, 0.472, 0.286), 0.063: (0.42, 0.035, 0.472, 0.303),
                  0.080: (0.48, 0.038, 0.472, 0.313), 0.090: (0.37, 0.032, 0.472, 0.326),
                  0.100: (0.40, 0.125, 0.630, 0.463), 0.125: (0.44, 0.125, 0.630, 0.476),
@@ -119,6 +130,8 @@ SHEETS: dict[str, tuple[tuple[float, float], str]] = {
     "sendcutsend": ((1727.2, 1117.6), "SendCutSend's largest laser-cut part, 44 x 68 in (5052, mild steel)"),
 }
 SCS_BENDING_SHEET = (1117.6, 762.0)  # the largest flat blank SendCutSend bends: 30 x 44 in
+#: Each shop's smallest flat part (long x short, mm): a cut file under it reads as drawn in the wrong unit.
+SMALLEST_PART: dict[str, tuple[float, float]] = {"protolabs": (6.35, 6.35), "sendcutsend": (9.525, 6.35)}
 
 
 def sheet_size(text: str | None) -> tuple[float, float] | None:
@@ -135,10 +148,55 @@ def sheet_size(text: str | None) -> tuple[float, float] | None:
     return (max(values), min(values))
 
 
+#: The alloys a --material can name beside its family (materials.resolve keeps the family alone).
+_ALLOYS = {"5052": "5052", "al5052": "5052", "6061": "6061", "6061-t6": "6061", "6061_t6": "6061", "al6061": "6061",
+           "7075": "7075", "al7075": "7075", "304": "304", "ss304": "304", "316": "316", "ss316": "316",
+           "316l": "316", "4130": "4130", "chromoly": "4130"}
+#: The bending calculator's name for each of its tables.
+SCS_NAMES = {"aluminum": "5052 aluminum", "steel": "mild steel", "stainless": "304 stainless", "brass": "brass",
+             "copper": "copper", "galvanized": "G90 galvanized steel", "titanium": "grade 2 titanium",
+             "4130": "4130 chromoly", "stainless_316": "316 stainless", "pc": "polycarbonate"}
+
+
+def alloy(name: str | None, declared: tuple[str, ...] = ()) -> str | None:
+    """The alloy a material's name gives (``6061``, ``316``), else one a part's declared material's name
+    carries (``Alu_G6061_T6``), else None: the family alone."""
+    import re
+
+    if name:
+        found = _ALLOYS.get(str(name).strip().lower().replace(" ", "_"))
+        if found:
+            return found
+    for text in declared:
+        match = re.search(r"(5052|6061|7075|304|316|4130)", str(text))
+        if match:
+            return match.group(1)
+    return None
+
+
+def scs_key(material: str | None, declared: tuple[str, ...] = ()) -> str | None:
+    """The bending calculator's table for a material (its family, or a table's own name): 5052 for an
+    aluminum of no other alloy, 316 apart from 304; None for an aluminum SendCutSend does not bend (6061,
+    7075) or no material."""
+    if not material:
+        return None
+    if material in SCS_BEND_TABLE:
+        return material
+    named = alloy(material, declared)
+    if named == "4130":
+        return "4130"
+    family = materials.resolve(material)
+    if family == "aluminum":
+        return "aluminum" if named in (None, "5052") else None
+    if family == "stainless" and named == "316":
+        return "stainless_316"
+    return family
+
+
 def scs_row(material: str | None, thickness: float | None) -> tuple[float, tuple[float, float, float, float]] | None:
-    """SendCutSend's calculator row for a material and a thickness (mm): (gauge in inches, (K, radius in,
-    die in, flange in)), or None where it lists none."""
-    table = SCS_BEND_TABLE.get(material or "")
+    """SendCutSend's calculator row for a material (a --material, or a table's name) and a thickness (mm):
+    (gauge in inches, (K, radius in, die in, flange in)), or None where it lists none."""
+    table = SCS_BEND_TABLE.get(scs_key(material) or "")
     if not table or thickness is None:
         return None
     inches = thickness / IN
@@ -154,9 +212,9 @@ def k_factor(material: str | None, rules: str | None, inside_radius: float, thic
     material's hardness and the bend's radius over thickness (medium, steel's, for a material not given)."""
     resolved = materials.resolve(material) if material else None
     if rules == "sendcutsend":
-        row = scs_row(resolved, thickness)
+        row = scs_row(material, thickness)
         if row is not None:
-            return row[1][0], f"SendCutSend's calculator, {resolved} {row[0]:.3f} in"
+            return row[1][0], f"SendCutSend's calculator, {SCS_NAMES[scs_key(material)]} {row[0]:.3f} in"
     hardness = _HARDNESS.get(resolved or "", "medium")
     ratio = inside_radius / thickness if thickness > 0 else 0.0
     column = 0 if ratio <= 1.0 + 1e-6 else 1 if ratio <= 3.0 + 1e-6 else 2  # a band's edge is in the band
@@ -213,7 +271,7 @@ def _uniform(source: Source, note: str) -> tuple[Rule, ...]:
 
 
 def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "error", edge: float | None = None,
-           spacing: float | None = None, note: str = "") -> tuple[Rule, ...]:
+           spacing: float | None = None, note: str = "", edge_note: str = "") -> tuple[Rule, ...]:
     rules = []
     if diameter is not None:
         rules.append(_r("hole_diameter", "holes", "size_mm", "min", diameter, "mm", "hole or slot size", source,
@@ -221,9 +279,10 @@ def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "
                         fix="open it to at least {limit:.3g} mm (the thickness times the source's ratio), "
                             "or drill it after cutting", **_SCALED))
     if edge is not None:
+        # a recommendation, a warning: "Holes should be at least the sheet's thickness from the edge"
         rules.append(_r("hole_to_edge", "holes", "edge_distance_mm", "min", edge, "mm", "hole-to-edge distance",
-                        source, scale_by="thickness", fix="move the hole in to at least {limit:.3g} mm from the edge",
-                        **_SCALED))
+                        source, scale_by="thickness", severity="warning", note=edge_note,
+                        fix="move the hole in to at least {limit:.3g} mm from the edge", **_SCALED))
     if spacing is not None:
         rules.append(_r("hole_spacing", "hole_spacing", "distance_mm", "min", spacing, "mm",
                         "hole-to-hole distance (edge to edge)", source, scale_by="thickness",
@@ -232,17 +291,25 @@ def _holes(source: Source, *, diameter: float | None, diameter_severity: str = "
 
 
 def _notches_tabs(source: Source) -> tuple[Rule, ...]:
+    # recommendations, warnings: notches "should be at least the greater of material thickness or 0.04 in.
+    # (1.016mm), and no longer than 5 times its width"; tabs likewise (punch tooling's proportions)
+    notch = ("notches should be at least the greater of the thickness or 0.04 in and no longer than five times "
+             "their width (Protolabs: a recommendation)")
+    tab = ("tabs should be at least the greater of twice the thickness or 0.126 in and no longer than five times "
+           "their width (Protolabs: a recommendation)")
     return (
-        _r("notch_width", "notches", "width_mm", "min", 1.0, "mm", "notch width", source,
-           scale_by="notch_min_mm", fix="widen the notch to at least {limit:.3g} mm (the greater of the "
-                                        "thickness and 1.016 mm)", **_SCALED),
+        _r("notch_width", "notches", "width_mm", "min", 1.0, "mm", "notch width", source, severity="warning",
+           scale_by="notch_min_mm", note=notch, fix="widen the notch to at least {limit:.3g} mm (the greater of the "
+                                                    "thickness and 1.016 mm)", **_SCALED),
         _r("notch_length", "notches", "length_to_width", "max", 5.0, "ratio", "notch length over its width",
-           source, fix="shorten the notch or widen it: its length at most five times its width"),
+           source, severity="warning", note=notch,
+           fix="shorten the notch or widen it: its length at most five times its width"),
         _r("tab_width", "tabs", "width_mm", "min", 1.0, "mm", "tab width", source, scale_by="tab_min_mm",
+           severity="warning", note=tab,
            fix="widen the tab to at least {limit:.3g} mm (the greater of twice the thickness and 3.2 mm)",
            **_SCALED),
         _r("tab_length", "tabs", "length_to_width", "max", 5.0, "ratio", "tab length over its width", source,
-           fix="shorten the tab or widen it: its length at most five times its width"),
+           severity="warning", note=tab, fix="shorten the tab or widen it: its length at most five times its width"),
     )
 
 
@@ -269,12 +336,16 @@ def _flat_size(source: Source, note: str) -> tuple[Rule, ...]:
 
 def _hubs_rules(source: Source) -> tuple[Rule, ...]:
     return (
+        # a recommendation, a warning: "We recommend a sheet metal thickness range between 0.5-10 mm"
         _r("thickness_max", "parts", "thickness_mm", "max", 6.0, "mm", "sheet thickness", source,
-           when={"bent": True}, fix="bend sheet no thicker than {limit:g} mm", note="bending: 0.5 to 6 mm"),
+           when={"bent": True}, item_when={"is_sheet": True}, severity="warning",
+           fix="bend sheet no thicker than {limit:g} mm", note="recommended for bending: 0.5 to 6 mm"),
         _r("thickness_max", "parts", "thickness_mm", "max", 10.0, "mm", "sheet thickness", source,
-           when={"bent": False}, fix="laser cut sheet no thicker than {limit:g} mm", note="laser: 0.5 to 10 mm"),
+           when={"bent": False}, item_when={"is_sheet": True}, severity="warning",
+           fix="laser cut sheet no thicker than {limit:g} mm", note="recommended for laser cutting: 0.5 to 10 mm"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.5, "mm", "sheet thickness", source,
-           fix="use sheet at least {limit:g} mm thick"),
+           item_when={"is_sheet": True}, severity="warning", fix="use sheet at least {limit:g} mm thick",
+           note="recommended: at least 0.5 mm"),
         _r("bend_radius", "bends", "inside_radius_mm", "min", 1.0, "mm", "inside bend radius", source,
            scale_by="thickness", severity="warning", item_when={"kind": "bend"},  # a hem's is hem_diameter's
            fix="open the inside radius to at least the thickness, {limit:.3g} mm", **_SCALED),
@@ -292,7 +363,8 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            fix="move the hole at least {limit:.3g} mm from where the bend's radius starts",
            note="measured from the start of the bend radius (the tangent line)", **_SCALED),
         *_holes(source, diameter=1.0, diameter_severity="warning", edge=1.0, spacing=2.0,
-                note="smaller holes are possible, with more risk of distortion"),
+                note="smaller holes are possible, with more risk of distortion",
+                edge_note="holes should be at least the sheet's thickness from the edge (a recommendation)"),
         _r("web_width", "webs", "width_mm", "min", 1.0, "mm", "material between cuts", source,
            scale_by="thickness", severity="warning",
            fix="leave at least {limit:.3g} mm of material between the cuts",
@@ -313,10 +385,11 @@ _HUBS_RULES = (*_uniform(HUBS, "sheet stock is one thickness"), *_hubs_rules(HUB
 
 _PROTOLABS_RULES = (
         *_uniform(PROTOLABS, "material thickness uniform throughout"),
+        # a capability, an error: "material thickness ranges from 0.024 in. (0.609mm) to 0.250 in. (6.35mm)"
         _r("thickness_max", "parts", "thickness_mm", "max", 6.35, "mm", "sheet thickness", PROTOLABS,
-           fix="use sheet no thicker than 0.250 in ({limit:g} mm)"),
+           item_when={"is_sheet": True}, fix="use sheet no thicker than 0.250 in ({limit:g} mm)"),
         _r("thickness_min", "parts", "thickness_mm", "min", 0.609, "mm", "sheet thickness", PROTOLABS,
-           fix="use sheet at least 0.024 in ({limit:g} mm) thick"),
+           item_when={"is_sheet": True}, fix="use sheet at least 0.024 in ({limit:g} mm) thick"),
         _r("bend_radius", "bends", "inside_radius_mm", "min", 0.254, "mm", "inside bend radius", PROTOLABS_TOOLKIT,
            fix="use a tooled inside radius, 0.01 to 1 in", note="tooling radii 0.01 to 1 in (0.254 to 25.4 mm); "
                                                                "standard 0.030, 0.060, 0.090, 0.120 in"),
@@ -345,7 +418,8 @@ _PROTOLABS_RULES = (
            fix="move the feature at least four thicknesses, {limit:.3g} mm, from the bend",
            note="features within about 4 t of a bend risk deformation; reference unstated, read here from the "
                 "tangent line"),
-        *_holes(PROTOLABS, diameter=1.0),
+        *_holes(PROTOLABS, diameter=1.0, diameter_severity="warning",
+                note="holes and slots should be a minimum of material thickness in diameter (a recommendation)"),
         _r("hole_to_edge", "holes", "edge_distance_mm", "min", {"thin": 1.574, "thick": 3.175}, "mm",
            "hole-to-edge distance", PROTOLABS, by="protolabs_edge_band",
            fix="move the hole in to at least {limit:.4g} mm from the edge (0.062 in to 0.036 in sheet, "
@@ -364,6 +438,10 @@ _PROTOLABS_RULES = (
            fix="bends are at most 47 in long"),
 )
 
+#: The min-max page's largest laser-cut parts, per material: the set's sheet is the largest of them.
+_LASER_MAX = ("laser-cut parts are at most 44 x 56-68 in in 5052 and mild steel, 34 x 56 in in brass, copper and "
+              "4130, 34 x 44 in in titanium (the min-max page, per material)")
+
 _SCS_RULES = (
     *_uniform(SCS_CUTTING, "cut from stock sheet of one thickness"),
     _r("hole_diameter", "holes", "size_mm", "min", 0.5, "mm", "hole or cutout size (laser)", SCS_CUTTING,
@@ -371,27 +449,32 @@ _SCS_RULES = (
     _r("hole_diameter", "holes", "size_mm", "min", 1.0, "mm", "hole size (5052 aluminum)", SCS_5052,
        scale_by="thickness", when={"scs_5052": True}, fix="open it to at least the thickness, {limit:.3g} mm",
        note="the 5052 page's own minimum, stricter than the cutting guide's half thickness"),
-    _r("hole_to_edge", "holes", "edge_distance_mm", "min", {"aluminum": 2.0}, "mm", "hole-to-edge distance (5052)",
-       SCS_5052, by="material", scale_by="thickness",
+    # a recommendation, a warning: "Leave at least 2x thickness between a hole and an edge" (a Eurorack panel's
+    # rail slots, laser cut by the thousand, sit 1.4 mm from the edge of 2 mm 5052)
+    _r("hole_to_edge", "holes", "edge_distance_mm", "min", 2.0, "mm", "hole-to-edge distance (5052)",
+       SCS_5052, scale_by="thickness", severity="warning", when={"scs_5052": True},
        fix="move the hole in to at least twice the thickness, {limit:.3g} mm, from the edge",
-       note="published for 5052 alone: another material is not evaluated"),
+       note="leave at least 2x thickness between a hole and an edge (a recommendation); published for 5052 "
+            "alone: another material is not evaluated"),
     # where the thickness is a calculator gauge its radius governs (bend_radius_shop), which is under 1 t
-    _r("bend_radius", "bends", "inside_radius_mm", "min", {"aluminum": 1.0}, "mm", "inside bend radius (5052)",
-       SCS_5052, by="material", scale_by="thickness", severity="warning", when={"scs_gauge": False},
+    _r("bend_radius", "bends", "inside_radius_mm", "min", 1.0, "mm", "inside bend radius (5052)",
+       SCS_5052, scale_by="thickness", severity="warning", when={"scs_gauge": False, "scs_5052": True},
        fix="5052 bends as tight as the thickness in many tempers, {limit:.3g} mm"),
-    # an error for now: SendCutSend bends at its own radius whatever is modelled, so whether a different one
-    # blocks the part (error) or only moves its flanges (warning) is the owner's call
-    _r("bend_radius_shop", "bends", "inside_radius_mm", "min", 1.0, "mm",
-       "inside bend radius, against the calculator's radius for the gauge less 5%", SCS_CALCULATOR,
-       scale_by="scs_radius_low_mm",
-       fix="model the bend at SendCutSend's effective radius for {material} {scs_gauge_in:.3f} in, "
+    # a warning: "Design your parts using our specs so they form as expected, we don't offer custom bend radii"
+    # (the bending page): the part is bent at the tooling's radius whatever is modelled, so its flanges move
+    _r("bend_radius_shop", "bends", "inside_radius_mm", "min", 1.0, "mm", "inside bend radius", SCS_CALCULATOR,
+       scale_by="scs_radius_low_mm", severity="warning", item_when={"kind": "bend"},
+       detail="SendCutSend bends {scs_material} {scs_gauge_in:.3f} in at {scs_radius_mm:.4g} mm "
+              "({scs_radius_in:.3f} in) whatever is modelled: the flanges come out at other lengths",
+       fix="model the bend at SendCutSend's effective radius for {scs_material} {scs_gauge_in:.3f} in, "
            "{scs_radius_mm:.4g} mm ({scs_radius_in:.3f} in): it offers no other",
-       note="no custom radii (the bending page); the calculator's effective radius per material and gauge, "
-            "matched within the larger of 5% and 0.001 in"),
-    _r("bend_radius_shop", "bends", "inside_radius_mm", "max", 1.0, "mm",
-       "inside bend radius, against the calculator's radius for the gauge plus 5%", SCS_CALCULATOR,
-       scale_by="scs_radius_high_mm",
-       fix="model the bend at SendCutSend's effective radius for {material} {scs_gauge_in:.3f} in, "
+       note="design to its specs so the part forms as expected: no custom radii (the bending page); the "
+            "calculator's effective radius per material and gauge, matched within the larger of 5% and 0.001 in"),
+    _r("bend_radius_shop", "bends", "inside_radius_mm", "max", 1.0, "mm", "inside bend radius", SCS_CALCULATOR,
+       scale_by="scs_radius_high_mm", severity="warning", item_when={"kind": "bend"},
+       detail="SendCutSend bends {scs_material} {scs_gauge_in:.3f} in at {scs_radius_mm:.4g} mm "
+              "({scs_radius_in:.3f} in) whatever is modelled: the flanges come out at other lengths",
+       fix="model the bend at SendCutSend's effective radius for {scs_material} {scs_gauge_in:.3f} in, "
            "{scs_radius_mm:.4g} mm ({scs_radius_in:.3f} in): it offers no other"),
     _r("bend_angle", "bends", "angle_deg", "max", 130.0, "deg", "bend angle", SCS_BENDING,
        fix="bend no more than 130 degrees from flat (no hems)",
@@ -410,19 +493,45 @@ _SCS_RULES = (
        when={"scs_gauge": False},
        fix="lengthen the flange past {limit:.3g} mm from the bend's apex: no SendCutSend gauge forms a shorter one",
        note="for a thickness the calculator lists no gauge of: its least minimum formed flange of all, 0.286 in"),
+    # a warning: "Thicker materials (.187-.250 in) need more contact" (the bending page): the flange's least
+    # length along the whole bend, not along half of it
+    _r("flange_length", "flanges", "length_outside_mm", "min", 1.0, "mm",
+       "formed flange length from the bend's apex (along the whole bend)", SCS_BENDING,
+       scale_by="scs_min_flange_mm", severity="warning", when={"scs_thick": True},
+       fix="lengthen the flange to the calculator's minimum for the gauge, {limit:.3g} mm from the bend's apex, "
+           "along the whole bend",
+       note="thicker materials (0.187 in and up) need more contact: the minimum flange along the full bend length"),
+    # a warning: features nearer the bend line than half the die "will be distorted" (the deformation guide)
     _r("hole_to_bend", "hole_to_bend", "distance_centerline_mm", "min", 1.0, "mm",
-       "feature distance from the bend line", SCS_DEFORMATION, scale_by="scs_half_die_mm",
+       "feature distance from the bend line", SCS_DEFORMATION, scale_by="scs_half_die_mm", severity="warning",
        fix="move the feature at least half the die width, {limit:.3g} mm, from the bend line",
-       note="from the bend line, where the die centres; half the calculator's die width for the gauge"),
+       note="a feature nearer the bend line than half the die width will be distorted (from the bend line, where "
+            "the die centres; half the calculator's die width for the gauge)"),
     _r("hole_to_bend", "hole_to_bend", "distance_centerline_mm", "min", SCS_LEAST_HALF_DIE_MM, "mm",
-       "feature distance from the bend line", SCS_DEFORMATION, when={"scs_gauge": False},
+       "feature distance from the bend line", SCS_DEFORMATION, when={"scs_gauge": False}, severity="warning",
        fix="move the feature at least {limit:.3g} mm from the bend line: half SendCutSend's narrowest die",
        note="for a thickness the calculator lists no gauge of: half the narrowest die, 0.472 in"),
-    _r("bend_relief_depth", "reliefs", "depth_centerline_minus_radius_mm", "min", {"thin": 0.508}, "mm",
-       "relief depth past the bend line less the inside radius", SCS_DEFORMATION, by="scs_band",
-       item_when={"kind": "bend"}, fix="cut the relief to the bend radius plus 0.020 in past the bend line",
-       note="unsupported bends to 0.187 in: relief depth = effective bend radius + 0.020 in from the bend line; "
-            "thicker sheet is not evaluated"),
+    # recommendations, warnings: "The width of your relief should be at least half the thickness of your
+    # material"; "The depth of your relief should be at least the material thickness + the bend radius + .02"
+    # (measured from the bend line; the deformation guide's "effective bend radius + 0.020 in" is the looser)
+    _r("bend_relief_width", "reliefs", "width_mm", "min", 0.5, "mm", "bend relief width", SCS_RELIEF,
+       scale_by="thickness", severity="warning", item_when={"kind": "bend"}, detail="{detail}",
+       fix="cut a relief at the bend's end at least half the thickness, {limit:.3g} mm, wide",
+       note="relief width = material thickness / 2", **_SCALED),
+    _r("bend_relief_depth", "reliefs", "depth_centerline_mm", "min", 1.0, "mm", "relief depth from the bend line",
+       SCS_RELIEF, scale_by="scs_relief_depth_mm", severity="warning", item_when={"kind": "bend"},
+       when={"scs_gauge": True}, detail="{detail}",
+       fix="cut the relief {limit:.3g} mm past the bend line: the thickness, the gauge's effective radius and "
+           "0.020 in",
+       note="relief depth = material thickness + bend radius + 0.020 in from the bend line, judged with the "
+            "calculator's effective radius for the gauge (the deformation guide's effective radius + 0.020 in is "
+            "the looser of SendCutSend's two)"),
+    _r("bend_relief_depth", "reliefs", "depth_centerline_minus_radius_mm", "min", 1.0, "mm",
+       "relief depth from the bend line less the inside radius", SCS_RELIEF, scale_by="scs_relief_t_mm",
+       severity="warning", item_when={"kind": "bend"}, when={"scs_gauge": False}, detail="{detail}",
+       fix="cut the relief past the bend line by the thickness, the bend's radius and 0.020 in ({limit:.3g} mm "
+           "plus the radius)",
+       note="for a thickness that is no gauge: the modelled radius"),
     _r("channel_base", "channels", "base_to_flange_ratio", "min", 2.0, "ratio",
        "U-channel base over flange length", SCS_BENDING, fix="make the channel's base at least twice its "
                                                              "flange length"),
@@ -435,10 +544,10 @@ _SCS_RULES = (
        SCS_BENDING, scale_by="sheet_short_mm", when={"bent": True}, fix="a part to bend is at most 30 x 44 in flat"),
     _r("flat_length", "parts", "flat_length_mm", "max", 1.0, "mm", "part's long side", SCS_MINMAX,
        scale_by="sheet_long_mm", when={"bent": False},
-       fix="laser-cut parts are at most 44 x 68 in (5052, mild steel; 44 x 30 in for most other metals)"),
+       fix=_LASER_MAX),
     _r("flat_width", "parts", "flat_width_mm", "max", 1.0, "mm", "part's short side", SCS_MINMAX,
        scale_by="sheet_short_mm", when={"bent": False},
-       fix="laser-cut parts are at most 44 x 68 in (5052, mild steel; 44 x 30 in for most other metals)"),
+       fix=_LASER_MAX),
     _r("flat_min", "parts", "flat_width_mm", "min", 6.35, "mm", "part's short side", SCS_MINMAX,
        when={"bent": False}, fix="the smallest laser-cut part is 0.25 x 0.375 in"),
     _r("flat_min_length", "parts", "flat_length_mm", "min", 9.525, "mm", "part's long side", SCS_MINMAX,
@@ -490,7 +599,6 @@ NOT_JUDGED: dict[str, dict[str, str]] = {
     "sendcutsend": {
         "thickness_max": "the thickness is judged against the calculator's gauges (sheet.gauge_unmatched)",
         "thickness_min": "the thickness is judged against the calculator's gauges (sheet.gauge_unmatched)",
-        "bend_relief_width": "the deformation guide gives a relief depth, no width",
         "hole_spacing": "no hole-to-hole number is published",
         "web_width": "the bridge width varies by material and is not on the pages read",
         "notch_width": "no notch number is published",
@@ -505,27 +613,39 @@ NOT_JUDGED: dict[str, dict[str, str]] = {
 }
 
 
+#: What a set's sources publish that the check does not measure: said in its note, never passed silently.
+NOT_MEASURED: dict[str, str] = {
+    "protolabs": "the discrete tooled radii (the range 0.01 to 1 in is judged) and the standard countersink "
+                 "angles (82, 90, 100 and 120 degrees)",
+    "sendcutsend": "box flange maxima (5 in; 3 in with hardware; a flange 3.5 to 5 in long at least 1.1 in wide), "
+                   "the corner flange gap (at least 0.015 in, recommended), window and joggle bends (to 90 "
+                   "degrees), each material's largest laser-cut part (the sheet is 5052's and mild steel's) and "
+                   "the thicker gauges' larger smallest part",
+}
+
+
 def _noted(note: str, name: str) -> str:
     gaps = NOT_JUDGED.get(name) or {}
     by_reason: dict[str, list[str]] = {}
     for rule, reason in gaps.items():
         by_reason.setdefault(reason, []).append(rule)
     said = "; ".join(f"{', '.join(rules)}: {reason}" for reason, rules in by_reason.items())
-    return f"{note}. Not judged by this set -- {said}" if said else note
+    note = f"{note}. Not judged by this set -- {said}" if said else note
+    return f"{note}. Not measured -- {NOT_MEASURED[name]}" if name in NOT_MEASURED else note
 
 
-_GENERIC = RuleSet("generic", "sheet", "text-to-cad generic", "2026-11-04", _GENERIC_RULES,
+_GENERIC = RuleSet("generic", "sheet", "text-to-cad generic", "2026-11-06", _GENERIC_RULES,
                    (HUBS, PROTOLABS, XOMETRY, SCS_BENDING), generic=True,
                    note=_noted("a starting point: Hubs's bending and laser rules, Protolabs' notch, tab, hem and "
                                "uniform-thickness rules, SendCutSend's channel proportion and Xometry's largest "
                                "blank, no one shop's limits", "generic"))
-_HUBS = RuleSet("hubs", "sheet", "Protolabs Network (Hubs)", "2026-11-04", _HUBS_RULES, (HUBS, XOMETRY),
+_HUBS = RuleSet("hubs", "sheet", "Protolabs Network (Hubs)", "2026-11-06", _HUBS_RULES, (HUBS, XOMETRY),
                 note=_noted("Hubs's sheet metal guide", "hubs"))
-_PROTOLABS = RuleSet("protolabs", "sheet", "Protolabs", "2026-11-04", _PROTOLABS_RULES,
+_PROTOLABS = RuleSet("protolabs", "sheet", "Protolabs", "2026-11-06", _PROTOLABS_RULES,
                      (PROTOLABS, PROTOLABS_TOOLKIT),
                      note=_noted("Protolabs' guidelines page and its sheet metal toolkit", "protolabs"))
-_SCS = RuleSet("sendcutsend", "sheet", "SendCutSend", "2026-11-04", _SCS_RULES,
-               (SCS_CUTTING, SCS_BENDING, SCS_DEFORMATION, SCS_CALCULATOR, SCS_5052, SCS_MINMAX),
+_SCS = RuleSet("sendcutsend", "sheet", "SendCutSend", "2026-11-06", _SCS_RULES,
+               (SCS_CUTTING, SCS_BENDING, SCS_DEFORMATION, SCS_CALCULATOR, SCS_5052, SCS_MINMAX, SCS_RELIEF),
                note=_noted("SendCutSend's cutting and bending guides and its bending calculator: the flange, die "
                            "and radius per material and gauge (give --material; a thickness that is no gauge "
                            f"within {SCS_GAUGE_TOLERANCE_IN} in is reported, its gauge rules not evaluated, and "
@@ -598,11 +718,14 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
         found["protolabs_toolkit"] = group is not None
         if group is not None:
             found["protolabs_flange_t"] = PROTOLABS_FLANGE[group][_protolabs_band(thickness)] * thickness
-        row = scs_row(material, thickness)
+        key = _scs_key(report, resolved)
+        row = scs_row(key, thickness) if key else None
         found["scs_gauge"] = row is not None
+        found["scs_relief_t_mm"] = thickness + 0.020 * IN
         if row is not None:
             gauge, (_, radius, die, flange) = row
             found["scs_gauge_in"] = gauge
+            found["scs_material"] = SCS_NAMES.get(str(key), str(key))
             found["scs_min_flange_mm"] = flange * IN
             found["scs_half_die_mm"] = die * IN / 2.0
             found["scs_radius_mm"] = radius * IN
@@ -610,13 +733,29 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
             slack = max(SCS_RADIUS_TOLERANCE[0] * radius * IN, SCS_RADIUS_TOLERANCE[1])
             found["scs_radius_low_mm"] = radius * IN - slack
             found["scs_radius_high_mm"] = radius * IN + slack
-        found["scs_band"] = "thin" if thickness <= 0.187 * IN + 1e-6 else "thick"
+            found["scs_relief_depth_mm"] = thickness + (radius + 0.020) * IN
+        found["scs_thick"] = (row[0] if row is not None else thickness / IN) >= 0.187 - 1e-6
     else:
         found.update(protolabs_toolkit=False, scs_gauge=False)
-    found["scs_5052"] = material == "aluminum"
+    # 5052's own page's rules: for 5052 alone, named (--material 5052, or a declared 5052)
+    found["scs_5052"] = material == "aluminum" and _alloy(report, resolved) == "5052"
     # a sharp bend already says why the flat pattern is short: sheet.flat_incomplete is left to it
     found["sharp_bends_found"] = bool(_items(report, "sharp_bends"))
     return found
+
+
+def _declared_names(report: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(str(body["material"]) for body in report.get("bodies") or ()
+                 if isinstance(body, dict) and body.get("material"))
+
+
+def _alloy(report: dict[str, Any], resolved: dict[str, Any]) -> str | None:
+    """The alloy the --material names, else the one the parts' declared material does, else None."""
+    return alloy(resolved.get("material"), _declared_names(report))
+
+
+def _scs_key(report: dict[str, Any], resolved: dict[str, Any]) -> str | None:
+    return scs_key(resolved.get("material"), _declared_names(report))
 
 
 def _items(report: dict[str, Any], family: str) -> list[dict[str, Any]]:
@@ -661,18 +800,35 @@ def _scs_gauge(report: dict[str, Any], resolved: dict[str, Any]) -> list[CheckFi
                              "the bending calculator's minimum flange, die width and radius are per material and "
                              "gauge: with no --material they are not evaluated (the gauge-free minimums are)",
                              "rules", "give --material (5052 aluminum: --material 5052)")]
-    table = SCS_BEND_TABLE.get(material)
+    key = _scs_key(report, resolved)
+    bendable = ", ".join(SCS_NAMES[name] for name in SCS_BEND_TABLE)
+    if key is None:  # an aluminum of another alloy
+        named = _alloy(report, resolved)
+        return [CheckFinding("error", "sheet.material_not_bent",
+                             f"SendCutSend bends 5052 H32 alone among aluminums (its bending page's materials): "
+                             f"{named} aluminum is cut flat, not bent", "rules",
+                             "bend the part in 5052 (--material 5052), or order it flat and bend it elsewhere")]
+    table = SCS_BEND_TABLE.get(key)
     if table is None:
-        return [CheckFinding("error", "sheet.gauge_unmatched",
-                             f"SendCutSend's bending calculator lists no {material}: it does not bend it",
-                             "rules", f"bend one of {', '.join(SCS_BEND_TABLE)}")]
-    if scs_row(material, thickness) is not None:
-        return []
+        return [CheckFinding("error", "sheet.material_not_bent",
+                             f"SendCutSend's bending page and calculator list no {material}: it bends {bendable}",
+                             "rules", "bend the part in one of SendCutSend's bending materials, or order it flat")]
+    row = scs_row(key, thickness)
+    if row is not None:
+        gauge = row[0] * IN
+        if abs(thickness - gauge) <= 0.01 * gauge:
+            return []
+        return [CheckFinding(
+            "warning", "sheet.gauge_thickness",
+            f"the part is {thickness:.4g} mm thick, read as SendCutSend's {SCS_NAMES[key]} {row[0]:.3f} in gauge "
+            f"({gauge:.4g} mm): the gauge's radius, die and flange are judged against a part modelled "
+            f"{100 * abs(thickness - gauge) / gauge:.1f}% off it", "rules",
+            f"model at {gauge:.4g} mm, the {row[0]:.3f} in gauge (the stock SendCutSend cuts and bends)")]
     inches = thickness / IN
     nearest = min(table, key=lambda gauge: abs(gauge - inches))
     return [CheckFinding(
         "error", "sheet.gauge_unmatched",
-        f"{thickness:.4g} mm ({inches:.4f} in) is none of SendCutSend's {material} gauges (the nearest is "
+        f"{thickness:.4g} mm ({inches:.4f} in) is none of SendCutSend's {SCS_NAMES[key]} gauges (the nearest is "
         f"{nearest:.3f} in, {nearest * IN:.4g} mm; a gauge matches within {SCS_GAUGE_TOLERANCE_IN} in): the "
         "gauge's minimum flange, die and radius are not evaluated, only the gauge-free minimums",
         "rules", f"model the part at a listed gauge ({', '.join(f'{g:.3f}' for g in sorted(table))} in)")]
@@ -716,6 +872,62 @@ def _sharp_hint(corner: dict[str, Any]) -> str:
     return f"{rule} (t = {t:.4g} mm: r {t:.4g} mm, outside {2 * t:.4g} mm)"
 
 
+def _faces_said(here: list[dict[str, Any]]) -> str:
+    refs = [str(item.get("location", "")).rsplit("/", 1)[-1] for item in here]
+    return ", ".join(refs[:6]) + (f" and {len(refs) - 6} more" if len(refs) > 6 else "")
+
+
+def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
+    """One finding per part for its formed faces (``sheet.formed_surface``) and one for its chamfered or
+    rounded cut edges (``sheet.edge_break``), each naming its faces."""
+    found: list[CheckFinding] = []
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in _items(report, "not_sheet"):
+        if item.get("judged") and item.get("kind") in ("formed", "edge_break"):
+            part = str(item.get("location", "")).rsplit("/", 1)[0]
+            groups.setdefault((item["kind"], part), []).append(item)
+    for (kind, _), here in groups.items():
+        if kind == "formed":
+            surfaces = sorted({str(item.get("surface")) for item in here})
+            found.append(CheckFinding(
+                "error", "sheet.formed_surface",
+                f"{len(here)} face(s) of the sheet are formed to a {' and '.join(surfaces)} surface "
+                f"({_faces_said(here)}): a cone or a torus is rolled, spun or stamped, not brake-bent",
+                here[0].get("location"),
+                "make each bend a cylinder about a straight axis between flat flanges, or quote the part as formed "
+                "(rolled, spun or stamped)"))
+        else:
+            deepest = max(float(item.get("break_mm") or 0.0) for item in here)
+            found.append(CheckFinding(
+                "warning", "sheet.edge_break",
+                f"{len(here)} face(s) chamfer or round the cut edges ({_faces_said(here)}; up to {deepest:.3g} mm "
+                "deep): a laser or waterjet cuts a square edge, so a chamfer or a round is a second operation "
+                "(deburring, an edge-break pass)", here[0].get("location"),
+                "leave the cut edges square and call for deburring, or quote the chamfers as a second operation"))
+    return found
+
+
+def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list[CheckFinding]:
+    """A cut file checked with no --thickness: how many of the set's rules scale with it, so were not
+    evaluated -- an OK is not a pass of them."""
+    if "cut_file" not in report or resolved.get("thickness") is not None or resolved.get("rules") == "none":
+        return []
+    rule_set = RULE_SETS.get(str(resolved.get("rules") or "generic"))
+    if rule_set is None:
+        return []
+    without = context(report, resolved)
+    given = context(report, {**resolved, "thickness": 1.0})
+    waiting = sorted({rule.id for rule in rule_set.rules if isinstance(report.get(rule.family), dict)
+                      and rule.applies(given) and rule.limit_for(given) is not None
+                      and (not rule.applies(without) or rule.limit_for(without) is None)})
+    if not waiting:
+        return []
+    names = ", ".join(ident.removeprefix("sheet.") for ident in waiting)
+    return [CheckFinding("warning", "sheet.thickness_unknown",
+                         f"a cut file carries no thickness: {len(waiting)} rule(s) that scale with it were not "
+                         f"evaluated ({names})", "rules", "give --thickness (the stock's, in mm)")]
+
+
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
     given = resolved.get("thickness")
@@ -736,7 +948,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         fraction = part.get("flat_material_fraction")
         # where a sharp_bend or a judged not_sheet face already says why the flat is short, that error is the
         # finding; this one fires where nothing else explains it
-        explained = bool(_items(report, "sharp_bends")) or any(item.get("judged") for item in _items(report, "not_sheet"))
+        explained = bool(_items(report, "sharp_bends")) or any(
+            item.get("judged") and item.get("kind") != "edge_break" for item in _items(report, "not_sheet"))
         if isinstance(fraction, (int, float)) and abs(float(fraction) - 1.0) > FLAT_MATERIAL_SLACK and not explained:
             why = "a flange or a bend did not unfold"
             found.append(CheckFinding(
@@ -751,6 +964,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       "shorten or cut back the flanges that collide when unfolded"))
         if part.get("unfold_note"):
             found.append(CheckFinding("warning", "sheet.not_unfolded", str(part["unfold_note"]), where))
+    found.extend(_surface_findings(report))
     corners: dict[tuple[Any, Any, Any], list[dict[str, Any]]] = {}
     for corner in _items(report, "sharp_bends"):  # one finding per place and kind, the rest counted
         corners.setdefault((corner.get("location"), corner.get("kind"), corner.get("angle_deg")), []).append(corner)
@@ -758,31 +972,20 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         more = f" (and {len(here) - 1} more at this ref)" if len(here) > 1 else ""
         found.append(CheckFinding("error", "sheet.sharp_bend", _sharp_message(here[0]) + more, location,
                                   _sharp_hint(here[0])))
+    # SendCutSend's own radius (no --bend-radius) is its rule's, sheet.bend_radius_shop: one finding a bend
     radius = resolved.get("bend_radius")
     bends = _items(report, "bends")
-    whose, slack, said = "the shop's", None, ""
-    if radius is None and resolved.get("rules") == "sendcutsend":
-        # with no --bend-radius, SendCutSend's own: the calculator's effective radius for the material and gauge
-        row = scs_row(materials.resolve(resolved.get("material")), _thickness(report, resolved))
-        if row is not None:
-            gauge, (_, inches, _, _) = row
-            radius = inches * IN
-            whose = f"SendCutSend's for {materials.resolve(resolved.get('material'))} {gauge:.3f} in"
-            slack = max(SCS_RADIUS_TOLERANCE[0] * radius, SCS_RADIUS_TOLERANCE[1])
-            said = f" ({inches:.3f} in)"
     if radius is not None:
         radius = float(radius)
         for bend in bends:
             value = bend.get("inside_radius_mm")
-            if bend.get("kind") not in (None, "bend") and slack is not None:
-                continue  # SendCutSend does not hem or curl: bend_angle judges those
-            limit = slack if slack is not None else max(0.01, 0.01 * radius)
+            limit = max(0.01, 0.01 * radius)
             if isinstance(value, (int, float)) and abs(value - radius) > limit:
                 found.append(CheckFinding(
                     "warning", "sheet.bend_radius_differs",
-                    f"the bend's inside radius is {value:.4g} mm, {whose} {radius:.4g} mm{said}: the part and its "
+                    f"the bend's inside radius is {value:.4g} mm, the shop's {radius:.4g} mm: the part and its "
                     "flat pattern will come out differently", bend.get("location"),
-                    f"model the bend at {whose} {radius:.4g} mm{said} inside radius"))
+                    f"model the bend at the shop's {radius:.4g} mm inside radius"))
     if resolved.get("rules") == "sendcutsend" and bends:
         found.extend(_scs_gauge(report, resolved))
     radii = sorted({round(float(bend["inside_radius_mm"]), 3) for bend in bends  # hems and curls: their own tools
@@ -818,6 +1021,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     if resolved.get("rules") == "sendcutsend" and cut.get("insunits") not in (None, 1, 4):
         found.append(CheckFinding("error", "sheet.units", f"the file's units are {cut.get('unit')}: SendCutSend "
                                   "takes inches or millimetres", "$INSUNITS", "save the file in inches or mm"))
+    found.extend(_thickness_unknown(report, resolved))
     if resolved.get("k_factor") is None and bends:
         sources = sorted({str(bend.get("k_factor_source")) for bend in bends if bend.get("k_factor_source")})
         if sources:
@@ -833,7 +1037,9 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
         parts = _items(report, "parts")
         size = (f", {mm(parts[0].get('flat_length_mm'))} x {mm(parts[0].get('flat_width_mm'))} mm"
                 if len(parts) == 1 else "")
-        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}"
+        unscaled = ("; no --thickness: the rules that scale with it not evaluated"
+                    if resolved.get("thickness") is None else "")
+        return f"cut file: {len(parts)} part(s), {cut.get('contour_count', 0)} contour(s){size}{unscaled}"
     parts = _items(report, "parts")
     bends = _items(report, "bends")
     thickness = parts[0].get("thickness_mm") if parts else None

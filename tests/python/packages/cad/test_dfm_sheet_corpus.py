@@ -105,7 +105,7 @@ def corpus() -> list[Case]:
                       near=12))
     block = bd.fillet(bd.Box(60, 40, 20).edges(), 3)
     cases.append(Case("filleted_machined_block", _labelled(block, "block"),
-                      [("sheet.not_sheet", None), ("sheet.thickness_max", None)]))  # no thickness verdicts after it
+                      [("sheet.not_sheet", None)]))  # no thickness verdicts on a part that is not sheet
     points = [[(x * 20, y * 20, 5 * ((x - 1.5) ** 2 * 0.3 + (y - 1) ** 2 * 0.2)) for y in range(3)] for x in range(4)]
     shell = bd.Solid.thicken(bd.Face.make_surface_from_array_of_points(points), 2.0)
     cases.append(Case("freeform_shell", _labelled(shell, "shell"), [("sheet.not_sheet", None)]))
@@ -144,9 +144,10 @@ def corpus() -> list[Case]:
     # 2 mm mild steel is 0.074 in (14 ga): its calculator row's 1.6 mm radius, 0.320 in formed flange and
     # 0.472 in die judge a flange 4 mm past an R1 bend run into the plate without reliefs
     cases.append(Case("scs_2mm_steel_short_flange", tabbed(t=2.0, r=1.0, height=4.0, label="scs2"),
-                      [("sheet.bend_radius_shop", None), ("sheet.bend_radius_differs", None),
+                      [("sheet.bend_radius_shop", None), ("sheet.gauge_thickness", None),  # 2 mm, 0.074 in
                        ("sheet.flange_length", (2.5, 0, 5)),
-                       ("sheet.bend_relief_depth", (0, 15, 2)), ("sheet.bend_relief_depth", (0, -15, 2))],
+                       ("sheet.bend_relief_depth", (0, 15, 2)), ("sheet.bend_relief_depth", (0, -15, 2)),
+                       ("sheet.bend_relief_width", (0, 15, 2)), ("sheet.bend_relief_width", (0, -15, 2))],
                       options=dict(rules="sendcutsend", material="mild steel")))
     good_scs = _labelled(_hole(_bracket("scsok", t=3.175, r=3.175, base=40, wall=30), 15, 25, 5), "scsok")
     cases.append(Case("scs_clean_0125_5052", good_scs, options=dict(rules="sendcutsend", material="5052")))

@@ -364,7 +364,11 @@ air-bending chart by material hardness and r/t), `--bend-radius` (the shop's; a 
   the material to the next face. A planar face whose rays mostly reach an antiparallel planar face is a
   skin; the area-weighted modal distance is the thickness `t`. A coaxial concave/convex cylinder pair `t`
   apart is a bend; a face touching both faces of a pair is a cut edge; a cone between a skin and a coaxial
-  hole wall is a countersink. A face square between two opposite planes that face away from each other,
+  hole wall is a countersink. A chamfer or a round of a skin's edge (a slanted plane, a convex cylinder of at
+  most `t` along it, a cone, torus or sphere about its normal, within the sheet) is an `edge_break`, and a
+  face square to the skin that reaches it and its opposite skin through breaks is a cut edge: its rays run
+  across the plate and measure its width, never its thickness. A cone, torus, sphere or freeform face whose
+  rays cross `t` is `formed` (a cone between flanges is not a bend). A face square between two opposite planes that face away from each other,
   nearer each other than its own rays run, is the cut edge of a stretch off the thickness (a 3 mm wall's end
   cap): the stretch is judged on its skins, not on rays that run along it. Everything else, and any stretch
   of a skin whose rays cross another distance, is `not_sheet` at its ref; a face standing square on a skin
@@ -382,7 +386,10 @@ air-bending chart by material hardness and r/t), `--bend-radius` (the shop's; a 
   curved). A bend about the same axis, radius and angle as the bend that placed its flange (a bend line a
   cut interrupts) is laid along the same line with its own strip, no loop. Fused, this is the flat pattern;
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
-  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip.
+  faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
+  round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
+  and fused on: the flat is the cut outline (an 80 x 40 x 3 plate chamfered 0.5 mm unfolds 80 x 40, not 79 x
+  39), and a hole with a broken rim is read back from it at its cut size.
   `cad.build123d.unfold(shape, thickness=, k_factor=, material=, rules=, bend_lines=False)` returns it
   (`bend_lines=True`: a Compound of `CUT` and `BEND` children, one DXF layer each), and raises `ValueError`
   for a part with a corner modelled without a bend or a flat that does not hold all of its material. Holes, notches, tabs, webs, gaps, flange lengths, reliefs and every distance are measured on
@@ -396,24 +403,27 @@ air-bending chart by material hardness and r/t), `--bend-radius` (the shop's; a 
 | family | per item | notes |
 |---|---|---|
 | `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `box_short_mm`, `unfold_note`, `flat_bend_lines` | one per part |
-| `not_sheet` | `kind` (thicker, thinner, unpaired), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict) | a boss, pocket, round, freeform face |
+| `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict) | a boss, pocket, round, freeform face |
 | `sharp_bends` | `kind` (sharp, inside_only, outside_only, unjoined), `angle_deg`, `inside_radius_mm`, `outside_radius_mm`, `thickness_mm`, `edge_count`, `faces` | a corner joined without a bend: its flange is not in the flat |
-| `bends` | `kind` (bend, hem, curl), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm`; `faces` [inside, outside] | location: the inside cylinder |
+| `bends` | `kind` (bend, hem, curl), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm` (None for a hem or curl: its mold lines meet nowhere); `faces` [inside, outside] | location: the inside cylinder |
 | `flanges` | per bend side: `length_tangent_mm` (least along the bend), `length_tangent_half_mm` (reached by half the bend), `length_inside_mm`/`_half`, `length_outside_mm`/`_half` (mold lines: + r·tan(θ/2), + (r+t)·tan(θ/2)), `length_outside_minus_radius_mm` | the length runs to the free edge or the next bend's tangent line |
 | `channels` | `base_length_mm`, `flange_length_mm` (outside), `base_to_flange_ratio` | a flange between two parallel bends turning the same way |
-| `reliefs` | per bend end and side where the flange runs on past the bend's end: `kind` (bend, corner), `needed`, `present`, `width_mm`, `depth_tangent_mm`, `depth_centerline_mm`, `depth_centerline_minus_radius_mm` | a missing relief has width 0 |
+| `reliefs` | per bend end and side where the flange runs on past the bend's end: `kind` (corner where the end meets another bend's end, relieved or not; else bend), `needed`, `present`, `width_mm`, `depth_tangent_mm`, `depth_centerline_mm`, `depth_centerline_minus_radius_mm`, `detail` | a missing relief has width and depth 0, its detail "no relief" |
 | `hems` | `inside_diameter_mm`, `gap_mm`, `return_length_mm` | bends of 175 to 185 degrees |
 | `curls` | `inside_radius_mm`, `outside_radius_mm`, `angle_deg` | over 185 degrees |
 | `holes` | `kind` (round, slot, cutout), `size_mm` (diameter, or least width), `length_mm` (largest extent), `edge_distance_mm` (edge to edge), `in_bend`, `countersunk`, `countersink_diameter_mm`; `faces` | location: the hole's wall; a hole read back from the flat (across a tangent line): the face it lies on |
 | `hole_spacing` | `distance_mm` edge to edge, `other` | each hole and its nearest |
 | `hole_to_bend` | `distance_tangent_mm`, `distance_centerline_mm` (+ BA/2), `distance_inside_mm`, `distance_outside_mm`, `distance_outside_minus_radius_mm`, `bend` | the nearest bend |
 | `notches` | `width_mm` (mouth), `length_mm` (depth), `length_to_width` | pockets of the outline off its hull |
-| `tabs` | `width_mm`, `length_mm`, `length_to_width` | facing straight sides, a tip, an inside corner at the base |
+| `tabs` | `width_mm`, `length_mm`, `length_to_width` | facing straight sides, a tip, an inside corner at both sides of the base (proud of the body on three sides: an L plate's leg is no tab) |
 | `webs` | `width_mm` | the narrowest material within an outline (a neck, a bridge) |
 | `gaps` | `width_mm`, `between` | the narrowest void (slots, holes, gaps between parts) |
 
 DXF adds `cut_file` (`insunits`, `unit`, `mm_per_unit`, `extents_mm`, `layers` with intents, `cut_layers`,
-`cut_layer_count`, `contour_count`, `is_drawing`), `scale` (`units_unknown`: every length rule withheld), and
+`cut_layer_count`, `contour_count`, `is_drawing`), `scale` (`units_unknown`: every length rule withheld;
+`units_suspect` where the declared unit makes the part implausible -- in mm a part under 25.4 mm, every hole
+under the given thickness, or under the set's smallest part; in inches larger than the set's sheet -- its
+note giving the part read the other way: a warning, the rules still run in the declared unit), and
 defect families, each item `location` = `layer L, TYPE #handle`, `xyz` in mm: `open_geometry` (dangling ends
 and branch points, less those an overlap explains: a copy of a curve laid on another meets it at three ends
 or leaves its own ends on it), `overlaps` (collinear lines or concentric equal arcs overlapping over a
@@ -433,11 +443,17 @@ says which radius is missing, the hint "model an inside radius r >= t and an out
 corner"), `sheet.flat_incomplete` (error: `flat_material_fraction` off 1 by more than 3%, the flat is not the
 part's blank, where no `sheet.sharp_bend` or judged `not_sheet` face already says why; context
 `sharp_bends_found`), `sheet.thickness_mismatch` (error), `sheet.flat_overlap` (error), `sheet.not_unfolded`
-(warning: a loop of bends, a flange no bend reaches), `sheet.bend_radius_differs` (warning: vs
-`--bend-radius`, or with `--rules sendcutsend` and none given, the calculator's radius for the gauge, named
-in mm and inches, beyond the same 5% / 0.001 in as `bend_radius_shop`), `sheet.bend_radii_mixed` (info:
-bends, not hems or curls), `sheet.under_kerf`
-(error), `sheet.hole_in_bend` (warning), `sheet.k_factor_assumed` (info); DXF: `sheet.open_contour`,
+(warning: a loop of bends, a flange no bend reaches), `sheet.formed_surface` (error, one per part: its
+`formed` faces; a cone or a torus is rolled, spun or stamped, not brake-bent), `sheet.edge_break` (warning,
+one per part: its chamfered or rounded cut edges, a second operation after cutting), `sheet.bend_radius_differs`
+(warning: vs `--bend-radius`; SendCutSend's own radius is `sheet.bend_radius_shop`'s), `sheet.bend_radii_mixed`
+(info: bends, not hems or curls), `sheet.under_kerf` (error), `sheet.hole_in_bend` (warning),
+`sheet.k_factor_assumed` (info); with `--rules sendcutsend` and bends: `sheet.material_not_bent` (error: an
+aluminum not 5052, "5052 H32 alone among aluminums", or a material neither its bending page nor its
+calculator lists), `sheet.gauge_unmatched` (error: a thickness none of the material's gauges; with no
+`--material`, a warning), `sheet.gauge_thickness` (warning: matched to a gauge more than 1% off it, "model at
+1.600 mm, the 0.063 in gauge"); DXF: `sheet.thickness_unknown` (warning: no `--thickness`, naming the rules
+that scale with it and were not evaluated; the OK line says so too), `sheet.open_contour`,
 `sheet.overlapping_curves`, `sheet.self_intersecting`, `sheet.crossing_contours`, `sheet.zero_area_loop`
 (errors), `sheet.annotation_on_cut_layer`, `sheet.floating_interior`, `sheet.short_line_run` (warnings),
 `sheet.units` (SendCutSend: inches or mm only).
@@ -452,46 +468,58 @@ thicker stretch's `local_thickness_mm` max the sheet's thickness, a thinner's mi
 sheet parts share one thickness (`one_thickness`; the message gives both: "local thickness (the sheet's is
 the maximum) 3 mm is over the 2 mm maximum"), else `deviation_mm` max 0 per direction; an unpaired face's
 `deviation_mm` max 0;
-`sheet.thickness_max` parts.thickness_mm max 6 bent / 10 flat (Hubs: bending 0.5-6, laser 0.5-10);
-`sheet.thickness_min` min 0.5; `sheet.bend_radius` bends.inside_radius_mm min 1 t (warning; bends, not hems,
+`sheet.thickness_max` parts.thickness_mm max 6 bent / 10 flat, `sheet.thickness_min` min 0.5 (warnings, "We
+recommend a sheet metal thickness range"; parts with `is_sheet` alone); `sheet.bend_radius` bends.inside_radius_mm min 1 t (warning; bends, not hems,
 which `sheet.hem_diameter` judges);
 `sheet.flange_length` flanges.length_outside_minus_radius_mm min 2 t (Hubs min bend height 2t + r; read from
 the outside mold line, the page does not say); `sheet.bend_relief_width` reliefs.width_mm min 1 t (bend
 reliefs, not corner); `sheet.hole_to_bend` hole_to_bend.distance_tangent_mm min 2 t ("from the start of the
-bend radius"); `sheet.hole_diameter` holes.size_mm min 1 t (warning); `sheet.hole_to_edge` min 1 t;
+bend radius"); `sheet.hole_diameter` holes.size_mm min 1 t (warning); `sheet.hole_to_edge` min 1 t (warning:
+"Holes should be at least the sheet's thickness from the edge");
 `sheet.hole_spacing` min 2 t; `sheet.web_width` webs.width_mm min 1 t (warning; Hubs's hole-to-edge applied
 to any web); `sheet.notch_width` min max(t, 1.016), `sheet.notch_length` length_to_width max 5,
-`sheet.tab_width` min max(2t, 3.2), `sheet.tab_length` max 5, `sheet.hem_diameter` min 1 t,
+`sheet.tab_width` min max(2t, 3.2), `sheet.tab_length` max 5 (warnings: notches and tabs "should" be),
+`sheet.hem_diameter` min 1 t,
 `sheet.hem_return` min 6 t (warning) (Protolabs guidelines); `sheet.flat_length`/`sheet.flat_width` max the
 sheet (Xometry's largest blank 3050 x 1520 unless `--sheet-size`).
 
 **hubs**: uniform thickness, the Hubs rules above, flat size against Xometry's blank.
 
-**protolabs**: uniform; thickness 0.609-6.35; `sheet.bend_radius` 0.254 min / `sheet.bend_radius_max` 25.4
+**protolabs**: uniform; thickness 0.609-6.35 (an error: "ranges from"; sheet parts alone); `sheet.bend_radius` 0.254 min / `sheet.bend_radius_max` 25.4
 (warning) (toolkit tooling radii); `sheet.flange_length` length_outside_minus_radius_mm min (toolkit
 multiplier by material group and thickness band) x t, or with no toolkit row length_outside_mm min 4 t
 (guidelines); `sheet.hole_to_bend` distance_outside_minus_radius_mm min the toolkit multiplier x t (toolkit:
 "same multipliers"; reference unstated, read from the outside mold line), or distance_tangent_mm min 4 t
-(warning; guidelines "within 4x"); hole diameter min 1 t; `sheet.hole_to_edge` min 1.574 mm (t <= 0.914) or
+(warning; guidelines "within 4x"); hole diameter min 1 t (warning: "should be"); `sheet.hole_to_edge` min 1.574 mm (t <= 0.914) or
 3.175 mm; notch, tab, hem rules; `sheet.countersink_diameter` 2.286-12.7; flat size max 1193.8 x 990.6;
 `sheet.flat_min` 6.35 flat, `sheet.formed_min` box_short_mm 12.7 formed; `sheet.bend_length` max 1193.8.
 
-**sendcutsend** (give `--material`; a thickness is a calculator gauge within 0.005 in, so 2 mm is 0.074 in
-steel and 3 mm is no 5052 gauge): uniform; `sheet.hole_diameter` min 0.5 t (cutting guide), 1 t for 5052
-(material page); `sheet.hole_to_edge` 2 t, by material, 5052 alone (other materials `not_evaluated`);
-`sheet.bend_radius` 1 t (warning, 5052, only where the thickness is no gauge: at a gauge the calculator's
-radius governs, which is under 1 t); `sheet.bend_radius_shop` the part's inside radius within the larger of
-5% and 0.001 in of the calculator's effective radius for the gauge (no custom radii; an error, the owner's
-call; its hint names the radius to model, in mm and inches, as `sheet.bend_radius_differs` does); `sheet.bend_angle`
-max 130, `sheet.bend_angle_min` min 5 (bending page; no hems); `sheet.flange_length` length_outside_half_mm
-min the calculator's minimum formed flange for the gauge (from the bend's apex, over half the bend);
-`sheet.hole_to_bend` distance_centerline_mm min half the gauge's die width (deformation guide: from the bend
-line, where the die centres). For a thickness that is no gauge, the gauge rules are `not_evaluated` (the
+**sendcutsend** (give `--material`; the alloy is kept beside its family: `aluminum` is the calculator's 5052,
+6061 and 7075 are not bent, 316 has its own gauges; a thickness is a calculator gauge within 0.005 in, so 2
+mm is 0.074 in steel and 3 mm is no 5052 gauge; the calculator's tables: 5052, mild and G90 steel, 304 and
+316 stainless, 4130, brass, copper, grade 2 titanium, polycarbonate): uniform; `sheet.hole_diameter` min
+0.5 t (cutting guide, an error: "At least 50% of material thickness"), 1 t for 5052 (material page);
+`sheet.hole_to_edge` 2 t, 5052 alone (a warning: "Leave at least 2x thickness between a hole and an edge";
+a Eurorack panel's rail slots sit 1.4 mm from the edge of 2 mm 5052); `sheet.bend_radius` 1 t (warning,
+5052, only where the thickness is no gauge: at a gauge the calculator's radius governs, which is under 1 t);
+`sheet.bend_radius_shop` the part's inside radius within the larger of 5% and 0.001 in of the calculator's
+effective radius for the gauge (a warning, one a bend: "Design your parts using our specs so they form as
+expected, we don't offer custom bend radii" -- it is bent at the tooling's radius and its flanges move; the
+message names the radius in mm and inches); `sheet.bend_angle` max 130 (an error: "No acute angles greater
+than 130"), `sheet.bend_angle_min` min 5 (bending page; no hems); `sheet.flange_length`
+length_outside_half_mm min the calculator's minimum formed flange for the gauge (from the bend's apex, over
+half the bend), and from 0.187 in its length_outside_mm along the whole bend (warning: "Thicker materials
+(.187-.250 in) need more contact"); `sheet.hole_to_bend` distance_centerline_mm min half the gauge's die
+width (a warning, "will be distorted"; deformation guide: from the bend line, where the die centres). For a
+thickness that is no gauge, the gauge rules are `not_evaluated` (the
 error `sheet.gauge_unmatched` names the nearest gauge; with no `--material`, a warning) and the gauge-free
 minimums judge instead: a flange of at least 0.286 in (the calculator's least) and a feature at least
-0.236 in from the bend line (half the narrowest die, 0.472 in). `sheet.bend_relief_depth`
-depth_centerline_minus_radius_mm min 0.508 to 0.187 in (thicker: `not_evaluated`); `sheet.channel_base`
-min 2; `sheet.bend_length` max 1117.6; flat size: bending 1117.6 x 762 (min 38.1 x 9.525), laser 1727.2 x
+0.236 in from the bend line (half the narrowest die, 0.472 in). Reliefs (its relief guide, warnings,
+"should be at least"): `sheet.bend_relief_width` reliefs.width_mm min t / 2; `sheet.bend_relief_depth`
+depth_centerline_mm min t + the gauge's effective radius + 0.020 in (no gauge: depth_centerline_minus_radius_mm
+min t + 0.020 in, the modelled radius) -- the guide's "material thickness + bend radius + .02", the stricter
+of SendCutSend's two (the deformation guide gives effective radius + 0.020 in); `sheet.channel_base` min 2
+(an error: "must be at least 2x"); `sheet.bend_length` max 1117.6; flat size: bending 1117.6 x 762 (min 38.1 x 9.525), laser 1727.2 x
 1117.6 (min 9.525 x 6.35); `sheet.cut_layers` max 1 (warning). generic also takes `sheet.channel_base`
 (warning, SendCutSend's 2:1).
 
@@ -499,24 +527,32 @@ min 2; `sheet.bend_length` max 1117.6; flat size: bending 1117.6 x 762 (min 38.1
 complete): generic and hubs leave the shop-tooling rules (largest radius, a shop's radius, countersinks,
 smallest parts, bend length and angle, relief depth, cut layers) to the shops' sets; hubs has no notch,
 tab, hem or channel numbers; protolabs no relief, hole-to-hole, web, angle, channel or layer rule;
-sendcutsend no relief width, hole-to-hole, web, notch, tab or countersink number, no hems (its 130 degree
-limit refuses them) and judges thickness by its gauges.
+sendcutsend no hole-to-hole, web, notch, tab or countersink number, no hems (its 130 degree limit refuses
+them) and judges thickness by its gauges. What a set's sources publish that is not measured is in its note
+too (`NOT_MEASURED`): protolabs' discrete tooled radii (the range is judged) and countersink angles (82, 90,
+100, 120 degrees); sendcutsend's box flange maxima (5 in; 3 in with hardware; a 3.5-5 in flange at least
+1.1 in wide), the corner flange gap (0.015 in, recommended), window and joggle bends (to 90 degrees), each
+material's largest laser-cut part (5052 and mild steel 44 x 56-68 in, brass, copper and 4130 34 x 56 in,
+titanium 34 x 44 in: the set's sheet is the largest) and the thicker gauges' larger smallest part.
 
-Sources, accessed 2026-11-03: hubs.com/guides/sheet-metal-fabrication; protolabs.com sheet metal design
-guidelines and its sheet metal toolkit; xometry.com/capabilities/sheet-metal-fabrication; sendcutsend.com
-guidelines/sheet-cutting, services/cnc-bending, guidelines/bend-deformation, bending-calculator,
-materials/5052-aluminum, materials/min-max.
+Sources, accessed 2026-11-03 (sets version 2026-11-06): hubs.com/guides/sheet-metal-fabrication;
+protolabs.com sheet metal design guidelines and its sheet metal toolkit;
+xometry.com/capabilities/sheet-metal-fabrication; sendcutsend.com guidelines/sheet-cutting,
+services/cnc-bending, guidelines/bend-deformation, bending-calculator, materials/5052-aluminum,
+materials/min-max, and (2026-11-06) blog/guide-to-designing-bend-reliefs.
 
 ### What it does not measure
 
 Bend order, tooling access and collisions while bending; grain direction; hardware (PEMs) and their
-distances; window bends; box flange maxima (SendCutSend's 3/5 in); bump-formed or conical bends (a cone
-between flanges is not a bend: not sheet); freeform formed shells (reported not sheet); closed hems
+distances; window and joggle bends; box flange maxima (SendCutSend's 3/5 in) and the corner flange gap;
+bump-formed or conical bends (a cone between flanges is not a bend: `sheet.formed_surface`); freeform formed
+shells (reported not sheet); closed hems
 (modelled as a double thickness: not sheet); a hole crossing a bend is unrolled from samples; a non-straight
 bend end is unrolled from samples; notches are hull pockets (a pocket's mouth, not its narrowest width);
 tabs need two parallel straight sides. Corner reliefs are reported, not judged (no published number
-verified). The Protolabs and Hubs flange and feature-to-bend conventions are not stated by the sources and
-are read from the outside mold line (stated in each rule's note).
+verified). Hubs's hole-to-bend is stated ("from the start of the bend radius") and read at the tangent line,
+as is Protolabs' guidelines' 4 t; only Hubs's flange height and the Protolabs toolkit's flange and feature
+distances are unstated, read from the outside mold line (each rule's note says so).
 
 ## Injection molding
 

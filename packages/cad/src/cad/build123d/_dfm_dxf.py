@@ -408,6 +408,36 @@ def _layer_intents(document: Any) -> tuple[dict[str, str], Any]:
     return declared, lambda layer: declared.get(layer) or layer_intent(layer)
 
 
+def _units_suspect(code: int, extents: Any, holes: list[float], options: dict[str, Any]) -> str | None:
+    """Why the declared unit makes the part implausible, read the other way, or None: in millimetres a part
+    under an inch, every hole under the given thickness or a part under the set's smallest; in inches a part
+    larger than the set's sheet. The rules still run in the declared unit."""
+    from cad._internal.dfm import sheet as rules_side
+
+    if code not in (1, 4) or extents is None or not len(extents):
+        return None
+    long, short = float(max(extents)), float(min(extents))
+    if long <= 0:
+        return None
+    rules = str(options.get("rules") or "generic")
+    thickness = options.get("thickness")
+    if code == 4:
+        least = rules_side.SMALLEST_PART.get(rules)
+        small_holes = bool(holes) and thickness is not None and max(holes) < float(thickness)
+        if not (long < 25.4 or small_holes or (least is not None and (long < least[0] or short < least[1]))):
+            return None
+        hole = f" (a {min(holes):.4g} mm hole)" if holes else ""
+        return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm{hole}; read as inches it is "
+                f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches set $INSUNITS to 1")
+    sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.SHEETS.get(
+        rules, rules_side.SHEETS["generic"])[0]
+    if long <= sheet[0] and short <= sheet[1]:
+        return None
+    return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "
+            f"{sheet[1]:.4g} mm sheet; read as millimetres it is {long / 25.4:.4g} x {short / 25.4:.4g} mm: if it "
+            "was drawn in millimetres set $INSUNITS to 4")
+
+
 def measure(document_type: str, source: Any, process: str, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The cut-file report of the DXF ``source``: facts alone."""
     import ezdxf
@@ -607,6 +637,9 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                 pairs.setdefault(key, {"distance_mm": round(d, 4), "location": record["location"],
                                        "other": other["location"], "xyz": record["xyz"]})
         families["hole_spacing"].extend(pairs.values())
+    suspect = _units_suspect(code, extents, [item["size_mm"] for item in families["holes"]], options)
+    if suspect:
+        report["scale"].update(units_suspect=True, note=suspect)
     sort_keys = {"holes": "size_mm", "hole_spacing": "distance_mm", "hole_to_bend": "distance_centerline_mm",
                  "notches": "width_mm", "tabs": "width_mm", "webs": "width_mm", "gaps": "width_mm"}
     for name, items in families.items():

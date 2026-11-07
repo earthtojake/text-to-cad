@@ -20,7 +20,8 @@ __all__ = ["CLASSES", "MATERIALS", "declared", "material_class", "resolve"]
 MATERIALS: dict[str, tuple[str, tuple[str, ...]]] = {
     # metals
     "aluminum": ("metal", ("aluminium", "al", "6061", "6061-t6", "7075", "5052", "al6061", "al5052")),
-    "steel": ("metal", ("mild_steel", "mild-steel", "carbon_steel", "1018", "a36", "cold_rolled_steel", "crs")),
+    "steel": ("metal", ("mild_steel", "mild-steel", "carbon_steel", "1018", "a36", "cold_rolled_steel", "crs", "4130",
+                        "chromoly", "4130_chromoly")),
     "stainless": ("metal", ("stainless_steel", "stainless-steel", "ss", "304", "316", "ss304", "ss316", "316l")),
     "brass": ("metal", ("c360",)),
     "copper": ("metal", ("c110", "c101")),
