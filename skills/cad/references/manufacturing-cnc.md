@@ -10,7 +10,9 @@ What a part built for milling has from its first line, so its first check passes
 `generic` set's numbers, from Protolabs Network's guide; a shop's set or `--tools` moves them):
 
 - **Stock and setups.** Start from the blank (`--stock`, else the part's box) and put the features on
-  as few sides as can be: each side a tool must face is a setup, four at most.
+  as few sides as can be: each side a tool must face is a setup, five at most (Hubs: a part rotated
+  three or four times). A pocket or a hole along no machine direction (`cnc.inclined_feature`) is a
+  setup of its own on an angled fixture, or more axes: square it to a side where the design allows.
 - **Pockets, slots and windows.** Vertical walls on a flat floor (or none: a window). Every vertical
   internal corner gets a radius -- at least half the smallest end mill (1.25 mm with no `--tools`),
   and a third of the cavity's depth where the design allows -- never a sharp corner, which no round
@@ -19,14 +21,16 @@ What a part built for milling has from its first line, so its first check passes
   floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled sharp: give its
   corners a radius or call out a broach.
 - **Holes.** Standard drill diameters (6.8 mm for M8, 4.2 for M5, 6.6 for an M6 clearance; `cnc.drill_size`
-  names the nearest), depth at most four diameters, and a thread as its tap-drill hole with a callout,
-  not modelled.
+  names the nearest), none under 1 mm (an error), depth at most four diameters, and a thread as its
+  tap-drill hole with a callout, not modelled.
 - **Walls and gaps.** Walls 0.8 mm or more in metal, 1.5 mm in plastic (0.5 / 1.0 are the floor);
   gaps 2.5 mm or wider (or the smallest tool).
-- **Reach.** Every face seen straight from one of the six axis directions (3 axes); no undercut, no
-  T-slot or dovetail unless the person planned the cutter; no closed void.
+- **Reach.** Every face seen straight from one of the six axis directions (3 axes); no undercut, and a
+  T-slot or dovetail, through or blind, only where the person planned the cutter (`cnc.special_cutter`,
+  a warning); no closed void.
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
-  at least 1.2 mm wide, cross holes radial; a flat, a keyway or an off-axis hole is live tooling.
+  at least 1.2 mm wide (Protolabs' turning rule), cross holes square to the axis (through it or beside
+  it); a flat, a keyway or an off-axis hole is live tooling.
 - The material and the process on the part: `part.material = metals.aluminum(process=machined())`
   (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
 
@@ -61,10 +65,15 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
 - `internal_corners` are a pocket's in-plane corners: `radius_mm`, `depth_mm`, and `reach_ratio`, the
   depth over the largest tool that fits. A floor-to-wall root is never a corner: a flat end mill
   makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
-- `cnc.sharp_internal_edge` is a concave edge no rotating tool makes. The fix is a radius or a relief
-  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan.
+- `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
+  why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
+  machine lacks would make it, a warning) and the hint follows it. The fix is a radius or a relief
+  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. Under
+  `--rules protolabs` a sharp corner is a warning naming the radius it is cut with. A crease a ball end
+  mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
-  `no_line_of_sight` faces nothing straight reaches.
+  `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot or dovetail
+  cutter makes.
 - `setups.setup_count` estimates clampings from the reachable directions.
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a
   tap drill, not a callout.

@@ -13,8 +13,10 @@ What a cut-and-bent part has from its first line (the `generic` set's numbers, i
 thickness `t`; a shop's set or bend table moves them):
 
 - **One thickness.** The whole part is one sheet: every face is its top, its bottom or a cut edge.
-  No boss, pocket, countersink, second thickness or solid block; a formed feature the person wants is
-  a check by hand.
+  No boss, pocket, countersink, second thickness or solid block. A chamfered or rounded cut edge is
+  allowed but is a second operation (`sheet.edge_break`, a warning); a cone or a torus between
+  flanges is formed, not bent (`sheet.formed_surface`): a formed feature the person wants is a check
+  by hand.
 - **A bend is two arcs.** Inside radius `r` of at least `t` (the shop's tooling sets it; `--bend-radius`
   when known) and outside radius `r + t` at the same corner. Build the legs, union them and fillet
   both edges of the corner:
@@ -32,9 +34,10 @@ thickness `t`; a shop's set or bend table moves them):
   Two boxes with a sharp corner, a fillet on one side only, or two radii that are not concentric is
   not a bend: the check reports the corner (`sheet.sharp_bend`, an error) and unfolds nothing past
   it. A shelled box (`bd.offset(box, -t, openings=...)`) has sharp corners the same way.
-- **Flanges and holes.** A flange runs at least `2t` past the bend's outside radius (`4t` keeps every
-  shop happy); a hole sits at least `2t` from where the bend's radius starts and `t` from an edge,
-  holes `2t` apart, each at least `t` across (`2t` for a tapped one); nothing crosses a bend.
+- **Flanges and holes.** A flange's height from the outside of the bend is at least `2t + r` (a
+  straight length of at least `t` past the bend; `4t` keeps every shop happy); a hole sits at least
+  `2t` from where the bend's radius starts and `t` from an edge, holes `2t` apart, each at least `t`
+  across; nothing crosses a bend.
 - **Reliefs.** Where a flange ends before the sheet's edge, a relief at the bend's end, at least `t`
   wide and reaching past the bend radius, so the bend does not tear.
 - **Cut features.** Slots, notches and tabs at least `t` wide (and wider than the kerf), no longer than
@@ -66,15 +69,21 @@ face. The options that change the verdicts:
 
 Rule sets: `generic`, `hubs`, `protolabs`, `sendcutsend`. With `sendcutsend` give `--material`: the
 thickness must be one of its gauges, and one that is not is `sheet.gauge_unmatched`, its gauge rules
-not evaluated. A mesh is refused: check the STEP or the model.
+not evaluated; one off its gauge by over 1% is `sheet.gauge_thickness`. It bends 5052 H32 alone among
+aluminums (`sheet.material_not_bent` for 6061 or 7075 with bends), at its own radius per gauge
+whatever is modelled (`sheet.bend_radius_shop`, a warning: the flanges come out at other lengths).
+A mesh is refused: check the STEP or the model.
 
 ## Read it
 
-The families: `parts`, `not_sheet`, `bends`, `flanges`, `channels`, `reliefs`, `hems`, `curls`,
-`holes`, `hole_spacing`, `hole_to_bend`, `notches`, `tabs`, `webs`, `gaps`.
+The families: `parts`, `not_sheet`, `sharp_bends`, `bends`, `flanges`, `channels`, `reliefs`, `hems`,
+`curls`, `holes`, `hole_spacing`, `hole_to_bend`, `notches`, `tabs`, `webs`, `gaps`.
 
-- `parts.is_sheet` and `not_sheet`: a body of constant thickness. A boss, a pocket, a freeform or a
-  closed hem's double thickness is `not_sheet` at its ref, and nothing after it is a sheet verdict.
+- `parts.is_sheet` and `not_sheet`: a body of constant thickness. A part mostly sheet is judged, its
+  departures at their refs: a boss, a pocket or a closed hem's double thickness `not_sheet`, chamfered
+  or rounded cut edges `edge_break` (a warning), a cone or a torus `formed` (`sheet.formed_surface`);
+  a part that is not sheet (`is_sheet` false) gets no sheet verdict. `sharp_bends` are corners joined
+  without a bend (`sheet.sharp_bend`): nothing past one unfolds.
 - `bends`: `inside_radius_mm`, `angle_deg`, `k_factor` with its source, `bend_allowance_mm`.
 - Distances come in several conventions: `hole_to_bend` carries `distance_tangent_mm` (from where the
   bend's radius starts), `distance_centerline_mm`, `distance_inside_mm` and `distance_outside_mm`;
@@ -119,8 +128,13 @@ falls out of a hole (`sheet.floating_interior`), text or dimensions on a cut lay
 short lines, and holes, webs and gaps against the thickness. `measurements.cut_file` gives the
 units, extents and layers. Then read by hand:
 
-- **Units.** With `$INSUNITS` unset or unknown no size is compared with a rule (`units_suspect`).
-  Compare `cut_file.extents_mm` with the part's expected size; never rescale silently.
+- **Thickness.** Give `--thickness`: the rules that scale with it (holes, edges, webs, notches, tabs,
+  reliefs) are not evaluated without it (`sheet.thickness_unknown`), and an `OK` then judges the
+  contours alone.
+- **Units.** With `$INSUNITS` unset or unknown no size is compared with a rule (`units_suspect`), and
+  a declared unit that makes the part implausible (an inch-drawn part declared mm reads 25.4 times
+  small) is said both ways. Compare `cut_file.extents_mm` with the part's expected size; never rescale
+  silently.
 - **Kerf.** Say whether the file is drawn to the finished size, with the shop's compensation, or
   already offset (`offset_profile`, `flat_pattern(..., kerf=)`): offsetting twice takes the kerf off
   twice. Take the kerf from the shop for the material and thickness.

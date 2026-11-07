@@ -276,7 +276,7 @@ can be checked:
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
-| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: `cad model dfm "$ID" --process cnc` ([Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
+| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: the script's `Check:` line (`cad model dfm "$ID" ...`, [Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
 
 ```bash
 cad model snapshot "$ID" tmp/review.png
@@ -348,7 +348,9 @@ cad stl dfm part.stl --process printing --technology sla --json
 `cad model dfm` checks a model's document by its id; `cad step dfm`, `cad xbf dfm`, `cad stl dfm`,
 `cad threemf dfm` and `cad glb dfm` check a file of the type. A model, a STEP or an xbf is measured
 exactly, and each finding names a face ref; a mesh (STL, 3MF, GLB) is measured as triangles, at
-`x, y, z` in millimetres, for molding and printing only. CNC and sheet refuse a mesh: check the STEP.
+`x, y, z` in millimetres, for molding and printing only (its `--process` choices): CNC and sheet need
+the STEP. A STEP keeps no process, so give `--process`; an xbf or a model takes the one its parts
+declare; `cad dxf dfm` checks a cut file as sheet with no `--process`.
 In a check script, `cad.model.dfm(handle, process=...)` and `cad.step.dfm(path, process=...)` return
 the same result as data. An order from SendCutSend is the sendcutsend skill's (it can run the sheet
 check with `--rules sendcutsend`); slicing and sending a print is the print3d skill's.
@@ -422,10 +424,14 @@ Never turn a set's number into a physical law, or a shop's machine capacity into
 - **The exit.** 1 when a finding is an error (a limit the part breaks as drawn) or a family was not
   measured (`measurement_failed`: the rest is still reported, so never read it as "no findings").
   The last line digests a failure: `FAILED <id>: N blocking finding(s); <what was measured>; failed:
-  molding.draft_min x10, ...`, every failure counted. 0 is not an approval: warnings
-  (recommendations, cost, risk) and unverified rules remain, and a set that judged nothing says so
-  (`rules_none_evaluated`).
-- **Fix by code.** Findings come errors first. A failing rule's finding is coded by its rule id
+  molding.draft_min x10, ...`: each failing rule with its count of error failures, then every other
+  error by its code. 0 is not an approval: warnings (recommendations, cost, risk) and unverified rules
+  remain, and a set that judged nothing says so (`rules_none_evaluated`). 2 means the command itself
+  was refused -- an option of another process or kind, no process where none is declared or the parts
+  declare several, a file that is not there, a mesh asked for cnc or sheet: fix the command, not the part.
+- **Fix by code.** What puts every figure in doubt comes first, whatever its severity
+  (`not_watertight`, `not_sound`, `measurement_failed`, `units_suspect`), then errors, warnings and
+  the facts. A failing rule's finding is coded by its rule id
   (`cnc.internal_corner_radius`), with the measured value, its limit and source, and a hint saying
   what to change; several failures at one ref are one finding (`and 2 more at this ref`), a warning on
   a figure that already fails an error at the same place is left to `measurements.rules`, and at
@@ -436,7 +442,8 @@ Never turn a set's number into a physical law, or a shop's machine capacity into
   `cad step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
   figures behind it are `measurements.<family>`, items worst first; the reference names the families.
 - **Read what was not judged.** `--json` prints one line; `measurements.rules` holds `set`, `note`
-  (what this set does not judge), `failed`, and `outcomes`, one per rule: `rule`, `status`
+  (what this set does not judge), `failed`, and `outcomes`, one per rule id (a rule's variants
+  merged: each failure carries its own `limit` where they differ): `rule`, `status`
   (`passed`, `failed`, `not_evaluated`, `not_applicable`), `limit`, `source`, `failures` and
   `reason`. A rule `passed` with reason "none found" had nothing of its kind to judge (no holes, no
   wall thin enough to list: `rules.none_found`): say none was found. A rule `not_evaluated` is never a
