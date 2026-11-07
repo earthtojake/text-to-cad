@@ -668,14 +668,12 @@ file.
   the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
 - **Selected** — every view's that has a panel, 2D or 3D, the frame's (`ViewFrame.jsx` hands it to
   `FlatPanel`'s `detail`; `kit/inspector/ItemDetail.jsx`'s `useSelectedDetail`), as a CAD tool's
-  Properties panel: under the lists, whatever tab is open, at the height of its content until the person sizes it
-  (what it holds, up to the smaller of 320px and 40% of the panel, `flatDetailHeight`: a short pick
-  takes no more room from the lists than it needs, a long one scrolls inside the cap; it follows the
-  content as the pick changes, measured by a `ResizeObserver` on the content's inner box; its top
-  edge is the grip that sizes it, and a height dragged to is kept with the file's view
-  (`panel.detailHeight`) and no longer follows the content; a double-click on the grip clears it and
-  the pane fits again, as the grip's accessible description says; never under 96px, the lists keeping
-  160px over it), scrolling on its own. **It is the same component as a Quick Edit chip's card** (`ItemDetail`): a pick
+  Properties panel: under the lists, whatever tab is open, 40% of the panel's height whatever is picked
+  (`toolStackLayout.js`'s `FLAT_DETAIL_SHARE`, `flatDetailHeight`), so the lists above it stay put from one
+  pick to the next and a tall screen gets a tall pane, what is picked scrolling inside it; its top edge is
+  the grip that sizes it, and a height dragged to is kept with the file's view (`panel.detailHeight`); a
+  double-click on the grip clears it and the pane is 40% again, as the grip's accessible description says;
+  never under 96px, the lists keeping 160px over it. **It is the same component as a Quick Edit chip's card** (`ItemDetail`): a pick
   reads identically in the pane and in its chip's card, from ONE description the view gives of it
   (`kit/inspector/inspect.js`'s `DetailItem`, through the frame's `inspect`: its `describe(id)`). First
   **what it is** — its glyph and name (`C17.1`, `VBUS · track`, `Circle on CUT`, `upper_arm`), its copy

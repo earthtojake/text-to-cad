@@ -949,7 +949,7 @@ export default {
   "flatPanel.back": "Back to the view",
   "flatPanel.resize": "Resize panel",
   "flatPanel.resizeDetail": "Resize details",
-  "flatPanel.resizeDetailHint": "Double-click to fit the details to what is picked",
+  "flatPanel.resizeDetailHint": "Double-click to reset its height",
   "flatPanel.nothingMatches": "Nothing matches “{query}”",
   "board.text.board_panel": "Board panel",
   "board.text.search_board": "Search the board",

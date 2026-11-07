@@ -920,7 +920,7 @@ export default {
   "flatPanel.back": "보기로 돌아가기",
   "flatPanel.resize": "패널 크기 조정",
   "flatPanel.resizeDetail": "세부 정보 크기 조정",
-  "flatPanel.resizeDetailHint": "두 번 클릭하면 선택 항목에 맞춥니다",
+  "flatPanel.resizeDetailHint": "두 번 클릭하면 기본 높이로 돌아갑니다",
   "flatPanel.nothingMatches": "“{query}”와 일치하는 항목이 없습니다",
   "board.text.board_panel": "기판 패널",
   "board.text.search_board": "기판 검색",

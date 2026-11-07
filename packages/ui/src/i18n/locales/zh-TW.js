@@ -921,7 +921,7 @@ export default {
   "flatPanel.back": "返回檢視",
   "flatPanel.resize": "調整面板大小",
   "flatPanel.resizeDetail": "調整詳細資料大小",
-  "flatPanel.resizeDetailHint": "按兩下使詳細資料符合所選內容",
+  "flatPanel.resizeDetailHint": "按兩下恢復預設高度",
   "flatPanel.nothingMatches": "沒有符合「{query}」的項目",
   "board.text.board_panel": "電路板面板",
   "board.text.search_board": "搜尋電路板",
