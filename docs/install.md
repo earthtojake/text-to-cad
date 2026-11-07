@@ -49,7 +49,7 @@ checksum. It:
    Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
    `cad-launcher`), as the CAD server does when it starts.
 7. Installs no CAD kernel: the environment a model runs in, the release with its CAD
-   kernel (OCP, build123d and what they need: about 220 MB to download, about 620 MB on
+   kernel (OCP, build123d and what they need: about 240 MB to download, about 620 MB on
    disk), is made on
    first need -- the first model, or the first view that needs the kernel -- in
    text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
@@ -508,9 +508,8 @@ imports use (`import build123d`: `cad[build123d]`), on the server's Python, 3.14
 kernel processes run in the `cad[build123d]` one: exports, snapshots and the meshes the viewer
 shows. Nothing is installed in advance: each environment is made the first time something needs
 it, and a first model or view waits for it. A model run so imports what its environment holds.
-Measured on an Apple silicon Mac, `cad[build123d]` is about 620 MB on disk (about 220 MB to
-download), and `cad[kicad]`, made the first time a board needs it, about 340 MB (about 110 MB to
-download).
+`cad[build123d]` is about 240 MB to download, and `cad[kicad]`, made the first time a board needs
+it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB.
 
 A model that needs another package names it at the top of its script, in Python's inline
 script metadata, and `cad run` installs it beside cad once, in an environment of its own that

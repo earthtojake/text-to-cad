@@ -1016,7 +1016,7 @@ as `cad run` makes a program's (`extras.ensure`), whose Python runs the library'
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
 way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
-installation's release, made once by the engine (about 110 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
+installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
