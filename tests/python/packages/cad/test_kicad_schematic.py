@@ -249,9 +249,8 @@ class TheStill(SchematicFixture):
         image = self.draw("root")
         # The MID wire, y = 64.77 mm, at x = 125 mm: 107 px right of the centre, on the centre row.
         self.assertTrue(any(self.near(image.getpixel((307, row)), (0, 150, 0)) for row in (199, 200, 201)))
-        self.assertTrue(self.near(image.getpixel((307, 120)), (245, 244, 239), 10))  # the page, 8 mm above it
-        dark = self.draw("dark", {"appearance": "dark"})
-        self.assertTrue(self.near(dark.getpixel((307, 120)), (28, 28, 28), 10))
+        # The page, 8 mm above it: KiCad's light paper, as every snapshot is; no display names a theme.
+        self.assertTrue(self.near(image.getpixel((307, 120)), (245, 244, 239), 10))
 
     def test_another_sheet_is_drawn_by_its_path(self) -> None:
         image = self.draw("load", {"sheet": "/Load/"}, center=at(43, 30))
@@ -261,8 +260,9 @@ class TheStill(SchematicFixture):
     def test_what_a_schematic_does_not_draw_is_refused(self) -> None:
         from cad.engine.snapshot import SnapshotRefused
 
-        for display, words in (({"sheet": "/Power/"}, "no sheet /Power/"), ({"mode": "copper"}, "takes appearance"),
-                               ({"border": "yes"}, "border is true or false")):
+        for display, words in (({"sheet": "/Power/"}, "no sheet /Power/"), ({"mode": "copper"}, "takes border, sheet"),
+                               ({"appearance": "dark"}, "^a schematic's display takes border, sheet:"),
+                               ("dark", "^--display is not JSON"), ({"border": "yes"}, "border is true or false")):
             with self.subTest(display=display), self.assertRaisesRegex(SnapshotRefused, words):
                 self.draw("refused", display)
 

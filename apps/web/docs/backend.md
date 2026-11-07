@@ -243,7 +243,7 @@ block inserts placed — so the client draws primitives and never parses DXF.
 
 `cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
-hairlines in their pens, on the light or dark paper. This route
+hairlines in their pens, on white paper (every snapshot is light). This route
 (`GET /api/v1/documents/dxf/<id>/drawing`) is the pane's alone.
 
 The drawing is opened by its absolute path (`POST /api/v1/documents`), as every file is: a

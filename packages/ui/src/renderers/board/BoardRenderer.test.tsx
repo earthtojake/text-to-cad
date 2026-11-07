@@ -849,7 +849,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1, appearance: 'light' } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1 } })]);
   expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });

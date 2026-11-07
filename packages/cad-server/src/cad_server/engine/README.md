@@ -710,7 +710,7 @@ cad kicad_sch erc SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom
 cad kicad_sch inspect SCHEMATIC [REF] [--json]
                                              its sheets, parts and nets; with REF (#U3, #U3.7, #net:VBUS,
                                              #sheet:/Power/, #wire:<uuid>), what that names
-cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display light|dark|JSON] [...]
+cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
 cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
@@ -1834,13 +1834,16 @@ browser viewer; snapshot has no Preview or video option. A packet requesting `pr
 
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
-(`render/`, below), in the look the viewer resolves for the same display settings. A mesh file
+(`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
+light -- the studio backdrop, a drawing's white paper, a board's and a schematic's light colours --
+whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
+and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
 feature edges and file units; its export source holds no B-rep to mesh. `--display` takes
 a mode (`solid`, `shaded`, `parts`, `xray`, `hidden-line`, `wireframe`), `exploded=A` (the parts
 moved apart as the viewer's Explode moves them, by an amount from 0 to 1; with a mode,
-`hidden-line,exploded=0.6`), `light` or `dark` (the appearance, all a drawing takes), or the display
-object (`mode`, `grid`, `appearance`, `camera`, `clip`: `{"enabled", "axis", "at", "invert", "partColors"}`,
+`hidden-line,exploded=0.6`), or the display object (a drawing takes none: `mode`, `grid`, `camera`,
+`clip`: `{"enabled", "axis", "at", "invert", "partColors"}`,
 its `at` in the file's unit as the viewer reads it -- a document's millimetres, a robot's or a GLB's
 metres, a 3MF's declared unit (`render/clip.py`); `exploded`: `{"enabled", "amount"}`, 0.5
 unless given; `hidden` and `isolated`: lists of part refs, an occurrence's path in the refs
@@ -1916,9 +1919,9 @@ board plot or parsed model is persisted. It refuses Preview, pose and transparen
 No KiCad is required to view a board; KiCad's own CLI (kicode's, the `kicad` integration's) performs DRC
 and exports.
 A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
-the hierarchy from its project's root and builds the page the display names (`{sheet, border,
-appearance}`: the root, `/`, unless it names another; the page's edge off unless asked; light or
-dark), and `render/schematic.py` paints it in KiCad's schematic colours, framed on what the page draws
+the hierarchy from its project's root and builds the page the display names (`{sheet, border}`: the
+root, `/`, unless it names another; the page's edge off unless asked), and `render/schematic.py`
+paints it in KiCad's light schematic colours, framed on what the page draws
 (the whole page with its border on) or through a plan camera. Its handle watches every sheet file of
 the hierarchy, so an edit to any sheet draws anew. It refuses Preview, pose, transparent output and
 references; KiCad's own CLI (kicode's) performs ERC and the exports.
@@ -1970,7 +1973,7 @@ per file (read again when a file it read changes) or with `daemon=False` in this
 - **A drawing** (`.dxf`) is drawn as the viewer's DXF pane draws it: from above, fitted with its
   16 px margin, lines, arcs, polylines, splines, ellipses, solids, solid hatches, blocks and
   dimensions one pixel wide in their pens (ACI 7 the look's ink), words set in the platform's UI
-  face, on the light or dark paper (`display.appearance`, `render/look.py`'s `DRAWING`). Its
+  face, on the light theme's white paper (`render/look.py`'s `DRAWING`); it takes no display. Its
   camera is a plan view, the window a Quick Edit view of it names (`render/drawing.py`'s
   `plan_view`: `{position, target, up, orthographicHalfHeight}` looking straight down at the sheet,
   +Y up), drawn as that window -- given as `--camera`, as `authored` (the view the ink was last

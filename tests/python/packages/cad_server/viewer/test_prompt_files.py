@@ -57,7 +57,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def request(self, **overrides) -> dict:
         return {"acceptInline": True, "name": "part.stl", "input": str(self.model), "annotation": ANNOTATION, "views": [
-            {"label": "view 1", "camera": CAMERA, "display": {"appearance": "dark"}, "width": 640, "height": 480},
+            {"label": "view 1", "camera": CAMERA, "display": {"mode": "xray", "grid": True}, "width": 640, "height": 480},
             {"label": "view 2", "camera": "iso"},
         ], **overrides}
 
@@ -75,7 +75,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(_view_of(packet, "view 2").camera, "iso")
         common = {"output": {"padding": 0, "tightFrame": False}}
         self.assertEqual(packet, {"input": str(self.model), "annotation": ANNOTATION, "jobs": [
-            {**common, "camera": CAMERA, "display": {"appearance": "dark"},
+            {**common, "camera": CAMERA, "display": {"mode": "xray", "grid": True},
              "outputs": [{"path": str(self.files / "part-1-view-1.png"), "label": "view 1", "width": 640, "height": 480}]},
             {**common, "camera": "iso", "outputs": [{"path": str(self.files / "part-1-view-2.png"), "label": "view 2"}]},
         ]})

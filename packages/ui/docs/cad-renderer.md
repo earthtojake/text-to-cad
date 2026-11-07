@@ -380,9 +380,9 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   `drawDrawing(ctx, drawable, …)` (text set with `fillText`, stretched to the width the
   server measured, so the page's face keeps the drawing's layout).
   `cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
-  this pane draws it: from above, fitted, hairlines in their pens, on the light or dark paper
-  (`--display light|dark`), with the plan-view `camera` and the `annotation` on the sheet a
-  Quick Edit's view carries.
+  this pane draws it: from above, fitted, hairlines in their pens, on the light theme's paper
+  whatever the pane's theme (every snapshot is light), with the plan-view `camera` and the
+  `annotation` on the sheet a Quick Edit's view carries.
 - **Hairlines, always.** Strokes are 1.25 CSS px at every zoom, as AutoCAD draws with
   LWDISPLAY off: paths are in MODEL space and the context carries the view, so one
   `lineWidth = 1.25 / scale` per frame rebuilds no geometry. Model-space lineweights
@@ -1670,7 +1670,7 @@ view draws its scene on it (`resolveViewSceneSettings`'s `canvas`, read live by 
 board on it in its palette (`plot2d/theme.js`, drawn again in the browser when the theme switches),
 a schematic's sheet on it and a drawing on it; what cannot read a stylesheet takes core's
 `lib/appTheme.js` copy, which `src/styles/canvas.test.js` holds equal. Preview keeps its studio
-(`previewDefaults`: `#222222` dark, white light), and the stills their own backgrounds.
+(`previewDefaults`: `#222222` dark, white light), and the stills their own light backgrounds, whatever the theme.
 The shared loading star and the marks use blue branding.
 
 ## Inspect, Render and live revisions

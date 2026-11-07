@@ -71,7 +71,8 @@ The stages keep ownership narrow:
 ### `common/viewSettings.js` and `common/sceneSettings.js`
 
 `normalizeViewSettings(display)` is the strict public schema shared with the parity page's
-snapshot job and mirrored by `cad <type> snapshot`'s `--display`. It preserves omitted groups and inherited appearance, defaulting
+snapshot job and mirrored by `cad <type> snapshot`'s `--display`, but for `appearance`, which a snapshot never takes (every
+snapshot is light). It preserves omitted groups and inherited appearance, defaulting
 only `mode` to `solid`. A file's modes, in order, are `solid`, `shaded`, `parts`,
 `xray`, `hidden-line`, and `wireframe` (`VIEW_MODE_VALUES`); `grid` is a boolean
 switch every mode draws, off unless said. Appearance, camera, clip and exploded are

@@ -66,9 +66,9 @@ snapshot rather than leaving the link out. No plugin runs: pose joints with `--p
 
 ## Display, camera and annotations
 
-A normal snapshot uses Solid mode and Light appearance. `--display` takes any of the viewer's
-display modes (`parts`, `xray`, `hidden-line`, `wireframe`, ...), `exploded=AMOUNT`, or the display
-object: `appearance` (`light` or `dark`), `camera` (projection and focal length) and `clip`
+A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme.
+`--display` takes any of the viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`,
+...), `exploded=AMOUNT`, or the display object: `camera` (projection and focal length) and `clip`
 (`{"clip": {"axis": "x", "at": 0.05}}`, `at` in metres, the file's own unit, as the viewer draws
 it). `--grid` draws the measuring grid, and `--camera`, `--size-profile`, `--width` and `--height`
 frame and size it. A Quick Edit packet from the viewer (inline JSON, saved to a temporary

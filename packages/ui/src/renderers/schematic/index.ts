@@ -9,11 +9,12 @@ export type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewS
 
 /**
  * A schematic's live state is the base state, its selection the references a person or a host picked
- * (`divider.kicad_sch#R1.2`), plus the sheet shown as a snapshot job reads it (`{ sheet, border, appearance }`).
+ * (`divider.kicad_sch#R1.2`), plus the sheet shown as a snapshot job reads it (`{ sheet, border }`: a snapshot is
+ * drawn light, whatever the viewer's theme).
  * It has no camera: `resetCamera` fits the sheet again.
  */
 export type SchematicLiveState = LiveViewState & {
-  schematicDisplay?: { sheet: string; border: boolean; appearance: 'light' | 'dark' };
+  schematicDisplay?: { sheet: string; border: boolean };
 };
 export type SchematicLiveController = LiveViewController<SchematicLiveState>;
 

@@ -14,25 +14,27 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
   mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
-  active, others, zones, tracks, appearance}`` (the active layer drawn on top, ``others`` the rest
+  active, others, zones, tracks}`` (the active layer drawn on top, ``others`` the rest
   ``shown``, ``dimmed`` or ``hidden`` -- the outline and the holes through an active copper layer kept at full
   strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1).
 - ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
   painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
-  ``{sheet, border, appearance}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
+  ``{sheet, border}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
-the look the viewer's viewport resolves for the same display settings. The answer is PNG bytes,
-which this writes to OUT.
+the look the viewer's viewport resolves for the same display settings. Every picture is light: the
+studio backdrop, the drawing's white paper, KiCad's light colours, whatever theme the person's viewer
+is in: a snapshot is a tool for an agent, and dark is the harder to read, so no request, flag or
+packet names a theme. The answer is PNG bytes, which this writes to OUT.
 
 The request is the snapshot contract's where it applies (``--display`` mode or JSON, ``--grid``,
 ``--camera``, ``clip`` -- its ``at`` in the file's unit, as the viewer reads it: a
 document's millimetres, a robot's or a GLB's metres, a 3MF's declared unit (``render/clip.py``) --
 the sizes, ``--json``), and what a kind does not offer is
 refused by name before anything renders: ``parts`` and ``exploded`` for a file that places a single
-part, ``--pose`` for a mesh, and everything but ``appearance`` for a drawing. ``--display
+part, ``--pose`` for a mesh, and every display setting for a drawing. ``--display
 exploded=0.6`` (or ``display.exploded``) moves the parts apart as the viewer's Explode does, by its
 amount (0.5 unless one is given). ``--annotation FILE`` draws the viewer's annotation over the
 model (its ink on the parts it was drawn on, wherever they stand): an annotation file, or the Quick
@@ -84,11 +86,10 @@ __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictur
            "parse_references", "picture_path", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated"})
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
-APPEARANCES = ("light", "dark")
 EXPLODED_KEYS = frozenset({"enabled", "amount"})
 # Explode's amount when a request names none: the viewer's own default.
 EXPLODED_AMOUNT = 0.5
@@ -183,10 +184,10 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, an appearance (``light``, ``dark``: all a drawing
-    takes), several by commas (``hidden-line,exploded=0.6``), or the viewer's display object (JSON,
-    or a JSON file). A KiCad board's (``board``) is its own vocabulary (``render/board.py``), and so is a
-    schematic's (``schematic``: ``render/schematic.py``)."""
+    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
+    the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
+    (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
+    ``render/schematic.py``)."""
     if schematic:
         from cad.engine.render.schematic import display_options as schematic_options
 
@@ -210,12 +211,9 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
-                elif token in APPEARANCES and "appearance" not in display:
-                    display["appearance"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "exploded=AMOUNT moves the parts apart, and light or dark is the appearance "
-                                          "(all a drawing takes; one of each, by commas)")
+                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
     unknown = sorted(set(display) - DISPLAY_KEYS)

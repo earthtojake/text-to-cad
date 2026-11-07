@@ -23,39 +23,26 @@ MODES = {
     "assembly": {"area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"},
     "placement": {"area", "fab", "courtyard", "outline"},
 }
-DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance", "active", "others", "dim", "zones", "tracks"}
+DISPLAY_KEYS = {"mode", "side", "poured", "layers", "active", "others", "dim", "zones", "tracks"}
 #: What the layers but the active one are (KiCad's high-contrast modes): drawn as they are, faded, or left out.
 OTHERS = ("shown", "dimmed", "hidden")
 # What a set saved when a board had a drawing sheet may still name: no layer now, left out.
 GONE = {"sheet"}
-# Mirrors core/lib/plot2d/theme.js, both themes; snapshot pixel tests check the layer colours. Dark is KiCad's
-# default theme on the viewer's neutral dark canvas; light is each of its colours darkened, its hue kept, to read
-# at 3:1 on white (theme.js says how). ``appearance`` picks one, light by default, as every snapshot's does.
-INNER = ["#7FC87F", "#CE7D2C", "#4FCBCB", "#DB628B", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#8DCB81", "#ED7C33",
-         "#5BC3EB", "#F76F8E", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#ED7C33", "#5BC3EB", "#F76F8E", "#A7A5C6",
-         "#28CCD9", "#E8B2A7", "#F2EDA1", "#ED7C33", "#5BC3EB", "#F76F8E", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1"]
+# Mirrors core/lib/plot2d/theme.js's light theme, the one every snapshot draws in (snapshot pixel tests check the
+# layer colours): KiCad's default colours, each darkened, its hue kept, to read at 3:1 on white (theme.js says how).
 COLORS = {
-    "F.Cu": "#C83434", "B.Cu": "#4D7FC4", "F.SilkS": "#F2EDA1", "B.SilkS": "#E8B2A7",
-    "F.Fab": "#AFAFAF", "B.Fab": "#585D84", "F.CrtYd": "#FF26E2", "B.CrtYd": "#26E9FF",
-    "F.Mask": (216, 100, 255, 0.4), "B.Mask": (2, 255, 238, 0.4),
-    "F.Paste": (180, 160, 154, 0.9), "B.Paste": (0, 194, 194, 0.9),
-    "F.Adhes": "#840084", "B.Adhes": "#000084", "Edge.Cuts": "#D0D2CD", "Margin": "#FF26E2",
-    "Dwgs.User": "#C2C2C2", "Cmts.User": "#5994DC", "Eco1.User": "#B4DBD2", "Eco2.User": "#D8C852",
-    "User.1": "#C2C2C2", "User.2": "#5994DC", "User.3": "#B4DBD2", "User.4": "#D8C852", "User.5": "#C2C2C2",
-    "User.6": "#5994DC", "User.7": "#B4DBD2", "User.8": "#D8C852", "User.9": "#E8B2A7",
-    "vias": "#E3B72E", "ratsnest": (0, 248, 255, 0.35), "drills": "#E3B72E",
-    "area": (100, 100, 100, 0.35), "names": (255, 255, 255, 0.9),
+    "F.Cu": "#C83434", "B.Cu": "#4D7FC4", "F.SilkS": "#9C964D", "B.SilkS": "#BC887E", "F.Fab": "#939393",
+    "B.Fab": "#585D84", "F.CrtYd": "#FF26E2", "B.CrtYd": "#0AA3B4", "F.Mask": (213, 97, 252, 0.4),
+    "B.Mask": (15, 166, 155, 0.4), "F.Paste": (163, 143, 137, 0.9), "B.Paste": (21, 164, 164, 0.9),
+    "F.Adhes": "#840084", "B.Adhes": "#000084", "Edge.Cuts": "#939590", "Margin": "#FF26E2", "Dwgs.User": "#939393",
+    "Cmts.User": "#5994DC", "Eco1.User": "#769B93", "Eco2.User": "#A59503", "User.1": "#939393", "User.2": "#5994DC",
+    "User.3": "#769B93", "User.4": "#A59503", "User.5": "#939393", "User.6": "#5994DC", "User.7": "#769B93",
+    "User.8": "#A59503", "User.9": "#BC887E", "vias": "#B58F0E", "ratsnest": (20, 164, 169, 0.6), "drills": "#B58F0E",
+    "area": (0, 0, 0, 0.07), "names": (255, 255, 255, 0.9),
 }
-LIGHT_INNER = ["#5BA35C", "#CE7D2C", "#14A5A5", "#DB628B", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#67A35B", "#E6762B",
-               "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1",
-               "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D"]
-LIGHT_COLORS = {
-    **COLORS, "F.SilkS": "#9C964D", "B.SilkS": "#BC887E", "F.Fab": "#939393", "B.CrtYd": "#0AA3B4",
-    "F.Mask": (213, 97, 252, 0.4), "B.Mask": (15, 166, 155, 0.4), "F.Paste": (163, 143, 137, 0.9), "B.Paste": (21, 164, 164, 0.9),
-    "Edge.Cuts": "#939590", "Dwgs.User": "#939393", "Eco1.User": "#769B93", "Eco2.User": "#A59503",
-    "User.1": "#939393", "User.3": "#769B93", "User.4": "#A59503", "User.5": "#939393", "User.7": "#769B93", "User.8": "#A59503",
-    "User.9": "#BC887E", "vias": "#B58F0E", "ratsnest": (20, 164, 169, 0.6), "drills": "#B58F0E", "area": (0, 0, 0, 0.07),
-}
+INNER = ["#5BA35C", "#CE7D2C", "#14A5A5", "#DB628B", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#67A35B", "#E6762B",
+         "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1",
+         "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D"]
 ZONE_OPACITY = 0.6
 # KiCad's "Inactive layers: Dim": every layer but the active one at this share (plot2d's DIM_OPACITY).
 DIM_OPACITY = 0.3
@@ -66,17 +53,13 @@ BOARD_FIT_MARGIN_SHARE = 0.06
 BOARD_FIT_MARGIN_PX = 16
 ACTIVE_KINDS = {"copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "outline"}
 # A hole's fill and its plated wall (None: the board's background, seen through).
-HOLES = {"pad": (None, "#E3B72E"), "via": ("#E3B72E", "#ECECEC"), "npth": ("#1AC4D2", None)}
-LIGHT_HOLES = {"pad": (None, "#B58F0E"), "via": ("#B58F0E", "#949494"), "npth": ("#0BA3B0", None)}
+HOLES = {"pad": (None, "#B58F0E"), "via": ("#B58F0E", "#949494"), "npth": ("#0BA3B0", None)}
 NAMES = {"pad": (255, 255, 255, 0.9), "via": (50, 50, 50, 0.9)}
-#: Each appearance's canvas, its layers and its holes (theme.js's ``BOARD_PALETTES``).
-PALETTES = {
-    "dark": {"background": "#292929", "colors": COLORS, "inner": INNER, "holes": HOLES},
-    "light": {"background": "#FFFFFF", "colors": LIGHT_COLORS, "inner": LIGHT_INNER, "holes": LIGHT_HOLES},
-}
+#: The light theme's canvas (theme.js's ``BOARD_PALETTES.light``).
+BACKGROUND = "#FFFFFF"
 UNDERLAYS = {"area"}
-# Placement's airwires, as the overlay draws them (board2d/boardOverlay.js's ``airwire``): light on dark, dark on light.
-AIRWIRES = {"dark": (232, 238, 245, 0.8), "light": (80, 86, 94, 0.8)}
+# Placement's airwires, as the overlay draws them on the light canvas (board2d/boardOverlay.js's ``airwire``).
+AIRWIRE = (80, 86, 94, 0.8)
 OVERLAYS = {"drill", "via", "ratsnest", "names"}
 
 
@@ -87,14 +70,7 @@ def display_options(value: Any, grid: bool = False) -> dict:
         if value.lstrip().startswith("{") or value.endswith(".json"):
             value = _json_or_file(value, "--display")
         else:
-            # A mode, an appearance, or both by commas (``copper,dark``), as every snapshot's --display takes them.
-            tokens = [token.strip() for token in value.split(",") if token.strip()]
-            value = {}
-            for token in tokens:
-                key = "appearance" if token in ("light", "dark") else "mode"
-                if key in value:
-                    raise SnapshotRefused(f"--display {value!r} names one mode and one appearance (light or dark), by commas")
-                value[key] = token
+            value = {"mode": value.strip()} if value.strip() else {}  # a mode: board, copper, assembly, placement
     if value is None:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
@@ -104,14 +80,12 @@ def display_options(value: Any, grid: bool = False) -> dict:
     if type(dim) is not bool:
         raise SnapshotRefused("board others is shown, dimmed or hidden (dim, the earlier switch, is true or false)")
     value = {key: item for key, item in value.items() if key != "dim"}
-    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "appearance": "light", "active": None,
+    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "active": None,
                "others": "dimmed" if dim else "shown", "zones": ZONE_OPACITY, "tracks": 1.0, **value}
     if display["mode"] not in MODES:
         raise SnapshotRefused(f"a board's modes are {', '.join(MODES)}")
     if display["side"] not in ("top", "bottom") or type(display["poured"]) is not bool:
         raise SnapshotRefused("board side is top or bottom and poured is true or false")
-    if display["appearance"] not in ("light", "dark"):
-        raise SnapshotRefused("board appearance is light or dark")
     if display["active"] is not None and (not isinstance(display["active"], str) or not display["active"]):
         raise SnapshotRefused("board active is a layer id or null")
     if display["others"] not in OTHERS:
@@ -145,27 +119,26 @@ def _rgba(color) -> tuple[int, int, int, int]:
     return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 255
 
 
-def layer_color(layer: str, appearance: str = "dark"):
-    palette = PALETTES[appearance]
+def layer_color(layer: str):
     inner = re.fullmatch(r"In(\d+)\.Cu", layer)
     if inner:
-        return palette["inner"][(int(inner[1]) - 1) % len(palette["inner"])]
-    return palette["colors"].get(layer, palette["colors"]["Dwgs.User"])
+        return INNER[(int(inner[1]) - 1) % len(INNER)]
+    return COLORS.get(layer, COLORS["Dwgs.User"])
 
 
-def netname_color(layer: str, appearance: str = "dark"):
+def netname_color(layer: str):
     """theme.js's ``netnameColor``: white names on copper, or dark ones on copper bright enough."""
-    color = layer_color(layer, appearance)
+    color = layer_color(layer)
     if isinstance(color, tuple):
         return (255, 255, 255, 0.7)
     r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
     return (0, 0, 0, 0.7) if r * 0.299 + g * 0.587 + b * 0.117 > 0.5 else (255, 255, 255, 0.7)
 
 
-def item_color(layer: str, item: dict, appearance: str = "dark"):
+def item_color(layer: str, item: dict):
     if item["t"] == "label":
-        return NAMES.get(item.get("kind"), NAMES["pad"]) if layer == "names" else netname_color(layer, appearance)
-    return layer_color(layer, appearance)
+        return NAMES.get(item.get("kind"), NAMES["pad"]) if layer == "names" else netname_color(layer)
+    return layer_color(layer)
 
 
 def grown_outline(points, distance: float) -> list:
@@ -271,14 +244,13 @@ def active_layer(layers: list[dict], display: dict) -> str | None:
 class _Painter:
     """One frame of a plot on a Pillow image, as ``plot2d.drawPlot`` paints it on a canvas."""
 
-    def __init__(self, image, place, scale: float, ss: int, background: str, appearance: str = "dark"):
+    def __init__(self, image, place, scale: float, ss: int, background: str = BACKGROUND):
         from PIL import Image, ImageDraw
 
         self.Image, self.ImageDraw = Image, ImageDraw
         self.image = image
         self.pen = ImageDraw.Draw(image, "RGBA")
         self.place, self.scale, self.ss, self.background = place, scale, ss, background
-        self.appearance = appearance
         self.batch = None  # a translucent colour's mask, painted in one pass: (rgba, mask, pen)
 
     # -- translucent paint: one mask per run of a colour, composited once, so it never doubles up on itself
@@ -377,8 +349,7 @@ class _Painter:
     # -- items
 
     def hole(self, item: dict):
-        holes = PALETTES[self.appearance]["holes"]
-        fill, wall = holes.get(item["hole"], holes["npth"])
+        fill, wall = HOLES.get(item["hole"], HOLES["npth"])
         fill = fill or self.background
         if item["t"] == "circle":
             if item.get("w", 0) > 0 and wall:
@@ -386,8 +357,8 @@ class _Painter:
             span = item.get("span")
             if span and len(span) == 2:
                 # plot.js: the half on top of the screen is the via's top layer, the other its bottom.
-                self.disc(item["at"], item["r"], layer_color(span[0], self.appearance), start=180, end=360)
-                self.disc(item["at"], item["r"], layer_color(span[1], self.appearance), start=0, end=180)
+                self.disc(item["at"], item["r"], layer_color(span[0]), start=180, end=360)
+                self.disc(item["at"], item["r"], layer_color(span[1]), start=0, end=180)
                 return
             self.disc(item["at"], item["r"], fill)
             return
@@ -400,7 +371,7 @@ class _Painter:
         from cad.engine.formats.kicad.labels import is_track, track_labels, track_name_detail
         from cad.engine.formats.kicad.stroke_font import text_strokes
 
-        color = layer_color(layer["id"], self.appearance)
+        color = layer_color(layer["id"])
         copper = layer["kind"] == "copper"
         detail = self.scale / self.ss
         named = []  # the tracks whose net names this frame writes, over everything else on their copper
@@ -420,7 +391,7 @@ class _Painter:
                     continue
                 strokes = text_strokes(item["text"], size=item["size"], at=item["at"], angle=item.get("angle", 0.0), mirror=mirrored)
                 for stroke in strokes:
-                    self.line(stroke, item_color(layer["id"], item, self.appearance), item.get("w", 0), minimum=False)
+                    self.line(stroke, item_color(layer["id"], item), item.get("w", 0), minimum=False)
                 continue
             paint = color
             if item.get("knockout"):
@@ -449,7 +420,7 @@ class _Painter:
             for label in track_labels(item, viewport):
                 strokes = text_strokes(label["text"], size=label["size"], at=label["at"], angle=label["angle"], mirror=mirrored)
                 for stroke in strokes:
-                    self.line(stroke, netname_color(layer["id"], self.appearance), label["w"], minimum=False)
+                    self.line(stroke, netname_color(layer["id"]), label["w"], minimum=False)
         self.flush()
 
 
@@ -512,10 +483,8 @@ class Held:
             x = sheet["width"] - point[0] if bottom else point[0]
             return ((x - cx) * scale + width / 2, (point[1] + cy) * scale + height / 2)
 
-        # The canvas of the still's appearance, everywhere (the payload's own is the dark one).
-        appearance = display["appearance"]
-        background = PALETTES[appearance]["background"]
-        image = Image.new("RGB", (width, height), background)
+        # The light canvas, everywhere, as every snapshot is (the payload's own is the dark one).
+        image = Image.new("RGB", (width, height), BACKGROUND)
         named = set(display["layers"]) if display["layers"] is not None else None
         vias, names = named is None or "vias" in named, named is None or "names" in named
         viewport = (width / scale, height / scale)  # the millimetres the still shows, for where a track's names fall
@@ -523,7 +492,7 @@ class Held:
         for layer, strength in focused_layers(sheet["layers"], layers, display):
             faded = strength < 1
             under = image.copy() if faded else None
-            _Painter(image, place, scale, ss, background, appearance).layer(
+            _Painter(image, place, scale, ss).layer(
                 layer, poured=display["poured"], vias=vias, names=names, mirrored=bottom, viewport=viewport,
                 zones=display["zones"], tracks=display["tracks"])
             if faded:
@@ -531,8 +500,8 @@ class Held:
         if display["mode"] == "placement":
             from PIL import ImageDraw
 
-            airwires = _Painter(image, place, scale, ss, background, appearance)
-            _placement(ImageDraw.Draw(image, "RGBA"), payload["board"], place, scale, bottom, airwires.line, appearance)
+            airwires = _Painter(image, place, scale, ss)
+            _placement(ImageDraw.Draw(image, "RGBA"), payload["board"], place, scale, bottom, airwires.line)
             airwires.flush()
         warnings = list(self.warnings)
         if still.references:  # what the prompt named, lit as the viewer lit it (`board_refs.py`)
@@ -541,7 +510,7 @@ class Held:
             from cad.engine.render.board_refs import paint_references
 
             warnings += paint_references(ImageDraw.Draw(image, "RGBA"), self.path, still.references,
-                                         payload["board"]["origin"], place, scale, ss, appearance=appearance)
+                                         payload["board"]["origin"], place, scale, ss)
         frame = np.array(image)
         if still.annotation:
             paint_ink(frame, still.annotation.get("marks", []), place, height / REFERENCE_HEIGHT)
@@ -554,7 +523,7 @@ class Held:
             "preview": False, "boardDisplay": display, "warnings": warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
 
 
-def _placement(pen, board, place, scale, bottom, line, appearance="dark"):
+def _placement(pen, board, place, scale, bottom, line):
     """Placement's pads and all unpoured net connections, as the board overlay draws them."""
     pads = board["pads"]
     near = "bottom" if bottom else "top"
@@ -589,7 +558,7 @@ def _placement(pen, board, place, scale, bottom, line, appearance="dark"):
             next_pin = min((i for i in range(len(points)) if i not in joined), key=distance.__getitem__)
             joined.add(next_pin)
             if parents[next_pin] >= 0:
-                line([points[parents[next_pin]], points[next_pin]], AIRWIRES[appearance], 0)
+                line([points[parents[next_pin]], points[next_pin]], AIRWIRE, 0)
             for i, point in enumerate(points):
                 if i not in joined:
                     length = math.dist(point, points[next_pin])
