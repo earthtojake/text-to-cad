@@ -27,6 +27,12 @@ class WhatsNewTest(unittest.TestCase):
         # Decided once: an earlier release's record found later changes nothing.
         self.assertEqual(whats_new.read(path=self.path, release="0.11", installed=lambda: ["0.10.3"])["seen"], ["0.11"])
 
+    def test_only_a_release_or_a_development_build_of_one_is_an_earlier_release(self) -> None:
+        # A test's own installation names no release: its fresh device is a new person's.
+        self.assertEqual(whats_new.read(path=self.path, release="0.11", installed=lambda: ["0.0.0+test"])["seen"], ["0.11"])
+        updated = self.path.with_name("updated.json")
+        self.assertEqual(whats_new.read(path=updated, release="0.11", installed=lambda: ["0.10.0-dev.5"])["seen"], [])
+
     def test_settings_an_earlier_release_wrote_without_the_field_are_an_update(self) -> None:
         write_section("telemetry", {"notifiedAt": 1.0, "notice": 1}, path=self.path)  # 0.10's settings, untouched
         answer = whats_new.read(path=self.path, release="0.11", installed=lambda: ["0.10.3", "0.11.0"])

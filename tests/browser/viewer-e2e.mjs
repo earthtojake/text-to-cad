@@ -297,6 +297,9 @@ async function formatGate() {
     const { context, page, errors } = await newPage();
     try {
       const canvas = await openFile(page, fixture.file);
+      // The test's device is a new person's: no dialog over the file (What's new is an updated device's).
+      const dialogs = await page.getByRole("dialog").allInnerTexts();
+      if (dialogs.length) failures.push(`${fixture.format}: a dialog over a new device's file: ${dialogs[0].split("\n")[0]}`);
       const shot = PNG.sync.read(await canvas.screenshot());
       const drawn = coverage(shot);
       if (fixture.threeD) {
