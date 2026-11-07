@@ -352,7 +352,9 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   (`layersSectionShown`): four or more layers drawn on, or any block reference; without it, no
   panel. Each layer's pen, name, entity count and eye (hidden: not drawn, picked or snapped
   to), and under it the block references placed on it, a click picking one; the panel's search
-  ("Search the drawing") keeps the layers whose names match, and the blocks whose names do. The
+  ("Search the drawing") keeps the layers whose names match, and the blocks whose names do, each
+  layer's chevron folding its hits while the search is up (folds of the search's own, `searchFolded`,
+  dropped as it is cleared: [the rule](settings-ui.md#the-views-panel-and-the-tool-stack)). The
   panel docking or going leaves a view the person framed where it was (`useDrawingView.js`).
 - **Quick Edit** carries the picks and the ink; its views are the window on screen as a
   plan-view camera (`planCamera`: looking straight down, `up` +Y, `orthographicHalfHeight` the

@@ -758,8 +758,13 @@ file.
   its name under the layer's name and, under its count, its handle as the entity's id it is, `#9C` (the
   payload carries no insertion point to show instead), its tooltip **Handle 9C**; Copy Reference names
   it by that handle (`drawing.dxf#h9C`), and the search finds it by it. Searching, the layers whose names match,
-  and the blocks whose names do under their layer, open: the search decides what shows, so a layer's
-  chevron is locked (a mark nobody can press) until it is cleared.
+  and the blocks whose names do under their layer, open, whatever the person had folded: the search
+  decides which rows are candidates, and among them a layer's chevron works as it does unsearched. A
+  collapse hides the hits under that layer (every block reference of a layer kept by its own name, the
+  matching ones of a layer kept by a block), never the layer's row, and an expand shows them again. Those
+  folds are the search's own, as its hits are: they hold while it is up, however the query is edited (a
+  layer folded stays folded as long as the search keeps it), and clearing the search drops them, so the
+  layers come back folded and open exactly as the person left them before searching.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
   often, so in the corner's column over the zoom pill, from the top down, the same in 2D and 3D:
   **Display**, the corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
@@ -788,7 +793,10 @@ file.
   each tab's hits under its name — the layers or sheets whose names match first, then the Parts' and
   the Nets' ranked hits (the arrows and Enter walk and pick the open tab's, else the first list's) —
   a tab with none left out, and one line when
-  nothing matches. Escape or the box's X clears it and the tabs come back.
+  nothing matches. Escape or the box's X clears it and the tabs come back, each tree folded and open as
+  the person left it: a search opens or shuts no tree's own rows. Most tabs list their hits flat, with
+  no chevron (the Model's, the Links', the Parts', the Nets', a board's layers, the Hierarchy); a
+  drawing's Layers keep each hit under its layer, whose chevron folds them for the search alone (above).
 - **Collapsed, it goes whole.** **Hide panel** takes it away and leaves **Show panel** (lucide's
   PanelLeftOpen) alone on a pill at the canvas's top-left, 8px in, on the strip's surface. No rail, no
   hover reveal, and a pick on the picture never opens it.
