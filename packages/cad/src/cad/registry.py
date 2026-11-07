@@ -94,6 +94,10 @@ class Integration:
     #: ``cad run <command>`` makes the integration's environment for one and runs it there, through the
     #: integration's ``_command`` module (``cad.<name>._command``), headless in private homes.
     commands: tuple[str, ...] = ()
+    #: What its extra brings, in the words said as its environment is made, and about how much of the disk that
+    #: environment takes (measured on an Apple silicon Mac, Python 3.14; the line says "about").
+    holds: str = ""
+    size_mb: int = 0
 
 
 @dataclass(frozen=True)
@@ -285,7 +289,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         modules=("build123d", "OCP"),
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
                        "ezdxf", "pillow"),
-        identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
+        identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
+        holds="the CAD kernel", size_mb=610),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
                  "its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes "
@@ -300,12 +305,14 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                         "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
                     "CAD_KICAD_CLI"),
         modules=("kicode",), distributions=("kicode",),
-        identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",)),
+        identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
+        holds="KiCad's kicad-cli", size_mb=310),
     "trimesh": Integration(
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
                    "and support", extra="trimesh", process="in-process",
-        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",)),
+        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
+        holds="trimesh", size_mb=150),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

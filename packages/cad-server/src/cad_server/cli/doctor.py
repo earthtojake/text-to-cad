@@ -130,7 +130,7 @@ def _current() -> list[str]:
             lines.append(f"releases {said} in {_home(str(releases.root()))}")
         last = switch.last()
         if last is not None:
-            how = (f"to text-to-cad {last.get('to')}" + (f" from {last.get('from')}" if last.get("from") else "")
+            how = (f"to cad-server {last.get('to')}" + (f" from {last.get('from')}" if last.get("from") else "")
                    + (f", {last['gapMs']} ms without an engine" if last.get("gapMs") is not None else ""))
             lines.append(f"update   {last.get('at')}: switched {how}" if last.get("ok")
                          else f"update   {last.get('at')}: the switch {how} failed: {last.get('error')}")
@@ -191,9 +191,7 @@ def _apps() -> list[str]:
                      + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
     for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
         if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
-            lines.append(f"app      {providers.label(agent)}: the skills of text-to-cad {got.get('release') or '?'}, "
-                         f"copied into {providers.shown(got.get('folder') or '?', machine)} by the Skills CLI"
-                         + (f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""))
+            lines.append(f"app      {providers.label(agent)}: {providers.skills_words(got, machine)}")
     return lines
 
 

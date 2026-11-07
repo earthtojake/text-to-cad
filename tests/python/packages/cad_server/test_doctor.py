@@ -416,7 +416,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn(f"  current  text-to-cad 1.1.0 ({releases.where('1.1.0')})\n", out)
         self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
-        self.assertIn("  update   2026-10-31T09:00:00+0000: switched to text-to-cad 1.1.0 from 1.0.0, 640 ms without an "
+        self.assertIn("  update   2026-10-31T09:00:00+0000: switched to cad-server 1.1.0 from 1.0.0, 640 ms without an "
                       "engine\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
         # the CAD kernel to the current one's.

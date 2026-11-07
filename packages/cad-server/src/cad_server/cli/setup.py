@@ -224,9 +224,10 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 # --- the engine on the port, as the engine says it of itself -----------------------------------------
 
 
-def engine_on(port: int) -> dict[str, Any] | None:
-    """The device's engine's ``status`` when its HTTP server is on ``port``, asked read-only through its door
-    and bounded (``ASK_SECONDS``), or None when none runs or it serves elsewhere."""
+def running_engine() -> dict[str, Any] | None:
+    """The device's engine's ``status``, asked read-only through its door and bounded (``ASK_SECONDS``), or
+    None when none runs: one with no HTTP port yet (``serving`` empty: a command started it, and no page has
+    asked for one) runs all the same."""
     import threading
 
     from cad.engine import client
@@ -242,9 +243,14 @@ def engine_on(port: int) -> dict[str, Any] | None:
     asking = threading.Thread(target=ask, daemon=True)
     asking.start()
     asking.join(ASK_SECONDS)
-    status = answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
-    serving = (status or {}).get("serving")
-    return status if isinstance(serving, dict) and serving.get("port") == port else None
+    return answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
+
+
+def serving_words(status: dict[str, Any]) -> str:
+    """Where an engine that runs serves HTTP, in words: its port, or none yet."""
+    serving = status.get("serving")
+    port = serving.get("port") if isinstance(serving, dict) else None
+    return f"on port {port}" if port else "with no HTTP port yet (the first CAD view opens one)"
 
 
 def port_held(port: int) -> str | None:
@@ -521,7 +527,7 @@ class Installer:
         row: dict[str, Any] = {"app": "engine", "label": "engine", "action": "leave"}
         if not port:
             return {**row, "subject": "CAD_ENGINE_PORT=0: the engine takes any free port"}
-        status = engine_on(port)
+        status = running_engine()
         if status is None:
             held = port_held(port)
             if held is None:
@@ -532,12 +538,12 @@ class Installer:
                 then = f"if the stop above does not free it, {then}"
             return {**row, "subject": f"port {port} is held by {held}: {then}"}
         name = status.get("installation") or status.get("version") or "?"
-        who = f"text-to-cad {name}'s engine (pid {status.get('pid')}) on port {port}"
+        who = f"cad-server {name}'s engine (pid {status.get('pid')}) {serving_words(status)}"
         prefix = status.get("prefix")
         if isinstance(prefix, str) and os.path.normcase(os.path.realpath(prefix)) == \
                 os.path.normcase(os.path.realpath(sys.prefix)):
             return {**row, "subject": f"{who}: this installation's"}
-        return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
+        return {**row, "action": "switch", "subject": f"{who}: drains, then cad-server {self.release}'s takes its place"}
 
     def _kernel(self) -> dict[str, Any] | None:
         """The CAD kernel environment, the base the engine's own kernel processes start from
@@ -586,15 +592,16 @@ class Installer:
         try:
             done = switch.handover(version, told=lambda line: self.say(f"engine   {line}"))
         except (OSError, ValueError, ConnectionError) as error:
-            self.say(f"engine   the switch to text-to-cad {version} could not run: {error}")
+            self.say(f"engine   the switch to cad-server {version} could not run: {error}")
             return True, None
         if done is None:
             return False, None
         if done.get("ok"):
             gap = f" ({done['gapMs']} ms without an engine)" if done.get("gapMs") is not None else ""
-            self.say(f"engine   text-to-cad {version} is the current installation{gap}")
+            moved = f"{done['from']} -> {version}" if done.get("from") else version
+            self.say(f"engine   cad-server {moved} is the current installation{gap}")
             return False, done
-        self.say(f"engine   the switch to text-to-cad {version} failed: {done.get('error')}"
+        self.say(f"engine   the switch to cad-server {version} failed: {done.get('error')}"
                  + ("; the release before runs again" if done.get("restored") else ""))
         return True, done
 
@@ -699,18 +706,34 @@ class Installer:
                 said = "no copy of text-to-cad"
             verdicts[name] = found
             self.say(f"verify   {app.label}: {said}")
+        verdicts.update(self._verify_skills())
         engine: dict[str, Any] | None = None
         if self.port:
             try:
-                status = engine_on(self.port)
+                status = running_engine()
             except Exception as error:  # noqa: BLE001 - a report line, never a failure of the setup
                 self.say(f"verify   engine port {self.port}: unknown ({type(error).__name__}: {error})")
             else:
                 name = (status or {}).get("installation") or (status or {}).get("version")
                 engine = {"port": self.port, "release": name}
-                self.say(f"verify   engine port {self.port}: " + (f"text-to-cad {name} running" if status is not None
-                                                                   else "not running; the next CAD session starts one"))
+                self.say(f"verify   engine port {self.port}: not running; the next CAD session starts one"
+                         if status is None else f"verify   engine: cad-server {name} running, {serving_words(status)}")
         return {"apps": verdicts, "engine": engine}
+
+    def _verify_skills(self) -> dict[str, Any]:
+        """The Skills CLI agents the receipt says got the skills, each read again: its folder holds them, or
+        the line says which it lost, in the words of ``cad doctor`` (``providers.skills_words``)."""
+        providers = self.providers
+        verdicts: dict[str, Any] = {}
+        for agent, got in ((self._receipt() or {}).get("skills") or {}).items():
+            if agent not in providers.SKILLS_AGENTS or not isinstance(got, dict) or (self.only and agent not in self.only):
+                continue
+            have = {path.name for path in providers.ours_in(providers.skills_folder(agent, self.machine))}
+            missing = [name for name in got.get("skills") or () if name not in have]
+            verdicts[agent] = {"verdict": "missing" if missing else "ok", "release": got.get("release")}
+            self.say(f"verify   {providers.label(agent)}: {providers.skills_words(got, self.machine)}"
+                     + (f", without {', '.join(missing)}" if missing else ""))
+        return verdicts
 
     def _telemetry(self) -> str:
         """The telemetry line: the notice the first time, else what is sent and why; ``--no-telemetry``
@@ -730,9 +753,10 @@ class Installer:
         self.say(f"telemetry {said}" + ("; turn it off with `cad telemetry off`" if said.startswith("on") else ""))
         return said
 
-    def _restart(self, apps: dict[str, Any], changed: set[str]) -> list[str]:
-        """What to restart to load what this run did (``changed``: the apps it installed or updated
-        the plugin in, a config it edited, and the agents that got the skills)."""
+    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Restart to load it:") -> list[str]:
+        """What to restart for what this run did to take hold (``changed``: the apps it installed or updated
+        the plugin in, a config it edited, and the agents that got the skills, or lost them to an uninstall),
+        under ``heading``."""
         providers = self.providers
         names = [name for name in providers.APPS if name in changed]
         if "claude" in changed:  # Cursor and Grok Build load the Claude Code plugin
@@ -742,7 +766,7 @@ class Installer:
         if agents:
             lines.append(f"{', '.join(agents)}: start a new session for the skills")
         if lines:
-            self.say("Restart to load it:")
+            self.say(heading)
             for line in lines:
                 self.say(f"  {line}")
         return lines
@@ -1012,8 +1036,10 @@ class Installer:
         if self.args.purge:
             extra.append({"app": "folders", "label": "folders", "action": "remove",
                           "subject": f"{providers.shown(state, self.machine)} and {providers.shown(cache, self.machine)}"})
-        where = "what earlier runs did, newest first" if receipt else "no receipt: every copy of text-to-cad found"
-        self._plan_lines(f"text-to-cad: cad uninstall takes back {where}:", apps, steps, extra)
+        title = ("text-to-cad: cad uninstall takes back what earlier runs did, newest first:" if receipt else
+                 "text-to-cad: cad uninstall finds no record of an earlier run, so it takes out every copy of "
+                 "text-to-cad here:")
+        self._plan_lines(title, apps, steps, extra)
         if self.args.dry_run:
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -1065,7 +1091,7 @@ class Installer:
                     self._keep(receipt)
         if self.args.purge:
             self._purge(state, cache)
-        restart = self._restart(apps, changed)
+        restart = self._restart(apps, changed, "Restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
     def _remove_command(self, proxy: str) -> bool:

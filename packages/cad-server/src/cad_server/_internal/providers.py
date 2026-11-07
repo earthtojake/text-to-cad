@@ -434,6 +434,13 @@ def ours_in(folder: Path) -> List[Path]:
     return [path for path in (Path(folder) / name for name in SKILLS) if path in found]
 
 
+def skills_words(got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
+    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it."""
+    at = f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""
+    return (f"the skills of text-to-cad {got.get('release') or '?'}, copied into "
+            f"{shown(got.get('folder') or '?', machine)} by the Skills CLI{at}")
+
+
 def skills_installed(printed: str) -> Optional[List[str]]:
     """The skills ``npx skills add --json`` says it installed (``"status": "installed"``), or
     ``None`` when what it printed is not that list."""

@@ -160,7 +160,7 @@ class Fixture(unittest.TestCase):
         self.addCleanup(port.stop)
         os.environ.pop("CAD_ENGINE_PORT", None)
         for patch in (mock.patch.object(providers.Machine, "here", return_value=self.machine),
-                      mock.patch.object(setup, "engine_on", side_effect=lambda port: self.serving),
+                      mock.patch.object(setup, "running_engine", side_effect=lambda: self.serving),
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
                       mock.patch.object(setup, "stop_earlier", return_value=(True, [], "")),
                       mock.patch.object(switch, "handover", return_value=None),
@@ -477,9 +477,30 @@ class InstallUpdateAndUninstall(Fixture):
                             "serving": {"port": PORT}}
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"engine +switch +text-to-cad {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
-                                  rf"drains, then text-to-cad {re.escape(RELEASE)}'s takes its place")
+            self.assertRegex(out, rf"engine +switch +cad-server {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
+                                  rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
         setup.stop_earlier.assert_not_called()
+
+    def test_an_engine_a_command_started_runs_with_no_port_and_the_plan_and_the_report_say_so(self) -> None:
+        """``cad doctor`` or a build starts an engine that opens no HTTP port until a page asks for one: it runs,
+        and the plan (which switches it, as the switch does) and the report say what is true."""
+        no_port = "with no HTTP port yet (the first CAD view opens one)"
+        self.serving = {"ok": True, "pid": 9, "version": "0.0.1", "installation": "0.0.1",
+                        "prefix": str(self.root / "older"), "serving": None}
+        code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"engine +switch +cad-server 0\.0\.1's engine \(pid 9\) {re.escape(no_port)}: "
+                              rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
+        self.assertNotIn("no engine running", out)
+        self.serving = {**self.serving, "version": RELEASE, "installation": RELEASE, "prefix": sys.prefix}
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"engine +leave +cad-server {re.escape(RELEASE)}'s engine \(pid 9\) {re.escape(no_port)}: "
+                              "this installation's")
+        self.assertIn(f"verify   engine: cad-server {RELEASE} running, {no_port}\n", out)
+        self.assertNotIn("not running", out)
+        self.serving = {**self.serving, "serving": {"port": PORT}}
+        self.assertIn(f"verify   engine: cad-server {RELEASE} running, on port {PORT}\n", self.run_setup()[1])
 
     def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
         self.desktop_with({})
@@ -488,7 +509,10 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup()
             self.assertEqual(code, 0, out)
             switch.handover.assert_called_once_with(RELEASE, told=mock.ANY)
-            self.assertIn(f"engine   text-to-cad {RELEASE} is the current installation (412 ms without an engine)", out)
+            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation (412 ms without an engine)", out)
+            self.assertEqual(out.count("is the current installation"), 1, "one line says it")
+            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": None}
+            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation\n", self.run_setup()[1])
             self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
                             "the apps first, then the switch")
             switch.follow.assert_not_called()
@@ -496,7 +520,7 @@ class InstallUpdateAndUninstall(Fixture):
                                             "restored": True}
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
-        self.assertIn(f"engine   the switch to text-to-cad {RELEASE} failed: no hello; the release before runs again", out)
+        self.assertIn(f"engine   the switch to cad-server {RELEASE} failed: no hello; the release before runs again", out)
         # The release before's plugin folder, and the apps' copies of it, come back with it.
         switch.follow.assert_called_once_with(told=mock.ANY)
 
@@ -703,6 +727,14 @@ sys.exit(0)
         self.assertFalse(self.state.exists())
         self.assertFalse(self.cache.exists())
 
+    def test_an_uninstall_with_no_record_of_a_setup_says_so_and_takes_out_what_it_finds(self) -> None:
+        self.desktop_with({"cad": self.entry()})
+        code, out, _err = self.run_uninstall("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[0], "text-to-cad: cad uninstall finds no record of an earlier run, so it takes "
+                                              "out every copy of text-to-cad here:")
+        self.assertIn("Claude Desktop", out)
+
     def test_an_uninstall_asks_first_and_without_a_yes_changes_nothing(self) -> None:
         """``cad uninstall`` destroys, so it says its plan and asks: where no one can be asked (no terminal,
         ``--json``) it changes nothing without ``--yes``, naming the command with it; at a terminal, anything
@@ -769,6 +801,20 @@ sys.exit(0)
         got = self.receipt()["skills"]["windsurf"]
         self.assertEqual((got["release"], got["skills"]), (RELEASE, list(providers.SKILLS)))
         self.assertIn("Windsurf: start a new session for the skills", out)
+        where = providers.shown(folder, self.machine)
+        self.assertRegex(out, rf"verify   Windsurf: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
+                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
+        document = json.loads(self.run_setup("--json", "--only", "windsurf")[1])
+        self.assertEqual(document["verified"]["apps"], {"windsurf": {"verdict": "ok", "release": RELEASE}})
+        # The report reads the folder again: a skill gone since, which nothing here can add back, is said.
+        shutil.rmtree(folder / providers.SKILLS[0])
+        (self.bin / ("npx.cmd" if os.name == "nt" else "npx")).unlink()
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"verify   Windsurf: the skills .+, without {providers.SKILLS[0]}\n")
+        command(self.bin, "npx", NPX)
+        code, out, _err = self.run_setup()
+        self.assertIn(f": {providers.SKILLS[0]} missing", out)
         # The receipt's release is this one and every skill is there: nothing to do.
         calls = (self.bin / "calls.jsonl").read_text(encoding="utf-8")
         code, out, _err = self.run_setup()
@@ -782,6 +828,8 @@ sys.exit(0)
         self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
                                 *sorted(providers.SKILLS), "-y"])
         self.assertEqual(providers.ours_in(folder), [])
+        self.assertIn("Restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
+        self.assertNotIn("Restart to load it", out)
 
     def test_only_takes_a_skills_cli_agent(self) -> None:
         command(self.bin, "npx", NPX)

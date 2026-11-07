@@ -143,7 +143,6 @@ def _point(version: str, told: Callable[[str], None]) -> bool:
         return False
     try:
         installations.point(version)
-        told(f"current is text-to-cad {version}")
     finally:
         daemon._drop_lock(held, places.lock_path())
     return True
@@ -157,23 +156,23 @@ def _started(version: str, port: int | None, told: Callable[[str], None]) -> tup
 
     record = installations.current()
     if record is None or record["version"] != version:
-        return False, f"text-to-cad {version} is not the current installation"
+        return False, f"cad-server {version} is not the current installation"
     try:
         connection = client.connect(start=True, timeout=START_SECONDS)
     except ConnectionError as error:
-        return False, f"text-to-cad {version}'s engine did not start: {error}"
+        return False, f"cad-server {version}'s engine did not start: {error}"
     if connection is None:
-        return False, f"text-to-cad {version}'s engine did not start"
+        return False, f"cad-server {version}'s engine did not start"
     connection.close()
     status = client.request({"op": "status"}, start=False) or {}
     prefix = status.get("prefix")
     if not isinstance(prefix, str) or not installations._same_place(prefix, record["prefix"]):
-        return False, f"the engine that answered runs from {prefix}, not text-to-cad {version}'s {record['prefix']}"
+        return False, f"the engine that answered runs from {prefix}, not cad-server {version}'s {record['prefix']}"
     if port:
         answer = client.request({"op": "http", "port": port}, start=False) or {}
         if "failed" in answer or not answer.get("url"):
-            return False, f"text-to-cad {version}'s engine could not serve on port {port}: {answer.get('failed', 'no answer')}"
-    told(f"text-to-cad {version}'s engine answers (pid {status.get('pid')})" + (f" on port {port}" if port else ""))
+            return False, f"cad-server {version}'s engine could not serve on port {port}: {answer.get('failed', 'no answer')}"
+    told(f"cad-server {version}'s engine answers (pid {status.get('pid')})" + (f" on port {port}" if port else ""))
     return True, ""
 
 
@@ -209,7 +208,7 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
     result["gapMs"] = round((time.monotonic() - gone) * 1000)
     if ok:
         result["ok"] = True
-        told(f"switched to text-to-cad {target} ({result['gapMs']} ms without an engine)")
+        told(f"switched to cad-server {target} ({result['gapMs']} ms without an engine)")
         _record(result)
         try:
             removed = releases.collect({target, *([previous] if previous else [])})
@@ -219,7 +218,7 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
             pass
         return result
     result["error"] = why
-    told(f"text-to-cad {target} did not take over: {why}")
+    told(f"cad-server {target} did not take over: {why}")
     if previous and installations.current_version() == target:
         # Kept first: the release before's engine, which starts again next, reads it as it starts serving and
         # says the update failed to the pages that watched it go (``update.Update.recall``).
@@ -230,7 +229,7 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
             back, why_not = _started(previous, port, told)
             result["restored"] = back
             if not back:
-                told(f"text-to-cad {previous}'s engine did not start again either: {why_not}")
+                told(f"cad-server {previous}'s engine did not start again either: {why_not}")
     _record(result)
     if result.get("restored"):
         # The release it failed to move to, for nothing now: its folder goes, its failure kept above. One a
@@ -271,7 +270,7 @@ def handover(target: str, *, told: Callable[[str], None] | None = None) -> dict[
     serving = status.get("serving")
     port = serving.get("port") if isinstance(serving, dict) else None
     previous = installations.current_version()
-    told(f"the engine (pid {status.get('pid')}) drains, then text-to-cad {target}'s takes its place"
+    told(f"the engine (pid {status.get('pid')}) drains, then cad-server {target}'s takes its place"
          + (f" on port {port}" if port else ""))
     client.request({"op": "stop", "drain": True}, start=False)
     return switch(target, port=port, previous=previous, told=told)
@@ -305,7 +304,7 @@ def follow(told: Callable[[str], None] | None = None) -> bool:
         if line.strip():
             told(line.rstrip())
     if done.returncode != 0:
-        told(f"text-to-cad {record['version']}'s `cad plugin --refresh` exited {done.returncode}")
+        told(f"cad-server {record['version']}'s `cad plugin --refresh` exited {done.returncode}")
     return done.returncode == 0
 
 
@@ -313,7 +312,7 @@ def helper(target: str, *, port: int | None, previous: str | None) -> int:
     """``cad update --switch <target>``: the switch, from a process of its own, then the plugin folder
     following the release it left current (``follow``); 0 when the switch held."""
     told = _said(None)
-    told(f"waiting for the engine to drain, to switch to text-to-cad {target}")
+    told(f"waiting for the engine to drain, to switch to cad-server {target}")
     held = switch(target, port=port, previous=previous, told=told)["ok"]
     follow(told)
     return 0 if held else 1
