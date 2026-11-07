@@ -6,7 +6,7 @@ absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu
 It imports no concrete renderer. Applications compose registrations from the
 separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the five
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the six
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx
@@ -52,9 +52,9 @@ and matching do not load the component.
 `prepare` returns `{ data, dispose? }`. FileViewer opens a file's document when the
 file is shown, and again only on `reload`: a renderer follows its file's changes
 itself (every CAD renderer loads the next revision behind what is on screen). A CAD
-file's controls are its own, over the viewport: its tool strip, the tool in hand's
-sub-toolbar, and its file sidebar
-([the design system](settings-ui.md#the-file-sidebar-and-the-tool-stack)); the view's
+file's controls are its own, over the viewport: its tool strip and the tool in hand's
+sub-toolbar, with its panel docked beside it
+([the design system](settings-ui.md#the-views-panel-and-the-tool-stack)); the view's
 controls (Projection, Display, Preview) end its strip, and in Preview its own bar holds
 Preview's, the navbar hidden: nothing of the view is the navbar's.
 

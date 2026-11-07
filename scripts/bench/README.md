@@ -1,6 +1,6 @@
 # Benchmarks
 
-Manual commands that measure cadgen and the CAD Viewer. None of them runs in CI:
+Manual commands that measure the engine and the CAD Viewer. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested
 (`tests/python/global/test_bench_helpers.py`). Performance numbers come from one
@@ -15,7 +15,7 @@ warm, and times every step:
 
 ```sh
 .venv/bin/python scripts/bench/corpus_bench.py --dry-run         # the config and the interpreter, checked
-.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy cadgen build
+.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy build
 .venv/bin/python scripts/bench/corpus_bench.py --model l_bracket # one; repeat --model for more
 ```
 
@@ -36,7 +36,7 @@ The models, smallest first, are `l_bracket`, `planetary_gear`, `qdd`, `motorbike
 its default root is `../tom-cad`. A worktree or isolated clone may have no such sibling;
 give `--config` a copy of `corpus.json` with the relative path to the external checkout
 or copied checkout. `--dry-run` checks configuration, files, edits and the selected
-interpreter's cadgen import (`--cadgen-src`), without building anything. It does not
+interpreter's import of the `cad` library (from `--cadgen-src`, default `packages/cad/src`), without building anything. It does not
 infer calls from source or promise that a script calls the selected model.
 
 Each project is copied into a fresh output folder. Source stays unchanged except for
@@ -63,7 +63,7 @@ The batch never stops another batch's engine or clears its cache. Steps are:
 - `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
   (`POST /api/v1/documents/model/<id>/mesh`), mesh again after dropping those meshes on the now-warm
   pool, then read the page's structure. No file is substituted for the model document;
-- `snapshot-first`, `snapshot`: draw that document id twice with `cad snapshot --json`.
+- `snapshot-first`, `snapshot`: draw that document id twice with `cad <type> snapshot --json`.
 
 The small measurement driver runs the target with Python's `runpy` and records reports
 returned by `api.build_script` when the script's explicit model calls reach it. It
@@ -92,7 +92,7 @@ display modes. Each `--doc NAME=PATH` (an `.xbf`, built first) is drawn in Solid
 Shaded, Parts, X-ray, Hidden line and Wireframe at iso and front (`--modes`,
 `--cameras`, `--size`) twice, both from the engine daemon's meshes
 (`CAD_ENGINE_DIR` picks the daemon): by OCCT, whose look is the reference
-(`cad/engine/render/look.py`) and which `cad snapshot` draws with; and by the
+(`cad/engine/render/look.py`) and which `cad <type> snapshot` draws with; and by the
 viewer's own scene code, `@cad/core`'s headless renderer, which the bench
 builds at the start of each run (`scripts/bundle/lib/snapshot_runtime.sh`, into the
 ignored `tmp/bench/snapshot-page`; the wheel does not carry it), then loads in a

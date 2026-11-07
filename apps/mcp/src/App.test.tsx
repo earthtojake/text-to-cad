@@ -55,9 +55,10 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     change(next: HostContext) { context = { ...context, ...next }; for (const listener of [...listeners]) listener(context); },
   };
   const answers: Record<string, Answer> = {
-    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`).
+    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`, `{updates}`).
     '/api/v1/settings': body => ({ language: { locale: body?.language?.locale ?? null },
-      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY } }),
+      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY },
+      updates: body?.updates ? { automatic: body.updates.automatic, reason: 'choice' } : { automatic: true, reason: 'default' } }),
     '/api/v1/server': () => ({ notice: null }),
     '/api/v1/documents': () => ({ documents: [] }),
     '/api/v1/local/reveal': () => null,
@@ -78,8 +79,8 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     }),
     answers,
     asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
-    /** The settings' reads (each of the language's and the consent's), and the telemetry answers sent. */
-    telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language)
+    /** The settings' reads (each of the language's, the consent's, What's new's and automatic updates'), and the telemetry answers sent. */
+    telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language && !request.body?.whats_new)
       .map(request => request.body && request.body.telemetry),
   };
   return { bridge, server };
@@ -442,15 +443,39 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
-  // The settings read once by each of the language and the consent: no answer sent.
-  expect(server.telemetry()).toEqual([null, null]);
-  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
+  // The settings read once by each of the language, the consent, What's new and automatic updates: no answer sent.
+  expect(server.telemetry()).toEqual([null, null, null, null]);
+  // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
+  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
+    expect.objectContaining({ id: 'automatic-updates', checked: true, label: 'Automatic updates' })]);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
   expect(server.telemetry().at(-1)).toEqual({ share: true });
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
   expect(server.telemetry().at(-1)).toEqual({ share: false });
   expect(viewer.props!.appSettings![0].checked).toBe(false);
+});
+
+it("a tab says What's new once after an update, kept seen through the server; a card in a chat has no room for it, and reads nothing for it", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const seen: string[] = [];
+  server.answers['/api/v1/settings'] = body => { seen.push(...(body?.whats_new?.seen ?? [])); return { language: { locale: null },
+    telemetry: { share: false, policy: POLICY }, whats_new: { seen: [...new Set(seen)], release: '0.11' } }; };
+  render(<App bridge={bridge as any} server={server as any} launch={home} />);
+  await waitFor(() => expect(viewer.props!.whatsNew?.entry).toBe('0.11'));
+  await act(async () => viewer.props!.whatsNew!.onDismiss());
+  expect(viewer.props!.whatsNew!.entry).toBeNull();
+  expect(server.asked('/api/v1/settings')).toContainEqual({ whats_new: { seen: ['0.11'] } });
+  cleanup();
+  const card = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
+  card.server.answers['/api/v1/settings'] = server.answers['/api/v1/settings'];
+  seen.length = 0;
+  render(<App bridge={card.bridge as any} server={card.server as any} presentation="inline"
+    launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
+  await act(async () => {});
+  expect(viewer.props!.whatsNew).toBeUndefined();
+  // the language's, the consent's and automatic updates'
+  expect(card.server.asked('/api/v1/settings')).toEqual([null, null, null]);
 });
 
 it('an answer is never undone by a read sent just before it, and a choice the environment made is shown fixed', async () => {

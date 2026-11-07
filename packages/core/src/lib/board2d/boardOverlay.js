@@ -1,0 +1,299 @@
+/**
+ * What a person is pointing at, drawn over a board's plot: the hovered item and the selection.
+ * The plot stays the board's picture; this draws on top of it, in the same pass, so a capture of
+ * the view shows what was selected.
+ *
+ * `resolved` items come from the index's `resolve()` or `pick()` (`createBoardIndex`); geometry
+ * is in page millimetres. Pure canvas 2D: the viewer and a headless capture draw the same thing.
+ *
+ * A net can be thousands of pads and tracks, and the viewer draws this on every hover change and
+ * every frame of a pan, so shapes are drawn in PAGE space — the canvas's transform maps them,
+ * through the bottom view's mirror — each from a path made once and kept with its item (`Path2D`),
+ * and what lies off screen is left out. Each item is its own path: a canvas fills and strokes many
+ * small paths far faster than one path of them all. Widths are screen pixels, as the person reads
+ * them, whatever the zoom.
+ *
+ * In a board's Placement display (`placement`) the plot carries no copper and no drills (a via's
+ * hole is routing), so this draws the pads (in KiCad's copper colours, the far side first), their
+ * holes and the board's own, and every connection as an airwire (`boardAirwires`), under the dim
+ * and the highlights. A net with a pour is joined by it, so its airwires are left out unless the
+ * net is selected; a selected net's airwires are highlighted.
+ */
+import { pageToScreen } from "../plot2d/plot.js";
+import { boardAirwires } from "./airwires.js";
+
+/**
+ * The overlay's colours in each theme: the highlight (the CAD views' ink highlight; on the light
+ * canvas the same blue darkened to 4.5:1, as `plot2d/theme.js` darkens a layer), what a lit item is
+ * filled with, how the rest of the board steps back for a net — darkened on the dark canvas, washed
+ * toward white on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad
+ * is the side looked at), its holes and its airwires: thin, under everything a person points at.
+ */
+const overlayTheme = (selection, rgb, { dim, airwire, inkEdge }) => Object.freeze({
+  selection,
+  // The ink's keyline (`drawing2d/marks.js`'s `keyline`): ink in a neon over copper of its own hue
+  // reads by its edge, as the canvas's contrast, dark on the dark canvas and light on the light one.
+  inkKeyline: Object.freeze({ color: inkEdge, width: 1.25 }),
+  hover: `rgba(${rgb}, 0.55)`,
+  dim,
+  part: `rgba(${rgb}, 0.10)`,
+  partPad: `rgba(${rgb}, 0.35)`,
+  zone: `rgba(${rgb}, 0.12)`,
+  copperZone: `rgba(${rgb}, 0.18)`,
+  // A text's, a dimension's value's and an area's box: lit, and the board still read through it.
+  box: `rgba(${rgb}, 0.16)`,
+  // The box being dragged: lighter still, so the board under it reads while it is drawn.
+  draft: `rgba(${rgb}, 0.1)`,
+  placementFront: "rgba(200, 52, 52, 0.9)",
+  placementBack: "rgba(77, 127, 196, 0.9)",
+  placementHole: "#000000",
+  airwire
+});
+export const BOARD_OVERLAY_THEMES = Object.freeze({
+  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)", inkEdge: "rgba(0, 0, 0, 0.85)" }),
+  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)", inkEdge: "rgba(255, 255, 255, 0.95)" })
+});
+/** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
+export function boardOverlayColors(scheme) {
+  return scheme === "light" ? BOARD_OVERLAY_THEMES.light : BOARD_OVERLAY_THEMES.dark;
+}
+/** The dark theme's, as the overlay draws without a theme. */
+export const BOARD_OVERLAY_COLORS = BOARD_OVERLAY_THEMES.dark;
+// Dots (vias, junctions, a pin's end) are filled a few dozen to a path.
+const DOTS_PER_PATH = 64;
+
+/**
+ * A view of the page: `px` is one screen pixel in page millimetres, `shows(box, margin)` whether a
+ * box (page mm) reaches the screen. `transform` maps page millimetres to CSS pixels; `mirrorX` is
+ * the page x the board is mirrored about (the view from the bottom), or null.
+ */
+function createView(transform, { width, height, mirrorX = null } = {}) {
+  const scale = transform.scale;
+  const project = mirrorX == null ? (x, y) => pageToScreen(transform, x, y) : (x, y) => pageToScreen(transform, 2 * mirrorX - x, y);
+  // The page box on screen, when the pane's size is known.
+  let visible = null;
+  if (width > 0 && height > 0) {
+    let minX = -transform.offsetX / scale; let maxX = (width - transform.offsetX) / scale;
+    if (mirrorX != null) [minX, maxX] = [2 * mirrorX - maxX, 2 * mirrorX - minX];
+    visible = [minX, -transform.offsetY / scale, maxX, (height - transform.offsetY) / scale];
+  }
+  const shows = (box, margin = 0) => !visible || !box
+    || (box[0] - margin <= visible[2] && box[2] + margin >= visible[0] && box[1] - margin <= visible[3] && box[3] + margin >= visible[1]);
+  return { transform, mirrorX, px: 1 / scale, project, shows };
+}
+
+/** Draw in page millimetres from here on: the view's transform, its mirror and the pixel ratio. */
+function pageSpace(ctx, view, pixelRatio) {
+  const { scale, offsetX, offsetY } = view.transform;
+  const s = scale * pixelRatio;
+  if (view.mirrorX == null) ctx.setTransform(s, 0, 0, s, offsetX * pixelRatio, offsetY * pixelRatio);
+  else ctx.setTransform(-s, 0, 0, s, (2 * view.mirrorX * scale + offsetX) * pixelRatio, offsetY * pixelRatio);
+}
+
+// ---- paths, in page space, made once per item -----------------------------------
+function addPoints(target, points, closed) {
+  if (points.length < 2) return;
+  target.moveTo(points[0][0], points[0][1]);
+  for (let index = 1; index < points.length; index += 1) target.lineTo(points[index][0], points[index][1]);
+  if (closed) target.closePath();
+}
+// An item's path, by its points (the index keeps them for as long as the index lives).
+const CLOSED_PATHS = new WeakMap();
+const OPEN_PATHS = new WeakMap();
+const cachePaths = typeof Path2D === "function";
+
+/** Fill and/or stroke one shape: its kept path where the canvas takes one, else drawn afresh. */
+function draw(ctx, points, closed, { fill = false, stroke = false }) {
+  if (points.length < 2) return;
+  if (cachePaths) {
+    const paths = closed ? CLOSED_PATHS : OPEN_PATHS;
+    let path = paths.get(points);
+    if (!path) { path = new Path2D(); addPoints(path, points, closed); paths.set(points, path); }
+    if (fill) ctx.fill(path);
+    if (stroke) ctx.stroke(path);
+    return;
+  }
+  ctx.beginPath();
+  addPoints(ctx, points, closed);
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+/** Polygons (`{ polygon, box }`), each filled (`fill`) and stroked `width` screen pixels wide. */
+function polygons(ctx, view, list, { color, width, fill = null }) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width * view.px;
+  ctx.lineJoin = "miter";
+  if (fill) ctx.fillStyle = fill;
+  for (const item of list) {
+    if (item.polygon.length < 2 || !view.shows(item.box, width * view.px)) continue;
+    draw(ctx, item.polygon, true, { fill: Boolean(fill), stroke: true });
+  }
+}
+
+/** Polylines (`{ points, box }`), each `widthOf(item)` page millimetres wide, round at their ends. */
+function strokes(ctx, view, list, color, widthOf) {
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const item of list) {
+    const width = widthOf(item);
+    if (item.points.length < 2 || !view.shows(item.box, width / 2)) continue;
+    ctx.lineWidth = width;
+    draw(ctx, item.points, false, { stroke: true });
+  }
+}
+
+/** Dots at `item.at`, each `radiusOf(item)` page millimetres: a few dozen to a path. */
+function dots(ctx, view, list, color, radiusOf) {
+  ctx.fillStyle = color;
+  let pending = 0;
+  ctx.beginPath();
+  for (const item of list) {
+    const [x, y] = item.at;
+    const radius = radiusOf(item);
+    if (!view.shows([x, y, x, y], radius)) continue;
+    ctx.moveTo(x + radius, y);
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    pending += 1;
+    if (pending === DOTS_PER_PATH) { ctx.fill(); ctx.beginPath(); pending = 0; }
+  }
+  if (pending) ctx.fill();
+}
+
+// A track at least `minimum` screen pixels wide; a via's dot at least `minimum` pixels across its radius.
+const trackWidth = (view, minimum) => (track) => Math.max(minimum * view.px, track.width);
+const viaRadius = (view, minimum) => (via) => Math.max(minimum * view.px, via.diameter / 2);
+
+/** Placement's layer: every pad, the side looked at drawn last, the holes, and the airwires of every net without a pour. */
+function placementLayer(ctx, view, index, colors) {
+  const looked = view.mirrorX == null ? "top" : "bottom";
+  const near = [];
+  const far = [];
+  for (const pad of index.padShapes) (pad.side === "both" || pad.side === looked ? near : far).push(pad);
+  for (const [list, color] of [[far, looked === "top" ? colors.placementBack : colors.placementFront],
+    [near, looked === "top" ? colors.placementFront : colors.placementBack]]) {
+    ctx.fillStyle = color;
+    for (const pad of list) if (pad.polygon.length > 2 && view.shows(pad.box)) draw(ctx, pad.polygon, true, { fill: true });
+  }
+  dots(ctx, view, [...index.padShapes.filter((pad) => pad.drill > 0), ...index.holes], colors.placementHole,
+    (hole) => (hole.drill || hole.diameter) / 2);
+  const poured = (name) => index.nets.get(name)?.zones.length > 0;
+  strokes(ctx, view, boardAirwires(index).filter((wire) => !poured(wire.net)), colors.airwire, () => view.px);
+}
+
+// ---- screen space: what keeps its size in pixels ---------------------------------
+function crosshair(ctx, view, [x, y], color, size = 7) {
+  const [sx, sy] = view.project(x, y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(sx - size, sy); ctx.lineTo(sx + size, sy);
+  ctx.moveTo(sx, sy - size); ctx.lineTo(sx, sy + size);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(sx, sy, size * 0.45, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/**
+ * One resolved board reference (or hit), highlighted in `color`. Its shapes are drawn in page
+ * space (`pageSpace`); a point's crosshair keeps its size on screen, so it is handed back in
+ * `crosshairs` for the caller to draw once the context is in pixels again. `shapesOf(pad)`: a pin's
+ * pads (`index.shapesOf`).
+ */
+export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, shapesOf = null, crosshairs = null, fills = BOARD_OVERLAY_COLORS }) {
+  if (!resolved) return;
+  const kind = resolved.kind;
+  const pinPads = shapesOf || ((pad) => pad.part.pads.filter((shape) => shape.number === pad.number));
+  if (kind === "part") {
+    const part = resolved.part;
+    polygons(ctx, view, [{ polygon: part.outline, box: part.box }], { color, width: 2 * weight, fill: fills.part });
+    polygons(ctx, view, part.pads, { color, width: 1, fill: fills.partPad });
+  } else if (kind === "pad") {
+    polygons(ctx, view, pinPads(resolved.pad), { color, width: 1.5 * weight, fill: color });
+  } else if (kind === "net") {
+    const net = resolved.net;
+    polygons(ctx, view, net.zones.map((zone) => ({ polygon: zone.outline, box: zone.box })), { color, width: 1.5, fill: fills.zone });
+    strokes(ctx, view, net.tracks, color, trackWidth(view, 2));
+    dots(ctx, view, net.vias, color, viaRadius(view, 2.5));
+    polygons(ctx, view, net.pads.flatMap(pinPads), { color, width: 1, fill: color });
+  } else if (kind === "copper" || kind === "point" || kind === "track" || kind === "via" || kind === "zone") {
+    const item = kind === "point" ? null : resolved.item;
+    if (item?.kind === "track") strokes(ctx, view, [item], color, trackWidth(view, 3));
+    else if (item?.kind === "via") dots(ctx, view, [item], color, viaRadius(view, 3));
+    // A zone named by its uuid is the zone on each of its layers: one outline.
+    else if (item?.kind === "zone") polygons(ctx, view, [{ polygon: item.outline, box: item.box }], { color, width: 2, fill: fills.copperZone });
+    // Copper and a point are a place: its crosshair; an item named by its uuid is the item alone.
+    if (kind === "copper" || kind === "point") crosshairs?.push({ at: resolved.page || toPage(resolved.at), color });
+  } else if (kind === "text") {
+    polygons(ctx, view, [resolved.item], { color, width: 1.5 * weight, fill: fills.box });
+  } else if (kind === "dimension") {
+    const item = resolved.item;
+    strokes(ctx, view, item.lines.map((points) => ({ points, box: item.box })), color, () => 2 * view.px);
+    if (item.polygon.length > 2) polygons(ctx, view, [{ polygon: item.polygon, box: item.box }], { color, width: 1, fill: fills.box });
+  } else if (kind === "shape") {
+    const item = resolved.item;
+    if (item.filled) polygons(ctx, view, [{ polygon: item.points, box: item.box }], { color, width: 2 * weight, fill: fills.box });
+    else strokes(ctx, view, [{ points: item.closed ? [...item.points, item.points[0]] : item.points, box: item.box }], color,
+      () => Math.max(3 * view.px, item.width));
+  } else if (kind === "area") {
+    const [x0, y0, x1, y1] = resolved.box;
+    polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box: resolved.box }], { color, width: 1.5 * weight, fill: fills.box });
+  }
+}
+
+/**
+ * The box an area is being dragged over, page millimetres, under the highlights: KiCad's window
+ * selection, a translucent rectangle in a solid outline (what an area names is what lies wholly
+ * inside it, as KiCad's left-to-right box takes).
+ */
+function draftBox(ctx, view, box, color, fill) {
+  const [x0, y0, x1, y1] = box;
+  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1.5, fill });
+}
+
+/**
+ * The overlay for one frame. `transform` maps page millimetres to CSS pixels; the context is set to
+ * `pixelRatio` here. `dim`: the rest of the board steps back (a net in focus).
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {ReturnType<typeof import("./boardIndex.js").createBoardIndex>} index
+ * @param {{ transform: object, pixelRatio?: number, width: number, height: number, hover?: object|null,
+ *   selection?: object[], dim?: boolean, mirrorX?: number|null, colors?: Partial<typeof BOARD_OVERLAY_COLORS>,
+ *   placement?: boolean }} frame
+ *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
+ *   `placement`: a board's Placement display, its pads and airwires drawn here.
+ *   `draft`: the page box an area is being dragged over (a drag under Select), or null.
+ */
+export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
+  mirrorX = null, colors = null, placement = false, draft = null }) {
+  if (!ctx || !index || !transform || !(transform.scale > 0)) return;
+  colors = { ...BOARD_OVERLAY_COLORS, ...colors };
+  const view = createView(transform, { width, height, mirrorX });
+  const shapesOf = index.shapesOf || null;
+  const crosshairs = [];
+  const highlight = (resolved, options) => drawResolved(ctx, view, resolved, { ...options, toPage: index.toPage, shapesOf, crosshairs, fills: colors });
+  ctx.save();
+  if (placement) {
+    pageSpace(ctx, view, pixelRatio);
+    placementLayer(ctx, view, index, colors);
+  }
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  if (dim && selection.length) {
+    ctx.fillStyle = colors.dim;
+    ctx.fillRect(0, 0, width, height);
+  }
+  pageSpace(ctx, view, pixelRatio);
+  if (draft) draftBox(ctx, view, draft, colors.selection, colors.draft);
+  for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25 });
+  if (placement) {
+    const nets = new Set(selection.filter((resolved) => resolved.kind === "net").map((resolved) => resolved.net.name));
+    if (nets.size) strokes(ctx, view, boardAirwires(index).filter((wire) => nets.has(wire.net)), colors.selection, () => 2 * view.px);
+  }
+  if (hover && !selection.some((resolved) => resolved.selector === hover.selector)) highlight(hover, { color: colors.hover });
+  // Back to screen pixels: a point's crosshair keeps its size.
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  for (const { at, color } of crosshairs) crosshair(ctx, view, at, color);
+  ctx.restore();
+}

@@ -232,6 +232,25 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual((status, answer), (404, {"error": "this install has no CAD app build",
                                                   "hint": f"run the install command again: `{command()}`"}))
 
+    def test_automatic_updates_are_the_person_s_setting_for_every_cad_app(self) -> None:
+        # The app menu's Automatic updates (`cad_server/auto_updates.py`): on by default, an answer kept in
+        # the settings every CAD app reads, a change guarded as every change is, and an environment's off fixed.
+        settings = "/api/v1/settings"
+        with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}):
+            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": True, "reason": "default"})
+            # What a read answered, put back as it was, keeps the default a default.
+            self.assertEqual(self.request("PUT", settings, self.request("GET", settings)[1])[1]["updates"]["reason"], "default")
+            status, answered = self.request("PUT", settings, {"updates": {"automatic": False}})
+            self.assertEqual((status, answered["updates"]), (200, {"automatic": False, "reason": "choice"}))
+            self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["updates"], {"automatic": False})
+            self.assertEqual(self.request("PUT", settings, {"updates": {"automatic": True}}, guard=False)[0], 403)
+            for change in ({"updates": {"automatic": "yes"}}, {"updates": True}, {"updates": {"automatic": True, "colour": 1}}):
+                with self.subTest(change=change):
+                    self.assertEqual(self.request("PUT", settings, change)[0], 400)
+            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": False, "reason": "choice"})
+        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}):
+            self.assertEqual(self.request("GET", settings)[1]["updates"], {"automatic": False, "reason": "environment"})
+
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.
         port = self.serve(create_cad_app(host="127.0.0.1", port=0))

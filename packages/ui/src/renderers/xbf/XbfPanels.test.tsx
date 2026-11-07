@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
-import { useXbfSelectionChips, xbfMassText, xbfMeasurementRows } from '../../../dist/renderers/xbf/xbfChips.js';
-import { selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
+import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
+import { nextSelectionIds, selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
+import { NO_EXPANSION, openRows, personsRows, shutOpenedBy, toggleRow } from '../../../dist/renderers/xbf/xbfExpansion.js';
 import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
 import { selectRenderer } from '../../../dist/file-viewer/registry.js';
@@ -32,10 +33,15 @@ function override(target: object, key: string, descriptor: PropertyDescriptor) {
 }
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  override(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return this.hasAttribute('data-file-sidebar-room') ? 600 : 0; } });
   override(Element.prototype, 'scrollIntoView', { value() {} });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); while (restores.length) restores.pop()!(); });
+
+// A section as the shell draws it: a tab of the view's panel, open.
+function InPanel({ tab, children }: { tab: string, children: React.ReactNode }) {
+  return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+    sections={children} tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+}
 
 // One assembly: a hinge of a base and two arms of one part, and a pin beside it, as the engine serves it.
 const structure = {
@@ -71,33 +77,211 @@ it("the tree is a STEP's: the document's wrapper is no row, repeated parts fold,
 // The controls a tree draws, in order: its rows' names and their actions.
 const controls = () => [...document.querySelectorAll('[aria-label="Modeling tree"] button, [aria-label="Modeling tree"] [data-disclosure-locked]')]
   .map(element => element.getAttribute('aria-label') || `locked:${(element as HTMLElement).dataset.disclosureLocked}`);
-const heading = () => [...document.querySelectorAll('section[data-tool-panel][aria-label="Model tree"] input, section[data-tool-panel][aria-label="Model tree"] header button')]
-  .map(element => element.getAttribute('aria-label'));
+// What heads the tree: the panel's search, which searches it.
+const heading = () => [...document.querySelectorAll('[data-flat-panel-head] input')].map(element => element.getAttribute('aria-label'));
 
 function Tree({ mode }: { mode: string }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const [expanded, setExpanded] = useState<string[]>([]);
   const toggle = (id: string) => setExpanded(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
   const partControls = { isAssemblyView: true, expandedTreeNodeIds: expanded, onToggleTreeNode: toggle, onFocusTreeNode: () => {}, hiddenPartIds: [] };
-  return <FileSidebar layout={layout} onLayoutChange={(patch: any) => setLayout((current: any) => ({ ...current, ...patch }))}>
-    <XbfModelTree tree={presentXbfTree(structure)} active mode={mode} partControls={partControls} />
-  </FileSidebar>;
+  return <InPanel tab="tree"><XbfModelTree tree={presentXbfTree(structure)} active mode={mode} partControls={partControls} /></InPanel>;
 }
 
 it("the Model tree's controls are a STEP's under every shape Select's filter gives it", () => {
   const view = render(<Tree mode="all" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Model tree' }));
   const states = [heading(), controls()];
   fireEvent.click(screen.getByRole('button', { name: 'Expand hinge' }));
   fireEvent.click(screen.getByRole('button', { name: 'Expand arm (2)' }));
   states.push(controls());
   for (const mode of ['parts', 'faces']) { view.rerender(<Tree mode={mode} />); states.push(controls()); }
-  // The heading's filter; the tree shut; the tree open; and under Select's Parts and Faces, its
+  // The panel's search; the tree shut; the tree open; and under Select's Parts and Faces, its
   // open rows' disclosure locked open.
   const hinge = ['Select hinge', 'Isolate hinge', 'Hide hinge'], pin = ['Select pin', 'Isolate pin', 'Hide pin'];
   const open = (disclosure: (row: string) => string) => [disclosure('hinge'), ...hinge, 'Select base', 'Isolate base', 'Hide base',
     disclosure('arm (2)'), 'Select arm (2)', 'Select arm_1', 'Isolate arm_1', 'Hide arm_1', 'Select arm_2', 'Isolate arm_2', 'Hide arm_2', ...pin];
-  expect(states).toEqual([['Filter model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
+  expect(states).toEqual([['Search the model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
+});
+
+// The tree as its host drives it (`XbfRenderer.jsx`): what is open and what is selected are the host's,
+// a press on a row selects as the host's `pickNode` does, and `pickInView` is a pick on the model.
+const fixtureTree = presentXbfTree(structure);
+let pickInView: (ids: string[]) => void = () => {};
+let hostSelection: string[] = [];
+function HostedTree() {
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
+  pickInView = ids => setChosen(ids);
+  hostSelection = chosen;
+  const partControls = { isAssemblyView: true, expandedTreeNodeIds: expanded, hiddenPartIds: [], onFocusTreeNode: () => {},
+    onToggleTreeNode: (id: string) => setExpanded(now => now.includes(id) ? now.filter(item => item !== id) : [...now, id]),
+    onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
+  return <InPanel tab="tree"><XbfModelTree tree={fixtureTree} active selectedIds={chosen} partControls={partControls} /></InPanel>;
+}
+// The rows as a person reads them: each name, "+" or "-" while its chevron says it is open or shut, "*" while it is lit.
+const treeRows = () => [...document.querySelectorAll('[aria-label="Modeling tree"] li[data-virtual-row]')].map(row => {
+  const chevron = row.querySelector('button[aria-expanded]'), name = row.querySelector('button[aria-pressed]');
+  return `${chevron ? (chevron.getAttribute('aria-expanded') === 'true' ? '- ' : '+ ') : ''}${name!.textContent}${name!.getAttribute('aria-pressed') === 'true' ? ' *' : ''}`;
+}).join(', ');
+
+it("a Model tree row's chevron opens and shuts it, whatever opened it, and a press on a row selects it and opens nothing", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<HostedTree />);
+  const seen: string[] = [];
+  const read = (step: string) => seen.push(`${step}: ${treeRows()} | ${hostSelection.join(' ')}`);
+  const name = (row: string) => screen.getByRole('button', { name: `Select ${row}` });
+  const chevron = (row: string) => name(row).closest('li')!.querySelector<HTMLElement>('button[aria-expanded]')!;
+  read('open');
+  // An assembly: its name selects it, shut; its chevron opens and shuts it and leaves the selection.
+  await user.click(name('hinge')); read('hinge pressed');
+  await user.click(chevron('hinge')); read('hinge chevron');
+  // A folded row: its name selects every part under it, which it holds, lit and shut; its chevron opens and shuts it.
+  await user.click(name('arm (2)')); read('arm (2) pressed');
+  await user.click(chevron('arm (2)')); read('arm (2) chevron');
+  await user.click(chevron('arm (2)')); read('arm (2) chevron again');
+  // The keyboard: Enter and Space on a chevron open and shut its row; Enter on a name selects it and opens nothing.
+  chevron('arm (2)').focus();
+  await user.keyboard('{Enter}'); read('chevron Enter');
+  await user.keyboard(' '); read('chevron Space');
+  name('base').focus();
+  await user.keyboard('{Enter}'); read('name Enter');
+  // A pick on the model opens the rows over what it picked; the chevron shuts them again, and the reveal does not
+  // reopen them; the next pick leaves the shape the person left.
+  act(() => pickInView(['i2'])); read('arm_2 picked');
+  await user.click(chevron('arm (2)')); read('arm (2) shut over the pick');
+  act(() => pickInView(['i3'])); read('pin picked');
+  expect(seen).toEqual([
+    'open: + hinge, pin | ',
+    'hinge pressed: + hinge *, pin | n0.0',
+    'hinge chevron: - hinge *, base, + arm (2), pin | n0.0',
+    'arm (2) pressed: - hinge, base, + arm (2) *, pin | i1 i2',
+    'arm (2) chevron: - hinge, base, - arm (2) *, arm_1 *, arm_2 *, pin | i1 i2',
+    'arm (2) chevron again: - hinge, base, + arm (2) *, pin | i1 i2',
+    'chevron Enter: - hinge, base, - arm (2) *, arm_1 *, arm_2 *, pin | i1 i2',
+    'chevron Space: - hinge, base, + arm (2) *, pin | i1 i2',
+    'name Enter: - hinge, base *, + arm (2), pin | i0',
+    'arm_2 picked: - hinge, base, - arm (2), arm_1, arm_2 *, pin | i2',
+    'arm (2) shut over the pick: - hinge, base, + arm (2), pin | i2',
+    'pin picked: - hinge, base, + arm (2), pin * | i3',
+  ]);
+});
+
+// The tree with the host's whole say over what is open (`XbfRenderer.jsx` over `xbfExpansion.js`): a person's
+// chevron or key, a pick's reveal and an isolation each open rows as theirs, leaving isolation shuts what it
+// opened, and the file's view keeps the person's rows alone.
+let hostIsolation: { exit(): void, persisted(): string[] } = { exit() {}, persisted: () => [] };
+function ExpandingHost() {
+  const [expansion, setExpansion] = useState(NO_EXPANSION);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [isolated, setIsolated] = useState<string[]>([]);
+  pickInView = ids => setChosen(ids);
+  hostSelection = chosen;
+  hostIsolation = { exit: () => { setExpansion((now: any) => shutOpenedBy(now, 'isolation')); setIsolated([]); }, persisted: () => personsRows(expansion) };
+  const partControls = { isAssemblyView: true, expandedTreeNodeIds: expansion.open, hiddenPartIds: [], focusedNodeIds: isolated,
+    onFocusTreeNode: (ids: string | string[]) => { const targets = [ids].flat(); setChosen([]); setIsolated(targets); setExpansion((now: any) => openRows(now, targets, 'isolation')); },
+    onToggleTreeNode: (id: string) => setExpansion((now: any) => toggleRow(now, id)),
+    onRevealTreeNodes: (ids: string[], reason: string) => setExpansion((now: any) => openRows(now, ids, reason)),
+    onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
+  return <InPanel tab="tree"><XbfModelTree tree={fixtureTree} active selectedIds={chosen} partControls={partControls} /></InPanel>;
+}
+const nameOf = (row: string) => screen.getByRole('button', { name: `Select ${row}` });
+// A row's id in the host's open rows: an assembly's selection id, a folded row's own.
+const openIdOf = (label: string): string | undefined => {
+  const find = (nodes: any[]): string | undefined => { for (const node of nodes) { if (node.label === label) return node.selectionId || node.id; const hit = find(node.children || []); if (hit) return hit; } };
+  return find(fixtureTree.roots);
+};
+const chevronOf = (row: string) => nameOf(row).closest('li')!.querySelector<HTMLElement>('button[aria-expanded]')!;
+
+it("a row isolating opened shuts again as the isolation ends, a double-clicked folded row too; a row open before stays open", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  const seen: string[] = [];
+  const read = (step: string) => seen.push(`${step}: ${treeRows()}`);
+  await user.click(chevronOf('hinge'));
+  read('hinge opened');
+  // A double-click on a folded row isolates its parts, and the tree opens the row to bring them into view.
+  await user.dblClick(nameOf('arm (2)')); read('arm (2) isolated');
+  act(() => hostIsolation.exit()); read('isolation left');
+  // Opened by hand before, it stays open after.
+  await user.click(chevronOf('arm (2)'));
+  await user.dblClick(nameOf('arm (2)'));
+  act(() => hostIsolation.exit()); read('opened first, isolated, left');
+  // An assembly shut before it is isolated is shut again after, and the person's rows under it are theirs.
+  await user.click(chevronOf('hinge'));
+  await user.dblClick(nameOf('hinge'));
+  read('hinge isolated');
+  act(() => hostIsolation.exit()); read('hinge left');
+  expect(seen).toEqual([
+    'hinge opened: - hinge, base, + arm (2), pin',
+    'arm (2) isolated: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'isolation left: - hinge, base, + arm (2), pin',
+    'opened first, isolated, left: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'hinge isolated: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'hinge left: + hinge, pin',
+  ]);
+});
+
+it("the file's view keeps the rows the person opened, never the rows a pick's reveal opened, which are theirs once they press them", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  await user.click(chevronOf('hinge'));
+  // A pick of arm_2 on the model opens arm (2) to show it: kept for the page, not with the file.
+  act(() => pickInView(['i2']));
+  expect([treeRows(), hostIsolation.persisted()]).toEqual(['- hinge, base, - arm (2), arm_1, arm_2 *, pin', [openIdOf('hinge')]]);
+  // Its chevron shut and opened again: the person's now, and kept.
+  await user.click(chevronOf('arm (2)'));
+  await user.click(chevronOf('arm (2)'));
+  expect(hostIsolation.persisted()).toEqual([openIdOf('hinge'), openIdOf('arm (2)')]);
+});
+
+it("a second plain press on the one selected folded row lets its parts go; Shift adds and takes each away as before", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  await user.click(chevronOf('hinge'));
+  await user.click(nameOf('arm (2)'));
+  const first = [treeRows(), hostSelection.join(' ')];
+  await user.click(nameOf('arm (2)'));
+  const again = [treeRows(), hostSelection.join(' ')];
+  // Shift: the parts added, then taken away, each as before; with base selected first it stays.
+  await user.click(nameOf('base'));
+  await user.keyboard('{Shift>}');
+  await user.click(nameOf('arm (2)'));
+  const added = hostSelection.join(' ');
+  await user.click(nameOf('arm (2)'));
+  await user.keyboard('{/Shift}');
+  expect([first, again, added, hostSelection.join(' ')]).toEqual([
+    ['- hinge, base, + arm (2) *, pin', 'i1 i2'], ['- hinge, base, + arm (2), pin', ''], 'i0 i1 i2', 'i0']);
+});
+
+it("the rows walk by the keyboard, as the tree pattern has it: Up, Down, Home, End, Right open and into, Left up and shut", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  const seen: string[] = [];
+  const at = () => document.activeElement?.getAttribute('aria-label') ?? '';
+  const step = async (key: string) => { await user.keyboard(key); seen.push(`${key} ${at()} | ${treeRows()}`); };
+  nameOf('hinge').focus();
+  for (const key of ['{ArrowRight}', '{ArrowRight}', '{ArrowDown}', '{ArrowRight}', '{ArrowRight}', '{ArrowDown}', '{ArrowLeft}', '{ArrowLeft}',
+    '{ArrowLeft}', '{End}', '{ArrowUp}', '{Home}', '{ArrowUp}', '{Enter}']) await step(key);
+  const shut = '- hinge, base, + arm (2), pin', open = '- hinge, base, - arm (2), arm_1, arm_2, pin';
+  expect(seen).toEqual([
+    `{ArrowRight} Select hinge | ${shut}`,
+    `{ArrowRight} Select base | ${shut}`,
+    `{ArrowDown} Select arm (2) | ${shut}`,
+    `{ArrowRight} Select arm (2) | ${open}`,
+    `{ArrowRight} Select arm_1 | ${open}`,
+    `{ArrowDown} Select arm_2 | ${open}`,
+    `{ArrowLeft} Select arm (2) | ${open}`,
+    `{ArrowLeft} Select arm (2) | ${shut}`,
+    `{ArrowLeft} Select hinge | ${shut}`,
+    `{End} Select pin | ${shut}`,
+    `{ArrowUp} Select arm (2) | ${shut}`,
+    `{Home} Select hinge | ${shut}`,
+    `{ArrowUp} Select hinge | ${shut}`,
+    '{Enter} Select hinge | - hinge *, base, + arm (2), pin',
+  ]);
+  // A row's arrows are the tree's at its ends and on a part too, never let through to the view's orbit;
+  // any other key is (`fireEvent` answers false for a key whose default was prevented).
+  expect([fireEvent.keyDown(nameOf('hinge'), { key: 'ArrowUp' }), fireEvent.keyDown(nameOf('pin'), { key: 'ArrowDown' }),
+    fireEvent.keyDown(nameOf('pin'), { key: 'ArrowRight' }), fireEvent.keyDown(nameOf('pin'), { key: 'x' })]).toEqual([false, false, false, true]);
 });
 
 it("Select's menu is a STEP's single choice: All when a file opens, or one kind alone", async () => {
@@ -169,32 +353,32 @@ const hingeKinematics = {
 
 // The section over the renderer's own pose state (`useXbfPose`).
 function XbfPosition({ kinematics = hingeKinematics, onPose = () => {} }: { kinematics?: any, onPose?: (values: any) => void }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const pose = useXbfPose(kinematics);
   onPose(pose.values);
-  return <FileSidebar layout={layout} onLayoutChange={(patch: any) => setLayout((current: any) => ({ ...current, ...patch }))}>
+  return <InPanel tab="position">
     <XbfPositionSection kinematics={kinematics} values={pose.values} couplings={pose.couplings} preset={pose.preset}
-      changed={pose.applied} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />
-  </FileSidebar>;
+      onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />
+  </InPanel>;
 }
 
-// What the Position section shows, in order: its heading's controls, then its body's.
+// What the Position tab shows, in order: its name and its head's controls, then its body's.
+const positionTab = () => document.querySelector<HTMLElement>('[data-flat-panel-section="position"]')!;
 function positionControls() {
-  const panel = screen.getByRole('region', { name: 'Position controls' });
-  const head = panel.querySelector<HTMLElement>('[data-sidebar-head]')!;
+  const panel = positionTab();
   return {
-    head: [within(head).getByRole('heading').textContent, ...[...head.querySelectorAll('button')].map(button => `${button.getAttribute('aria-label')}:${(button as HTMLButtonElement).disabled}`)],
+    head: [document.querySelector('[data-flat-panel-tab="position"] [data-flat-panel-tab-name]')!.textContent,
+      `Reset position:${(panel.querySelector('[data-pose-reset]') as HTMLButtonElement).disabled}`],
     body: [...panel.querySelectorAll('[data-tool-panel-body] button, [data-tool-panel-body] input, [data-tool-panel-body] [role=slider]')]
       .map(element => `${element.getAttribute('role') || element.tagName.toLowerCase()}:${element.getAttribute('aria-label')}:${(element as HTMLInputElement).value ?? ''}`)
   };
 }
 
-it("Position is a STEP's -- its heading, its Pose row, a named slider and value per joint -- through a configuration and back", async () => {
+it("Position is a STEP's -- its heading, its Pose row with Reset on it, a named slider and value per joint -- through a configuration and back", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   render(<XbfPosition />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
   const states: unknown[] = [positionControls()];
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
+  expect(within(panel).getByRole('button', { name: 'Reset position' }).closest('[data-pose-row]')).toBe(within(panel).getByRole('button', { name: /^Pose: / }).closest('[data-pose-row]'));
   await user.click(within(panel).getByRole('button', { name: /^Pose: / }));
   const menu = document.querySelector<HTMLElement>('[role=menu][aria-label="Pose"]')!;
   states.push(within(menu).getAllByRole('menuitemradio').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`));
@@ -204,11 +388,11 @@ it("Position is a STEP's -- its heading, its Pose row, a named slider and value 
   await user.clear(value);
   await user.type(value, '25{Enter}');
   states.push(positionControls());
-  await user.click(within(panel.querySelector<HTMLElement>('[data-sidebar-head]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
   states.push(positionControls());
-  // The heading (Reset is off at the opening pose), the Pose row, then the joint's slider and value.
-  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`, 'Close position:false'],
-    body: [`button:Pose: ${pose}:`, 'slider:hinge:', `input:hinge slider value:${value}`] });
+  // The tab (Reset, in the Pose row, is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it.
+  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`],
+    body: [`button:Pose: ${pose}:`, 'button:Reset position:', `input:hinge slider value:${value}`, 'slider:hinge:'] });
   expect(states).toEqual([shown('Default', '0.00°', true), ['Default:true', 'open:false'], shown('open', '90.0°', false),
     shown('Custom', '25.0°', false), shown('Default', '0.00°', true)]);
 });
@@ -254,8 +438,7 @@ it('Position drives a cylindrical pair by both its values, and says what it cann
     asBuilt: { hinge: 0, slide: [0, 10], spin: 0, knee: 0, shin: 0 }, configurations: {}, loop: ['knee', 'shin'],
   };
   render(<XbfPosition kinematics={rig} onPose={onPose} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
   expect(within(panel).getAllByRole('slider').map(thumb => [thumb.getAttribute('aria-label'), thumb.getAttribute('aria-valuemin'), thumb.getAttribute('aria-valuemax')]))
     .toEqual([['hinge', '-180', '180'], ['slide angle', '-180', '180'], ['slide position', '0', '50'], ['spin', '-180', '180']]);
   const position = within(panel).getByLabelText('slide position slider value') as HTMLInputElement;
@@ -299,8 +482,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   const onPose = vi.fn();
   render(<XbfPosition kinematics={fingerKinematics} onPose={onPose} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
   // Under the Pose row: the coupling, 0 as built over its range; no joint of it has a slider.
   expect(sliders(panel)).toEqual([['index_curl', '0', '1']]);
   expect(within(panel).queryByLabelText('index_pip slider value')).toBeNull();
@@ -314,7 +496,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   expect(onPose.mock.lastCall![0]).toEqual(pose(90, 100, 70));
   await setValue(user, panel, 'index_curl', '0.2');
   expect(onPose.mock.lastCall![0]).toEqual(pose(18, 20, 14));
-  await user.click(within(panel.querySelector<HTMLElement>('[data-sidebar-head]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel).getByRole('button', { name: 'Reset position' }));
   expect(valueOf(panel, 'index_curl')).toBe('0.00');
   expect(onPose.mock.lastCall![0]).toEqual(pose(0, 0, 0));
 });
@@ -397,23 +579,39 @@ it("a face picked on a STEP's page opens Quick Edit with its reference, named or
   }
 });
 
-function Card({ id, measured }: { id: string, measured: object }) {
-  const tree = presentXbfTree(structure);
-  const scene = { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts: () => measured };
-  const { chips } = useXbfSelectionChips({ scene, tree, resource: null, selectedIds: [id], facts: new Map(), onRemove: () => {}, onHover: () => {} });
-  return <div>{chips[0].card}</div>;
-}
+// A pick as the Selected pane and its chip's card read it, over a scene that measures what it is asked.
+const describedAs = (measured: object) => xbfDescriber({ scene: { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null,
+  measureParts: () => measured } as any, tree: presentXbfTree(structure) });
+const fact = (item: any, label: string) => item.facts.find((row: any) => row.label === label)?.value;
 
-it("a part's card weighs it by its material, and an assembly's sums its parts", () => {
+it("a part's description weighs it by its material and says where it sits; a subassembly's sums its parts and lists them", () => {
   expect(xbfMassText({ volume: 1000, mass: 1000e-9 * 7870, unweighed: 0 })).toBe('0.00787 kg');
   expect(xbfMassText({ volume: 1000, mass: 12.3456, unweighed: 0 })).toBe('12.35 kg');
   expect(xbfMassText({ volume: 1000, mass: null, unweighed: 1 })).toBe('no material');
-  render(<Card id="i3" measured={{ size: [10, 20, 30], volume: 600, mass: null, unweighed: 1 }} />);
-  expect(screen.getByText('Mass')).toBeTruthy();
-  expect(screen.getByText('no material')).toBeTruthy();
-  cleanup();
-  render(<Card id="n0.0" measured={{ size: [10, 20, 30], volume: 6000, mass: 1.234, unweighed: 1 }} />);
-  expect(screen.getByText('1.234 kg · 1 without material')).toBeTruthy();
+  const base = describedAs({ size: [10, 20, 30], volume: 600, mass: null, unweighed: 1 })('i0');
+  expect([base.title, base.what, base.tip, base.ref, fact(base, 'Size'), fact(base, 'Mass'), base.related]).toEqual(['base', 'hinge', 'hinge', 'base', '10 × 20 × 30 mm', 'no material', null]);
+  const hinge = describedAs({ size: [10, 20, 30], volume: 6000, mass: 1.234, unweighed: 1 })('n0.0');
+  expect([hinge.title, fact(hinge, 'Parts'), fact(hinge, 'Mass')]).toEqual(['hinge', '3', '1.234 kg · 1 without material']);
+  // Its children, a row each that picks it, a folded run of one part's copies said part by part.
+  expect([hinge.related.title, hinge.related.rows.map((row: any) => [row.pick, row.label])]).toEqual(['Parts', [['i0', 'base'], ['i1', 'arm_1'], ['i2', 'arm_2']]]);
+  // Its chip's card is the same description.
+  function Chips() {
+    const scene = { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts: () => null };
+    const tree = presentXbfTree(structure);
+    const { chips } = useXbfSelectionChips({ scene, tree, resource: null, selectedIds: ['n0.0'], facts: new Map(), onRemove: () => {}, onHover: () => {},
+      describe: xbfDescriber({ scene: scene as any, tree }) });
+    return <p>{chips[0].detail.related.rows.length}</p>;
+  }
+  render(<Chips />);
+  expect(screen.getByText('3')).toBeTruthy();
+});
+
+it("the hover tip's words for an engine document are its tree's names, measuring nothing", () => {
+  const measureParts = vi.fn(() => null);
+  const tip = xbfTipper({ scene: { structure, describePart: (part: string) => ({ name: part }), describeElement: () => null, measureParts } as any,
+    tree: presentXbfTree(structure) });
+  expect([tip('i0'), tip('n0.0'), tip('i3'), tip('i99')]).toEqual(['base · hinge', 'hinge', 'pin', '']);
+  expect(measureParts).not.toHaveBeenCalled();
 });
 
 it("the menus are a STEP's: a part's offers Copy Reference, Select, Isolate, Hide others, Hide, the tree's expansion and the framing", () => {

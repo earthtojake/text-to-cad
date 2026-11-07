@@ -51,7 +51,7 @@ test('the CAD viewer shows one file by its absolute path, the home with none, an
   const { rerender } = render(view('C:\\models\\a.step'));
   // One renderer per file family, every one reading the tab's settings.
   // A STEP opens as an .xbf does, in the engine document's renderer: the STEP renderer is not registered.
-  expect(props().renderers.map(renderer => renderer.id)).toEqual(['dxf', 'glb', 'mesh', 'robot', 'xbf']);
+  expect(props().renderers.map(renderer => renderer.id)).toEqual(['dxf', 'board', 'schematic', 'glb', 'mesh', 'robot', 'xbf']);
   // The file in the viewer's one spelling, which the host hears of once the catalog has it.
   expect([props().file, shown]).toEqual(['C:/models/a.step', [null]]);
   await act(async () => client.publish([{ file: 'C:/models/a.step' }]));
@@ -251,6 +251,22 @@ test("the host's Full size is the navbar's one host action: Export is the file m
   // A host that hands none: the navbar has no host action, and the file menu no Export without downloads.
   rerender(view({}));
   expect([props().navbarActions ?? null, props().fileMenuItems ?? null]).toEqual([null, null]);
+});
+
+test("What's new is said over the home, and over a file once its view is up: never over its loading page", () => {
+  const client = cadClient();
+  const live = createLiveRegistry();
+  const whatsNew = { entry: '0.11', onDismiss: vi.fn() };
+  const view = (file: string) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={live} file={file}
+    library={library} onShow={() => {}} whatsNew={whatsNew} />;
+  const { rerender } = render(view(''));
+  expect(screen.getByRole('dialog').getAttribute('data-whats-new')).toBe('0.11');
+  rerender(view('/m/a.step'));
+  expect(screen.queryByRole('dialog')).toBeNull();  // the file's loading page: its renderer is not up
+  let release = () => {};
+  act(() => { release = live.binding.bind({ readState: () => ({}), capture: async () => new Blob(), thumbnail: async () => new Blob() }); });
+  expect(screen.getByRole('dialog')).toBeTruthy();
+  act(() => release());
 });
 
 test("a model's Files starts where the explorer was last this tab, else the person's home folder, never the script's", async () => {

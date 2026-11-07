@@ -31,7 +31,7 @@ from tests.python.support import opengl
 # built, and one control curling all three knuckles.
 FINGER = """
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
 from cad.engine import xbf
 
 CURL = {{"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}}  # degrees at a full curl
@@ -66,7 +66,7 @@ BARE = FINGER.format(coupling="return finger", extra="")
 # and sliding each door.
 HYPERCAR = """
 import build123d as bd
-from cad.ap242 import gear_pair, mechanism_state, screw_pair
+from cad.build123d import gear_pair, mechanism_state, screw_pair
 from cad.engine import xbf
 
 SWEEP = {"left": -70, "right": 70}  # each door's turn when open, degrees
@@ -96,7 +96,7 @@ def hypercar():
 # A gear train: three wheels on a plate, one coupling turning them at fixed ratios.
 TRAIN = """
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state
 from cad.engine import xbf
 
 RATIOS = {{"sun": 1.0, "idler": -2.0, "ring": 0.5}}
@@ -125,7 +125,7 @@ def train():
 # Two fingers, one function's: each placement's joints and coupling labelled alike.
 HAND = """
 import build123d as bd
-from cad.ap242 import gear_pair, mechanism_state
+from cad.build123d import gear_pair, mechanism_state
 from cad.engine import xbf
 
 
@@ -198,7 +198,7 @@ def _couplers(loaded: document.Loaded) -> dict[str, list[tuple]]:
 
 # The finger posed by a model of its own: a posed file is a function, never an export's option.
 POSED = """
-from cad.ap242 import posed
+from cad.build123d import posed
 from cad.engine import xbf
 from index_finger import index_finger
 
@@ -245,7 +245,7 @@ class AuthoringTest(unittest.TestCase):
     def test_each_pair_says_what_is_wrong_by_name_and_returns_the_assembly(self) -> None:
         import build123d as bd
 
-        from cad.ap242 import gear_pair, rack_and_pinion_pair, screw_pair
+        from cad.build123d import gear_pair, rack_and_pinion_pair, screw_pair
 
         box = bd.Box(1, 1, 1)
         for call, error in (

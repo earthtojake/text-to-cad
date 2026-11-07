@@ -233,7 +233,8 @@ class CacheTest(unittest.TestCase):
         self.assertEqual((meta["revision"], meta["bytes"]), (record["revision"], self.file(ident).stat().st_size))
         self.assertEqual(sorted(os.listdir(self.state / "documents" / ident)), ["document.json"],
                          "the bytes are the cache folder's, never the state folder's")
-        compiled = list((self.cache / "pycache").glob("*/**/build123d/__init__.*.pyc"))  # the prefix mirrors its path
+        compiled = [path for path in (self.cache / "pycache").glob("*/**/build123d/__init__.*.pyc")  # the prefix mirrors its path
+                    if path.parent.parent.name != "cad"]  # build123d's own, not the library's integration of it
         self.assertEqual(len(compiled), 1, "the worker's libraries' bytecode, in the engine's folder")
         self.assertEqual(list(self.project.rglob("*.pyc")), [], "none beside the model")
         self.assertEqual(self.ask({"op": "status"})["cache"]["written"], written + 1)
@@ -257,13 +258,22 @@ class CacheTest(unittest.TestCase):
             self.run_script(name)
             self.cached(ident)
         # The shell refuses a document it cannot name, before anything is deleted.
-        refused = self.cli("delete", cube, str(self.project / "nothing.py"))
+        refused = self.cli("delete", cube, str(self.project / "nothing.py"), "--yes")
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn(f"no document is recorded for {self.project / 'nothing.py'}", refused.stderr)
         self.assertTrue(self.record(cube) and self.file(cube).is_file(), "nothing was deleted")
+        # It destroys, so it asks: --dry-run says what it would delete, and where no one can be asked nothing is
+        # deleted without --yes.
+        planned = self.cli("delete", cube, str(self.project / "other.py"), "--dry-run")
+        self.assertEqual((planned.returncode, planned.stdout.splitlines()),
+                         (0, ["would delete 2 documents: each one's record, its document in the engine's cache and "
+                              "what the engine holds of it (your own files stay)", f"  cube {cube}", f"  other {other}"]))
+        asked = self.cli("delete", cube, "--json")
+        self.assertEqual((asked.returncode, json.loads(asked.stdout)["reason"]), (2, "confirmation_required"))
+        self.assertTrue(self.record(cube) and self.file(cube).is_file(), "nothing was deleted")
         # Several at once, an id and a model's script: a line each; the record, the cached document and
         # the engine's copy go; the script stays.
-        done = self.cli("delete", cube, str(self.project / "other.py"))
+        done = self.cli("delete", cube, str(self.project / "other.py"), "--yes")
         self.assertEqual((done.returncode, done.stdout, done.stderr), (0, f"deleted cube {cube}\ndeleted other {other}\n", ""))
         for ident in (cube, other):
             self.assertEqual(self.record(ident), {})
@@ -286,7 +296,7 @@ class CacheTest(unittest.TestCase):
         self.run_script("other")
         self.cached(other)
         self.assertEqual(self.cli("stop").returncode, 0)
-        done = self.cli("delete", other, "--json")
+        done = self.cli("delete", other, "--json", "--yes")
         self.assertEqual((done.returncode, done.stderr), (0, ""))
         self.assertEqual(json.loads(done.stdout), {"ok": True, "deleted": [{"id": other, "name": "other", "kind": "model"}]})
         self.assertEqual((self.record(other), self.file(other).parent.exists()), ({}, False))
@@ -629,7 +639,7 @@ class CacheTest(unittest.TestCase):
         self.assertNotIn("files", self.record(ident), "nothing records which files a model wrote")
         self.assertEqual(self.cli("stop").returncode, 0)
         # Unchanged after a restart: taken by its key, nothing run; its STEP is the document's export, as
-        # `cad export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
+        # `cad <type> export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
         # the first run after a restart may write it once, the same geometry).
         done = self.run_script("plate")
         self.assertIn("took plate.py::plate cold in", done.stdout)

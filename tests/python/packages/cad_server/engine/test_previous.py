@@ -357,7 +357,7 @@ class PreviousTest(unittest.TestCase):
         self.assertEqual(self.xbf.read_bytes(), first)
 
     def export(self, name: str) -> bytes:
-        """The kit's STEP as ``cad export`` writes it, in a process of its own, through an engine
+        """The kit's STEP as ``cad <type> export`` writes it, in a process of its own, through an engine
         of the test's own -- its folders, no port of its own choosing -- stopped once the test ends:
         never the developer's engine, state or cache, however the file is run."""
         import subprocess

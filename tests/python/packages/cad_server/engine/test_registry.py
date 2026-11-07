@@ -45,6 +45,25 @@ class RegistryTest(unittest.TestCase):
         self.registry = Registry(self.state)
         self.ident = model_id(self.state / "parts.py", "cube")
 
+    def test_a_file_s_derived_views_live_under_its_document_and_go_with_it(self) -> None:
+        """A KiCad board's plot, refilled pours, DRC and kept exports are kept in the document cache under the
+        board's own document, keyed by its bytes: a changed file is a new entry, and its deletion removes them."""
+        from cad.engine.formats.kicad import poured
+        from cad.engine.ids import file_id
+
+        cache = self.state / "cache"
+        board = self.state / "board.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20241229))", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(cache)}):
+            first = poured.folder(board, poured.key(board))
+            self.assertEqual(first, cache / "documents" / file_id(board) / "kicad" / poured.key(board))
+            first.mkdir(parents=True)
+            (first / "drc.json").write_text("{}", encoding="utf-8")
+            board.write_text("(kicad_pcb (version 20241229) (general))", encoding="utf-8")
+            self.assertNotEqual(poured.folder(board, poured.key(board)), first, "a changed file is a new entry")
+            Registry(self.state, cache).delete(file_id(board))  # what cad delete and the home's Delete both run
+        self.assertFalse((cache / "documents" / file_id(board)).exists(), "deleted with its document")
+
     def test_an_engine_record_reads_only_a_port_number(self) -> None:
         engines = self.state / registry.ENGINES
         engines.mkdir(parents=True, exist_ok=True)

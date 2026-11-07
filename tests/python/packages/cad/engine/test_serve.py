@@ -452,7 +452,7 @@ def kernel_facts(data: bytes) -> dict:
 
 
 class InspectionReadTest(unittest.TestCase):
-    """What ``cad inspect`` reads through the engine's door (``Server.read``): a structure that
+    """What ``cad <type> inspect`` reads through the engine's door (``Server.read``): a structure that
     sends no part to the mesher, and each part's facts measured once by its geometry key -- an edit
     measures only the parts whose key is new. Measuring is lazy: a build of a document no inspection
     measured reads and measures nothing; once one has, each later build's new parts are measured

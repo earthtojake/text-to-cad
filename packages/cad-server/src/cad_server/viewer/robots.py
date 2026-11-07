@@ -28,13 +28,17 @@ import json
 import os
 import re
 
+from cad.registry import DOCUMENT_TYPES
+
 from .backend import absolute_path
 from .encoding import file_version, local_asset_url_for_path
 from .scanner import node_basename
 
 __all__ = ["ROBOT_SUFFIXES", "resolve_robot_path", "robot_response"]
 
-ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
+# The robot descriptions: every document type viewed as a robot (``cad.registry``).
+ROBOT_SUFFIXES = tuple(extension for entry in DOCUMENT_TYPES.values() if entry.view == "robot"
+                       for extension in entry.extensions)
 # A primitive's mesh is named by the sha256 of its GLB (``cad_server.robot_payload.primitive_glb_bytes``).
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 

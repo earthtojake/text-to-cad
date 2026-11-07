@@ -129,8 +129,8 @@ async function openRobot({ phone = false } = {}) {
   }
   render(<Pane />);
   const pane = screen.getByTestId('one');
-  // Its Links are in the file sidebar once the robot has loaded; on a phone the sidebar's tiles
-  // lead the strip, which comes with the robot.
+  // Its Links are in the view's panel once the robot has loaded; on a phone the panel's pill
+  // leads the strip, which comes with the robot.
   await waitFor(() => expect(phone ? within(pane).queryByRole('group', { name: 'Interaction tools' }) : pane.querySelector('[aria-label="Robot links"] li')).not.toBeNull());
   const tools = () => within(pane).getByRole('group', { name: 'Interaction tools' });
   const robot = {
@@ -154,16 +154,19 @@ async function openRobot({ phone = false } = {}) {
       await waitFor(() => expect(document.querySelector('[data-select-filter]')).toBeNull());
     },
     menuItems: () => [...document.querySelectorAll('[data-select-filter]')].map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`),
-    // The tool stack's panels on screen, top to bottom, and the file sidebar's sections.
+    // The tool stack's panels on screen, top to bottom, and the view's panel's sections (each a tab of it).
     stack: () => [...pane.querySelectorAll('[data-cad-tool-stack] [data-tool-panel]')]
       .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label')),
-    sidebar: () => [...pane.querySelectorAll('[data-cad-file-sidebar] [data-tool-panel]')]
-      .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label')),
+    sidebar: () => [...pane.querySelectorAll('[data-flat-panel] [data-tool-panel]')]
+      .filter(panel => pane.querySelector(`[data-flat-panel-tab="${panel.getAttribute('data-flat-panel-section')}"]`)).map(panel => panel.getAttribute('aria-label')),
     knobs: () => pane.querySelectorAll('[data-cad-joint-handles]').length,
     jointField: (name: string) => within(pane).getByLabelText(`${name} value in deg`) as HTMLInputElement,
     position: () => within(pane.querySelector('[data-tool-panel][aria-label="Position controls"]') as HTMLElement),
     open: (name: string) => fireEvent.click(robot.tool(name)),
     type(name: string, value: string) {
+      // On Position's tab, as a person reaches the joints.
+      const tab = pane.querySelector<HTMLElement>('[data-flat-panel-tab="position"]');
+      if (tab && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
       const field = robot.jointField(name);
       fireEvent.change(field, { target: { value } });
       fireEvent.keyDown(field, { key: 'Enter' });
@@ -230,7 +233,7 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all, the navbar holding none of them", async () => {
+it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; Home is the cube's; the navbar holds none of them", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
   const actions = strip.querySelector<HTMLElement>('[data-view-controls]')!;
@@ -238,13 +241,13 @@ it("a robot is a 3D view: Projection, Display and Preview end the strip, in the 
   expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
   expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
   expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
+  expect(robot.pane.querySelector('[data-view-home]')?.getAttribute('aria-label')).toBe('Home');
   expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   robot.client.dispose();
 });
 
-it('robot Links and Position are the file sidebar\'s whatever Select picks, a Position control leaves the tool and its filter, and no pick opens or turns the host\'s column', async () => {
+it('robot Links and Position are the view\'s panel\'s whatever Select picks, a Position control leaves the tool and its filter, and no pick opens or turns the host\'s column', async () => {
   const robot = await openRobot();
-  expect(within(robot.pane).queryAllByRole('tab')).toHaveLength(0);
   // With the knobs put away, Position's section is on screen and drives the joints all the same.
   await robot.choose('links');
   expect(robot.sidebar()).toEqual(['Links', 'Position controls']);
@@ -263,44 +266,28 @@ it('robot Links and Position are the file sidebar\'s whatever Select picks, a Po
   robot.client.dispose();
 });
 
-it('robot Links and Position are the file sidebar\'s tiles whatever Select picks: a tile opens its section alone, its X or the tile closes it, and it never folds', async () => {
+it('robot Links and Position are the view\'s panel\'s tabs whatever Select picks: a tab shows its section alone, and it never folds', async () => {
   const robot = await openRobot();
-  const tiles = () => within(within(robot.pane).getByRole('group', { name: 'File sidebar' })).getAllByRole('button');
-  const pressed = () => tiles().filter(tile => tile.getAttribute('aria-pressed') === 'true').map(tile => tile.getAttribute('aria-label'));
+  const tabs = () => [...robot.pane.querySelectorAll('[data-flat-panel] [role=tab]')];
+  const names = () => tabs().map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')]);
   const links = () => robot.pane.querySelector<HTMLElement>('[data-tool-panel][aria-label="Links"]')!;
-  expect([tiles().map(tile => tile.getAttribute('aria-label')), pressed(), robot.toolNames()]).toEqual([['Links', 'Position'], [], SELECT_IN_HAND]);
+  expect([names(), robot.toolNames()]).toEqual([[['Links', 'true'], ['Position', 'false']], SELECT_IN_HAND]);
   await robot.choose('position');
   expect([robot.filter(), robot.sidebar()]).toEqual(['Selection filter: Position', ['Links', 'Position controls']]);
-  fireEvent.click(tiles()[0]);
-  expect([pressed(), links().hasAttribute('data-sidebar-closed'), robot.pane.querySelector('aside[data-cad-file-sidebar]')!.hasAttribute('data-open')]).toEqual([['Links'], false, true]);
-  expect(within(links()).queryByRole('button', { name: /^(?:Collapse|Expand) links$/ })).toBeNull();
-  // One section at a time: Position's tile takes Links' place.
-  fireEvent.click(tiles()[1]);
-  expect([pressed(), links().hasAttribute('data-sidebar-closed')]).toEqual([['Position'], true]);
-  fireEvent.click(tiles()[0]);
-  fireEvent.click(within(links()).getByRole('button', { name: 'Close links' }));
-  expect([pressed(), robot.pane.querySelector('aside[data-cad-file-sidebar]')!.hasAttribute('data-open')]).toEqual([[], false]);
+  expect([links().hidden, within(links()).queryByRole('button', { name: /^(?:Collapse|Expand) links$/ })]).toEqual([false, null]);
+  // One section at a time: Position's tab takes Links' place.
+  fireEvent.click(tabs()[1]);
+  expect([names(), links().hidden]).toEqual([[['Links', 'false'], ['Position', 'true']], true]);
   robot.client.dispose();
 });
 
-it('on a phone a robot\'s sidebar is one tile beside the strip, opening a panel of Links and Position tabs', async () => {
+it('on a phone a robot has no panel: no pill, no Links or Position tab, the strip alone', async () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844, toJSON: noop } as DOMRect);
   const robot = await openRobot({ phone: true });
   expect(robot.pane.querySelector('[data-viewer-layout]')!.getAttribute('data-viewer-layout')).toBe('mobile');
-  const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
-  const toggle = within(robot.pane).getByRole('button', { name: 'Sidebar' });
-  expect([strip.contains(toggle), robot.pane.querySelectorAll('[data-file-sidebar-tools] button').length]).toEqual([false, 1]);
-  fireEvent.click(toggle);
-  await waitFor(() => expect(robot.pane.querySelector('aside[data-cad-file-sidebar]')!.hasAttribute('data-open')).toBe(true));
-  // Its first section, under a tab per section; a phone's panel: its own width, and no grip.
-  expect([...robot.pane.querySelectorAll('[data-file-sidebar-tab]')].map(tab => [tab.getAttribute('aria-label'), tab.getAttribute('data-state')]))
-    .toEqual([['Links', 'on'], ['Position', 'off']]);
-  const aside = robot.pane.querySelector<HTMLElement>('aside[data-cad-file-sidebar]')!;
-  expect([aside.style.width, aside.querySelector('[data-file-sidebar-corner]')]).toEqual(['288px', null]);
-  fireEvent.click(robot.pane.querySelector('[data-file-sidebar-tab="position"]')!);
-  await waitFor(() => expect(robot.jointField('shoulder')).toBeTruthy());
-  expect(robot.pane.querySelector('[data-tool-panel][aria-label="Links"]')!.hasAttribute('data-sidebar-closed')).toBe(true);
+  expect(within(robot.pane).getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  expect([within(robot.pane).queryByRole('button', { name: 'Show panel' }), robot.pane.querySelector('[data-flat-panel]')]).toEqual([null, null]);
   robot.client.dispose();
 });
 

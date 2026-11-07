@@ -244,7 +244,7 @@ def draw_occt(doc: Path, folder: Path, modes: list[str], cameras: list[str], siz
 # the ignored tmp/bench/snapshot-page, once per run, so it is always the checkout's own scene code;
 # it is read as files and routed to the page's origin, and it reads the document from the engine
 # daemon that serves it: those requests are fetched for the page with the user's token, which the
-# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cad snapshot`` drew mesh files this way before OCCT drew every kind;
+# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cad <type> snapshot`` drew mesh files this way before OCCT drew every kind;
 # nothing cadgen ships carries the page now, and this bench builds it for the viewer's side alone.
 
 PAGE_ORIGIN = "http://localhost"

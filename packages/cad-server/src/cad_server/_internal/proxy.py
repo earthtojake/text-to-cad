@@ -1,8 +1,8 @@
 """``cad``, the command (``~/.local/bin/cad``): the current installation, run.
 
-The proxy's ``sh`` runs this module with the current installation's interpreter
-(``cad_server._internal.installations``: ``current``), or with no current one the interpreter registered
-last; it runs one installation's ``cad`` console script with the arguments:
+The proxy's ``sh`` (on Windows ``cad.exe``'s ``__main__.py``) runs this module with the current
+installation's interpreter (``cad_server._internal.installations``: ``current``), or with no current one
+the interpreter registered last; it runs one installation's ``cad`` console script with the arguments:
 
 a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
@@ -26,7 +26,7 @@ import sys
 
 from cad_server._internal.launch import COMMAND, LAUNCHER, SERVER
 
-# The ``cad`` command's own words (``installations._SH``) when no installation is registered.
+# The ``cad`` command's own words (``installations._SH``, ``installations._MAIN``) when no installation is registered.
 NONE_INSTALLED = (f"{SERVER} is not installed: run `" + " ".join(LAUNCHER) + f" {SERVER} {COMMAND} doctor` once, "
                   "outside any sandbox or with its permission")
 

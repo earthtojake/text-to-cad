@@ -1,0 +1,473 @@
+/**
+ * A flat picture on a canvas, and the three things a person does to it: drag or a trackpad's
+ * two-finger scroll to pan, a mouse's wheel or a pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
+ * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
+ * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
+ * hand takes it (`onDrag`, a board's Select drawing its box): then the middle button pans, as
+ * KiCad's does (`middlePan`), and the view's other drags are the 3D views' (`orbitPan`, three's
+ * OrbitControls as `useViewerRuntime.js` sets them): the right button's drag pans (a Mac
+ * trackpad's two-finger click and drag) and a primary drag with Ctrl, Cmd or Shift held pans, the
+ * browser's menu kept off the picture; a press of either that does not travel is no tap. A mouse's
+ * wheel zooms, as a pinch and a wheel with Cmd or Ctrl do; a trackpad's two-finger scroll pans, as
+ * Figma's does (`wheelGesture.js`). Every flat view (a 2D drawing, a
+ * board) is this one hook under its own paint.
+ *
+ * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
+ * already the person's), the `bounds` the fit frames (`@cad/core`'s plane maths,
+ * `lib/drawing2d/transform.js`: model space, y up) and `paint(ctx, frame)`, which draws one whole
+ * frame — the surface around the picture included — at the frame's view. A frame is
+ * `{ width, height, pixelRatio, transform, element, colorScheme }`: the pane in CSS pixels, the
+ * backing store's ratio, the view (null until there is a picture to frame), the pane's element
+ * (whose tokens say the theme) and the host's scheme.
+ *
+ * The view the person moves is handed back to keep with its pane (`onViewMoved`, `flatView.js`'s
+ * record), and the view a file was left at (`restored`) is placed on every pane the picture is laid
+ * out in, by what it shows, until the person moves it: so on the pane it was framed in it is the
+ * stored transform exactly, however the pane changed meanwhile (the panel docking beside the canvas
+ * once the file has loaded).
+ *
+ * The view lives in a REF, not in React state. A pan is a stream of pointer moves and a zoom is
+ * a stream of wheel ticks; re-rendering a component tree per event would make both stutter and
+ * would tell React about a number only the canvas cares about. The component re-renders when
+ * something it actually shows changes — whether a drag is in progress, so the cursor can say so —
+ * and never per frame.
+ *
+ * Painting is on demand: one `requestAnimationFrame` is scheduled when something changed, and an
+ * idle picture draws nothing at all. A resize is the exception: resizing the canvas wipes it, so
+ * the pane's observer paints at once.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  carryTransform,
+  clampScale,
+  fitTransform,
+  panTransform,
+  sameTransform,
+  zoomLimits,
+  zoomTransform
+} from "@cad/core/lib/drawing2d/transform.js";
+import { flatViewRecord, readFlatView } from "./flatView.js";
+import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "./pixelRatio.js";
+import { createWheelGesture } from "./wheelGesture.js";
+import { doubleClickFits } from "./dom.js";
+import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
+
+/** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
+const WHEEL_ZOOM_SPEED = 0.0015;
+/** A trackpad pinch arrives as a ctrl-wheel with much smaller deltas. */
+const PINCH_WHEEL_ZOOM_SPEED = 0.01;
+/** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
+export const TAP_SLOP_PX = 4;
+/** How much closer than the fit framing a thing may bring the view. */
+export const FRAME_ZOOM_CAP = 24;
+const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED));
+
+/**
+ * @param {object} options
+ * @param {unknown} options.content  The picture, or null while it loads.
+ * @param {readonly [number, number, number, number]|null} options.bounds  What the fit frames.
+ * @param {{ scale: number, offsetX: number, offsetY: number, width?: number, height?: number }|null} options.restored
+ *   The view this file was left at, when it was left anywhere but the fit: `flatView.js`'s record, the
+ *   transform and the pane it was framed in (a record without its pane is taken as it is).
+ * @param {"light"|"dark"} options.colorScheme
+ * @param {(view: { scale: number, offsetX: number, offsetY: number, width: number, height: number }|null) => void} options.onViewMoved
+ *   Called after the person moves the view, with the view to remember (`flatView.js`'s record: the
+ *   transform and its pane); with null when it is the fit again.
+ * @param {(ctx: CanvasRenderingContext2D, frame: { width: number, height: number, pixelRatio: number,
+ *   transform: object|null, element: Element|null, colorScheme: "light"|"dark" }) => void} options.paint  One whole frame.
+ * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
+ * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
+ *   A pointer resting over the canvas with nothing pressed (null: it left).
+ * @param {(phase: "start" | "move" | "end" | "cancel", drag: { start: { x: number, y: number }, point: { x: number, y: number },
+ *   event: PointerEvent | null }) => boolean | void} [options.onDrag]  Asked, as a press with the primary button
+ *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
+ *   release are the tool's too, and the view does not pan.
+ * @param {(point: { x: number, y: number }, event: MouseEvent) => boolean | void} [options.onDoubleTap]  Asked first what a
+ *   double-click is (a schematic's sheet symbol entered, answering true); else, under Select, it fits (`doubleClickFits`).
+ * @param {boolean} [options.middlePan]  A press of the middle button pans.
+ * @param {boolean} [options.orbitPan]  The 3D views' pans: a right-button drag, and a primary drag with Ctrl, Cmd or Shift.
+ * @param {(bounds: readonly number[], width: number, height: number, options: { top: number }) => object} [options.fitBox]
+ *   The fit: drawing2d's by default (a 16px gutter); a board's leaves more (`plot2d`'s `fitBoardBounds`).
+ * @param {boolean} [options.clearStrip]  The fit keeps clear of the view's tool strip over its top, as a
+ *   drawing's does: the room the frame measures as `--cad-tools-bottom`.
+ */
+export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
+  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const contextRef = useRef(null);
+  const sizeRef = useRef({ width: 0, height: 0 });
+  const transformRef = useRef(null);
+  const fitScaleRef = useRef(0);
+  // The person has framed this picture themselves: a resize must not take it back,
+  // and it is worth remembering. A restored view is already theirs.
+  const movedRef = useRef(Boolean(restored));
+  // The view the file was left at, until the person moves it (or fits): every pane the picture is laid
+  // out in places it from this record, never from the pixels of the pane before.
+  const restoredRef = useRef(readFlatView(restored));
+  const boundsRef = useRef(bounds);
+  boundsRef.current = bounds;
+  const fitBoxRef = useRef(fitBox);
+  fitBoxRef.current = fitBox;
+  const clearStripRef = useRef(clearStrip);
+  clearStripRef.current = clearStrip;
+  const schemeRef = useRef(colorScheme);
+  schemeRef.current = colorScheme;
+  const onViewMovedRef = useRef(onViewMoved);
+  onViewMovedRef.current = onViewMoved;
+  const paintFrameRef = useRef(paintFrame);
+  paintFrameRef.current = paintFrame;
+  const tapRef = useRef(onTap);
+  tapRef.current = onTap;
+  const hoverRef = useRef(onHover);
+  hoverRef.current = onHover;
+  const dragRef = useRef(onDrag);
+  dragRef.current = onDrag;
+  const doubleTapRef = useRef(onDoubleTap);
+  doubleTapRef.current = onDoubleTap;
+  const middlePanRef = useRef(middlePan);
+  middlePanRef.current = middlePan;
+  const orbitPanRef = useRef(orbitPan);
+  orbitPanRef.current = orbitPan;
+  const [dragging, setDragging] = useState(false);
+  const frameRef = useRef(0);
+
+  // Who hears that the view moved: the corner's zoom pill (`ZoomControl.jsx`), told as each frame paints.
+  const viewListeners = useRef(new Set());
+  const paint = useCallback(() => {
+    frameRef.current = 0;
+    for (const listener of viewListeners.current) listener();
+    const canvas = canvasRef.current;
+    const { width, height } = sizeRef.current;
+    if (!canvas || width <= 0 || height <= 0) return;
+    const ctx = contextRef.current || (contextRef.current = canvas.getContext("2d"));
+    if (!ctx) return;
+    const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
+    paintFrameRef.current?.(ctx, {
+      width, height, pixelRatio, transform: transformRef.current, element: containerRef.current, colorScheme: schemeRef.current
+    });
+  }, []);
+
+  const requestPaint = useCallback(() => {
+    if (frameRef.current) return;
+    frameRef.current = requestAnimationFrame(paint);
+  }, [paint]);
+
+  /** Paint in the caller's task, in place of any frame already asked for. */
+  const paintNow = useCallback(() => {
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    paint();
+  }, [paint]);
+
+  /** The fit of the picture on a pane of `width` × `height`, clear of the view's strip where it keeps clear of it. */
+  const fitOn = useCallback((width, height) => {
+    const frame = clearStripRef.current ? containerRef.current?.closest?.("[data-slot=cad-file-view]") : null;
+    const strip = frame ? Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom")) : 0;
+    return fitBoxRef.current(boundsRef.current, width, height, { top: Number.isFinite(strip) ? strip : 0 });
+  }, []);
+
+  /**
+   * A stored view (`flatView.js`'s record) on the pane as it is now: on a pane of the size it was framed in,
+   * its transform exactly; on another, carried there by what it shows (`carryTransform`). One stored
+   * without its pane is taken as it is.
+   */
+  const placed = useCallback((view, fitted) => {
+    const { width, height } = sizeRef.current;
+    if (!view.width || !view.height) return { scale: view.scale, offsetX: view.offsetX, offsetY: view.offsetY };
+    const from = { width: view.width, height: view.height, fitScale: fitOn(view.width, view.height).scale };
+    return carryTransform(view, from, { width, height, fitScale: fitted.scale });
+  }, [fitOn]);
+
+  /** Recompute the fitted scale for the current pane, and adopt it unless the view is the person's. */
+  const refit = useCallback((force) => {
+    const { width, height } = sizeRef.current;
+    if (!boundsRef.current || width <= 0 || height <= 0) return;
+    const fitted = fitOn(width, height);
+    fitScaleRef.current = fitted.scale;
+    if (force || !movedRef.current || (!restoredRef.current && !transformRef.current)) {
+      // The fit: asked for, or the view is nobody's, or the picture the person framed went (an empty
+      // revision) and another came.
+      movedRef.current = false;
+      restoredRef.current = null;
+      transformRef.current = fitted;
+      onViewMovedRef.current?.(null);
+    } else if (restoredRef.current) {
+      // The view the file was left at, untouched since: placed on the pane it has now, from its record
+      // (which already says it, so nothing is written).
+      transformRef.current = placed(restoredRef.current, fitted);
+    }
+    requestPaint();
+  }, [requestPaint, fitOn, placed]);
+
+  /** Record a view the person chose, with the pane it is framed in. */
+  const moveTo = useCallback((next) => {
+    if (!next || sameTransform(transformRef.current, next)) return;
+    transformRef.current = next;
+    movedRef.current = true;
+    restoredRef.current = null;
+    onViewMovedRef.current?.(flatViewRecord(next, sizeRef.current));
+    requestPaint();
+  }, [requestPaint]);
+
+  /** Show a view handed back (a sheet's, the window a 3D view leaves): a record with its pane is placed on this one. */
+  const setView = useCallback((view) => {
+    const read = readFlatView(view);
+    const { width, height } = sizeRef.current;
+    if (!read) return;
+    moveTo(boundsRef.current && width > 0 && height > 0 ? placed(read, fitOn(width, height))
+      : { scale: read.scale, offsetX: read.offsetX, offsetY: read.offsetY });
+  }, [moveTo, placed, fitOn]);
+
+  const fit = useCallback(() => refit(true), [refit]);
+
+  /**
+   * Frame a box of the picture (model space, y up), centred, with the fit's margin; never closer
+   * than `FRAME_ZOOM_CAP` times the fit, so a pad or a short track is framed in what is round it.
+   */
+  const frame = useCallback((box) => {
+    const { width, height } = sizeRef.current;
+    if (!box || !fitScaleRef.current || width <= 0 || height <= 0) return;
+    const [minX, minY, maxX, maxY] = box;
+    const fitted = fitTransform([minX, minY, maxX, maxY], width, height);
+    const scale = clampScale(Math.min(fitted.scale, fitScaleRef.current * FRAME_ZOOM_CAP), zoomLimits(fitScaleRef.current));
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    moveTo({ scale, offsetX: width / 2 - cx * scale, offsetY: height / 2 + cy * scale });
+  }, [moveTo]);
+
+  const zoomBy = useCallback((factor, anchor) => {
+    const transform = transformRef.current;
+    if (!transform || !fitScaleRef.current) return;
+    const { width, height } = sizeRef.current;
+    const point = anchor || { x: width / 2, y: height / 2 };
+    moveTo(zoomTransform(transform, point, factor, zoomLimits(fitScaleRef.current)));
+  }, [moveTo]);
+
+  // ---- the pane's size -------------------------------------------------------
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () => {
+      const rect = container.getBoundingClientRect();
+      const width = Math.max(0, Math.round(rect.width));
+      const height = Math.max(0, Math.round(rect.height));
+      const previous = sizeRef.current;
+      if (width === previous.width && height === previous.height) return;
+      // The view the person moved, and the pane and fit it was framed on, read BEFORE the size changes:
+      // it is carried across the resize by what it shows rather than by its pixels (see below). A view
+      // still the one the file was left at is placed from its record instead, by the refit.
+      const held = !restoredRef.current && transformRef.current && previous.width > 0 && previous.height > 0 && fitScaleRef.current > 0
+        ? { transform: transformRef.current, from: { width: previous.width, height: previous.height, fitScale: fitScaleRef.current } }
+        : null;
+      sizeRef.current = { width, height };
+      const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
+      canvas.width = Math.max(1, Math.round(width * pixelRatio));
+      canvas.height = Math.max(1, Math.round(height * pixelRatio));
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      // A canvas resize wipes its backing store AND its context state, so the
+      // cached context has to be re-read along with the picture.
+      contextRef.current = canvas.getContext("2d");
+      refit(false);
+      // A view still the fit has just refitted to the room it has now, and the view the file was left
+      // at, untouched, has been placed on it from its record. A view the person framed is not taken
+      // back by a resize — but it must not keep an absolute pixel scale either, or a pane that narrows
+      // simply crops the picture where it stands. So it keeps what it MEANT: the same zoom relative to
+      // the fit, still centred on what it was centred on (`carryTransform`). That is how the 3D
+      // viewports behave when their pane changes size, and a panel docked beside the pane, or taken
+      // away, is such a change: the pane is what the panel leaves, and the picture is centred in it,
+      // never left under the panel.
+      if (held && movedRef.current && fitScaleRef.current > 0) {
+        moveTo(carryTransform(held.transform, held.from, { width, height, fitScale: fitScaleRef.current }));
+      }
+      // Resizing the canvas above wiped it. The observer runs after layout and before
+      // paint, but after this frame's animation callbacks, so a frame asked for now would
+      // only be painted in the NEXT frame and the pane would show empty for one. Paint the
+      // picture at its new size here, so the frame the pane changed in already shows it.
+      paintNow();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [moveTo, paintNow, refit]);
+
+  // A new picture frames itself, unless this file's view is already the person's.
+  useEffect(() => {
+    transformRef.current = boundsRef.current ? transformRef.current : null;
+    refit(false);
+  }, [content, refit]);
+
+  // The theme moved: same view, different ink.
+  //
+  // The host's `colorScheme` is one trigger, but not the only one — whatever
+  // swaps the tokens does it by writing the class or the style on `<html>`, and
+  // that write is not a React render here. So watch the element the tokens are
+  // declared on, exactly as the 3D viewers' backdrop does.
+  useEffect(() => {
+    requestPaint();
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") return undefined;
+    const observer = new MutationObserver(requestPaint);
+    observer.observe(document.documentElement, { attributeFilter: ["class", "style"] });
+    return () => observer.disconnect();
+  }, [colorScheme, requestPaint]);
+
+  // The handle is cleared with the frame it names: React's development StrictMode runs this
+  // cleanup and then the effects again on the SAME refs, and a stale non-zero handle would
+  // make `requestPaint` believe a frame is still pending and never paint again.
+  useEffect(() => () => {
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    frameRef.current = 0;
+  }, []);
+
+  // ---- pointer and wheel -----------------------------------------------------
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    /** @type {Map<number, {x: number, y: number}>} */
+    const pointers = new Map();
+    const local = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    const pinchState = { distance: 0, centre: { x: 0, y: 0 } };
+    const measurePinch = () => {
+      const [first, second] = [...pointers.values()];
+      pinchState.distance = Math.hypot(first.x - second.x, first.y - second.y);
+      pinchState.centre = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    };
+
+    // The press that may still be a tap: where it went down, until it travels or a second finger lands.
+    // `drag`: the tool took it (`onDrag`); `pan`: a middle press, a pan from the start.
+    let press = null;
+    const onPointerDown = (event) => {
+      // Primary press only: a secondary or middle press belongs to whatever the
+      // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
+      const mouse = event.pointerType === "mouse";
+      const middle = mouse && event.button === 1 && middlePanRef.current;
+      // The 3D views' pans: the right button's drag, a primary drag with a modifier (a click with one is still a click).
+      const secondary = mouse && event.button === 2 && orbitPanRef.current;
+      const modified = orbitPanRef.current && event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
+      if (mouse && event.button !== 0 && !middle && !secondary) return;
+      capturePointer(canvas, event.pointerId);
+      const point = local(event);
+      pointers.set(event.pointerId, point);
+      // A second finger is a pinch: a drag the tool had taken lets go.
+      if (press?.drag && pointers.size > 1) dragRef.current?.("cancel", { start: press.start, point, event });
+      press = pointers.size === 1
+        ? { id: event.pointerId, start: point, moved: middle, drag: false, pan: middle || secondary || modified, tapless: secondary } : null;
+      if (pointers.size === 2) measurePinch();
+      if (pointers.size === 1) setDragging(true);
+      hoverRef.current?.(null, null);
+      event.preventDefault();
+    };
+    const onPointerMove = (event) => {
+      const previous = pointers.get(event.pointerId);
+      if (!previous) {
+        // Nothing pressed: the pointer resting over the picture, for the tool in hand.
+        if (!pointers.size && event.pointerType !== "touch") hoverRef.current?.(local(event), event);
+        return;
+      }
+      const point = local(event);
+      pointers.set(event.pointerId, point);
+      const transform = transformRef.current;
+      if (!transform) return;
+      if (pointers.size === 1) {
+        if (press?.drag) { dragRef.current?.("move", { start: press.start, point, event }); return; }
+        if (press && !press.moved) {
+          if (Math.hypot(point.x - press.start.x, point.y - press.start.y) <= TAP_SLOP_PX) return;
+          press.moved = true;
+          // The tool in hand may take the drag (a box drawn), else it pans.
+          if (!press.pan && dragRef.current?.("start", { start: press.start, point, event }) === true) { press.drag = true; return; }
+          moveTo(panTransform(transform, point.x - press.start.x, point.y - press.start.y));
+          return;
+        }
+        moveTo(panTransform(transform, point.x - previous.x, point.y - previous.y));
+      } else if (pointers.size === 2 && fitScaleRef.current) {
+        const before = { ...pinchState };
+        measurePinch();
+        if (before.distance > 0 && pinchState.distance > 0) {
+          const zoomed = zoomTransform(transform, before.centre, pinchState.distance / before.distance,
+            zoomLimits(fitScaleRef.current));
+          moveTo(panTransform(zoomed, pinchState.centre.x - before.centre.x, pinchState.centre.y - before.centre.y));
+        }
+      }
+    };
+    const onPointerUp = (event) => {
+      const at = pointers.get(event.pointerId);
+      if (!pointers.delete(event.pointerId)) return;
+      releasePointer(canvas, event.pointerId);
+      if (pointers.size === 2) measurePinch();
+      if (pointers.size === 0) setDragging(false);
+      const tapped = press && press.id === event.pointerId && !press.moved && !press.tapless && event.type === "pointerup";
+      const dragged = press?.drag && press.id === event.pointerId ? press : null;
+      press = null;
+      if (dragged && at) dragRef.current?.(event.type === "pointerup" ? "end" : "cancel", { start: dragged.start, point: at, event });
+      if (tapped && at) tapRef.current?.(at, event);
+    };
+    const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
+    // The right button is a pan: the browser's own menu stays off the picture, as OrbitControls keeps it off a 3D view.
+    const onContextMenu = (event) => { if (orbitPanRef.current) event.preventDefault(); };
+    // A mouse's wheel and a pinch zoom about the pointer; a trackpad's two-finger scroll pans (`wheelGesture.js`).
+    const readWheel = createWheelGesture();
+    const onWheel = (event) => {
+      const transform = transformRef.current;
+      if (!transform) return;
+      // The page must not scroll under a picture being moved, so this listener
+      // is registered non-passive and always consumes the event.
+      event.preventDefault();
+      const gesture = readWheel(event);
+      if (gesture.pan) moveTo(panTransform(transform, gesture.pan.x, gesture.pan.y));
+      else zoomBy(wheelZoomFactor(gesture.zoom, gesture.pinch), local(event));
+    };
+    const onDoubleClick = (event) => {
+      event.preventDefault();
+      if (doubleTapRef.current?.(local(event), event) === true) return;
+      // A fit is Select's double-click, as in every view: under Pencil, Shapes or Measure it is theirs.
+      if (doubleClickFits(canvas)) fit();
+    };
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+    canvas.addEventListener("pointerleave", onPointerLeave);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("dblclick", onDoubleClick);
+    canvas.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      canvas.removeEventListener("contextmenu", onContextMenu);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("dblclick", onDoubleClick);
+    };
+  }, [fit, moveTo, zoomBy]);
+
+  /** The framed picture as a PNG, the surface included: it is painted into the canvas. */
+  const encode = useCallback((noun) => new Promise((resolve, reject) => {
+    const canvas = canvasRef.current;
+    if (!canvas) { reject(new Error(`This ${noun} is not on screen yet.`)); return; }
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error(`The browser could not encode this ${noun} as a PNG.`));
+    }, "image/png");
+  }), []);
+
+  /**
+   * The view's zoom for the corner's pill (`kit/shell/ZoomControl.jsx`): 100% the fit — the picture
+   * whole, as it opens and as F frames it, so 100% fits — and the zoom steps about the pane's middle.
+   */
+  const zoom = useMemo(() => ({
+    read: () => (transformRef.current && fitScaleRef.current ? (transformRef.current.scale / fitScaleRef.current) * 100 : 100),
+    subscribe: (listener) => { viewListeners.current.add(listener); return () => viewListeners.current.delete(listener); },
+    zoomBy: factor => zoomBy(factor),
+    zoomTo100: fit,
+    fit
+  }), [zoomBy, fit]);
+
+  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, zoom, setView, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+}

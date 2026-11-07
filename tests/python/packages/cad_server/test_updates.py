@@ -126,6 +126,20 @@ class UpdatesTest(unittest.TestCase):
         with mock.patch.object(cad_server, "__version__", "0.10.0"), mock.patch.object(updates, "_get", return_value=None):
             self.assertIsNone(updates.newest(), "this is the newest")
 
+    def test_an_update_s_dry_run_reads_the_feed_now_and_keeps_nothing(self) -> None:
+        """What ``cad update --dry-run`` says it would do: the feed read now, bounded, written nowhere."""
+        self.just_read({"latest": "0.8.5"})
+        kept = (self.tmp / updates.FILE).read_bytes()
+        for answer, expected in (({"latest": "0.9.1"}, ("newer", "0.9.1")), ({"latest": "0.8.1"}, ("newest", None)),
+                                 (None, ("unreachable", None))):
+            with self.subTest(answer=answer), mock.patch.object(updates, "_get", return_value=answer) as get:
+                self.assertEqual(updates.newest_now(), expected)
+                get.assert_called_once_with("https://api.texttocad.dev/v1/versions")
+        self.assertEqual((self.tmp / updates.FILE).read_bytes(), kept, "a dry run keeps nothing")
+        with mock.patch.dict(os.environ, {"CAD_UPDATE_CHECK": "0"}), mock.patch.object(updates, "_get") as get:
+            self.assertEqual(updates.newest_now(), ("off", None))
+            get.assert_not_called()
+
     def test_the_feed_is_read_at_most_once_an_hour_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
         answers = [FEED, None, {"latest": "0.9.1"}]

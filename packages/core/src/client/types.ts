@@ -28,7 +28,7 @@ export interface CadOpenInApp { id: string; name: string }
  * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
  * on disk now, and the detected apps that take it.
  */
-export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[] }
+export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[]; default?: boolean }
 /** `GET /api/v1/local/open-in`: a document's files and their apps, and which file manager this computer has. */
 export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
@@ -74,6 +74,8 @@ export interface CadRecent {
   pinned: boolean; missing: boolean;
   /** The picture's name (its content's), and when it was taken. */
   thumbnail: string | null; pictured: number | null;
+  /** Its picture in the dark theme's own colours, where its view draws one (a board's); null or absent: `thumbnail` in both. */
+  thumbnailDark?: string | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
@@ -81,6 +83,11 @@ export interface CadRecent {
 }
 /** Whether the person's usage stats are sent (`/api/v1/settings`' `telemetry`; nothing asks): `reason` says who decided. */
 export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
+/** What's new (`/api/v1/settings`' `whats_new`): the releases, by their minor (`0.11`), whose notes the person has seen, and the one the engine runs. */
+export interface CadWhatsNew { seen: string[]; release: string | null }
+/** Whether the engine updates by itself (`/api/v1/settings`' `updates`: `cad_server/auto_updates.py`), and why:
+ * the default, the person's choice, or the environment (`CAD_UPDATE_CHECK=0`, CI), which no click changes. */
+export interface CadAutomaticUpdates { automatic: boolean; reason: 'default' | 'choice' | 'environment' }
 /** A newer text-to-cad, as cadgen's version check says it (`/api/v1/server`'s `notice`): the release offered, and this install's. */
 export interface CadUpdateNotice { latest: string; version: string }
 /** Where an update the update button started is (`cad_server/_internal/update.py`). */
@@ -225,13 +232,13 @@ export interface CadWorkspaceService {
    * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
    * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
-  /** Keep a model's picture in the library. */
-  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string; dark?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library, and its dark theme's beside it where the picture carries one (`dark`: a board's). */
+  keepThumbnail(png: Blob & { dark?: Blob }, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
-  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
+  thumbnail(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: CadRequestOptions & { scheme?: 'light' | 'dark' }): Promise<string | null>;
   /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
-  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
+  thumbnailUrl(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: { scheme?: 'light' | 'dark' }): string;
   /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
@@ -244,6 +251,10 @@ export interface CadWorkspaceService {
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
   language(locale?: string | null): Promise<{ locale: string | null }>;
+  /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
+  whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
+  /** Whether the engine updates by itself; with `automatic`, the person's answer (the app menu's Automatic updates). */
+  automaticUpdates(automatic?: boolean): Promise<CadAutomaticUpdates>;
   /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
   version(): Promise<CadVersion>;
   /** The update button's click: the engine updates in the background, and answers as `version` does. */
@@ -255,6 +266,17 @@ export interface CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
+  /**
+   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
+   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
+   * hierarchy's index out (the viewer reads it with the first sheet it shows).
+   */
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  /**
+   * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
+   */
+  boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
@@ -306,7 +328,9 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original';
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
+export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
+  | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }
 /** One export: `epoch` is the session's (`ExportService.epoch`), `''` until the page has asked it. */
 export interface ExportRequest { requestId: string; epoch: string; source: ExportSource; format: ExportFormat }
@@ -325,4 +349,22 @@ export interface ExportService {
   status(id: string, sequence?: number, signal?: AbortSignal): Promise<ExportJob>;
   /** Where the browser downloads a ready job's file: the session's own origin, never a token. */
   fileUrl(id: string): string;
+}
+
+/** One model of a board's 3D models table: a STEP the engine serves by its document id, or why there is none. */
+export type CadBoardModel =
+  | { file: string; document: string; api: string; stamp: string; missing?: undefined }
+  | { file: string; missing: "not-found" | "vrml-only" | "outside" | "too-large" | "not-step" | "embedded" | "too-many" | string };
+
+export interface CadPlotPayload {
+  schemaVersion: number;
+  kind: string;
+  /** What wrote the file (`"pcbnew 10.99"`), for wording only. */
+  generator?: string;
+  /** The board's connections still to make, each drawn as a ratsnest line. */
+  unrouted: number | null;
+  sheets: { name: string; width: number; height: number; background: string; layers: { id: string; kind: string; side: string; items: Record<string, unknown>[] }[] }[];
+  /** The board's index, in sheet millimetres: what the board view's tools point with. */
+  board?: Record<string, unknown>;
+  [key: string]: unknown;
 }

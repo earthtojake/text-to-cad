@@ -37,6 +37,12 @@ exact version, ask which one. A release pull request comes one of two ways:
   `main`'s and stamps the derived metadata and every pin of the release's own
   (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
+Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
+bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
+every device (a patch below 1.0, a patch or minor from 1.0), so Version Check refuses a migration guide
+in one. What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
+bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
+
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
 its Version Check vets the bump (a branch of this repository only, a version past
@@ -72,13 +78,16 @@ a worker, the library; run in the daemon or a command, the server; run inside th
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the
 server runs as `uvx ... --from cad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
-The server installs the library with its `build123d` extra, with uv, into one base environment per
-installation that every model and kernel process runs in (`cad_server._internal.base`), a program's
-own folder last on its path. That installation registers itself and writes the `cad` command,
+The server installs the library with its `build123d` extra, with uv, on first need, into one base
+environment per installation that its kernel processes run in (`cad_server._internal.base`); `cad run`
+is `uv run` with the library pinned at the device's release and the integrations a program's imports
+use, in an environment the engine makes per set (`cad_server._internal.extras`), a program's own
+folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
 sandbox, the command can), which runs the current installation, so no skill names a release. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
-PyPI's `cad` project holds unrelated 1.x releases an open requirement would resolve to. The release
+the three distributions are released in lockstep, one `VERSION`, and the server speaks only its own
+release's library (the worker contract), so the server pins the library at its own release. The release
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. The device runs one
 server, the current installation's (`<state>/installations/current`): the CAD app, every thread and
@@ -102,8 +111,12 @@ which points both at the checkout.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
 - `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
+  `docs/contributing/`: [writing a skill](docs/contributing/writing-a-skill.md),
+  [adding a document type](docs/contributing/adding-a-document-type.md) and
+  [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
-  ([0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
+  ([0.10 to next, a draft](docs/migrations/migrating-0.10-to-next.md),
+  [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).
@@ -178,8 +191,8 @@ which points both at the checkout.
   parser and behaviour live in `cad_server.cli`. The server draws every snapshot with
   OCCT, so no skill has a browser step. The server carries the JavaScript it serves too
   (the CAD Viewer client, the CAD app page), so a skill ships no runtime of its own. Not every
-  skill needs the server (bambu-labs, dfam-check, dfm, gcode, sendcutsend and
-  step-parts never run it); do not add the dependency to a skill that never invokes it.
+  skill needs the server (print3d never
+  runs it); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:
   generate small fixtures in fresh temporary directories or use tiny test-owned
@@ -227,7 +240,7 @@ which points both at the checkout.
 - The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
   `packages/cad-server`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
-  checkout serves `apps/web/dist`). The CAD, DXF and robot-description skills document that verb directly.
+  checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, robot simulation) documents that verb directly.
   Nothing in `cad_server.viewer` imports the CAD kernel at module scope — a STEP or
   `.xbf` it shows is read and meshed by the server's kernel processes (`viewer/documents.py`),
   never by a request's thread.

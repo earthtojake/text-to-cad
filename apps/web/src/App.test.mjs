@@ -72,7 +72,8 @@ test('the web host keeps the URL, the history, the title and the appearance, and
       : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
       : url === '/api/v1/local/link' ? { link: '1767225600.abc', expires: 1767225600 }
       : url !== '/api/v1/settings' ? { ok: true }
-      : { language: { locale: null }, telemetry };
+      : { language: { locale: null }, telemetry, whats_new: { seen: init.body ? ['0.11'] : [], release: '0.11' },
+        updates: { automatic: true, reason: 'default' } };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
@@ -127,9 +128,10 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(window.document.title, 'one.step');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/documents'), [['/api/v1/documents', { action: 'open', path: '/m/one.step' }]]);
     // CAD's telemetry, as the CAD app's: the person's settings read for the consent (and once for the
-    // language), its answer in the app menu. (The model shown is counted, by its format and only with
-    // consent, as it joins the library.)
-    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')), [['/api/v1/settings', null], ['/api/v1/settings', null]]);
+    // language, once for What's new and once for automatic updates), its answer in the app menu. (The model
+    // shown is counted, by its format and only with consent, as it joins the library.)
+    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')),
+      [['/api/v1/settings', null], ['/api/v1/settings', null], ['/api/v1/settings', null], ['/api/v1/settings', null]]);
     // A Quick Edit copied is counted by this Viewer's server, as a touch is: told nothing of the edit.
     viewer().host.usage.used('quickEdit');
     await new Promise(resolve => setImmediate(resolve));
@@ -141,14 +143,20 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/activity'),
       [['/api/v1/local/activity', { controls: [{ control: 'display_xray', count: 1, seconds: 0 }] }]]);
     libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/api/v1/local/activity'), 1);
-    // The app menu: Analytics.
+    // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Telemetry', false]]);
+      [['Telemetry', false], ['Automatic updates', true]]);
     // Nothing asks (a cad command says it once): the viewer has no notice, and the app menu's toggle
     // is the person's answer.
     assert.equal(viewer().notice, undefined);
     await act(() => viewer().appSettings[0].onCheckedChange(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { telemetry: { share: false } }]);
+    // An update to a release with notes: What's new, for the viewer to say over the page, and its
+    // dismissal kept seen in the person's settings.
+    assert.equal(viewer().whatsNew.entry, '0.11');
+    await act(() => viewer().whatsNew.onDismiss());
+    assert.equal(viewer().whatsNew.entry, null);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { whats_new: { seen: ['0.11'] } }]);
     // A newer release is the update button, as in the CAD app: an icon first in the navbar while this
     // install is behind, drawn from the notice the page started with: nothing is read for it.
     assert.equal(viewer().update.props.notice.latest, '0.9.0');
@@ -158,7 +166,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(async () => { viewer().update.props.onUpdate(); await new Promise(resolve => setTimeout(resolve, 10)); });
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/update').map(([url]) => url), ['/api/v1/local/update']);
     assert.equal(viewer().update.props.phase.phase, 'working');
-    assert.deepEqual(guards, ['1']);
+    assert.deepEqual(guards, ['1', '1']);
 
     // Showing another file is a navigation, by the file's id: pushed, and undone by Back.
     const historyLength = window.history.length;

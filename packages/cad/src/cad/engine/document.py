@@ -250,7 +250,7 @@ def _mesh_refused(path: str, ordinals: tuple[int, ...]) -> str:
         f" and {len(ordinals) - 6} more" if len(ordinals) > 6 else "")
     faces = f"face {shown} is a triangulation" if len(ordinals) == 1 else f"faces {shown} are triangulations"
     return (f"{path} is a mesh, not B-rep: {faces} with no surface (as build123d's import_stl makes), and a "
-            "document holds B-rep alone. Read the mesh as data with read_mesh(path) -- its vertices, triangles "
+            "document holds B-rep alone. Read the mesh as data with stl.read(path) -- its vertices, triangles "
             "and bounding_box() -- and build B-rep from those")
 
 

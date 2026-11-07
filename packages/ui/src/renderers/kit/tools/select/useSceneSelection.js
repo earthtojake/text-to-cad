@@ -14,8 +14,10 @@ function nextSelection(current, id, multiSelect) {
  * What is selected and hovered in a scene whose parts a pick names (`scene.pick(ray)`'s `id`, the
  * file's own id for the part). The scene draws both (`scene.setHighlight`).
  * Selection is React state, because Quick Edit's chips draw it; hover is not, because nothing but
- * the scene shows it and it changes as the pointer moves. A new revision of the file keeps what it
- * still has.
+ * the scene shows it and it changes as the pointer moves — but what the pointer is on in the view
+ * (`pointed`, a pick's `hoverHit`, not a row's or a chip's `hover`) is, the frame's hover tip naming it,
+ * and it changes only as the pointer crosses from one part to the next. A new revision of the file keeps
+ * what it still has.
  *
  * `requestRender` asks the viewport for the frame that shows a changed highlight: one that keeps
  * the shadow maps, since a highlight moves and reshapes nothing.
@@ -25,6 +27,7 @@ function nextSelection(current, id, multiSelect) {
  */
 export function useSceneSelection({ scene, requestRender }) {
   const [chosen, setChosen] = useState(EMPTY);
+  const [pointed, setPointed] = useState("");
   const hovered = useRef("");
   const selected = useMemo(() => (scene?.hasPart ? chosen.filter(id => scene.hasPart(id)) : EMPTY), [scene, chosen]);
   const live = useRef(null);
@@ -46,6 +49,6 @@ export function useSceneSelection({ scene, requestRender }) {
   const clear = useCallback(() => setChosen(current => (current.length ? EMPTY : current)), []);
   // A viewport pick: the part under the pointer, and nothing clears.
   const pick = useCallback((hit, { multiSelect = false } = {}) => (hit ? select(hit.id, { multiSelect }) : clear()), [select, clear]);
-  const hoverHit = useCallback(hit => hover(hit?.id || ""), [hover]);
-  return { selected, active: selected.length > 0, select, clear, pick, hover, hoverHit };
+  const hoverHit = useCallback((hit) => { hover(hit?.id || ""); setPointed(String(hit?.id || "")); }, [hover]);
+  return { selected, active: selected.length > 0, select, clear, pick, hover, hoverHit, pointed };
 }

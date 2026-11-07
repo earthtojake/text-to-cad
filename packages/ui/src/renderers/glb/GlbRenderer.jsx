@@ -9,7 +9,8 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { useMotionExclusion } from "../kit/tools/model-effects/motionExclusion.js";
 import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
-import { useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
@@ -131,14 +132,34 @@ function GlbSurface({ view, data }) {
     if (hit && !modifiers?.multiSelect) measureRef.current.select([]);
   }, [selection.pick]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} previewView={previewView}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): the reference, Select, the framing.
+  const viewportRef = useRef(null);
+  const contextMenuItems = scene && !previewing && shell.toolMode === GLB_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null
+  }) : null;
+
+  const zoomToSelection = {
+    available: selection.selected.length > 0 && Boolean(scene?.selectionBounds),
+    run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  const described = useSceneDescribe(scene);
+  const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
+    inspect={inspect}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
-    </>} />;
+    </>; }} />;
 }
 
 export default function GlbRenderer(props) {

@@ -49,7 +49,7 @@ export interface OpenInApp { id: string; name: string }
  * `export:<format>` (a file a model's last build wrote), its kind, its file's name, whether it is on
  * disk now, and the apps this computer has that take it (in the host's order).
  */
-export interface OpenInTarget { target: string; kind: string; name: string; present: boolean; apps: readonly OpenInApp[] }
+export interface OpenInTarget { target: string; kind: string; name: string; present: boolean; apps: readonly OpenInApp[]; default?: boolean }
 /** A document's files and their apps (`GET /api/v1/local/open-in`'s answer, for a CAD host). */
 export interface OpenInFiles { targets: readonly OpenInTarget[]; fileManager?: string }
 export interface FileActions {

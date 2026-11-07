@@ -6,7 +6,8 @@ directory forgets them.
 The file is one JSON object with a section per feature, each owned by the module that uses it
 (``telemetry``: whether usage stats and crash reports are sent, and the install's random id,
 ``cad_server/analytics.py``; ``language``: the language a person chose for the CAD views,
-``cad_server/language.py``). A change reads,
+``cad_server/language.py``; ``whats_new``: the releases whose What's new dialog the person has seen,
+``{"seen": ["0.11"]}``, ``cad_server/whats_new.py``). A change reads,
 changes and writes its own section under the state folder's one lock (``update_section``,
 ``file_lock.state``), so two apps changing settings at once never undo each other, whichever
 sections they touch.

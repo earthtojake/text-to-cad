@@ -10,12 +10,11 @@ export const metadata: Metadata = {
 
 export default function TermsOfServicePage() {
   return (
-    <LegalPage title="Terms of Service" updated="October 1, 2026">
+    <LegalPage title="Terms of Service" updated="November 3, 2026">
       <LegalSection>
         <p>
           These terms govern your use of text-to-cad, provided by Thompson Labs LLC (“we”, “us”): the
-          text-to-cad plugin and its skills, the software they run, the step.parts part
-          library, and this website, texttocad.dev. By using text-to-cad you agree to them.
+          text-to-cad plugin and its skills, the software they run, and this website, texttocad.dev. By using text-to-cad you agree to them.
         </p>
       </LegalSection>
 
@@ -41,7 +40,7 @@ export default function TermsOfServicePage() {
 
       <LegalSection title="3. Acceptable use">
         <p>
-          Do not use step.parts or this website to break the law, infringe anyone’s rights, or
+          Do not use this website to break the law, infringe anyone’s rights, or
           disrupt or overload the services.
         </p>
       </LegalSection>
@@ -55,7 +54,7 @@ export default function TermsOfServicePage() {
 
       <LegalSection title="5. No warranty">
         <p>
-          text-to-cad and step.parts are provided “as is”, without warranty of any kind. Check
+          text-to-cad is provided “as is”, without warranty of any kind. Check
           generated models, drawings and manufacturing files before you fabricate, order or rely on
           them.
         </p>

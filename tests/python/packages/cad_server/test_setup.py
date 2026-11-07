@@ -124,7 +124,8 @@ elif args[2] == "remove":
 
 
 class Terminal(io.StringIO):
-    """A terminal whose every answer is no: the installer asks nothing, so it reads none of it."""
+    """A terminal whose every answer is no: the installer asks nothing, so it reads none of it (and an
+    uninstall told yes, ``--yes``, reads none either)."""
 
     def isatty(self) -> bool:
         return True
@@ -177,8 +178,9 @@ class Fixture(unittest.TestCase):
     def run_setup(self, *argv: str) -> tuple[int, str, str]:
         return self._run(setup.main, argv)
 
-    def run_uninstall(self, *argv: str) -> tuple[int, str, str]:
-        return self._run(uninstall.main, argv)
+    def run_uninstall(self, *argv: str, yes: bool = True) -> tuple[int, str, str]:
+        """``cad uninstall``, said yes to (``--yes``) unless ``yes`` is false: it destroys, so it asks first."""
+        return self._run(uninstall.main, (*argv, "--yes") if yes else argv)
 
     def _run(self, main, argv: tuple[str, ...]) -> tuple[int, str, str]:
         out, err, terminal = io.StringIO(), io.StringIO(), Terminal("n\n" * 8)
@@ -254,6 +256,33 @@ class TheCommand(Fixture):
         self.assertEqual(code, 2)
         self.assertIn("CAD_ENGINE_PORT='no-port' is not a port", err)
         self.assertFalse(self.state.exists())
+
+    def test_an_update_s_dry_run_says_what_it_would_install_before_the_plan(self) -> None:
+        """``cad update --dry-run`` reads the version feed -- a read, kept nowhere -- and says the release an
+        update would install, or why it would set this one up again, before this release's plan."""
+        from cad_server import updates
+        from cad_server.cli import update
+
+        def run(*argv: str, feed) -> tuple[int, str, str]:
+            with mock.patch.dict(os.environ, {"CI": "", "CAD_UPDATE_CHECK": ""}), \
+                    mock.patch.object(updates, "_get", return_value=feed), mock.patch.object(updates, "_seen", set()):
+                return self._run(update.main, argv)
+
+        code, out, _err = run("--dry-run", feed={"latest": "99.0.0"})
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertEqual(lines[0], f"cad update: would install text-to-cad 99.0.0 (this is {RELEASE}), then set it up in "
+                                   "every agent app here, as its own setup plans it; this release's plan of it:")
+        self.assertTrue(lines[1].startswith(f"text-to-cad {RELEASE} for this machine"), out)
+        self.assertIn("Dry run: nothing was changed.", out)
+        code, out, _err = run("--dry-run", feed=None)
+        self.assertEqual(out.splitlines()[0], "cad update: could not reach the version feed "
+                                              f"(https://api.texttocad.dev/v1/versions): it would set up this release, "
+                                              f"{RELEASE}, again:")
+        code, out, err = run("--dry-run", "--json", feed={"latest": RELEASE})
+        self.assertEqual(json.loads(out)["update"], {"current": RELEASE, "feed": "read", "release": None})
+        self.assertIn(f"cad update: text-to-cad {RELEASE} is the newest release", err)
+        self.assertFalse((self.state / updates.FILE).exists(), "a dry run keeps nothing")
 
     def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
         command(self.bin, "claude", CLAUDE)
@@ -512,16 +541,40 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("Gemini CLI: install the text-to-cad extension", err)
         switch.handover.assert_not_called()
 
-    def test_the_cad_kernel_environment_is_planned_and_made_once(self) -> None:
+    def test_an_automatic_update_s_first_half_makes_the_kernel_and_stops_before_the_apps(self) -> None:
+        # `CAD_UPDATE_PREPARE=1` (`cad_server._internal.update.PREPARE_ENV`): the release registered and its
+        # CAD kernel environment made -- the one making no other setup does -- while the engine works;
+        # nothing of the apps, the plugin folder or the engine changes.
+        from cad_server._internal import base
+
+        command(self.bin, "gemini", "sys.exit(0)\n")
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
+                mock.patch.object(base, "ensure") as ensured:
+            code, out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 0, err + out)
+        ensured.assert_called_once()
+        self.assertEqual([json.loads(line)["progress"]["stage"] for line in out.splitlines()], ["build123d"],
+                         "the kernel's stage, and no apps stage")
+        self.assertNotIn("Gemini CLI: install the text-to-cad extension\n", err)
+        self.assertFalse((plugin.folder() / plugin.MANIFEST).exists(), "the plugin folder is the apps': written at the second half")
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()] \
+            if (self.bin / "calls.jsonl").exists() else []
+        self.assertNotIn(["gemini", "extensions", "link", str(plugin.folder())], calls, "no app is pointed at anything")
+        switch.handover.assert_not_called()
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE, setup.PREPARE_ENV: "1"}), \
+                mock.patch.object(base, "ensure", side_effect=base.Refused("uv could not reach the index")):
+            code, _out, err = self.run_setup("--engine-update")
+        self.assertEqual(code, 1, "a kernel that cannot be made keeps the engine where it is")
+        self.assertIn("build123d uv could not reach the index", err)
+
+    def test_the_cad_kernel_environment_is_said_in_the_plan_and_never_made_at_setup(self) -> None:
         from cad_server._internal import base
 
         core = base.Installation(**{**base.dataclasses.asdict(base.Installation.here()), "kernel": False})
         made: dict = {}
 
         def ensure(installation=None, *, make=True, told=None):
-            if make and "env" not in made:
-                told("making the CAD kernel environment, once: cad[build123d] in the cache folder")
-                made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
+            self.assertFalse(make, "setup makes no environment: it is made on first need")
             return made.get("env")
 
         where = providers.shown(str(base.where(core)), self.machine)
@@ -529,16 +582,14 @@ class InstallUpdateAndUninstall(Fixture):
                 mock.patch.object(base, "ensure", side_effect=ensure):
             planned = self.run_setup("--dry-run")
             first = self.run_setup()
+            made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
             again = self.run_setup()
-        self.assertEqual(planned[0], 0)
-        self.assertRegex(planned[1], rf"\n  build123d\s+make\s+cad\[build123d\] {re.escape(core.release)} in "
-                                     rf"{re.escape(where)}, once\n")
-        self.assertNotIn("making", planned[1], "a dry run makes nothing")
-        self.assertEqual(first[0], 0, first[1])
-        self.assertIn("build123d making the CAD kernel environment, once: cad[build123d] in the cache folder\n", first[1])
-        self.assertEqual(again[0], 0)
-        self.assertNotIn("making", again[1])
-        self.assertRegex(again[1], r"build123d\s+leave\s+cad\[build123d\] ")
+        self.assertEqual((planned[0], first[0], again[0]), (0, 0, 0), first[1])
+        for said in (planned[1], first[1]):
+            self.assertRegex(said, rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)}, made on "
+                                   rf"first need in {re.escape(where)}\n")
+        self.assertRegex(again[1], rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)} in ")
+        self.assertNotIn("making", first[1])
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
@@ -551,6 +602,36 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
                          [("plugin", True), ("claude-desktop", True), ("gemini", False)])
+
+    def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
+        # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
+        command(self.bin, "gemini", """import os, pathlib
+if args[:2] == ["extensions", "link"]:
+    folder = pathlib.Path(os.environ["USERPROFILE"]) / ".gemini" / "extensions" / "text-to-cad"
+    folder.mkdir(parents=True)
+    (folder / ".gemini-extension-install.json").write_text(json.dumps({"source": args[2], "type": "link"}))
+    print('Extension "text-to-cad" linked successfully and enabled.')
+    print("Extension integrity store cannot be verified", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+""")
+        code, out, _err = self.run_setup("--only", "gemini")
+        self.assertEqual(code, 0, out)
+        linked = f"text-to-cad {RELEASE}, linked to {providers.shown(plugin.folder(), self.machine)}"
+        self.assertIn(f'  done all the same: {linked} (gemini exited 1, saying "Extension "text-to-cad" linked '
+                      'successfully and enabled. Extension integrity store cannot be verified")\n', out)
+        self.assertNotIn("failed", out)
+        self.assertNotIn("Some steps failed", out)
+        self.assertIn(f"verify   Gemini CLI: {linked}\n", out)
+        (action,) = [action for action in self.receipt()["actions"] if action["app"] == "gemini"]
+        self.assertEqual((action["ok"], action["code"]), (True, 1))
+        self.assertIn("Extension integrity store cannot be verified", action["warning"])
+        # A command that fails and leaves nothing behind is still a failure.
+        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
+        shutil.rmtree(self.home / ".gemini")
+        code, out, _err = self.run_setup("--only", "gemini")
+        self.assertEqual(code, 1, out)
+        self.assertIn("  failed: exit status 1", out)
 
     def test_the_plugin_folder_is_written_before_an_app_is_pointed_at_it_and_goes_with_an_uninstall(self) -> None:
         command(self.bin, "claude", CLAUDE_EMPTY)
@@ -621,6 +702,52 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(code, 0, out)
         self.assertFalse(self.state.exists())
         self.assertFalse(self.cache.exists())
+
+    def test_an_uninstall_asks_first_and_without_a_yes_changes_nothing(self) -> None:
+        """``cad uninstall`` destroys, so it says its plan and asks: where no one can be asked (no terminal,
+        ``--json``) it changes nothing without ``--yes``, naming the command with it; at a terminal, anything
+        but y or yes changes nothing either."""
+        from cad_server._internal import consent
+
+        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+            self.assertEqual(self.run_setup()[0], 0)
+        proxy = Path(installations.proxy_path())
+        before = (self.snapshot(), sorted(path.name for path in self.state.iterdir()))
+        code, out, err = self.run_uninstall("--purge", yes=False)
+        self.assertEqual(code, 2, err)
+        self.assertIn("text-to-cad: cad uninstall takes back what earlier runs did", out, "the plan, said first")
+        self.assertIn("cad uninstall: taking text-to-cad out of this computer and removing its state and cache folders "
+                      "needs a yes, and no one can be asked here (no terminal, or --json): nothing was changed; "
+                      "`cad uninstall --purge --yes` says yes\n", err)
+        code, out, err = self.run_uninstall("--json", yes=False)
+        self.assertEqual((code, json.loads(out)), (2, {
+            "ok": False, "reason": "confirmation_required", "userActionRequired": True,
+            "next": ["cad uninstall --json --yes"],
+            "error": "taking text-to-cad out of this computer needs a yes, and no one can be asked here (no terminal, "
+                     "or --json): nothing was changed; `cad uninstall --json --yes` says yes"}))
+        # At a terminal, a no -- or anything but y or yes -- is a no.
+        for answer in ("n\n", "\n", "sure\n", ""):
+            with self.subTest(answer=answer):
+                out, err, terminal = io.StringIO(), io.StringIO(), Terminal(answer)
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                        mock.patch.object(sys, "stdin", terminal), mock.patch.object(consent, "interactive",
+                                                                                      return_value=True):
+                    code = uninstall.main(["--purge"])
+                self.assertEqual(code, 1)
+                self.assertTrue(err.getvalue().endswith("This cannot be undone: --purge removes text-to-cad's state "
+                                                        "folder (your settings, the documents' records, Recents) and "
+                                                        "its cache folder.\nTake text-to-cad out as planned? (y/N) "
+                                                        "cad uninstall: nothing was changed\n"), err.getvalue())
+        self.assertEqual((self.snapshot(), sorted(path.name for path in self.state.iterdir())), before)
+        self.assertTrue(proxy.is_file())
+        # A yes, typed: it goes on.
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+                mock.patch.object(sys, "stdin", Terminal("y\n")), mock.patch.object(consent, "interactive",
+                                                                                   return_value=True):
+            code = uninstall.main([])
+        self.assertEqual(code, 0, out.getvalue() + err.getvalue())
+        self.assertFalse(proxy.exists())
 
     def test_purge_leaves_a_folder_of_the_same_name_that_another_program_keeps(self) -> None:
         for folder in (self.state, self.cache):
@@ -796,11 +923,13 @@ class TheOneLineInstaller(unittest.TestCase):
         self.assertIn(f'exec "$uvx" {launch} $refresh --from "$requirement" cad "$verb" "$@"\n', text)
         self.assertIn('requirement="cad-server==$version"', text)
         self.assertIn('refresh="--refresh-package cad-server --refresh-package cad"', text)
-        # One way in, the same at a terminal or not: cad asks nothing, so it reads none.
+        # One way in, the same at a terminal or not: cad asks nothing here, so it reads none -- an uninstall,
+        # the person's own --uninstall, told yes by the release that would ask.
         self.assertEqual(text.count('cad "$verb" "$@"'), 1)
         self.assertNotIn("cad install", text)
         self.assertNotIn("/dev/tty", text)
-        self.assertNotIn("--yes", text)
+        self.assertEqual([line.strip() for line in text.splitlines() if "--yes" in line and not line.strip().startswith("#")],
+                         ["set -- \"$@\" --yes"])
         sh = shutil.which("sh")
         if sh and os.name != "nt":
             self.assertEqual(subprocess.run([sh, "-n", str(INSTALL_SH)], capture_output=True).returncode, 0)
@@ -823,7 +952,12 @@ class TheOneLineInstaller(unittest.TestCase):
         self.assertIn("if ($argument -eq '--uninstall') { $verb = 'uninstall'; continue }", text)
         self.assertNotIn("cad install", text)
         self.assertIn("$refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')", text)
-        self.assertNotIn("--yes", text)
+        # Asking nothing: setup asks nothing, and an uninstall -- the person's own --uninstall -- is told yes,
+        # by a release that asks (from $ConsentSince on) and takes it.
+        self.assertEqual([line.strip() for line in text.splitlines() if "--yes" in line and not line.strip().startswith("#")],
+                         ["if ($verb -eq 'uninstall' -and ($from -or -not (Test-Older $version $ConsentSince))) "
+                          "{ $rest += '--yes' }"])
+        self.assertEqual(re.findall(r"^\s*\$ConsentSince = '([^']*)'$", text, re.M), ["0.11.0"])
         pwsh = shutil.which("pwsh")
         if pwsh:
             # Parsed, never run: the path is inside the command (after -Command, an argument is more command).
@@ -865,10 +999,16 @@ class TheOneLineInstaller(unittest.TestCase):
             self.assertEqual(given, [*head, "cad-server==1.2.3", "cad", "setup"])
             done, given = run("--version", "0.0.1")  # older than the script's own, taken as asked
             self.assertEqual(given, [*head, "cad-server==0.0.1", "cad", "setup"])
-            # --uninstall picks the verb, wherever it is given; the rest goes to `cad uninstall`.
+            # --uninstall picks the verb, wherever it is given; the rest goes to `cad uninstall`, told yes: the
+            # person asked for it, and the installer asks nothing. A release from before uninstall asked takes no
+            # --yes; a build named outright is taken as this one.
             done, given = run("--purge", "--uninstall", "--dry-run")
-            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "uninstall", "--purge", "--dry-run"])
-            self.assertIn("cad uninstall --purge --dry-run\n", done.stderr)
+            self.assertEqual(given, [*head, "cad-server==9.9.9", "cad", "uninstall", "--purge", "--dry-run", "--yes"])
+            self.assertIn("cad uninstall --purge --dry-run --yes\n", done.stderr)
+            done, given = run("--uninstall", "--version", "0.10.4")
+            self.assertEqual(given, [*head, "cad-server==0.10.4", "cad", "uninstall"])
+            done, given = run("--uninstall", "--from", "/builds/cad_server-0.1.0-py3-none-any.whl")
+            self.assertEqual(given[-3:], ["cad", "uninstall", "--yes"])
             done, given = run("--version=1.2.4")
             self.assertEqual(given[len(head)], "cad-server==1.2.4")
             done, given = run(feed="")  # the version feed cannot be read: the release the script was published with

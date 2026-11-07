@@ -36,10 +36,13 @@ for (const reconnects of [true, false]) {
     });
     vi.mocked(loadXbfDocument).mockResolvedValueOnce(document('v1')).mockResolvedValueOnce(document('v2'));
     const hook = renderHook(() => useXbfScene({ client, file: 'one' }));
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    // The version read starts before the first scene is set: await the scene itself, never the read alone.
+    await vi.waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.scene).not.toBeNull();
+      expect(hook.result.current).toMatchObject({ revision: 'v1', busy: false, error: null });
+    });
     const previous = hook.result.current.scene;
-    expect(previous).not.toBeNull();
-    expect(hook.result.current).toMatchObject({ revision: 'v1', busy: false, error: null });
 
     // Advance only the retry timer; a rejected version read must retain the
     // previous scene and either recover or surface the host's reconnection error.
