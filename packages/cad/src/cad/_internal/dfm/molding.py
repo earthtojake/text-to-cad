@@ -6,16 +6,21 @@ Measured along one pull (``pull``), on exact geometry (``cad.build123d._dfm_mold
 - ``draft``: every wall face's draft and which way it opens (``+pull``, ``-pull``, ``none``, ``split``);
 - ``undercuts``: the trapped features, each with what releases it (``side_action`` and its directions and
   stroke, ``lifter``, ``collapsible_core``, ``none``) and whether it faces outside or in;
-- ``thickness``: the nominal wall, each face's (or region's) thin and thick readings;
-- ``transitions``: each face's (or region's) steepest change of wall, at the two points it lies between;
-- ``ribs`` and ``bosses``: their thickness, height, fillet and spacing against the wall they stand on;
+- ``thickness``: the nominal wall, each face's (or region's) thin and thick readings, and whether it is a
+  wall's or a rib's or boss's (``feature``: their rules judge those, the wall's range does not);
+- ``transitions``: each step in the wall, its run over its change, read on the stepped side (a free-form
+  face's from the rolling ball);
+- ``ribs`` and ``bosses``: their thickness, height, fillet and spacing against the wall they stand on (a
+  rib with a barb is a snap arm, ``kind``: snap);
 - ``corners``: the internal corners, their radius against the wall;
 - ``projection`` and ``envelope``: the projected area along the pull, the part's spans and depths;
 - ``parting``: whether one flat parting plane takes the outline, its height, what it does not take;
 - ``clamp``: the clamp force the projected area needs (added here: a resin's factor, ``CLAMP_FACTORS``,
   times the area, the cavities and a safety margin -- an estimate, its source named).
 
-With ``candidates`` the pulls are ranked (x, y, z and the part's principal axes) instead.
+With ``candidates`` the pulls are ranked (x, y, z and the part's principal axes) instead (``ranked``); where
+the pull looks wrong (``pull_doubtful``) the measurement ranks them too (``pull_check``) and the hint names the
+one ranked first.
 """
 
 from __future__ import annotations
@@ -29,12 +34,12 @@ from cad._internal.dfm.rules import Rule, RuleSet, Source
 from cad.results import CheckFinding
 
 __all__ = ["CLAMP_FACTORS", "MEASURED_FROM", "OPTIONS", "RULE_SETS", "WALL_RANGES", "clamp", "context", "findings",
-           "summary", "validate"]
+           "pull_doubtful", "ranked", "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"pull": "z", "wall_limit": 45.0, "zero_tol": 0.05, "cavities": None}
 MEASURED_FROM = ("brep", "mesh")
 _ACCESSED = "2026-11-03"
-_VERSION = "2026-11-03"
+_VERSION = "2026-11-06"
 
 HUBS = Source("hubs-im", "Protolabs Network (Hubs)", "Injection molding design guide",
               "https://www.hubs.com/guides/injection-molding/", _ACCESSED)
@@ -84,6 +89,11 @@ _MOLDED = ("+pull", "-pull", "none")
 _RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
 
 
+#: Hubs' and Protolabs' recommended draft, in their words.
+_DRAFT_NOTE = ("Hubs: \"A minimum draft angle of 2\u00b0 is recommended.\" (its 1-2 deg is the extra a textured face "
+               "adds); Protolabs: \"Most situations: 2\u00b0\"")
+
+
 def _draft_rules(source: str, least: float, severity: str, preferred: tuple[float, str] | None = None,
                  note: str = "") -> tuple[Rule, ...]:
     rules = [Rule("molding.draft_min", "draft", "draft_deg", "min", least, "deg", "wall draft", source,
@@ -110,12 +120,14 @@ def _undercut_rules(source: str) -> tuple[Rule, ...]:
 
 
 def _wall_rules() -> tuple[Rule, ...]:
+    # A wall's face (``feature``: wall): a rib's and a boss's are judged by their own rules. Both read the face's
+    # wall (its area median); its thickest point, a junction's, is thick_section's.
     return (
         Rule("molding.wall_min", "thickness", "thickness_mm", "min", {k: v[0] for k, v in WALL_RANGES.items()}, "mm",
-             "wall thickness", "protolabs-im", severity="warning", by="resin",
+             "wall thickness", "protolabs-im", severity="warning", by="resin", item_when={"feature": "wall"},
              fix="thicken this wall to at least {limit:.3g} mm for the resin, or choose an easier-flowing one"),
-        Rule("molding.wall_max", "thickness", "max_mm", "max", {k: v[1] for k, v in WALL_RANGES.items()}, "mm",
-             "wall thickness", "protolabs-im", severity="warning", by="resin",
+        Rule("molding.wall_max", "thickness", "thickness_mm", "max", {k: v[1] for k, v in WALL_RANGES.items()}, "mm",
+             "wall thickness", "protolabs-im", severity="warning", by="resin", item_when={"feature": "wall"},
              fix="core this section out to {limit:.3g} mm or less, keeping the wall uniform"),
     )
 
@@ -131,14 +143,22 @@ def _uniform_rules() -> tuple[Rule, ...]:
     )
 
 
+_RIB = {"kind": "rib"}  # a rib's height and spacing: a snap arm (``kind``: snap) is judged by the snap rule
+#: Hubs states both, the wall's and the rib's: the generic and hubs sets take the first.
+_RIB_HEIGHT_NOTE = ("Hubs: \"max. height equal to 3x the wall thickness\" and \"Define a height smaller than 3 \u00d7 "
+                    "rib thickness\"")
+
+
 def _rib_rules(thickness: tuple[float, str], height: tuple[str, float, str], fillet: tuple[str, float, str] | None,
-               gap: tuple[str, float, str] | None, draft: tuple[float, str] | None) -> tuple[Rule, ...]:
+               gap: tuple[str, float, str] | None, draft: tuple[float, str] | tuple[float, str, str] | None
+               ) -> tuple[Rule, ...]:
     rules = [Rule("molding.rib_thickness", "ribs", "thickness_ratio", "max", thickness[0], "ratio",
                   "rib thickness over the wall it stands on", thickness[1], severity="warning",
                   fix="thin the rib to {limit:g} of the wall or less: a thick rib sinks the face behind it")]
     field, limit, cited = height
     what = "rib height over the wall" if field == "height_ratio" else "rib height over its thickness"
     rules.append(Rule("molding.rib_height", "ribs", field, "max", limit, "ratio", what, cited, severity="warning",
+                      item_when=_RIB, note=_RIB_HEIGHT_NOTE if cited == "hubs-im" else "",
                       fix="lower the rib, or use two ribs: a tall thin rib fills poorly and sticks"))
     if fillet:
         field, limit, cited = fillet
@@ -151,11 +171,27 @@ def _rib_rules(thickness: tuple[float, str], height: tuple[str, float, str], fil
         what = "gap to the next rib or wall over the rib's thickness" if field == "gap_to_thickness" else \
             "gap to the next rib or wall over the wall"
         rules.append(Rule("molding.rib_gap", "ribs", field, "min", limit, "ratio", what, cited, severity="warning",
+                          item_when=_RIB,
                           fix="space the ribs wider: a narrow steel blade between them cools and wears badly"))
     if draft:
         rules.append(Rule("molding.rib_draft", "ribs", "draft_deg", "min", draft[0], "deg", "rib draft", draft[1],
-                          severity="warning", fix="draft the rib's sides {limit:g} deg or more"))
+                          severity="warning", note=draft[2] if len(draft) > 2 else "",
+                          fix="draft the rib's sides {limit:g} deg or more"))
     return tuple(rules)
+
+
+#: Hubs' snap-fit and vertical-feature sentences: a snap arm's thickness, a boss's root (no source gives a radius).
+_SNAP = Rule("molding.snap_thickness", "ribs", "thickness_ratio", "min", 0.5, "ratio",
+             "snap arm thickness over the wall it stands on", "hubs-im", severity="warning",
+             item_when={"kind": "snap"},
+             note="Hubs: \"Design snap-fits with thickness greater than 0.5x the wall thickness\"; the barb is an "
+                  "undercut too (\"snap-fit joints are another example of undercuts\")",
+             fix="thicken the snap arm to more than {limit:g} of the wall it stands on")
+_BOSS_ROOT = Rule("molding.boss_root_fillet", "bosses", "base_fillet_mm", "min", 0.01, "mm",
+                  "boss root fillet radius (any rounding)", "hubs-im", severity="warning",
+                  note="Hubs: \"the base of vertical features (like ribs, bosses, snap-fits) must also always be "
+                       "rounded\"; no source gives a radius, so the limit (0.01 mm) stands for rounded at all",
+                  fix="fillet the boss's root where it meets the wall: a sharp root concentrates stress")
 
 
 _CORNER = Rule("molding.inside_corner_radius", "corners", "ratio_to_wall", "min", 0.5, "ratio",
@@ -168,17 +204,15 @@ _TRANSITION = Rule("molding.wall_transition", "transitions", "transition_ratio",
 
 _GENERIC = RuleSet(
     "generic", "molding", "text-to-cad generic", _VERSION,
-    (*_draft_rules("protolabs-im", 0.5, "error", (1.0, "hubs-im"),
-                   note="1 deg, the low end of the 1-2 deg Hubs recommends for most walls (its 2 deg rule of thumb "
-                        "is the hubs set's)"), *_undercut_rules("hubs-im"), *_wall_rules(),
-     *_uniform_rules(), _TRANSITION,
+    (*_draft_rules("protolabs-im", 0.5, "error", (2.0, "hubs-im"), note=_DRAFT_NOTE), *_undercut_rules("hubs-im"),
+     *_wall_rules(), *_uniform_rules(), _TRANSITION,
      *_rib_rules((0.6, "xometry-ribs"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
                  ("gap_to_wall", 2.5, "xometry-ribs"), (0.5, "xometry-ribs")),
-     _CORNER),
+     _SNAP, _BOSS_ROOT, _CORNER),
     (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS), generic=True,
     note="a starting point drawn from published guides, no shop's limits: Protolabs' 0.5 deg draft minimum and its "
-         "wall table, 1 deg recommended (the low end of Hubs' 1-2 deg), Hubs' corner, transition and undercut guidance, Xometry's and Protolabs' rib and boss "
-         "proportions")
+         "wall table, 2 deg recommended (Hubs and Protolabs both), Hubs' corner, transition, undercut, snap-fit and "
+         "root guidance, Xometry's and Protolabs' rib and boss proportions")
 
 _PROTOLABS = RuleSet(
     "protolabs", "molding", "Protolabs", _VERSION,
@@ -201,7 +235,10 @@ _PROTOLABS = RuleSet(
           "protolabs-im", fix="the mold takes parts {limit:.4g} mm deep at most"),
      Rule("molding.depth_from_parting", "envelope", "depth_from_parting_mm", "max", 4.0 * _IN, "mm",
           "depth from the parting line", "protolabs-im",
-          fix="move the parting line toward the middle: each half reaches {limit:.4g} mm from it at most")),
+          fix="move the parting line toward the middle: each half reaches {limit:.4g} mm from it at most"),
+     Rule("molding.part_volume", "envelope", "volume_mm3", "max", 59.0 * _IN ** 3, "mm3", "part volume",
+          "protolabs-im", note="Protolabs: \"Volume: 59 cu. in.\"",
+          fix="the press shoots parts of {limit:.6g} mm3 at most: core the part out or split it")),
     (PROTOLABS, PROTOLABS_WALLS),
     note="Protolabs' published limits: its draft, side-action, size and projected-area limits are its feasibility "
          "limits (errors); its wall table and uniform-wall guidance are recommendations (warnings)")
@@ -209,11 +246,12 @@ _PROTOLABS = RuleSet(
 _HUBS = RuleSet(
     "hubs", "molding", "Protolabs Network (Hubs)", _VERSION,
     (Rule("molding.draft", "draft", "draft_deg", "min", 2.0, "deg", "wall draft", "hubs-im", severity="warning",
-          item_when={"opens": _MOLDED}, fix="draft this wall {limit:g} deg (Hubs' recommended minimum)"),
+          item_when={"opens": _MOLDED}, note=_DRAFT_NOTE, fix="draft this wall {limit:g} deg (Hubs' recommended minimum)"),
      *_undercut_rules("hubs-im"), _TRANSITION,
      *_rib_rules((0.5, "hubs-im"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
-                 ("gap_to_thickness", 4.0, "hubs-im"), None),
-     _CORNER),
+                 ("gap_to_thickness", 4.0, "hubs-im"),
+                 (0.25, "hubs-im", "Hubs: ribs drafted \"at least 0.25\u00b0 - 0.5\u00b0\": the low end")),
+     _SNAP, _BOSS_ROOT, _CORNER),
     (HUBS,),
     note="Hubs' design guide: its numbers are recommendations (warnings) but for an undercut nothing releases")
 
@@ -252,6 +290,10 @@ def pull(spec: str) -> None:
 def validate(resolved: dict[str, Any], document_type: str) -> None:
     if resolved.get("pull") is not None:
         pull(resolved["pull"])
+    material = materials.resolve(resolved.get("material"))
+    if materials.material_class(material) == "metal":
+        resins = ", ".join(sorted(WALL_RANGES))
+        raise ArgumentRefused(f"--material for molding is a resin: {material} is a metal (a resin: {resins})")
     if not 0.0 < float(resolved["wall_limit"]) <= 90.0:
         raise ArgumentRefused(f"--wall-limit is an angle in degrees above 0 and at most 90, not {resolved['wall_limit']}")
     if not 0.0 <= float(resolved["zero_tol"]) < 90.0:
@@ -307,6 +349,52 @@ def _location(face: dict[str, Any]) -> str | None:
     return face.get("location") or where(face.get("centroid_xyz"))
 
 
+#: The pull is doubtful where this share of the wall reads zero draft along it (most of it: a box modelled
+#: on its side) ...
+DOUBTFUL_ZERO_SHARE = 0.5
+#: ... or this percentage of the surface is trapped along it: an engineering trigger, no source's (a drafted
+#: cup modelled along x reads 42% trapped along z, and a part pulled along its own axis rarely a quarter).
+DOUBTFUL_UNDERCUT_PCT = 25.0
+
+
+def pull_doubtful(draft: dict[str, Any], undercuts: dict[str, Any]) -> tuple[bool, bool]:
+    """Whether the pull looks like the wrong one: (most of the wall reads zero draft, a quarter of the surface
+    is trapped) -- where either holds on one part, the measurement ranks the pulls (``pull_check``) for the
+    hint (an assembly's parts, or a part's several solids, each open their own way: its hint names no pull)."""
+    zero = (draft.get("zero_draft_wall_area_mm2") or 0) > 0 and \
+        draft["zero_draft_wall_area_mm2"] >= DOUBTFUL_ZERO_SHARE * float(draft.get("wall_area_mm2") or 0.0)
+    trapped = float(undercuts.get("candidate_area_pct_of_surface") or 0.0) >= DOUBTFUL_UNDERCUT_PCT
+    return zero, trapped
+
+
+def ranked(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The candidate pulls, best first: the fewest features nothing releases, then the least undercut area, the
+    fewest side actions, the least zero-draft wall, the most draft at its least, a flat parting before a stepped
+    one. Areas are sampled, so two within a hundredth of the largest wall area (1 mm2 at least) tie."""
+    rows = [row for row in rows if "error" not in row]
+    tie = max([1.0] + [0.01 * float(row.get("wall_area_mm2") or 0.0) for row in rows])
+
+    def key(row: dict[str, Any]) -> tuple:
+        return (row.get("unreleasable_count") or 0, round(float(row.get("undercut_candidate_area_mm2") or 0.0) / tie),
+                row.get("side_action_count") or 0, round(float(row.get("zero_draft_wall_area_mm2") or 0.0) / tie),
+                -float(row.get("min_wall_draft_deg") or 0.0), row.get("flat_parting") is False)
+
+    return sorted(rows, key=key)
+
+
+def _pull_hint(report: dict[str, Any], why: str) -> str:
+    """The hint where the pull looks wrong: what --candidates ranks first (``pull_check``, measured only then)."""
+    rows = ranked(((report.get("pull_check") or {}).get("candidates")) or [])
+    if not rows:
+        return f"{why}: the pull may be the wrong one -- --candidates ranks the pulls; "
+    first = rows[0]
+    axis = [float(value) for value in first.get("axis") or (0.0, 0.0, 0.0)]
+    along = [float(value) for value in (report.get("draft") or {}).get("pull_axis") or (0.0, 0.0, 0.0)]
+    if abs(sum(a * b for a, b in zip(axis, along))) > 0.9999:
+        return f"{why}, yet --candidates ranks this pull ({first['pull']}) first: "
+    return f"{why}: the pull may be the wrong one -- --candidates ranks {first['pull']} first; "
+
+
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
     mesh = report.get("mesh") or {}
@@ -317,28 +405,36 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         found.append(CheckFinding("warning", "several_bodies",
                                   f"{len(bodies)} parts: an assembly, not one molded part; each is measured on its "
                                   f"own, none shadows another", "bodies"))
+    for body in bodies:
+        if isinstance(body, dict) and (body.get("solid_count") or 0) > 1:
+            found.append(CheckFinding(
+                "warning", "several_bodies",
+                f"{body['solid_count']} solids in one part shadow each other: its undercuts, walls and bosses are "
+                f"read across them", body.get("owner") or body.get("name") or "bodies",
+                "check the molded solid alone (a component model's housing without its contacts)"))
     if candidates:
         return found
     estimate = clamp(report, resolved)
     if estimate is not None:
         report["clamp"] = estimate
     draft = report.get("draft") or {}
+    undercuts = report.get("undercuts") or {}
+    zero_doubt, trapped_doubt = pull_doubtful(draft, undercuts) if "error" not in draft and "error" not in undercuts \
+        else (False, False)
     if (draft.get("zero_draft_wall_area_mm2") or 0) > 0:
         faces = draft.get("largest_zero_draft_faces") or [{}]
-        most = draft["zero_draft_wall_area_mm2"] >= 0.5 * float(draft.get("wall_area_mm2") or 0.0)
         found.append(CheckFinding(
             "warning", "zero_draft_walls",
             f"{draft['zero_draft_wall_area_mm2']:g} mm2 of wall has no draft along the pull (under "
             f"{draft['zero_tol_deg']:g} deg), {draft['zero_draft_face_count']} faces; the largest is "
             f"{faces[0].get('area_mm2', 0):g} mm2", _location(faces[0]),
-            ("most of the wall area reads zero draft along this pull: the pull may be the wrong one -- "
-             "--candidates ranks the pulls; " if most else "")
+            (_pull_hint(report, "most of the wall area reads zero draft along this pull") if zero_doubt else "")
             + "draft each of these walls along the pull the part is confirmed to open along"))
     reading = draft.get("min_wall_draft") or {}
     if reading.get("reading_note"):
-        found.append(CheckFinding("warning", "coarse_curved_face", reading["reading_note"],
+        # Info: a curved face's reading off its chords, said with its spread; the draft rules judge the figure.
+        found.append(CheckFinding("info", "coarse_curved_face", reading["reading_note"],
                                   where(reading.get("location_xyz"))))
-    undercuts = report.get("undercuts") or {}
     if (undercuts.get("candidate_area_mm2") or 0) > 0:
         faces = undercuts.get("largest_candidate_faces") or [{}]
         counts = ", ".join(f"{undercuts[key]} {words}" for key, words in
@@ -353,7 +449,10 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"surface) does not withdraw along a straight two-half pull, {undercuts['candidate_face_count']} "
             f"faces; the largest is {faces[0].get('area_mm2', 0):g} mm2"
             + (f"; {undercuts['undercut_count']} feature(s): {counts}" if undercuts.get("undercut_count") else ""),
-            _location(faces[0])))
+            _location(faces[0]),
+            (_pull_hint(report, f"{undercuts['candidate_area_pct_of_surface']:g}% of the surface is trapped along "
+                                f"this pull (a quarter or more: an engineering trigger, no source's)")
+             + "confirm the pull before budgeting side actions") if trapped_doubt else None))
     if undercuts.get("probe_resolution_note"):
         found.append(CheckFinding("info", "probe_resolution", undercuts["probe_resolution_note"], "undercuts"))
     parting = report.get("parting") or {}
@@ -390,10 +489,8 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
 
 def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> str:
     if candidates:
-        rows = sorted((row for row in report["pulls"]["candidates"] if "error" not in row),
-                      key=lambda row: (row.get("unreleasable_count") or 0, row["undercut_candidate_area_mm2"],
-                                       row.get("side_action_count") or 0, row["zero_draft_wall_area_mm2"]))
-        return "pulls by undercut then zero-draft area: " + "; ".join(
+        rows = ranked(report["pulls"]["candidates"])
+        return "pulls best first (undercuts, side actions, zero-draft area, then draft and parting): " + "; ".join(
             f"{row['pull']} {mm(row['undercut_candidate_area_mm2'])} mm2 undercut"
             + (f" ({row.get('undercut_count')} feature(s), {row.get('side_action_count')} side action(s))"
                if row.get("undercut_count") else "")

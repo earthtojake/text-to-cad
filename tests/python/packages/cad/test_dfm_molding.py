@@ -38,6 +38,12 @@ def _face(result: Any, shape: Any, location: str) -> Any:
     return part.faces()[int(ordinal) - 1]
 
 
+def _ramp(run: float) -> Any:
+    """A 20 mm wide plate 2 mm thick stepping to 3 over ``run`` (0: a sharp step)."""
+    profile = bd.Polygon((-30, 0), (30, 0), (30, 3), (run / 2, 3), (-run / 2, 2), (-30, 2), align=None)
+    return bd.extrude(bd.Plane.XZ * profile, amount=-20)
+
+
 def _tray(draft: float = 3.0, wall: float = 2.0) -> Any:
     outer = bd.extrude(bd.Rectangle(60, 40), 20, taper=-draft)
     inset = wall / math.cos(math.radians(draft)) - wall * math.tan(math.radians(draft))
@@ -191,6 +197,26 @@ class ThicknessTest(unittest.TestCase):
         steps = _check(ramp).measurements["transitions"]["items"]
         self.assertGreater(min([step["transition_ratio"] for step in steps] or [99]), 3.0)
 
+    def test_a_step_reads_its_run_over_its_rise(self) -> None:
+        # 2 to 3 mm: a sharp step reads 0, a 2 mm ramp 2 (under Hubs' 3: it fails), a 4 mm ramp 4 (it passes).
+        for run, ratio, fails in ((0.0, 0.0, True), (2.0, 2.0, True), (4.0, 4.0, False)):
+            with self.subTest(run=run):
+                result = _check(_ramp(run))
+                (step,) = result.measurements["transitions"]["items"]
+                self.assertAlmostEqual(step["transition_ratio"], ratio, places=3)
+                self.assertEqual((step["min_mm"], step["max_mm"], step["basis"]), (2.0, 3.0, "step"))
+                self.assertEqual("molding.wall_transition" in {f.code for f in result.findings}, fails)
+
+    def test_the_skill_s_drafted_tray_reads_its_walls(self) -> None:
+        # extrude(taper=) walls lie a hair off the tangent plane of the floor's ball: their edges' roots once
+        # cancelled and read the wall 4 mm.
+        body = bd.extrude(bd.Rectangle(60, 40), 20, taper=1)
+        tray = body - bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=1)
+        result = _check(tray)
+        self.assertLess(result.measurements["thickness"]["max_mm"], 3.2)
+        self.assertFalse({"molding.wall_max", "molding.thick_section", "molding.wall_transition"}
+                         & {f.code for f in result.findings})
+
     def test_the_ball_against_its_closed_form(self) -> None:
         # One flat face of a 4 mm slab, from above: the ball is half the slab.
         vertices = np.array([[-50, -50, 0], [50, -50, 0], [50, 50, 0], [-50, 50, 0.0]])
@@ -203,6 +229,11 @@ class ThicknessTest(unittest.TestCase):
         corner = np.array([[1.0, -50, 0], [1.0, 50, 0], [1.0, 50, -5]])
         values, _ = ops.ball_thickness(np.array([[0, 0, 4.0]]), np.array([[0, 0, 1.0]]), np.array([np.inf]),
                                        corner, np.array([[0, 1, 2]]))
+        self.assertAlmostEqual(values[0], 2 * (1 + 16) / 8, places=9)
+        # The same edge tilted a hair off the tangent plane (a drafted wall's): its root, solved stably, holds.
+        tilted = corner + np.array([[0, 0, 0], [0, 0, 1e-12], [0, 0, 0]])
+        values, _ = ops.ball_thickness(np.array([[0, 0, 4.0]]), np.array([[0, 0, 1.0]]), np.array([np.inf]),
+                                       tilted, np.array([[0, 1, 2]]))
         self.assertAlmostEqual(values[0], 2 * (1 + 16) / 8, places=9)
 
 
@@ -247,6 +278,36 @@ class FeaturesTest(unittest.TestCase):
         sides = [edge for edge in roots if abs(edge.center().Y) < 14]
         (rib,) = _check(part.fillet(0.3, sides)).measurements["ribs"]["items"]
         self.assertEqual(rib["base_fillet_mm"], 0.0)
+
+    def test_a_snap_arm_is_judged_as_one(self) -> None:
+        # A 1.2 x 6 x 10 cantilever with a 1 mm barb: a snap (Hubs' 0.5 x wall), not a rib too tall.
+        plate = bd.Box(60, 40, 2, align=BOTTOM)
+        arm = plate + bd.Pos(0, 0, 2) * bd.Box(1.2, 6, 10, align=BOTTOM) + \
+            bd.Pos(0.6, 0, 10) * bd.Box(1.0, 6, 1.5, align=(A.MIN, A.CENTER, A.MIN))
+        result = _check(arm)
+        (snap,) = result.measurements["ribs"]["items"]
+        self.assertEqual(snap["kind"], "snap")
+        self.assertTrue(snap["barb"])
+        codes = {f.code for f in result.findings}
+        self.assertIn("molding.undercut", codes)
+        self.assertFalse({"molding.rib_height", "molding.rib_gap", "molding.snap_thickness"} & codes)
+        outcomes = {o["rule"]: o for o in result.measurements["rules"]["outcomes"]}
+        self.assertEqual(outcomes["molding.snap_thickness"]["status"], "passed")
+        self.assertEqual(outcomes["molding.rib_height"].get("evaluated"), 0)
+
+    def test_a_boss_root_is_judged_and_rib_faces_leave_the_wall_range(self) -> None:
+        plate = bd.Box(60, 40, 2, align=BOTTOM)
+        part = (plate + bd.Pos(0, 0, 2) * (bd.Cylinder(3, 8, align=BOTTOM) - bd.Cylinder(1.5, 8, align=BOTTOM))).solids()[0]
+        root = [e for e in part.edges() if abs(e.center().Z - 2) < 1e-6 and e.geom_type == bd.GeomType.CIRCLE
+                and abs(e.radius - 3) < 1e-6]
+        for shape, fails in ((part, True), (part.fillet(0.5, root), False)):
+            with self.subTest(filleted=not fails):
+                self.assertEqual("molding.boss_root_fillet" in {f.code for f in _check(shape).findings}, fails)
+        # 1 mm ribs on ABS (whose wall table starts at 1.14): the rib rules judge them, the wall's range not.
+        ribbed = bd.extrude(bd.Rectangle(80, 60), 2, taper=3) + bd.Pos(0, 0, 4.5) * bd.Box(1.0, 50, 5)
+        result = _check(ribbed)
+        self.assertIn("rib", {item["feature"] for item in result.measurements["thickness"]["items"]})
+        self.assertNotIn("molding.wall_min", {f.code for f in result.findings})
 
     def test_a_drafted_boss_is_a_boss(self) -> None:
         plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
@@ -319,6 +380,26 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertEqual((rows["x"]["undercut_count"], rows["x"]["undercut_candidate_area_mm2"]), (0, 0.0))
         self.assertEqual((rows["z"]["undercut_count"], rows["z"]["side_action_count"]), (1, 1))
 
+    def test_pulls_tie_on_area_and_part_on_draft(self) -> None:
+        rows = [{"pull": "x", "axis": [1, 0, 0], "undercut_candidate_area_mm2": 0.0, "zero_draft_wall_area_mm2": 0.4,
+                 "wall_area_mm2": 5000.0, "min_wall_draft_deg": 1.66},
+                {"pull": "z", "axis": [0, 0, 1], "undercut_candidate_area_mm2": 0.0, "zero_draft_wall_area_mm2": 11.4,
+                 "wall_area_mm2": 5000.0, "min_wall_draft_deg": 7.46},
+                {"pull": "y", "axis": [0, 1, 0], "undercut_candidate_area_mm2": 900.0, "zero_draft_wall_area_mm2": 0.0,
+                 "wall_area_mm2": 5000.0, "min_wall_draft_deg": 9.0}]
+        self.assertEqual([row["pull"] for row in type_side.ranked(rows)], ["z", "x", "y"])
+
+    def test_a_cup_modelled_along_x_says_which_pull_ranks_first(self) -> None:
+        cup = bd.Rot(0, 90, 0) * (bd.Cone(20, 18, 20, align=BOTTOM) - bd.Pos(0, 0, 3) * bd.Cone(18, 16, 17, align=BOTTOM))
+        (trapped,) = [f for f in _check(cup, pull="z").findings if f.code == "undercut_candidates"]
+        self.assertIn("--candidates ranks x first", trapped.hint)
+
+    def test_several_solids_in_one_part_are_said(self) -> None:
+        pair = bd.Box(10, 10, 10) + bd.Pos(30, 0, 0) * bd.Box(10, 10, 10)
+        self.assertEqual(len(pair.solids()), 2)
+        (said,) = [f for f in _check(pair).findings if f.code == "several_bodies"]
+        self.assertIn("2 solids in one part", said.message)
+
     def test_an_assembly_is_measured_part_by_part_at_its_parts_refs(self) -> None:
         plain = bd.Box(20, 20, 10)
         plain.label = "plain"
@@ -362,18 +443,29 @@ class RuleSetsTest(unittest.TestCase):
         self.assertTrue(facts.ok)
         self.assertNotIn("rules", facts.measurements)
 
-    def test_generic_recommends_one_degree_and_a_zero_draft_pull_points_at_candidates(self) -> None:
+    def test_generic_recommends_two_degrees_and_a_zero_draft_pull_points_at_candidates(self) -> None:
         (draft,) = [rule for rule in type_side.RULE_SETS["generic"].rules if rule.id == "molding.draft"]
-        self.assertEqual(draft.limit, 1.0)
-        self.assertIn("1-2 deg", draft.note)
-        flared = bd.extrude(bd.Rectangle(40, 30), 20, taper=-1)
-        self.assertNotIn("molding.draft", {f.code for f in _check(flared).findings})
+        self.assertEqual(draft.limit, 2.0)
+        self.assertIn("Most situations: 2", draft.note)
+        for taper, warned in ((-1, True), (-2, False)):
+            flared = bd.extrude(bd.Rectangle(40, 30), 20, taper=taper)
+            self.assertEqual("molding.draft" in {f.code for f in _check(flared).findings}, warned)
         box = bd.Box(40, 30, 20)
         (zero,) = [f for f in _check(box).findings if f.code == "zero_draft_walls"]
         self.assertIn("--candidates", zero.hint)
         drafted_box = _check(bd.extrude(bd.Rectangle(40, 30), 20, taper=2) - bd.Pos(0, 0, 4) * bd.Box(4, 4, 8))
         (zero,) = [f for f in drafted_box.findings if f.code == "zero_draft_walls"]
         self.assertNotIn("--candidates", zero.hint)
+
+    def test_the_sources_other_limits_and_a_metal_refused(self) -> None:
+        (rib_draft,) = [rule for rule in type_side.RULE_SETS["hubs"].rules if rule.id == "molding.rib_draft"]
+        self.assertEqual(rib_draft.limit, 0.25)
+        block = _check(bd.extrude(bd.Rectangle(110, 100), 100, taper=3), rules="protolabs")
+        self.assertIn("molding.part_volume", {f.code for f in block.findings if f.severity == "error"})
+        from cad._internal import manufacturing
+        from cad._internal.refused import ArgumentRefused
+        with self.assertRaisesRegex(ArgumentRefused, "is a resin: steel is a metal"):
+            manufacturing.options("step", "molding", {"material": "steel"})
 
     def test_a_thin_wall_for_the_resin(self) -> None:
         thin = bd.extrude(bd.Rectangle(40, 30), 0.8, taper=3)

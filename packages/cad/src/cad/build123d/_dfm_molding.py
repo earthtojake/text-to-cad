@@ -11,11 +11,14 @@ Every part of the document is measured along the pull on its B-rep, each finding
   are one group, split where its trapped points lie apart (two snaps under one lid are two features); what
   releases each is found by more rays (``meshops_molding.classify_undercut``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
-  it), the nominal wall (the area-weighted median), each face's thin and thick readings; **transitions**:
-  each face's steepest change of wall, at the pair of points it lies between;
+  it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
+  or a boss's face, else wall); **transitions**: each step read on its stepped side (two parallel faces at two
+  wall offsets, the chain of faces between them: its run over the change, ``ops.steps``), and on a free-form
+  face no step takes in the rolling ball's steepest change;
 - **ribs**: two opposite planar faces close together, both standing on one base face (a concave edge or
-  a concave fillet between), taller than thick; **bosses**: a convex cylinder (or a cone drafted 5 deg or
-  less) standing on a face square to its axis, with the coaxial hole inside it if it has one;
+  a concave fillet between), taller than thick -- a snap arm (``kind``: snap) where a trapped face, its barb,
+  touches it; **bosses**: a convex cylinder (or a cone drafted 5 deg or less) standing on a face square to
+  its axis, with the coaxial hole inside it if it has one, and its root's fillet (0: sharp);
 - **corners**: every internal corner -- a concave edge with no fillet (radius 0) or a concave fillet
   face (its radius; a free-form blend's from its curvature) -- with its radius over the wall meeting there;
 - **projection**: the part triangulated (each triangle naming its face) and projected on the parting
@@ -24,7 +27,8 @@ Every part of the document is measured along the pull on its B-rep, each finding
   zero-draft walls on the outline, the curved faces turning through the pull there), whether one flat
   plane takes it and at what height, and the depth either side.
 
-With ``candidates`` the pulls are ranked instead: x, y, z and the part's principal axes. A family that
+With ``candidates`` the pulls are ranked instead: x, y, z and the part's principal axes; where the pull looks
+wrong (``molding.pull_doubtful``) the same ranking is kept as ``pull_check``, for the hint. A family that
 raises leaves ``{"error": ...}`` and the report says so (``partial``).
 """
 
@@ -37,6 +41,7 @@ from typing import Any
 import numpy as np
 
 from cad._internal import meshops_molding as ops
+from cad._internal.dfm.molding import pull_doubtful
 from cad.build123d import _dfm_brep
 
 __all__ = ["measure"]
@@ -911,7 +916,6 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
 
 def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
-    steps: list[dict[str, Any]] = []
     sections: list[dict[str, Any]] = []
     medians: list[float] = []
     lows: list[float] = []
@@ -922,14 +926,11 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
         nominals.append({"part": geo.part.owner or geo.part.name, "nominal_mm": _r(nominal, 3)})
         if nominal is None or nominal <= 0:
             continue
-        found = ops.transitions(geo.points, measured.values, geo.owner, ~measured.edge_held, geo.spacing, nominal)
         for ordinal, face in measured.per_face.items():
             item = {"location": geo.ref(ordinal), "thickness_mm": _r(face["median"], 3),
                     "min_mm": _r(face["low"], 3), "max_mm": _r(face["max"], 3),
                     "nominal_mm": _r(nominal, 3), "ratio_to_nominal": _r(face["max"] / nominal, 3),
-                    "thin_ratio": _r((face["median"] or 0) / nominal, 3), "xyz": _xyz(face["at"])}
-            if ordinal in found:
-                steps.append(_transition(geo.ref(ordinal), found[ordinal]))
+                    "thin_ratio": _r((face["median"] or 0) / nominal, 3), "feature": "wall", "xyz": _xyz(face["at"])}
             items.append(item)
             medians.append(face["median"])
             lows.append(face["low"])
@@ -963,30 +964,102 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
                    "the surface there that stays inside the part, never more than the exact ray straight through; "
                    "a face's thickness_mm is the area median of its points, min_mm the 10th percentile, max_mm "
                    "the most; the nominal wall is the area median over the part, leaving out the points held by "
-                   "a face round a convex edge (they read low)"),
+                   "a face round a convex edge (they read low); feature: a rib's or a boss's face (their rules "
+                   "judge them, the wall's range does not), else wall"),
     }
     if len(nominals) > 1:
         result["per_part"] = nominals
-    steps.sort(key=lambda step: step["transition_ratio"])
-    result["_transitions"] = {"count": len(steps), "items": steps[:_ITEMS], "method": _TRANSITION_METHOD}
     return result
 
 
-_TRANSITION_METHOD = ("per face, the steepest change of the rolling-ball wall between two of its points within four "
-                      "sample spacings whose walls differ by half the nominal or more: transition_ratio is their "
-                      "distance over the change; the item stands between them (xyz), min_mm and max_mm the two "
-                      "walls, at_xyz each one's point")
+_TRANSITION_METHOD = ("each step read on its stepped side: two parallel faces facing the same way whose walls differ "
+                     "by a quarter of the nominal or more and by about their offset (one face behind both), joined by a chain "
+                     "of faces (a pad's side, a chamfer, a fillet); transition_ratio is the chain's run across "
+                     "(square to the faces) over the change in wall, so a vertical step reads 0 and a chamfer its run "
+                     "over its rise; the item names the chain's first face, min_mm and max_mm the two walls, at_xyz a "
+                     "point on each seam. A free-form face, which no such faces bound, is read by the rolling ball: "
+                     "the steepest change between two of its points within four sample spacings whose walls differ by "
+                     "half the nominal (basis: ball)")
 
 
 def _transition(location: str | None, change: dict[str, Any]) -> dict[str, Any]:
-    """One face's steepest change of wall (``ops.transitions``) as an item: where it is and what it steps."""
+    """One step (``ops.steps``) or one face's steepest change of wall (``ops.transitions``) as an item: where it
+    is and what it steps."""
     (a, b), (ta, tb) = change["points"], change["thickness"]
     if ta > tb:
         (a, b), (ta, tb) = (b, a), (tb, ta)
+    length = change.get("length")
     item = {"transition_ratio": _r(change["ratio"], 3), "min_mm": _r(ta, 3), "max_mm": _r(tb, 3),
-            "change_mm": _r(tb - ta, 3), "length_mm": _r(float(np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "change_mm": _r(tb - ta, 3),
+            "length_mm": _r(float(length if length is not None else np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "basis": "step" if "chain" in change else "ball",
             "xyz": _xyz((np.asarray(a) + np.asarray(b)) / 2.0), "at_xyz": [_xyz(a), _xyz(b)]}
     return ({"location": location} if location else {}) | item
+
+
+def _side_walls(geo: _Geometry, measured: _Thickness, faces: list[int]) -> dict[int, float]:
+    """The wall under each of ``faces``: the area median of its rolling balls clear of a convex edge, or its widest
+    where none is (a rib's top: the rib's thickness)."""
+    finite = np.isfinite(measured.values)
+    walls: dict[int, float] = {}
+    for ordinal in faces:
+        mine = (geo.owner == ordinal) & finite
+        if not mine.any():
+            continue
+        clean = mine & ~measured.edge_held
+        value = (ops.weighted_median(measured.values[clean], geo.weights[clean]) if clean.any()
+                 else float(measured.values[mine].max()))
+        if value is not None:
+            walls[ordinal] = float(value)
+    return walls
+
+
+def _transitions_part(geo: _Geometry, measured: _Thickness, skip: set[int]) -> list[dict[str, Any]]:
+    """The part's steps (``ops.steps`` over its planar faces) and, on its free-form faces no step takes in, the
+    rolling ball's steepest change (``ops.transitions``)."""
+    nominal = measured.nominal
+    if nominal is None or nominal <= 0:
+        return []
+    links = geo.neighbours()
+    planes = {ordinal: (np.asarray(surface.normal, dtype=float), np.asarray(surface.origin, dtype=float))
+              for ordinal, surface in enumerate(geo.surfaces, start=1)
+              if surface.kind == "plane" and surface.normal is not None and surface.origin is not None}
+    walls = _side_walls(geo, measured, list(planes))
+    shape_edges = geo.part.edges()
+    cache: dict[tuple[int, int], np.ndarray] = {}
+
+    def seams(a: int, b: int) -> np.ndarray:
+        key = (a, b)
+        if key not in cache:
+            segments = []
+            for other, edge in links.get(a, []):
+                if other != b:
+                    continue
+                points = []
+                for t in np.linspace(0.0, 1.0, 9):
+                    at = shape_edges[edge.ordinal - 1].position_at(float(t))
+                    points.append([at.X, at.Y, at.Z])
+                points = np.array(points)
+                segments.extend(zip(points[:-1], points[1:]))
+            cache[key] = np.array(segments).reshape(-1, 2, 3)
+        return cache[key]
+
+    found = ops.steps(planes, lambda face: [other for other, _edge in links.get(face, [])], seams, walls, nominal,
+                      skip=skip)
+    items = [_transition(geo.ref(step["chain"][0]), step) for step in found]
+    taken = set(skip) | {face for step in found for face in step["chain"]}
+    free = np.array([ordinal not in planes and ordinal not in taken for ordinal in geo.owner], dtype=bool)
+    usable = free & ~measured.edge_held
+    if usable.any():
+        for ordinal, change in ops.transitions(geo.points, measured.values, geo.owner, usable, geo.spacing,
+                                               nominal).items():
+            items.append(_transition(geo.ref(ordinal), change))
+    return items
+
+
+def _transitions(per_part: list[list[dict[str, Any]]]) -> dict[str, Any]:
+    items = sorted((item for part in per_part for item in part), key=lambda item: item["transition_ratio"])
+    return {"count": len(items), "items": items[:_ITEMS], "method": _TRANSITION_METHOD}
 
 
 # --- ribs, bosses, corners -------------------------------------------------------------------------------
@@ -1102,8 +1175,14 @@ def _same_plane(geo: _Geometry, a: int, b: int) -> bool:
 
 
 def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nominal: float | None,
-               used: set[int]) -> list[dict[str, Any]]:
+               used: set[int], trapped: set[int] | None = None, kinds: dict[int, str] | None = None
+               ) -> list[dict[str, Any]]:
+    """The part's ribs (see the module). A rib a trapped face touches -- one of its own faces, or a face beside
+    them no larger than its side, not its base -- is a snap arm, its barb that face (``kind``: ``snap``, else
+    ``rib``): judged by the snap rule, not the rib's height and spacing."""
     links = geo.neighbours()
+    trapped = trapped or set()
+    kinds = kinds if kinds is not None else {}
     planes = [ordinal for ordinal, surface in enumerate(geo.surfaces, start=1)
               if surface.kind == "plane" and surface.normal is not None]
     bases = {ordinal: _bases(geo, ordinal, links, np.asarray(geo.surfaces[ordinal - 1].normal)) for ordinal in planes}
@@ -1170,9 +1249,17 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
             gap = min(gaps) if gaps else None
             fillet = min([fillet_a, fillet_b] + [radius for radius, _f in end_roots])
             draft = min(drafts[a - 1].draft, drafts[b - 1].draft)
-            used.update({a, b, fa, fb} - {0})
+            own = ({a, b, fa, fb} | ends | {fillet_face for _radius, fillet_face in end_roots}) - {0}
+            used.update(own)
+            side = min(float(geo.areas[a - 1]), float(geo.areas[b - 1]))
+            beside = {other for face in ({a, b} | ends) for other, _edge in links.get(face, [])} - own - {base}
+            barb = sorted(face for face in (({a, b} | ends | beside) & trapped)
+                          if face in own or float(geo.areas[face - 1]) <= side)
+            kind = "snap" if barb else "rib"
+            kinds.update({face: kind for face in own})
             items.append({
-                "location": geo.ref(a), "faces": [geo.ref(a), geo.ref(b), geo.ref(base)],
+                "location": geo.ref(a), "kind": kind, "faces": [geo.ref(a), geo.ref(b), geo.ref(base)],
+                **({"barb": [geo.ref(face) for face in barb]} if barb else {}),
                 "thickness_mm": _r(root, 3), "tip_thickness_mm": _r(tip, 3), "height_mm": _r(height, 3),
                 "length_mm": _r(length, 3), "wall_mm": _r(wall, 3),
                 "thickness_ratio": _r(root / wall, 3) if wall else None,
@@ -1206,8 +1293,10 @@ def _radius_at(surface: Any, point: np.ndarray) -> float:
     return radius + height * math.tan(math.radians(float(surface.half_angle_deg or 0.0)))
 
 
-def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int]) -> list[dict[str, Any]]:
+def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int],
+                 kinds: dict[int, str] | None = None) -> list[dict[str, Any]]:
     links = geo.neighbours()
+    kinds = kinds if kinds is not None else {}
     items: list[dict[str, Any]] = []
     holes = [(ordinal, surface) for ordinal, surface in enumerate(geo.surfaces, start=1)
              if _round(surface) and surface.concave and surface.axis is not None]
@@ -1243,6 +1332,7 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
                 inner = (hole, _radius_at(hs, obase), float(span.min()))
         taken.add(ordinal)
         used.update({ordinal, fillet_face} - {0})
+        kinds.update({face: "boss" for face in {ordinal, fillet_face, inner[0] if inner else 0} - {0}})
         wall_ref = _face_wall(thick, base) or nominal
         wall = radius - inner[1] if inner else 2.0 * radius
         items.append({
@@ -1492,23 +1582,39 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
     else:
         report["undercuts"] = _safe(_undercuts, geos, pull, zero_tol, under_parts)
         trapped = [{face for group in part["groups"] for face in group} for part in under_parts]
+    if len(geos) != 1 or len(geos[0].part.solids()) != 1 or "error" in report["draft"] or \
+            "error" in report["undercuts"]:
+        doubtful = False  # an assembly's parts (a part's solids) each open their own way: no one pull to rank
+    else:
+        doubtful = any(pull_doubtful(report["draft"], report["undercuts"]))
+    if doubtful:
+        # One part whose pull looks wrong (most of the wall zero draft, or a quarter of the surface trapped): the
+        # pulls ranked as --candidates ranks them, so the hint names the one it puts first. Measured only then.
+        report["pull_check"] = _safe(_candidates, [_Geometry(geo.part, budget=_CANDIDATE_SAMPLES) for geo in geos],
+                                     wall_limit, zero_tol)
     thick = _safe(lambda: [_thickness_part(geo) for geo in geos])
     if isinstance(thick, dict):
         for name in ("thickness", "transitions", "ribs", "bosses", "corners"):
             report[name] = dict(thick)
     else:
         report["thickness"] = _safe(_thickness, geos, thick)
-        steps = report["thickness"].pop("_transitions", None)
-        report["transitions"] = steps if steps is not None else dict(report["thickness"])
         used: list[set[int]] = [set() for _ in geos]
+        kinds: list[dict[int, str]] = [{} for _ in geos]
         report["ribs"] = _safe(lambda: _features_family("ribs", [
-            _ribs_part(geo, t, d, t.nominal, u) for geo, t, d, u in zip(geos, thick, drafts, used)],
+            _ribs_part(geo, t, d, t.nominal, u, s, k) for geo, t, d, u, s, k in zip(geos, thick, drafts, used, trapped,
+                                                                                    kinds)],
             "thickness_ratio", worst_low=False))
         report["bosses"] = _safe(lambda: _features_family("bosses", [
-            _bosses_part(geo, t, t.nominal, u) for geo, t, u in zip(geos, thick, used)], "wall_ratio",
+            _bosses_part(geo, t, t.nominal, u, k) for geo, t, u, k in zip(geos, thick, used, kinds)], "wall_ratio",
             worst_low=False))
         report["corners"] = _safe(lambda: _features_family("corners", [
             _corners_part(geo, t, t.nominal, u) for geo, t, u in zip(geos, thick, used)], "ratio_to_wall"))
+        report["transitions"] = _safe(lambda: _transitions([_transitions_part(geo, t, u)
+                                                            for geo, t, u in zip(geos, thick, used)]))
+        # A rib's or a boss's faces are judged by their rules, not the wall's range (``feature``).
+        named = {geo.ref(face): kind for geo, part in zip(geos, kinds) for face, kind in part.items()}
+        for item in (report["thickness"].get("items") or []) if isinstance(report["thickness"], dict) else []:
+            item["feature"] = named.get(item.get("location"), "wall")
     projected = _safe(lambda: [_projection_part(geo, pull) for geo in geos])
     if isinstance(projected, dict):
         report["projection"] = projected

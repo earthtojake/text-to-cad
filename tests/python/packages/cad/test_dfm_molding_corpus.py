@@ -247,15 +247,15 @@ CASES = [
                                                                    "molding.wall_max", "molding.undercut",
                                                                    "molding.draft_min")),
     # extrude(taper=) writes the flaring walls and their fillets as B-splines: the fillets still read
-    Case("small_fillet_tray", lambda: tray(draft=1.0, fillet=0.5),
+    Case("small_fillet_tray", lambda: tray(draft=2.0, fillet=0.5),
          expect={"molding.inside_corner_radius": INNER_EDGES},
          absent=tuple(rule for rule in CLEAN if rule != "molding.inside_corner_radius")),
     Case("floor_hole", floor_hole, absent=CLEAN, mesh="fine"),
     Case("hooked_lid", hooked_lid, expect={"molding.undercut": HOOKS}, absent=("molding.undercut_unreleasable",)),
     Case("tray_ribs", tray_ribs, expect={"molding.rib_thickness": TRAY_RIBS},
          absent=("molding.undercut", "molding.wall_max"), mesh="fine"),
-    Case("thick_pad", thick_pad, expect={"molding.thick_section": [PAD], "molding.wall_max": [PAD],
-                                         "molding.wall_transition": [PAD]},
+    # The pad's section is thick_section's; wall_max judges a face's own wall, not its thickest point.
+    Case("thick_pad", thick_pad, expect={"molding.thick_section": [PAD], "molding.wall_transition": [PAD]},
          absent=("molding.undercut", "molding.wall_min"), mesh="fine"),
     Case("sharp_bracket", bracket, expect={"molding.inside_corner_radius": [CORNER]},
          absent=("molding.undercut", "molding.thick_section", "molding.wall_min", "molding.wall_max"), mesh="coarse"),

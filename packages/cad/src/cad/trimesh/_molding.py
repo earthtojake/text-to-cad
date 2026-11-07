@@ -32,6 +32,7 @@ import numpy as np
 import trimesh
 
 from cad._internal import meshops_molding as ops
+from cad._internal.dfm.molding import pull_doubtful
 
 # Length units a mesh file may carry, as a factor to millimetres: an STL is unitless, so the caller
 # states which one (the check's one table).
@@ -971,6 +972,11 @@ def measure(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol
         "undercuts": _safe(_undercut_facts, mesh, pull, zero_tol),
         "projection": _safe(_projection_facts, mesh, pull),
     }
+    draft, undercuts, facts = report["draft"], report["undercuts"], report["mesh"]
+    if "error" not in draft and "error" not in undercuts and (facts.get("body_count") or 1) == 1 and \
+            any(pull_doubtful(draft, undercuts)):
+        # One body whose pull looks wrong: the pulls ranked, so the hint names the one --candidates puts first.
+        report["pull_check"] = _safe(_pull_facts, mesh, wall_limit, zero_tol)
     _shared_families(mesh, pull, wall_limit, zero_tol, report)
     report["notes"] = list(_MESH_NOTES)
     _mark_partial(report)
@@ -986,6 +992,7 @@ _MESH_NOTES = (
     "fillet radii are not read: a filleted corner or rib root joins its faces into one region, so corners lists "
     "sharp internal corners only and ribs only those meeting their base at a sharp edge",
     "bosses are found only with their axis along the pull",
+    "a snap arm reads as a rib: its barb's undercut is found, the arm is not told from a rib",
 )
 
 
@@ -1015,6 +1022,9 @@ _SLIVER = 2e-4
 #: A facet leaning less than this either way is taken as square to the pull where a lean's sign matters
 #: (a split face, a silhouette): a mesh's own noise tilts facets by about this much.
 _NOISE_DEG = 0.5
+#: Two facets meeting at less than this are chords of one curved face (a crease turns more): the parting's
+#: silhouette between them is read to their chord band.
+_CHORD_DEG = 45.0
 #: A concave edge turning this much is a sharp internal corner: a square one turns 90, and a fillet
 #: exported coarsely enough to turn 45 a facet (two facets round a quarter) is not one.
 _CORNER_TURN_DEG = 60.0
@@ -1119,7 +1129,8 @@ class _Regions:
                     continue
                 for x, y, far in ((a, b, fb), (b, a, fa)):
                     link = self.links.setdefault(x, {}).setdefault(y, {"concave": 0.0, "convex": 0.0, "turn": 0.0,
-                                                                        "angle": 0.0, "points": [], "far": []})
+                                                                        "angle": 0.0, "points": [], "far": [],
+                                                                        "segments": []})
                     link["far"].append(int(far))  # the triangles on y's side of the edge
                     length = float(np.linalg.norm(mesh.vertices[edge[0]] - mesh.vertices[edge[1]]))
                     link["concave" if concave else "convex"] += length
@@ -1127,6 +1138,7 @@ class _Regions:
                     link["turn"] += float(angle) * length
                     link["angle"] = link["turn"] / max(link["concave"] + link["convex"], 1e-12)
                     link["points"].append(mesh.vertices[edge].mean(axis=0))
+                    link["segments"].append(mesh.vertices[edge])
         normals = mesh.face_normals
         order = np.argsort(self.label, kind="stable")
         bounds = np.searchsorted(self.label[order], np.arange(self.count + 1))
@@ -1227,10 +1239,51 @@ def _transition(change: dict) -> dict:
     (a, b), (ta, tb) = change["points"], change["thickness"]
     if ta > tb:
         (a, b), (ta, tb) = (b, a), (tb, ta)
+    length = change.get("length")
     return {"transition_ratio": round(float(change["ratio"]), 3), "min_mm": round(float(ta), 3),
             "max_mm": round(float(tb), 3), "change_mm": round(float(tb - ta), 3),
-            "length_mm": round(float(np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "length_mm": round(float(length if length is not None else np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "basis": "step" if "chain" in change else "ball",
             "xyz": _xyz((np.asarray(a) + np.asarray(b)) / 2.0), "at_xyz": [_xyz(a), _xyz(b)]}
+
+
+def _transitions_mesh(regions: _Regions, balls: tuple, skip: set) -> dict:
+    """The mesh's steps (``meshops_molding.steps`` over its flat regions: a chamfer steeper than a region's 20 deg
+    join is a region of its own, a gentler one joins the levels into one and is no abrupt step) and, on its curved
+    regions no step takes in, the rolling ball's steepest change (``meshops_molding.transitions``)."""
+    points, values, owner, held, spacing, weights, nominal = balls
+    items: list = []
+    if nominal:
+        planes = {region: (regions.normal[region], regions.centroid[region]) for region in range(regions.count)
+                  if regions.planar[region] and regions.areas[region] >= regions.sliver}
+        walls: dict[int, float] = {}
+        finite = np.isfinite(values)
+        for region in planes:
+            mine = (owner == region) & finite
+            if not mine.any():
+                continue
+            clean = mine & ~held
+            value = (ops.weighted_median(values[clean], weights[clean]) if clean.any() else float(values[mine].max()))
+            if value is not None:
+                walls[region] = float(value)
+
+        def seams(a: int, b: int) -> np.ndarray:
+            return np.asarray(regions.links.get(a, {}).get(b, {}).get("segments", []), dtype=float).reshape(-1, 2, 3)
+
+        found = ops.steps(planes, lambda region: list(regions.links.get(region, {})), seams, walls, nominal, skip=skip)
+        items = [_transition(step) for step in found]
+        taken = set(skip) | {region for step in found for region in step["chain"]}
+        free = np.array([region not in planes and region not in taken for region in owner], dtype=bool) & ~held
+        if free.any():
+            items += [_transition(change) for change in
+                      ops.transitions(points, values, owner, free, spacing, nominal).values()]
+    items.sort(key=lambda step: step["transition_ratio"])
+    return {"count": len(items), "items": items[:300], "method": (
+        "each step read on its stepped side: two parallel flat regions facing the same way whose walls differ by a "
+        "quarter of the nominal or more and by about their offset, joined by a chain of regions; transition_ratio is "
+        "the chain's run across over the change in wall (a vertical step reads 0). A curved region no such regions "
+        "bound is read by the rolling ball: the steepest change between two of its points within four sample "
+        "spacings whose walls differ by half the nominal (basis: ball)")}
 
 
 def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
@@ -1288,17 +1341,15 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
         # The nominal wall: the area median of the regions' own walls (a narrow region's from its neighbours).
         nominal = ops.weighted_median(np.array([face["median"] for face in per.values()]),
                                       np.array([float(regions.areas[region]) for region in per]))
-    items, sections, steps = [], [], []
-    found = ops.transitions(points, values, owner, ~held, spacing, nominal) if nominal else {}
+    items, sections = [], []
     for region, face in per.items():
         if not nominal:
             break
         item = {"thickness_mm": round(face["median"], 3), "min_mm": round(face["low"], 3),
                 "max_mm": round(face["max"], 3), "nominal_mm": round(nominal, 3),
                 "ratio_to_nominal": round(face["max"] / nominal, 3), "thin_ratio": round(face["median"] / nominal, 3),
-                "area_mm2": round(float(regions.areas[region]), 2), "xyz": _xyz(face["at"])}
-        if region in found:
-            steps.append(_transition(found[region]))
+                "area_mm2": round(float(regions.areas[region]), 2), "feature": "wall", "_region": region,
+                "xyz": _xyz(face["at"])}
         items.append(item)
         if face["max"] > _THICK_RATIO * nominal:
             sections.append({"thickness_mm": item["max_mm"], "ratio_to_nominal": item["ratio_to_nominal"],
@@ -1306,7 +1357,6 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
     sections.sort(key=lambda section: -section["ratio_to_nominal"])
     thin = sorted(items, key=lambda item: item["thickness_mm"])[:100]
     thick = sorted(items, key=lambda item: -item["ratio_to_nominal"])[:100]
-    steps.sort(key=lambda step: step["transition_ratio"])
     chosen, seen = [], set()
     for item in thin + thick:
         if id(item) not in seen:
@@ -1314,10 +1364,7 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
             chosen.append(item)
     return {
         "_per": {region: face["median"] for region, face in per.items()},
-        "_transitions": {"count": len(steps), "items": steps[:300], "method": (
-            "per region, the steepest change of the rolling-ball wall between two of its points within four sample "
-            "spacings whose walls differ by half the nominal or more: transition_ratio is their distance over the "
-            "change; the item stands between them (xyz), min_mm and max_mm the two walls, at_xyz each one's point")},
+        "_balls": (points, values, owner, held, spacing, weights, nominal),
         "nominal_mm": round(nominal, 3) if nominal else None,
         "min_mm": round(min(i["thickness_mm"] for i in items), 3) if items else None,
         "min_point_mm": round(min(i["min_mm"] for i in items), 3) if items else None,
@@ -1329,7 +1376,8 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
         "method": ("rolling ball on the mesh: at points spread evenly over the triangles, the diameter of the "
                    "largest ball touching the surface there that no triangle cuts into, never more than the ray "
                    "straight through; per region (triangles joined across edges under 20 deg) the area median, "
-                   "10th percentile and most. Exact for flat walls; a curved wall is read off its chords"),
+                   "10th percentile and most. Exact for flat walls; a curved wall is read off its chords; feature: a "
+                   "rib's or a boss's region (their rules judge them, the wall's range does not), else wall"),
     }
 
 
@@ -1406,7 +1454,8 @@ def _ribs_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_
             gap = min(gaps) if gaps else None
             lean = abs(float(na @ pull))
             items.append({
-                "thickness_mm": round(root, 3), "tip_thickness_mm": round(tip, 3), "height_mm": round(height, 3),
+                "kind": "rib", "thickness_mm": round(root, 3), "tip_thickness_mm": round(tip, 3),
+                "height_mm": round(height, 3),
                 "length_mm": round(length, 3), "wall_mm": round(wall, 3) if wall else None,
                 "thickness_ratio": round(root / wall, 3) if wall else None,
                 "height_ratio": round(height / wall, 3) if wall else None,
@@ -1525,18 +1574,41 @@ def _parting_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, ze
     skip = trapped if trapped is not None else np.zeros(len(mesh.faces), dtype=bool)
     elements = []
     adjacency = mesh.face_adjacency
+    # A facet's chord band: how far along the pull it reaches. Where the surface turns through the pull between
+    # two facets of one curved face (a dihedral under _CHORD_DEG), the turn lies somewhere in that band, and a
+    # silhouette spanning no more than it is level to what the mesh can say (a sphere's equator read 1.5 to 3 mm
+    # tall off its chords, a flat parting all the same).
+    reach = mesh.triangles @ pull
+    band = reach.max(axis=1) - reach.min(axis=1)
+    crossings: dict[int, tuple[np.ndarray, float]] = {}
     if len(adjacency):
-        opposite = (sign[adjacency[:, 0]] * sign[adjacency[:, 1]] < 0) & ~skip[adjacency[:, 0]] & ~skip[adjacency[:, 1]]
-        edges = mesh.face_adjacency_edges[opposite]
-        if len(edges):
-            mids = mesh.vertices[edges].mean(axis=1)
+        fa, fb = adjacency[:, 0], adjacency[:, 1]
+        chord = np.degrees(mesh.face_adjacency_angles) < _CHORD_DEG
+        all_edges = mesh.face_adjacency_edges
+        pick = np.nonzero((sign[fa] * sign[fb] < 0) & ~skip[fa] & ~skip[fb])[0]
+        if len(pick):
+            mids = mesh.vertices[all_edges[pick]].mean(axis=1)
             near = ops.near_outline(projection, np.column_stack([mids @ u, mids @ v]), 3.0)
-            for (va, vb), keep in zip(edges, near):
-                if keep:
-                    ha, hb = float(heights[va]), float(heights[vb])
-                    elements.append({"kind": "edge", "low": min(ha, hb), "high": max(ha, hb),
-                                     "weight": float(np.linalg.norm(mesh.vertices[va] - mesh.vertices[vb])),
-                                     "xyz": _xyz((mesh.vertices[va] + mesh.vertices[vb]) / 2)})
+            for k in pick[near]:
+                va, vb = all_edges[k]
+                ha, hb = float(heights[va]), float(heights[vb])
+                elements.append({"kind": "edge", "low": min(ha, hb), "high": max(ha, hb),
+                                 "weight": float(np.linalg.norm(mesh.vertices[va] - mesh.vertices[vb])),
+                                 "xyz": _xyz((mesh.vertices[va] + mesh.vertices[vb]) / 2),
+                                 **({"tolerance": float(max(band[fa[k]], band[fb[k]]))} if chord[k] else {})})
+        # A curved region's turn: the edges between its facets whose own normals lean either way (or one of
+        # them square to the pull), at their heights; each crossing is good to the chord band of the facets
+        # either side, so the turn spans up to twice it and is level.
+        raw = mesh.face_normals @ pull
+        inside = np.nonzero((regions.label[fa] == regions.label[fb]) & (raw[fa] * raw[fb] <= 0)
+                            & (raw[fa] != raw[fb]))[0]
+        if len(inside):
+            label = regions.label[fa[inside]]
+            order = np.argsort(label, kind="stable")
+            for chunk in np.split(order, np.flatnonzero(np.diff(label[order])) + 1):
+                k = inside[chunk]
+                crossings[int(label[chunk[0]])] = (heights[all_edges[k]].ravel(),
+                                                   2.0 * float(np.maximum(band[fa[k]], band[fb[k]]).max()))
     for region in range(regions.count):
         tris = regions.faces(region)
         if skip[tris].any():
@@ -1553,9 +1625,11 @@ def _parting_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, ze
             elements.append({"kind": "wall", "low": float(hv.min()), "high": float(hv.max()),
                              "weight": float(regions.areas[region]), "xyz": _xyz(regions.centroid[region])})
         elif (signs > 0).any() and (signs < 0).any() and not regions.planar[region]:
-            turning = tris[np.argsort(np.abs(along[tris]))[: max(2, len(tris) // 10)]]
-            ht = mesh.triangles_center[turning] @ pull
-            elements.append({"kind": "turn", "low": float(ht.min()), "high": float(ht.max()),
+            ht, slack = crossings.get(region, (None, 0.0))
+            if ht is None or not len(ht):
+                turning = tris[np.argsort(np.abs(along[tris]))[: max(2, len(tris) // 10)]]
+                ht, slack = mesh.triangles_center[turning] @ pull, float(band[turning].max())
+            elements.append({"kind": "turn", "low": float(ht.min()), "high": float(ht.max()), "tolerance": slack,
                              "weight": float(regions.areas[region]), "xyz": _xyz(regions.centroid[region])})
     found = ops.parting(elements, top, bottom, max(tolerance, 2 * projection["cell"]))
     off = {id(element) for element in found["off_plane"]}
@@ -1593,9 +1667,8 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
             draft["wall_face_count"] = len(items)
     thickness = _safe(_thickness_mesh, mesh, regions)
     walls: dict[int, float] = thickness.pop("_per", {}) if isinstance(thickness, dict) else {}
-    steps = thickness.pop("_transitions", None)
+    balls = thickness.pop("_balls", None)
     report["thickness"] = thickness
-    report["transitions"] = steps if steps is not None else dict(thickness)
     nominal = thickness.get("nominal_mm")
 
     def wall_of(region: int):
@@ -1604,9 +1677,17 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
     used: set = set()
     report["ribs"] = _safe(lambda: _family(_ribs_mesh(mesh, regions, pull, wall_of, nominal, used),
                                            "thickness_ratio"))
+    kinds = {region: "rib" for region in used}
     report["bosses"] = _safe(lambda: _family(_bosses_mesh(mesh, regions, pull, wall_of, nominal, used), "wall_ratio"))
+    kinds.update({region: "boss" for region in used if region not in kinds})
     report["corners"] = _safe(lambda: _family(_corners_mesh(mesh, regions, wall_of, nominal, used), "ratio_to_wall",
                                               low=True))
+    report["transitions"] = _safe(_transitions_mesh, regions, balls, used) if balls is not None else dict(thickness)
+    # A rib's or a boss's regions are judged by their rules, not the wall's range (``feature``).
+    for item in thickness.get("items") or []:
+        region = item.pop("_region", None)
+        if region in kinds:
+            item["feature"] = kinds[region]
     parting = _safe(_parting_mesh, mesh, regions, pull, zero_tol, wall_limit, _trapped_regions(mesh, regions, pull,
                                                                                                zero_tol))
     span = parting.pop("_span", None) if isinstance(parting, dict) else None

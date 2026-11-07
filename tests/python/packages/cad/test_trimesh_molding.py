@@ -510,9 +510,10 @@ class CheckTest(unittest.TestCase):
 
         report = result.measurements
         self.assertFalse(report["partial"])
+        # pull_check: every side zero draft, so the pull is doubtful and the pulls are ranked for the hint.
         self.assertEqual(sorted(report), ["bosses", "clamp", "corners", "draft", "envelope", "mesh", "notes", "partial",
-                                         "parting", "process", "projection", "ribs", "rules", "scale", "source",
-                                         "thickness", "transitions", "undercuts"])
+                                         "parting", "process", "projection", "pull_check", "ribs", "rules", "scale",
+                                         "source", "thickness", "transitions", "undercuts"])
         # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
         self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
@@ -896,6 +897,64 @@ class SharedFamiliesTest(unittest.TestCase):
         self.assertTrue(report["parting"]["flat_parting_possible"])
         self.assertAlmostEqual(report["envelope"]["items"][0]["span_major_mm"], 30.0, places=2)
         self.assertGreater(report["clamp"]["tons"], 0)
+
+
+def _ramp(run: float):
+    """A 20 mm wide plate 2 mm thick stepping to 3 over ``run`` (0: a sharp step)."""
+    from build123d import Polygon
+    profile = Polygon((-30, 0), (30, 0), (30, 3), (run / 2, 3), (-run / 2, 2), (-30, 2), align=None)
+    return extrude(Plane.XZ * profile, amount=-20)
+
+
+def _filleted_ribs():
+    """Two 1.2 mm ribs 6 tall on a 2 mm plate, 4 mm apart, their roots rounded 0.5: the walls 2.24 at most."""
+    from build123d import BuildPart, Locations, add, fillet
+    with BuildPart() as ribbed:
+        add(Box(60, 40, 2, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+        for x in (-2.6, 2.6):
+            with Locations((x, 0, 2)):
+                Box(1.2, 30, 6, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        roots = [e for e in ribbed.edges().filter_by(Axis.Y) if abs(e.center().Z - 2) < 0.01
+                 and abs(abs(e.center().X) - 2.6) < 0.7]
+        fillet(roots, 0.5)
+    return ribbed.part
+
+
+class MeshTessellationTest(unittest.TestCase):
+    """What a coarse (0.5 mm) and a fine (0.05 mm) export must read alike: a figure within tolerance of the
+    construction's, never an exact float (x86 and arm64 tessellate apart)."""
+
+    @staticmethod
+    def _check(part, tolerance: float):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "part.stl"
+            export_stl(part, str(path), tolerance=tolerance, angular_tolerance=0.5 if tolerance >= 0.5 else 0.1)
+            return cad.stl.dfm(str(path), process="molding", material="abs")
+
+    def test_a_sphere_and_a_rod_part_flat(self) -> None:
+        from build123d import Rot, Sphere
+        for name, part in (("sphere", Sphere(10)), ("rod along x", Rot(0, 90, 0) * Cylinder(5, 30))):
+            for tolerance in (0.5, 0.05):
+                with self.subTest(part=name, tolerance=tolerance):
+                    parting = self._check(part, tolerance).measurements["parting"]
+                    self.assertTrue(parting["flat_parting_possible"], parting["items"][:3])
+
+    def test_a_rib_s_far_side_holds_the_ball(self) -> None:
+        for tolerance in (0.5, 0.05):
+            with self.subTest(tolerance=tolerance):
+                result = self._check(_filleted_ribs(), tolerance)
+                self.assertLess(result.measurements["thickness"]["max_mm"], 2.6)
+                self.assertNotIn("molding.thick_section", {f.code for f in result.findings})
+
+    def test_a_ramp_steeper_than_three_to_one_is_abrupt(self) -> None:
+        for run, ratio, fails in ((2.0, 2.0, True), (4.0, None, False)):
+            with self.subTest(run=run):
+                result = self._check(_ramp(run), 0.05)
+                ratios = [step["transition_ratio"] for step in result.measurements["transitions"]["items"]]
+                if ratio is not None:
+                    self.assertAlmostEqual(min(ratios), ratio, delta=0.1)
+                self.assertEqual("molding.wall_transition" in {f.code for f in result.findings}, fails)
+
 
 if __name__ == "__main__":
     unittest.main()

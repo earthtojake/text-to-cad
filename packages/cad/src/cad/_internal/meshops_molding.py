@@ -9,7 +9,9 @@ STEP it came from answer from one algorithm:
 - ``raster``, ``near_outline``: a projection's covered cells, its outline and its area;
 - ``ball_thickness``: the wall under each point, the diameter of the largest ball touching the surface
   there (the rolling-ball thickness), never more than the ray straight through;
-- ``weighted_median``, ``weighted_quantile``, ``transitions``: the nominal wall and abrupt changes of it;
+- ``weighted_median``, ``weighted_quantile``: the nominal wall; ``steps``: abrupt changes of it read on the
+  stepped side (two parallel faces at two offsets, the chain between them), ``transitions`` the rolling ball's
+  pairs where no such faces are (a free-form face);
 - ``classify_undercut``: what releases a trapped feature -- side actions (how many, which way, how far),
   a lifter, a collapsible core, or nothing -- from rays the caller casts;
 - ``parting``: whether one flat parting plane takes the part's outline, and at what height.
@@ -27,7 +29,8 @@ from typing import Any
 import numpy as np
 
 __all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "even_points", "lateral_directions",
-           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster", "transitions", "weighted_median", "weighted_quantile"]
+           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster", "steps", "transitions",
+           "weighted_median", "weighted_quantile"]
 
 Cast = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -225,6 +228,9 @@ def near_outline(projection: dict[str, Any], points: np.ndarray, band_cells: flo
 
 #: The surface points a first, loose bound on the ball is taken from, at most (evenly chosen).
 BOUND_POINTS = 12000
+#: A point's own face's triangles near it are left out of its ball where they face within this of it (the
+#: chords of its own sheet, which run inside a convex face); one turned farther holds the ball.
+_OWN_TURN_DEG = 60.0
 
 
 def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray, floor: float,
@@ -280,8 +286,11 @@ def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray,
             disc = qb * qb - 4.0 * qa * qc
             root = np.sqrt(np.maximum(disc, 0.0))
             linear = np.abs(qa) < 1e-30 * np.maximum(ee, 1e-30)
-            for sign in (-1.0, 1.0):
-                t = np.where(linear, -qc / np.where(np.abs(qb) > 0, qb, np.inf), (-qb + sign * root) / (2.0 * qa))
+            # The stable roots, q / qa and qc / q: the textbook (-qb +- root) / 2 qa cancels when the edge lies
+            # almost in the tangent plane (qa tiny: a drafted or off-axis wall's) and loses the stationary point.
+            q = -0.5 * (qb + np.copysign(root, qb))
+            for t in (np.where(linear, -qc / np.where(np.abs(qb) > 0, qb, np.inf), q / qa),
+                      qc / np.where(q != 0, q, np.inf)):
                 hh = h0 + t * h1
                 ok = (disc >= 0) & (t > 0) & (t < 1) & (hh > floor)
                 best = np.minimum(best, np.where(ok, (aa + 2 * t * ae + t * t * ee) / (2.0 * hh), np.inf))
@@ -338,7 +347,8 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
 
     Points sampled on exact faces lie off a triangulation of them (a chord runs inside a convex face), so
     with ``point_face`` and ``triangle_face`` (and ``others_face``) a point is not held by its own face's triangles
-    near it (within three of them); ``cap``
+    near it (within three of them) that face as it does (within ``_OWN_TURN_DEG``): a mesh region's far side --
+    a filleted rib's, round its root -- holds it as another face would; ``cap``
     gives its own face's bound instead (a convex cylinder's or sphere's radius, inf for a plane)."""
     p_all = np.asarray(points, dtype=float).reshape(-1, 3)
     n_all = np.asarray(normals, dtype=float).reshape(-1, 3)
@@ -381,6 +391,12 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         medians = [float(np.median(chunk)) for chunk in np.split(longest[by_face], first[1:])]
         typical = dict(zip(labels.tolist(), medians))
         keep_off = np.array([3.0 * typical.get(int(face), 0.0) for face in np.asarray(point_face)])
+        # ... and only those facing about as the point does (within _OWN_TURN_DEG): the chords of the sheet the
+        # point lies on. A mesh region wraps round a filleted rib (side, root, floor, root, other side), and the
+        # rib's far side, facing the other way, holds the ball as it would across a face of its own.
+        facing = np.cross(b_t - a_t, c_t - a_t)
+        facing /= np.where(np.linalg.norm(facing, axis=1) > 0, np.linalg.norm(facing, axis=1), 1.0)[:, None]
+        agree = math.cos(math.radians(_OWN_TURN_DEG))
     # Points a few at a time (neighbours in the sampled order lie near one another, so their triangles mostly
     # coincide): each solves the triangles within its own ball's reach (2 r of the bound), its own face's left out.
     chunk = 24
@@ -401,7 +417,8 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         distance = np.linalg.norm(centroid[None, window, :] - p_all[index, None, :], axis=2) - reach[None, window]
         near = distance <= 2.0 * upper[index, None] * (1 + 1e-9)
         if own:
-            near &= (tri_face[None, window] != np.asarray(point_face)[index, None]) | (distance > keep_off[index, None])
+            near &= ((tri_face[None, window] != np.asarray(point_face)[index, None]) | (distance > keep_off[index, None])
+                     | (n_all[index] @ facing[window].T < agree))
         local = np.nonzero(near.any(axis=0))[0]
         columns = window[local]
         near = near[:, local]
@@ -543,6 +560,109 @@ def transitions(points: np.ndarray, thickness: np.ndarray, groups: np.ndarray, u
         found[int(group)] = {"ratio": float(ratio[a, b]), "points": (p[index[a]], p[index[b]]),
                              "thickness": (float(t[index[a]]), float(t[index[b]]))}
     return found
+
+
+#: Two faces this close to parallel (degrees) are the two levels of a step.
+_LEVEL_DEG = 1.0
+
+
+def steps(planes: dict[int, tuple[np.ndarray, np.ndarray]], neighbours: Callable[[int], Any],
+          seams: Callable[[int, int], np.ndarray], walls: dict[int, float], nominal: float,
+          skip: set[int] | frozenset[int] = frozenset(), least_change: float = 0.25, most: int = 3
+          ) -> list[dict[str, Any]]:
+    """The steps in a wall, read on the stepped side: two flat faces (``planes``: each one's outward normal and a
+    point on it) facing the same way at two offsets along it, joined by a chain of at most ``most`` faces none
+    of which is parallel to them (a pad's side, a pocket's, a chamfer, a fillet and the face it runs into),
+    whose walls (``walls``: each flat face's) differ by ``least_change`` times the nominal or more (exact faces:
+    a quarter of the wall, where the ball's noisier pairs take half) AND by about
+    the offset between them -- the face behind both is one: a pad, a pocket, a ramp, not a rib's top (its wall
+    the rib's) nor a wall's rim (its offset the wall's height). The step's run is how far the chain reaches
+    across, square to the faces' normal: from the seam where it leaves one (``seams(face, other)``: the edges
+    between two faces as segments, (k, 2, 3)) to where it meets the other, the median over the second. Per
+    step: ``ratio`` (run over the change: a vertical step reads 0, a chamfer its run over its rise), ``length``
+    (the run), ``points`` (a point of each seam, facing one another), ``thickness`` (the two walls), ``chain``
+    and ``sides`` (the two flat faces). ``skip``: faces no chain crosses (a rib's, a boss's: their rules judge
+    them)."""
+    level = math.cos(math.radians(_LEVEL_DEG))
+    found: list[dict[str, Any]] = []
+    seen: set[tuple] = set()
+    for start, (normal, origin) in planes.items():
+        if start in skip or start not in walls:
+            continue
+        n = np.asarray(normal, dtype=float)
+        parent: dict[int, int] = {start: start}
+        ring = [start]
+        for _depth in range(most + 1):
+            following = []
+            for face in ring:
+                for other in neighbours(face):
+                    if other in parent or other in skip:
+                        continue
+                    plane = planes.get(other)
+                    lean = float(np.asarray(plane[0]) @ n) if plane is not None else 0.0
+                    if plane is not None and abs(lean) >= level:
+                        # A level face ends the chain that reached it, and is reached again by the next (a pad's
+                        # top from each of its sides: a step each).
+                        if lean > 0 and face != start and other in walls:
+                            chain = []
+                            back = face
+                            while back != start:
+                                chain.append(back)
+                                back = parent[back]
+                            chain.reverse()
+                            step = _step(start, other, chain, n, origin, plane[1], seams, walls, nominal,
+                                         least_change)
+                            key = (min(start, other), max(start, other), tuple(sorted(chain)))
+                            if step is not None and key not in seen:
+                                seen.add(key)
+                                found.append(step)
+                        continue
+                    parent[other] = face
+                    following.append(other)
+            if _depth == most:
+                break
+            ring = following
+    return found
+
+
+def _step(low: int, high: int, chain: list[int], normal: np.ndarray, at_low: np.ndarray, at_high: np.ndarray,
+          seams: Callable[[int, int], np.ndarray], walls: dict[int, float], nominal: float,
+          least_change: float) -> dict[str, Any] | None:
+    rise = abs(float((np.asarray(at_high, dtype=float) - np.asarray(at_low, dtype=float)) @ normal))
+    thin, thick = walls[low], walls[high]
+    change = abs(thick - thin)
+    if change < least_change * nominal or abs(rise - change) > 0.25 * change:
+        return None
+    first = np.asarray(seams(low, chain[0]), dtype=float).reshape(-1, 2, 3)
+    last = np.asarray(seams(chain[-1], high), dtype=float).reshape(-1, 2, 3)
+    if not len(first) or not len(last):
+        return None
+
+    def flat(points: np.ndarray) -> np.ndarray:
+        return points - np.outer(points @ normal, normal)
+
+    a, b = flat(first[:, 0]), flat(first[:, 1])
+    q_all = np.vstack([last[:, 0], last[:, 1], 0.5 * (last[:, 0] + last[:, 1])])
+    q = flat(q_all)
+    e = b - a
+    with np.errstate(divide="ignore", invalid="ignore"):
+        along = np.einsum("qmk,mk->qm", q[:, None, :] - a[None], e) / np.maximum(np.einsum("mk,mk->m", e, e), 1e-300)
+    t = np.clip(along, 0.0, 1.0)
+    foot = a[None] + t[:, :, None] * e[None]
+    distance = np.linalg.norm(q[:, None, :] - foot, axis=2)
+    # Across the seam only: a point of the far seam whose foot on the near one falls past its ends lies beside
+    # it, not across (a part's end face touches both levels, its seams end to end).
+    distance = np.where((along >= -1e-6) & (along <= 1 + 1e-6), distance, np.inf)
+    nearest = distance.min(axis=1)
+    across = np.flatnonzero(np.isfinite(nearest))
+    if len(across) < 0.5 * len(nearest):
+        return None
+    pick = int(across[np.argsort(nearest[across])[len(across) // 2]])
+    run = float(nearest[pick])
+    segment = int(np.argmin(distance[pick]))
+    seam_low = first[segment, 0] + t[pick, segment] * (first[segment, 1] - first[segment, 0])
+    return {"ratio": run / change, "length": run, "points": (seam_low, q_all[pick]), "thickness": (thin, thick),
+            "chain": list(chain), "sides": (low, high)}
 
 
 # --- undercuts -------------------------------------------------------------------------------------------
@@ -819,19 +939,23 @@ def parting(elements: list[dict[str, Any]], top: float, bottom: float, tolerance
     (``kind`` ``edge``: a face opening one way meets one opening the other), a zero-draft wall on the
     outline (``wall``: the line may run anywhere up it) or a curved face turning through the pull there
     (``turn``: the heights it turns at). One plane at height h takes an edge or a turn only where its span
-    is within ``tolerance`` and holds h, a wall where h lies up it. Returns ``flat``, the plane's ``height``
+    is within ``tolerance`` (or the element's own, a mesh's chord band: what its facets can resolve) and holds
+    h, a wall where h lies up it. Returns ``flat``, the plane's ``height``
     (the middle of what every element allows; else the elements' weighted median height), the ``range``
     allowed, the elements no flat plane takes (``off_plane``) and the depths either side."""
     if not elements:
         middle = 0.5 * (top + bottom)
         return {"flat": None, "height": middle, "range": None, "off_plane": [],
                 "depth_above": top - middle, "depth_below": middle - bottom}
+    def slack(element: dict[str, Any]) -> float:
+        return max(tolerance, float(element.get("tolerance") or 0.0))
+
     lo, hi = -math.inf, math.inf
     for element in elements:
-        lo = max(lo, element["low"] - tolerance)
-        hi = min(hi, element["high"] + tolerance)
+        lo = max(lo, element["low"] - slack(element))
+        hi = min(hi, element["high"] + slack(element))
     slanted = [element for element in elements
-               if element["kind"] != "wall" and element["high"] - element["low"] > tolerance]
+               if element["kind"] != "wall" and element["high"] - element["low"] > slack(element)]
     flat = lo <= hi and not slanted
     off: list[dict[str, Any]] = []
     if flat:
@@ -844,7 +968,7 @@ def parting(elements: list[dict[str, Any]], top: float, bottom: float, tolerance
         weights = np.array([max(float(element.get("weight", 1.0)), 1e-9) for element in elements])
         height = float(weighted_median(heights, weights) or 0.0)
         off = [element for element in elements
-               if not (element["low"] - tolerance <= height <= element["high"] + tolerance)
-               or (element["kind"] != "wall" and element["high"] - element["low"] > tolerance)]
+               if not (element["low"] - slack(element) <= height <= element["high"] + slack(element))
+               or (element["kind"] != "wall" and element["high"] - element["low"] > slack(element))]
     return {"flat": bool(flat), "height": float(height), "range": [float(lo), float(hi)] if flat else None,
             "off_plane": off, "depth_above": float(top - height), "depth_below": float(height - bottom)}
