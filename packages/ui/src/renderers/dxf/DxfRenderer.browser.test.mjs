@@ -365,7 +365,11 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
   await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.camera?.scale > 0, key);
   const record = await page.evaluate(stateKey => window.cadHarness.state.renderers[stateKey], key);
   assert.equal(record.version, 2);
-  assert.deepEqual(Object.keys(record.camera).sort(), ['offsetX', 'offsetY', 'scale'], 'the drawing\'s transform is its camera');
+  // Its camera is its transform with the pane it was framed in, in CSS pixels (`kit/viewport/flatView.js`).
+  assert.deepEqual(Object.keys(record.camera).sort(), ['height', 'offsetX', 'offsetY', 'scale', 'width'],
+    'the drawing\'s transform and its pane are its camera');
+  assert.ok(Math.abs(record.camera.width - canvas.width) <= 1 && Math.abs(record.camera.height - canvas.height) <= 1,
+    `the pane is the canvas it was framed in: ${record.camera.width}x${record.camera.height} vs ${canvas.width}x${canvas.height}`);
   assert.deepEqual([record.display, record.renderer], [null, {}], 'and a drawing has nothing else');
 
   await page.evaluate(() => window.cadHarness.mounted(false));
