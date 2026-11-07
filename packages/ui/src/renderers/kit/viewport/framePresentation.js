@@ -1,5 +1,7 @@
 // A newly allocated WebGL canvas has no presentable scene. Keep it covered
-// until the destination mode has drawn content with its own lighting. Later
+// until the destination mode has drawn content with its own lighting, and the
+// scene says it is fit to be seen (`presentable`, `lib/viewer/sceneContract.js`:
+// a board's slab once its face's picture is on it). Later
 // presentation keys reuse that canvas: they acknowledge the newly reconciled
 // scene after a real draw without hiding an already usable view.
 export function createFramePresentation({ canvas, renderMode, onPresent }) {
@@ -10,7 +12,8 @@ export function createFramePresentation({ canvas, renderMode, onPresent }) {
     draw(runtime, drawFrame, request = null) {
       const key = String(request?.key || "");
       const ready = request?.ready === true;
-      const hasVisibleContent = Boolean(runtime?.hasVisibleModel || runtime?.hasDrawingDocument);
+      const hasVisibleContent = Boolean(runtime?.hasVisibleModel || runtime?.hasDrawingDocument)
+        && runtime?.kitScene?.presentable?.() !== false;
       const environmentReady = !(runtime?.renderMode ?? renderMode) || runtime?.environmentReady === true;
       if (!canvasPresented && (!ready || !key || !hasVisibleContent || !environmentReady)) return false;
       drawFrame();

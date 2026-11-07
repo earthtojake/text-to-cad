@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import { interactiveCameraFrameForBounds, interactiveFitPadding, interactiveViewportFitScale } from './viewportCameraFit.js';
+import { fitRoom, interactiveCameraFrameForBounds, interactiveFitPadding, interactiveViewportFitScale } from './viewportCameraFit.js';
 
-function frameBounds(bounds, aspect, orthographic, padding = undefined) {
+function frameBounds(bounds, aspect, orthographic, padding = undefined, room = 1) {
   const camera = orthographic ? new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10000) : new THREE.PerspectiveCamera(48, aspect, 0.01, 10000);
   camera.position.set(2.1, -1.65, 1.08);
   camera.up.set(0, 0, 1);
   const controls = { target: new THREE.Vector3() };
-  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect, padding });
+  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect, padding, room });
   camera.position.copy(frame.position); camera.up.copy(frame.up); camera.lookAt(frame.target);
   if (orthographic) {
     camera.top = frame.halfHeight; camera.bottom = -frame.halfHeight;
@@ -153,5 +153,23 @@ for (const orthographic of [false, true]) {
     assert.deepEqual(after.target.toArray(), before.target.toArray());
     assert.equal(after.halfHeight, before.halfHeight);
     assert.equal(after.distance, before.distance);
+  });
+}
+
+// A 3D fit keeps clear of the view's tool strip as a flat view's does: the box fitted in the room
+// under the strip, centred in it, whatever the projection.
+for (const orthographic of [false, true]) {
+  test(`${orthographic ? 'orthographic' : 'perspective'} fit frames the box in the room under the strip, centred in it`, () => {
+    const bounds = { min: [0, 0, 0], max: [40, 30, 120] };
+    const room = fitRoom(100, 800);
+    assert.equal(room, 0.875);
+    const whole = frameBounds(bounds, 1, orthographic);
+    const under = frameBounds(bounds, 1, orthographic, undefined, room);
+    const span = points => [Math.min(...points.map(point => point.y)), Math.max(...points.map(point => point.y))];
+    const [wholeLow, wholeHigh] = span(whole.projected), [low, high] = span(under.projected);
+    // In NDC (1 the top) the strip takes 2 * (1 - room) off the top, so the room's middle is (1 - room) lower.
+    assert.ok(Math.abs((low + high) / 2 - ((wholeLow + wholeHigh) / 2 - (1 - room))) < 0.02, `centred in the room: ${low}..${high}`);
+    assert.ok(Math.abs((high - low) / (wholeHigh - wholeLow) - room) < 0.03, `fitted in the room: ${(high - low) / (wholeHigh - wholeLow)}`);
+    assert.ok(high < 1 - 2 * (1 - room), 'below the strip');
   });
 }

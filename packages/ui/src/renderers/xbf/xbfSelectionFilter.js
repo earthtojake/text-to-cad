@@ -47,9 +47,10 @@ export function connectedSelectionApplies(id, filter) {
 }
 
 /**
- * The selection after a pick of `ids` (one element, or a grown group): replaced, or with
- * `additive` the group added -- or taken away where every one of it is selected already. A plain
- * pick of the one thing selected already lets it go, as every selecting view does.
+ * The selection after a pick of `ids` (one element, a grown group, a folded row's parts): replaced, or
+ * with `additive` the group added -- or taken away where every one of it is selected already. A plain
+ * pick of the one thing selected already, exactly, lets it go, as every selecting view does: one element,
+ * or the group it is (pressed again, a folded row's parts are let go of, as a part's row's part is).
  */
 export function nextSelectionIds(current, ids, additive = false) {
   if (!ids.length) return additive ? current : [];
@@ -59,6 +60,7 @@ export function nextSelectionIds(current, ids, additive = false) {
     for (const id of ids) { if (remove) next.delete(id); else next.add(id); }
     return [...next];
   }
-  if (ids.length === 1 && current.length === 1 && current[0] === ids[0]) return [];
+  const picked = new Set(ids);
+  if (current.length === picked.size && current.every(id => picked.has(id))) return [];
   return [...ids];
 }

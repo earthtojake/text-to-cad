@@ -297,7 +297,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         script = self.run_in("plate.py")
         self.assertEqual(script.returncode, 0, script.stderr)
         # A command exports the xbf the script built: the worker that built it holds it.
-        command = self.run_in("-m", "cad_server.cli", "export", "XBF/plate.xbf", "plate.step")
+        command = self.run_in("-m", "cad_server.cli", "xbf", "export", "XBF/plate.xbf", "plate.step")
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertEqual(self.run_in("dies.py").returncode, 1)
         spool = self.state / analytics.SPOOL
@@ -331,9 +331,9 @@ class ThroughTheDaemonTest(unittest.TestCase):
         pointer, handed = model_id(self.folder / "part.py", "part"), run.stdout.split("SHAPE ", 1)[1].split()[0]
         refused = model_id(self.folder / "part.py", "nowhere")
         for ident in (pointer, handed):
-            done = self.run_in("-m", "cad_server.cli", "export", ident, str(self.folder / f"{ident}.stl"))
+            done = self.run_in("-m", "cad_server.cli", "model", "export", ident, str(self.folder / f"{ident}.stl"))
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "export", refused, str(self.folder / "x.stl")).returncode, 0)
+        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "model", "export", refused, str(self.folder / "x.stl")).returncode, 0)
         from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         try:
@@ -342,7 +342,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         except unittest.SkipTest:
             drawn = False
         if drawn:
-            done = self.run_in("-m", "cad_server.cli", "snapshot", pointer, str(self.folder / "part.png"))
+            done = self.run_in("-m", "cad_server.cli", "model", "snapshot", pointer, str(self.folder / "part.png"))
             self.assertEqual(done.returncode, 0, done.stderr)
         spool = self.state / analytics.SPOOL
         spooled = spool.read_text(encoding="utf-8")

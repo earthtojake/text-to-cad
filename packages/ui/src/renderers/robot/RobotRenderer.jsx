@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Box, MousePointer2 } from "lucide-react";
 import { PositionIcon } from "../kit/tools/ChangedDot.jsx";
@@ -7,6 +7,11 @@ const URDF_JOINT_VALUE_EPSILON = 1e-9;
 import { createRobotScene } from "@cad/core/lib/urdf/robotScene.js";
 import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
+import { useViewerHost } from "../../host/context.js";
+import { menuEntry } from "../kit/shell/viewMenu.js";
+import { sceneCopyText } from "../kit/tools/select/sceneReferences.jsx";
+import { isLabelSelector } from "@cad/core/lib/cadRefs.js";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { readFileView } from "../kit/shell/fileView.js";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
@@ -19,8 +24,7 @@ import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
 import { selects } from "../kit/tools/select/selectFilter.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import PositionControls from "./PositionControls.jsx";
-import { positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
-import { useRobotReferences } from "./robotReferences.jsx";
+import { useRobotDescribe, useRobotInspect, useRobotReferences, useRobotTip } from "./robotReferences.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
 import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
@@ -50,13 +54,11 @@ const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: fals
 const poseIsSet = pose => Boolean(pose) && Object.entries(pose.getSnapshot().values)
   .some(([name, value]) => Math.abs(value - (pose.defaults[name] ?? value)) > URDF_JOINT_VALUE_EPSILON);
 
-// The file sidebar's Position section, its tile's dot the tools view's joints off their defaults. It
-// reads the pose itself, and only whether it is off its defaults: a pose step renders it only when
-// that flips, and never the surface (a pose step renders no component of the renderer).
+// The view's panel's Position tab. Its controls read the pose themselves: a pose step renders no
+// component of the renderer.
 function PositionSection({ pose, previewPose, revision }) {
   const { t } = useI18n();
-  const changed = useSyncExternalStore(pose.subscribe, () => !positionValuesAreDefault(pose.getSnapshot().values, pose.defaults));
-  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details" changed={changed}>
+  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
     {/* Preview poses its own robot (`previewPose`). */}
     <PositionControls key={`${revision}:${previewPose ? "preview" : "tools"}`} pose={previewPose || pose} />
   </ToolPanel>;
@@ -305,7 +307,7 @@ function RobotSurface({ view, data }) {
         onChange={value => { setSelectFilter(value); selectTool(ROBOT_TOOL.SELECT); }} /> }),
     ...sceneTools.tools
   ];
-  // The file sidebar, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
+  // The view's panel, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
   const sidebarShown = !shell.previewing;
   const sidebar = <>
     <LinksSection key={modelKey} active={sidebarShown} robot={robot?.robot || null} components={robot?.components}
@@ -319,8 +321,10 @@ function RobotSurface({ view, data }) {
 
   // What is selected, for Quick Edit: each link (an object by its link) as a reference into the
   // description, and as a chip whose card says what the description says of it.
+  const describe = useRobotDescribe({ robot: robot?.robot || null, components: robot?.components, selectLink: selection.selectLink,
+    onOpenFile: view.onOpenFile, resource: shell.frame.resource });
   const { references, chips: referenceChips } = useRobotReferences({ robot: robot?.robot || null, components: robot?.components,
-    selection, resource: shell.frame.resource, onOpenFile: view.onOpenFile });
+    selection, resource: shell.frame.resource, describe });
 
   // A link pasted into Quick Edit's note, by its name and the solid's glyph (as its chip shows it),
   // where it is one of this file's.
@@ -328,16 +332,53 @@ function RobotSurface({ view, data }) {
   const nameLink = useCallback(reference => (reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector"
     ? { name: reference.target.selectors.join(", "), kind: "solid" } : ""), [resourcePath]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): over a link or an object its
+  // reference (the link's name), Select or Deselect, Hide, then the framing; over empty space the framing.
+  const host = useViewerHost();
+  const viewportRef = useRef(null);
+  const pickedIds = () => [...selectionRef.current.selectedLinkNames.map(name => `link:${name}`), ...selectionRef.current.selectedComponentIds];
+  const contextMenuItems = scene && !shell.previewing && toolMode === ROBOT_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: pickedIds(), t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName].filter(Boolean))]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => (hit.componentId ? selection.select(hit.componentId, { multiSelect: selected }) : selection.selectLink(hit.linkName, { multiSelect: selected })),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null,
+    more: hit => [menuEntry("visibility", t("tree.hide"), { onSelect: () => changeVisibility(hit.componentId ? [hit.componentId]
+      : (robotRef.current?.parts || []).filter(part => part.link === hit.linkName).map(part => part.id), false) })]
+  }) : null;
+
+  const zoomToSelection = {
+    available: selection.active,
+    run: () => { const box = scene?.selectionBounds?.(pickedIds()); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  // What is picked, as the frame reads it: the Selected pane under the Links, the hover tip, the rows of both.
+  const components = robot?.components;
+  const frameIds = useCallback((ids) => {
+    const objects = new Set((components || []).map(component => component.id));
+    const box = scene?.selectionBounds?.(ids.map(id => (objects.has(id) ? id : `link:${id}`)));
+    if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box);
+  }, [components, scene]);
+  const resource = shell.frame.resource;
+  // A link copies its reference; a mesh object its link's, as its chip does.
+  const copyLinks = useCallback((ids) => {
+    const linkOf = new Map((components || []).map(component => [component.id, component.link]));
+    return sceneCopyText(resource, [...new Set(ids.map(id => linkOf.get(id) ?? id))].filter(name => isLabelSelector(String(name || ""))));
+  }, [resource, components]);
+  const tip = useRobotTip({ robot: robot?.robot || null, components });
+  const inspect = useRobotInspect({ selection, components, describe, tip, frame: frameIds, copyText: copyLinks, enabled: Boolean(scene) && !shell.previewing });
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
+    inspect={inspect}
     references={shell.previewing ? NO_REFERENCES : references} referenceChips={shell.previewing ? NO_REFERENCES : referenceChips}
     nameReference={nameLink}
     onClearReferences={() => { clearSelection(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       {poseActive ? <JointHandleOverlay handlesRef={handlesRef} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
       <PointerPick viewport={viewport} scene={scene} enabled={picksLinks} onPick={handlePick} onHover={selection.hoverHit} />
-    </>} />;
+    </>; }} />;
 }
 
 export default function RobotRenderer(props) {

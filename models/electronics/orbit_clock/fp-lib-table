@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "orbit")(type "KiCad")(uri "${KIPRJMOD}/orbit.pretty")(options "")(descr "Orbit's footprints"))
+)

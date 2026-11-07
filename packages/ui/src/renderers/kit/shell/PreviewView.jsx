@@ -13,7 +13,7 @@
 // `view.overlay(viewport, drawn)`, handed the Render scene Preview draws.
 import { useCallback } from "react";
 import ShellViewport from "./ShellViewport.jsx";
-import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
+import { useStageView } from "./useStageViewport.js";
 
 /**
  * @param {{ view: { scene: object | null, overlay?: ((viewport: object, drawn: object) => import("react").ReactNode) | null,
@@ -23,8 +23,8 @@ import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.
  */
 export default function PreviewView({ view, desired, modelKey, sceneScaleMode, viewRef, orbit = false, orbitSpeed = 1, onPresented = null }) {
   const previewKey = `${modelKey}#preview`;
-  const update = useAppliedViewSettings(desired, previewKey, viewRef, null);
   // The file's Render as Preview draws it (`previewViewScene.js`), applied by its own coordinator.
+  const { update, props } = useStageView(desired, previewKey, viewRef, null);
   const drawn = update.scene;
   const overlay = view.overlay;
   const children = useCallback(viewport => overlay?.(viewport, drawn) ?? null, [overlay, drawn]);
@@ -36,19 +36,10 @@ export default function PreviewView({ view, desired, modelKey, sceneScaleMode, v
     modelKey={modelKey}
     presentationKey={previewKey}
     sceneScaleMode={sceneScaleMode}
-    projection={drawn.camera.projection}
-    focalLength={drawn.camera.focalLength}
-    themeSettings={drawn.theme}
-    displaySettings={drawn.display}
-    appearance={drawn.appearance}
-    receiveShadows={drawn.view.lighting.enabled}
-    renderMode={drawn.render.enabled}
-    renderConfiguration={drawn.render.configuration}
-    quality={drawn.quality}
+    {...props}
     orbit={orbit}
     orbitSpeed={orbitSpeed}
     viewCube={false}
-    viewUpdate={update}
     onPresentationChange={presentationChange}
     onCameraSettled={view.onCameraSettled || null}
     runtimeLifecycle={view.runtimeLifecycle || null}

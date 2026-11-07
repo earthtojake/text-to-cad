@@ -1,0 +1,63 @@
+import type { ComponentType } from 'react';
+import { defineFileRenderer } from '../../file-viewer/registry.js';
+import type { FileRendererProps } from '../../file-viewer/types.js';
+import type { LiveViewBinding, LiveViewController, LiveViewState } from '../kit/shell/liveBinding.js';
+import { createCadPreferences, prepareWorkspaceEntry } from '../workspace/index.js';
+import type { CadPreferenceSource, PreparedWorkspaceEntry, ViewerCommandSource, WorkspaceClientOption } from '../workspace/index.js';
+
+export type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewState } from '../kit/shell/liveBinding.js';
+
+/**
+ * A board's live state is the base state, its selection the board references a person or a host
+ * picked (`blinky.kicad_pcb#R1.2`), plus the board's Display as a snapshot job reads it. Drawn flat
+ * (2D) it has no camera to pose: `resetCamera` fits the board again; shown in 3D its camera is every
+ * 3D view's (`setCamera`, `readState().camera`). Its Display is the person's.
+ */
+export type BoardLiveState = LiveViewState & {
+  boardDisplay?: { mode: string; side: 'top' | 'bottom'; poured: boolean; layers?: string[] };
+};
+export type BoardLiveController = LiveViewController<BoardLiveState>;
+
+export interface BoardRendererOptions {
+  client: WorkspaceClientOption;
+  preferences?: CadPreferenceSource;
+  /** Host requests. One to select a reference selects it on a board read with its index (`#U3`, `#U3.9`, `#net:VIN`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`). */
+  commands?: ViewerCommandSource;
+  /** The mounted view's live command surface. `select` and `clearSelection` are the board's; a camera is declined, loudly, while it is drawn flat (2D), and Display commands always are. */
+  live?: LiveViewBinding<any>;
+}
+export interface PreparedBoardDocument extends PreparedWorkspaceEntry {
+  services: Omit<BoardRendererOptions, 'client'> & { preferences: CadPreferenceSource };
+}
+
+/** A KiCad board. Never artifact-managed: the backend draws the file as it is. */
+export const BOARD_FILE = /\.kicad_pcb$/i;
+
+/**
+ * A `.kicad_pcb` is a flat view, as a `.dxf` is: the backend reads the board from its file, layer
+ * by layer (`GET /api/v1/documents/kicad_pcb/<id>/plot`), and the client paints the layers on a canvas, with Select (its parts,
+ * pads, nets, tracks, vias, zones, texts, dimensions and graphics, or a point or an area), Annotate and Measure, its Board and
+ * Layers in the view's panel, its Flip, 2D/3D and Display at the strip's end; 2D/3D shows the same view in 3D
+ * (`Board3dView.jsx`, a chunk of its own, loaded only then).
+ * Registering loads no three.js, no viewport and no backend connection; a board drawn in 2D loads none either.
+ *
+ * It still opens a render session it never draws from, as a DXF does: that session is what
+ * registers the file as OPEN with the client, which is how a rewritten board reaches this tab.
+ */
+export function createBoardRenderer({ client, ...options }: BoardRendererOptions) {
+  const services = { ...options, preferences: options.preferences || createCadPreferences() };
+  return defineFileRenderer<PreparedBoardDocument>({
+    id: 'board',
+    priority: 100,
+    matches: (file) => BOARD_FILE.test(file.path),
+    async prepare(context) {
+      const prepared = await prepareWorkspaceEntry(client, context);
+      return { ...prepared, data: { ...prepared.data, services } };
+    },
+    // The renderer, with the file menu's Export of the board (`workspace/withFileExport.jsx`).
+    load: async () => {
+      const [{ default: Board }, { withFileExport }] = await Promise.all([import('./BoardRenderer.jsx'), import('../workspace/withFileExport.jsx')]);
+      return { default: withFileExport(Board) as ComponentType<FileRendererProps<PreparedBoardDocument>> };
+    }
+  });
+}

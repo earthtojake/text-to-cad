@@ -101,7 +101,7 @@ test("the words the viewer's tools once spelled in English are the dictionaries'
     for (const word of words) assert.ok(!read(path).includes(word), `${path} spells ${word} itself`);
   }
   for (const key of ["preview.preparing", "playback.loop", "playback.autoplay", "select.pick", "chip.copied", "explode.label",
-    "quickEdit.describe", "status.buildPreview", "tree.showAll", "tree.exitIsolation", "robot.none", "robot.meshObject"]) {
+    "quickEdit.describe", "status.buildPreview", "tree.showAll", "tree.exitIsolate", "robot.none", "robot.meshObject"]) {
     for (const [locale, table] of Object.entries(TABLES)) assert.ok(table[key], `${locale} has ${key}`);
     assert.notEqual(ja[key], en[key], `${key} is translated`);
   }

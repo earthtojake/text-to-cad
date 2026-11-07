@@ -58,8 +58,9 @@ credentials, all made from one token:
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
 an upgrade. `cad server --rotate-token`, with every server stopped
-(`cad stop`), replaces the token, and with
-it every link and every session made before. Behind the credentials:
+(`cad stop`), replaces the token once you say yes (it asks; `--yes` where it
+cannot), and with it every link and every session made before. Behind the
+credentials:
 
 - A Host check refuses DNS rebinding.
 - A request the cookie alone admits must come from the server's own pages or
@@ -91,10 +92,17 @@ MCP Apps hosts keep out of the model's context, and refuses a call without it
 before anything routes the request. Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.
 
-**Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF or SRDF
-written by someone else is untrusted input. The server reads it in separate
-processes and bounds its work: assembly, node and block expansion, archive
-unpacking, and buffer reads. It fetches nothing a file names over the network.
+**Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF, SRDF, KiCad board or
+schematic written by someone else is untrusted input. The server reads it in separate
+processes (a KiCad file off its request threads, its refill in KiCad's own process) and bounds its work: assembly, node and block expansion, archive
+unpacking, and buffer reads. It fetches nothing a file names over the network. The 3D models a KiCad
+board names are read only as STEP files, and only inside the board's own folder, KiCad's installed 3D
+library and the folders `CAD_KICAD_3DMODELS` names, every symlink followed first; any other file a board
+names is shown as missing, and the page asks for a model's mesh by an id, never by a path. A name is
+checked against those folders as text before any file system call is made for it, and one that is a
+network share (`\\server\share`), a device (`\\?\`, `\\.\`) or drive-relative is refused outright, on
+every platform: on Windows, opening a share would offer its server the person's credentials. A board
+names at most 512 distinct models, each STEP at most 64 MiB and all of them at most 512 MiB.
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
 

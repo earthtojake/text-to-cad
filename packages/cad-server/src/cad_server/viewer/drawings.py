@@ -42,6 +42,8 @@ import os
 import threading
 from collections import OrderedDict
 
+from cad.registry import DOCUMENT_TYPES
+
 from .backend import absolute_path
 from .scanner import node_basename
 
@@ -53,7 +55,8 @@ __all__ = [
     "resolve_drawing_path",
 ]
 
-DRAWING_SUFFIX = ".dxf"
+# The drawing's file, by its document type (``cad.registry``: the one viewed as a drawing).
+DRAWING_SUFFIX = DOCUMENT_TYPES["dxf"].suffix
 # How long a request waits on a render before it answers 202: a small drawing renders inside it
 # and is answered by the first request, and a large one costs one request per hold.
 DRAWING_HOLD_SECONDS = 2.0

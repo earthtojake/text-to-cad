@@ -33,7 +33,7 @@ from tests.python.support import opengl
 
 HINGE = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import step, xbf
 
 
@@ -57,7 +57,7 @@ CONNECT = 'base.joints["elbow"].connect_to(arm.joints["mount"], angle=30)'
 
 CHAIN = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import xbf
 
 
@@ -89,7 +89,7 @@ def lift():
 # model's own turning it to {turned} degrees.
 CAR = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import xbf
 
 
@@ -196,7 +196,7 @@ def _sampled(path: Path, pose: Any) -> list:
 
 # A posed file is a model of its own: the hinge at a state, never an export's option.
 POSED = """
-from cad.ap242 import posed
+from cad.build123d import posed
 from cad.engine import step, xbf
 from hinge import hinge
 
@@ -586,7 +586,7 @@ class NestedTest(_Folder):
         self.assertEqual({pair.label: pair.links for pair in found.pairs}, {"mount": (0, 1), "spin": (1, 2)})
         # ``posed`` moves the sub-assembly and the plate inside it once, as the sampler does.
         self.build("mounted_up", """
-from cad.ap242 import posed
+from cad.build123d import posed
 from cad.engine import xbf
 from mounted import mounted
 
@@ -776,7 +776,7 @@ BENCH = """
 import math
 
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
 from cad.engine import xbf
 
 

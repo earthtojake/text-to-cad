@@ -1,5 +1,5 @@
 """Exports: a document translated to STEP, GLB, STL, 3MF and xbf by one writer
-(``export.translate``), whether a decorator declares the file or ``cad export`` asks
+(``export.translate``), whether a decorator declares the file or ``cad <type> export`` asks
 for it. The STEP reads back through the engine's own reader with its names, colours,
 materials and instance tree; the meshes are parsed and counted; a posed model's STEP is the
 same bytes in every process; a build keeps a file its document did not change, writes only
@@ -29,7 +29,7 @@ from cad.engine.export import ExportRefused, Source, translate
 
 BOARD = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import glb, paint, step, stl, threemf, xbf
 from bd_materials import metals
 
@@ -107,7 +107,7 @@ translate(Path(sys.argv[1]), None, Path(sys.argv[2]))
 # sub-assembly repeated, posed three ways by a model of its own.
 HINGES = """
 import build123d as bd
-from cad.ap242 import mechanism_state, posed
+from cad.build123d import mechanism_state, posed
 from cad.engine import xbf
 
 PLATE = bd.Box(10, 10, 2)
@@ -357,9 +357,10 @@ class ExportTest(unittest.TestCase):
         self.assertEqual((found["ok"], found["source"], [(row["path"], row["kind"]) for row in found["files"]]),
                          (True, str(self.xbf), [(str(self.folder / "json.stl"), "stl")]))
         self.assertEqual(found["files"][0]["bytes"], (self.folder / "json.stl").stat().st_size)
-        # Refused: under --json, its envelope on stdout and exit 1; else its words on stderr, exit 2.
+        # Refused: under --json, its envelope on stdout; else its words on stderr; exit 2 either way.
         status, out, err = run("export", str(self.xbf), str(self.folder / "board.obj"), "--json")
-        self.assertEqual((status, json.loads(out)["ok"], err), (1, False, ""))
+        self.assertEqual((status, json.loads(out)["ok"], json.loads(out)["reason"], err),
+                         (2, False, "invalid_argument", ""))
         self.assertIn("an export is one of", json.loads(out)["error"])
         status, out, err = run("export", str(self.xbf), str(self.folder / "board.obj"))
         self.assertEqual((status, out), (2, ""))
@@ -446,7 +447,7 @@ class BuildFilesTest(unittest.TestCase):
         [report] = engine_build.build(script, ["plate"], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         self.assertFalse(any(row["written"] for row in report["files"].values()), report["files"])
-        source = engine_build.held(script, "plate")  # what ``cad export`` translates
+        source = engine_build.held(script, "plate")  # what ``cad <type> export`` translates
         self.assertEqual(translate(source, None, out / "plate.step"), (out / "plate.step").stat().st_size)
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
         refusal = f"its folder {out} is read-only (mode 0555)"
@@ -460,7 +461,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
 
     def test_a_verb_given_a_declared_file_reads_the_file_and_consults_no_model(self) -> None:
-        """A declared file is an export of its model, never a tie to it: ``cad export
+        """A declared file is an export of its model, never a tie to it: ``cad <type> export
         <declared>.xbf out.step`` reads the file as a file document, in the documents worker, though
         the worker that built the model holds its document -- the same STEP, no model consulted."""
         from cad_server.engine import daemon
@@ -1055,7 +1056,7 @@ class StepBytesTest(unittest.TestCase):
 
     def test_a_build_s_step_is_its_xbf_s_read_cold_in_another_process(self) -> None:
         self.assertEqual(self.fresh("cold.step"), self.built)
-        # So exporting the xbf over the build's STEP keeps the file (``cad export``: unchanged).
+        # So exporting the xbf over the build's STEP keeps the file (``cad <type> export``: unchanged).
         stamp = self.step.stat().st_mtime_ns
         translate(self.xbf, None, self.step)
         self.assertEqual(self.step.stat().st_mtime_ns, stamp)

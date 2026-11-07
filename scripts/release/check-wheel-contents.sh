@@ -49,11 +49,17 @@ LIBRARY_REQUIRED=(
   # site-packages that installs it.
   "cad/_internal/lazy_kernel.py"
   "cad-lazy-kernel.pth"
-  # The robot validators' library: a packaging regression here would ship a server whose
-  # `urdf validate` cannot import.
-  "cad/urdf_source.py"
-  "cad/srdf_validation.py"
-  "cad/findings.py"
+  # The document types and their registry, and the robot checks' library: a packaging regression
+  # here would ship a server whose `cad urdf validate` cannot import.
+  "cad/registry.py"
+  "cad/_internal/document_type.py"
+  "cad/_internal/aliases.py"
+  "cad/_internal/programs.py"
+  "cad/urdf/_source.py"
+  "cad/srdf/_validation.py"
+  "cad/_internal/findings.py"
+  "cad/kicad_pcb/__init__.py"
+  "cad/kicad/_program.py"
   # The engine's library half: the worker every build runs in, and the client every command reaches
   # the server by.
   "cad/engine/__init__.py"
@@ -68,7 +74,8 @@ SERVER_REQUIRED=(
   "cad_server/assets.py"
   "cad_server/cli/__init__.py"
   "cad_server/cli/viewer.py"
-  "cad_server/cli/urdf_validate.py"
+  "cad_server/cli/urdf.py"
+  "cad_server/cli/document_types.py"
   "cad_server/viewer/__init__.py"
   "cad_server/viewer/__main__.py"
   "cad_server/viewer/main.py"

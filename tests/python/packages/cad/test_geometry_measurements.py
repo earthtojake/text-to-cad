@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from build123d import Compound, Pos, Rot, Solid, Vector, Vertex
-from cad.geometry import GeometryError, closest_points, mass_properties
+from cad.build123d._geometry import GeometryError, closest_points, mass_properties
 
 
 def _unbounded_plane():

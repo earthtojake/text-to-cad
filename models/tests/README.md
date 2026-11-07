@@ -26,8 +26,8 @@ From each case's folder, with the engine's environment (the library on the path)
 export CAD_ENGINE_DIR="$(mktemp -d /tmp/cadgen-manual-engine.XXXXXX)"
 python source.py                     # render_floor/, viewer_concurrency/
 python annotation_fixture.py         # unified_annotations/
-cad snapshot "$ID" /tmp/open.png --pose open     # ID: the id: line the run printed
-cad export "$ID" /tmp/annotations.glb            # demo, baked as a clip
+cad model snapshot "$ID" /tmp/open.png --pose open     # ID: the id: line the run printed
+cad model export "$ID" /tmp/annotations.glb            # demo, baked as a clip
 ```
 
 ## The port
@@ -44,4 +44,4 @@ cad export "$ID" /tmp/annotations.glb            # demo, baked as a clip
 
 - `joint_playground/joint_playground.urdf`: an authored URDF of primitives, no model,
   and no doc names it. It is kept in [`unported/`](unported/README.md), and the engine's snapshot draws it as
-  it is (`cad snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png`).
+  it is (`cad urdf snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png`).
