@@ -731,3 +731,27 @@ measure a mesh a program already holds, answering the same report as data:
 or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
 `cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
 (`cad[trimesh]`), and a check without it says so in one line.
+
+## Finite element analysis
+
+`cad.fea` (`cad fea faces|parts|solve`, the server's generated commands) studies a part or an
+assembly of a STEP or an `.xbf`.
+It reads the document in its own process, as the engine reads a file (`engine.document.load`), with
+no worker and no build, and names faces by the engine's refs, resolved in the document's structure
+as `cad inspect` resolves them (`engine.refs`): a study's `bracket/face 17` is the face the CAD
+Viewer copies. A study is a JSON file; a solve writes only the result GLB its `out` names (and a
+`.vtu` beside it when asked), each replaced only once all are written, so a failed run leaves the
+previous result as it was; every number is in the result it returns (`--json`). Its `ok` is the
+validators' rule, an error blocks: a part that yields or misses a check is a correct result of a part
+unfit to use, so its GLB is written and the command exits 1, as is a study stopped before the solve
+(a part nothing holds), with none. A study whose answer would be wrong is refused instead, writing
+nothing: a zero load, a load on a held face, a study no load reaches, reactions that do not balance.
+`_internal/fea/` solves one kind of study: linear elastic stress and displacement. The mesher is
+netgen, a dependency of every install where netgen publishes wheels (macOS, Linux x86_64 and Windows
+x86_64; elsewhere `solve` refuses, naming the platform), run in a process of its own, since its
+OpenCascade and OCP's cannot share one. The solver is CalculiX (`ccx`, 2.20 or newer), which the
+person installs (`conda install -c conda-forge calculix`, `calculix-ccx` on Debian and Ubuntu, or
+FreeCAD on macOS and Windows, which carries one): `CAD_CCX` names it, else `ccx` on PATH, else
+FreeCAD's. A missing or older one is an error saying how to install
+it; cad downloads no solver and has no other. It runs headless, in a private folder with homes of its
+own, so it reads and writes nothing of the person's. The result names the CalculiX version that ran.

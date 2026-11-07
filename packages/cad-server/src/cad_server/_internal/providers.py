@@ -110,7 +110,7 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("cad", "engineering-drawing", "pcb", "print3d", "robot-simulation", "sendcutsend")
+SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "robot-simulation", "sendcutsend")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
