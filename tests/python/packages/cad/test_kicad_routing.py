@@ -325,7 +325,8 @@ class ViaLimit(unittest.TestCase):
         self.assertEqual([True, False], [c.routed for c in done], [c.line() for c in done])
         self.assertEqual(2, len(router.vias))
         independent_check(self, copper, RULES, router, [want("A")])
-        self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
+        self.assertIn("with no via left of the entry's 2", done[1].reason)
+        self.assertIn("a narrower track (the board allows 0.15 mm) or another layer may fit", done[1].reason)
 
     def test_every_entry_answers_a_line_even_with_nothing_to_route(self) -> None:
         copper = read_copper(board(resistor("R1", 5, 10, 0, "B", "A"), resistor("R2", 9, 10, 0, "A", "C"),
@@ -358,6 +359,7 @@ class LayerChanges(unittest.TestCase):
         layers = (("F.Cu", 1.0), ("In1.Cu", 1.0), ("B.Cu", 1.0))
         done = Router(copper, RULES, [want("A", layers=layers, vias=0)]).run()
         self.assertFalse(done[0].routed, done[0].line())
+        self.assertIn("on F.Cu and In1.Cu and B.Cu with no via for", done[0].reason)
         router = Router(copper, RULES, [want("A", layers=layers)])
         done = router.run()
         self.assertTrue(done[0].routed, done[0].line())

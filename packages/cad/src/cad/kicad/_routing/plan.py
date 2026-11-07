@@ -513,8 +513,9 @@ class Router:
         reason = None
         own = self._own.get(want.net, [])
         layers = " and ".join(self.copper[k] for k in allowed)
-        limit = (f" with at most {want.vias} via{'s' if want.vias != 1 else ''}"
-                 + (f" left of the entry's {want.vias + spent}" if spent else "") if want.vias is not None else "")
+        limit = ("" if want.vias is None else (" with no via" if want.vias == 0 else
+                                                 f" with at most {want.vias} via{'s' if want.vias != 1 else ''}")
+                 + (f" left of the entry's {want.vias + spent}" if spent else ""))
         for margin in (*MARGINS, None):
             window = self._window(boxes, margin)
             sources = self._terminals(source, window, allowed)
@@ -600,8 +601,11 @@ class Router:
             if len(room) < FLOOD and not met:
                 area = len(room) * self.pitch ** 2 / (count // nodes)
                 walls = self._walls(room, free, window, want)
-                return (f"{name} is walled in{' by ' + walls if walls else ''}: no way out of the {area:.1f} mm² round "
-                        f"it on {layers} for a {want.width:g} mm track keeping {want.clearance:g} mm")
+                pocket = "a pocket under 0.1 mm²" if area < 0.1 else f"the {area:.1f} mm²"
+                narrower = (f"; a narrower track (the board allows {self.rules.min_track_width:g} mm) or another layer "
+                            "may fit" if want.width > self.rules.min_track_width + 1e-9 else "")
+                return (f"{name} is walled in{' by ' + walls if walls else ''}: no way out of {pocket} round it on "
+                        f"{layers} for a {want.width:g} mm track keeping {want.clearance:g} mm{narrower}")
         return None
 
     def _walls(self, room: Sequence[int], free: bytearray, window: _Window, want: Want) -> str:
