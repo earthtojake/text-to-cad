@@ -88,7 +88,7 @@ def for_name(name: str) -> str | None:
     ``cad.build123d``); then an integration's namespace (``cad.build123d``, ``cad.kicad._session``: the
     registry's), a document type's reader (``cad.step.read``: its ``reader_integration``), its edit
     (``cad.kicad_pcb.edit``: the edit's integration, kicad) and a type's operation that runs in the caller
-    (``cad.step.dfm``: trimesh; never one the engine runs, as ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
+    (``cad.step.dfm``: build123d, ``cad.stl.dfm``: trimesh; never one the engine runs, as ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
     from cad._internal.aliases import current
     from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED
 

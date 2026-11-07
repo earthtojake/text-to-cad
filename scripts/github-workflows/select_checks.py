@@ -192,6 +192,19 @@ def _shim_change(path: str) -> Select:
     return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_SHIM, ("cad_mcp",)))
 
 
+# The manufacturing checks are a leaf of the library: their type side (cad._internal.dfm and the check's
+# signature, manufacturing), their exact measurements (the build123d integration's _dfm_* modules) and their
+# mesh measurements (the trimesh integration) are imported by the 3D types' `dfm` alone. A change to them
+# reaches the tests that name them, and those that read every command (the generated command lines).
+DFM_CODE = (f"{LIBRARY_SRC}/_internal/dfm/**", f"{LIBRARY_SRC}/_internal/manufacturing.py",
+            f"{LIBRARY_SRC}/_internal/meshops_*.py", f"{LIBRARY_SRC}/build123d/_dfm_*.py", f"{LIBRARY_SRC}/trimesh/**")
+_NAMES_DFM = r"\bdfm|_dfm|manufactur|trimesh|\bunfold\b|DOCUMENT_TYPES"
+
+
+def _dfm_change(path: str) -> Select:
+    return select(cadgen=_cadgen_tests_naming(_NAMES_DFM, ()))
+
+
 # The engine (cad.engine, and the server's half, cad_server.engine) is no leaf: every build,
 # export and snapshot a skill runs is its, the viewer serves every STEP and .xbf through it
 # (``cad_server.viewer.xbf``), the CAD app's views open them through the viewer's routes, and the
@@ -276,6 +289,7 @@ RULES: tuple[Rule, ...] = (
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(SHIM_CODE, _shim_change, final=True),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
+    Rule(DFM_CODE, _dfm_change, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
          CADGEN_CONSUMERS),
 

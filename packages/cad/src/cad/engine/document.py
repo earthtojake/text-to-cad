@@ -1858,7 +1858,39 @@ def material_json(material: Any) -> dict[str, Any] | None:
             value = {"min": None if math.isnan(value.min) else value.min,
                      "max": None if math.isnan(value.max) else value.max}
         physics[field.name] = value
-    return {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+    found = {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+    process = process_json(getattr(material, "process", None))
+    if process is not None:  # absent, not null, without one: a material's content key is unchanged
+        found["process"] = process
+    return found
+
+
+def process_json(process: Any) -> dict[str, Any] | None:
+    """A part's declared manufacturing process (``bd_materials.processes.AppliedProcess``): the
+    route as its enum's value, and the per-part fields the dataclass holds."""
+    from dataclasses import fields
+    from bd_materials.processes import AppliedProcess, Process
+
+    if process is None:
+        return None
+    if isinstance(process, Process):  # the deprecated bare route, assigned after construction
+        process = AppliedProcess(process)
+    found: dict[str, Any] = {}
+    for field in fields(process):
+        value = getattr(process, field.name)
+        found[field.name] = value.value if isinstance(value, Process) else list(value) if isinstance(value, tuple) else value
+    return found
+
+
+def process_from_json(value: dict[str, Any] | None) -> Any:
+    """The ``AppliedProcess`` ``process_json`` wrote, or None; only that dataclass and its enum."""
+    from bd_materials.processes import AppliedProcess, Process
+
+    if value is None:
+        return None
+    given = dict(value)
+    route = Process(given.pop("process"))
+    return AppliedProcess(route, **{key: tuple(item) if isinstance(item, list) else item for key, item in given.items()})
 
 
 def material_key(material: Any) -> str | None:
@@ -1892,7 +1924,10 @@ def material_from_json(value: dict[str, Any] | None) -> Any:
     fields = {key: Range(math.nan if item["min"] is None else item["min"],
                          math.nan if item["max"] is None else item["max"]) if isinstance(item, dict) else item
               for key, item in value["material"].items()}
-    return FinishedMaterial(cls(**fields), pbr=pbr_from_json(value["pbr"]))
+    found = FinishedMaterial(cls(**fields), pbr=pbr_from_json(value["pbr"]))
+    # Provenance beside the resolved look, as the ``pbr`` setter keeps it: the look is ``pbr``'s.
+    found.process = process_from_json(value.get("process"))
+    return found
 
 
 def _label_material(label: Any) -> Any:
