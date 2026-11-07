@@ -40,10 +40,11 @@ def move_margin(radius: float, pitch: float) -> float:
     """How much more room than ``radius`` a node needs so that a move to a neighbouring node with as much room is
     clear along its whole length: sqrt(r^2 + (L/2)^2) - r for the longest move, a diagonal, L = pitch * sqrt 2.
 
-    The proof: let x be the move's point nearest an obstacle and o the obstacle's point nearest x. The distance to
-    o along the move's line is sqrt(e^2 + (t - t0)^2), e the line's distance from o; both ends are at least
-    r + margin from the obstacle, so from o, and one of them is at least L/2 along the line from the foot t0:
-    e^2 >= (r + margin)^2 - L^2/4 >= r^2. So x, at least e from o, is at least r from the obstacle."""
+    The proof: let x be the move's point nearest an obstacle and o the obstacle's point nearest x. If x is an end,
+    it has room. Else x is the foot of o on the move, and the distance from o to the move's point at t is
+    sqrt(e^2 + (t - t0)^2), e = |x - o|. Both ends are at least r + margin from the obstacle, so from o, and the
+    nearer of them is at most L/2 along the line from the foot t0: e^2 >= (r + margin)^2 - L^2/4 = r^2. So x is
+    at least r from the obstacle."""
     half = pitch * math.sqrt(2.0) / 2.0
     return math.sqrt(radius * radius + half * half) - radius
 
