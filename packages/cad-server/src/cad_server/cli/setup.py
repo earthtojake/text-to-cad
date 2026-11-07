@@ -16,8 +16,8 @@ current installation's
    uvx's environment, as the install command runs it --, it makes that folder with uv, from uv's cache
    where it holds it, and runs the same command from there. A development install or a source tree
    sets itself up where it is.
-2. **Plan.** Under a lock in the state folder, every agent app is read (``cad_server._internal.providers``),
-   and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
+2. **Plan.** Under a lock in the state folder, every agent app is read from its own files, no app's command run
+   (``cad_server._internal.providers``), and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
    3245); and build123d, the CAD kernel, and whether it is made. ``--dry-run`` stops there and writes
    nothing. Nothing is asked.
@@ -320,6 +320,8 @@ class Installer:
         self.stopped: list[dict[str, Any]] = []
         # Whether Claude Code has the plugin after this run, so Cursor and Grok Build load it.
         self.fed = False
+        # Whether this run asked Claude Code's listing (``providers.read_for``), so reads it again the same way.
+        self.listed = False
 
     # --- saying -----------------------------------------------------------------------------
 
@@ -680,7 +682,7 @@ class Installer:
         if step.action not in ("install", "update") or step.app not in providers.APPS:
             return None
         try:
-            app = providers.detect(self.machine, [step.app], folder=self.folder)[step.app]
+            app = providers.detect(self.machine, [step.app], folder=self.folder, listed=self.listed)[step.app]
         except Exception:  # noqa: BLE001 - a check that cannot read the app finds nothing: the failure stands
             return None
         ours = app.ours()
@@ -695,7 +697,7 @@ class Installer:
         """Each selected app's copy as the apps say it now, read again, and the engine on the port."""
         providers = self.providers
         try:
-            apps = providers.detect(self.machine, folder=self.folder)
+            apps = providers.detect(self.machine, folder=self.folder, listed=self.listed)
         except Exception as error:  # noqa: BLE001 - a report line, never a failure of the setup
             self.say(f"verify   unknown ({type(error).__name__}: {error})")
             return {"apps": {}, "engine": None}
@@ -862,9 +864,10 @@ class Installer:
         failed, changed = False, set()
         with exclusive(state / LOCK, waiting=lambda: told("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
-            apps = providers.detect(self.machine, folder=self.folder)
-            steps = providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
-                                           skills=receipt.get("skills"), desktop_entry=self._desktop_entry())
+            apps, steps, self.listed = providers.read_for(
+                lambda apps: providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
+                                                    skills=receipt.get("skills"), desktop_entry=self._desktop_entry()),
+                self.machine, folder=self.folder)
             backed_up = self._backed_up(receipt)
             for step in steps:
                 told(f"{step.label}: {step.action} {step.subject}")
@@ -925,9 +928,11 @@ class Installer:
         state.mkdir(parents=True, exist_ok=True)
         with exclusive(state / LOCK, waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
-            apps = providers.detect(self.machine, folder=self.folder)
-            steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
-                                   only=self.only, machine=self.machine, skills=receipt.get("skills"))
+            apps, steps, self.listed = providers.read_for(
+                lambda apps: providers.plan(apps, release=self.release, folder=self.folder,
+                                            desktop_entry=self._desktop_entry(), only=self.only, machine=self.machine,
+                                            skills=receipt.get("skills")),
+                self.machine, folder=self.folder)
             self.fed = providers.feeds(apps, self.only or providers.APPS)
             earlier = self._earlier() if not self.engine_update else []
             engine = self._engine(earlier) if not self.engine_update else {

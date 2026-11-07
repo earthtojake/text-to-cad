@@ -66,7 +66,8 @@ def command(folder: Path, name: str, body: str) -> Path:
     return launcher
 
 
-# Claude Code with a development install of the plugin, and nothing else, for a plan to show.
+# Claude Code with a development install of the plugin, and nothing else, for a plan to show: the record it keeps
+# (``claude_with_a_development_install``), and its listing, which a real run asks.
 CLAUDE = """
 if args == ["plugin", "list", "--json"]:
     print(json.dumps([{"id": "text-to-cad@earthtojake-dev", "version": "0.0.1-dev.1", "scope": "user"}]))
@@ -74,6 +75,13 @@ elif args == ["plugin", "marketplace", "list", "--json"]:
     print("[]")
 else:
     sys.exit(9)
+"""
+
+# An app's command that writes in the home as it starts, as every one of them does: run for any reason, it shows.
+WRITES = """
+import os, pathlib
+wrote = pathlib.Path(os.environ["HOME"]) / ".written-by-a-command" / args[0]
+wrote.mkdir(parents=True, exist_ok=True)
 """
 
 # Claude Code with nothing installed, whose every other command succeeds: the plugin folder it is
@@ -286,8 +294,42 @@ class TheCommand(Fixture):
         self.assertIn(f"cad update: text-to-cad {RELEASE} is the newest release", err)
         self.assertFalse((self.state / updates.FILE).exists(), "a dry run keeps nothing")
 
-    def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
+    def claude_with_a_development_install(self) -> None:
         command(self.bin, "claude", CLAUDE)
+        records = providers.claude_dir(self.machine) / "plugins" / "installed_plugins.json"
+        records.parent.mkdir(parents=True)
+        records.write_text(json.dumps({"version": 2, "plugins": {"text-to-cad@earthtojake-dev": [
+            {"version": "0.0.1-dev.1", "scope": "user"}]}}), encoding="utf-8")
+
+    def home_files(self) -> dict[str, str]:
+        """Every path under the home, with what it holds: a dry run changes none."""
+        return {str(path): path.read_text(encoding="utf-8", errors="replace") if path.is_file() else "folder"
+                for path in sorted(self.home.rglob("*"))}
+
+    def test_a_dry_run_or_a_plan_that_leaves_an_app_runs_no_app_s_command_and_writes_nothing_in_the_home(self) -> None:
+        """Checking what an app has runs no command of it: each writes its own files as it starts (``WRITES``),
+        and would create its folder in a home where there was none."""
+        for name in ("claude", "codex", "gemini", "grok", "cursor-agent", "npx"):
+            command(self.bin, name, WRITES)
+        (self.home / ".codeium" / "windsurf").mkdir(parents=True)  # for npx
+        before = self.home_files()
+        code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.home_files(), before)
+        self.assertFalse((self.bin / "calls.jsonl").exists(), "no command ran")
+        self.assertRegex(out, r"Claude Code +install")
+        self.assertRegex(out, r"Codex +install")
+        self.assertRegex(out, r"Gemini CLI +install")
+        self.assertRegex(out, r"Grok Build +leave +served by the Claude Code plugin")
+        self.assertRegex(out, r"Windsurf +install")
+        # A real run: Grok Build's "leave" runs no command of it, and Codex is asked no version it has no use for.
+        self.run_setup()
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual({call[0] for call in calls}, {"claude", "codex", "gemini", "npx"})
+        self.assertNotIn(["codex", "--version"], calls)
+
+    def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
+        self.claude_with_a_development_install()
         self.desktop_with({"other": {"command": "node", "args": ["server.js"]}})
         (self.home / ".cursor").mkdir()
         earlier = self.earlier_installation()
@@ -312,8 +354,7 @@ class TheCommand(Fixture):
         self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
         self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
+        self.assertFalse((self.bin / "calls.jsonl").exists(), "no app's command runs for a dry run")
         setup.stop_earlier.assert_not_called()
 
     def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
