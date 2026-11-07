@@ -261,8 +261,10 @@ eases to a camera on the side the 2D view showed (`boardFrame.js`'s `cameraOnSid
 `side`): the camera the file was left at in 3D, turned over to that side when it looks at the other, or
 Home's direction so turned, handed to the viewport's `goHome`, so the ease never crosses the board's plane.
 Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
-viewport, which then goes: its own window when nobody has moved the 3D camera since the opening (the
-count of hands on it, `camera/cameraTouch.js`'s `cameraHands`), else the camera's (`planFromCamera`).
+viewport, which then goes: its own window when the 3D view opened on it (`opening.flat`) and nobody has
+moved the 3D camera since the opening (the count of hands on it, `camera/cameraTouch.js`'s `cameraHands`),
+else the camera's (`planFromCamera`): a camera moved, or the one a file left in 3D reopened on, which no
+2D picture was under (`boardFrame.js`'s `leavingView`).
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
 board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision

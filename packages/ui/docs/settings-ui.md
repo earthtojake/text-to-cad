@@ -969,7 +969,9 @@ that side if it looks at the other: the ease never crosses the board's plane, so
 view has drawn that same picture, so the switch shows no frame of anything else. Leaving with the camera
 where that left it (nothing turned, panned or zoomed since) gives the 2D view back exactly as it was,
 from its side; once the camera has been moved (a Flip is a move), leaving frames the 2D view on what the
-camera was centred on, at the matching scale, from its side, the side Flip showed. Either way the 3D view stays until the 2D canvas has painted
+camera was centred on, at the matching scale, from its side, the side Flip showed. That round trip is a 3D
+view entered from the 2D view in the same page: a file reopened in 3D opens on its stored camera with no 2D
+picture under it, so leaving it always frames the 2D view on the camera's window, moved or not. Either way the 3D view stays until the 2D canvas has painted
 the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
 The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
 of More, and in 3D Display's submenu ends with Projection.

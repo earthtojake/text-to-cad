@@ -23,7 +23,7 @@
  * to `opening.then` (the camera this file was left at in 3D) or to Home's tilt, on the side the 2D view
  * showed (`opening.side`: a camera on the other side turned over to it, `boardFrame.js`'s `cameraOnSide`);
  * whether anybody has moved the camera since (`moved`: a hand on it, `kit/camera/cameraTouch.js`) is what
- * leaving 3D asks.
+ * leaving a 3D view opened on the 2D picture asks (`boardFrame.js`'s `leavingView`).
  *
  * Its parts stand on it (`@cad/core/lib/board3d/boardParts.js`): each footprint's 3D model, the STEP the
  * board's models table names (`models`, `GET …/models`) read by its document id through the engine
@@ -295,7 +295,8 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       if (!now || sideNow() === side) return;
       viewer.setPerspective({ ...now, ...cameraTurnedOver(now) }, { animate: true });
     },
-    /** Whether anybody has moved the camera since it was shown and eased to where it opens: leaving 3D then frames its `plan`. */
+    /** Whether anybody has moved the camera since it was shown and eased to where it opens: leaving a 3D view opened on the
+     *  2D picture then frames its `plan`, as leaving one opened on a stored camera always does (`boardFrame.js`'s `leavingView`). */
     moved: () => opened.current !== null && cameraHands(runtime()) !== opened.current,
     /** The 3D camera as the 2D view's window: what leaving 3D frames once the camera has moved, and what a prompt's view is. */
     plan(mirrorX) {

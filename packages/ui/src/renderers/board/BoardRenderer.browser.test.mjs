@@ -271,6 +271,41 @@ test('2D to 3D and back with the camera left alone: every frame shows the board,
   assert.deepEqual(errors, []);
 });
 
+test('a board reopened in 3D leaves for 2D centred on what its camera centred on, nobody having moved it', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  // The tab's record in the page's sessionStorage (`?store=session`): a reload of the page is a reload of the tab.
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb&store=session`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  // In 3D, the camera turned onto R1 pad 2 from the front, right and above, and kept with the file's view.
+  await pane.locator('[data-board-dimension]').click();
+  const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await settled();
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [55, -45, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await page.waitForFunction(() => {
+    const board3d = value => (value && typeof value === 'object' ? value.board3d?.value ?? Object.values(value).map(board3d).find(Boolean) : null);
+    const kept = board3d(JSON.parse(sessionStorage.getItem('text-to-cad:tab:harness') || 'null'));
+    return kept?.mode === '3d' && Math.abs((kept.camera?.target?.[0] ?? 0) - 35.825) < 1e-6;
+  });
+  // Reopened, it is in 3D on that camera; the pad picked, then 2D with the camera untouched.
+  await page.reload();
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && Math.abs(camera.target[0] - 35.825) < 1e-6; });
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
+  await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
+  await pane.locator('[data-board-dimension="3d"]').click();
+  await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
+  const flat = await frame(pane);
+  const pad = litAt(flat);
+  assert.ok(pad && Math.hypot(pad[0] - flat.width / 2, pad[1] - flat.height / 2) <= 1, `R1 pad 2 at the centre: ${pad} in ${flat.width} x ${flat.height}`);
+  assert.equal(await pane.locator('[data-board-side]').getAttribute('data-board-side'), 'top');
+  assert.deepEqual(errors, []);
+});
+
 test('in 3D Flip turns the camera over and its icon is the side the camera is on, turned by Flip, ⇧F or a drag; 2D comes back on that side', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());

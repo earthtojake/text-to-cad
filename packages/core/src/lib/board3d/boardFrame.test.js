@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  cameraOnSide, cameraTurnedOver, headOnCamera, millimetresPerPixel, perspectiveHeadOn, planFromCamera, rayOnBoard, sheetToWorld, sideSeenAlong, worldToSheet
+  cameraOnSide, cameraTurnedOver, headOnCamera, leavingView, millimetresPerPixel, perspectiveHeadOn, planFromCamera, rayOnBoard, sheetToWorld,
+  sideSeenAlong, worldToSheet
 } from "./boardFrame.js";
 import { faceBox, faceRaster, faceTransform, faceUv, faceView } from "./boardFaces.js";
 import { fitBoardBounds } from "../plot2d/plot.js";
@@ -90,6 +91,24 @@ test("a camera turned off the face hands the 2D view the face point it centres, 
   // An orthographic lens draws every depth at the target's half height; a perspective one the face point, farther, smaller.
   close([orthographic.transform.scale], [height / 40], "orthographic");
   close([perspective.transform.scale], [height / (40 * along)], "perspective");
+});
+
+test("leaving 3D gives the 2D view back as it was only after a round trip from its picture nobody turned; else the camera's window, at its scale and side", () => {
+  const camera = { side: "bottom", transform: { scale: 3, offsetX: 10, offsetY: 20 } };
+  let asked = 0;
+  const plan = () => { asked += 1; return camera; };
+  const framed = { transform: camera.transform, side: "bottom" };
+  // Entered from the 2D picture and left alone: the 2D view as it was, from the side it showed; no camera read.
+  assert.deepEqual(leavingView({ flat: true, moved: false, side: "top", plan }), { transform: null, side: "top" });
+  assert.equal(asked, 0);
+  // Moved since it opened (a Flip is a move): the camera's window.
+  assert.deepEqual(leavingView({ flat: true, moved: true, side: "top", plan }), framed);
+  // Opened on the camera the file was left at (a reload in 3D), no 2D picture ever under it: the camera's window,
+  // whether or not anybody moved it.
+  assert.deepEqual(leavingView({ flat: false, moved: false, side: null, plan }), framed);
+  assert.deepEqual(leavingView({ flat: false, moved: true, side: null, plan }), framed);
+  // No camera to read yet (its viewport not up): the 2D view as it is.
+  assert.deepEqual(leavingView({ flat: false, moved: false, side: null, plan: () => null }), { transform: null, side: null });
 });
 
 test("Flip turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {
