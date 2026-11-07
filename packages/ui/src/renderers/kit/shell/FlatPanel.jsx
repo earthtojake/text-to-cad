@@ -20,7 +20,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * after it, then a row of tabs, buttons as Figma's (a board's Parts, Nets and Layers, a schematic's
  * Parts, Nets and Hierarchy), and the open tab's list under them, scrolling as one; under that, when the
  * view hands one in, what is picked in detail (`detail`: the Selected pane, `kit/inspector/ItemDetail.jsx`),
- * as tall as it needs, up to 320px or 40% of the panel's height, and scrolling on its own, whatever tab is open. It keeps two lines,
+ * 40% of the panel's height whatever is picked, until the person sizes it, and scrolling on its own, whatever tab is open. It keeps two lines,
  * the same on both sides: its boxes 8px in, what is read in them 16px in.
  *
  * - **Collapsed, it goes completely**: its expand button alone on a small pill at the canvas's
@@ -300,7 +300,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   };
 
   // The detail's height: the person's from the grip on its top edge (one write when it lets go; a
-  // double-click on it clears that), else what its content needs up to the cap (`flatDetailHeight`).
+  // double-click on it clears that), else its steady share of the panel (`flatDetailHeight`).
   const asideRef = useRef(null);
   const [asideHeight, setAsideHeight] = useState(0);
   useLayoutEffect(() => {
@@ -312,22 +312,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // With no height of the person's, the pane fits what it holds: the content's inner box, observed.
-  const contentRef = useRef(null);
-  const [contentHeight, setContentHeight] = useState(null);
-  const hasDetail = Boolean(detail);
-  useLayoutEffect(() => {
-    const element = contentRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return undefined;
-    // The pane's own top rule (1px) is part of its height.
-    const measure = () => setContentHeight(Math.ceil(element.getBoundingClientRect().height) + 1);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [hasDetail]);
   const [detailDraft, setDetailDraft] = useState(null);
-  const { height: drawnDetail, max: detailMax } = flatDetailHeight({ panelHeight: asideHeight, kept: detailHeight, draft: detailDraft, content: contentHeight });
+  const { height: drawnDetail, max: detailMax } = flatDetailHeight({ panelHeight: asideHeight, kept: detailHeight, draft: detailDraft });
   const clampDetail = value => flatDetailHeight({ panelHeight: asideHeight, draft: value }).height;
   const detailDrag = useRef(null);
   const startDetailDrag = event => {
@@ -439,7 +425,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
         onDoubleClick={() => { if (detailHeight !== null) onDetailHeightChange?.(undefined); }}
         data-flat-panel-detail-grip="" />
       <ScrollArea className="min-h-0 flex-1">
-        <div ref={contentRef} className="px-2"><FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider></div>
+        <div className="px-2"><FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider></div>
       </ScrollArea>
     </div> : null}
     {page ? null : <div role="separator" aria-orientation="vertical" aria-label={t("flatPanel.resize")} aria-valuenow={drawnWidth}

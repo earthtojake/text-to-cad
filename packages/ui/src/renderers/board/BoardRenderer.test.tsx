@@ -7,7 +7,8 @@ import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
-import { VIEW_CORNER_SURFACE_CLASS, VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
+import { FLOATING_CHROME_SURFACE_CLASS } from '../../../dist/lib/floatingSurface.js';
+import { STRIP_SHAPE_CLASS } from '../../../dist/renderers/kit/tools/stripTouch.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/board/BoardRenderer.js';
 import BOARD from './__fixtures__/board.plot.json';
@@ -162,12 +163,12 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The view's corner's column over the zoom pill (`ViewCorner.jsx`'s `ViewPillColumn`): Display, 2D/3D and Flip, from the top down.
-const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-pill-column]')!;
-const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent);
+// The board's view controls, the strip's end after its rule (`BoardDisplay.jsx`'s `boardViewControls`): Flip, 2D/3D, then Display.
+const viewControls = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-cad-toolbar] [data-view-controls]')!;
+const viewButtons = (pane: HTMLElement) => [...viewControls(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent);
 // 2D/3D and Flip, each by what its name says it is ("View: 2D", "Side: Top").
-const dimensionButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^View: / });
-const flipButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^Side: / });
+const dimensionButton = (pane: HTMLElement) => within(viewControls(pane)).getByRole('button', { name: /^View: / });
+const flipButton = (pane: HTMLElement) => within(viewControls(pane)).getByRole('button', { name: /^Side: / });
 // An icon by name: Lucide's by its class, a board's side by its own (`boardSideIcons.jsx`: `side-top`, `side-bottom`).
 const iconName = (svg: SVGElement | null) => (svg ? [...svg.classList].find(name => name.startsWith('lucide-'))
   ?? (svg.dataset.boardSideIcon ? `side-${svg.dataset.boardSideIcon}` : null) : null);
@@ -193,9 +194,9 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElemen
 };
 const choice = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string) =>
   within(await displayMenu(user, pane)).getByRole('combobox', { name }).textContent;
-/** The corner's Display: its menu of presets, opened (portalled, as every dropdown is). */
+/** The strip's Display: its menu of presets, opened (portalled, as every dropdown is). */
 const presetMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
-  if (!menuShown('Display')) await user.click(within(corner(pane)).getByRole('button', { name: /^Display mode:/ }));
+  if (!menuShown('Display')) await user.click(within(viewControls(pane)).getByRole('button', { name: /^Display mode:/ }));
   return openMenu('Display');
 };
 /** The preset Display has ticked (Custom while the eyes have left the preset's set), the menu put away again. */
@@ -232,7 +233,7 @@ const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unkno
   fireEvent.pointerUp(canvas, event);
 };
 
-it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then the side in the view's corner; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
+it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then, after its rule, Flip, 2D/3D and Display; its corner is the zoom pill alone; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
@@ -240,29 +241,24 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // Its view controls on the screen are the corner's column over the zoom pill: Display, 2D/3D and Flip; the strip has none.
-  expect(tools.querySelector('[data-view-controls]')).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Display mode: Board', 'View: 2D', 'Side: Top']);
-  expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
-  // Every corner control is the strip's own 24px button carrying the corner's one surface (`ViewCorner.jsx`), with
-  // nothing round it and no border or shadow: Display, 2D/3D and Flip, the column's own children; the pill one
-  // row of the same buttons on that surface.
+  // Its view controls on the screen end the strip, after its rule: Flip and 2D/3D, the state buttons, then Display's menu.
+  expect(viewButtons(pane)).toEqual(['Side: Top', 'View: 2D', 'Display mode: Board']);
+  expect(tools.querySelector('[data-strip-rule] + [data-view-controls]')).not.toBeNull();
+  // The corner is the zoom pill alone, a floating toolbar as the strip is: the strip's shape on the strip's surface
+  // (its border and shadow), the strip's own 24px tiles inside it, standing on no surface of their own.
   const classes = (element: Element) => [...element.classList];
-  const surface = VIEW_CORNER_SURFACE_CLASS.split(' ');
-  const column = [...corner(pane).children] as HTMLElement[];
-  expect(column.map(element => element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON']);
+  const surface = FLOATING_CHROME_SURFACE_CLASS.split(' ');
   const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
-  expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => pill.classList.contains(name))).toBe(true);
-  for (const button of [...column, ...pill.querySelectorAll<HTMLElement>('button')]) expect(classes(button)).toContain('size-6');
-  for (const control of [...column, pill]) {
-    expect(surface.every(name => control.classList.contains(name)), control.getAttribute('aria-label') || 'pill').toBe(true);
-    expect(classes(control).some(name => /^(border|shadow-(sm|md|lg))/.test(name))).toBe(false);
+  expect(pill.querySelector('[data-zoom-control]')!.textContent).toBe('100%');
+  for (const name of [...STRIP_SHAPE_CLASS.split(' '), ...surface]) expect(pill.classList.contains(name), name).toBe(true);
+  for (const button of [...viewControls(pane).querySelectorAll<HTMLElement>('button'), ...pill.querySelectorAll<HTMLElement>('button')]) {
+    expect(classes(button)).toContain('size-6');
+    expect(surface.some(name => button.classList.contains(name)), button.getAttribute('aria-label') || '').toBe(false);
   }
-  // The pill's buttons stand on its surface, not on a second one of their own.
-  for (const button of pill.querySelectorAll('button')) expect(surface.some(name => button.classList.contains(name))).toBe(false);
-  // 2D/3D and Flip are the view's state button, Projection's (`kit/shell/StateButton.jsx`), a tile like Display's.
-  expect([...corner(pane).querySelectorAll('[data-state-button]')]).toEqual([dimensionButton(pane), flipButton(pane)]);
-  const display = within(corner(pane)).getByRole('button', { name: /^Display mode:/ });
+  expect(pane.querySelector('[data-view-home]')).toBeNull();
+  // Flip and 2D/3D are the view's state button, Projection's (`kit/shell/StateButton.jsx`), a tile like Display's.
+  expect([...viewControls(pane).querySelectorAll('[data-state-button]')]).toEqual([flipButton(pane), dimensionButton(pane)]);
+  const display = within(viewControls(pane)).getByRole('button', { name: /^Display mode:/ });
   for (const button of [dimensionButton(pane), flipButton(pane)]) expect(button.className).toBe(display.className);
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
@@ -303,15 +299,16 @@ it('a native board uses the host language for its controls, tree and accessible 
   dispose();
 });
 
-it('a board without its index is the picture, its corner, and its Layers (with the layer display): no tools, no Parts or Nets, no Quick Edit', async () => {
+it('a board without its index is the picture, its view controls, and its Layers (with the layer display): no tools, no Parts or Nets, no Quick Edit', async () => {
   const { board: _index, ...picture } = BOARD as any;
   readPlot = () => json(picture);
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  // No tools, so no strip; Display, 2D/3D and Flip in the corner's column over the zoom pill.
-  expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Display mode: Board', 'View: 2D', 'Side: Top']);
+  // No tools: the strip is its view controls alone, Flip, 2D/3D and Display, with no rule; the zoom pill in the corner.
+  expect(within(strip(pane)).queryByRole('button', { name: 'Select' })).toBeNull();
+  expect([viewButtons(pane), strip(pane).querySelector('[data-strip-rule]')]).toEqual([['Side: Top', 'View: 2D', 'Display mode: Board'], null]);
+  expect(pane.querySelector('[data-zoom-pill]')).not.toBeNull();
   // Its one list, with no row of tabs over it.
   expect(within(panel(pane)).queryAllByRole('tab')).toEqual([]);
   expect(within(panel(pane)).getByRole('region', { name: 'Layers' })).toBeTruthy();
@@ -547,6 +544,8 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
     .filter(label => !label!.startsWith('Remove'))).toEqual(['led · 2 parts']));
   expect(parts.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
+  // Several picked: the pane draws one, the active one, the last of them, under its switcher.
+  expect([detail()!.querySelector('[data-board-detail-head]')!.textContent, detail()!.querySelector('[data-flat-panel-picks-count]')!.textContent]).toEqual(['R1', '2 of 2']);
   expect(frames.at(-1)).toEqual(fitted);
   menu = await blockMenu();
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Zoom to led' }));
@@ -556,7 +555,7 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   // facts (a chip card's: the same component), then its pads, each its number and net.
   fireEvent.click(within(parts).getByRole('button', { name: 'Select J1' }));
   expect(selected(controller)).toEqual(['#J1']);
-  expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1');
+  expect([detail()!.querySelector('[data-board-detail-head]')!.textContent, detail()!.querySelector('[data-flat-panel-picks]')]).toEqual(['J1', null]);
   const facts = () => [...detail()!.querySelectorAll('[data-flat-panel-facts] [data-info-row]')].map(row => row.textContent);
   expect(facts().slice(0, 3)).toEqual(['IDJ1', 'ValueConn_01x02', 'FootprintPinHeader_1x02_P2.54mm_Vertical']);
   expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
@@ -706,7 +705,7 @@ it("the Layers tab holds KiCad's layer display options — the others, the pours
   const { pane, dispose } = view;
   await opened(pane);
   const menu = await displayMenu(user, pane);
-  // The preset is the corner's Display, not the tab's: the tab has the layers and their display.
+  // The preset is the strip's Display, not the tab's: the tab has the layers and their display.
   expect([...menu.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section'))).toEqual(['board-layer-display']);
   expect(within(menu).getAllByRole('combobox').map(select => [select.getAttribute('aria-label'), select.textContent]))
     .toEqual([['Other layers', 'Shown']]);
@@ -811,12 +810,12 @@ it('a preset chooses the layers; the side (Flip) and the pours are kept through 
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
-  // The side, Flip in the corner over the pill: the top shown, and a press turns the board over.
+  // The side, Flip at the strip's end: the top shown, and a press turns the board over.
   expect(flipButton(pane).getAttribute('aria-label')).toBe('Side: Top');
   await user.click(flipButton(pane));
   expect(flipButton(pane).getAttribute('aria-label')).toBe('Side: Bottom');
   await user.click(within(await displayMenu(user, pane)).getByRole('checkbox', { name: 'Copper pours' }));
-  // A switch is not a layer set: the preset is still the one on screen, the corner's Display ticks it.
+  // A switch is not a layer set: the preset is still the one on screen, the strip's Display ticks it.
   expect(await presetChoice(user, pane)).toBe('Board');
   const presets = await presetMenu(user, pane);
   expect(within(presets).getAllByRole('menuitemradio').map(option => option.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
@@ -956,14 +955,14 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; a p
   expect(view.pane.querySelector('[data-flat-panel-scrim]')).toBeNull();
   view.dispose();
   cleanup();
-  // A phone: no panel and no pill; the board, its strip and its corner's controls in More.
+  // A phone: no panel and no pill; the board, its strip and its view controls in More.
   sized(400);
   const phone = await open();
   await opened(phone.pane);
   expect([phone.pane.querySelector('[data-flat-panel]'), phone.pane.querySelector('[data-flat-panel-pill]')]).toEqual([null, null]);
-  expect(phone.pane.querySelector('[data-view-pill-column]')).toBeNull();
-  // More's rows: Display's and the zoom's submenus, and 3D view and View from bottom, ticked while they are,
-  // each with the icon the corner shows for that state; a press on View from bottom turns the board over.
+  expect(phone.pane.querySelector('[data-cad-toolbar] [data-view-controls]')).toBeNull();
+  // More's rows, in the strip's order: View from bottom and 3D view, ticked while they are, each with the icon its
+  // tile shows for that state, then Display's and the zoom's submenus; a press on View from bottom turns the board over.
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const more = async () => { await user.click(within(phone.pane).getByRole('button', { name: 'More tools' })); return openMenu('More tools'); };
   // A row's own icon: its Lucide glyph, not the menu's tick or submenu chevron.
@@ -971,11 +970,11 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; a p
     .find(name => name && !['lucide-check', 'lucide-chevron-right'].includes(name)) ?? null;
   const rows = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLElement>('[role^=menuitem]')]
     .map(row => [row.textContent, row.getAttribute('aria-checked'), glyph(row)]);
-  expect(rows(await more())).toEqual([['Display', null, null], ['3D view', 'false', 'lucide-box'], ['View from bottom', 'false', 'side-bottom'],
+  expect(rows(await more())).toEqual([['View from bottom', 'false', 'side-bottom'], ['3D view', 'false', 'lucide-box'], ['Display', null, null],
     ['Zoom', null, 'lucide-scan-search']]);
   await user.click(within(await openMenu('More tools')).getByRole('menuitemcheckbox', { name: 'View from bottom' }));
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
-  expect(rows(await more())[2]).toEqual(['View from bottom', 'true', 'side-bottom']);
+  expect(rows(await more())[0]).toEqual(['View from bottom', 'true', 'side-bottom']);
   phone.dispose();
 });
 
@@ -1019,7 +1018,7 @@ it("a panel docking beside a board is a resize of its pane: a board still at its
   dispose();
 });
 
-it("2D/3D is one view: the strip, the panel and the corner stay the same mounted controls, Projection is Display's in 3D, and what is picked and measured stays; 3 switches; the file keeps it", async () => {
+it("2D/3D is one view: the strip, its view controls, the panel and the corner stay the same mounted controls, Projection is Display's in 3D, and what is picked and measured stays; 3 switches; the file keeps it", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
@@ -1033,10 +1032,10 @@ it("2D/3D is one view: the strip, the panel and the corner stay the same mounted
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Select' }));
   const controller = await controllerOf(view);
   expect(selected(controller)).toEqual(['#R1.2']);
-  // What the strip, the panel and the corner (its column and its pill) are, by their names and by the elements themselves.
+  // What the strip (its view controls among it), the panel and the corner (its pill) are, by their names and by the elements themselves.
   const controls = () => ({
-    strip: strip(pane), panel: panel(pane), column: corner(pane), pill: pane.querySelector<HTMLElement>('[data-zoom-pill]'),
-    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-view-pill-column] button, [data-zoom-pill] button')]
+    strip: strip(pane), panel: panel(pane), views: viewControls(pane), pill: pane.querySelector<HTMLElement>('[data-zoom-pill]'),
+    names: [...pane.querySelectorAll<HTMLElement>('[data-cad-tool-groups] button, [data-flat-panel] [role=tab], [data-zoom-pill] button')]
       .map(button => button.getAttribute('aria-label') || button.textContent)
   });
   const flat = controls();
@@ -1056,7 +1055,7 @@ it("2D/3D is one view: the strip, the panel and the corner stay the same mounted
   // The same controls, by name but for the one that says the view is in 3D now: the same button, a box.
   const solid = controls();
   expect(solid.names).toEqual(flat.names.map(name => (name === 'View: 2D' ? 'View: 3D' : name)));
-  for (const key of ['strip', 'panel', 'column', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
+  for (const key of ['strip', 'panel', 'views', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
   expect(dimensionButton(pane)).toBe(dimension);
   expect(shown(dimension)).toEqual(['View: 3D', 'lucide-box', 'ghost']);
   // The corner is the one it was: the pill (the 3D camera's zoom now), and no cube, Projection or Home of a 3D view's.

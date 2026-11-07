@@ -46,35 +46,41 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   expect(listeners.size).toBe(0);
 });
 
-// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves every
-// corner control there, as one group: each column flush with its anchor's outer edge, the pill's a gap over it.
-it('every corner control follows the corner the host anchors the cube at', async () => {
-  const { ViewCornerSideProvider, ViewCubeColumn, ViewPillColumn, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
+// The pill is a floating toolbar as the strip is: its shape and its surface, bordered and shadowed, its tiles inside.
+it('the pill is the strip\'s own shape on the strip\'s surface, the corner\'s inset from the edges', async () => {
+  const { FLOATING_CHROME_SURFACE_CLASS } = await import('../../../../dist/lib/floatingSurface.js');
+  const { STRIP_SHAPE_CLASS } = await import('../../../../dist/renderers/kit/tools/stripTouch.js');
+  const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
+  const view = render(<ZoomControl zoom={zoom} />);
+  const pill = view.container.querySelector('[data-zoom-pill]') as HTMLElement;
+  for (const name of [...STRIP_SHAPE_CLASS.split(' '), ...FLOATING_CHROME_SURFACE_CLASS.split(' ')]) expect(pill.classList.contains(name), name).toBe(true);
+  expect([...pill.querySelectorAll('button')].map(button => [button.getAttribute('aria-label'), button.classList.contains('size-6')]))
+    .toEqual([['Zoom out', true], ['Zoom 100%', true], ['Zoom in', true]]);
+  expect([pill.style.right, pill.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)', 'calc(12px + var(--cad-viewport-corner-bottom, 0px))']);
+});
+
+// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves the corner there, as
+// one group: Home at the cube's upper-right, the pill the corner's inset from the left edge.
+it('the corner follows the side the host anchors the cube at', async () => {
+  const { ViewCornerSideProvider, ViewHome, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
   const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
   const corner = (side: string) => {
     const view = render(<ViewCornerSideProvider value={side}>
-      <ViewPillColumn><span /></ViewPillColumn>
-      <ViewCubeColumn projection={{ value: 'orthographic', onChange: () => {} }} onHome={() => {}} />
+      <ViewHome onHome={() => {}} />
       <ZoomControl zoom={zoom} />
     </ViewCornerSideProvider>);
-    const element = (selector: string) => view.container.querySelector(selector) as HTMLElement;
-    const placed = (selector: string) => [element(selector).style.left, element(selector).style.right, element(selector).style.bottom];
-    const cube = [...view.container.querySelectorAll('[data-view-corner]')].find(el => !el.hasAttribute('data-view-pill-column')) as HTMLElement;
-    const result = { pill: placed('[data-zoom-pill]'), pillColumn: placed('[data-view-pill-column]'),
-      aligned: element('[data-view-pill-column]').classList.contains(side === 'left' ? 'items-start' : 'items-end'),
-      cubeColumn: [cube.style.left, cube.style.right] };
+    const placed = (selector: string) => { const element = view.container.querySelector(selector) as HTMLElement; return [element.style.left, element.style.right, element.style.bottom]; };
+    const result = { home: placed('[data-view-home]'), pill: placed('[data-zoom-pill]') };
     view.unmount();
     return result;
   };
-  const bottom = 'calc(8px + var(--cad-viewport-corner-bottom, 0px))';
-  // The pill 8px off the bottom, its 24px, then the corner's 4px gap.
-  const over = 'calc(36px + var(--cad-viewport-corner-bottom, 0px))';
-  expect(corner('right')).toEqual({ pill: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', bottom],
-    pillColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', over], aligned: true,
-    cubeColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 20px)'] });
-  expect(corner('left')).toEqual({ pill: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto', bottom],
-    pillColumn: ['calc(var(--cad-viewport-corner-left, 0px) + 14px)', 'auto', over], aligned: true,
-    cubeColumn: ['calc(var(--cad-viewport-corner-left, 0px) + 20px)', 'auto'] });
+  // Home's tile overlaps the cube's box (6rem, 8px off the bottom) by 16px across and 10px down from its far top corner.
+  const homeBottom = 'calc(calc(8px + var(--cad-viewport-corner-bottom, 0px)) + 6rem - 10px)';
+  const pillBottom = 'calc(12px + var(--cad-viewport-corner-bottom, 0px))';
+  expect(corner('right')).toEqual({ home: ['', 'calc(var(--cad-viewport-corner-right, 2px) + 6rem - 16px)', homeBottom],
+    pill: ['', 'calc(var(--cad-viewport-corner-right, 2px) + 10px)', pillBottom] });
+  expect(corner('left')).toEqual({ home: ['calc(var(--cad-viewport-corner-left, 0px) + 6rem - 16px)', 'auto', homeBottom],
+    pill: ['calc(var(--cad-viewport-corner-left, 0px) + 10px)', 'auto', pillBottom] });
   const host = document.body.appendChild(document.createElement('div'));
   expect(viewCornerSide(host)).toBe('right');
   host.style.setProperty('--cad-viewport-corner-left', '2px');

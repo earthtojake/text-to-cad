@@ -1,12 +1,12 @@
 import { createContext, useContext } from "react";
 
 // The strip's tiles: 24px, their icons 14px (a little over half the tile), whatever size the icon
-// was handed at. The view's controls after its tools (Display, Preview) are its tiles too. On a
-// touch strip (a phone) they are 36px, their icons 18px.
+// was handed at. The view's controls after its tools (Projection, Display, Preview; a board's Flip,
+// 2D/3D and Display) are its tiles too. On a touch strip (a phone) they are 36px, their icons 18px.
 export const STRIP_BUTTON_CLASS = "size-6 [&>svg]:size-3.5!";
 export const TOUCH_STRIP_BUTTON_CLASS = "size-9 rounded-md [&>svg]:size-4.5!";
 // The strip's own shape around its tiles (`FloatingToolBar.js`): 4px in, its tiles 4px apart, its
-// corners rounded-md. A toolbar of any length is this shape on its surface (the view's corner's too).
+// corners rounded-md. A toolbar of any length is this shape on its surface (the corner's zoom pill too).
 export const STRIP_SHAPE_CLASS = "items-center gap-1 rounded-md p-1";
 
 const StripTouch = createContext(false);

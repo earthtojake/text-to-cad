@@ -6,21 +6,28 @@ import {
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
+import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS } from "../tools/stripTouch.js";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
-import { VIEW_CORNER_TOOLBAR_BUTTON_CLASS, VIEW_CORNER_TOOLBAR_CLASS, useViewCornerSide, viewCornerAway } from "./ViewCorner.jsx";
+import { useViewCornerSide, viewCornerAway } from "./ViewCorner.jsx";
 import { viewCornerLayout } from "./viewportLayout.js";
 
 export { ZOOM_FACTOR };
 
+// The pill is a floating toolbar of its own: the strip's shape on the strip's surface (`FloatingToolBar.js`), its
+// tiles inside the strip's padding, so it is as tall as the strip (34px with its border) and reads as the same object.
+const PILL_CLASS = cn("pointer-events-auto absolute z-20 inline-flex shrink-0", STRIP_SHAPE_CLASS, FLOATING_CHROME_SURFACE_CLASS);
+// Its percentage: a tile 48px wide, its digits tabular, lit while the menu it opens is up.
+const PERCENT_CLASS = cn(STRIP_BUTTON_CLASS, "w-12 px-0 text-tiny font-medium tabular-nums aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
+
 /**
- * A flat view's zoom, in the view's corner (`ViewCorner.jsx`), as a canvas tool keeps it (tldraw's,
- * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, one 24px row of the strip's
- * buttons on the corner's surface (`ViewCorner.jsx`'s `VIEW_CORNER_TOOLBAR_CLASS`), 96px wide, and the
- * percentage pressed opens the zoom's menu — Zoom in, Zoom out,
- * Zoom to 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's keys, `pressZoomKey`).
- * A 3D view shows no percentage: its corner is the cube's, with Home over it. A flat view that draws its
+ * A flat view's zoom, the one thing in the view's corner (`ViewCorner.jsx`), as a canvas tool keeps it (tldraw's,
+ * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, the strip's tiles in a floating toolbar
+ * of its own (the strip's shape and surface, 34px tall), and the percentage pressed opens the zoom's menu — Zoom in,
+ * Zoom out, Zoom to 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key
+ * (`zoomShortcuts`; the view's keys, `pressZoomKey`).
+ * A 3D view shows no percentage: its corner is the cube's, with Home. A flat view that draws its
  * picture in 3D keeps its pill, which zooms the 3D camera (`viewportZoom`).
  *
  * 100% is the picture as authored, framed whole (a flat view's fit; in 3D the 3D views' own ruler, the
@@ -29,7 +36,8 @@ export { ZOOM_FACTOR };
  * tells it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders. Its
  * digits are tabular and its width is fixed, so the pill never shifts as it changes.
  *
- * It stands in the corner wherever the host anchors it (`viewCornerLayout`'s `pill`), unless `style` places it.
+ * It stands in the corner wherever the host anchors it, the corner's inset from the edges (`viewCornerLayout`'s
+ * `pill`), unless `style` places it.
  *
  * @param {{ zoom: ViewZoom, style?: object }} props
  * @typedef {{ read(): number, subscribe(listener: () => void): () => void, zoomBy(factor: number): void, fit(): void,
@@ -41,14 +49,13 @@ export default function ZoomPill({ zoom, style = null }) {
   const percent = useZoomPercent(zoom);
   const shown = `${Math.round(percent).toLocaleString()}%`;
   const side = useViewCornerSide();
-  return <div className={cn("absolute z-20", VIEW_CORNER_TOOLBAR_CLASS)} style={style ?? viewCornerLayout(side).pill} data-zoom-pill="">
-    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={VIEW_CORNER_TOOLBAR_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
+  return <div className={PILL_CLASS} style={style ?? viewCornerLayout(side).pill} data-zoom-pill="">
+    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={STRIP_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide="top"
-          className={cn(VIEW_CORNER_TOOLBAR_BUTTON_CLASS, "w-12 px-0 text-tiny font-medium tabular-nums")} data-zoom-control="">
+        <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide="top" className={PERCENT_CLASS} data-zoom-control="">
           <span className="w-full text-center">{shown}</span>
         </ToolbarButton>
       </DropdownMenuTrigger>
@@ -57,7 +64,7 @@ export default function ZoomPill({ zoom, style = null }) {
         <ZoomMenuItems zoom={zoom} />
       </DropdownMenuContent>
     </DropdownMenu>
-    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={VIEW_CORNER_TOOLBAR_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
+    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={STRIP_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
       <Plus aria-hidden="true" />
     </ToolbarButton>
   </div>;
