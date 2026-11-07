@@ -21,8 +21,11 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
-/** One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its product name. */
-export interface CadOpenInApp { id: string; name: string }
+/**
+ * One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its name (a KiCad's says its
+ * version). `refuses: 'newer'`: it cannot open this file, which a newer version saved, and an open with it is a 400.
+ */
+export interface CadOpenInApp { id: string; name: string; refuses?: 'newer' }
 /**
  * One of a document's files, as Open in lists it: `source` (a model's script, a file document's file)
  * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
