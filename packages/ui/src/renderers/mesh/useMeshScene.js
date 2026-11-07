@@ -40,11 +40,11 @@ export function useMeshScene({ entry, resources, client }) {
   };
   useEffect(() => () => adopt(null), []);
   useEffect(() => {
-    if (!url) {
+    if (!url && !rendered) {
       adopt(null);
-      const label = format.toUpperCase();
+      const label = (entryKind(entry) || format).toUpperCase();
       setState({ scene: null, revision, busy: false, progress: null, empty: false,
-        error: new Error(`${label} entry is missing ${label} asset: ${entry?.file || "(unknown)"}`) });
+        error: new Error(`${label} entry is missing ${label} asset: ${file || "(unknown)"}`) });
       return undefined;
     }
     if (rendered && typeof client?.renderedMesh !== "function") {

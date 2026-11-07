@@ -105,7 +105,6 @@ class Version(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="tmp-openscad-stub-") as folder:
             stub = openscad_stub.write_stub(folder)
             self.assertEqual(install.version(stub), "2021.01")
-            self.assertFalse(install.has_backend(stub), "2021.01 takes no --backend")
             with mock.patch.dict(os.environ, {"CAD_OPENSCAD": str(stub)}):
                 self.assertEqual(install.ready(), (stub, "2021.01"))
                 with mock.patch.object(install, "version", side_effect=AssertionError("asked again")):
@@ -170,6 +169,12 @@ class Dependencies(unittest.TestCase):
             self.assertEqual(_render.dependencies(text, source=program, folder=root), (helper, lib), "sorted, each once")
             # A file that is gone names nothing, and a relative path is the program's folder's.
             self.assertEqual(_render.dependencies("x.stl: gone.scad helper.scad\n", source=program, folder=root), (helper,))
+            # Make writes a ``$`` in a path as ``$$``: a library under such a folder is read, and in the key.
+            (root / "cost$").mkdir()
+            priced = root / "cost$" / "lib.scad"
+            priced.write_text("// scad\n", encoding="utf-8")
+            self.assertEqual(_render.dependencies(f"x.stl: {root}/cost$$/lib.scad\n", source=program, folder=root), (priced,))
+            self.assertEqual(_render._split("a$$b c\\ d $x"), ["a$b", "c d", "$x"])
 
     def test_the_key_reads_the_program_its_includes_and_the_version(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tmp-openscad-key-") as folder:
@@ -214,9 +219,18 @@ class Render(unittest.TestCase):
         out = self.root / "part.stl"
         out.write_bytes(b"earlier")
         self.program.write_text("syntax error here\n", encoding="utf-8")
-        with self.assertRaisesRegex(_render.RenderError, r"OpenSCAD could not render part\.scad \(exit 1\): ERROR: Parser error"):
+        with self.assertRaisesRegex(_render.ProgramRefused, r"OpenSCAD could not render part\.scad \(exit 1\): ERROR: Parser error"):
             _render.render(self.program, out)
         self.assertEqual(out.read_bytes(), b"earlier")
+        # OpenSCAD not finishing, or not running, is no fault of the program's: said apart from its refusals.
+        with mock.patch.object(_render.subprocess, "run", side_effect=_render.subprocess.TimeoutExpired("openscad", 1)), \
+                self.assertRaisesRegex(_render.RenderUnavailable, r"did not finish rendering part\.scad"):
+            _render.render(self.program, out)
+        with mock.patch.object(_render.subprocess, "run", side_effect=OSError(13, "Permission denied")), \
+                self.assertRaisesRegex(_render.RenderUnavailable, "cannot run .*Permission denied"):
+            _render.render(self.program, out)
+        self.assertFalse(issubclass(_render.RenderUnavailable, _render.ProgramRefused))
+        self.assertTrue(issubclass(_render.TwoDimensional, _render.ProgramRefused))
         self.program.write_text("square(10);\n", encoding="utf-8")
         with self.assertRaisesRegex(_render.TwoDimensional, r"part\.scad is a 2D program: OpenSCAD renders its object to a DXF"):
             _render.render(self.program, out)

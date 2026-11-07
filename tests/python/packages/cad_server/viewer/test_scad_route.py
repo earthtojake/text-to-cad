@@ -22,9 +22,11 @@ from unittest import mock
 from tests.python.support import openscad_stub
 
 from cad.openscad._program import OpenscadMissing
-from cad.openscad._render import RenderError
+from cad.openscad._render import ProgramRefused, RenderUnavailable
 from cad_server.viewer import handler as handler_module
-from cad_server.viewer.http_app import create_cad_app
+from cad_server.viewer import scads as route
+from cad_server.viewer.http_app import _KIND_ROUTES, create_cad_app
+from cad_server.viewer.kinds import EXPORTS, RENDERED_KINDS
 from cad_server.viewer.scads import ScadAnswers
 
 
@@ -76,6 +78,49 @@ class MeshRules(unittest.TestCase):
         self.assertEqual((status, render.calls), (200, 2))
         self.assertNotEqual((changed, other), (body, key))
 
+    def test_a_rendered_mesh_is_a_mesh_view_the_server_renders_worked_out_from_the_registry(self) -> None:
+        self.assertEqual(RENDERED_KINDS, frozenset({"scad"}))
+        self.assertEqual((_KIND_ROUTES["scad"], _KIND_ROUTES["stl"], EXPORTS["scad"]), ("mesh, source", "source", []))
+
+    def test_a_held_mesh_that_is_gone_is_rendered_again_never_a_404(self) -> None:
+        render = Render()
+        answers = self.answers(render=render)
+        status, mesh, key = answers.response(str(self.program))
+        self.assertEqual(status, 200)
+        mesh.unlink()  # cad delete, a cleared cache
+        status, again, other = answers.response(str(self.program))
+        self.assertEqual((status, again, other, render.calls), (200, mesh, key, 2))
+        self.assertTrue(again.is_file())
+
+    def test_the_programs_own_fault_is_held_and_openscads_is_not(self) -> None:
+        refused = Render(fails=ProgramRefused("OpenSCAD could not render part.scad (exit 1): ERROR: Parser error"))
+        answers = self.answers(render=refused)
+        status, body, _key = answers.response(str(self.program))
+        self.assertEqual((status, body["error"]), (400, "OpenSCAD could not render part.scad (exit 1): ERROR: Parser error"))
+        answers.response(str(self.program))
+        self.assertEqual(refused.calls, 1, "the same program fails the same way: held until it changes")
+        self.program.write_text("cube(11);\n", encoding="utf-8")
+        answers.response(str(self.program))
+        self.assertEqual(refused.calls, 2, "an edit is asked again")
+        unavailable = Render(fails=RenderUnavailable("OpenSCAD did not finish rendering part.scad in 900 s"))
+        answers = self.answers(render=unavailable)
+        status, body, _key = answers.response(str(self.program))
+        self.assertEqual((status, body["hint"]), (503, route._AGAIN))
+        answers.response(str(self.program))
+        self.assertEqual(unavailable.calls, 2, "not the program's fault: asked again")
+
+    def test_the_keys_remembered_are_bounded_and_their_includes_stat_without_the_record(self) -> None:
+        answers = self.answers(render=Render())
+        for at in range(route.HELD + 5):
+            program = self.folder / f"p{at}.scad"
+            program.write_text(f"cube({at});\n", encoding="utf-8")
+            answers.response(str(program))
+        self.assertLessEqual(len(answers._keys), route.HELD)  # noqa: SLF001
+        self.assertLessEqual(len(answers._held), route.HELD)  # noqa: SLF001
+        key = answers.key(str(self.program))
+        with mock.patch("cad_server._internal.scads.includes", side_effect=AssertionError("the record is read once")):
+            self.assertEqual(answers.key(str(self.program)), key)
+
     def test_a_render_that_takes_longer_than_the_hold_is_asked_again(self) -> None:
         release = threading.Event()
         answers = self.answers(render=Render(hold=release), hold_seconds=0, retry_ms=250)
@@ -91,9 +136,6 @@ class MeshRules(unittest.TestCase):
                              (str(self.folder / "part.step"), r"part\.step is not one")):
             with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, message):
                 answers.response(ref)
-        refused = self.answers(render=Render(fails=RenderError("OpenSCAD could not render part.scad (exit 1): ERROR")))
-        status, body, _key = refused.response(str(self.program))
-        self.assertEqual((status, body["error"]), (400, "OpenSCAD could not render part.scad (exit 1): ERROR"))
         missing = Render(fails=OpenscadMissing("openscad was not found: install OpenSCAD 2021.01 or newer"))
         without = self.answers(render=missing)
         status, body, _key = without.response(str(self.program))
@@ -131,6 +173,16 @@ class MeshRules(unittest.TestCase):
             self.assertNotEqual(changed, key)
             self.assertEqual(sorted(path.name for path in scads.folder(self.program).iterdir()),
                              sorted([key, changed, scads.INCLUDES]))
+            # The program by another spelling of its path -- through a symlinked folder -- is the same program:
+            # the same folder, the same key, and the kept mesh, not a render.
+            link = self.folder / "link"
+            link.symlink_to(self.folder, target_is_directory=True)
+            spelled = link / "part.scad"
+            self.assertEqual(scads.folder(spelled), scads.folder(self.program))
+            stamp = other.stat().st_mtime_ns
+            self.assertEqual(scads.rendered(spelled, "2021.01"), (other, changed))
+            self.assertEqual(other.stat().st_mtime_ns, stamp, "not rendered again")
+            self.assertEqual(ScadAnswers().response(str(spelled))[1:], (other, changed))
 
 
 @unittest.skipUnless(openscad_stub.RUNS, "the stand-in OpenSCAD is a shebang script, which Windows does not run")

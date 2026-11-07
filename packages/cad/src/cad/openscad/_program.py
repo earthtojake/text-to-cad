@@ -33,8 +33,8 @@ from cad.registry import INTEGRATIONS
 
 from cad._internal import programs
 
-__all__ = ["NAMES", "OPENSCAD", "OpenscadMissing", "check_version", "find", "has_backend", "headless_env",
-           "install_hint", "installed", "libraries", "private_run", "quiet", "ready", "version"]
+__all__ = ["NAMES", "OPENSCAD", "OpenscadMissing", "check_version", "find", "headless_env", "install_hint",
+           "installed", "libraries", "private_run", "quiet", "ready", "version"]
 
 _PROBE = INTEGRATIONS["openscad"].probe
 assert _PROBE is not None
@@ -157,7 +157,6 @@ def check_version(path: Path, found: str | None) -> str:
 # The programs found and checked in this process, by their path and stamp: a render asks once, not per call;
 # a program that is missing is looked for again each time (no process is run to find one).
 _READY: dict[tuple[str, int, int], str] = {}
-_BACKEND: dict[str, bool] = {}
 
 
 def ready() -> tuple[Path, str]:
@@ -173,19 +172,3 @@ def ready() -> tuple[Path, str]:
     if known is None:
         known = _READY[stamp] = check_version(path, version(path))
     return path, known
-
-
-def has_backend(path: Path) -> bool:
-    """Whether OpenSCAD at ``path`` takes ``--backend`` (a 2024 snapshot or newer: Manifold, many times faster
-    than CGAL on a union), asked of its ``--help`` once per program in this process. 2021.01 does not."""
-    known = _BACKEND.get(str(path))
-    if known is None:
-        with private_run("cad-openscad-help-") as (_folder, env):
-            try:
-                done = subprocess.run([str(path), "--help"], env=env, stdin=subprocess.DEVNULL, capture_output=True,
-                                      text=True, timeout=120, check=False)
-                said = f"{done.stdout}\n{done.stderr}"
-            except (OSError, subprocess.SubprocessError):
-                said = ""
-        known = _BACKEND[str(path)] = "--backend" in said
-    return known

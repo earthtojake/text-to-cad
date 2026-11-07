@@ -127,9 +127,9 @@ def snapshot(source: Path | str, out: Path | str, **options: Any) -> Any:
     STL (``cad.engine.api.snapshot``): every option is the snapshot's, about the picture -- ``display``,
     ``camera``, ``grid``, ``width``, ``height``, ``size_profile``, ``annotation``, ``measurements``
     (``cad scad snapshot``)."""
-    from cad.engine.api import snapshot as draw
+    from cad.engine.api import read_as, snapshot as draw
 
-    with _rendered(source) as found:
+    with _rendered(source) as found, read_as("scad"):  # counted as a program's snapshot, not an STL's
         return draw(found.mesh, out, **options)
 
 

@@ -41,7 +41,7 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entr
 from .documents import EngineDocuments
 from cad.registry import DOCUMENT_TYPES
 
-from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, RENDERED_KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
     "ApiError",
@@ -227,12 +227,11 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
-# A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+# A model's document has no file, so no source. A mesh view whose bytes the server renders (``RENDERED_KINDS``:
+# an OpenSCAD program, ``scads.py``) answers its ``mesh``, the STL made of it, beside its ``source``, the text.
+_KIND_ROUTES = {entry.wire: "mesh, source" if entry.wire in RENDERED_KINDS
+                else _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
-# An OpenSCAD program is a mesh view whose bytes the server renders (``scads.py``): the page reads its ``mesh``,
-# the STL OpenSCAD made of it, and its ``source`` is the program's text.
-_KIND_ROUTES["scad"] = "mesh, source"
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)
@@ -912,7 +911,7 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._handle_board_models(response, path)})
         if kind == "kicad_sch" and rest == ["plot"]:
             return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
-        if kind == "scad" and rest == ["mesh"]:
+        if kind in RENDERED_KINDS and rest == ["mesh"]:
             return self._methods(request, {"GET": lambda: self._handle_scad_mesh(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None

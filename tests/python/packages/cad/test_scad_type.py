@@ -87,6 +87,21 @@ class TheFunctions(unittest.TestCase):
         again = scad.export(self.program, out / "part.stl", daemon=False)
         self.assertEqual([(row.kind, row.written) for row in again], [("stl", False)], "the same bytes: left as it was")
 
+    def test_a_snapshot_of_a_program_counts_as_a_programs_not_an_stls(self) -> None:
+        """The engine's snapshot is handed the rendered STL, and tells its observers it read a ``scad``
+        (``api.read_as``), so telemetry counts the program's format, never the temporary STL's."""
+        from cad.engine import api
+
+        stl = self.root / "render.stl"
+        stl.write_bytes(b"x")
+        drawn = api.Drawn(path=self.root / "out.png", width=1, height=1, report={})
+        facts = api._facts("snapshot", (stl, self.root / "out.png"), {}, {}, drawn, None, 0.1)  # noqa: SLF001
+        self.assertEqual(facts["source"], "stl")
+        with api.read_as("scad"):
+            facts = api._facts("snapshot", (stl, self.root / "out.png"), {}, {}, drawn, None, 0.1)  # noqa: SLF001
+        self.assertEqual((facts["source"], facts["found"]), ("scad", True))
+        self.assertEqual(api._facts("snapshot", (stl, self.root / "out.png"), {}, {}, drawn, None, 0.1)["source"], "stl")  # noqa: SLF001
+
     def test_dfm_measures_the_rendered_mesh(self) -> None:
         result = scad.dfm(self.program, process="printing")
         self.assertTrue(result.ok, [finding.message for finding in result.findings])

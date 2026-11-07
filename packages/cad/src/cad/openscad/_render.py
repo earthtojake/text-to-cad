@@ -1,11 +1,14 @@
 """One render of an OpenSCAD program to a binary STL, headless, and what is read of the program for its key.
 
 ``render(source, out)`` runs ``openscad -o <private>/render.stl --export-format binstl -d <private>/render.d
-SOURCE`` (``--backend=manifold`` where the program takes it) in a private folder with the headless environment
-(``_program``), then moves the STL to ``out`` atomically: a failure leaves no file this run wrote, and an
-earlier ``out`` stays byte for byte (law 17). It fails in OpenSCAD's own words -- its stderr, Qt's noise
-dropped -- and refuses a 2D program in one line: OpenSCAD renders a 2D object to a DXF or an SVG, which the
-``scad`` type does not take yet. The dependency file OpenSCAD writes (Make's format, spaces escaped) names
+SOURCE`` in a private folder with the headless environment (``_program``), then moves the STL to ``out``
+atomically: a failure leaves no file this run wrote, and an earlier ``out`` stays byte for byte (law 17). No
+backend is chosen: a snapshot's ``--backend=manifold`` is left to the program's defaults (a build that lists
+the flag may still lack Manifold). It fails in OpenSCAD's own words -- its stderr, Qt's noise dropped -- as a
+``ProgramRefused`` (the program's own fault: a parse error, a missing include; ``TwoDimensional`` for a 2D
+program, which OpenSCAD renders to a DXF or an SVG and the ``scad`` type does not take yet), and as a
+``RenderUnavailable`` when OpenSCAD could not run or did not finish in time, which is no fault of the
+program's. The dependency file OpenSCAD writes (Make's format, spaces and ``$`` escaped) names
 every file it read: the ``include``s, ``use``s and ``import``s beside the program, which the server keeps a
 rendered mesh by (``key``: the program's bytes, each of theirs, OpenSCAD's version and this code's), so an
 edit to a library file renders the program again as an edit to the program does.
@@ -30,7 +33,8 @@ from cad._internal.atomic_replace import replace_atomic, temp_suffix
 
 from . import _program
 
-__all__ = ["CODE_VERSION", "RenderError", "Rendered", "TwoDimensional", "dependencies", "key", "render"]
+__all__ = ["CODE_VERSION", "ProgramRefused", "RenderError", "RenderUnavailable", "Rendered", "TwoDimensional",
+           "dependencies", "key", "render"]
 
 #: The render's arguments as a number: a change to them is a new key for every kept mesh.
 CODE_VERSION = 1
@@ -41,11 +45,20 @@ _CONTINUED = re.compile(r"\s*\\\s*$")
 
 
 class RenderError(RuntimeError):
-    """OpenSCAD could not render the program; the message carries what it said."""
+    """The program was not rendered; the message carries what OpenSCAD said, or why it did not run."""
 
 
-class TwoDimensional(RenderError):
+class ProgramRefused(RenderError):
+    """OpenSCAD refused the program itself -- a parse error, a missing include: the program's own fault, the
+    same until the program changes."""
+
+
+class TwoDimensional(ProgramRefused):
     """The program's top-level object is 2D: OpenSCAD renders it to a DXF or an SVG, not a mesh."""
+
+
+class RenderUnavailable(RenderError):
+    """OpenSCAD could not run, or did not finish in time: no fault of the program's, worth asking again."""
 
 
 @dataclass(frozen=True)
@@ -61,7 +74,8 @@ class Rendered:
 
 
 def _split(line: str) -> list[str]:
-    """A dependency line's paths: split on unescaped whitespace, a ``\\ `` an escaped space."""
+    """A dependency line's paths: split on unescaped whitespace, a ``\\ `` an escaped space, ``$$`` Make's one
+    ``$``."""
     found: list[str] = []
     current = ""
     chars = iter(line)
@@ -69,6 +83,9 @@ def _split(line: str) -> list[str]:
         if char == "\\":
             following = next(chars, "")
             current += following if following in (" ", "\\") else char + following
+        elif char == "$":
+            following = next(chars, "")
+            current += "$" if following == "$" else char + following
         elif char.isspace():
             if current:
                 found.append(current)
@@ -131,18 +148,15 @@ def render(source: str | os.PathLike, out: str | os.PathLike, *, timeout: float 
     executable, found_version = _program.ready()
     with _program.private_run("cad-openscad-render-") as (folder, env):
         rendered, deps = folder / "render.stl", folder / "render.d"
-        argv = [str(executable), "-o", str(rendered), "--export-format", "binstl", "-d", str(deps)]
-        if _program.has_backend(executable):
-            argv.append("--backend=manifold")
-        argv.append(str(program))
+        argv = [str(executable), "-o", str(rendered), "--export-format", "binstl", "-d", str(deps), str(program)]
         try:
             done = subprocess.run(argv, cwd=str(program.parent), env=env, stdin=subprocess.DEVNULL,
                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
-            raise RenderError(f"OpenSCAD did not finish rendering {program.name} in {timeout:g} s") from None
+            raise RenderUnavailable(f"OpenSCAD did not finish rendering {program.name} in {timeout:g} s") from None
         except OSError as error:
-            raise RenderError(f"cannot run {executable}: {error.strerror or error}") from None
+            raise RenderUnavailable(f"cannot run {executable}: {error.strerror or error}") from None
         said = _program.quiet(f"{done.stderr}\n{done.stdout}")
         if done.returncode != 0 or not rendered.is_file():
             if _NOT_3D in said:
@@ -152,8 +166,8 @@ def render(source: str | os.PathLike, out: str | os.PathLike, *, timeout: float 
             lines = said.splitlines()
             words = [line for line in lines if line.startswith(("ERROR", "WARNING", "Can't", "Current"))
                      or "error" in line.lower()] or lines[-3:]
-            raise RenderError(f"OpenSCAD could not render {program.name} (exit {done.returncode}): "
-                              + "; ".join(line.strip() for line in words))
+            raise ProgramRefused(f"OpenSCAD could not render {program.name} (exit {done.returncode}): "
+                                 + "; ".join(line.strip() for line in words))
         try:
             text = deps.read_text(encoding="utf-8", errors="replace")
         except OSError:

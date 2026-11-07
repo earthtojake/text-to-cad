@@ -38,12 +38,13 @@ import sys
 import threading
 import time
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
 __all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Written", "export", "hand_over",
-           "observers", "serve", "snapshot", "status", "stop", "inspect"]
+           "observers", "read_as", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words."""
@@ -1129,6 +1130,19 @@ def _heard(name: str, value: Any) -> None:
         heard[name] = value
 
 
+@contextmanager
+def read_as(kind: str) -> Iterator[None]:
+    """What a verb run inside this block in this thread reads, for its facts: ``kind``, a document type's id,
+    where the file the verb is handed is a rendering of a document of that type (``cad.scad.snapshot`` draws
+    the STL OpenSCAD rendered of a program, and the snapshot counts as a ``scad``'s, not an STL's)."""
+    previous = getattr(_HEARD, "read_as", None)
+    _HEARD.read_as = kind
+    try:
+        yield
+    finally:
+        _HEARD.read_as = previous
+
+
 def _observed(verb: str, function: _Verb) -> _Verb:
     """``function``, telling ``observers`` what it did as it returns or raises."""
 
@@ -1182,9 +1196,10 @@ def _facts(verb: str, args: tuple, kwargs: dict[str, Any], heard: dict[str, Any]
         "models": [_model(report) for report in reports], "worker": worker,
         "error": _error(error, reports, worker)}
     if verb in ("export", "snapshot"):
-        # A job's is the file it draws, which it says as it starts (``snapshot(job=)``).
+        # A job's is the file it draws, which it says as it starts (``snapshot(job=)``); a file handed over as
+        # another type's rendering is counted as that type (``read_as``).
         source = heard.get("source") or (args[0] if args else kwargs.get("source"))
-        found["source"] = _kind(source)
+        found["source"] = getattr(_HEARD, "read_as", None) or _kind(source)
     if verb == "snapshot":
         found["pose"] = kwargs.get("pose") is not None
     if verb == "export":
