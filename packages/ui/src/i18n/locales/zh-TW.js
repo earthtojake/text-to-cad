@@ -228,6 +228,8 @@ export default {
   "file.fileExplorer": "檔案總管",
   "file.fileManager": "檔案管理員",
   "file.sourceMissing": "來源檔案已被移動或刪除。",
+  "file.kicadBoardTooNew": "{app} 無法開啟此電路板：它由較新版本的 KiCad 儲存。",
+  "file.kicadSchematicTooNew": "{app} 無法開啟此電路圖：它由較新版本的 KiCad 儲存。",
   "file.defaultApp": "預設應用程式",
 
   "menu.backToHome": "回到首頁",

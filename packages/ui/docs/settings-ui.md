@@ -69,7 +69,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   script: Visual Studio Code, Cursor …; a file's: FreeCAD, Bambu Studio …, by their product names,
   untranslated as Finder is); each file the model's last build wrote that is on disk, its apps as
   **App (file name)** (FreeCAD (bracket.step)); and **Default app**, the OS's own handler for the
-  source. A group with no item is left out with its separator, and an export whose file is gone is
+  source. A KiCad board or schematic takes each KiCad this computer has, a channel's newest, by a name
+  that says which (**KiCad 9.0.6**, **KiCad 10.99 nightly**), and no Default app. A KiCad that cannot
+  read the file's format is never silently hidden: its row is drawn disabled, with the reason as its
+  hint (**KiCad 9.0.6 can't open this board: it was saved by a newer KiCad.**, `file.kicadBoardTooNew`,
+  `file.kicadSchematicTooNew`), so the person learns what to install. A group with no item is left out
+  with its separator, and an export whose file is gone is
   left out. The apps are asked for as the menu opens, never before: what needs no answer is there
   at once, the apps join it when it comes, and a failed or slow answer leaves the menu as without
   them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the CAD viewer's

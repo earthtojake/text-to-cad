@@ -227,6 +227,8 @@ export default {
   "file.fileExplorer": "파일 탐색기",
   "file.fileManager": "파일 관리자",
   "file.sourceMissing": "소스가 이동되었거나 삭제되었습니다.",
+  "file.kicadBoardTooNew": "{app}에서 이 기판을 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
+  "file.kicadSchematicTooNew": "{app}에서 이 회로도를 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.defaultApp": "기본 앱",
 
   "menu.backToHome": "홈으로",
