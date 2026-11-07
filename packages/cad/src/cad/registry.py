@@ -306,6 +306,12 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",)),
+    "xcaf_pmi": Integration(
+        "xcaf_pmi", "xcaf-pmi, Paul Fremantle's AP242 writer: writes an .xbf's PMI to a STEP with haecceity instead "
+                    "of the kernel's writer, with callouts drawn as text and notes in the file",
+        extra="xcaf_pmi", process="separate",
+        modules=("xcaf_pmi",), distributions=("xcaf-pmi", "quiddity"), identity=("xcaf-pmi",),
+        commands=("xcaf-pmi",)),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
