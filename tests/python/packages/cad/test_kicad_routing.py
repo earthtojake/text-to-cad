@@ -587,7 +587,8 @@ class KiCadRules(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             board = OpenBoard(folder)
             self.assertAlmostEqual(0.2, _rules(board, []).default.clearance)
-            Path(folder, "b.kicad_dru").write_text('(version 1)\n(rule "hv" (constraint clearance (min 1mm)))\n')
+            Path(folder, "b.kicad_dru").write_text('(version 1)\n(rule "hv" (constraint clearance (min 1mm)))\n',
+                                                   encoding="utf-8")
             with self.assertRaises(ValueError) as caught:
                 _rules(board, [])
             self.assertIn("custom rules (b.kicad_dru)", str(caught.exception))
