@@ -74,7 +74,7 @@ build123d = [
 # person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
 # 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [
-  "kicode==10.99.0.dev20261031",
+  "kicode==10.99.0.dev20261106",
 ]
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and

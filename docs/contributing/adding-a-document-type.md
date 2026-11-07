@@ -118,7 +118,7 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
 2. **The integration's entry** (`INTEGRATIONS["kicad"]`): process kind `separate`, the probe
    `kicad-cli` with the minimum version our exports need and the install hint said when it is missing,
    and `CAD_KICAD_CLI` as the variable that names it outright. Its extra, `cad[kicad]`, is kicode
-   (`kicode==10.99.0.dev20261031`, GPL-3.0-or-later as KiCad is, run as a program and imported as KiPy's
+   (`kicode==10.99.0.dev20261106`, GPL-3.0-or-later as KiCad is, run as a program and imported as KiPy's
    MIT client): KiCad's headless `kicad-cli` and its IPC API client, KiPy (as `kicode`), one nightly's
    build of both. The person's own KiCad is never run; the `cad` command installs the extra's
    environment the first time a board command needs it, as it does the `trimesh` integration's.
