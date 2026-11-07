@@ -710,8 +710,17 @@ file.
   - a GLB's node and a 3MF's object (their scenes' `describePart`): a node's index, triangles, size in
     the file's metres and authored material; an object's build item and triangles. Neither has a panel,
     so neither has a pane: their chips' cards are the same component all the same.
-  Several picked: how many, and each of them (its name and its short kind), a row that picks it alone.
-  Nothing picked: none. A view without a panel (a phone, a GLB, a mesh, a drawing of a few layers) has
+  **Several picked**: one at a time, the **active** pick (Blender's active object): the last pick made,
+  a pick added becoming it, and as it is let go of (Shift on it) the nearest one left, the one after it,
+  else the one before it. Over its detail, the pane's own top row, kept in sight as the detail scrolls, is
+  its switcher (`ItemDetail.jsx`'s `SelectedPane`, a group named Picks): ‹ and ›, 24px tiles named
+  Previous pick and Next pick, stepping through the picks in the order they were made and wrapping, either
+  side of the count, "2 of 5" in tabular figures, a menu's trigger whose menu (a stock dropdown of radio
+  items) lists every pick, its glyph, its name and its short kind, the active one ticked, a choice making it
+  the active one; ←/→ (and [ and ]) step while the switcher has the keyboard. While the pointer or the
+  keyboard is in the pane, the view lights the active pick as a row's hover lights its own, so the person
+  sees which one the pane means. One pick: no switcher. A chip's card still reads its own (a block's chip,
+  its parts). Nothing picked: none. A view without a panel (a phone, a GLB, a mesh, a drawing of a few layers) has
   no pane; its chips' cards read the same.
 - **A hover tip** — the frame's, every view's that picks (`ViewFrame.jsx`, `kit/shell/HoverTip.jsx`'s
   `useFrameHoverTip`): under Select, the name of what a press would pick there (the view's `hovered`) and

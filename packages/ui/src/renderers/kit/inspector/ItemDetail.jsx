@@ -1,12 +1,16 @@
-import { memo, useCallback, useMemo, useRef } from "react";
-import { Check, Copy } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, useTreeRowHeight } from "@cad/ui/primitives/tree-row";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { useFlatPanel } from "../shell/FlatPanel.jsx";
+import { STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
 import { useCopyFlash } from "./copyFlash.js";
-import { selectionItem, useInspect } from "./inspect.js";
+import { InspectContext, nextActivePick, pickRows, useInspect } from "./inspect.js";
 import { PickGlyph, hasPickGlyph } from "./pickGlyph.jsx";
 import { InfoRow, MonoValue } from "./referenceRows.jsx";
 import VirtualRows from "./VirtualRows.jsx";
@@ -29,11 +33,15 @@ export function elideMiddle(text, chars = CARD_ID_CHARS) {
   return `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
 }
 
-// A kind's glyph: the view's own for it (`glyphs`), else its pick glyph, else the slot alone.
-function Glyph({ kind, glyphs }) {
+// A kind's glyph: the view's own for it (`glyphs`), else its pick glyph, else none.
+function KindIcon({ kind, glyphs }) {
   const Icon = glyphs?.[kind];
-  return <TreeRowGlyph>{Icon ? <Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} />
-    : hasPickGlyph(kind) ? <PickGlyph kind={kind} className={TREE_ROW_DENSE_ICON_CLASS} /> : null}</TreeRowGlyph>;
+  return Icon ? <Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} />
+    : hasPickGlyph(kind) ? <PickGlyph kind={kind} className={TREE_ROW_DENSE_ICON_CLASS} /> : null;
+}
+// A row's glyph slot, holding its kind's glyph where it has one.
+function Glyph({ kind, glyphs }) {
+  return <TreeRowGlyph><KindIcon kind={kind} glyphs={glyphs} /></TreeRowGlyph>;
 }
 
 // One of what it is connected to: its glyph, its name, and its muted detail.
@@ -175,22 +183,125 @@ export default function ItemDetail({ item, place = "pane", copy = null }) {
   </section>;
 }
 
+// The switcher's tiles: the strip's 24px buttons; its count a tile as wide as its words, lit while its menu is up.
+const SWITCH_CLASS = STRIP_BUTTON_CLASS;
+const COUNT_CLASS = cn(STRIP_BUTTON_CLASS, "w-auto min-w-6 px-1.5 text-tiny tabular-nums aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
+// ←/→, and [ and ], step through the picks while the switcher has the keyboard.
+const STEP_KEYS = Object.freeze({ ArrowLeft: -1, ArrowRight: 1, "[": -1, "]": 1 });
+
+/**
+ * Several picks: one at a time, the active one, chosen here. ‹ and › step through the picks in the order they were
+ * picked, wrapping; the count between them ("2 of 5") is a menu of every pick, its glyph, its name and its short
+ * kind, the active one ticked, whose choice makes it the active one; ←/→ (and [ and ]) step while the keyboard is
+ * on the switcher. A group of its own, the pane's top row, staying in sight as the detail under it scrolls.
+ */
+function PickSwitcher({ picks, active, onActive, glyphs }) {
+  const { t } = useI18n();
+  const at = Math.max(0, picks.findIndex(pick => pick.id === active));
+  const step = by => onActive(picks[(at + by + picks.length) % picks.length].id);
+  const position = { index: (at + 1).toLocaleString(), count: picks.length.toLocaleString() };
+  const onKeyDown = event => {
+    // The menu's own keys, from its portal, are the menu's.
+    const by = STEP_KEYS[event.key];
+    if (!by || event.altKey || event.ctrlKey || event.metaKey || !event.currentTarget.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    step(by);
+  };
+  return <div role="group" aria-label={t("selection.picks")} onKeyDown={onKeyDown}
+    className="sticky top-0 z-10 -mx-2 flex items-center gap-1 bg-sidebar px-2 pt-1.5" data-flat-panel-picks="">
+    <ToolbarButton label={t("selection.previous")} className={SWITCH_CLASS} onClick={() => step(-1)} data-flat-panel-picks-step="previous">
+      <ChevronLeft aria-hidden="true" />
+    </ToolbarButton>
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <ToolbarButton label={t("selection.positionName", position)} tooltip={t("selection.picks")} className={COUNT_CLASS} data-flat-panel-picks-count="">
+          {t("selection.position", position)}
+        </ToolbarButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} collisionPadding={8} aria-label={t("selection.picks")}
+        className={cn(FLOATING_SURFACE_CLASS, "max-h-72 max-w-64 data-[state=closed]:animate-none!")}>
+        <DropdownMenuRadioGroup value={active} onValueChange={onActive}>
+          {picks.map(pick => <DropdownMenuRadioItem key={pick.id} value={pick.id} className="min-w-0" data-flat-panel-pick={pick.id}>
+            <KindIcon kind={pick.kind} glyphs={glyphs} />
+            <span className="truncate">{pick.label}</span>
+            {pick.detail ? <span className="min-w-0 truncate text-micro text-muted-foreground">{pick.detail}</span> : null}
+          </DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <ToolbarButton label={t("selection.next")} className={SWITCH_CLASS} onClick={() => step(1)} data-flat-panel-picks-step="next">
+      <ChevronRight aria-hidden="true" />
+    </ToolbarButton>
+  </div>;
+}
+
+/**
+ * The Selected pane's own: what is picked, as `ItemDetail` draws one pick. With several picks it draws one at a
+ * time, the active one, under its switcher (`PickSwitcher`), and while the pointer or the keyboard is in the pane the
+ * view lights the active pick as a row's hover lights its own (`useInspect().hover`), so the person sees which one
+ * the pane means: a row hovered in it lights its pick, and the active one again as the pointer leaves the row.
+ */
+function SelectedPane({ item, copy, picks, active, onActive }) {
+  const inspect = useInspect();
+  const several = picks.length > 1;
+  const [pointed, setPointed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const engaged = several && (pointed || focused);
+  const hover = useRef(inspect?.hover);
+  hover.current = inspect?.hover;
+  useEffect(() => {
+    if (!engaged) return undefined;
+    hover.current?.(active);
+    return () => hover.current?.("");
+  }, [engaged, active]);
+  const lit = useMemo(() => (engaged && inspect ? { ...inspect, hover: id => inspect.hover(id || active) } : inspect), [engaged, inspect, active]);
+  return <InspectContext.Provider value={lit}>
+    <div onPointerEnter={() => setPointed(true)} onPointerLeave={() => setPointed(false)}
+      onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }} data-selected-pane="">
+      {several ? <PickSwitcher picks={picks} active={active} onActive={onActive} glyphs={inspect?.glyphs || null} /> : null}
+      {item ? <ItemDetail key={item.id} item={item} copy={copy} /> : null}
+    </div>
+  </InspectContext.Provider>;
+}
+
+const samePicks = (a, b) => a === b || (a.length === b.length && a.every((id, at) => id === b[at]));
+
+/**
+ * The active pick among `selected` (Blender's active object): the last pick made, a pick added becoming it, and as it
+ * is let go of the nearest one left (`nextActivePick`); `choose(id)` makes one of the picks the active one.
+ * @param {readonly string[]} selected
+ * @returns {[string, (id: string) => void]}
+ */
+function useActivePick(selected) {
+  const [state, setState] = useState(() => ({ picks: selected, active: selected.at(-1) ?? "" }));
+  let current = state;
+  if (!samePicks(state.picks, selected)) {
+    current = { picks: selected, active: nextActivePick(state.picks, selected, state.active) };
+    setState(current);
+  }
+  const choose = useCallback(id => setState(now => (now.picks.includes(id) && now.active !== id ? { ...now, active: id } : now)), []);
+  return [current.active, choose];
+}
+
 /**
  * The Selected pane, every view's that has a panel (`ViewFrame.jsx` hands it to `FlatPanel.jsx`'s
- * `detail`): what is picked, as `ItemDetail` draws it — the one pick, or how many and each of them
- * (`selectionItem`) — its name copying what `copyText` gives. Null while nothing is picked (the
- * panel then draws no pane).
+ * `detail`): what is picked, as `ItemDetail` draws it, one pick, its name copying what `copyText` gives; with
+ * several, the active one (`useActivePick`) under the switcher of them all (`SelectedPane`). Null while nothing is
+ * picked (the panel then draws no pane).
  * @param {import("./inspect.js").Inspect | null} inspect
  */
 export function useSelectedDetail(inspect) {
-  const { t } = useI18n();
   const selected = inspect?.selected || EMPTY, describe = inspect?.describe, copyOf = inspect?.copyText;
+  const [active, choose] = useActivePick(selected);
   return useMemo(() => {
-    const item = inspect ? selectionItem(inspect, t) : null;
-    if (!item) return null;
-    const copy = item.pick && copyOf ? copyOf([item.pick]) : "";
-    return <ItemDetail item={item} copy={copy || null} />;
-    // The pane follows the picks and their description.
+    if (!inspect || !active) return null;
+    const item = describe(active);
+    const picks = selected.length > 1 ? pickRows(selected, describe) : EMPTY;
+    if (!item && picks.length < 2) return null;
+    const copy = item?.pick && copyOf ? copyOf([item.pick]) : "";
+    return <SelectedPane item={item} copy={copy || null} picks={picks} active={active} onActive={choose} />;
+    // The pane follows the picks, the active one and their description.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, describe, copyOf, t]);
+  }, [selected, describe, copyOf, active, choose]);
 }

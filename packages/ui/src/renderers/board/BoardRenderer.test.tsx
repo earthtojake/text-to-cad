@@ -544,6 +544,8 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
     .filter(label => !label!.startsWith('Remove'))).toEqual(['led · 2 parts']));
   expect(parts.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
+  // Several picked: the pane draws one, the active one, the last of them, under its switcher.
+  expect([detail()!.querySelector('[data-board-detail-head]')!.textContent, detail()!.querySelector('[data-flat-panel-picks-count]')!.textContent]).toEqual(['R1', '2 of 2']);
   expect(frames.at(-1)).toEqual(fitted);
   menu = await blockMenu();
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Zoom to led' }));
@@ -553,7 +555,7 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   // facts (a chip card's: the same component), then its pads, each its number and net.
   fireEvent.click(within(parts).getByRole('button', { name: 'Select J1' }));
   expect(selected(controller)).toEqual(['#J1']);
-  expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1');
+  expect([detail()!.querySelector('[data-board-detail-head]')!.textContent, detail()!.querySelector('[data-flat-panel-picks]')]).toEqual(['J1', null]);
   const facts = () => [...detail()!.querySelectorAll('[data-flat-panel-facts] [data-info-row]')].map(row => row.textContent);
   expect(facts().slice(0, 3)).toEqual(['IDJ1', 'ValueConn_01x02', 'FootprintPinHeader_1x02_P2.54mm_Vertical']);
   expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
