@@ -297,15 +297,35 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
 
   // The panel's search keeps the layers whose names match, and the blocks whose names do, under their layer.
   const search = within(aside).getByRole('textbox', { name: 'Search the drawing' });
+  const hits = (kind: string) => [...aside.querySelectorAll(`[data-flat-panel-hit] [data-${kind}-row]`)].map(row => row.getAttribute(`data-${kind}-row`));
   fireEvent.change(search, { target: { value: 'nut' } });
-  await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-layer-row]')].map(row => row.getAttribute('data-layer-row'))).toEqual(['HARDWARE']));
-  expect(aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')).toHaveLength(2);
+  await waitFor(() => expect(hits('layer')).toEqual(['HARDWARE']));
+  expect(hits('insert')).toEqual(['99', '9B']);
   // A handle finds its reference, as it is shown or bare.
   fireEvent.change(search, { target: { value: '#9b' } });
-  await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')].map(row => row.getAttribute('data-insert-row'))).toEqual(['9B']));
+  await waitFor(() => expect(hits('insert')).toEqual(['9B']));
   fireEvent.change(search, { target: { value: 'zzz' } });
   await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
+  // The search decides the candidates; among them HARDWARE's chevron folds its hits, its own row staying, and
+  // the fold holds as the query is edited.
+  const hardware = () => aside.querySelector<HTMLElement>('[data-layer-row="HARDWARE"]')!;
+  fireEvent.change(search, { target: { value: 'nut' } });
+  fireEvent.click(await waitFor(() => within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' })));
+  await waitFor(() => expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]));
+  fireEvent.change(search, { target: { value: 'm5' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]);
+  // Cleared, the search's fold goes with it: the layer as the person left it, open. One they fold themselves
+  // is opened on its hits by a search, and shut again when it is cleared.
   fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(2));
+  fireEvent.click(within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' }));
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0));
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect(hits('insert')).toEqual(['99', '9B']));
+  fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0);
 
   // Hidden, its expand button stands alone on a pill at the canvas's top-left, and brings it back.
   fireEvent.click(within(aside).getByRole('button', { name: 'Hide panel' }));

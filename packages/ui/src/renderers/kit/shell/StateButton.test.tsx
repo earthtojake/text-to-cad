@@ -1,13 +1,13 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ArrowUpToLine, Square } from 'lucide-react';
+import { Square } from 'lucide-react';
 import StateButton from '../../../../dist/renderers/kit/shell/StateButton.js';
 import ProjectionToggle from '../../../../dist/renderers/kit/shell/ProjectionToggle.js';
 
 // The view's one state button (`StateButton.jsx`), Projection's and a view's own: its icon is the state
 // on screen, its name says that state, its tooltip what a press does, with the key that does the same;
-// lit, it is drawn in the strip's pressed fill and keeps its tooltip, which a tool in hand does not.
+// no state is drawn in the strip's pressed fill.
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const tip = () => screen.queryByRole('tooltip');
@@ -34,15 +34,6 @@ it('shows the state on screen and names it; its tooltip says what a press does, 
   away(button);
   fireEvent.click(button);
   expect(presses).toEqual(['pressed']);
-});
-
-it('lit for a state a person may lose track of, it is drawn in the pressed fill and still says what a press does', () => {
-  render(<StateButton icon={ArrowUpToLine} label="Side: Bottom" tooltip="View from top" shortcut="⇧F" lit onPress={() => {}} />);
-  const button = screen.getByRole('button', { name: 'Side: Bottom' });
-  expect(icon(button)).toBe('lucide-arrow-up-to-line');
-  expect([button.getAttribute('data-variant'), button.getAttribute('aria-keyshortcuts'), button.hasAttribute('aria-pressed')]).toEqual(['secondary', 'Shift+F', false]);
-  hover(button);
-  expect(tip()!.textContent).toBe('View from top⇧F');
 });
 
 it('Projection is the state button: the projection on screen, named, the other one its tooltip, a press switching to it', () => {

@@ -228,7 +228,7 @@ through an active copper layer, always stay at full strength), the copper pours 
 tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
 tabs, the picked part's or net's pads. The view's corner, over the zoom, has **Display** (the
 preset: the mode), **2D/3D** (a square while the board is flat, a box in 3D) and **Flip** (the side
-seen: an arrow down onto the board from the top, up from the bottom, lit while the bottom is shown; ⇧F).
+seen: the board as two stacked layers, the side facing you solid; ⇧F).
 Each button's icon is what is on screen and its tooltip what a press does. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).

@@ -1,6 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOARD_THICKNESS_MM, headOnCamera, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
+import { BOARD_THICKNESS_MM, headOnCamera, leavingView, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -87,12 +87,15 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.
  * Entering 3D opens head on, on the window the 2D view shows (the flat canvas on screen until the board in
- * 3D has drawn that same picture), and eases to the 3D views' Home, the board framed whole from the
- * opening direction (or to the camera this file was left at in 3D). Leaving it with the camera where that
- * left it gives the 2D view back as it was; once the camera has been moved (a Flip moves it), leaving frames
- * the 2D view on what the camera was centred on, at its scale, from its side, the side Flip's icon showed
- * (the board in 3D up until the flat canvas has painted it). Which of the two is up, and the 3D camera and
- * projection, are the file's view (`board3d`).
+ * 3D has drawn that same picture), and eases, on the side the 2D view showed, to the 3D views' Home tilt,
+ * the board framed whole (from the bottom, Home turned over as Flip turns it), or to the camera this file
+ * was left at in 3D, turned over to that side if it looks at the other: the ease never crosses the board's
+ * plane, so Flip's icon stays the side it was. Leaving it with the camera where that
+ * left it gives the 2D view back as it was; once the camera has been moved (a Flip moves it), or when the 3D
+ * view opened on the camera a file was left at in 3D (a reload in 3D, with no 2D picture under it), leaving
+ * frames the 2D view on what the camera was centred on, at its scale, from its side, the side Flip's icon
+ * showed (the board in 3D up until the flat canvas has painted it). Which of the two is up, and the 3D camera
+ * and projection, are the file's view (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -489,36 +492,41 @@ function BoardSurface({ view, data }) {
 
   // ---- 2D/3D: one view, its other canvas -------------------------------------------------
   // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
-  // this file was left at in 3D, or to Home; a file left in 3D opens on its camera. The flat canvas stays
-  // on screen until the board in 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
+  // this file was left at in 3D, or to Home's tilt, on that same side (a camera on the other side turned
+  // over to it); a file left in 3D opens on its camera. The flat canvas stays on screen until the board in
+  // 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
   const mirrorFor = useCallback(side => boardMirrorX(sheetRef.current, side), []);
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
-  // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it.
-  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, flat: false }));
+  // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it;
+  // `side`: the side the 2D view showed, which the opening's ease ends on.
+  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, side: display.side, flat: false }));
+  const openingRef = useRef(opening);
+  openingRef.current = opening;
   // The side the 2D view showed as 3D was entered, and the window leaving 3D hands the 2D view (none: its own).
   const enteredRef = useRef(null);
   const leavingRef = useRef(null);
   const switchDimension = useCallback(next => {
     if (next === dimensionRef.current) return;
     if (next === "3d") {
-      const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current;
+      const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current, side = displayRef.current.side;
       const span = board ? Math.max(board.width, board.height) : 100;
-      const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side: displayRef.current.side,
-        mirrorX: mirrorFor(displayRef.current.side), thickness: thicknessRef.current, distance: 2 * span }) : null;
+      const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side,
+        mirrorX: mirrorFor(side), thickness: thicknessRef.current, distance: 2 * span }) : null;
       const left = saved.current.board3d.camera;
-      enteredRef.current = { side: displayRef.current.side };
-      setOpening({ camera: headOn, then: left, home: !left, flat: Boolean(headOn) });
+      enteredRef.current = { side };
+      setOpening({ camera: headOn, then: left, home: !left, side, flat: Boolean(headOn) });
       setClosing3d(false);
     } else {
-      // Leaving a camera nobody has moved since it opened gives the 2D view back as it was, from the side
-      // it showed (the opening's ease is not a move); a camera moved, the 2D view framed on what it was
-      // centred on, at its scale, from its side.
+      // Leaving a 3D view that opened on the 2D picture, its camera moved by nobody since (the opening's ease is
+      // not a move), gives the 2D view back as it was, from the side it showed; else the 2D view is framed on
+      // what the camera centres, at its scale, from its side: a camera moved, or the one a file left in 3D
+      // reopened on, which no 2D picture was under (`boardFrame.js`'s `leavingView`).
       const solid3d = view3dRef.current;
-      const plan = solid3d?.moved() ? solid3d.plan(mirrorFor) : null;
-      leavingRef.current = plan?.transform || null;
-      const side = plan ? plan.side : enteredRef.current?.side;
-      if (side && side !== displayRef.current.side) setDisplay(current => ({ ...current, side }));
+      const leaving = leavingView({ flat: Boolean(openingRef.current.flat), moved: Boolean(solid3d?.moved()), side: enteredRef.current?.side ?? null,
+        plan: () => solid3d?.plan(mirrorFor) ?? null });
+      leavingRef.current = leaving.transform;
+      if (leaving.side && leaving.side !== displayRef.current.side) setDisplay(current => ({ ...current, side: leaving.side }));
       setClosing3d(true);
     }
     dimensionRef.current = next;

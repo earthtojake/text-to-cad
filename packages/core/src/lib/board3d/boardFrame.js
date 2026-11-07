@@ -136,6 +136,24 @@ export function planFromCamera({ position, target, halfHeight, perspective = fal
 }
 
 /**
+ * What leaving 3D hands the 2D view. Its own window — the 2D view as it was, from the side it showed
+ * (`side`) — when the 3D view opened on that picture, head on (`flat`), and nobody has moved its camera
+ * since (`moved`; the opening's ease is no move): the round trip of a 3D view nobody turned. Else the
+ * camera's window (`plan()`, `planFromCamera`: what it centres, at its scale, from its side), whether the
+ * camera was moved or the 3D view opened on the camera the file was left at (a reload in 3D), under which
+ * no 2D picture was ever on screen. `plan` is asked only then.
+ *
+ * @param {{ flat: boolean, moved: boolean, side: "top" | "bottom" | null,
+ *   plan(): { side: "top" | "bottom", transform: { scale: number, offsetX: number, offsetY: number } } | null }} leaving
+ * @returns {{ transform: { scale: number, offsetX: number, offsetY: number } | null, side: "top" | "bottom" | null }}
+ *   `transform`: the window to frame the 2D view on (null: its own); `side`: the side it shows (null: as it is).
+ */
+export function leavingView({ flat, moved, side, plan }) {
+  const framed = flat && !moved ? null : plan();
+  return framed ? { transform: framed.transform, side: framed.side } : { transform: null, side };
+}
+
+/**
  * The camera turned to the board's other side: what Flip does in 3D. The eye goes over the
  * board's left-to-right axis through its target (the world's x: y and z negated), and which way is up
  * stays as it was, so the world's up stays up on screen (the cube reads upright) and the other face is
@@ -147,6 +165,21 @@ export function cameraTurnedOver({ position, target, up }) {
   const offset = position.map((value, axis) => value - target[axis]);
   const turned = [offset[0], -offset[1], -offset[2]];
   return { position: turned.map((value, axis) => value + target[axis]), target: [...target], up: [...up] };
+}
+
+/**
+ * A camera on one side of the board: as it is where it already looks at that side (`sideSeenAlong`), else
+ * turned over to it as Flip turns it (`cameraTurnedOver`). Where a 3D view entered from the 2D view eases
+ * to — Home's tilt, or the camera the file was left at in 3D — on the side the 2D view showed, so the ease
+ * stays on that side of the board's plane and Flip's icon never changes by itself: the 3D views' Home
+ * (front, right, above) from the bottom is behind, right and below, the world's up still up.
+ *
+ * @param {{ position: number[], target: number[], up: number[] }} camera
+ * @param {"top" | "bottom"} side
+ */
+export function cameraOnSide(camera, side) {
+  const seen = sideSeenAlong(camera.target.map((value, axis) => value - camera.position[axis]));
+  return seen === side ? camera : { ...camera, ...cameraTurnedOver(camera) };
 }
 
 /**

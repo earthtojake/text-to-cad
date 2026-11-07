@@ -8,7 +8,7 @@ import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
 import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
-import { selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
+import { nextSelectionIds, selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
 import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
 import { selectRenderer } from '../../../dist/file-viewer/registry.js';
@@ -99,6 +99,69 @@ it("the Model tree's controls are a STEP's under every shape Select's filter giv
   const open = (disclosure: (row: string) => string) => [disclosure('hinge'), ...hinge, 'Select base', 'Isolate base', 'Hide base',
     disclosure('arm (2)'), 'Select arm (2)', 'Select arm_1', 'Isolate arm_1', 'Hide arm_1', 'Select arm_2', 'Isolate arm_2', 'Hide arm_2', ...pin];
   expect(states).toEqual([['Search the model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
+});
+
+// The tree as its host drives it (`XbfRenderer.jsx`): what is open and what is selected are the host's,
+// a press on a row selects as the host's `pickNode` does, and `pickInView` is a pick on the model.
+const fixtureTree = presentXbfTree(structure);
+let pickInView: (ids: string[]) => void = () => {};
+let hostSelection: string[] = [];
+function HostedTree() {
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
+  pickInView = ids => setChosen(ids);
+  hostSelection = chosen;
+  const partControls = { isAssemblyView: true, expandedTreeNodeIds: expanded, hiddenPartIds: [], onFocusTreeNode: () => {},
+    onToggleTreeNode: (id: string) => setExpanded(now => now.includes(id) ? now.filter(item => item !== id) : [...now, id]),
+    onSelectTreeNode: (id: string, { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id], multiSelect)) };
+  return <InPanel tab="tree"><XbfModelTree tree={fixtureTree} active selectedIds={chosen} partControls={partControls} /></InPanel>;
+}
+// The rows as a person reads them: each name, "+" or "-" while its chevron says it is open or shut, "*" while it is lit.
+const treeRows = () => [...document.querySelectorAll('[aria-label="Modeling tree"] li[data-virtual-row]')].map(row => {
+  const chevron = row.querySelector('button[aria-expanded]'), name = row.querySelector('button[aria-pressed]');
+  return `${chevron ? (chevron.getAttribute('aria-expanded') === 'true' ? '- ' : '+ ') : ''}${name!.textContent}${name!.getAttribute('aria-pressed') === 'true' ? ' *' : ''}`;
+}).join(', ');
+
+it("a Model tree row's chevron opens and shuts it, whatever opened it, and a press on a row selects it and opens nothing", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<HostedTree />);
+  const seen: string[] = [];
+  const read = (step: string) => seen.push(`${step}: ${treeRows()} | ${hostSelection.join(' ')}`);
+  const name = (row: string) => screen.getByRole('button', { name: `Select ${row}` });
+  const chevron = (row: string) => name(row).closest('li')!.querySelector<HTMLElement>('button[aria-expanded]')!;
+  read('open');
+  // An assembly: its name selects it, shut; its chevron opens and shuts it and leaves the selection.
+  await user.click(name('hinge')); read('hinge pressed');
+  await user.click(chevron('hinge')); read('hinge chevron');
+  // A folded row: its name selects every part under it, which it holds, lit and shut; its chevron opens and shuts it.
+  await user.click(name('arm (2)')); read('arm (2) pressed');
+  await user.click(chevron('arm (2)')); read('arm (2) chevron');
+  await user.click(chevron('arm (2)')); read('arm (2) chevron again');
+  // The keyboard: Enter and Space on a chevron open and shut its row; Enter on a name selects it and opens nothing.
+  chevron('arm (2)').focus();
+  await user.keyboard('{Enter}'); read('chevron Enter');
+  await user.keyboard(' '); read('chevron Space');
+  name('base').focus();
+  await user.keyboard('{Enter}'); read('name Enter');
+  // A pick on the model opens the rows over what it picked; the chevron shuts them again, and the reveal does not
+  // reopen them; the next pick leaves the shape the person left.
+  act(() => pickInView(['i2'])); read('arm_2 picked');
+  await user.click(chevron('arm (2)')); read('arm (2) shut over the pick');
+  act(() => pickInView(['i3'])); read('pin picked');
+  expect(seen).toEqual([
+    'open: + hinge, pin | ',
+    'hinge pressed: + hinge *, pin | n0.0',
+    'hinge chevron: - hinge *, base, + arm (2), pin | n0.0',
+    'arm (2) pressed: - hinge, base, + arm (2) *, pin | i1 i2',
+    'arm (2) chevron: - hinge, base, - arm (2) *, arm_1 *, arm_2 *, pin | i1 i2',
+    'arm (2) chevron again: - hinge, base, + arm (2) *, pin | i1 i2',
+    'chevron Enter: - hinge, base, - arm (2) *, arm_1 *, arm_2 *, pin | i1 i2',
+    'chevron Space: - hinge, base, + arm (2) *, pin | i1 i2',
+    'name Enter: - hinge, base *, + arm (2), pin | i0',
+    'arm_2 picked: - hinge, base, - arm (2), arm_1, arm_2 *, pin | i2',
+    'arm (2) shut over the pick: - hinge, base, + arm (2), pin | i2',
+    'pin picked: - hinge, base, + arm (2), pin * | i3',
+  ]);
 });
 
 it("Select's menu is a STEP's single choice: All when a file opens, or one kind alone", async () => {

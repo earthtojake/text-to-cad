@@ -67,7 +67,8 @@ it('every corner control follows the corner the host anchors the cube at', async
     return result;
   };
   const bottom = 'calc(8px + var(--cad-viewport-corner-bottom, 0px))';
-  const over = 'calc(46px + var(--cad-viewport-corner-bottom, 0px))';
+  // The pill 8px off the bottom, its 24px, then the corner's 4px gap.
+  const over = 'calc(36px + var(--cad-viewport-corner-bottom, 0px))';
   expect(corner('right')).toEqual({ pill: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', bottom],
     pillColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 14px)', over], aligned: true,
     cubeColumn: ['', 'calc(var(--cad-viewport-corner-right, -6px) + 20px)'] });

@@ -7,7 +7,7 @@ import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
-import { VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
+import { VIEW_CORNER_SURFACE_CLASS, VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/board/BoardRenderer.js';
 import BOARD from './__fixtures__/board.plot.json';
@@ -35,7 +35,8 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
 });
 // The board in 3D mounts the 3D views' viewport, which needs WebGL: a stand-in here, which says it has
 // presented and answers the camera calls; the pixels and the picks through it are the browser suite's.
-const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[] }));
+// `homes`: what each Home was asked to frame from (its direction and up).
+const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[] }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
   const React = await import('react');
   return {
@@ -45,7 +46,7 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
         captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }),
         getPerspective: () => ({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0, 1] }),
         setPerspective: (camera: any) => { viewport3d.calls.push(`setPerspective ${JSON.stringify(camera.position)}`); return true; },
-        goHome: () => { viewport3d.calls.push('goHome'); return true; },
+        goHome: (from?: any) => { viewport3d.calls.push('goHome'); viewport3d.homes.push(from ?? null); return true; },
         resetZoom: () => { viewport3d.calls.push('resetZoom'); return true; },
         zoomToBounds: () => true, zoomPercent: () => 100, subscribeCamera: () => () => {}, zoomBy: () => true, zoomTo100: () => true
       }));
@@ -167,9 +168,11 @@ const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('
 // 2D/3D and Flip, each by what its name says it is ("View: 2D", "Side: Top").
 const dimensionButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^View: / });
 const flipButton = (pane: HTMLElement) => within(corner(pane)).getByRole('button', { name: /^Side: / });
-// A button's state as the screen shows it: its name, its Lucide icon, its fill (`secondary`: the strip's pressed fill).
-const shown = (button: HTMLElement) => [button.getAttribute('aria-label'), [...button.querySelector('svg')!.classList].find(name => name.startsWith('lucide-')),
-  button.getAttribute('data-variant')];
+// An icon by name: Lucide's by its class, a board's side by its own (`boardSideIcons.jsx`: `side-top`, `side-bottom`).
+const iconName = (svg: SVGElement | null) => (svg ? [...svg.classList].find(name => name.startsWith('lucide-'))
+  ?? (svg.dataset.boardSideIcon ? `side-${svg.dataset.boardSideIcon}` : null) : null);
+// A button's state as the screen shows it: its name, its icon, its fill (`secondary`: the strip's pressed fill).
+const shown = (button: HTMLElement) => [button.getAttribute('aria-label'), iconName(button.querySelector('svg')), button.getAttribute('data-variant')];
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
 const panel = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-flat-panel]')!;
@@ -241,15 +244,22 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
   expect(cornerButtons(pane)).toEqual(['Display mode: Board', 'View: 2D', 'Side: Top']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
-  // Every corner control is a small toolbar on the one corner box (`ViewCorner.jsx`): the strip's fill and
-  // shape with no border or shadow, its buttons the strip's tiles; Display, 2D/3D and Flip one button each.
-  const boxes = [...corner(pane).querySelectorAll<HTMLElement>('[data-view-corner-tile]'), pane.querySelector<HTMLElement>('[data-zoom-pill]')!];
-  expect(boxes.length).toBe(4);
-  for (const control of boxes) {
-    expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => control.classList.contains(name))).toBe(true);
-    expect([...control.classList].some(name => /^(border|shadow)/.test(name))).toBe(false);
-    for (const button of control.querySelectorAll('button')) expect(button.classList.contains('size-6')).toBe(true);
+  // Every corner control is the strip's own 24px button carrying the corner's one surface (`ViewCorner.jsx`), with
+  // nothing round it and no border or shadow: Display, 2D/3D and Flip, the column's own children; the pill one
+  // row of the same buttons on that surface.
+  const classes = (element: Element) => [...element.classList];
+  const surface = VIEW_CORNER_SURFACE_CLASS.split(' ');
+  const column = [...corner(pane).children] as HTMLElement[];
+  expect(column.map(element => element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON']);
+  const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
+  expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => pill.classList.contains(name))).toBe(true);
+  for (const button of [...column, ...pill.querySelectorAll<HTMLElement>('button')]) expect(classes(button)).toContain('size-6');
+  for (const control of [...column, pill]) {
+    expect(surface.every(name => control.classList.contains(name)), control.getAttribute('aria-label') || 'pill').toBe(true);
+    expect(classes(control).some(name => /^(border|shadow-(sm|md|lg))/.test(name))).toBe(false);
   }
+  // The pill's buttons stand on its surface, not on a second one of their own.
+  for (const button of pill.querySelectorAll('button')) expect(surface.some(name => button.classList.contains(name))).toBe(false);
   // 2D/3D and Flip are the view's state button, Projection's (`kit/shell/StateButton.jsx`), a tile like Display's.
   expect([...corner(pane).querySelectorAll('[data-state-button]')]).toEqual([dimensionButton(pane), flipButton(pane)]);
   const display = within(corner(pane)).getByRole('button', { name: /^Display mode:/ });
@@ -957,15 +967,15 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; a p
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const more = async () => { await user.click(within(phone.pane).getByRole('button', { name: 'More tools' })); return openMenu('More tools'); };
   // A row's own icon: its Lucide glyph, not the menu's tick or submenu chevron.
-  const glyph = (row: HTMLElement) => [...row.querySelectorAll('svg')].flatMap(svg => [...svg.classList])
-    .find(name => name.startsWith('lucide-') && !['lucide-check', 'lucide-chevron-right'].includes(name)) ?? null;
+  const glyph = (row: HTMLElement) => [...row.querySelectorAll<SVGElement>('svg')].map(iconName)
+    .find(name => name && !['lucide-check', 'lucide-chevron-right'].includes(name)) ?? null;
   const rows = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLElement>('[role^=menuitem]')]
     .map(row => [row.textContent, row.getAttribute('aria-checked'), glyph(row)]);
-  expect(rows(await more())).toEqual([['Display', null, null], ['3D view', 'false', 'lucide-box'], ['View from bottom', 'false', 'lucide-arrow-up-to-line'],
+  expect(rows(await more())).toEqual([['Display', null, null], ['3D view', 'false', 'lucide-box'], ['View from bottom', 'false', 'side-bottom'],
     ['Zoom', null, 'lucide-scan-search']]);
   await user.click(within(await openMenu('More tools')).getByRole('menuitemcheckbox', { name: 'View from bottom' }));
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
-  expect(rows(await more())[2]).toEqual(['View from bottom', 'true', 'lucide-arrow-up-to-line']);
+  expect(rows(await more())[2]).toEqual(['View from bottom', 'true', 'side-bottom']);
   phone.dispose();
 });
 
@@ -1087,7 +1097,7 @@ it("2D/3D is one view: the strip, the panel and the corner stay the same mounted
   again.dispose();
 });
 
-it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key; Flip is lit from the bottom; ⇧F flips as F still fits", async () => {
+it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key, neither ever in a pressed fill; ⇧F flips as F still fits", async () => {
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
@@ -1103,7 +1113,7 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
   for (const button of [dimensionButton(pane), flipButton(pane)]) expect(button.hasAttribute('aria-pressed')).toBe(false);
   expect([dimensionButton(pane).getAttribute('aria-keyshortcuts'), flipButton(pane).getAttribute('aria-keyshortcuts')]).toEqual(['3', 'Shift+F']);
   expect([shown(dimensionButton(pane)), await hint(dimensionButton(pane))]).toEqual([['View: 2D', 'lucide-square', 'ghost'], 'Switch to 3D3']);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Top', 'lucide-arrow-down-to-line', 'ghost'], 'View from bottom⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Top', 'side-top', 'ghost'], 'View from bottom⇧F']);
   // Moved off the fit (a middle-button pan), so F's fit would show.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
   const fitted = { ...frames.at(-1)! };
@@ -1114,19 +1124,27 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
   const moved = { ...frames.at(-1)! };
-  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it, lit, its hint the way back.
+  // Flip's glyph: the board's two layers, the solid one at 85%, set as the side it shows.
+  const glyph = () => { const svg = flipButton(pane).querySelector('svg')!; return { place: svg.querySelector('g')!.getAttribute('transform'),
+    paths: [...svg.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('fill-opacity')]) }; };
+  const top = glyph();
+  expect(top.paths.map(([, fill]) => fill)).toEqual(['0.85', null]);
+  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it by its icon alone, as
+  // Projection shows its state (no pressed fill), its hint the way back.
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
   expect(frames.at(-1)).toEqual(moved);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary'], 'View from top⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'ghost'], 'View from top⇧F']);
+  // The same drawing mirrored top to bottom, so the two sides weigh the same: the top's set 0.75 down, the bottom's 0.75 up.
+  expect([top.place, glyph().place, glyph().paths]).toEqual(['translate(0 0.75)', 'matrix(1 0 0 -1 0 23.25)', top.paths]);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.side).toBe('bottom'));
-  // F is the fit, still, not a flip; ⇧F again, and the top is back, unlit.
+  // F is the fit, still, not a flip; ⇧F again, and the top is back.
   fireEvent.keyDown(canvas, { key: 'f', code: 'KeyF' });
   await waitFor(() => expect(frames.at(-1)).toEqual(fitted));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom' });
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'top' }));
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   dispose();
 });
 
@@ -1144,12 +1162,12 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   viewport3d.calls.length = 0;
   fireEvent.click(flipButton(pane));
   expect(viewport3d.calls).toEqual(['setPerspective [10,40,-30]']);
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   report(true);
-  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   // Turned back over by hand (an orbit past the board's plane): the icon follows.
   report(false);
-  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'lucide-arrow-down-to-line', 'ghost']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   // ⇧F is Flip's key in 3D too.
   viewport3d.calls.length = 0;
   fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: 'F', code: 'KeyF', shiftKey: true });
@@ -1164,8 +1182,36 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   cleanup();
   const again = await open('blinky.kicad_pcb', { state: stored });
   await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
-  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'lucide-arrow-up-to-line', 'secondary']);
+  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   again.dispose();
+});
+
+it("entering 3D eases to a camera on the side 2D showed, so Flip keeps it: Home's tilt from below for the bottom, the camera left in 3D turned over to the top", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const side = () => flipButton(pane).getAttribute('data-board-side');
+  // Seen from the bottom in 2D, then in 3D: Home framed from the 3D views' Home direction turned over the board.
+  fireEvent.click(flipButton(pane));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
+  viewport3d.homes.length = 0;
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.homes).toHaveLength(1));
+  expect([viewport3d.homes[0], side()]).toEqual([{ direction: [2.1, 1.65, -1.08], up: [0, 0, 1] }, 'bottom']);
+  // The camera at rest under the board, kept with the file; back in 2D, still the bottom, which Flip turns to the top.
+  act(() => { viewport3d.props.onPerspectiveChange({ position: [10, 40, -30], target: [10, 0, 0], up: [0, 0, 1] }); });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.camera?.position).toEqual([10, 40, -30]));
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  expect(side()).toBe('bottom');
+  fireEvent.click(flipButton(pane));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'top' }));
+  // In 3D again, from the top: the camera it was left at, turned over the board to the top about its target, and no Home.
+  viewport3d.calls.length = 0;
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.calls).toContain('setPerspective [10,-40,30]'));
+  expect([viewport3d.homes.length, side()]).toEqual([1, 'top']);
+  dispose();
 });
 
 it("a part's card says its 3D model, or why it has none, and the Parts end with the parts that have none; the Layers' 3D models eye is kept with the file", async () => {
