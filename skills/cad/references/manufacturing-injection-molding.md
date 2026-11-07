@@ -4,200 +4,123 @@ The evidence, the rules, the review and how to check a redesign are SKILL.md's
 [Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
 to injection molding.
 
-## Sources
+## Design it
 
-Where the person supplies no shop specification, start from these two:
+What a molded part has from its first line (the `generic` set's numbers, from Protolabs' and Protolabs
+Network's guides; a shop's set moves them):
 
-- [Injection molding design guide](https://www.hubs.com/guides/injection-molding/) (Protolabs Network) for the design rules: wall thickness and hollowing thick sections, draft, ribs, bosses, undercuts and side actions, snap fits and living hinges, common defects (sink, warp), and the straight-pull cost tips.
-- [Plastic injection molding guidelines](https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/) (Protolabs) for that supplier's size limits, resin-specific wall thickness table, draft, undercut and radii guidance.
+- **The pull first.** Decide which way the mold opens (`--pull z`: the open side of a box faces +Z) and
+  model every feature along it. Build the outside by extruding the outline up from the parting face
+  with draft, and cut the cavity by extruding the inner outline down from the open face with the same
+  draft, so both release:
 
-Texture, wall depth, resin grade, fillers, and tooling can change the
-applicable limits. Verify the current guidance before citing numerical
-thresholds.
+  ```python
+  body = bd.extrude(bd.Rectangle(60, 40), 20, taper=2)                      # 2 degrees, narrowing upward
+  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=2)  # from the open face down, narrowing
+  body = body - cavity
+  ```
 
-## Measure it
+  Every wall needs 0.5 degree at least (an error under it) and 2 degrees recommended (a warning under
+  it: Hubs' and Protolabs' figure; a light texture takes 3, a heavier one 5 or more, Protolabs) to
+  eject cleanly; a face square to the pull is not a wall and takes none. A hole or a boss is drafted the
+  same way.
+- **One wall.** A nominal wall in the resin's range (ABS 1.1 to 3.6 mm, PC 1.0 to 3.8, nylon 0.8 to 2.9;
+  the material table has the rest) and no section thicker than 1.7 times it: core out thick spots.
+  Change thickness over a length of three times the step, never a sharp step.
+- **Ribs and bosses.** A rib is 50 to 60% of the wall it stands on, at most three walls tall, at least
+  2.5 walls from the next, drafted 0.5 degree or more, with a fillet of a quarter of the rib's own
+  thickness at its root. A boss is a drafted tube whose wall is 60% of the base wall at most, its hole
+  along the pull, a fillet at the root (a sharp root is `molding.boss_root_fillet`, a warning) and
+  gussets to the wall rather than a thick foot. A snap arm is a rib with a barb: the check reads it as a
+  snap (`kind: snap`, at least half the wall thick, Hubs) and its barb as the undercut it is.
+- **Corners.** Inside radius at least half the wall, outside radius the inside plus the wall, so the
+  thickness stays constant around the corner. Fillet the cavity's vertical edges and its floor edges.
+- **Undercuts.** A feature that will not pull straight -- a side hole, a snap hook, a lip under a rim --
+  takes a side action or a lifter (a warning, a cost) and one nothing frees is an error: avoid it, or
+  plan the action with the person.
+- The resin and the process on the part: `part.material = plastics.abs_(process=molded())`
+  (`bd_materials.processes`); `cad model dfm "$ID" --pull z` then needs no `--process` or `--material`.
 
-`cad <type> dfm --process molding` measures draft, undercuts and projected area along a pull:
+## Check it
 
 ```bash
-cad step dfm part.step --process molding --pull z
-cad model dfm "$ID" --process molding --pull y --json
-cad stl dfm part.stl --process molding --units mm
-cad step dfm part.step --process molding --candidates
+cad step dfm cover.step --process molding --pull z --material abs
+cad model dfm "$ID" --process molding --pull y --material pc --cavities 4 --rules protolabs
+cad step dfm cover.step --process molding --candidates
+cad stl dfm cover.stl --process molding --pull z --units mm
 ```
 
-```text
-warning: zero_draft_walls at 0, -10, 0: 1250.84 mm2 of wall has no draft along the pull (under 0.05 deg), 66 triangles; the largest face is 300 mm2
-OK part.step: molding along 0,0,1: walls 1250.84 mm2, zero-draft 1250.84 mm2, min wall draft 0 deg, undercut candidates 0 mm2, projected 550 mm2, depth 10 mm
-```
+The options that change the verdicts:
 
-The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id, and `<type>` is its document
-type: `stl`, `threemf` (`cad threemf dfm part.3mf`), `glb`, `step`, `xbf` or `model`. A STEP or an xbf is
-tessellated by the engine, so there is nothing to export first. `--pull` is an axis (`z`, `-y`) or
-`x,y,z` components, `z` by default; `--wall-limit` (45 degrees) is where a face stops being a wall and
-`--zero-tol` (0.05 degrees) is zero draft. A mesh already held in a program (an `.obj`, a `.ply`) is
-measured with `cad.trimesh.molding(mesh, pull="z")` in a check script.
+- `--pull`: the confirmed pull, an axis (`z`, `-y`) or `x,y,z` components; `z` by default. Draft and
+  undercuts are relative to it. Without a confirmed pull, rank the pulls with `--candidates` (it
+  judges nothing) and report draft as unverified rather than failing every vertical-looking face.
+- `--material`: the resin's wall range and clamp factor. Without it the wall-range rules are not
+  evaluated (`resin_unknown`).
+- `--cavities`: the clamp-force estimate.
+- `--wall-limit` (45 degrees: a face steeper from the pull is no wall) and `--zero-tol` (0.05
+  degrees: under it is zero draft).
 
-The check is facts only: it never compares a figure with a resin's or a tool's limit, so its `OK` is
-not a moldable verdict. Its findings say what the figures show (warnings `zero_draft_walls`,
-`undercut_candidates`, `units_suspect`, `several_bodies`, `coarse_curved_face`; info
-`probe_resolution`), each at the place it was measured. It exits 1 when something was not measured: a
-`measurement_failed` error names the family and the rest are still reported, so never read that run
-as "no findings"; `mesh_unreadable`, `not_finite` and `invalid_target` carry no measurements at all.
+Rule sets: `generic`, `protolabs`, `hubs`, `xometry`. A STEP, an xbf or a model is measured exactly
+and each item names a face ref; prefer it to a mesh.
 
-`--json` prints one line, `ok`, `findings`, `summary` and `measurements`, the report the families
-below describe.
+## Read it
 
-### Units: `measurements.mesh` and `measurements.scale`
+The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`, `corners`, `projection`,
+`envelope`, `parting`, `clamp`; `pulls` with `--candidates`.
 
-An STL carries no units, so `--units mm|cm|m|in|ft` states the file's (the other types declare their
-own), and the report repeats it as `scale.declared_units`. Without it an STL is read as millimetres,
-and `scale.units_suspect` flags a part whose bounding box is then not the size of a molded part. That
-flag catches only the extremes: a 4 × 3 × 2 part is plausible in millimetres, centimetres AND inches,
-so `scale.bbox_mm_if_units` gives the envelope under each one. Check it against the part you expect
-rather than treating a clear flag as confirmation.
+- `draft` items carry `draft_deg` and `opens` (`+pull`, `-pull`, `none` for zero draft, `split` where
+  the parting crosses the face). Faces square to the pull are not walls and appear in no draft figure.
+- `undercuts` items carry the `release` each needs: `side_action`, `lifter`, `collapsible_core`, or
+  `none`. `molding.undercut` (a warning) is tooling cost; `molding.undercut_unreleasable` (an error)
+  is a feature no action tried frees. Distinguish a need for side actions from impossibility.
+- `thickness.nominal_mm` and `thick_sections` (a face's `feature` says whether it is a wall's, a rib's or
+  a boss's: the wall range judges walls alone); `transitions` (a step between two walls read on its
+  stepped side, `basis: step`: its run over its change, `min_mm`, `max_mm`, the two points in `at_xyz`,
+  judged by `molding.wall_transition`; a free-form face's from the rolling ball, `basis: ball`); `ribs`
+  (`kind` rib or snap) and `bosses` as ratios to the wall they stand on; `corners` as radius over the
+  wall. These are sink and stress signals, not a fill simulation. Walls drafted with `extrude(taper=...)`
+  are B-splines that the check reads as the planes and cylinders they are.
+- `parting.flat_parting_possible`, and `stepped_parting` where it is not.
+- `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
+  factor for the resin.
+- Several bodies (`several_bodies`) are an assembly: each body is checked on its own. Say so rather
+  than reviewing an assembly as a part. A part of several solids gets the same warning: a component
+  model whose contacts sit inside its housing reads its pins as walls and ribs and its slots as
+  undercuts, so check the housing alone (one fused solid gives no such signal: say so).
 
-### `measurements.draft`
+When the pull looks wrong -- most of the wall reads zero draft along it, or a quarter of the surface is
+trapped -- the `zero_draft_walls` or `undercut_candidates` hint names the pull `--candidates` ranks
+first: confirm the pull before budgeting side actions or drafting walls.
 
-- `wall_area_mm2`: faces within `--wall-limit` (default 45°) of the pull. Tops,
-  bottoms and steep chamfers are not walls and appear in no draft figure.
-- `wall_draft_histogram_mm2`: wall area by draft band.
-- `wall_area_by_opening_mm2`: wall area by the direction its half withdraws
-  (`+pull`, `-pull`, `none`). Walls opening both ways along one pull is the
-  normal two-half case; which faces belong to which half is a parting-line
-  decision, not this.
-- `zero_draft_wall_area_mm2`: FLAT wall area parallel to the pull, pooled by
-  normal in `largest_zero_draft_faces`.
-- `zero_draft_tangent_area_mm2`: facets on a CURVED face that merely runs
-  parallel to the pull. A sphere is tangent to the pull along a line, not over
-  an area, so this figure scales with the tessellation — one sphere read
-  261 mm² coarse and 67 mm² fine. Report it as a tangency, never as a wall.
-  A wall that a fillet joins tangentially is NOT this: a flange rim with a
-  radius top and bottom stays zero-draft wall. The whole connected zero-draft
-  region is measured, not one triangle of it, so a flat wall the exporter split
-  into rows is not mistaken for one step of a sweep.
-- `min_wall_draft`: the lowest draft over the part's faces, above an absolute
-  area floor (0.1% of surface area), with its area and location. Tangent bands
-  are excluded. `min_facet_draft` is the single worst triangle; it moves with
-  the mesh, so quote `min_wall_draft`.
-- `drafted_wall_mean_draft_deg`: area-weighted over the drafted walls.
-
-Every reported face carries `"surface"`: `"flat"` or `"curved"`, and the two are
-pooled differently because they have to be. A flat face is pooled by normal and
-read exactly — every facet of a planar wall carries the surface's own normal. A
-curved face is pooled by the SURFACE it lies on, because a facet of one is a
-chord: pooled by normal instead, a 3° cone came back as 318 separate "faces" of
-10 to 60 mm² and the lowest chord among them was reported as the part's minimum,
-giving 0.46°, 0.68° and 1.91° for the same wall at three tessellations.
-
-A curved face is read at the **5th percentile of its own area**, not its mean
-(which would bury a real low-draft band on a sphere) and not its minimum (the
-chord outlier again). It also carries `spread_deg`, the scatter across the same
-face. On a face whose draft should be uniform that spread is the tessellation,
-and it BOUNDS the error: the reading is low by no more than the spread it
-declares. A spread over a degree means measure a finer mesh before citing the
-figure against a limit, and `reading_note` (the `coarse_curved_face` finding)
-says so. Note that `area_mm2` for a curved face is the whole face's area, not
-the area at that one draft.
-
-Read `min_wall_draft` against `zero_draft_wall_area_mm2` in the same report. If
-there is zero-draft wall area and the minimum is not zero, the two disagree and
-the report is wrong; say so rather than quoting one of them.
-
-### `measurements.undercuts`
-
-A straight two-half pull occlusion test. From each face a ray is cast along the
-direction its mold half withdraws; faces the part itself blocks are candidates
-(`candidate_area_mm2`, `candidate_area_pct_of_surface`, `largest_candidate_faces`
-with their centroids). Zero-draft walls count only when both directions are
-blocked (`trapped_zero_draft_area_mm2`). Faces are split to a small maximum edge
-before casting, so the counted area follows the feature rather than the
-tessellation.
-
-`opens_toward` is the lean of a face's outward normal along the pull, not its
-mold-half assignment. The test assumes a straight two-half tool with the
-parting at the silhouette; a candidate may be resolved by a side action, a
-lifter, or another parting line, and that judgement, plus the full withdrawal
-path and shutoffs, is made in the review, not here.
-
-A file with several bodies is an assembly, not one molded part: each body is
-tested against itself, `body_count` and `per_body` appear, and nothing treats
-one body as an obstruction for another. Say so in the report rather than
-reviewing an assembly as a part. A sealed internal void is NOT a second body —
-coring a thick section is the standard molding fix, so it is counted in
-`internal_void_count` and the part stays one body. Nothing here measures a
-sealed void's own walls or reaches inside one.
-
-`probe_resolution_note` (the `probe_resolution` finding) appears when the face
-budget stopped the split short. A mesh already over budget is cast unsplit, so
-undercut area follows the tessellation; measure a finer mesh near the edge the
-note names before quoting the area.
-
-### `measurements.projection`
-
-Silhouette area along the pull (`projected_area_mm2`), rasterised, with
-`raster_resolution_mm` sized to the part and reported. Plus depth along the pull
-(`depth_along_pull_mm`) and volume. The figure is a count of covered cells,
-accurate to about one cell ring.
-
-### `--candidates`: `measurements.pulls.candidates`
-
-In place of one pull's `draft`, `undercuts` and `projection` (it takes no `--pull`),
-repeats the draft and undercut summaries for x, y, z AND the mesh's own
-principal axes, each row a `pull` with its `undercut_candidate_area_mm2`,
-`wall_area_mm2`, `zero_draft_wall_area_mm2`, `wall_area_below_1deg_mm2` and
-`min_wall_draft_deg`. A part modelled off-axis has no good pull among the three
-world axes, and reading a 2° draft as 12° under `--pull z` looks like a
-measurement rather than a mismatch; `principal0/1/2` are where its draft was
-built. Draft magnitude is the same for a +axis and a -axis pull. Choose a pull
-from measured area, not by eye.
-
-### Not measured here
-
-**Wall thickness.** Measure it on the CAD model, or on the mesh with a tool
-that casts rays (`cad <type> dfm --process printing` reports
-`measurements.wall_thickness`), and trust only the thin end of a ray cast: one
-ray along the face normal reads a plate's LENGTH rather than its thickness. The
-thin end — the minimum and the thin samples — is what it gets right, and the
-thin end is what fill depends on. No ray cast sees a sealed void. State the
-method with any thickness finding.
+On a mesh: an STL has no units, so give `--units` and compare `scale.bbox_mm_if_units` with the part
+you expect. A curved face's draft reads low by up to its `spread_deg` (`coarse_curved_face`, an info:
+measure a finer mesh before citing it); fillets are not seen, so filleted corners and rib roots merge;
+bosses are found only along the pull; a snap arm is not told from a rib.
 
 ## Review the part
 
-Collect resin grade/filler, nominal wall, pull direction, proposed parting line,
-texture/cosmetic faces, critical fits, and tooling constraints. Treat unknown
-resin or pull direction as missing context, not permission to guess a verdict.
+Collect resin grade and filler, nominal wall, pull direction, proposed parting line, textured and
+cosmetic faces, critical fits, and tooling constraints. Then check by hand what the check does not
+measure:
 
-- Review local wall thickness and transitions, including rib and boss junctions.
-  Sampling must state its coverage. Thick intersections can matter even when
-  nominal walls are consistent. Compare with resin-specific guidance.
-- Evaluate draft relative to the stated pull direction, separating core/cavity
-  sides and textured faces. Zero draft means a wall parallel to the pull direction;
-  top/bottom faces perpendicular to it should not be flagged as zero-draft walls.
-- Identify candidate undercuts and trapping features relative to the proposed
-  parting and pull. A normal-angle check alone is not a complete undercut test;
-  visibility/occlusion and the full withdrawal path matter. Distinguish a need
-  for side actions or inserts from impossibility of molding.
-- Review ribs, bosses, corner transitions, shutoffs, and likely ejection access.
-  Flag sink/warpage risks qualitatively unless a relevant analysis was run.
-- Discuss gate, vent, weld-line, packing, cooling, and shrinkage implications as
-  tooling questions; geometry review does not simulate filling or predict a
-  validated cycle time. Do not rescale the finished part for shrinkage without
-  the toolmaker's resin/process assumptions.
-- Preserve mating faces and functional dimensions when proposing draft or
-  coring. Identify which datum stays fixed and whether the proposed change
-  adds or removes material.
+- Texture draft, extra draft on tall features, shut-off draft; core and cavity sides separately.
+- Stripping undercuts, snap-fit and living-hinge proportions, threads, a boss against its screw.
+- The withdrawal path and the slide's own clearance: a side action's stroke is to where the pull
+  clears. The undercut test samples points, so a feature smaller than their spacing can be missed.
+- Gate, vent, weld lines, packing, cooling, shrinkage and warpage: tooling questions, never a
+  validated cycle time. Do not rescale the part for shrinkage without the toolmaker's assumptions.
+- Preserve mating faces and functional dimensions when proposing draft or coring: say which datum
+  stays fixed and whether the change adds or removes material.
 
-This workflow reviews conventional thermoplastic injection molding. For silicone,
-overmolding, or insert molding, identify the additional process requirements
-and obtain applicable guidance rather than reusing thermoplastic limits blindly.
+This workflow reviews conventional thermoplastic injection molding. For silicone, overmolding or
+insert molding, obtain applicable guidance rather than reusing thermoplastic limits.
 
 ## Worked reasoning example
 
 The following numbers are illustrative inputs, not default process limits.
 
-If a side wall has measured 0.5 degree draft (`measurements.draft.min_wall_draft`
-from `cad step dfm part.step --process molding --pull <axis>`) relative to the
-confirmed pull and the selected texture/tooling specification requires 2 degrees,
-report the shortfall for that wall. Without a confirmed pull direction, report
-draft as unverified rather than failing every vertical-looking face.
+`molding.draft_min at cover/face 4: wall draft 0 deg is under the 0.5 deg minimum`, along the
+confirmed `--pull z`. Report the wall as fail and propose at least the rule's draft, more if the
+selected texture needs it, keeping the mating face fixed. Along an unconfirmed pull, report the same
+figure as unverified.
