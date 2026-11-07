@@ -20,6 +20,9 @@ from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE
 
 __all__ = ["NetClass", "Rules", "custom_limits"]
 
+#: What every check keeps past a clearance besides KiCad's arc error: a micron.
+SPARE = 0.001
+
 
 @dataclass(frozen=True)
 class NetClass:
@@ -78,7 +81,7 @@ class Rules:
     @property
     def epsilon(self) -> float:
         """What every check adds to the clearance it keeps: KiCad's arc error and a micron."""
-        return self.max_error + 0.001
+        return self.max_error + SPARE
 
     def with_custom(self, limits: Mapping[str, float]) -> "Rules":
         return replace(self, custom=dict(limits))

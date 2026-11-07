@@ -50,8 +50,9 @@ XY = tuple[float, float]
 
 #: The most memory the region's fields and its largest search may take together: the fields 28 bytes a node on each
 #: copper layer and 16 more (``field``); a search 17 bytes a node of its window on each layer its entry allows, once
-#: more for each via its limit allows, and some 60 more a node (``SEARCH_BYTES``), its last window the whole region. A 100 x 100 mm region of a
-#: four-layer board at 0.075 mm is some 230 MB of fields and 260 MB of search on four layers with no via limit.
+#: more for each via its limit allows, and some 60 more a node (``SEARCH_BYTES``), its last window the whole region.
+#: A 100 x 100 mm region of a four-layer board at 0.075 mm is some 230 MB of fields and 260 MB of search on four
+#: layers with no via limit.
 #: Past it, the plan is refused before anything is routed: route it in parts, or lower its via limits.
 MAX_BYTES = 600_000_000
 #: What a search keeps for each state (``search``): its cost (8 bytes), its parent (8) and whether it is closed (1);
@@ -73,6 +74,8 @@ BUDGET = 3_000_000
 MARGINS = (2.0, 8.0)
 #: How many states a flood from a connection's end counts before it calls that end open.
 FLOOD = 20_000
+#: How far inside a board track's end a route may start or end on it (mm): it is carried onto the end exactly.
+ON_END = 0.01
 
 
 def pitch_for(widths: Iterable[float], clearances: Iterable[float]) -> float:
@@ -443,7 +446,7 @@ class Router:
                 if item.new is not None:  # this plan's own: on its centreline, where it is split for the branch
                     shapes, inside = [Shape.segment(a, b, 0.0)], 1e-6
                 else:  # the board's: at its ends alone, for a track there is never cut
-                    shapes, inside = [Shape.point(*a, 0.0), Shape.point(*b, 0.0)], max(half - 0.01, 0.0)
+                    shapes, inside = [Shape.point(*a, 0.0), Shape.point(*b, 0.0)], max(half - ON_END, 0.0)
             else:
                 shapes, inside = (list(item.pad.inner) if item.kind == "pad" else list(item.shapes)), 0.0
             for shape in shapes:

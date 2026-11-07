@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from cad.engine.formats.kicad import sexpr
+from cad.engine.formats.kicad.board_index import _CHAIN as CHAIN  # KiCad's chaining epsilon: an outline closes within it
 from cad.engine.formats.kicad.board_index import (
     FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, item_id, item_layers, layer_of,
     net_of, net_table, points_of, read_index, zone_outline,
@@ -431,7 +432,7 @@ def read_copper(text: str | list) -> BoardCopper:
     graphics += [Graphic(None, text.layer, (Shape.polygon(text.polygon),))
                  for text in index.texts if text.layer in copper and len(text.polygon) >= 3]
     rings = tuple(tuple(line) for line in index.outline
-                  if len(line) > 3 and math.dist(line[0], line[-1]) <= 0.01)
+                  if len(line) > 3 and math.dist(line[0], line[-1]) <= CHAIN)
     open_ = tuple(tuple(line) for line in index.outline if tuple(line) not in rings)
     return BoardCopper(copper, tuple(pads), tuple(tracks), tuple(vias), tuple(graphics), tuple(keepouts),
                        tuple(holes), rings, open_)
