@@ -47,9 +47,14 @@ __all__ = ["Connection", "NewTrack", "NewVia", "Router", "Want", "pitch_for"]
 Point = tuple[int, int]  # nanometres
 XY = tuple[float, float]
 
-#: The most memory the region's fields may take: 28 bytes a node on each copper layer and 16 more (``field``). A
-#: 100 x 100 mm region of a four-layer board at 0.075 mm is some 230 MB. Past it, route the plan in parts.
+#: The most memory the region's fields and its largest search may take together: the fields 28 bytes a node on each
+#: copper layer and 16 more (``field``); a search 17 bytes a node of its window on each layer its entry allows, once
+#: more for each via its limit allows (``search``), its last window the whole region. A 100 x 100 mm region of a
+#: four-layer board at 0.075 mm is some 230 MB of fields and 120 MB of search on four layers with no via limit.
+#: Past it, the plan is refused before anything is routed: route it in parts, or lower its via limits.
 MAX_BYTES = 600_000_000
+#: What a search keeps for each state (``search``): its cost (8 bytes), its parent (8) and whether it is closed (1).
+SEARCH_BYTES = 17
 #: How far past the box round a plan's pads its region reaches: at least this, or a quarter of the box's size.
 REGION_MARGIN = 5.0
 #: A pad with no free node of its own (a fine-pitch pin whose free lane is narrower than the grid) escapes to a
@@ -279,12 +284,15 @@ class Router:
         x1, y1 = min(x1 + grow, max(p[0] for p in edge) + self.reach + 1.0), min(y1 + grow, max(p[1] for p in edge) + self.reach + 1.0)
         self.i0, self.j0 = math.floor(x0 / g), math.floor(y0 / g)
         self.nx, self.ny = math.ceil(x1 / g) - self.i0 + 1, math.ceil(y1 / g) - self.j0 + 1
-        size = self.nx * self.ny * (28 * len(self.copper) + 16)
-        if size > MAX_BYTES:
+        fields = self.nx * self.ny * (28 * len(self.copper) + 16)
+        states = max(((want.vias or 0) + 1) * len(want.layers) for want in self.wants)
+        searching = (self.nx + 2) * (self.ny + 2) * states * SEARCH_BYTES
+        if fields + searching > MAX_BYTES:
             raise ValueError(f"the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
                              f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
-                             f"{size / 1e6:.0f} MB of fields, past the router's {MAX_BYTES / 1e6:.0f} MB: route the plan in "
-                             "parts, the nets of one area each")
+                             f"{fields / 1e6:.0f} MB of fields and {searching / 1e6:.0f} MB for its largest search (its "
+                             f"layers, once more for each via its limit allows), past the router's {MAX_BYTES / 1e6:.0f} "
+                             "MB: route the plan in parts, the nets of one area each, or lower its via limits")
 
     def _ids(self, layers: Iterable[str]) -> list[int]:
         return [self.layer_of[layer] for layer in layers if layer in self.layer_of]

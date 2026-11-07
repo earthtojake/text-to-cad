@@ -288,6 +288,14 @@ class ViaLimit(unittest.TestCase):
         self.assertEqual(2, len(router.vias))
         self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
 
+    def test_a_search_past_the_memory_cap_is_refused_before_anything_is_routed(self) -> None:
+        """Each via a limit allows is another copy of the search's states: a limit whose search would not fit the
+        router's memory is refused up front, naming both parts."""
+        copper = read_copper(board(resistor("R1", 5, 10, 0, "A", "B"), resistor("R2", 25, 10, 0, "A", "C")))
+        with self.assertRaises(ValueError) as caught:
+            Router(copper, RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)), vias=5000)])
+        self.assertIn("MB for its largest search", str(caught.exception))
+
 
 class LayerChanges(unittest.TestCase):
     def test_a_blind_via_changes_layer_only_between_the_layers_it_joins(self) -> None:
