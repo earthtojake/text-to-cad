@@ -78,6 +78,7 @@ jobs:
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      cadjoint: ${{ steps.select.outputs.cadjoint }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -352,6 +353,36 @@ jobs:
       - name: Run the KiCad suite
         # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
         run: scripts/test/test-kicad.sh
+
+  # The cadjoint integration: a field made a build123d solid (cad.cadjoint.solid), its refusals, a field's
+  # section drawn, and one model built through an engine of the suite's own, with cad[cadjoint] installed in
+  # the job's interpreter. cadjoint and JAX are ~130 MB from PyPI, cached by uv after the first run; the suite
+  # meshes small fields on CPU and builds one model. Only the integration's code, its suite, its runner and a
+  # full run select it; the package jobs never install it.
+  cadjoint:
+    name: cadjoint integration
+    needs: changes
+    if: needs.changes.outputs.cadjoint == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Install the cadjoint integration's extra
+        run: uv pip install --system --python python --editable "./packages/cad[cadjoint]"
+
+      - name: Run the cadjoint suite
+        run: scripts/test/test-cadjoint.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.

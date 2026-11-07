@@ -126,6 +126,8 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
+The cadjoint integration's extra is not in `requirements-dev.txt`: its JAX is some 130 MB that no other suite reads. To work on `cad.cadjoint` or run its suite, `uv pip install --python .venv --editable "./packages/cad[cadjoint]"`, and the suite is `scripts/test/test-cadjoint.sh`.
+
 Skills run the server as `cad` through `~/.local/bin/cad`, the proxy
 that runs the device's current installation (`<state>/installations/current`): the release `cad setup` or an update made current, from its folder
 (`<state>/releases/<VERSION>`), else the first installation a CAD app server (`cad-mcp`) or
@@ -380,6 +382,7 @@ diff content: a comment in a module selects what the module's code would.
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 | KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
+| cadjoint integration | the integration's code (the library's `cadjoint/` and `build123d/_faceted.py`), the library's `pyproject.toml` (the extra's pin), `tests/python/packages/cadjoint`, `test-cadjoint.sh` | `cad[cadjoint]` installed into the job's interpreter (cadjoint and JAX, ~130 MB, Linux only), then `test-cadjoint.sh`: fields made solids, their refusals, a section drawn and one model built |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,

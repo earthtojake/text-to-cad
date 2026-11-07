@@ -29,6 +29,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
     packaging  web_viewer         packaging, and its steps that drive the bundled viewer
+    kicad  cadjoint               the KiCad boards job, the cadjoint integration job
     full
     record                        the artifact name recording what this run tests
 
@@ -60,7 +61,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "cadjoint")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -211,6 +212,11 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{LIBRARY_SRC}/_internal/integrations.py",
               f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
 KICAD_SUITE = "tests/python/packages/kicad"
+# The cadjoint integration: its helpers (cad.cadjoint), the faceted solid they build, and the extra in the
+# library's pyproject reach the cadjoint job beside what their package reaches; the job installs
+# cad[cadjoint] (cadjoint and JAX, ~130 MB), which no other job does.
+CADJOINT_CODE = (f"{LIBRARY_SRC}/cadjoint/**", f"{LIBRARY_SRC}/build123d/_faceted.py")
+CADJOINT_SUITE = "tests/python/packages/cadjoint"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen",)
@@ -271,6 +277,9 @@ RULES: tuple[Rule, ...] = (
     # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
+    Rule(CADJOINT_CODE, select(flags=["cadjoint"])),
+    # The extra's pin (cad[cadjoint]) lives in the library's pyproject.
+    Rule(("packages/cad/pyproject.toml",), select(flags=["cadjoint"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
@@ -301,6 +310,7 @@ RULES: tuple[Rule, ...] = (
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
     # installed), never the package jobs'.
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
+    Rule((f"{CADJOINT_SUITE}/**", "scripts/test/test-cadjoint.sh"), select(flags=["cadjoint"]), final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),

@@ -71,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
+            r"^tests/python/packages/cadjoint/(.*/)?test_[^/]*\.py$",  # test-cadjoint.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -250,7 +251,11 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
                      "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"})
+                # The library's pyproject holds the cadjoint extra's pin, so it reaches that job too.
+                unreached = {"core-js", "web", "mcp", "api", "docs", "kicad", "cadjoint"}
+                if path == "packages/cad/pyproject.toml":
+                    unreached.discard("cadjoint")
+                self.assertEqual(jobs_for(path), GATED - unreached)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -289,7 +294,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "cadjoint"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -298,6 +303,18 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(jobs_for(path), {"kicad", "skills"})
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
+
+    def test_cadjoint_code_reaches_the_cadjoint_job_beside_its_package_and_its_suite_that_job_alone(self):
+        # The integration's code runs what its package runs, and the cadjoint job, which installs cad[cadjoint].
+        code = "packages/cad/src/cad/cadjoint/_solid.py"
+        self.assertEqual(jobs_for(code), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"})
+        self.assertEqual(tests_for(code)["cadgen_tests"], [CADGEN])
+        # The suite and its runner are that job's alone: no package job collects them.
+        for path in ("tests/python/packages/cadjoint/test_solid.py", "scripts/test/test-cadjoint.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"cadjoint", "skills"})
+        # ...and nothing else reaches it: an engine change runs the package suites, not cadjoint.
+        self.assertNotIn("cadjoint", jobs_for("packages/cad/src/cad/engine/api.py"))
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
         self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})
@@ -348,7 +365,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "cadjoint"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},
