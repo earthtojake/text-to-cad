@@ -81,7 +81,8 @@ class Routed:
 
 def _number(value: Any, name: str, where: str, low: float = 0.0, whole: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < low:
-        kind = "a whole number" if whole else "a number of millimetres" if name != "via_cost" else "a number"
+        kind = ("a whole number" if whole else "a number" if name == "via_cost"
+                else "a cost per mm (a number)" if name.startswith("the cost of") else "a number of millimetres")
         raise ValueError(f"{where}: {name} is {kind}, {low:g} or more, not {value!r}")
     if whole and int(value) != value:
         raise ValueError(f"{where}: {name} is a whole number, not {value!r}")
@@ -104,7 +105,7 @@ def _layers(value: Any, copper: Sequence[str], where: str) -> tuple[tuple[str, f
         raise ValueError(f"{where}: layers names no layer; the board's copper layers are {', '.join(copper)}")
     for layer, _ in pairs:
         if layer not in copper:
-            raise ValueError(f"{where}: {layer!r} is not a copper layer of this board; its are {', '.join(copper)}")
+            raise ValueError(f"{where}: {layer!r} is not a copper layer of this board; its copper layers are {', '.join(copper)}")
     if len({layer for layer, _ in pairs}) != len(pairs):
         raise ValueError(f"{where}: layers names a layer twice")
     return tuple(pairs)
@@ -164,7 +165,17 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
                 raise ValueError(f"{where}: net is a net's name (\"/CLK\", or the reference \"#net:/CLK\"), not {net!r}")
             net = net.strip().removeprefix("#net:")
             if net not in pads_of:
-                close = difflib.get_close_matches(net, nets, n=3)
+                try:
+                    board.pad(net)
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError(f"{where}: {net} is a pad, not a net: a connection between two pads is a pair "
+                                     f"inside the plan's list, route(b, [(\"{net}\", \"C4.1\")], ...)")
+                lowered = {}
+                for name in nets:
+                    lowered.setdefault(name.lower(), name)
+                close = [lowered[name] for name in difflib.get_close_matches(net.lower(), list(lowered), n=3)]
                 raise ValueError(f"{where}: no pad of the board is on a net {net!r}"
                                  + (f"; did you mean {', '.join(map(repr, close))}?" if close else ""))
             pads, ends = pads_of[net], None
@@ -174,7 +185,10 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
             if isinstance(refs, (str, bytes)) or not isinstance(refs, Sequence) or len(refs) != 2:
                 raise ValueError(f"{where}: pads is a pair of pads (\"U1.3\", \"C4.1\"), not {refs!r}")
             a, b = (_reference(ref, where) for ref in refs)
-            first, second = board.pad(a), board.pad(b)
+            try:
+                first, second = board.pad(a), board.pad(b)
+            except ValueError as error:
+                raise ValueError(f"{where}: {error}") from None
             if first is second:
                 raise ValueError(f"{where}: {a} to itself is no connection")
             if not first.net or first.net != second.net:
@@ -187,7 +201,8 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         off = [pad.ref or f"a pad of {pad.part}" for pad in pads if not named & set(pad.layers)]
         if off:
             raise ValueError(f"{where}: {', '.join(off[:6])}{' and more' if len(off) > 6 else ''} "
-                             f"{'is' if len(off) == 1 else 'are'} on no layer it may use ({', '.join(named)}): "
+                             f"{'is' if len(off) == 1 else 'are'} on no layer it may use "
+                             f"({', '.join(layer for layer, _ in layers)}): "
                              "add the layer a pad is on, or route that pad by hand")
         netclass = rules.of(net)
         least = rules.clearance(net)
@@ -199,7 +214,8 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         if clearance < least - 1e-9:
             raise ValueError(f"{where}: clearance {clearance:g} mm is under the {least:g} mm DRC holds {net} to (its "
                              f"netclass {netclass.name} and the board's rules): change the netclass in the .kicad_pro "
-                             "to route closer")
+                             + ("or the custom rule that sets it " if rules.custom.get("clearance", 0.0) >= least - 1e-9
+                                else "") + "to route closer")
         vias = entry.get("vias")
         vias = None if vias is None else int(_number(vias, "vias", where, 0, whole=True))
         via_cost = _number(entry.get("via_cost", VIA_COST), "via_cost", where)

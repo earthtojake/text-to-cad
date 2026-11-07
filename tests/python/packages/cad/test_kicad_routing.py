@@ -401,8 +401,9 @@ class Plans(unittest.TestCase):
         self.copper = read_copper(board(resistor("R1", 5, 10, 0, "A", "B"), resistor("R2", 25, 10, 0, "A", "C"),
                                         resistor("R3", 15, 15, 0, "B", "C", side="B")))
 
-    def wants(self, plan, **options):
-        return _wants(_entries(plan, {"layers": None, **options}), self.copper, RULES)
+    def wants(self, plan, copper=None, **options):
+        board = self.copper if copper is None else replace(self.copper, copper=copper)
+        return _wants(_entries(plan, {"layers": None, **options}), board, RULES)
 
     def refused(self, plan, said: str, **options) -> None:
         with self.assertRaises(ValueError) as caught:
@@ -424,6 +425,13 @@ class Plans(unittest.TestCase):
         self.refused([{"net": "A", "layers": ["F.Cu"], "clearance": 0.1}], "under the 0.2 mm DRC holds A to")
         self.refused([{"net": "A", "layers": ["F.Cu"], "width": 0.1}], "under the board's least track width")
         self.refused([{"net": "A", "layers": ["F.Cu"], "vias": 1.5}], "vias is a whole number")
+        self.refused(("R1.1", "R2.1"), "R1.1 is a pad, not a net: a connection between two pads is a pair inside",
+                     layers=["F.Cu"])
+        self.refused([("R1.1", "R9.1")], "route: entry 1: no part 'R9' on the board", layers=["F.Cu"])
+        self.refused(["a"], "did you mean 'A'", layers=["F.Cu"])
+        self.refused(["B"], "R3.1 is on no layer it may use (F.Cu, In1.Cu)", layers=["F.Cu", "In1.Cu"],
+                     copper=("F.Cu", "In1.Cu", "B.Cu"))
+        self.refused([{"net": "A", "layers": {"F.Cu": "x"}}], "the cost of F.Cu is a cost per mm (a number)")
 
     def test_the_options_and_their_defaults(self) -> None:
         (a, b, c) = self.wants(["#net:A", ("#R3.1", "R1.2"), {"net": "C", "layers": {"F.Cu": 1, "B.Cu": 3}, "vias": 0}],
