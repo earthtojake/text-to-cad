@@ -4,7 +4,7 @@ Read this file when choosing visual checks for a model or a file the viewer open
 
 This is the catalogue of what a snapshot can draw. Take the snapshots a change needs to judge it,
 usually one from the angle that shows it; with a viewer open the person is looking too, so never
-screenshot the card to confirm your own work ([Pictures](../SKILL.md#pictures)).
+screenshot the card to confirm your own work ([Check each change](../SKILL.md#check-each-change)).
 
 ## Contents
 
@@ -18,15 +18,15 @@ screenshot the card to confirm your own work ([Pictures](../SKILL.md#pictures)).
 - [Targeted additions](#targeted-additions)
 - [Diagnostic review](#diagnostic-review)
 
-`cad snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
+`cad <type> snapshot SRC OUT.png` draws SRC as the CAD Viewer draws it, rendered by OCCT,
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (`.dxf`). A
 script is never a source. Nothing is written but OUT.
 
 ```bash
-cad snapshot "$ID" tmp/review.png
-cad snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
+cad model snapshot "$ID" tmp/review.png
+cad model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
 A face the mesher left without triangles is drawn without it and named in a
@@ -54,14 +54,15 @@ side view for a pattern or silhouette, or a clipped view for internal geometry. 
 fixed set of views proves every face or feature is correct.
 
 ```bash
-cad snapshot "$ID" tmp/iso.png
-cad snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad snapshot "$ID" tmp/top.png --camera top
-cad snapshot "$ID" tmp/front.png --camera front
+cad model snapshot "$ID" tmp/iso.png
+cad model snapshot "$ID" tmp/below_behind.png --camera 225:-30
+cad model snapshot "$ID" tmp/top.png --camera top
+cad model snapshot "$ID" tmp/front.png --camera front
 ```
 
-With no flags a snapshot is the `solid` display, Light appearance, an orthographic
-isometric camera fitted to the model, 1600x1200.
+With no flags a snapshot is the `solid` display, an orthographic isometric camera fitted
+to the model, 1600x1200. A snapshot is always light, whatever theme the viewer is in or the
+view it replays was seen in: no flag or packet names a theme.
 
 ## Display, camera and size
 
@@ -71,7 +72,7 @@ colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
 `exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1),
 alone or after a mode (`hidden-line,exploded=0.6`), or the viewer's display object,
-inline or as a JSON file: `mode`, `grid`, `appearance` (`light` or `dark`), `camera`
+inline or as a JSON file: `mode`, `grid`, `camera`
 (`projection`: `orthographic` or `perspective`; `focalLength`), `clip` and `exploded`
 (`{"enabled": true, "amount": 0.5}`). `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
@@ -84,7 +85,9 @@ an `azimuth:elevation` pair in degrees, a camera object (`position`, `target`, `
 `direction`, `zoom`, `orthographicHalfHeight`), or `authored` (below). A camera
 object's lengths are in the viewer's scene coordinates, as a Quick Edit packet carries
 them: a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit.
-Projection and focal length belong in `display.camera`.
+Projection and focal length belong in `display.camera`. The presets are the world's axes, Z up,
+not a part's own front: `front` looks from -Y along +Y, `top` from +Z down, so a panel modelled
+lying flat (its face to +Z, as its DXF is drawn) faces `top` and shows edge-on from `front`.
 
 `--size-profile` is one of exactly these names; anything else is refused with this
 list:
@@ -108,7 +111,9 @@ the picture is drawn; a file of the pose is a posed model
 ([exports](exports.md#posed-files-and-parts-on-their-own)).
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
-and a failure as `{"ok": false, "error": ...}` on stdout, with exit status 1.
+and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status
+is the failure's class with `--json` and without: 2 for a request refused before anything ran
+(`reason`: `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for a render that failed.
 
 ## Clipped views
 
@@ -119,7 +124,7 @@ millimetres, a robot's or a GLB's metres, a 3MF's declared unit) and `invert`; t
 cut is capped. Look straight at the cut:
 
 ```bash
-cad snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -129,7 +134,7 @@ Edit packet given to `--annotation` carries the person's own, which `--display` 
 override:
 
 ```bash
-cad snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
 ```
 
 ## Annotations and Quick Edit views
@@ -153,12 +158,12 @@ absolute path of a `.snapshot.json`. Save inline JSON to a temporary
 
 The views' cameras, the ink and the measurements are in the viewer's scene coordinates
 -- a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit -- and
-`cad snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
+`cad <type> snapshot` reads them so; `clip.at` alone is in the file's unit, a GLB's metres.
 
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 `--annotation FILE` draws the ink over the model, each mark on its part wherever the
@@ -176,8 +181,8 @@ display, hidden and isolated parts and pose, the ink and the dimensions over eac
 into the files its outputs name:
 
 ```bash
-cad snapshot --job tmp/bracket.snapshot.json
-cad snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad model snapshot --job tmp/bracket.snapshot.json
+cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
 `--job` takes a packet, a job (`{input, camera, display, jointValues, outputs, ...}`)
@@ -207,8 +212,8 @@ still on it.
   of the Parts palette, where the viewer opens it. `--pose` names an SRDF group state
   or gives joint values (degrees, metres) over that pose.
 - **A drawing** (`.dxf`) is drawn whole from above in its pens, as the viewer's
-  drawing pane draws it. It takes `--display` with `appearance` alone (`--display dark`,
-  or `{"appearance": "dark"}`), and the size flags; every other flag is refused by name.
+  drawing pane draws it, on white paper. It takes no `--display`; the size flags, a plan-view
+  `--camera`, `--annotation` and `--measurements` apply, and every other flag is refused by name.
 
 ## Output paths
 
