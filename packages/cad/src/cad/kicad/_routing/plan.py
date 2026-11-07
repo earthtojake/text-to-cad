@@ -110,7 +110,7 @@ class Connection:
     length: float = 0.0
 
     def line(self) -> str:
-        what = f"{self.net}: {self.between[0]} to {self.between[1]}"
+        what = f"{self.net}: {self.between[0]}" + (f" to {self.between[1]}" if self.between[1] else "")
         if self.routed and self.reason:
             return f"{what}: {self.reason}"
         if self.routed:
@@ -369,8 +369,12 @@ class Router:
                 return [Connection(want.net, want.pads, True, "already joined by the copper on the board")]
             return [self._join(want, first, second, want.pads)]
         islands = [island for island in _islands(self._own.get(want.net, [])) if any(item.kind == "pad" for item in island)]
-        if len(islands) < 2:
-            return []
+        if len(islands) < 2:  # every entry answers a line: a net whole already, or of one pad
+            pads = sorted((item.name for island in islands for item in island if item.kind == "pad"), key=_natural)
+            if len(pads) < 2:
+                return [Connection(want.net, (pads[0] if pads else "its copper", ""), True,
+                                   "the net's one pad on the board: nothing to route")]
+            return [Connection(want.net, (pads[0], pads[-1]), True, "already joined by the copper on the board")]
         islands.sort(key=lambda island: (-sum(item.kind == "pad" for item in island), _natural(_island_name(island))))
         tree, apart = islands[0], islands[1:]
         done = []

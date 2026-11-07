@@ -288,6 +288,13 @@ class ViaLimit(unittest.TestCase):
         self.assertEqual(2, len(router.vias))
         self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
 
+    def test_every_entry_answers_a_line_even_with_nothing_to_route(self) -> None:
+        copper = read_copper(board(resistor("R1", 5, 10, 0, "B", "A"), resistor("R2", 9, 10, 0, "A", "C"),
+                                   segment("", "A", (5.825, 10.0), (8.175, 10.0))))
+        done = Router(copper, RULES, [want("A"), want("B")]).run()
+        self.assertEqual(["A: R1.2 to R2.1: already joined by the copper on the board",
+                          "B: R1.1: the net's one pad on the board: nothing to route"], [c.line() for c in done])
+
     def test_a_search_past_the_memory_cap_is_refused_before_anything_is_routed(self) -> None:
         """Each via a limit allows is another copy of the search's states: a limit whose search would not fit the
         router's memory is refused up front, naming both parts."""
