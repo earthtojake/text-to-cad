@@ -14,10 +14,12 @@ apps. Every run is at a terminal that would answer no, and asks it nothing.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import io
 import json
 import os
+import platform
 import re
 import shutil
 import stat
@@ -313,6 +315,32 @@ class TheCommand(Fixture):
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
         setup.stop_earlier.assert_not_called()
+
+    def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
+        """The install command runs ``cad setup`` from uvx's environment: a real run moves to its release's
+        folder first, and the base is keyed by that folder; a dry run stays, and says the same folder."""
+        from cad_server._internal import base
+
+        home = releases.where(RELEASE)
+        uvx = dataclasses.replace(base.Installation.here(), prefix=str(self.root / "uvx-env"), python="3.14.6",
+                                  kernel=False)
+        kernel = re.compile(r"build123d +leave +.+, made on first need in (.+)\n")
+
+        def said() -> Path:
+            with mock.patch.object(base.Installation, "here", return_value=uvx), \
+                    mock.patch.object(setup.Installer, "_home", return_value=home):
+                code, out, _err = self.run_setup("--dry-run")
+            self.assertEqual(code, 0, out)
+            return Path(str(kernel.search(out).group(1)).replace("~", str(self.home), 1))
+
+        self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home))))
+        self.assertNotEqual(said(), base.where(uvx), "not the folder of the environment it runs from")
+        # A release folder made earlier runs the Python it runs, asked of it.
+        with mock.patch.object(releases, "python_version", return_value="3.14.2"):
+            self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home), python="3.14.2")))
+        with mock.patch.object(base, "interpreter", return_value=Path(sys.executable)):
+            self.assertEqual(releases.python_version(home), platform.python_version())
+        self.assertIsNone(releases.python_version(self.root / "none"), "no Python there")
 
     def test_a_first_install_inside_a_windows_app_package_installs_nothing_and_says_where_to_run_it(self) -> None:
         """An MSIX app's shell (the Claude desktop app's) has what it writes under AppData -- uv's Python, on a

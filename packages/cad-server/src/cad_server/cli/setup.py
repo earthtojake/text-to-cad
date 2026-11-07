@@ -553,7 +553,7 @@ class Installer:
 
         row: dict[str, Any] = {"app": "build123d", "label": "build123d", "action": "leave"}
         try:
-            installation = base.Installation.here()
+            installation = self._as_set_up(base.Installation.here())
             if installation.kernel:
                 return None
             found = base.ensure(installation, make=False)
@@ -564,6 +564,20 @@ class Installer:
         if found is not None:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
         return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
+
+    def _as_set_up(self, installation: Any) -> Any:
+        """``installation`` as the run that sets it up will be: a dry run stops short of step 1, so run from
+        anywhere but its release's folder (uvx's environment) it says what it would do from there. The base's
+        folder is keyed by the environment it belongs to (``base.where``) and by that environment's Python."""
+        import dataclasses
+
+        from cad_server._internal import releases
+
+        home = self._home()
+        if home is None or os.path.normcase(os.path.realpath(home)) == os.path.normcase(os.path.realpath(sys.prefix)):
+            return installation
+        return dataclasses.replace(installation, prefix=str(home),
+                                   python=releases.python_version(home) or installation.python)
 
     def _prepare_kernel(self) -> bool:
         """An automatic update's first half only (``PREPARE_ENV``): this release's CAD kernel environment
