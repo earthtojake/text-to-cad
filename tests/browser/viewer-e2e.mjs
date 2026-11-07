@@ -36,17 +36,17 @@ const root = path.resolve(args.dir || ".");
 const fixtures = [
   // `tools` is the file's own tool strip; unavailable tools are hidden. `threeD` has
   // Projection, Display and Preview at the strip's end; `sections`
-  // are file sidebar tiles it must have (what there is to read of the file, whatever the tool).
+  // are the view's panel's tabs it must have (what there is to read of the file, whatever the tool).
   { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
   // A STEP: read by the engine, drawn as an engine document is.
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model tree"], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
   { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: [], threeD: false, minCoverage: 0.003 },
   { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Links"], threeD: true },
   // A cadgen engine document: served by the engine, read by the page from it, and picked,
   // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
   { format: "xbf", file: "smoke.xbf", parts: true,
-    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model tree"], threeD: true },
+    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -315,25 +315,26 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // What there is to read of the file is the file sidebar's, a tile per section, never a tool.
-      const tiles = await page.locator("[data-file-sidebar-tools] button").evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")));
-      for (const label of fixture.sections) if (!tiles.includes(label)) failures.push(`${fixture.format}: missing the ${label} tile (sidebar: ${tiles.join(", ")})`);
-      if (!fixture.sections.length && tiles.length) failures.push(`${fixture.format}: a file sidebar on a file with nothing to read (${tiles.join(", ")})`);
-      // Projection, Display and Preview end the tool strip on 3D views; drawings have none.
+      // What there is to read of the file is the view's panel's, a tab per section (a panel of one has no
+      // row of tabs: each section is labelled by its name), never a tool.
+      const tabs = await page.locator("[data-flat-panel] [data-flat-panel-section]").evaluateAll((sections) =>
+        sections.map((section) => section.getAttribute("aria-label")));
+      for (const label of fixture.sections) if (!tabs.includes(label)) failures.push(`${fixture.format}: missing the ${label} tab (panel: ${tabs.join(", ")})`);
+      if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
+      // A 3D view's own controls end the tool strip, Projection, Display then Preview, each named by what it is
+      // ("Projection: Orthographic" is Projection); a drawing's strip has none.
       const controls = await page.locator("[data-cad-toolbar] [data-view-controls] button").evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Projection: Orthographic", "Display mode: Solid", "Preview"] : [];
+        buttons.map((button) => button.getAttribute("aria-label").split(":")[0]));
+      const expected = fixture.threeD ? ["Projection", "Display mode", "Preview"] : [];
       if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
       if (await page.locator("[data-viewer-navbar] [data-view-controls] button").count()) failures.push(`${fixture.format}: editor view controls in the navbar`);
       const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
       if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
+      // Every view has the menu, its framing always (`kit/shell/viewMenu.js`); a file of parts, its tree's entries too.
+      for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
       if (fixture.parts) {
-        for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
         for (const item of presentTree) if (!menu.includes(item)) failures.push(`${fixture.format}: parts menu missing ${item}`);
-      } else if (menu.length) {
-        failures.push(`${fixture.format}: a viewport menu opened on a renderer that has none (${menu.join(", ")})`);
       }
       if (errors.length) failures.push(`${fixture.format}: ${errors.join(" | ")}`);
       results.push({ format: fixture.format, coverage: drawn });
@@ -387,6 +388,34 @@ const CAMERA_EPSILON = 1e-6;
 
 async function cameraState(page) {
   return page.evaluate(() => window.__cadCamera?.() || null);
+}
+
+// A 3D fit frames the model in the room under the view's tool strip and centres it there
+// (`kit/camera/viewportCameraFit.js`, `fitRoom`): the camera's target stands above the point the
+// fit aims at, along the view's screen up, by the share of the half height the strip takes. What
+// the tools view aims at is that point; Preview's view has no strip and aims at it directly.
+// `reach` is the strip's (`stripReach`) when the camera was read; an orthographic camera at 1x.
+async function stripReach(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    const frame = canvas?.closest("[data-slot=cad-file-view]");
+    if (!canvas || !frame || canvas.closest("[data-preview-view]")) return { clear: 0, height: 1 };
+    const clear = Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom"));
+    return { clear: Number.isFinite(clear) && clear > 0 ? clear : 0, height: Math.max(1, canvas.clientHeight) };
+  });
+}
+
+function aimPoint(camera, reach) {
+  if (!camera || camera.projection !== "orthographic" || !(reach?.clear > 0)) return camera?.target;
+  const share = Math.max(1 - reach.clear / reach.height, 0.5);
+  const offset = camera.position.map((value, axis) => value - camera.target[axis]);
+  const length = Math.hypot(...offset) || 1;
+  const direction = offset.map((value) => value / length);
+  const along = camera.up.reduce((sum, value, axis) => sum + value * direction[axis], 0);
+  const upright = camera.up.map((value, axis) => value - along * direction[axis]);
+  const upLength = Math.hypot(...upright) || 1;
+  const lift = (1 - share) * Number(camera.halfHeight) / (Number(camera.zoom) || 1);
+  return camera.target.map((value, axis) => value - lift * upright[axis] / upLength);
 }
 
 function cameraDrift(actual, expected) {
@@ -531,16 +560,17 @@ async function modeCameraGate() {
     await openFile(page, "smoke.step");
     await settledCameraFrame(page, { projection: "orthographic", stage: "initial Inspect frame" });
     const inspectFit = await cameraState(page);
+    const inspectAim = aimPoint(inspectFit, await stripReach(page));
     if (inspectFit?.projection !== "orthographic") {
       failures.push(`mode camera: Inspect did not open orthographic (${inspectFit?.projection})`);
     }
 
-    // Preview converts the camera to its projection, keeping what it looks at, and leaving it
-    // is exact.
+    // Preview converts the camera to its projection, keeping what it looks at (the point the tools
+    // view's fit centres under its strip; Preview has none), and leaving it is exact.
     await switchMode(page, "Inspect", "Render");
     const renderFit = await cameraState(page);
     if (!renderFit) failures.push("mode camera: the camera seam published nothing in Render");
-    else if (renderFit.target.some((value, axis) => Math.abs(value - inspectFit.target[axis]) > 1e-6)) {
+    else if (renderFit.target.some((value, axis) => Math.abs(value - inspectAim[axis]) > 1e-6)) {
       failures.push(`mode camera: Render re-aimed the view — ${describeCamera(renderFit)}`);
     }
 
@@ -613,6 +643,7 @@ async function modeCameraGate() {
     await openFile(revision.page, "hinge.step");
     await settledCameraFrame(revision.page, { stage: "hinge before its revision" });
     const firstFit = await cameraState(revision.page);
+    const firstAim = aimPoint(firstFit, await stripReach(revision.page));
     if (firstFit?.untouched !== true) failures.push(`step revision: the opening fit does not read as untouched (${firstFit?.untouched})`);
     if (await rebuilt("hinge.step", "grown")) {
       const refit = await cameraState(revision.page);
@@ -640,11 +671,13 @@ async function modeCameraGate() {
         }
         // Their fit, F, frames the revision on screen, about its own centre, at the angle they
         // left (the ruler's 100% is the default angle's, so it is not read here), and the camera
-        // is untouched again.
+        // is untouched again. Each fit aims at the box's centre (`aimPoint`: its target stands above
+        // it along that angle's screen up, under the strip).
         await revision.page.keyboard.press("f");
         await settledCameraFrame(revision.page, { stage: "the fit F makes" });
         const fitted = await cameraState(revision.page);
-        if (!fitted || fitted.target.some((value, axis) => Math.abs(value - firstFit.target[axis]) > 1e-6) || fitted.zoom !== 1) {
+        const fittedAim = fitted && aimPoint(fitted, await stripReach(revision.page));
+        if (!fitted || fittedAim.some((value, axis) => Math.abs(value - firstAim[axis]) > 1e-6) || fitted.zoom !== 1) {
           failures.push(`step revision: F did not frame the first revision — ${describeCamera(fitted)}`);
         } else if (!sameDirection(fitted, handFramed)) {
           failures.push(`step revision: F turned the view — ${describeCamera(fitted)}`);

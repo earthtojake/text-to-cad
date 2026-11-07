@@ -5,11 +5,11 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
-import { Slider } from "@cad/ui/primitives/slider";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
-import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
+import { parseFileSheetNumberInput } from "../../inspector/FileSheet.js";
+import { SliderField } from "../../inspector/SliderField.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -104,32 +104,33 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
   </DropdownMenu>;
 }
 
-// Clip's controls: its axis, then one slider, which applies the cut as it leaves zero and removes it
-// at zero. `className` lays them out where they sit, and `sliderClassName` draws the slider.
-export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds, className = "flex min-w-0 items-center gap-2 px-2 py-1",
-  sliderClassName = FILE_SHEET_PRECISION_SLIDER_CLASSES }) {
+// Clip's controls: the slider control on one line (`SliderField`, `inline`), its axis as its label,
+// then the slider, which applies the cut as it leaves zero and removes it at zero, then the share it
+// cuts away, typed as well as dragged.
+export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds, className }) {
   const { clip, range, amount } = clipState(viewSettings, bounds);
   const controls = useControlUsage();
   const { t } = useI18n();
-  return <div className={className}>
-    <ClipAxisSelect viewSettings={viewSettings} onViewSettingsPatch={onViewSettingsPatch} bounds={bounds} />
-    <Slider thumbProps={{ "aria-label": t("clip.amount") }} value={[amount]} min={0} max={100}
-      step={0.1} disabled={!range}
-      onValueChange={([value]) => { controls.changed("clip_amount"); onViewSettingsPatch({ clip: {
-        enabled: value > 0, at: clipAtForAmount(clip, bounds, value / 100)
-      } }); }}
-      className={sliderClassName} />
-  </div>;
+  const write = value => { controls.changed("clip_amount"); onViewSettingsPatch({ clip: {
+    enabled: value > 0, at: clipAtForAmount(clip, bounds, value / 100)
+  } }); };
+  const text = clipSummary(viewSettings, bounds);
+  return <SliderField inline className={className} label={<ClipAxisSelect viewSettings={viewSettings} onViewSettingsPatch={onViewSettingsPatch} bounds={bounds} />}
+    name={t("clip.amount")} value={amount} min={0} max={100} step={0.1} disabled={!range} onValueChange={write}
+    text={text} textLabel={t("render.valueOf", { name: t("clip.amount") })}
+    onTextCommit={draft => { if (draft !== text) write(parseFileSheetNumberInput(draft, { fallback: amount, min: 0, max: 100 })); }} />;
 }
 
-// Explode's control: one slider, which applies the effect as it leaves zero and removes it at zero.
-// `className` draws it where it sits (its sub-toolbar's slider).
-export function ExplodeControls({ viewSettings, onViewSettingsPatch, className = FILE_SHEET_PRECISION_SLIDER_CLASSES }) {
+// Explode's control: the slider control on one line, `label` leading it (its name), then the slider,
+// which applies the effect as it leaves zero and removes it at zero, then the amount, typed as well.
+export function ExplodeControls({ viewSettings, onViewSettingsPatch, label = null, className }) {
   const exploded = normalizeExplodedViewSettings(viewSettings?.exploded);
   const controls = useControlUsage();
   const { t } = useI18n();
-  return <Slider thumbProps={{ "aria-label": t("explode.amount") }}
-    value={[exploded.enabled ? exploded.amount * 100 : 0]} min={0} max={100} step={1}
-    onValueChange={([amount]) => { controls.changed("explode_amount"); onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: amount > 0 } }); }}
-    className={className} />;
+  const amount = exploded.enabled ? Math.round(exploded.amount * 100) : 0;
+  const write = value => { controls.changed("explode_amount"); onViewSettingsPatch({ exploded: { amount: value / 100, enabled: value > 0 } }); };
+  const text = `${amount}%`;
+  return <SliderField inline className={className} label={label} name={t("explode.amount")} value={exploded.enabled ? exploded.amount * 100 : 0}
+    min={0} max={100} step={1} onValueChange={write} text={text} textLabel={t("render.valueOf", { name: t("explode.amount") })}
+    onTextCommit={draft => { if (draft !== text) write(parseFileSheetNumberInput(draft, { fallback: amount, min: 0, max: 100, integer: true })); }} />;
 }

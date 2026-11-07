@@ -188,7 +188,7 @@ function HarnessSurface({ view, data }) {
   ]), [picked]);
 
   // `panel*.harness` stands in for a file whose sidebar is full: a tree far taller than any
-  // viewer and a Reference, each a section of the file sidebar; a retained effect — "Keep" keeps a
+  // viewer and a Reference, each a tab of the view's panel; a retained effect — "Keep" keeps a
   // small panel in the tool stack, highlighted, whatever tool is up — and "Pose", a tool that adds
   // a Position section to the sidebar while it is up.
   const [kept, setKept] = useState(false);
@@ -205,7 +205,7 @@ function HarnessSurface({ view, data }) {
     onSelect: () => setPosing(value => !value) };
   const rows = (count, name) => <ul className="px-2 py-1">{Array.from({ length: count }, (_, index) =>
     <li key={index} className="flex h-6 items-center">{name} {index + 1}</li>)}</ul>;
-  // The file sidebar: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
+  // The view's panel: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
   const sidebar = withPanel ? <>
       <ToolPanel id="tree" label="Harness tree" fit="tree" resizable collapsible={false}
         header={<TreeFilterInput label="Filter tree" placeholder="Search…" value={filter} onChange={setFilter} dense className="px-0 shadow-none" />}>{rows(treeRows, "Row")}</ToolPanel>
@@ -220,7 +220,7 @@ function HarnessSurface({ view, data }) {
   const previewView = useMemo(() => ({ scene: previewScene, animation: data.previewAnimation ?? null, onCameraSettled }),
     [previewScene, data.previewAnimation, onCameraSettled]);
 
-  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the file sidebar (down the left).
+  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the view's panel (down the left).
   return <RendererShell shell={shell} tools={withPanel ? [selectTool, ...shell.tools.drawing, keepTool, poseTool] : shell.tools.drawing}
     previewView={previewView}
     toolPanels={toolPanels} sidebar={sidebar} references={references} onClearReferences={() => setPicked("")}

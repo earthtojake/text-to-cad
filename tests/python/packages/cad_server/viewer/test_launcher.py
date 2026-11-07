@@ -55,12 +55,16 @@ class LauncherTest(unittest.TestCase):
         self.assertTrue(engine_daemon.await_exit(pid), "the stopped engine leaves the test's folder")
 
 
-    def launch(self, *args, cwd=None, ok=True):
+    def launch(self, *args, cwd=None, ok=True, reason='failed'):
         done = subprocess.run([sys.executable, '-m', 'cad_server.viewer', '--json', '--dist', str(self.dist), *args],
                               env=self.env, cwd=cwd or self.root, capture_output=True, text=True, timeout=60)
         if not ok:
-            self.assertNotEqual(done.returncode, 0)
-            return done.stderr
+            # The launch answers in JSON: its failure is its one document on stdout, the contract's, and its
+            # class sets the exit status (2 for a FILE that is not there or not one, 1 for a launch that failed).
+            found = json.loads(done.stdout)
+            self.assertEqual((found['ok'], found['reason']), (False, reason))
+            self.assertEqual(done.returncode, 1 if reason == 'failed' else 2, done.stderr)
+            return found['error']
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
 
@@ -127,8 +131,26 @@ class LauncherTest(unittest.TestCase):
         status, _, data = self.get(launched, '/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab')
         self.assertEqual(status, 404)
         self.assertIn('is held', json.loads(data)['error'])
+        # A script, a file of no type and one that is not there are the command line's (refused before the engine
+        # is asked, as the engine refuses them), an id it does not hold the engine's to say: each by its reason.
         (self.root / 'model.py').write_text('print(1)\n', encoding='utf-8')
-        self.assertIn('no CAD file', self.launch('model.py', ok=False))
+        (self.root / 'notes.txt').write_text('x\n', encoding='utf-8')
+        self.assertEqual(self.launch('model.py', ok=False, reason='wrong_type'),
+                         "model.py is a model's script, not a CAD file: `cad run model.py` builds its models and prints "
+                         "each one's page")
+        self.assertIn('no CAD file at', self.launch('notes.txt', ok=False, reason='wrong_type'))
+        self.assertEqual(self.launch('gone.step', ok=False, reason='not_found'), 'no such file: gone.step')
+        self.assertIn('is held', self.launch('6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab', ok=False, reason='not_found'))
+        # The engine refuses the same FILEs by the same rule, for a launch that did not check them first.
+        from unittest import mock
+
+        from cad_server.viewer.engine_app import EngineApp
+        from cad_server.viewer.main import Unopened
+
+        for name, reason in (('model.py', 'wrong_type'), ('gone.step', 'not_found')):
+            with self.subTest(name=name), self.assertRaises(Unopened) as refused:
+                EngineApp.document(mock.Mock(), name, str(self.root))
+            self.assertEqual(refused.exception.reason, reason)
 
     def test_every_route_requires_token_and_keeps_host_and_post_gates(self):
         launch = self.launch()

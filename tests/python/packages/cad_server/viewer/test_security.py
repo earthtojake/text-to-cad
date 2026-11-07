@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote
 
+from cad.engine.formats.kicad import sexpr
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 
@@ -227,6 +228,44 @@ class OnlyCadBytesLeave(SecurityTestCase):
             with self.subTest(name=name):
                 status, _, body = self.fixture.asset(self.fixture.path(name))
                 self.assertDenied(status, body, {404})
+
+
+class ABoardsModelsReadNothingOutsideItsFolders(SecurityTestCase):
+    """A board's 3D models table (``GET .../kicad_pcb/<id>/models``) answers only STEPs inside the board's folder
+    and KiCad's 3D library: a board naming any other file is told it is missing, gets no document id, and so no
+    route serves that file. A STEP it does find is a document like any other, whose structure names its file."""
+
+    def test_a_hostile_board_cannot_aim_the_table_outside(self):
+        outside = os.path.join(self.fixture.base, "outside.step")
+        Path(outside).write_text(SECRET, encoding="utf-8")
+        link = self.fixture.path("models/link.step")
+        os.makedirs(os.path.dirname(link), exist_ok=True)
+        try:
+            os.symlink(outside, link)
+        except (OSError, NotImplementedError):
+            pass
+        # Each name is written as KiCad writes a string (a backslash and a quote escaped): the Windows path
+        # and a share's backslashes, and the quotes, are read back as the names, on every platform.
+        names = ["/etc/passwd", "../../outside.step", "${KIPRJMOD}/../outside.step", outside, "${KIPRJMOD}/models/link.step",
+                 "${KIPRJMOD}/secrets.json", "${KIPRJMOD}/.env", 'C:\\Users\\x\\"evil".step', "\\\\server\\share\\x41.step"]
+        board = self.fixture.write("hostile.kicad_pcb", "(kicad_pcb (version 20240108) (footprint \"x\" (at 0 0) "
+                                   + " ".join(f"(model {sexpr.quote(name)})" for name in names) + "))")
+        opened = json.dumps({"path": board}).encode()
+        status, _, body = self.fixture.request("POST", "/api/v1/documents", body=opened, headers={
+            "x-cad-viewer": "1", "content-type": "application/json", "content-length": str(len(opened))})
+        self.assertEqual(status, 201, body[:400])
+        api = json.loads(body)["api"]
+        status, _, body = self.fixture.request("GET", f"{api}/models")
+        self.assertEqual(status, 200, body[:400])
+        table = json.loads(body)["models"]
+        self.assertEqual(sorted(table), sorted(names))
+        for name, answer in table.items():
+            self.assertIn("missing", answer, name)
+            self.assertNotIn("document", answer, name)
+        self.assertNotIn(SECRET.encode("ascii"), body)
+        # The names are the board's own words, answered as keys; no answer carries a path the server found.
+        # (As JSON writes the folder: a Windows path's backslashes are doubled there.)
+        self.assertNotIn(json.dumps(self.fixture.base)[1:-1], json.dumps(list(table.values())))
 
 
 class MalformedPercentEncoding(SecurityTestCase):

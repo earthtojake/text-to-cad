@@ -40,6 +40,12 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+def _types():
+    from cad.registry import DOCUMENT_TYPES
+
+    return DOCUMENT_TYPES
+
+
 # The ``cad`` command this process runs (``cad_server.cli``, as it starts one); None for a model script or a
 # Python caller.
 command: str | None = None
@@ -47,9 +53,9 @@ command: str | None = None
 SERVERS = frozenset({"viewer", "mcp", "server"})
 API = "cad.engine.api"
 # An engine kind as telemetry names it (``analytics.KINDS``): models are distinct from file formats.
-KINDS = {"xbf": "xbf", "step": "step", "glb": "glb", "stl": "stl", "threemf": "3mf", "dxf": "dxf", "urdf": "urdf",
-         "sdf": "sdf", "srdf": "srdf", "model": "model"}
-MESHES = frozenset({"stl", "glb", "threemf"})
+# A document type's id to its analytics spelling (``cad.registry``'s ``wire``), and a live model's.
+KINDS = {**{entry.id: entry.wire for entry in _types().values()}, "model": "model"}
+MESHES = frozenset(entry.id for entry in _types().values() if entry.view == "mesh")
 
 
 class _Analytics:

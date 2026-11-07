@@ -61,6 +61,10 @@
       "types": "./dist/update/index.d.ts",
       "import": "./dist/update/index.js"
     },
+    "./whats-new": {
+      "types": "./dist/whats-new/index.d.ts",
+      "import": "./dist/whats-new/index.js"
+    },
     "./tab-store": {
       "types": "./dist/tab-store/index.d.ts",
       "import": "./dist/tab-store/index.js"

@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from cad.findings import format_findings
-from cad.srdf_source import parse_srdf_file
+from cad._internal.findings import format_findings
+from cad.srdf._source import parse_srdf_file
 
 
 SAMPLE_SRDF = """\

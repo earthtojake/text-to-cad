@@ -48,4 +48,7 @@ test("Open in's apps come in groups after the places: the source's, each present
     [["places", true], ["places", false], ["source", false], ["exports", true], ["default", false]]);
   // No answer (yet, or ever): the places alone.
   assert.deepEqual(rows({ files: null }).map(([, label]) => label), ["Browser", "Finder"]);
+  // A file the server never opens in an app (a KiCad board, whose handler is KiCad): no Default app.
+  const board = { targets: [{ target: "source", kind: "kicad_pcb", name: "blinky.kicad_pcb", present: true, apps: [], default: false }] };
+  assert.deepEqual(rows({ files: board }).map(([group]) => group), ["places", "places"]);
 });

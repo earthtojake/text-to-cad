@@ -238,30 +238,6 @@ class ProxyFileTests(Fixture):
         self.assertEqual(installations.write_proxy(where, windows=False)[1], installations.FOREIGN)
         self.assertEqual(Path(path).read_text(encoding="utf-8"), "#!/bin/sh\nexec uv-tool-cadgen\n")
 
-    def test_the_windows_proxy_is_a_cmd_with_the_same_marker(self) -> None:
-        text = installations.script(True)
-        self.assertIn(f"rem {installations.MARK}{installations.REVISION}\r\n", text)
-        self.assertIn("-P -m cad_server._internal.proxy %*", text)
-        installations.write_proxy(str(self.root / "bin"), windows=True)
-        self.assertTrue((self.root / "bin" / "cad.cmd").is_file())
-
-    def test_the_cmd_takes_the_python_from_its_record_line(self) -> None:
-        # No Windows here to run it: for /f's split is simulated. With delims=" a run of quotes is
-        # one delimiter and none starts the line, so the line's leading space is token 1.
-        import re
-
-        python = "C:\\Users\\a b\\AppData\\Local\\uv\\env\\Scripts\\python.exe"
-        path, _status = installations.register("1.2.3", (python[:-10] + "cad.exe", python, "C:\\env"), self.state)
-        text = installations.script(True)
-        tokens, delimiter, needle = re.search(r'tokens\^=(\d+)\^ delims\^=\^(.) %%p in \(`findstr /c:"((?:\\"|[^"])*)" ',
-                                              text).groups()
-        needle = needle.replace('\\"', '"')  # findstr's escaped quote
-        (line,) = [line for line in Path(path).read_text(encoding="utf-8").splitlines() if needle in line]
-        fields = [field for field in line.split(delimiter) if field]
-        found = fields[int(tokens) - 1]
-        self.assertEqual(found.replace("\\\\", "\\"), python, "the cmd's !python:\\\\=\\! unescapes JSON's backslashes")
-        self.assertIn("!python:\\\\=\\!", text)
-
     @POSIX
     def test_the_sh_runs_the_current_installation_else_the_one_registered_last(self) -> None:
         where = str(self.root / "bin")
@@ -291,48 +267,6 @@ class ProxyFileTests(Fixture):
         ran = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment, cwd=self.root)
         self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy status\n", "a current that is no version is none")
 
-    def test_the_windows_proxy_reads_the_python_and_the_console_script_a_record_names(self) -> None:
-        # No Windows runner executes the cmd: each for /f is checked against the record's own line, the
-        # current installation's and then each registered one's. With delims set to a quote alone, cmd
-        # skips empty pieces and keeps the indent as one.
-        import re
-
-        record = self.registered("1.0.0")
-        lines = Path(record["path"]).read_text(encoding="utf-8").splitlines()
-        text = installations.script(True)
-        for named in ("!current!.json", "%%n"):
-            reads = re.findall(r'tokens\^=(\d+)\^ delims\^=\^" %%(\w) in \(`findstr /c:"\\"(\w+)\\":" \^< '
-                               r'"!state!\\installations\\' + re.escape(named) + r'"`\) do set "(\w+)=%%\2"', text)
-            self.assertEqual(sorted((key, name) for _taken, _letter, key, name in reads),
-                             [("cad", "console"), ("python", "python")], named)
-            for taken, _letter, key, _name in reads:
-                (line,) = [row for row in lines if f'"{key}":' in row]
-                pieces = [piece for piece in line.split('"') if piece]
-                self.assertEqual(pieces[int(taken) - 1].replace("\\\\", "\\"), record[key])
-        self.assertIn('set /p current=<"!state!\\installations\\current"', text)
-        # Alive as alive() says it, as the sh does: an uninstalled server leaves its python.
-        self.assertEqual(text.count('if exist "!python!" if exist "!console!" goto run'), 2)
-
-    def test_the_cmd_reads_a_record_whose_paths_are_not_ascii(self) -> None:
-        # A record is UTF-8 (a user folder named with accents or another script), and for /f decodes
-        # findstr's output in the console's code page: the cmd switches to UTF-8 before its first read and
-        # back before it runs or says anything, and stays ASCII itself, as cmd parses it in that code page.
-        text = installations.script(True)
-        self.assertTrue(text.isascii())
-        switch = text.index("chcp 65001 >nul 2>&1")
-        self.assertLess(text.index('for /f "tokens=*" %%a in (\'chcp\') do for %%b in (%%a) do set "codepage=%%~nb"'),
-                        switch)
-        self.assertLess(switch, text.index("set /p current="))
-        self.assertLess(switch, text.index("findstr /c:"))
-        # findstr opens no path itself: one outside the ANSI code page (a CJK name on a Western system)
-        # reaches a program as question marks. cmd opens the record, through Windows' Unicode API.
-        self.assertEqual(text.count("findstr /c:"), 4)
-        self.assertEqual(text.count('":" ^< "!state!\\installations\\'), 4)
-        restore = "if defined codepage chcp !codepage! >nul 2>&1\r\n"
-        self.assertEqual(text.count(restore), 2)
-        self.assertIn(restore + "echo ", text)
-        self.assertIn(":run\r\n" + restore + "endlocal & ", text)
-
     @POSIX
     def test_the_sh_passes_over_an_installation_whose_console_script_is_gone(self) -> None:
         where = str(self.root / "bin")
@@ -347,6 +281,215 @@ class ProxyFileTests(Fixture):
         ran = subprocess.run([installations.proxy_path(where, windows=False), "status"], capture_output=True,
                              text=True, env=environment, cwd=self.root)
         self.assertEqual(ran.stdout, "1.0.0\n", ran.stderr)
+
+
+class WindowsCommandTests(Fixture):
+    """``cad.exe``: distlib's launcher, a shebang naming the command's own Python beside it, and a zip whose
+    ``__main__.py`` chooses the installation. Written on any system; run for real on Windows alone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bin = str(self.root / "bin")
+        self.exe = Path(installations.proxy_path(self.bin, windows=True))
+        self.making = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
+        self.made = self.making.start()
+        self.addCleanup(self.making.stop)
+
+    def interpreter(self, folder: str) -> None:
+        """The command's Python as uv makes it, without uv: a venv's python.exe and the home it names."""
+        home = self.root / "home"
+        home.mkdir(exist_ok=True)
+        (home / "python.exe").write_bytes(b"MZ")
+        Path(folder, "Scripts").mkdir(parents=True, exist_ok=True)
+        Path(folder, "Scripts", "python.exe").write_bytes(b"MZ")
+        Path(folder, "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.0\n", encoding="utf-8")
+
+    @staticmethod
+    def exe_of(main: str) -> bytes:
+        """A cad.exe of a launcher's shape whose ``__main__.py`` is ``main``."""
+        import io
+        import zipfile
+
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("__main__.py", main)
+        return b"MZ launcher\n#!C:\\uv\\tools\\cad-server\\Scripts\\python.exe\n" + stream.getvalue()
+
+    def write(self) -> str:
+        path, status, error = installations.write_proxy(self.bin, windows=True)
+        self.assertEqual((path, error), (str(self.exe), None))
+        return status
+
+    def test_cad_exe_is_distlib_s_launcher_a_shebang_to_its_own_python_and_the_zip(self) -> None:
+        import zipfile
+        from importlib.resources import files
+
+        self.assertEqual(self.write(), installations.MISSING)
+        data = self.exe.read_bytes()
+        stub = files("distlib").joinpath("t64.exe").read_bytes()
+        self.assertTrue(data.startswith(stub), "pip's console launcher, as it ships in distlib")
+        # The launcher runs `<its folder>\cad-launcher\Scripts\python.exe -I cad.exe <arguments>`: no state
+        # folder in it, so every release and every state folder writes these same bytes.
+        self.assertTrue(data[len(stub):].startswith(b"#!<launcher_dir>\\cad-launcher\\Scripts\\python.exe -I\n"))
+        with zipfile.ZipFile(self.exe) as archive:
+            self.assertEqual(archive.namelist(), ["__main__.py"])
+            main = archive.read("__main__.py").decode("utf-8")
+        self.assertEqual(main, installations.script(True))
+        self.assertTrue(main.startswith(f"# {installations.MARK}{installations.REVISION}\n"))
+        compile(main, "__main__.py", "exec")
+        self.made.assert_called_once_with(str(self.root / "bin" / "cad-launcher"))
+        self.assertEqual(self.write(), installations.OK)
+        self.assertEqual(self.made.call_count, 1, "a Python that starts is never made again")
+
+    def test_a_cad_exe_not_ours_is_left_alone_a_later_one_too_and_a_stale_one_rewritten(self) -> None:
+        exe = self.exe_of
+        self.exe.parent.mkdir()
+        theirs = exe("import sys\nfrom cad_server.cli import main\nsys.exit(main())\n")  # `uv tool install cad-server`
+        self.exe.write_bytes(theirs)
+        self.assertEqual(self.write(), installations.FOREIGN)
+        self.assertEqual(self.exe.read_bytes(), theirs)
+        self.exe.write_bytes(b"MZ not a zip")
+        self.assertEqual(self.write(), installations.FOREIGN)
+        later = exe(installations.script(True).replace(f"{installations.MARK}{installations.REVISION}",
+                                                       f"{installations.MARK}{installations.REVISION + 1}"))
+        self.exe.write_bytes(later)
+        self.assertEqual(self.write(), installations.NEWER)
+        self.assertEqual(self.exe.read_bytes(), later)
+        self.exe.write_bytes(exe(installations.script(True) + "# changed\n"))
+        self.assertEqual(self.write(), installations.STALE)
+        self.assertEqual(self.write(), installations.OK)
+
+    def test_a_stub_of_another_distlib_is_still_this_revision_s_command(self) -> None:
+        self.write()
+        data = self.exe.read_bytes()
+        archive = data[data.index(b"#!<launcher_dir>"):]
+        self.exe.write_bytes(b"MZ another distlib's t64.exe" + archive)
+        self.assertEqual(self.write(), installations.OK, "releases of other distlibs do not rewrite it in turn")
+
+    def test_a_python_that_no_longer_starts_is_made_again_and_the_exe_kept(self) -> None:
+        self.write()
+        before = self.exe.stat().st_mtime_ns
+        (self.root / "home" / "python.exe").unlink()  # uv's Python it was made of, uninstalled
+        self.assertEqual(installations.proxy_status(str(self.exe), windows=True), installations.STALE)
+        self.assertEqual(self.write(), installations.STALE)
+        self.assertEqual(self.made.call_count, 2)
+        self.assertEqual(self.exe.stat().st_mtime_ns, before, "the same bytes: cad.exe is not written again")
+        self.assertEqual(self.write(), installations.OK)
+
+    def test_a_running_cad_exe_is_set_aside_replaced_and_swept_by_a_later_write(self) -> None:
+        self.write()
+        self.exe.write_bytes(self.exe_of(installations.script(True) + "# the one running\n"))  # stale, and running:
+        replace, remove = os.replace, os.remove
+
+        def held_replace(source, target):  # Windows: a running program is never replaced...
+            if os.fspath(target) == str(self.exe) and self.exe.exists():
+                raise PermissionError(13, "Access is denied", str(target))
+            return replace(source, target)
+
+        def held_remove(path):  # ...nor removed, but it can be renamed
+            if os.fspath(path).endswith(installations.ASIDE):
+                raise PermissionError(13, "Access is denied", str(path))
+            return remove(path)
+
+        from cad._internal import atomic_replace
+
+        with mock.patch.object(atomic_replace.os, "replace", side_effect=held_replace), \
+                mock.patch.object(atomic_replace.time, "sleep"), \
+                mock.patch.object(installations.os, "remove", side_effect=held_remove):
+            self.assertEqual(self.write(), installations.STALE)
+        self.assertEqual(installations.proxy_status(str(self.exe), windows=True), installations.OK)
+        (aside,) = [name for name in os.listdir(self.bin) if name.endswith(installations.ASIDE)]
+        self.assertRegex(aside, r"^cad\.exe\.[0-9a-f]{8}\.old$")
+        self.assertIn(b"# the one running", (self.root / "bin" / aside).read_bytes(), "the running one, set aside")
+        self.assertEqual([name for name in os.listdir(self.bin) if name.endswith(".tmp")], [])
+        self.assertEqual(self.write(), installations.OK)  # it ended: the next write removes it
+        self.assertFalse((self.root / "bin" / aside).exists())
+
+    def test_the_cad_cmd_before_goes_at_the_write_after_cad_exe_is_in_place(self) -> None:
+        self.exe.parent.mkdir()
+        earlier = self.exe.parent / "cad.cmd"
+        earlier.write_text("@echo off\r\nrem cad proxy: 9\r\n", encoding="utf-8")
+        self.assertEqual(installations.earlier_command(self.bin), str(earlier))
+        self.assertEqual(self.write(), installations.MISSING)
+        self.assertTrue(earlier.exists(), "a cad update through cad.cmd still has cmd reading it")
+        self.assertEqual(self.write(), installations.OK)
+        self.assertFalse(earlier.exists())
+        earlier.write_text("@echo off\r\nrem a person's own\r\n", encoding="utf-8")
+        self.write()
+        self.assertTrue(earlier.exists(), "a cad.cmd not ours stays")
+        self.assertIsNone(installations.earlier_command(self.bin))
+
+    def test_an_uninstall_takes_cad_exe_its_python_and_the_cad_cmd_before(self) -> None:
+        self.write()
+        (self.exe.parent / "cad.cmd").write_text("@echo off\r\nrem cad proxy: 9\r\n", encoding="utf-8")
+        remove = os.remove
+
+        def held_remove(path):  # the cad.exe this uninstall runs through
+            if os.path.basename(os.fspath(path)).startswith("cad.exe"):
+                raise PermissionError(13, "Access is denied", str(path))
+            return remove(path)
+
+        with mock.patch.object(installations.os, "remove", side_effect=held_remove):
+            removed, left = installations.remove_proxy(self.bin, windows=True)
+        self.assertEqual(sorted(removed), sorted([str(self.exe), str(self.exe.parent / "cad.cmd"),
+                                                  installations.interpreter_folder(self.bin)]))
+        (aside,) = left
+        self.assertRegex(os.path.basename(aside), r"^cad\.exe\.[0-9a-f]{8}\.old$")
+        self.assertEqual(sorted(os.listdir(self.bin)), [os.path.basename(aside)], "no cad command is left")
+
+    @POSIX
+    def test_its_main_runs_the_current_installation_else_the_one_registered_last_with_the_arguments_as_given(self) -> None:
+        import sys
+
+        self.write()
+        environment = {"PATH": os.environ.get("PATH", ""), "CAD_STATE_DIR": str(self.root / "state")}
+
+        def run(*args: str) -> subprocess.CompletedProcess:
+            # The launcher's own command line: its Python, -I, the exe itself, then the arguments (and -S:
+            # the command's Python has nothing installed).
+            return subprocess.run([sys.executable, "-I", "-S", str(self.exe), *args], capture_output=True, text=True,
+                                  env=environment, cwd=self.root)
+
+        none = run("status")
+        self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
+        for version in ("1.0.0", "2.0.0"):
+            record = self.registered(version)
+            Path(record["python"]).write_text(f'#!/bin/sh\nprintf "%s|" "{version}" "$@"\nexit 3\n', encoding="utf-8")
+            os.chmod(record["python"], 0o755)
+        os.utime(self.root / "state/installations/2.0.0.json", (1, 1))  # 1.0.0 registered last
+        arguments = ["run", "--with", "pandas>=2", "a&b %PATH% ^!<c>|d.py", 'say "é"']
+        ran = run(*arguments)
+        self.assertEqual(ran.stdout, "|".join(["1.0.0", "-P", "-m", "cad_server._internal.proxy", *arguments]) + "|",
+                         "no current: the last registered, each argument one, as given")
+        self.assertEqual(ran.returncode, 3, "the installation's exit status")
+        installations.point("2.0.0", self.state)
+        self.assertTrue(run("status").stdout.startswith("2.0.0|"), "the current one")
+        (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
+        self.assertTrue(run("status").stdout.startswith("1.0.0|"), "a current that is no version is none")
+        installations.point("2.0.0", self.state)
+        os.remove(record["cad"])  # 2.0.0 uninstalled from its environment: its python stays
+        self.assertTrue(run("status").stdout.startswith("1.0.0|"))
+
+    @unittest.skipUnless(os.name == "nt", "cad.exe runs on Windows")
+    def test_on_windows_cad_exe_runs_this_installation_with_the_arguments_as_given(self) -> None:
+        self.making.stop()  # the real one: uv makes the command's Python
+        self.addCleanup(self.making.start)
+        self.assertEqual(self.write(), installations.MISSING)
+        python = os.path.join(self.bin, "cad-launcher", "Scripts", "python.exe")
+        self.assertTrue(os.path.isfile(python))
+        self.assertFalse((self.root / "home").exists(), "uv made it, not the test's stand-in")
+        ran = subprocess.run([str(self.exe), "--version"], capture_output=True, text=True, encoding="utf-8")
+        # The current installation of the runner's state folder: this interpreter, by the version it is
+        # registered as, which the proxy tells it.
+        current = installations.current()
+        self.assertIsNotNone(current)
+        self.assertEqual((ran.returncode, ran.stdout.strip()), (0, f"cad {current['version']}"), ran.stderr)
+        # cmd parsed these: `>` and `|` redirected, `&` split the line, `^` and `!` went, `%PATH%` expanded.
+        odd = 'a&b>c|d ^e !f! %PATH% "g"'
+        ran = subprocess.run([str(self.exe), odd], capture_output=True, text=True, encoding="utf-8", cwd=self.root)
+        self.assertEqual(ran.returncode, 2, ran.stderr)
+        self.assertIn(f"cad: unknown command {odd!r}", ran.stderr)
+        self.assertFalse((self.root / "c").exists(), "nothing was redirected")
 
 
 class ResolutionTests(Fixture):

@@ -27,7 +27,8 @@ made only where none is (``Folder.create``: the page token), which is linked int
 written synchronously, and only when a field differs from the one on disk; then
 each of ``OBSERVERS`` is told (a mirror uploads in the background: nothing waits on the network).
 The cache folder is a second ``Folder``, written the same way; forgetting a document
-(``delete``) forgets its cache file too.
+(``delete``) forgets its cache file too, and its Recents pictures (``preview``: PNGs under
+``PICTURES``, which Recents writes and bounds, ``cad_server.viewer.recents``) that no other record names.
 
 Beside the documents, ``<state>/engines/token`` is the user's page token, which every engine
 serves with, whatever its release (``Registry.token``; the first engine makes it, ``make_token``),
@@ -55,8 +56,8 @@ from cad.engine.atomic_replace import replace_atomic
 from cad.engine.ids import is_id
 from cad.engine.records import (DOCUMENTS, RECORD, SCHEMA, command, detached, home, parse, program, relative, rerun)
 
-__all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "Folder", "OBSERVERS", "RECORD", "Registry", "SCHEMA", "TOKEN", "command", "current",
-           "detached", "home", "program", "relative"]
+__all__ = ["DOCUMENTS", "ENGINES", "ENGINE_FIELDS", "ENGINE_SCHEMA", "FACTORY", "Folder", "OBSERVERS", "PICTURES", "RECORD", "Registry", "SCHEMA", "TOKEN",
+           "command", "current", "detached", "home", "pictures", "program", "relative"]
 
 ENGINES = "engines"
 # The engine records' own schema: 3 holds, while the default port is another's, the port the
@@ -66,6 +67,20 @@ ENGINE_SCHEMA = 3
 ENGINE_FIELDS = ("port", "schema")
 # The user's page token, one for every installation's engine: a link outlives an upgrade.
 TOKEN = f"{ENGINES}/token"
+
+# Where a record's Recents pictures are (its ``preview``'s ``thumbnail`` and ``thumbnailDark``: file names).
+PICTURES = "recents/thumbnails"
+_PICTURE = re.compile(r"[0-9a-f]{32}\.png")
+
+
+def pictures(record: dict[str, Any] | None) -> set[str]:
+    """The pictures a record's ``preview`` names: its PNGs' names under ``PICTURES``."""
+    preview = (record or {}).get("preview")
+    if not isinstance(preview, dict):
+        return set()
+    return {name for name in (preview.get("thumbnail"), preview.get("thumbnailDark"))
+            if isinstance(name, str) and _PICTURE.fullmatch(name)}
+
 
 # Told of every record written (one that changed), after it is on disk; never waited on for more.
 OBSERVERS: list[Callable[[dict[str, Any]], None]] = []
@@ -225,15 +240,26 @@ class Registry:
         return [record for record in (self.get(name) for name in self.state.names(DOCUMENTS)) if record is not None]
 
     def delete(self, ident: str) -> bool:
-        """Forget document ``ident``: its folder, whole, and its cache file in the cache folder."""
+        """Forget document ``ident``: its folder, whole, its cache file in the cache folder, and its
+        Recents pictures that no other record names (``forget_pictures``: a record re-pointed under a
+        new id keeps the pictures it names)."""
         if not is_id(ident):
             return False
         with self._lock(ident):
+            named = pictures(self.get(ident))
             there = self.state.path(f"{DOCUMENTS}/{ident}").exists()
             self.state.remove(f"{DOCUMENTS}/{ident}")
             if self.cache is not None:
                 self.cache.remove(f"{DOCUMENTS}/{ident}")
+        self.forget_pictures(named)
         return there
+
+    def forget_pictures(self, names: set[str]) -> None:
+        """The pictures ``names`` removed from ``PICTURES``, but those a record still names."""
+        names = {name for name in names if _PICTURE.fullmatch(name)}
+        if names:
+            for name in names - {name for record in self.list() for name in pictures(record)}:
+                self.state.remove(f"{PICTURES}/{name}")
 
     # --- the installation's engine -------------------------------------------------------------
 

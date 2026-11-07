@@ -65,12 +65,12 @@ function firstPaint({ record, prefersDark = false, blocked = false }) {
 test("the first paint reads the tab record's appearance before any module loads, and follows the OS without one", () => {
   const html = readFileSync(new URL("../../../index.html", import.meta.url), "utf8");
   assert.ok(html.indexOf("<script>") < html.indexOf("</head>"), "the script is in the head, before anything is painted");
-  const dark = firstPaint({ record: { version: 1, settings: { appearance: DARK_COLOR_SCHEME_ID } } });
+  const dark = firstPaint({ record: { version: 2, settings: { appearance: DARK_COLOR_SCHEME_ID } } });
   assert.equal(dark.classList.contains("dark"), true);
   assert.equal(dark.style.colorScheme, DARK_COLOR_SCHEME_ID);
-  const light = firstPaint({ record: { version: 1, settings: { appearance: LIGHT_COLOR_SCHEME_ID } }, prefersDark: true });
+  const light = firstPaint({ record: { version: 2, settings: { appearance: LIGHT_COLOR_SCHEME_ID } }, prefersDark: true });
   assert.equal(light.classList.contains("dark"), false);
-  const system = firstPaint({ record: { version: 1, settings: { appearance: "nonsense" } }, prefersDark: true });
+  const system = firstPaint({ record: { version: 2, settings: { appearance: "nonsense" } }, prefersDark: true });
   assert.equal(system.classList.contains("dark"), true);
   assert.equal(firstPaint({ record: undefined, prefersDark: true }).classList.contains("dark"), true, "a new tab follows the OS");
   assert.equal(firstPaint({ record: { version: 0, settings: { appearance: "light" } }, prefersDark: true }).classList.contains("dark"), true, "another version's record is nobody's");

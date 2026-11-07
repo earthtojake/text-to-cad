@@ -7,8 +7,8 @@ const INITIAL_ROWS = 60;
 export const VIRTUAL_ROWS_OVERSCAN = 12;
 
 function scrollerOf(element) {
-  // In the file sidebar a section does not scroll: the bar does, as one.
-  const panel = element.closest('[data-file-sidebar-scroller]') || element.closest('[data-tool-panel-body]');
+  // In the view's panel a tab does not scroll: the panel does.
+  const panel = element.closest('[data-flat-panel-scroller]') || element.closest('[data-tool-panel-body]');
   if (panel) return panel;
   for (let node = element.parentElement; node; node = node.parentElement) {
     if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) return node;
@@ -40,7 +40,7 @@ export function revealRow(row) {
  * places each mounted row where it would sit, so its scroller's height, scroll range and every
  * row's position are the full list's: what is drawn cannot tell the difference.
  *
- * The scroller is the file sidebar's, for a list in one of its sections; the list's tool-stack
+ * The scroller is the view's panel's, for a list in one of its tabs; the list's tool-stack
  * panel body (`[data-tool-panel-body]`) for one in a panel; else the nearest
  * scrolling ancestor, else the window. The window follows it on scroll and resize, and is
  * brought up to date before the browser paints, so no scrolled-to row is ever missing. A list
