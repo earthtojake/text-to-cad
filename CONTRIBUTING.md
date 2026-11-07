@@ -112,7 +112,7 @@ makes no base for it (`cad_server/_internal/base.py`), and nothing makes an envi
 (not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
 <type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
-cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
+cad's integrations than build123d alone (none, kicad or cadjoint), or that names packages of its own, runs in an
 environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
 uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel

@@ -57,7 +57,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `cadjoint`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -84,7 +84,8 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); and engineering drawings (`@eng_drawing`).
+trimesh); a cadjoint field made a solid a model returns (`cad.cadjoint.solid`); and engineering
+drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -623,7 +624,11 @@ src/cad/
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   and the producers it registers (_producers)
+                         #   a faceted solid from a mesh's arrays (_faceted), and the producers it
+                         #   registers (_producers)
+  cadjoint/              # the cadjoint integration: a field of cadjoint's made a build123d solid
+                         #   of planar faces, through its own mesher and simplifier (_solid), and
+                         #   a section of the field drawn (_section)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
@@ -731,3 +736,40 @@ measure a mesh a program already holds, answering the same report as data:
 or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
 `cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
 (`cad[trimesh]`), and a check without it says so in one line.
+
+## Implicit fields
+
+A cadjoint field -- a signed-distance function of cadjoint's, built of blended booleans, shells,
+offsets, patterns and sketches -- becomes a solid a model returns, with the `cadjoint` integration
+(`cad[cadjoint]`): `cad.cadjoint.solid(scene, cell=..., bounds=None)`, `cell` the sampling cell in
+millimetres, `bounds` a box of the caller's in place of cadjoint's own fit:
+
+```python
+from cad import model
+from cad.cadjoint import solid
+from cadjoint.construction import Solid
+from cadjoint.sdf.boolean import Union
+
+scene = Union(Solid.sphere(radius=15.0, name="hub"),
+              Solid.cylinder(radius=8.0, height=20.0, position=(0.0, 0.0, 20.0), name="boss"),
+              smoothness=3.0)
+
+
+@model
+def node():
+    return solid(scene, cell=1.0)
+```
+
+The field is meshed by cadjoint's dual contouring, sharp creases kept, and simplified by its
+error-bounded, feature-preserving collapse to within a twentieth of the cell; what comes back is a
+build123d `Solid` of planar triangular faces (`cad.build123d.faceted_solid`, which makes one of any
+closed triangle mesh's arrays), so the document, its views, exports, inspection and checks are any
+solid's, and a STEP of it is faceted too. Nothing plausible-wrong comes back (law 17): a scene that is
+no field, a cell that is no positive number, more than 512 cells on an axis, a field with no closed
+part in reach, bounds that cut the part or hold no surface, a mesh that is not watertight and a mesh of
+several bodies are each refused, naming the fix, and no solid is made. The solids are build123d's, so
+the integration needs the build123d integration (the registry's `needs`): a script run with `cad run` that imports
+`cadjoint` or `cad.cadjoint` gets both, and one whose header names `cad[cadjoint]` gets build123d with
+it. `cad.cadjoint.section(scene, out, axis="z", at=0.0)` draws one plane of the field as a PNG --
+inside and outside by colour, contours of distance, the surface as a line -- and answers what it shows
+(`Section`: its plane, its extent, the field's range on it), without meshing.

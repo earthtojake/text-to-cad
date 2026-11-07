@@ -252,7 +252,8 @@ re-runs the body that read it:
   xbf beside the STEP and read the xbf.
 - **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and
-  built from, never placed in a model.
+  built from, or made a solid of planar faces with
+  `cad.build123d.faceted_solid(mesh.vertices, mesh.triangles)`, never placed in a model as it is.
 - **Every file the body's Python opens** for reading is an input too: `open`,
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's

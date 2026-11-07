@@ -479,7 +479,8 @@ the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
 reaches it. A model runs where the kernel is. `cad run` runs it exactly as `uv run` would -- the same
 options and the same script header -- in an environment the server makes with uv in its cache
 folder and keeps: the library pinned at the server's release, with the integrations the script's
-imports use (`import build123d`: `cad[build123d]`), on the server's Python, 3.14. The server's own
+imports use (`import build123d`: `cad[build123d]`; `import cadjoint`: `cad[cadjoint]`, with the
+build123d its solids are made of), on the server's Python, 3.14. The server's own
 kernel processes run in the `cad[build123d]` one: exports, snapshots and the meshes the viewer
 shows. Nothing is installed in advance: each environment is made the first time something needs
 it, and a first model or view waits for it. A model run so imports what its environment holds.

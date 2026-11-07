@@ -446,7 +446,8 @@ verbosity) key nothing. What it adds is two things:
   core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
   folder, its package, its project, following absolute and relative imports and the imports inside
   function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
-  build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
+  build123d integration; `kicode`: the kicad integration; `cadjoint`: the cadjoint integration, and
+  with it build123d, which it needs), each of cad's names it imports or uses by the
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
   build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
@@ -944,7 +945,9 @@ file route sends, the catalog's extensions, the snapshot packets' inputs, the ro
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
 runtime bundled at build time, which are generated from it (`python -m cad.registry --js`) and checked
 against it. `wire` is the one other spelling, the frozen
-protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas.
+protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas. An
+integration whose helpers hand back another's objects names it (`Integration.needs`: cadjoint's solids
+are build123d's), and `cad run` closes a program's integrations over it (`extras.integrations`).
 
 **A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
 (`cad._internal.document_type.bind`), the module class of every type (`ModelType` for `cad.model`, whose

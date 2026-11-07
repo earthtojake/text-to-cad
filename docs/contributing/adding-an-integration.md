@@ -32,7 +32,7 @@ an integration.
 
 | Kind | What it is | Examples | An integration? |
 | --- | --- | --- | --- |
-| A | Python libraries model code imports | build123d, pandas | yes, where we write helpers that take its objects or producers of its values |
+| A | Python libraries model code imports | build123d, cadjoint, pandas | yes, where we write helpers that take its objects or producers of its values |
 | B | Python libraries our producers call | ezdxf, Pillow, netgen | yes, where the code that calls it is ours for that tool |
 | C | External programs our code runs | kicad-cli, ccx, freecadcmd | yes: a probe, headless runs, one missing-tool result |
 | D | Tools only the agent runs | a slicer's CLI the agent calls | no: the skill teaches it, cad's code never calls it |
@@ -50,7 +50,9 @@ an integration.
       comment saying why. An external program needs no extra until it ships as a package.
 - [ ] **The registry entry**, `INTEGRATIONS` in `packages/cad/src/cad/registry.py`: name, summary,
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
-      (the program, its minimum version, its install hint, the variable that names it outright).
+      (the program, its minimum version, its install hint, the variable that names it outright),
+      and, where its helpers hand back another integration's objects, `needs` naming it (cadjoint's
+      solids are build123d's), which `cad run` closes a program's integrations over.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a

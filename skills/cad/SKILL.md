@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the robot-simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies; models organic forms, smooth blends, shells and patterns as implicit signed-distance fields with cadjoint. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, explode or showcase animations, and signed-distance-field (SDF) modeling. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -19,6 +19,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
 | **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
 | **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
+| **Blend, shell or pattern a form a field does better (implicit / SDF)** | `solid(scene, cell=...)` from `cad.cadjoint` in the body. | [Implicit fields](references/implicit-fields.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `step.read`, `xbf.read` or `stl.read` in the body. | [Inputs](references/model-contract.md#inputs) |
 | **Resolve a reference from a prompt** | `cad model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
