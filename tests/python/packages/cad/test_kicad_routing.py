@@ -25,7 +25,7 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
-from cad.kicad._route import _entries, _rules, _wants, route  # noqa: E402
+from cad.kicad._route import Routed, _entries, _rules, _wants, route  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing import plan  # noqa: E402
@@ -399,6 +399,9 @@ class Plans(unittest.TestCase):
             def get_as_string(self) -> str:
                 return self.text
 
+        import cad.kicad
+
+        self.assertIs(cad.kicad.Routed, Routed)
         with self.assertRaises(TypeError) as caught:
             route("board.kicad_pcb", ["A"], layers=["F.Cu"])
         self.assertIn("the board a kicad_pcb.edit block has open", str(caught.exception))

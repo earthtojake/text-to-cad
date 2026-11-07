@@ -23,7 +23,7 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
   kicad_sch erc`` and ``export``).
 * ``route`` (``_route``, its search in ``_routing``): copper for the connections an agent names, in the order
   it names them, written into the board a ``kicad_pcb.edit`` block has open: KiPy's board in, the copper out
-  through it, every rule the board's own.
+  through it, every rule the board's own; it answers a ``Routed``.
 
 The board readers are the document type's (``cad.kicad_pcb``), our own code for the file format: viewing,
 reading and drawing a board need no KiCad. Importing this package starts nothing and imports no kicode.
@@ -31,6 +31,6 @@ reading and drawing a board need no KiCad. Importing this package starts nothing
 
 from __future__ import annotations
 
-from cad.kicad._route import route
+from cad.kicad._route import Routed, route
 
-__all__ = ["route"]
+__all__ = ["Routed", "route"]
