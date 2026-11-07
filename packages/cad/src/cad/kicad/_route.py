@@ -216,16 +216,32 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
 # --- the board, read and written through KiPy ---------------------------------------------------------------------
 
 
-def _max_error(board: Any) -> float:
-    """KiCad's own arc error, its board setting (``max_error`` in the project's design rules); its default where the
-    project does not say."""
+def _project_file(board: Any, suffix: str) -> Path | None:
+    """The open board's project file ending ``suffix`` (``.kicad_pro``, ``.kicad_dru``), where its project names one."""
     try:
-        document = board.document
-        project = Path(document.project.path) / f"{document.project.name}.kicad_pro"
+        project = board.document.project
+    except AttributeError:
+        return None
+    if not project.path or not project.name:
+        return None
+    return Path(project.path) / f"{project.name}{suffix}"
+
+
+#: KiCad's own default arc error (its ARC_HIGH_DEF), where the project does not set one.
+MAX_ERROR = 0.005
+
+
+def _max_error(board: Any) -> float:
+    """KiCad's own arc error, its board setting (``max_error`` in the project's design rules); KiCad's default
+    (``MAX_ERROR``) where the project does not say."""
+    project = _project_file(board, ".kicad_pro")
+    if project is None:
+        return MAX_ERROR
+    try:
         rules = json.loads(project.read_text(encoding="utf-8"))["board"]["design_settings"]["rules"]
-        return max(float(rules.get("max_error", 0.005)), 0.0)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return 0.005
+        return max(float(rules.get("max_error", MAX_ERROR)), 0.0)
+    except (OSError, KeyError, ValueError):  # no project file, or one that does not set it (JSON's errors: ValueError)
+        return MAX_ERROR
 
 
 def _rules(board: Any, names: Sequence[str]) -> Any:
@@ -255,20 +271,27 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
                   min_via_diameter=constraints.min_via_size * nm, min_via_drill=constraints.min_through_drill * nm,
                   min_annulus=constraints.min_via_annular_width * nm, max_error=_max_error(board))
     try:
+        response = board.get_custom_design_rules()
+    except Exception as error:  # noqa: BLE001 - KiPy's ApiError: a KiCad without the request gives no custom rules
+        if type(error).__name__ != "ApiError":
+            raise
+        dru = _project_file(board, ".kicad_dru")
+        if dru is not None and dru.is_file() and "(rule" in dru.read_text(encoding="utf-8", errors="replace"):
+            raise ValueError(f"route keeps the board's custom rules ({dru.name}), and this KiCad cannot give them over "
+                             "its API: run the edit with kicode's kicad-cli (unset CAD_KICAD_CLI), or take the rules "
+                             "out while routing") from None
+        response = None
+    custom = []
+    if response is not None:
         from kicode.proto.board.board_commands_pb2 import CustomRulesStatus  # pyrefly: ignore[missing-import]
         from kicode.proto.board.board_rules_pb2 import CustomRuleConstraintType  # pyrefly: ignore[missing-import]
 
-        response = board.get_custom_design_rules()
         if CustomRulesStatus.Name(response.status) == "CRS_INVALID":
             raise ValueError(f"route: KiCad cannot read the board's custom rules (.kicad_dru: {response.error_text}), "
                              "so the router cannot keep them: fix them first")
         custom = [(rule.name, CustomRuleConstraintType.Name(constraint.type),
                    (constraint.numeric.min * nm) if constraint.numeric is not None else 0.0)
                   for rule in response.rules for constraint in rule.constraints]
-    except Exception as error:  # noqa: BLE001 - KiPy's ApiError: a KiCad without the request reads no custom rules
-        if type(error).__name__ != "ApiError":
-            raise
-        custom = []
     limits, refused = custom_limits(custom)
     if refused:
         raise ValueError(f"route: the board's custom rules {', '.join(map(repr, refused))} disallow items, or assert of "

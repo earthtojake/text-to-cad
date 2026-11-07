@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import math
 import random
+import tempfile
 import unittest
 from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tests.python.support.paths import add_repo_path
@@ -22,7 +25,7 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
-from cad.kicad._route import _entries, _wants, route  # noqa: E402
+from cad.kicad._route import _entries, _rules, _wants, route  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing import plan  # noqa: E402
@@ -459,6 +462,46 @@ class CustomPads(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             read_copper(self.pad("(gr_squiggle (start 0 0) (end 1 1))"))
         self.assertIn("pad U1.1: its primitive gr_squiggle", str(caught.exception))
+
+
+class ApiError(Exception):
+    """KiPy's, by name: what a KiCad without a request answers."""
+
+
+class OpenBoard:
+    """The open board as far as ``_rules`` asks it, on a KiCad that cannot give its custom rules."""
+
+    def __init__(self, folder: str) -> None:
+        self.document = SimpleNamespace(project=SimpleNamespace(path=folder, name="b"))
+
+    def get_nets(self) -> list:
+        return [SimpleNamespace(name="")]
+
+    def get_netclass_for_nets(self, nets) -> dict:
+        found = SimpleNamespace(name="Default", constituents=[], clearance=200_000, track_width=250_000,
+                                via_diameter=800_000, via_drill=400_000)
+        return {"": found}
+
+    def get_design_rules(self):
+        return SimpleNamespace(rules=SimpleNamespace(constraints=SimpleNamespace(
+            min_clearance=0, min_track_width=0, copper_edge_clearance=0, hole_clearance=0, hole_to_hole_min=0,
+            min_via_size=0, min_through_drill=0, min_via_annular_width=0)))
+
+    def get_custom_design_rules(self):
+        raise ApiError("no such request")
+
+
+class KiCadRules(unittest.TestCase):
+    def test_custom_rules_kicad_cannot_give_are_refused_never_dropped(self) -> None:
+        """A KiCad whose API cannot give the custom rules routes a board without a .kicad_dru as ever, and refuses one
+        with rules, naming the file: never routed by its netclasses alone."""
+        with tempfile.TemporaryDirectory() as folder:
+            board = OpenBoard(folder)
+            self.assertAlmostEqual(0.2, _rules(board, []).default.clearance)
+            Path(folder, "b.kicad_dru").write_text('(version 1)\n(rule "hv" (constraint clearance (min 1mm)))\n')
+            with self.assertRaises(ValueError) as caught:
+                _rules(board, [])
+            self.assertIn("custom rules (b.kicad_dru)", str(caught.exception))
 
 
 class Keepouts(unittest.TestCase):
