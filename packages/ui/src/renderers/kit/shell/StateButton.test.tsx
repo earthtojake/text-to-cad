@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Square } from 'lucide-react';
 import StateButton from '../../../../dist/renderers/kit/shell/StateButton.js';
 import ProjectionToggle from '../../../../dist/renderers/kit/shell/ProjectionToggle.js';
+import { textGlyphIcon } from '../../../../dist/renderers/kit/shell/TextGlyph.js';
 
 // The view's one state button (`StateButton.jsx`), Projection's and a view's own: its icon is the state
 // on screen, its name says that state, its tooltip what a press does, with the key that does the same;
@@ -34,6 +35,16 @@ it('shows the state on screen and names it; its tooltip says what a press does, 
   away(button);
   fireEvent.click(button);
   expect(presses).toEqual(['pressed']);
+});
+
+it('a word is an icon: drawn as the tile draws a Lucide icon, in its colour, hidden from the name, its figures tabular', () => {
+  render(<StateButton icon={textGlyphIcon('2D')} label="View: 2D" tooltip="Switch to 3D" onPress={() => {}} />);
+  const glyph = screen.getByRole('button', { name: 'View: 2D' }).firstElementChild as SVGSVGElement;
+  // The tile's own child svg on Lucide's 24-unit grid, so the tile sizes it as it sizes theirs (`[&>svg]:size-3.5!`).
+  expect([glyph.tagName, glyph.getAttribute('viewBox'), glyph.getAttribute('aria-hidden'), glyph.getAttribute('fill'), glyph.dataset.textGlyph])
+    .toEqual(['svg', '0 0 24 24', 'true', 'currentColor', '2D']);
+  const text = glyph.querySelector('text')!;
+  expect([text.textContent, text.getAttribute('font-weight'), text.style.fontVariantNumeric]).toEqual(['2D', '600', 'tabular-nums']);
 });
 
 it('Projection is the state button: the projection on screen, named, the other one its tooltip, a press switching to it', () => {
