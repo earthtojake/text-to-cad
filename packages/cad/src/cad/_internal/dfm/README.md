@@ -153,15 +153,18 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
 ### Families (what each measures, and how)
 
 - **holes** — a connected set of coaxial concave cylinders and cones (plus the planes square to the axis whose
-  every neighbour is one of them: a counterbore step, a flat floor), with one cylinder sweeping >= 300
-  degrees. `diameter_mm` (narrowest full cylinder), `depth_mm` (the cylinders' extent along the axis),
+  every neighbour is one of them: a counterbore step, a flat floor); sets on one axis whose cylinders of one
+  radius overlap along it are one hole (a hole a slot splits); one radius's cylinders sweep >= 300 degrees
+  together. `diameter_mm` (narrowest full cylinder), `depth_mm` (the cylinders' extent along the axis),
   `depth_to_diameter`, `through` / `bottom` (`through`, `drill_point`, `flat`, `closed`, `other`: an exact
   ray along the axis from inside the hole meets the hole's own floor or not), `point_angle_deg` (a drill
   point's included angle), `counterbores` [{diameter_mm, depth_mm}], `countersinks` [{diameter_mm,
-  angle_deg}], `axis`, `aligned` (along a world axis), `opening`, `drilled` (<= 1 3/4 in), `standard_drill`
+  angle_deg}], `axis`, `aligned` (along a world axis), `reachable` (along a direction the machine has),
+  `inclination_deg` (to the nearest world axis), `opening`, `drilled` (<= 1 3/4 in), `standard_drill`
   (`"6.8 mm"`, `"1/4 in (6.350 mm)"`, `"#7 (5.105 mm)"`, `"letter F (6.528 mm)"`: within 0.005 mm),
   `drill_deviation_mm`, `tap_candidate` (`"M8x1.25"` where the diameter is an ISO 262 coarse tap drill: a
-  fact, not a verdict); with `--turning`, `relation` (axial / radial / off_axis). Drill table: Wikipedia
+  fact, not a verdict), `tap_drill`, `tap_nominal_mm` (that thread's nominal); with `--turning`, `relation`
+  (axial; radial: square to the axis and meeting it; perpendicular: square to it, beside it; off_axis). Drill table: Wikipedia
   "Drill bit sizes" (ASME B94.11M): metric 0.2-25 mm in its steps, fractional 1/64 in to 1 3/4 in, #80-#1,
   A-Z.
 - **threads** — modelled threads: non-analytic faces (no surface of revolution) whose edge points sweep >= 350
@@ -174,28 +177,41 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   concave/tangent edges parallel to the normal. `kind` (`closed`; `slot`: open with opposite walls; `open`),
   `depth_mm` (floor to the walls' rim), `depth_from_top_mm` (floor to the part's top along the normal: tool
   reach), `width_mm` (narrowest exact ray between opposite walls of the pocket), `depth_to_width`,
-  `open_boundary_fraction`, `floor_radius_mm` (root fillet), `axis`, `aligned`, `wall_count`, `floor` (its
+  `open_boundary_fraction`, `floor_radius_mm` (root fillet), `axis`, `aligned`, `reachable` (along a direction
+  the machine has, or none of its edges left unmade: a chamfer mill's V reads as a pocket on one flank),
+  `inclination_deg`, `wall_count`, `floor` (its
   floor's ref), `width_faces` (the two walls the width is between; `location` is the first of them, else the
   floor). An open step that reads both ways (floor+wall or wall+floor seen from the side) keeps the shallower
-  reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, no floor) are faces along a
-  world axis joined by concave or tangent edges along it, none a floor pocket's, none meeting a plane square to
-  the axis by a concave edge, with a concave cylinder along it that is no floor's root fillet (no tangent plane
-  neighbour seen end-on); `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the shallower
-  side's reach, `width_mm` / `depth_to_width` as for a pocket, `floor` null.
+  reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, through T-slots and
+  dovetails, no floor) are faces along a world axis joined by concave or tangent edges along it, none a floor
+  pocket's, none meeting a plane square to the axis by a concave edge, closed around the axis (their normals
+  seen along it in no one half-plane: an open valley is no window), with a corner -- a concave cylinder along
+  it that is no floor's root fillet (no tangent plane neighbour seen end-on), or a sharp concave edge along
+  it; `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the shallower side's reach,
+  `width_mm` / `depth_to_width` as for a pocket, `floor` null.
 - **internal_corners** — a pocket's in-plane corners: concave cylinders along the pocket's axis (`radius_mm`)
   and sharp concave edges along it that no tool makes from another side (`radius_mm` 0, `sharp` true,
   `edge`). `height_mm` (the corner's own extent: the cavity depth there), `depth_mm` (from the part's top),
   `radius_to_depth`, `tool_mm` (largest `--tools` tool <= 2r, else 2r), `reach_ratio` (depth / tool_mm),
   `pocket` (its floor's ref; a through cavity's `location`), `folded_edges` (the sharp edges its run makes
-  through small edge rounds at its ends, folded in rather than listed under sharp_edges). A through cavity's
-  concave cylinders are its corners the same way. `radius_mm` is read to 0.01 mm (`RADIUS_TOLERANCE`: 1.4999
+  through small edge rounds at its ends -- an edge sharing a vertex and a face with it that runs along its
+  axis, or is a face of such a round and under twice its radius long; never a floor-to-wall edge -- folded in
+  rather than listed under sharp_edges). A through cavity's concave cylinders and unmade sharp edges along it
+  are its corners the same way. `radius_mm` is read to 0.01 mm (`RADIUS_TOLERANCE`: 1.4999
   is 1.5). Floor-to-wall roots are never corners (a flat end mill makes them sharp).
 - **sharp_edges** — every other sharp concave edge no rotating tool makes (each with `void_angle_deg`,
-  `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees). Made by: an
+  `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees, and `reason`,
+  the first that holds: `other_axes` -- a tool along a direction the machine lacks would make it;
+  `vertical_corner` -- both faces lie along a machine direction the edge runs along, a corner where the
+  tool's side leaves its radius; `acute`; `blocked` -- a face is a plane square to a machine direction, the
+  way along it blocked; `no_square_face`). A crease a ball end mill makes is an item too: `made_by`
+  `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
+  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Made by: an
   end mill where one face is a plane square to an approach direction (a floor or a ceiling), the void angle
   >= 90 and a ray from that face along the direction escapes; a T-slot cutter where a face of the cavity
   the edge bounds is seen along that direction; a 45/60 degree dovetail cutter likewise (its face a plane);
-  a 60/90/120 degree chamfer mill along the bisector; a ball end mill where the void angle is >= 150 degrees
+  a 60/90/120 degree chamfer mill along the bisector, and its shoulder (a 150/135/120 degree void: one face
+  along the mill's axis, the other looking along it); a ball end mill where the void angle is >= 150 degrees
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
   R (1 / sin(void / 2) - 1), 0.035 R at 150) along a direction both faces look along whose ray from the crease
   escapes; a drill or tap for a hole's own edges. `by_tool` counts every concave edge by the tool. Evaluated at
@@ -210,23 +226,28 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   `height_to_thickness`, `surface`. The 200 listed items are refined to the exact least distance between the
   face and `opposite` (`BRepExtrema_DistShapeShape`; faces sharing an edge or a vertex are not), kept where the
   segment leaves the face within ~45 degrees of its inward normal and its middle is in the material or on the
-  boundary: `refined` true, `xyz` the thinnest point.
+  boundary: `refined` true, `xyz` the thinnest point. A face and its `opposite` are one item (the thinner
+  reading): one web is one finding; gaps likewise.
 - **gaps** — the same ray outward across the void (holes and threads excluded); the narrowest per face under
   10 mm: `width_mm`, `opposite`, `surface`; refined the same way, through the void.
 - **access** — faces (stock faces on the part's box excluded when no `--stock`) whose sampled points no
   straight line from the machine's directions reaches (exact rays must escape the part; back-facing points
   never count): `unreached_fraction`, `unreached_any_direction_fraction` (200 directions over the sphere),
-  `kind` (`undercut`: five axes would reach it; `no_line_of_sight`: nothing straight would). Directions: 3
+  `kind` (`undercut`: five axes would reach it; `no_line_of_sight`: nothing straight would), `hole` and
+  `hole_axis` (a hole's face, and its axis). Items of `kind` `special_cutter` are the edges only a T-slot or
+  dovetail cutter makes, joined by the faces they share, whatever line of sight says: `cutter`,
+  `edge_count`, `edges` (their fractions 0). Directions: 3
   axes the six world axes; 4 axes those plus every 15 degrees about the rotary axis (X, Y or Z, the one
   that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and 200
   over the sphere (so five reach at least what four do).
 - **setups** — one item per part: the greedy set cover of the sampled area by direction (`directions`
   [{direction, area_fraction, faces}]), `orientation_count`, `setup_count` (clampings: each orientation on 3
   axes; directions square to the rotary axis are one on 4; directions within a half-space above one
-  clamping face are one on 5), `unreached_area_fraction`, `rotary_axis`, `sampled_points`.
+  clamping face are one on 5), `unreached_area_fraction`, `rotary_axis`, `sampled_points`,
+  `inclined_directions` (each inclined hole's or pocket's own direction: one more orientation and clamping).
 - **voids** — closed cavities (inner shells): `volume_mm3`, `face_count`.
 - **stock** — per part: `size_mm`, `stock_mm`, `stock_given`, `fits_stock`, `length_mm` >= `width_mm` >=
-  `height_mm`, `volume_mm3`, `stock_volume_mm3`, `removal_ratio`.
+  `height_mm`, `volume_mm3`, `stock_volume_mm3`, `removal_ratio` (null where the part does not fit).
 - **small_features** — faces narrower than 0.5 mm (2 x area / perimeter); scalars `smallest_edge_mm`,
   `smallest_face_mm2`, `fine_faces` (under 1 mm).
 - With `--turning` (pockets and internal_corners are then absent): **turning** (per part: `axis` — the line
@@ -246,37 +267,41 @@ smallest `--tools` tool when given.
 
 | id | family.field | generic / hubs | protolabs | xometry |
 |---|---|---|---|---|
-| cnc.internal_corner_sharp | internal_corners.radius_mm min, sharp corners (e): the radius to give | 1.25 (a 2.5 mm tool's); tools: 0.5 x min tool | soft 0.2286 / hard 0.4191 (half its narrowest milled line; no material: soft); tools: 0.5 x min tool | 1.25; tools: 0.5 x min tool |
+| cnc.internal_corner_sharp | internal_corners.radius_mm min, sharp corners: the radius to give | 1.25 (e, a 2.5 mm tool's); tools: 0.5 x min tool | w ("Sharp inside corners ... will be radiused"; the message says the radius): soft 0.2286 / hard 0.4191 (half its narrowest milled line; no material: soft); tools: 0.5 x min tool | 1.25 (e); tools: 0.5 x min tool |
 | cnc.internal_corner_radius | internal_corners.radius_mm | 0.025 mm (e, Hubs micro tools 0.05 mm); tools: 0.5 x min tool (e) | tools: 0.5 x min tool (e) | 1.625 mm (w, 130% of a 2.5 mm tool's radius); tools: 0.65 x min tool (w) |
 | cnc.internal_corner_small | internal_corners.radius_mm min 1.25 (w) | Hubs 2.5 mm small features | - | - |
 | cnc.corner_radius_to_depth | internal_corners.radius_to_depth min 0.3333 (w) | Hubs | - | - |
 | cnc.corner_reach / _limit | internal_corners.reach_ratio max 4 (w) / 30 (e) | Hubs 3-4 D cutting length / 30:1 specialised | - | - |
-| cnc.sharp_internal_edge | sharp_edges.radius_mm min (e), its fix by `acute` (open the angle / square a face) | 1.25; tools: 0.5 x min tool | as internal_corner_sharp | 1.25; tools: 0.5 x min tool |
+| cnc.sharp_internal_edge | sharp_edges.radius_mm min, message and fix by `reason` (e; `other_axes` w: an angled setup or more axes) | 1.25; tools: 0.5 x min tool | as internal_corner_sharp: `acute` e, the rest w | 1.25; tools: 0.5 x min tool |
 | cnc.knife_edge | knife_edges.thickness_mm min (w) | metal 0.5 / plastic 1.0 (Hubs feasible wall) | 0.51 | 0.5 |
 | cnc.pocket_depth_to_width | pockets.depth_to_width max | 4 (w, Hubs) | - | 3 (w, lower end of 3-5) |
 | cnc.milled_depth | pockets.depth_from_top_mm max | - | 50.8 (e) | - |
 | cnc.wall_thickness | walls.thickness_mm min | metal 0.5 / plastic 1.0 (e, Hubs feasible) | 0.51 (w) | 0.5 (e, min feature) |
 | cnc.wall_thickness_recommended | walls.thickness_mm min | metal 0.8 / plastic 1.5 (w) | - | metal 0.794 / plastic 1.5 (w) |
-| cnc.hole_diameter / _limit | holes.diameter_mm min | 1.0 (w) / 0.05 (e) | - | - |
+| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a) | Hubs: align features to the six principal directions, else 5 axes | "non-orthogonal features" need 5-axis indexed | Xometry: five- or three-axis |
+| cnc.hole_diameter | holes.diameter_mm min | 1.0 (e: "Feasible: any diameter larger than 1 mm") | - | - |
 | cnc.hole_depth / _limit | holes.depth_to_diameter max | 4 (w) / 40 (e) | - | 4 (w) / 10 (e) |
 | cnc.drill_size | holes.drill_deviation_mm max 0.005 (w), drilled holes | Hubs: standard drill sizes | - | - |
 | cnc.thread_size | threads.major_diameter_mm min 6 (w) | Hubs | - | - |
-| cnc.thread_length / _minimum | threads.length_to_diameter max 3 / min 1.5 (w) | Hubs | - | - |
+| cnc.thread_length / _minimum | threads.length_to_diameter max 3 / min 1.5 (w) | Hubs | - | max 2 (w, "no longer than two times the hole diameter") |
 | cnc.modelled_thread | threads.modelled max 0, internal (w) | - | Protolabs: don't model internal threads | - |
 | cnc.gap_width | gaps.width_mm min | 0.05 (e); tools: min tool (e) | soft 0.457 / hard 0.838 (e, narrowest engraved line); tools: min tool | tools: min tool (e) |
 | cnc.gap_width_small | gaps.width_mm min 2.5 (w) | Hubs | - | Xometry min tool 2.5 |
-| cnc.undercut | access.unreached_fraction max 0.02, kind undercut (w) | Hubs (special cutters) | - | - |
+| cnc.undercut | access.unreached_fraction max 0.02, kind undercut (w; a hole's face: its fix names the axis) | Hubs (special cutters) | - | - |
+| cnc.special_cutter | access.edge_count max 0, kind special_cutter (w) | Hubs: undercuts are machined with special tools, 3 to 40 mm wide | - | - |
 | cnc.no_line_of_sight | access.unreached_any_direction_fraction max 0.02 (w) | Hubs | - | - |
 | cnc.enclosed_void | voids.volume_mm3 max 0 (e) | Hubs | - | - |
-| cnc.setups | setups.setup_count max 4 (w) | Hubs (3-4 acceptable) | - | - |
+| cnc.setups | setups.setup_count max 5 (w) | Hubs: rotated "up to three or four times" (five clampings) | - | - |
+| cnc.two_sided | setups.setup_count max 2 on 3 axes (w) | - | its 3-axis rows: "two-sided machining only" | - |
 | cnc.part_thickness | stock.height_mm min 1.02 (e) | - | Protolabs | - |
+| cnc.part_size_min | stock.width_mm min 6.35 (e) | - | minimum size 0.25 x 0.25 in. | - |
 | cnc.envelope_length/width/height | stock.*_mm max | 2032/1219/610 (w, Xometry's, generic only) | per material x axes (e): plastic/3 559x356x19.1, aluminum/3 559x356x95.3, aluminum/5 254x178x95.3, hard/5 254x178x44.45, ss304/5 107.95x82.55x95.25 | 2032/1219/610 (e) |
 | cnc.turned_diameter / _length | turning.max_diameter_mm / length_mm max | 813 / 1575 (w, Xometry's, generic) | 100.33 / 228.6 (e) | 813 / 1575 (e) |
 | cnc.turned_feature_diameter / _small | turned_diameters.diameter_mm min | - | 0.76 (e) / 4.07 (w) | - |
 | cnc.turned_feature_length | turned_diameters.length_mm min | - | 1.27 (e) | - |
 | cnc.turned_wall | walls.thickness_mm min (turning) | - | 0.51 (e) | - |
 | cnc.axial_hole_diameter / radial_hole_diameter | holes.diameter_mm min | - | 1.0 / 2.0 (1.0 Al, brass) (e) | - |
-| cnc.off_axis_hole | holes.diameter_mm max 0, off-axis, not Al/brass (e) | - | Protolabs | - |
+| cnc.off_axis_hole | holes.diameter_mm max 0, `off_axis` alone, not Al/brass (e); radial_hole_diameter reads radial and perpendicular | - | "parallel or perpendicular to the axis of revolution" | - |
 | cnc.groove_width / groove_depth | grooves (OD) | - | width min 1.2 (0.5 Al, brass) / depth max 24.1 (e) | - |
 | cnc.internal_groove | grooves (ID) width max 0 (e) | - | ID grooves not offered | - |
 
@@ -287,25 +312,31 @@ edge, height and depth below the top; `sharp_internal_edge` its edge, the two fa
 Fact findings (not rules): `cnc.stock_too_small` (e: the part does not fit `--stock`), `cnc.no_turning_axis`
 (e, `--turning` on a part with no surface of revolution), `cnc.mostly_not_turned` (w, under half the area
 turns), `cnc.live_tooling` (i), `cnc.rotary_axis` (i), `cnc.fine_detail` (i, >= 20 faces under 1 mm),
-`cnc.material_assumed` (i: no `--material`, walls judged by metal's limits).
+`cnc.material_assumed` (i: no `--material`, walls judged by metal's limits), `cnc.ball_creases` (i: the
+creases a ball end mill rounds, the worst one's departure from the drawn edge), `cnc.envelope_unlisted` (w,
+`--rules protolabs`: its size table has no row for this material on these axes, so the size is not judged).
+The summary says a part's setups (an assembly: the most any part takes), never a sum.
 
 Context the rules read: `material_class`, `wall_class` (the class, else `metal`), `hardness` (soft: plastics,
 aluminium, brass, copper; hard: steels, stainless, titanium), `envelope` (`<group>/<axes>`), `lathe_material`
 (`al_brass` | `other`), `tools_given`, `min_tool_mm`, `axes`, `turning`.
 
-Sources (accessed 2026-11-03): Hubs "How to design parts for CNC machining"; Protolabs "CNC milling design
+Sources (accessed 2026-11-06; the sets' version 2026-11-06): Hubs "How to design parts for CNC machining"; Protolabs "CNC milling design
 guidelines" and "CNC turning design guidelines"; Xometry "10 tips to improve your CAD designs for CNC
 machining" and "CNC machining service" capabilities (Xometry's own CNC design guide URL is still a 404).
 
 ### What it cannot measure
 
 Tool holder and spindle collisions (access is a line of sight, a tool of zero diameter; width and corner
-radius cover the diameter separately); a T-slot or dovetail cutter's actual entry path; fixturing and
+radius cover the diameter separately); a T-slot or dovetail cutter's actual entry path (its edges are said,
+not its clearance); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
 workholding; tolerances, surface finish, cycle time or cost; thread callouts on a drawing (only modelled
 threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); pockets whose
 floor is not planar (a 3D-contoured cavity is reported through access and walls, not as a pocket); sharp
 edges are judged at their midpoint; text and engraving are recognised only as many fine faces and as
-narrow gaps; turning: ID groove depth beyond the bore, parting/chucking allowances, and cone point angle.
+narrow gaps; a crease a ball end mill makes is accepted at `BALL_VOID_DEG` whatever the part's tolerance
+(its departure is recorded, not judged); turning: ID groove depth beyond the bore, parting/chucking
+allowances, and a cone point's angle on the turned profile itself (only a hole's drill point is read).
 
 ### Budgets
 

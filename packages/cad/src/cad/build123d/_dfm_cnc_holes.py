@@ -2,9 +2,10 @@
 counterbore, a countersink, a drill point, a flat floor -- and the standard drill each diameter is.
 
 **A hole** is a connected set of faces on one axis: concave cylinders and cones coaxial with each other, and
-the planes square to that axis whose every neighbour is one of them (a counterbore's step, a flat floor). At
-least one cylinder must sweep 300 degrees or more about the axis (a pocket's quarter-round corner or a slot's
-half-round end is not a hole). Its **diameter** is its narrowest full cylinder's; its **depth** the extent
+the planes square to that axis whose every neighbour is one of them (a counterbore's step, a flat floor);
+sets on one axis whose cylinders of one radius overlap along it are one hole (a hole a slot splits in two). At
+least one radius's cylinders must sweep 300 degrees or more about the axis together (a pocket's quarter-round
+corner or a slot's half-round end is not a hole). Its **diameter** is its narrowest full cylinder's; its **depth** the extent
 of its cylinders along the axis; **blind** where an exact ray along the axis from inside the narrowest
 cylinder meets a face of the hole itself (its floor) and **through** where neither way does. A blind hole's
 floor is a ``drill_point`` (a concave cone closing to a point: its included angle, 118 degrees for a jobber
@@ -114,7 +115,7 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
     candidates = [i for i in range(1, model.n + 1)
                   if model.surface(i).kind in ("cylinder", "cone") and model.surface(i).concave]
     claimed: set[int] = set()
-    found: list[dict[str, Any]] = []
+    groups: list[set[int]] = []
     for seed in candidates:
         if seed in claimed or model.surface(seed).kind != "cylinder":
             continue
@@ -136,6 +137,37 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
                                     and _coaxial(axis_surface, model.surface(o)) for o in rest):
                         group.add(other)
                         frontier.append(other)
+        claimed |= group
+        groups.append(group)
+    # a hole a slot splits is pieces that do not touch: pieces on one axis whose cylinders of one radius
+    # overlap along it are one hole (two lugs' coaxial holes, apart along the axis, are two)
+    parent = list(range(len(groups)))
+
+    def root(k: int) -> int:
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    spans: dict[tuple[Any, ...], list[tuple[float, float, int]]] = {}
+    for k, group in enumerate(groups):
+        for i in group:
+            s = model.surface(i)
+            if s.kind == "cylinder":
+                low, high = model.extent(i, unit(_axis_key(s)[:3]))
+                spans.setdefault(_axis_key(s) + (round(float(s.radius), 6),), []).append((low, high, k))
+    for entries in spans.values():
+        for n, (low, high, k) in enumerate(entries):
+            for other_low, other_high, j in entries[n + 1:]:
+                if j != k and min(high, other_high) - max(low, other_low) > 1e-6:
+                    parent[root(k)] = root(j)
+    by_root: dict[int, set[int]] = {}
+    for k, group in enumerate(groups):
+        by_root.setdefault(root(k), set()).update(group)
+    merged = list(by_root.values())
+    found: list[dict[str, Any]] = []
+    holed: set[int] = set()
+    for group in merged:
         cylinders = [i for i in group if model.surface(i).kind == "cylinder"]
         by_radius: dict[float, float] = {}
         for i in cylinders:
@@ -144,11 +176,11 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
         full = sorted(radius for radius, span in by_radius.items() if span >= math.radians(300.0))
         if not full:
             continue
-        claimed |= group
+        holed |= group
         hole = _describe(model, group, full)
         if hole is not None:
             found.append(hole)
-    return found, claimed
+    return found, holed
 
 
 def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any] | None:
@@ -218,6 +250,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         "drilled": drilled, "standard_drill": label if drilled else None,
         "drill_deviation_mm": round(deviation, 4) if drilled else None,
         "tap_candidate": _tap(diameter),
+        # the candidate thread's nominal diameter: what a shop's thread range is read against
+        "tap_drill": _tap(diameter) is not None,
+        "tap_nominal_mm": float(_tap(diameter)[1:].split("x")[0]) if _tap(diameter) else None,
         "location": model.ref(narrow[0]), "faces": [model.ref(i) for i in sorted(group)],
         "xyz": brep.rounded(centre),
     }

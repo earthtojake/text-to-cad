@@ -197,6 +197,7 @@ class Model:
         self._quota: np.ndarray | None = None
         self._projected: OrderedDict[tuple[float, ...], _Projected] = OrderedDict()
         self._extents: dict[tuple[float, ...], tuple[float, float]] = {}
+        self._sweeps: dict[int, np.ndarray] = {}
 
     # --- faces -------------------------------------------------------------------------------------------
 
@@ -351,8 +352,22 @@ class Model:
             return abs(float(np.asarray(s.axis) @ d)) > SAME
         if s.kind in ("cone", "sphere", "torus"):
             return False
+        if s.kind == "extrusion":
+            # a curve swept along a line (a glyph's side, a profile's): along the line, whatever its samples
+            return abs(float(self.sweep(ordinal) @ d)) > SAME
         normals = self.samples(ordinal)[1]
         return len(normals) >= 3 and bool(np.all(np.abs(normals @ d) < ALONG))
+
+    def sweep(self, ordinal: int) -> np.ndarray:
+        """A surface of linear extrusion's direction (a unit vector)."""
+        found = self._sweeps.get(ordinal)
+        if found is None:
+            from OCP.BRepAdaptor import BRepAdaptor_Surface
+
+            direction = BRepAdaptor_Surface(self.face(ordinal).wrapped).Direction()
+            found = unit((direction.X(), direction.Y(), direction.Z()))
+            self._sweeps[ordinal] = found
+        return found
 
     def facing(self, ordinal: int, direction: np.ndarray) -> bool:
         """Whether the face is a plane whose outward normal is ``direction``: a floor a tool on that axis cuts

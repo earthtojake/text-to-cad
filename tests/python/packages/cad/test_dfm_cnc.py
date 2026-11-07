@@ -234,13 +234,33 @@ class SharpEdgesTest(unittest.TestCase):
             result = _check(self._valley(void))
             self.assertTrue(result.ok, void)
             self.assertEqual(result.measurements["sharp_edges"]["by_tool"], {"ball_mill": 1})
-        sharp = _check(self._valley(140.0))  # under BALL_VOID_DEG: a crease a radius must be drawn for
-        self.assertIn("cnc.sharp_internal_edge", _codes(sharp))
-        finding = next(f for f in sharp.findings if f.code == "cnc.sharp_internal_edge")
-        self.assertIn("no face square to a machine direction", finding.message)
+            # made, and still in the record: the ball's round departs from the drawn crease by R (1/sin(v/2) - 1)
+            [crease] = result.measurements["sharp_edges"]["items"]
+            self.assertEqual((crease["made_by"], crease["radius_mm"]), ("ball_mill", 1.25))
+            self.assertAlmostEqual(crease["deviation_mm"], 1.25 * (1 / math.sin(math.radians(void / 2)) - 1), places=4)
+            self.assertIn("cnc.ball_creases", _codes(result))
+        # under BALL_VOID_DEG: a tool tilted square to one face makes it sharp, a direction three axes lack
+        sharp = _check(self._valley(140.0))
         edge = sharp.measurements["sharp_edges"]["items"][0]
+        self.assertEqual((edge["reason"], edge["made_by"]), ("other_axes", None))
+        finding = next(f for f in sharp.findings if f.code == "cnc.sharp_internal_edge")
+        self.assertEqual(finding.severity, "warning")
         self.assertIn(f"{edge['edge']} between {edge['between']}, a 140-degree void, at", finding.message)
-        self.assertIn("its 140-degree void", finding.hint)
+        self.assertIn("an angled setup or more axes", finding.hint)
+        self.assertEqual(_check(self._valley(140.0), axes=5).measurements["sharp_edges"]["items"], [])
+
+    def test_a_crease_says_why_no_tool_makes_it(self) -> None:
+        # a closed trough's ends: no 3-axis tool makes them; a chamfer mill tilted to their bisector would
+        trough = _check(_part(bd.Box(60, 40, 20) - bd.Pos(0, 0, 10) * bd.Rot(0, 90, 0) * bd.Cylinder(8, 40)))
+        self.assertEqual({item["reason"] for item in trough.measurements["sharp_edges"]["items"]}, {"other_axes"})
+        finding = next(f for f in trough.findings if f.code == "cnc.sharp_internal_edge")
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("an angled setup or more axes", finding.hint)
+        # a D-bore's flat meets its arc along the bore: a corner along a tool's axis, a radius or EDM
+        bore = bd.Box(30, 30, 20) - (bd.Cylinder(6, 40) & bd.Pos(0, -2, 0) * bd.Box(12, 12, 40))
+        result = _check(_part(bore))
+        corners = result.measurements["internal_corners"]["items"]
+        self.assertEqual(sorted((c["radius_mm"], c["sharp"]) for c in corners)[:2], [(0.0, True), (0.0, True)])
 
     def test_a_curved_floor_is_no_end_mill_s_floor(self) -> None:
         trough = bd.Box(60, 40, 20) - bd.Pos(0, 0, 10) * bd.Rot(0, 90, 0) * bd.Cylinder(8, 40)
@@ -248,6 +268,25 @@ class SharpEdgesTest(unittest.TestCase):
         self.assertEqual(result.measurements["sharp_edges"]["by_tool"], {"none": 2})
         self.assertEqual(len(result.measurements["sharp_edges"]["items"]), 2)
         self.assertEqual(result.measurements["internal_corners"]["items"], [])  # closed at its ends: no through cut
+
+    def test_by_tool_counts_every_unmade_edge_once(self) -> None:
+        # a pocket with sharp corners and a rim round, beside a 140-degree crease: every unmade edge is an
+        # item, a corner or an edge folded into one
+        part = bd.Box(60, 30, 12) - bd.Pos(-15, 0, 2) * bd.Box(16, 10, 8.01, align=(A.CENTER, A.CENTER, A.MIN))
+        rim = [e for e in part.edges() if abs(e.center().Z - 6) < 1e-6 and abs(e.center().X + 15) < 8.1
+               and abs(e.center().Y) < 5.1]
+        part = bd.fillet(rim, 0.3) - bd.Pos(15, 0, 6) * bd.Rot(0, 0, 0) * bd.extrude(
+            bd.Plane.XZ * bd.Polygon((-8, 0.01), (8, 0.01), (0, -8 * math.tan(math.radians(20))), align=None), 20,
+            both=True)
+        report = _check(_part(part)).measurements
+        items = report["sharp_edges"]["items"]
+        corners = report["internal_corners"]["items"]
+        unmade = (len([i for i in items if i["made_by"] is None]) + len([c for c in corners if c.get("edge")])
+                  + sum(len(c.get("folded_edges") or ()) for c in corners))
+        self.assertEqual(report["sharp_edges"]["by_tool"].get("none", 0), unmade)
+        self.assertGreater(unmade, 4)
+        self.assertEqual(report["sharp_edges"]["by_tool"].get("ball_mill", 0),
+                         len([i for i in items if i["made_by"] == "ball_mill"]))
 
     def test_the_edges_a_corner_runs_through_a_rim_round_are_that_corner(self) -> None:
         part = bd.Box(40, 30, 12) - bd.Pos(0, 0, 2) * bd.Box(16, 10, 8.01, align=(A.CENTER, A.CENTER, A.MIN))
@@ -285,10 +324,14 @@ class AccessTest(unittest.TestCase):
         self.assertTrue(undersides)
         self.assertTrue(all(3 <= item["xyz"][2] <= 9 for item in undersides))
         opened = bd.Box(80, 60, 30) - bd.Pos(0, 0, 12) * bd.Box(90, 8, 6) - bd.Pos(0, 0, 6) * bd.Box(90, 20, 6)
-        report = _check(_part(opened)).measurements
-        self.assertEqual(report["access"]["items"], [])
+        result = _check(_part(opened))
+        report = result.measurements
+        # every face in line of sight, but a T-slot cutter's work: an undercut all the same
+        self.assertEqual([(item["kind"], item["cutter"], item["edge_count"]) for item in report["access"]["items"]],
+                         [("special_cutter", "slot cutter", 4)])
         self.assertEqual(report["sharp_edges"]["items"], [])
         self.assertEqual(report["sharp_edges"]["by_tool"].get("slot_cutter"), 4)
+        self.assertEqual([f.severity for f in result.findings if f.code == "cnc.special_cutter"], ["warning"])
 
     def test_five_axes_reach_an_inclined_hole_three_do_not(self) -> None:
         part = _part(bd.Box(60, 40, 30) - bd.Rot(0, 30, 0) * bd.Cylinder(4, 100))
@@ -400,6 +443,17 @@ class RuleSetsTest(unittest.TestCase):
                          (3.0, "aluminum/3", "soft"))
         with self.assertRaisesRegex(ValueError, "--tools"):
             manufacturing.options("step", "cnc", {"tools": "3,x"})
+
+    def test_protolabs_says_what_its_tables_do_not_list(self) -> None:
+        three_sides = bd.Box(40, 30, 20) - _pocket(10, 10, 4, 2, 10) - bd.Rot(180, 0, 0) * _pocket(10, 10, 4, 2, 10) \
+            - bd.Rot(0, 90, 0) * _pocket(10, 10, 4, 2, 20)
+        steel = _check(_part(three_sides), rules="protolabs", material="steel")
+        self.assertEqual({f.severity for f in steel.findings if f.code in ("cnc.envelope_unlisted", "cnc.two_sided")},
+                         {"warning"})
+        self.assertEqual({f.code for f in steel.findings} & {"cnc.envelope_unlisted", "cnc.two_sided"},
+                         {"cnc.envelope_unlisted", "cnc.two_sided"})
+        tiny = _check(_part(bd.Box(5, 8, 3)), rules="protolabs", material="aluminum")
+        self.assertIn("cnc.part_size_min", {f.code for f in tiny.findings if f.severity == "error"})
 
     def test_a_live_shape_is_checked_as_its_step_is(self) -> None:
         part = _part(bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6), "block")

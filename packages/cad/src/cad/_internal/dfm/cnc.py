@@ -27,7 +27,9 @@ __all__ = ["MEASURED_FROM", "OPTIONS", "RULE_SETS", "context", "findings", "summ
 OPTIONS: dict[str, Any] = {"axes": 3, "turning": False, "tools": None, "stock": None}
 MEASURED_FROM = ("brep",)
 
-_ACCESSED = "2026-11-03"
+_ACCESSED = "2026-11-06"
+#: The rule sets' own version (``RuleSet.version``), bumped when a set's rules change.
+_VERSION = "2026-11-06"
 HUBS = Source("hubs-cnc", "Protolabs Network (Hubs)", "How to design parts for CNC machining",
               "https://www.hubs.com/knowledge-base/how-design-parts-cnc-machining/", _ACCESSED)
 PROTOLABS_MILLING = Source("protolabs-milling", "Protolabs", "CNC milling design guidelines",
@@ -58,37 +60,70 @@ _EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at
 _ACROSS_DETAIL = {"walls": "to {opposite} at {xyz}", "gaps": "to {opposite} at {xyz}"}
 
 
+#: Why no tool of the machine makes a sharp concave edge (``sharp_edges`` items' ``reason``): the words of the
+#: rule's message, and its fix.
+_EDGE_REASONS = {
+    "acute": ("sharp concave edge (void under 90 degrees)",
+              "its {void_angle_deg:.0f}-degree void is under 90, so no tool's end or side reaches its root: open "
+              "it to 90 degrees or more, round it to at least {limit:g} mm, or plan EDM"),
+    "vertical_corner": ("sharp concave edge (a corner along a tool's axis)",
+                        "a corner of a cavity cut along it, where the tool's side leaves its radius: give it a "
+                        "radius of at least {limit:g} mm, or a dog-bone relief, or plan EDM"),
+    "blocked": ("sharp concave edge (its square face blocked)",
+                "a face is square to a machine direction but the way to the edge along it is blocked, so no "
+                "tool's end reaches it: give it a radius of at least {limit:g} mm, open that way, or plan EDM"),
+    "no_square_face": ("sharp concave edge (no face square to a machine direction)",
+                       "neither face at its {void_angle_deg:.0f}-degree void is a plane square to a machine "
+                       "direction, so no tool's corner makes it sharp: round it to at least {limit:g} mm (a ball "
+                       "end mill's radius), square one face to an approach direction, or give more axes"),
+}
+#: A sharp edge a tool along a direction the machine lacks would make: the access warning's severity and words.
+_OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
+               "a tool along a direction this machine lacks makes it sharp: an angled setup or more axes "
+               "(--axes 5), or round it to at least {limit:g} mm")
+
+
 def _corner_rules(source: str, sharp_note: str, radius: Any = _SMALL_TOOL_RADIUS,
-                  by: str | None = None) -> tuple[Rule, ...]:
+                  by: str | None = None, sharp: str = "error", left: str = "") -> tuple[Rule, ...]:
     """A sharp vertical corner and a sharp concave edge, judged against the radius they must be given: half
-    the smallest tool with ``--tools``, else ``radius`` (a mapping chosen by the context key ``by``)."""
+    the smallest tool with ``--tools``, else ``radius`` (a mapping chosen by the context key ``by``). An edge's
+    message and fix follow its ``reason``. ``sharp`` is the severity of a sharp corner and of an obtuse edge
+    (an acute one is always an error: no tool reaches its root), and ``left`` the words a source gives for the
+    radius such a corner is cut with, appended to the message."""
     corner_fix = ("sharp vertical corner: give it a radius of at least {limit:g} mm (a third of the cavity's "
                   "depth or more is better), or a dog-bone relief, or plan EDM")
-    acute_fix = ("its {void_angle_deg:.0f}-degree void is under 90, so no tool's end or side reaches its root: open "
-                 "it to 90 degrees or more, round it to at least {limit:g} mm, or plan EDM")
-    obtuse_fix = ("neither face at its {void_angle_deg:.0f}-degree void is a plane square to a machine direction, "
-                  "so no tool's corner makes it sharp: round it to at least {limit:g} mm (a ball end mill's "
-                  "radius), square one face to an approach direction, or give more axes")
     found: list[Rule] = []
     for when, scale, limit, key in (({**_MILLING, **_TOOLS}, "min_tool_mm", 0.5, None),
                                     ({**_MILLING, **_NO_TOOLS}, None, radius, by)):
-        found += [
-            Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
-                 "sharp vertical corner radius", source, scale_by=scale, by=key, when=when,
-                 item_when={"sharp": True}, fix=corner_fix, note=sharp_note, detail=_CORNER_DETAIL),
-            Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
-                 "sharp concave edge (void under 90 degrees) radius", source, scale_by=scale, by=key, when=when,
-                 item_when={"acute": True}, fix=acute_fix, note=sharp_note, detail=_EDGE_DETAIL),
-            Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
-                 "sharp concave edge (no face square to a machine direction) radius", source, scale_by=scale,
-                 by=key, when=when, item_when={"acute": False}, fix=obtuse_fix, note=sharp_note,
-                 detail=_EDGE_DETAIL)]
+        found.append(Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
+                          "sharp vertical corner radius", source, severity=sharp, scale_by=scale, by=key, when=when,
+                          item_when={"sharp": True}, fix=corner_fix, note=sharp_note, detail=_CORNER_DETAIL + left))
+        for reason, (what, fix) in _EDGE_REASONS.items():
+            found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
+                              what + " radius", source, severity="error" if reason == "acute" else sharp,
+                              scale_by=scale, by=key, when=when, item_when={"reason": reason}, fix=fix,
+                              note=sharp_note, detail=_EDGE_DETAIL + ("" if reason == "acute" else left)))
+        found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
+                          _OTHER_AXES[0] + " radius", source, severity="warning", scale_by=scale, by=key, when=when,
+                          item_when={"reason": "other_axes"}, fix=_OTHER_AXES[1], note=sharp_note,
+                          detail=_EDGE_DETAIL))
     found.append(Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm",
                       "internal corner radius", source, scale_by="min_tool_mm", when={**_MILLING, **_TOOLS},
                       item_when={"sharp": False},
                       fix="radius the corner to at least {limit:g} mm, the smallest tool's radius, or add a smaller "
                           "tool", note="a corner tighter than the smallest end mill's radius is not cut by it"))
     return tuple(found)
+
+
+def _inclined_rules(source: str, note: str) -> tuple[Rule, ...]:
+    """A pocket or hole along no direction the machine has: its own setup, an angled one, or more axes. Five
+    axes reach every direction (not applicable); on four, the features square to the rotary axis pass."""
+    return tuple(Rule("cnc.inclined_feature", family, "inclination_deg", "max", 0.0, "deg",
+                      f"{noun} axis off the machine's directions", source, severity="warning",
+                      when={**_MILLING, "axes": (3, 4)}, item_when={"reachable": False},
+                      fix=f"an inclined {noun}: an angled fixture (its own setup), or 4 or 5 axes, or square it to "
+                          "a side of the part", note=note)
+                 for family, noun in (("pockets", "pocket"), ("holes", "hole")))
 
 
 def _knife_rule(source: str, limit: Any, by: str | None, note: str) -> Rule:
@@ -133,11 +168,10 @@ _GENERIC_RULES: tuple[Rule, ...] = (
          note="recommended minimum walls: 0.8 mm metal, 1.5 mm plastic"),
     _knife_rule("hubs-cnc", {"metal": 0.5, "plastic": 1.0}, "wall_class",
                 "the material thins to nothing at an acute convex edge: judged against the feasible wall"),
-    Rule("cnc.hole_diameter_limit", "holes", "diameter_mm", "min", 0.05, "mm", "hole diameter", "hubs-cnc",
-         fix="make the hole at least {limit:g} mm", note="micro-drills go down to 0.05 mm"),
+    *_inclined_rules("hubs-cnc", "align every feature (holes, cavities, vertical walls) to one of the six "
+                                 "principal directions; if that is not possible, 5-axis machining is an option"),
     Rule("cnc.hole_diameter", "holes", "diameter_mm", "min", 1.0, "mm", "hole diameter", "hubs-cnc",
-         severity="warning", fix="make the hole 1 mm or more: smaller is micro-drilling",
-         note="any hole above 1 mm is feasible"),
+         fix="make the hole 1 mm or more", note='"Feasible: any diameter larger than 1 mm"'),
     Rule("cnc.hole_depth", "holes", "depth_to_diameter", "max", 4.0, "ratio", "hole depth to diameter",
          "hubs-cnc", severity="warning", fix="limit the depth to {limit:g} diameters, or widen the hole",
          note="recommended hole depth: 4x the nominal diameter"),
@@ -168,9 +202,20 @@ _GENERIC_RULES: tuple[Rule, ...] = (
          note="features under 2.5 mm are micro-machining"),
     Rule("cnc.undercut", "access", "unreached_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the face no straight tool reaches from the machine's directions", "hubs-cnc",
-         severity="warning", when=_MILLING, item_when={"kind": "undercut"},
+         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": False},
          fix="open the face to a setup direction, or plan a T-slot or dovetail cutter, or more axes",
          note="undercuts need special cutters (T-slot, dovetail) and cost more"),
+    Rule("cnc.undercut", "access", "unreached_fraction", "max", ACCESS_TOLERANCE, "share",
+         "share of the hole's face no straight tool reaches from the machine's directions", "hubs-cnc",
+         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": True},
+         fix="the hole's axis ({hole_axis}) is along no machine direction: drill it in an angled setup or on "
+             "more axes, or square it to a side", note="a drill comes in along the hole's axis"),
+    Rule("cnc.special_cutter", "access", "edge_count", "max", 0, "edges", "edges only a special cutter makes",
+         "hubs-cnc", severity="warning", when=_MILLING, item_when={"kind": "special_cutter"},
+         fix="a {cutter} cuts it: keep the undercut 3 to 40 mm wide in a standard size (a dovetail 45 or 60 "
+             "degrees), or open it to a setup direction",
+         note="undercuts (T-slots and dovetails) are machined using special tools; their width can vary between "
+              "3 mm and 40 mm"),
     Rule("cnc.no_line_of_sight", "access", "unreached_any_direction_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the face no straight line from outside reaches", "hubs-cnc", severity="warning", when=_MILLING,
          item_when={"kind": "no_line_of_sight"},
@@ -179,9 +224,10 @@ _GENERIC_RULES: tuple[Rule, ...] = (
     Rule("cnc.enclosed_void", "voids", "volume_mm3", "max", 0.0, "mm3", "enclosed void", "hubs-cnc",
          fix="open the void to the outside or make the part in pieces: no tool reaches a closed cavity",
          note="a tool reaches only what it can enter"),
-    Rule("cnc.setups", "setups", "setup_count", "max", 4, "setups", "setups", "hubs-cnc", severity="warning",
+    Rule("cnc.setups", "setups", "setup_count", "max", 5, "setups", "setups", "hubs-cnc", severity="warning",
          when=_MILLING, fix="put the features on fewer sides: each setup is a refixturing",
-         note="three or four setups are acceptable; more is excessive"),
+         note='"This is often acceptable if the part needs to be rotated up to three or four times, but anything '
+              'above this limit is excessive." Four rotations are five clampings'),
     Rule("cnc.envelope_length", "stock", "length_mm", "max", 2032.0, "mm", "part length", "xometry-cnc",
          severity="warning", when=_MILLING, note="a large shop's largest milled part: 2032 x 1219 x 610 mm"),
     Rule("cnc.envelope_width", "stock", "width_mm", "max", 1219.0, "mm", "part width", "xometry-cnc",
@@ -202,8 +248,20 @@ _PROTOLABS_ENVELOPE = {  # (length, width, height) of the largest part, per mate
 }
 _PROTOLABS_RULES: tuple[Rule, ...] = (
     # without --tools, the tool its narrowest milled line is cut with (0.018 in. soft, 0.033 in. hard): its radius
-    *_corner_rules("protolabs-milling", "an inside corner is left with the radius of the tool that cuts it",
-                   radius={"soft": 0.2286, "hard": 0.4191}, by="line_class"),
+    *_corner_rules("protolabs-milling", '"Sharp inside corners on a part will be radiused (rounded) as a natural '
+                                        'result of the CNC machining process. Resulting radii will be the minimum '
+                                        'allowable tool radius."',
+                   radius={"soft": 0.2286, "hard": 0.4191}, by="line_class", sharp="warning",
+                   left=": Protolabs cuts it with its tool's radius, {limit:g} mm or more"),
+    *_inclined_rules("protolabs-milling", '"5-axis indexed milling (also referred to as 3+2 milling) allows for '
+                                          'more complex geometries and non-orthogonal features like off-axis holes."'),
+    Rule("cnc.two_sided", "setups", "setup_count", "max", 2, "setups", "setups on 3 axes", "protolabs-milling",
+         severity="warning", when={**_MILLING, "axes": 3},
+         fix="put the features on two opposite sides, or give 5 axes",
+         note="its 3-axis rows are two-sided machining only"),
+    Rule("cnc.part_size_min", "stock", "width_mm", "min", 6.35, "mm", "part width", "protolabs-milling",
+         when=_MILLING, fix="make the part at least {limit:g} mm across both ways (0.25 x 0.25 in.)",
+         note="minimum size 0.25 in. x 0.25 in."),
     Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm", "internal corner radius",
          "protolabs-milling", scale_by="min_tool_mm", when={**_MILLING, **_TOOLS}, item_when={"sharp": False},
          fix="radius the corner to at least {limit:g} mm, the smallest tool's radius",
@@ -253,11 +311,13 @@ _PROTOLABS_RULES: tuple[Rule, ...] = (
          "protolabs-turning", when=_TURNING, item_when={"relation": "axial"}),
     Rule("cnc.radial_hole_diameter", "holes", "diameter_mm", "min", {"al_brass": 1.0, "other": 2.0}, "mm",
          "radial hole diameter", "protolabs-turning", by="lathe_material", when=_TURNING,
-         item_when={"relation": "radial"}, note="2 mm, or 1 mm in aluminum and brass"),
+         item_when={"relation": ("radial", "perpendicular")}, note="2 mm, or 1 mm in aluminum and brass"),
     Rule("cnc.off_axis_hole", "holes", "diameter_mm", "max", {"other": 0.0}, "mm",
          "off-axis hole on a turned part", "protolabs-turning", by="lathe_material", when=_TURNING,
-         item_when={"relation": "off_axis"}, fix="make the hole axial or radial, or the part aluminum or brass",
-         note="odd-angle holes only in aluminum and brass"),
+         item_when={"relation": "off_axis"},
+         fix="make the hole parallel or perpendicular to the axis, or the part aluminum or brass",
+         note='"holes that are either parallel or perpendicular to the axis of revolution"; "Off-axis holes are '
+              'supported for turned parts machined from aluminum and brass."'),
     Rule("cnc.groove_width", "grooves", "width_mm", "min", {"al_brass": 0.5, "other": 1.2}, "mm",
          "outside groove width", "protolabs-turning", by="lathe_material", when=_TURNING,
          item_when={"internal": False}),
@@ -270,6 +330,10 @@ _PROTOLABS_RULES: tuple[Rule, ...] = (
 
 _XOMETRY_RULES: tuple[Rule, ...] = (
     *_corner_rules("xometry-tips", "round end mills cannot cut a sharp internal corner"),
+    *_inclined_rules("xometry-tips", "it asks whether a feature needs a five-axis or a three-axis process"),
+    Rule("cnc.thread_length", "threads", "length_to_diameter", "max", 2.0, "ratio", "thread length to diameter",
+         "xometry-tips", severity="warning", fix="thread no more than {limit:g} diameters",
+         note='"designing thread should be no longer than two times the hole diameter"'),
     Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.65, "mm", "internal corner radius",
          "xometry-tips", severity="warning", scale_by="min_tool_mm", when={**_MILLING, **_TOOLS},
          item_when={"sharp": False}, fix="radius the corner to {limit:g} mm: 130% of the smallest tool's radius",
@@ -317,14 +381,15 @@ _PROTOLABS_RULES, _XOMETRY_RULES = _detailed(_PROTOLABS_RULES), _detailed(_XOMET
 
 _NOTE = "a starting point drawn from published guides (mostly Protolabs Network's), no shop's limits"
 RULE_SETS: dict[str, RuleSet] = {
-    "generic": RuleSet("generic", "cnc", "text-to-cad generic", _ACCESSED, _GENERIC_RULES, (HUBS, XOMETRY_SERVICE),
+    "generic": RuleSet("generic", "cnc", "text-to-cad generic", _VERSION, _GENERIC_RULES, (HUBS, XOMETRY_SERVICE),
                        generic=True, note=_NOTE),
-    "hubs": RuleSet("hubs", "cnc", "Protolabs Network (Hubs)", _ACCESSED, _HUBS_RULES, (HUBS,),
+    "hubs": RuleSet("hubs", "cnc", "Protolabs Network (Hubs)", _VERSION, _HUBS_RULES, (HUBS,),
                     note="its CNC design guide's recommended and feasible values"),
-    "protolabs": RuleSet("protolabs", "cnc", "Protolabs", _ACCESSED, _PROTOLABS_RULES,
+    "protolabs": RuleSet("protolabs", "cnc", "Protolabs", _VERSION, _PROTOLABS_RULES,
                          (PROTOLABS_MILLING, PROTOLABS_TURNING),
-                         note="its milling and turning guidelines; corner radii follow --tools (it gives none)"),
-    "xometry": RuleSet("xometry", "cnc", "Xometry", _ACCESSED, _XOMETRY_RULES, (XOMETRY_TIPS, XOMETRY_SERVICE),
+                         note="its milling and turning guidelines; corner radii follow --tools (it gives none); "
+                              "sharp inside corners are warnings: it cuts them with its tool's radius"),
+    "xometry": RuleSet("xometry", "cnc", "Xometry", _VERSION, _XOMETRY_RULES, (XOMETRY_TIPS, XOMETRY_SERVICE),
                        note="its CNC design tips and its service's size limits"),
 }
 
@@ -440,6 +505,25 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                 found.append(CheckFinding("info", "cnc.rotary_axis",
                                           f"{item['part']}: the rotary axis taken is {item['rotary_axis']}",
                                           item.get("location")))
+        if resolved.get("rules") == "protolabs" and resolved.get("material") is not None:
+            ctx = context(report, resolved)
+            if ctx["envelope"] not in _PROTOLABS_ENVELOPE:
+                rows = ", ".join(f"{key.replace('/', ' on ')} axes {' x '.join(mm(v) for v in size)} mm"
+                                 for key, size in _PROTOLABS_ENVELOPE.items())
+                found.append(CheckFinding(
+                    "warning", "cnc.envelope_unlisted",
+                    f"Protolabs lists no {ctx['axes']}-axis machine for {ctx['material']}: its rows are {rows}; the "
+                    f"part's size is not judged", "stock",
+                    "give the --axes of a listed row, or ask Protolabs for a quote"))
+    balls = [item for item in _items(report, "sharp_edges") if item.get("made_by") == "ball_mill"]
+    if balls:
+        worst = max(balls, key=lambda item: item.get("deviation_mm") or 0)
+        found.append(CheckFinding(
+            "info", "cnc.ball_creases",
+            f"{len(balls)} sharp crease(s) a ball end mill makes, rounded by its {mm(worst['radius_mm'])} mm radius: "
+            f"up to {mm(worst['deviation_mm'])} mm off the drawn edge ({worst['edge']}, a "
+            f"{worst['void_angle_deg']:.0f}-degree void)", worst.get("location"),
+            "draw the round if that is outside the part's tolerance"))
     small = report.get("small_features") or {}
     if isinstance(small, dict) and (small.get("fine_faces") or 0) >= 20:
         found.append(CheckFinding("info", "cnc.fine_detail",
@@ -451,10 +535,12 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
 def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> str:
     bodies = report.get("bodies") or []
     head = "turning" if resolved.get("turning") else f"{resolved['axes']}-axis milling"
-    setups = sum(item.get("setup_count") or 0 for item in _items(report, "setups"))
+    # setups are a part's: an assembly's parts are each clamped on their own, so its largest is said, never a sum
+    per_part = [item.get("setup_count") or 0 for item in _items(report, "setups")]
+    setups = max(per_part, default=0)
     counts = [f"{len(bodies)} part(s)", f"{mm(round(sum(body.get('volume_mm3') or 0 for body in bodies), 3))} mm3"]
     if setups and not resolved.get("turning"):
-        counts.append(f"{setups} setup(s)")
+        counts.append(f"up to {setups} setup(s) a part" if len(per_part) > 1 else f"{setups} setup(s)")
     for family in ("holes", "pockets"):
         value = report.get(family)
         if isinstance(value, dict) and value.get("count"):

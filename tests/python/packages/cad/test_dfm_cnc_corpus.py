@@ -11,8 +11,10 @@ be 1.0: the corpus is small and every case is exact, so a miss is a bug (or, whe
 case, a limit of the measurement that the case shows).
 
 Edge cases: fillets everywhere, a freeform (spline) surface, an assembly, an inch STEP, a 2 mm part and a
-2.2 m one, a turned part, a part that needs five setups, a T-slot, a dovetail, a closed void, an inclined
-hole on three axes and on five.
+2.2 m one, a turned part, a part that needs six setups, a T-slot and a dovetail (through and blind), a closed
+void, an inclined hole and an inclined pocket on three axes and on five, a sharp-cornered window, a hole a
+slot splits, an offset cross hole on a turned part, creases either side of the ball end mill's angle, and
+engraving under Protolabs.
 """
 
 from __future__ import annotations
@@ -158,7 +160,7 @@ def voided() -> Any:
 
 def six_sides() -> Any:
     part = bd.Box(60, 60, 60)
-    for rotation in ((0, 0, 0), (180, 0, 0), (0, 90, 0), (0, -90, 0), (-90, 0, 0)):
+    for rotation in ((0, 0, 0), (180, 0, 0), (0, 90, 0), (0, -90, 0), (-90, 0, 0), (90, 0, 0)):
         part -= bd.Rot(*rotation) * _at(_pocket(20, 20, 5, 5, 30), 0, 0, 0)
     return _labelled(part, "six_sides")
 
@@ -174,6 +176,41 @@ def inclined() -> Any:
     part = bd.Box(60, 40, 30)
     part -= bd.Rot(0, 30, 0) * bd.Cylinder(4, 100)
     return _labelled(part, "inclined")
+
+
+def inclined_pocket() -> Any:
+    """A 10 x 8 x 4 mm pocket (R2 corners) cut square into a 45-degree face: no 3-axis direction makes its
+    floor's edges; five axes tilt to it (the face's centre is at x 22.5, z 7.5)."""
+    part = bd.Box(60, 40, 30)
+    part = bd.chamfer(part.edges().group_by(bd.Axis.Z)[-1].group_by(bd.Axis.X)[-1], 15)
+    face = next(f for f in part.faces() if abs(f.normal_at().Z) > 0.1 and abs(f.normal_at().X) > 0.1)
+    cut = bd.fillet(bd.Box(10, 8, 5, align=(A.CENTER, A.CENTER, A.MIN)).edges().filter_by(bd.Axis.Z), 2)
+    return _labelled(part - bd.Plane(face.center(), z_dir=face.normal_at()) * bd.Pos(0, 0, -4) * cut, "inclined_pocket")
+
+
+def sharp_window() -> Any:
+    """A 30 x 15 mm window through a 10 mm plate, its corners sharp (planted: a window's corners are its own)."""
+    return _labelled(bd.Box(60, 40, 10) - bd.Box(30, 15, 20), "sharp_window")
+
+
+def split_hole() -> Any:
+    """A d8 hole through 20 mm that a 1 mm slot (from x -10 out of the +x side) cuts in two half-cylinders: one
+    hole, its halves no pocket's corners."""
+    return _labelled(bd.Box(60, 40, 20) - bd.Cylinder(4, 30) - bd.Pos(10, 0, 0) * bd.Box(40, 1, 30), "split_hole")
+
+
+def cross_shaft() -> Any:
+    """A turned d20 shaft with a d3 hole square to its axis, 4 mm beside it: perpendicular, as Protolabs turns."""
+    body = bd.Cylinder(10, 60, align=(A.CENTER, A.CENTER, A.MIN))
+    return _labelled(body - bd.Pos(4, 0, 30) * bd.Rot(90, 0, 0) * bd.Cylinder(1.5, 30), "cross_shaft")
+
+
+def engraved() -> Any:
+    """A V and an L engraved 0.5 mm deep in strokes 0.8 mm wide, every corner drawn sharp (top at z = 3)."""
+    v = bd.Polygon((0, -3), (2.5, 3), (1.6, 3), (0, -0.6), (-1.6, 3), (-2.5, 3), align=None)
+    ell = bd.Polygon((6, -3), (11, -3), (11, -2.2), (6.8, -2.2), (6.8, 3), (6, 3), align=None)
+    part = bd.Box(40, 20, 6) - bd.Pos(0, 0, 2.5) * bd.extrude(v, 1) - bd.Pos(0, 0, 2.5) * bd.extrude(ell, 1)
+    return _labelled(part, "engraved")
 
 
 def shaft() -> Any:
@@ -298,11 +335,13 @@ def knife() -> Any:
     return _labelled(bd.extrude(bd.Plane.XZ * profile, 15, both=True), "knife")
 
 
-def valley() -> Any:
-    """A block whose top is a 176-degree valley along y: a ball end mill's crease (a control)."""
-    rise = 30 * math.tan(math.radians(2))
-    profile = bd.Polygon((-30, 0), (30, 0), (30, 10 + rise), (0, 10), (-30, 10 + rise), align=None)
-    return _labelled(bd.extrude(bd.Plane.XZ * profile, 20, both=True), "valley")
+def valley(void: float = 176.0) -> Callable[[], Any]:
+    """A block whose top is a valley along y of ``void`` degrees, its crease at z = 10."""
+    def build() -> Any:
+        rise = 30 * math.tan(math.radians((180 - void) / 2))
+        profile = bd.Polygon((-30, 0), (30, 0), (30, 10 + rise), (0, 10), (-30, 10 + rise), align=None)
+        return _labelled(bd.extrude(bd.Plane.XZ * profile, 20, both=True), "valley")
+    return build
 
 
 # --- the ground truth ------------------------------------------------------------------------------------
@@ -325,13 +364,18 @@ CASES = [
                  ("cnc.hole_diameter", None, box(29.6, -0.4, 21, 30.4, 0.4, 25)),
                  ("cnc.hole_depth", None, box(39.5, -0.5, -21, 40.5, 0.5, 25)),
                  ("cnc.hole_depth_limit", None, box(39.5, -0.5, -21, 40.5, 0.5, 25))]),
+    # the T open at both ends is in line of sight along x, but only a T-slot cutter makes it: an undercut too
     Case("tslots", tslots, {"material": "aluminum"},
          expect=[("cnc.no_line_of_sight", None, box(-25, 5, 3, 25, 25, 9)),
-                 ("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15))],
+                 ("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15)),
+                 ("cnc.special_cutter", None, box(-45, -25, 3, 45, -5, 15)),
+                 ("cnc.special_cutter", None, box(-25, 5, 3, 25, 25, 15))],
          allow=[("cnc.undercut", None, box(-25, 5, 3, 25, 25, 15))]),
+    # the dovetail through along x is a dovetail cutter's: an undercut
     Case("grooves", grooves, {"material": "aluminum"},
          expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
-                 ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15))],
+                 ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15)),
+                 ("cnc.special_cutter", None, box(-40, -29.7, 7, 40, -10.3, 15))],
          # the 30-degree groove narrows to nothing at its root: a gap no tool enters; the dovetail's foot
          # (y = -29.62) stands 0.38 mm from the part's side (y = -30): a real wall the exact distance finds
          allow=[("cnc.gap_width", None, box(-40, 4.2, 9, 40, 7.8, 15)),
@@ -339,7 +383,8 @@ CASES = [
                 ("cnc.wall_thickness", None, box(-40, -30, 7, 40, -29.6, 7.1)),
                 ("cnc.wall_thickness_recommended", None, box(-40, -30, 7, 40, -29.6, 7.1))]),
     Case("grooves-5axis", grooves, {"material": "aluminum", "axes": 5},
-         expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15))],
+         expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+                 ("cnc.special_cutter", None, box(-40, -29.7, 7, 40, -10.3, 15))],
          allow=[("cnc.gap_width", None, box(-40, 4.2, 9, 40, 7.8, 15)),
                 ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15)),
                 ("cnc.wall_thickness", None, box(-40, -30, 7, 40, -29.6, 7.1)),
@@ -351,6 +396,7 @@ CASES = [
     # the hole runs 30 / cos 30 = 34.6 mm at 8 mm: 4.3 diameters, over Hubs' recommended 4
     Case("inclined", inclined, {"material": "aluminum"},
          expect=[("cnc.undercut", None, box(-30, -4, -15, 30, 4, 15)),
+                 ("cnc.inclined_feature", None, box(-30, -4, -15, 30, 4, 15)),
                  ("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),
     Case("inclined-4axis", inclined, {"material": "aluminum", "axes": 4},
          expect=[("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),
@@ -364,6 +410,7 @@ CASES = [
                  ("cnc.internal_groove", None, box(-7, -7, 40, 7, 7, 43)),
                  ("cnc.radial_hole_diameter", None, box(-15, -0.75, 99.25, 15, 0.75, 100.75)),
                  ("cnc.off_axis_hole", None, box(6, -15, 70, 10, 15, 110))]),
+    Case("cross_shaft", cross_shaft, {"material": "steel", "turning": True, "rules": "protolabs"}),
     Case("clean_shaft", clean_shaft, {"material": "aluminum", "turning": True, "rules": "protolabs"}),
     Case("filleted", filleted, {"material": "aluminum"}),
     Case("freeform", freeform, {"material": "aluminum"}),
@@ -398,7 +445,23 @@ CASES = [
          expect=[("cnc.wall_thickness", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5)),
                  ("cnc.wall_thickness_recommended", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5))]),
     Case("knife", knife, {"material": "aluminum"}, expect=[("cnc.knife_edge", None, box(-0.1, -7.5, -0.1, 0.1, 7.5, 0.1))]),
-    Case("valley", valley, {"material": "aluminum"}),
+    Case("valley", valley(), {"material": "aluminum"}),
+    Case("valley-160", valley(160.0), {"material": "aluminum"}),
+    # under BALL_VOID_DEG: a tool tilted square to a face makes it, a direction three axes lack (a warning)
+    Case("valley-140", valley(140.0), {"material": "aluminum"},
+         expect=[("cnc.sharp_internal_edge", None, box(-30, -20, 9.9, 30, 20, 10.1))]),
+    Case("inclined_pocket", inclined_pocket, {"material": "aluminum"},
+         expect=[("cnc.inclined_feature", None, box(16, -5, 1, 29, 5, 14)),
+                 ("cnc.sharp_internal_edge", None, box(16, -5, 1, 29, 5, 14))]),
+    Case("inclined_pocket-5axis", inclined_pocket, {"material": "aluminum", "axes": 5}),
+    Case("sharp_window", sharp_window, {"material": "aluminum"},
+         expect=[("cnc.internal_corner_sharp", None, box(-15, -7.5, -5, 15, 7.5, 5))]),
+    # the slot itself is 1 mm wide and 6 deep from the side it opens to
+    Case("split_hole", split_hole, {"material": "aluminum"},
+         allow=[("cnc.gap_width_small", None, box(-10, -0.5, -10, 30, 0.5, 10)),
+                ("cnc.pocket_depth_to_width", None, box(-10, -0.5, -10, 30, 0.5, 10))]),
+    Case("engraved", engraved, {"material": "aluminum", "rules": "protolabs"},
+         expect=[("cnc.internal_corner_sharp", None, box(-2.5, -3, 2.5, 11, 3, 3))]),
     Case("cavity-hubs", xometry_cavity, {"material": "aluminum", "rules": "hubs"},
          allow=[("cnc.corner_radius_to_depth", None, box(-15, -3, -1, 15, 3, 20)),
                 ("cnc.corner_reach", None, box(-15, -3, -1, 15, 3, 20))]),
@@ -502,6 +565,7 @@ class CorpusTest(unittest.TestCase):
     def test_the_assembly_reports_each_part(self) -> None:
         _, result, _ = self.results["kit"]
         self.assertEqual(sorted(item["part"] for item in result.measurements["stock"]["items"]), ["bracket", "plate"])
+        self.assertIn("up to 1 setup(s) a part", result.summary)  # a part's setups, never their sum
 
     def test_four_axes_turn_about_the_axis_that_reaches_the_inclined_hole(self) -> None:
         setup = self.results["inclined-4axis"][1].measurements["setups"]["items"][0]
@@ -511,7 +575,31 @@ class CorpusTest(unittest.TestCase):
     def test_setups_count_the_sides(self) -> None:
         counts = {name: self.results[name][1].measurements["setups"]["items"][0]["setup_count"]
                   for name in ("six_sides", "two_sides")}
-        self.assertEqual(counts, {"six_sides": 5, "two_sides": 2})
+        self.assertEqual(counts, {"six_sides": 6, "two_sides": 2})
+
+    def test_an_inclined_feature_is_its_own_setup_on_three_axes(self) -> None:
+        three = self.results["inclined_pocket"][1].measurements
+        self.assertEqual([p["reachable"] for p in three["pockets"]["items"]], [False])
+        setup = three["setups"]["items"][0]
+        self.assertEqual((setup["inclined_directions"], setup["setup_count"]), ([[0.7071, 0.0, 0.7071]], 3))
+        self.assertTrue(self.results["inclined_pocket-5axis"][1].measurements["pockets"]["items"][0]["reachable"])
+
+    def test_a_window_and_a_split_hole_read_as_drawn(self) -> None:
+        window = self.results["sharp_window"][1].measurements
+        self.assertEqual([(p["kind"], p["depth_mm"], p["width_mm"]) for p in window["pockets"]["items"]],
+                         [("through", 10.0, 15.0)])
+        self.assertEqual([c["radius_mm"] for c in window["internal_corners"]["items"]], [0.0] * 4)
+        self.assertEqual(window["sharp_edges"]["items"], [])
+        split = self.results["split_hole"][1].measurements
+        self.assertEqual([(h["diameter_mm"], h["through"]) for h in split["holes"]["items"]], [(8.0, True)])
+        self.assertEqual(split["internal_corners"]["items"], [])
+
+    def test_protolabs_cuts_engraving_s_sharp_corners_with_its_tool(self) -> None:
+        _, result, _ = self.results["engraved"]
+        self.assertTrue(result.ok)
+        self.assertEqual({f.severity for f in result.findings if f.code == "cnc.internal_corner_sharp"}, {"warning"})
+        hole = self.results["cross_shaft"][1].measurements["holes"]["items"][0]
+        self.assertEqual(hole["relation"], "perpendicular")
 
 
 if __name__ == "__main__":

@@ -6,8 +6,9 @@ names its axis; the line whose coaxial faces have the most area is taken. **Axis
 part's area on faces of revolution about it (coaxial cylinders, cones, tori, spheres centred on it) and on
 planes square to it whose every edge is a circle about it (a square plate's faces are no turned face). Every other face is **off-axis**: joined into features by their edges, each is a
 ``cross_hole`` (a hole on another axis: ``radial`` where its axis is square to the turning axis and meets it,
-``off_axis`` otherwise -- the hole itself is marked so), a ``flat`` (one plane along the axis), a ``slot``
-(planes along the axis facing each other: a keyway), or a ``feature``.
+``perpendicular`` where it is square to it beside it, ``off_axis`` otherwise -- the hole itself is marked
+so), a ``flat`` (one plane along the axis), a ``slot`` (planes along the axis facing each other: a keyway), or a
+``feature``.
 
 **Diameters** are the convex coaxial cylinders (diameter, length along the axis); **bores** the holes on the
 axis; **grooves** the coaxial cylinders whose both ends meet planes square to the axis by concave edges: an
@@ -128,11 +129,12 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
                                                          "bottom", "location", "xyz")})
                 continue
         else:
-            # radial: square to the axis and meeting it
+            # radial: square to the axis and meeting it; perpendicular: square to it, beside it (Protolabs turns
+            # "holes that are either parallel or perpendicular to the axis of revolution"); off_axis: else
             square = abs(float(np.asarray(hole_axis) @ axis)) < 1e-4
             normal = np.cross(np.asarray(hole_axis), axis)
             meets = abs(float(gap @ unit(normal))) < 1e-4 if np.linalg.norm(normal) > 1e-9 else False
-            hole["relation"] = "radial" if square and meets else "off_axis"
+            hole["relation"] = ("radial" if meets else "perpendicular") if square else "off_axis"
         for face in faces:
             hole_faces_by_ordinal[face] = hole
     grooves = [groove for _, groove in sorted(groove_floors.items())]
