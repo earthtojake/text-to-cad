@@ -813,7 +813,9 @@ file.
   the picture. Showing or hiding it is a resize of the canvas, as a 3D viewport's: a view still at
   its fit refits to the room it has now, and a view the person has moved keeps its zoom against
   the fit and the point of the picture at its centre at the centre of the room left
-  (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). Zoom to fit and 100%
+  (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). A flat view is kept with
+  the pane it was framed in (`kit/viewport/flatView.js`), so a file reopened with its panel open (the
+  canvas the whole view until the panel docks) comes back exactly as it was left. Zoom to fit and 100%
   measure the room beside the panel. A file whose panel the person has not opened or closed opens
   it in a view 1024px wide or more and starts it collapsed under that; once they have, the choice is
   the file's at any width. Opened, it docks as it does on a wide view. **On a phone** (under 600px)

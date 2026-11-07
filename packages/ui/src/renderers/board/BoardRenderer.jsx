@@ -24,6 +24,7 @@ import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
+import { readFlatView } from "../kit/viewport/flatView.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardDescribe, useBoardInspect, useBoardReferences, useBoardTip } from "./boardReferences.jsx";
@@ -119,13 +120,6 @@ const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
 // How near a pick must be, in CSS pixels: a cursor's, or a fingertip's (`TOUCH_HIT_PX`).
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
-const finite = value => typeof value === "number" && Number.isFinite(value);
-/** The stored view, or null for the fit: nothing but the transform's three numbers. */
-function readTransform(raw) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const { scale, offsetX, offsetY } = raw;
-  return finite(scale) && scale > 0 && finite(offsetX) && finite(offsetY) ? { scale, offsetX, offsetY } : null;
-}
 /** What a board's snapshot packet carries of its prompt's references: their selectors into the board, once each, as the box orders them. */
 const boardPacketReferences = (references, file) => [...new Set(references
   .filter(reference => reference?.resource?.path === file && reference.target?.kind === "cad-selector")
@@ -150,7 +144,8 @@ function BoardSurface({ view, data }) {
 
   // ---- the file's view: the transform, the board's Display, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
-  const [restored] = useState(() => readTransform(stored.camera));
+  // The flat canvas's view as it was left, with the pane it was framed in (`kit/viewport/flatView.js`).
+  const [restored] = useState(() => readFlatView(stored.camera));
   // 2D or 3D, the 3D camera and its projection: the file's, as it was left.
   const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
   // In 3D the side shown is the side the camera is on (Flip's icon follows it): a file left in 3D opens on its
@@ -183,7 +178,7 @@ function BoardSurface({ view, data }) {
     saveTimer.current = window.setTimeout(() => stateChangeRef.current?.(record), SAVE_DELAY_MS);
   }, []);
   // A view that is still the fit stores no camera: `null` is "fit me".
-  const rememberView = useCallback(transform => save({ camera: transform ? { ...transform } : null }), [save]);
+  const rememberView = useCallback(moved => save({ camera: readFlatView(moved) }), [save]);
   const remember3d = useCallback(change => save({ board3d: { ...saved.current.board3d, ...change } }), [save]);
   useEffect(() => { storedRef.current = JSON.stringify(recordOf({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d })); }, []);
   useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);

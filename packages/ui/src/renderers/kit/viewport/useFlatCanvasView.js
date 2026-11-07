@@ -20,6 +20,12 @@
  * backing store's ratio, the view (null until there is a picture to frame), the pane's element
  * (whose tokens say the theme) and the host's scheme.
  *
+ * The view the person moves is handed back to keep with its pane (`onViewMoved`, `flatView.js`'s
+ * record), and the view a file was left at (`restored`) is placed on every pane the picture is laid
+ * out in, by what it shows, until the person moves it: so on the pane it was framed in it is the
+ * stored transform exactly, however the pane changed meanwhile (the panel docking beside the canvas
+ * once the file has loaded).
+ *
  * The view lives in a REF, not in React state. A pan is a stream of pointer moves and a zoom is
  * a stream of wheel ticks; re-rendering a component tree per event would make both stutter and
  * would tell React about a number only the canvas cares about. The component re-renders when
@@ -32,14 +38,15 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  carryTransform,
   clampScale,
   fitTransform,
   panTransform,
   sameTransform,
-  screenToModel,
   zoomLimits,
   zoomTransform
 } from "@cad/core/lib/drawing2d/transform.js";
+import { flatViewRecord, readFlatView } from "./flatView.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "./pixelRatio.js";
 import { createWheelGesture } from "./wheelGesture.js";
 import { doubleClickFits } from "./dom.js";
@@ -59,11 +66,13 @@ const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHE
  * @param {object} options
  * @param {unknown} options.content  The picture, or null while it loads.
  * @param {readonly [number, number, number, number]|null} options.bounds  What the fit frames.
- * @param {{ scale: number, offsetX: number, offsetY: number }|null} options.restored
- *   The view this file was left at, when it was left anywhere but the fit.
+ * @param {{ scale: number, offsetX: number, offsetY: number, width?: number, height?: number }|null} options.restored
+ *   The view this file was left at, when it was left anywhere but the fit: `flatView.js`'s record, the
+ *   transform and the pane it was framed in (a record without its pane is taken as it is).
  * @param {"light"|"dark"} options.colorScheme
- * @param {(transform: object|null) => void} options.onViewMoved  Called after the person moves the
- *   view, with the transform to remember; with null when it is the fit again.
+ * @param {(view: { scale: number, offsetX: number, offsetY: number, width: number, height: number }|null) => void} options.onViewMoved
+ *   Called after the person moves the view, with the view to remember (`flatView.js`'s record: the
+ *   transform and its pane); with null when it is the fit again.
  * @param {(ctx: CanvasRenderingContext2D, frame: { width: number, height: number, pixelRatio: number,
  *   transform: object|null, element: Element|null, colorScheme: "light"|"dark" }) => void} options.paint  One whole frame.
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
@@ -93,7 +102,9 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   // The person has framed this picture themselves: a resize must not take it back,
   // and it is worth remembering. A restored view is already theirs.
   const movedRef = useRef(Boolean(restored));
-  const restoredRef = useRef(restored);
+  // The view the file was left at, until the person moves it (or fits): every pane the picture is laid
+  // out in places it from this record, never from the pixels of the pane before.
+  const restoredRef = useRef(readFlatView(restored));
   const boundsRef = useRef(bounds);
   boundsRef.current = bounds;
   const fitBoxRef = useRef(fitBox);
@@ -148,33 +159,64 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     paint();
   }, [paint]);
 
-  /** Recompute the fitted scale for the current pane, and adopt it unless the view is the person's. */
-  const refit = useCallback((force) => {
-    const box = boundsRef.current;
-    const { width, height } = sizeRef.current;
-    if (!box || width <= 0 || height <= 0) return;
+  /** The fit of the picture on a pane of `width` × `height`, clear of the view's strip where it keeps clear of it. */
+  const fitOn = useCallback((width, height) => {
     const frame = clearStripRef.current ? containerRef.current?.closest?.("[data-slot=cad-file-view]") : null;
     const strip = frame ? Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom")) : 0;
-    const fitted = fitBoxRef.current(box, width, height, { top: Number.isFinite(strip) ? strip : 0 });
+    return fitBoxRef.current(boundsRef.current, width, height, { top: Number.isFinite(strip) ? strip : 0 });
+  }, []);
+
+  /**
+   * A stored view (`flatView.js`'s record) on the pane as it is now: on a pane of the size it was framed in,
+   * its transform exactly; on another, carried there by what it shows (`carryTransform`). One stored
+   * without its pane is taken as it is.
+   */
+  const placed = useCallback((view, fitted) => {
+    const { width, height } = sizeRef.current;
+    if (!view.width || !view.height) return { scale: view.scale, offsetX: view.offsetX, offsetY: view.offsetY };
+    const from = { width: view.width, height: view.height, fitScale: fitOn(view.width, view.height).scale };
+    return carryTransform(view, from, { width, height, fitScale: fitted.scale });
+  }, [fitOn]);
+
+  /** Recompute the fitted scale for the current pane, and adopt it unless the view is the person's. */
+  const refit = useCallback((force) => {
+    const { width, height } = sizeRef.current;
+    if (!boundsRef.current || width <= 0 || height <= 0) return;
+    const fitted = fitOn(width, height);
     fitScaleRef.current = fitted.scale;
-    if (force || !movedRef.current) {
+    if (force || !movedRef.current || (!restoredRef.current && !transformRef.current)) {
+      // The fit: asked for, or the view is nobody's, or the picture the person framed went (an empty
+      // revision) and another came.
       movedRef.current = false;
+      restoredRef.current = null;
       transformRef.current = fitted;
       onViewMovedRef.current?.(null);
-    } else if (!transformRef.current) {
-      transformRef.current = restoredRef.current;
+    } else if (restoredRef.current) {
+      // The view the file was left at, untouched since: placed on the pane it has now, from its record
+      // (which already says it, so nothing is written).
+      transformRef.current = placed(restoredRef.current, fitted);
     }
     requestPaint();
-  }, [requestPaint]);
+  }, [requestPaint, fitOn, placed]);
 
-  /** Record a view the person chose. */
+  /** Record a view the person chose, with the pane it is framed in. */
   const moveTo = useCallback((next) => {
     if (!next || sameTransform(transformRef.current, next)) return;
     transformRef.current = next;
     movedRef.current = true;
-    onViewMovedRef.current?.(next);
+    restoredRef.current = null;
+    onViewMovedRef.current?.(flatViewRecord(next, sizeRef.current));
     requestPaint();
   }, [requestPaint]);
+
+  /** Show a view handed back (a sheet's, the window a 3D view leaves): a record with its pane is placed on this one. */
+  const setView = useCallback((view) => {
+    const read = readFlatView(view);
+    const { width, height } = sizeRef.current;
+    if (!read) return;
+    moveTo(boundsRef.current && width > 0 && height > 0 ? placed(read, fitOn(width, height))
+      : { scale: read.scale, offsetX: read.offsetX, offsetY: read.offsetY });
+  }, [moveTo, placed, fitOn]);
 
   const fit = useCallback(() => refit(true), [refit]);
 
@@ -211,15 +253,12 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       const height = Math.max(0, Math.round(rect.height));
       const previous = sizeRef.current;
       if (width === previous.width && height === previous.height) return;
-      // What the pane held in its middle, and how far the view was from the fitted scale.
-      // Both are read BEFORE the size changes: a view the person chose is carried across a
-      // resize in those terms rather than in pixels (see below).
-      const heldCentre = transformRef.current && previous.width > 0 && previous.height > 0
-        ? screenToModel(transformRef.current, previous.width / 2, previous.height / 2)
+      // The view the person moved, and the pane and fit it was framed on, read BEFORE the size changes:
+      // it is carried across the resize by what it shows rather than by its pixels (see below). A view
+      // still the one the file was left at is placed from its record instead, by the refit.
+      const held = !restoredRef.current && transformRef.current && previous.width > 0 && previous.height > 0 && fitScaleRef.current > 0
+        ? { transform: transformRef.current, from: { width: previous.width, height: previous.height, fitScale: fitScaleRef.current } }
         : null;
-      const heldZoom = transformRef.current && fitScaleRef.current > 0
-        ? transformRef.current.scale / fitScaleRef.current
-        : 0;
       sizeRef.current = { width, height };
       const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
       canvas.width = Math.max(1, Math.round(width * pixelRatio));
@@ -230,20 +269,16 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       // cached context has to be re-read along with the picture.
       contextRef.current = canvas.getContext("2d");
       refit(false);
-      // A view still the fit has just refitted to the room it has now. A view the person framed is
-      // not taken back by a resize — but it must not keep an absolute pixel scale either, or a pane
-      // that narrows simply crops the picture where it stands. So it keeps what it MEANT: the same
-      // zoom relative to the fit, still centred on what it was centred on. That is how the 3D
-      // viewports behave when their pane changes size, and a panel docked beside the pane, or
-      // taken away, is such a change: the pane is what the panel leaves, and the picture is
-      // centred in it, never left under the panel.
-      if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
-        const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));
-        moveTo({
-          scale,
-          offsetX: width / 2 - heldCentre[0] * scale,
-          offsetY: height / 2 + heldCentre[1] * scale
-        });
+      // A view still the fit has just refitted to the room it has now, and the view the file was left
+      // at, untouched, has been placed on it from its record. A view the person framed is not taken
+      // back by a resize — but it must not keep an absolute pixel scale either, or a pane that narrows
+      // simply crops the picture where it stands. So it keeps what it MEANT: the same zoom relative to
+      // the fit, still centred on what it was centred on (`carryTransform`). That is how the 3D
+      // viewports behave when their pane changes size, and a panel docked beside the pane, or taken
+      // away, is such a change: the pane is what the panel leaves, and the picture is centred in it,
+      // never left under the panel.
+      if (held && movedRef.current && fitScaleRef.current > 0) {
+        moveTo(carryTransform(held.transform, held.from, { width, height, fitScale: fitScaleRef.current }));
       }
       // Resizing the canvas above wiped it. The observer runs after layout and before
       // paint, but after this frame's animation callbacks, so a frame asked for now would
@@ -434,5 +469,5 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     fit
   }), [zoomBy, fit]);
 
-  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, zoom, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, zoom, setView, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

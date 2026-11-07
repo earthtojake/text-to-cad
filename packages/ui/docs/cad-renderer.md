@@ -430,9 +430,13 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   There is no zoom command and no zoom percentage: no host ever sent one. `select`,
   `setCamera` and `setDisplaySettings` are each declined with a sentence that says why;
   a `selectReference` host request is consumed without changing the view.
-- **State** under `[path, "dxf"]`: the drawing's `camera`, `{ scale, offsetX, offsetY }`
-  (`dxf/drawingTransform.js`), and only once the person has MOVED the view — an untouched drawing stores nothing, so it
-  reopens fitted to whatever pane it lands in. A hard cutover: every record the 3D DXF
+- **State** under `[path, "dxf"]`: the drawing's `camera`, every flat view's record
+  (`kit/viewport/flatView.js`): `{ scale, offsetX, offsetY, width, height }`, the transform and the pane
+  it was framed in, and only once the person has MOVED the view — an untouched drawing stores nothing, so it
+  reopens fitted to whatever pane it lands in. A stored view is placed on the pane the drawing opens in by
+  what it shows (`carryTransform`), so on a pane of the size it was framed in (a reload with the panel
+  open, though the canvas is the whole view until the panel docks) it is that view exactly; a record
+  without its pane is taken as it is. A hard cutover: every record the 3D DXF
   viewer wrote (thickness, bends, hidden layers, 2D/3D, a camera) reads as nothing
   stored.
 - **Fixture and test**: `dxf/__fixtures__/sample.drawing.json` is exactly what the route
@@ -838,7 +842,7 @@ A reload shows the same file, and restores it:
 
 | Kept | What |
 | --- | --- |
-| `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
+| `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a flat view's (a board's, a schematic's, a drawing's) plane transform with the pane it was framed in (`kit/viewport/flatView.js`), placed on the pane it opens in by what it shows, and exactly itself on a pane of that size. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
 | `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
