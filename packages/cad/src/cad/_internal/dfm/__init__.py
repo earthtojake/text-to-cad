@@ -14,7 +14,9 @@ Every process module has:
 - ``OPTIONS``: its own options and their defaults (``None``: not given, measured or the rule set's);
 - ``RULE_SETS``: ``generic`` and the shops' sets it has, each a ``rules.RuleSet``;
 - ``MEASURED_FROM``: ``("brep", "mesh")``, the sources it measures (a mesh-only figure says so);
-- ``validate(resolved, document_type)``: ``ValueError`` naming the fix for a value out of range;
+- ``validate(resolved, document_type)``: ``ArgumentRefused`` naming the fix for a value out of range (its
+  kind -- a count an ``int``, a flag a ``bool``, a length finite -- already held by ``manufacturing.options``:
+  ``_common.require_*``);
 - ``context(report, resolved)``: what its rules read beside the report (the material's class, the
   measured thickness, the technology);
 - ``findings(report, resolved, candidates)``: the findings its facts call for, verdicts apart;

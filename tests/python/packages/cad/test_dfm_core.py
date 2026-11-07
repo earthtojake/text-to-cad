@@ -112,6 +112,109 @@ class RulesTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _set(Rule("r", "f", "v", "max", 1.0, "mm", "v", "elsewhere"))
 
+    def test_the_edges_of_a_verdict(self) -> None:
+        rule = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s", fix="raise it to {limit:g}")
+        # a value just under the limit prints the digits that tell them apart
+        found, _ = evaluate({"f": {"items": [{"v": 0.999999, "location": "a"}]}}, _set(rule), {})
+        self.assertIn("v 0.999999 mm is under the 1 mm minimum", found[0].message)
+        # a pass over some items is not a pass over the rest
+        _, record = evaluate({"f": {"items": [{"v": 2.0, "location": "a"}, {"v": None, "location": "b"}]}},
+                             _set(rule), {})
+        self.assertEqual((record["outcomes"][0]["status"], record["outcomes"][0]["reason"]),
+                         ("passed", "1 item(s) not measured"))
+        # a bool is no scale
+        scaled = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s", scale_by="t")
+        self.assertIsNone(scaled.limit_for({"t": True}))
+        # the failures past those shown: counted where the record lists them, with the fix
+        items = [{"v": 0.1, "location": f"p/face {i}"} for i in range(12)]
+        found, _ = evaluate({"f": {"items": items}}, _set(rule), {})
+        self.assertEqual((found[-1].location, found[-1].hint), ("measurements.rules", "raise it to 1"))
+        # a warning is implied by an error on the same item, not on another that shares its place
+        error, warning = Rule("e", "f", "v", "min", 1.0, "mm", "v", "s"), \
+            Rule("w", "f", "v", "min", 2.0, "mm", "v", "s", severity="warning")
+        found, _ = evaluate({"f": {"items": [{"v": 0.5}, {"v": 1.5}]}}, _set(error, warning), {})
+        self.assertEqual(sorted(f.code for f in found), ["e", "w"])
+
+    def test_every_rule_id_has_one_outcome_in_every_context(self) -> None:
+        """Variants of one rule id (a tool given or not, acute or square, a minimum and a maximum, a technology)
+        answer once: judged where any judged, else not evaluated or not applicable -- never twice, never gone."""
+        from cad._internal import dfm
+
+        for process in dfm.PROCESSES:
+            for name, rule_set in dfm.module(process).RULE_SETS.items():
+                ids = {rule.id for rule in rule_set.rules}
+                for context, report in _exercises(rule_set):
+                    with self.subTest(process=process, rules=name, context=context, measured=bool(report)):
+                        _, record = evaluate(report, rule_set, context)
+                        said = [outcome["rule"] for outcome in record["outcomes"]]
+                        self.assertEqual(sorted(said), sorted(ids))
+
+    def test_variants_that_judge_are_one_outcome_with_every_failure(self) -> None:
+        low = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s")
+        high = Rule("r", "f", "v", "max", 5.0, "mm", "v", "s")
+        gated = Rule("r", "f", "v", "min", 3.0, "mm", "v", "s", when={"tool": True})
+        report = {"f": {"items": [{"v": 0.5, "location": "a"}, {"v": 9.0, "location": "b"}, {"v": 2.0, "location": "c"}]}}
+        _, record = evaluate(report, _set(low, high, gated), {"tool": False})
+        (outcome,) = record["outcomes"]
+        self.assertEqual((outcome["status"], outcome["evaluated"]), ("failed", 3))
+        self.assertEqual(sorted((f["op"], f["value"]) for f in outcome["failures"]), [("max", 9.0), ("min", 0.5)])
+        self.assertEqual([variant["op"] for variant in outcome["variants"]], ["min", "max"])
+        # none applies: one not_applicable, its conditions said
+        _, record = evaluate({}, _set(Rule("g", "f", "v", "min", 1.0, "mm", "v", "s", when={"tool": True})), {})
+        self.assertEqual([o["status"] for o in record["outcomes"]], ["not_applicable"])
+
+    def test_every_template_names_fields_its_process_writes(self) -> None:
+        """A rule's ``fix`` and ``detail`` name only the failure's own figures and what its process writes -- a
+        context key, an item's field -- as a key or a keyword in the process's modules: a name that is neither
+        would print as a raw brace (the text as written), silently."""
+        import re
+        import string
+
+        import cad
+        from cad._internal import dfm
+
+        root = Path(cad.__file__).parent
+        for process in dfm.PROCESSES:
+            sources = [root / "_internal" / "dfm" / f"{process}.py", root / "build123d" / "_dfm_brep.py",
+                       *(root / "build123d").glob(f"_dfm_{process}*.py"), *(root / "trimesh").glob(f"_{process}.py"),
+                       *(root / "_internal").glob("meshops_*.py"),
+                       *([root / "build123d" / "_dfm_dxf.py"] if process == "sheet" else [])]
+            text = "".join(path.read_text(encoding="utf-8") for path in sources)
+            for rule_set in dfm.module(process).RULE_SETS.values():
+                for rule in rule_set.rules:
+                    for template in (rule.fix, rule.detail):
+                        names = {field.split(".")[0].split("[")[0]
+                                 for _, field, _, _ in string.Formatter().parse(template) if field}
+                        unknown = {name for name in names - {"value", "limit", "unit", "xyz"}
+                                   if f'"{name}"' not in text and not re.search(rf"\b{name}=", text)}
+                        with self.subTest(rule=rule.id, rules=rule_set.name, template=template):
+                            self.assertEqual(unknown, set())
+
+
+def _exercises(rule_set: RuleSet) -> list[tuple[dict, dict]]:
+    """Contexts that satisfy each rule's ``when`` in turn (and none), each against no report and against one
+    with an item for every rule's ``item_when``: where the variants of a rule id judge, split and vanish."""
+    base: dict = {}
+    for rule in rule_set.rules:
+        if rule.scale_by:
+            base[rule.scale_by] = 1.0
+        if rule.by and isinstance(rule.limit, dict):
+            base.setdefault(rule.by, next(iter(rule.limit)))
+    contexts = [{}, dict(base)]
+    for rule in rule_set.rules:
+        wanted = {key: value[0] if isinstance(value, (tuple, list)) else value for key, value in rule.when.items()}
+        contexts.append({**base, **wanted})
+    if rule_set.selector:
+        contexts.append({**base, rule_set.selector: "a value no rule names"})
+    items: dict[str, list] = {}
+    for index, rule in enumerate(rule_set.rules):
+        fields = {other.field: 1.0 for other in rule_set.rules if other.family == rule.family}
+        when = {key: value[0] if isinstance(value, (tuple, list)) else value for key, value in rule.item_when.items()}
+        items.setdefault(rule.family, []).append({**fields, **when, "location": f"p/face {index}"})
+    report = {family: {"items": found} for family, found in items.items()}
+    unique = list({repr(sorted(context.items(), key=str)): context for context in contexts}.values())
+    return [(context, measured) for context in unique for measured in ({}, report)]
+
 
 class OptionsTest(unittest.TestCase):
     def test_each_option_belongs_to_its_process(self) -> None:
@@ -136,6 +239,47 @@ class OptionsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ranks molding's pulls"):
             manufacturing.options("step", "cnc", {}, candidates=True)
         self.assertEqual(manufacturing.options("dxf", "sheet", {"kerf": 0.2})["kerf"], 0.2)
+        self.assertEqual(manufacturing.options("dxf", None, {"kerf": 0.2})["kerf"], 0.2, "a DXF's one process")
+
+    def test_a_value_of_another_kind_is_refused_never_coerced(self) -> None:
+        for process, given, said in (
+                ("cnc", {"axes": 3.7}, "--axes is a whole number, not 3.7"),
+                ("cnc", {"axes": True}, "--axes is a whole number"),
+                ("cnc", {"turning": "no"}, "--turning is true or false, not 'no'"),
+                ("molding", {"cavities": 1.5}, "--cavities is a whole number"),
+                ("printing", {"samples": 2.5}, "--samples is a whole number"),
+                ("sheet", {"kerf": float("inf")}, "--kerf is a finite number, not inf"),
+                ("sheet", {"thickness": float("nan")}, "--thickness is a finite number"),
+                ("cnc", {"tools": 6}, "--tools is text")):
+            with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
+                manufacturing.options("step", process, given)
+        with self.assertRaisesRegex(ValueError, "--candidates is true or false"):
+            manufacturing.options("stl", "printing", {}, candidates=1)
+        with self.assertRaisesRegex(ValueError, "--axes is a whole number"):  # before the process is read
+            manufacturing.options("model", None, {"axes": 3.5})
+
+    def test_each_type_takes_its_processes_and_their_options_alone(self) -> None:
+        import inspect
+
+        import cad
+
+        for document_type, processes, has, lacks in (
+                ("step", ("cnc", "sheet", "molding", "printing"), {"axes", "kerf", "pull", "nozzle"}, set()),
+                ("stl", ("molding", "printing"), {"pull", "nozzle", "candidates", "units"}, {"axes", "kerf"}),
+                ("dxf", ("sheet",), {"kerf", "thickness", "k_factor"}, {"axes", "pull", "candidates"})):
+            with self.subTest(document_type=document_type):
+                function = getattr(cad, document_type).dfm
+                parameters = inspect.signature(function).parameters
+                self.assertEqual(manufacturing.processes_for(document_type), processes)
+                self.assertTrue(has <= set(parameters) and not lacks & set(parameters), sorted(parameters))
+                with self.assertRaises(TypeError):
+                    function("part", axes=3) if "axes" in lacks else function("part", nonsense=1)
+        self.assertEqual(inspect.signature(cad.dxf.dfm).parameters["process"].default, "sheet")
+        self.assertIn("source: the .dxf cut file to check.", cad.dxf.dfm.__doc__)
+        with self.assertRaisesRegex(ValueError, "give --process molding or printing$"):
+            manufacturing.options("glb", None, {})
+        with self.assertRaisesRegex(ValueError, "a STEP keeps no process: give --process cnc"):
+            manufacturing.options("step", None, {})
 
 
 def _pocketed() -> bd.Part:
@@ -279,10 +423,11 @@ class DeclaredMaterialTest(unittest.TestCase):
         self.assertNotIn("cnc.material_assumed", codes)
         self.assertEqual(result.measurements["rules"]["context"]["material"], "aluminum")
         self.assertEqual(result.measurements["bodies"][0]["material"], "Alu_G6061_T6")
-        # a material given wins, and nothing is read
+        # a material given wins, and the declared one it overrides is said
         given = cnc(plate, material="steel")
         self.assertEqual(given.measurements["rules"]["context"]["material"], "steel")
-        self.assertNotIn("material_declared", {finding.code for finding in given.findings})
+        said = [finding.message for finding in given.findings if finding.code == "material_declared"]
+        self.assertEqual(said, ["material steel as given, not the aluminum the parts declare: judged as steel"])
 
     def test_parts_that_disagree_are_judged_as_with_none(self) -> None:
         from bd_materials import metals, plastics
@@ -361,20 +506,26 @@ class DeclaredProcessTest(unittest.TestCase):
 
     def test_parts_that_disagree_or_declare_nothing_checkable_name_the_fix(self) -> None:
         from bd_materials import metals, plastics
-        from bd_materials.processes import cast, machined, molded
+        from bd_materials.processes import cast, fdm, machined, molded
 
-        mixed = self._checked(bd.Compound(children=[self._part(metals.aluminum(process=machined()), "a"),
-                                                   self._part(plastics.abs_(process=molded()), "b", 60)]))
-        self.assertFalse(mixed.ok)
-        self.assertEqual([f.code for f in mixed.findings], ["process_mixed"])
-        self.assertIn("machined (a), molded (b)", mixed.findings[0].message)
+        from cad._internal.refused import ArgumentRefused
+
+        # each is the caller's to fix with --process: refused by name (the command's exit 2), never a result
+        with self.assertRaisesRegex(ArgumentRefused, r"machined \(a\), molded \(b\).*give --process"):
+            self._checked(bd.Compound(children=[self._part(metals.aluminum(process=machined()), "a"),
+                                                self._part(plastics.abs_(process=molded()), "b", 60)]))
         for material, said in ((metals.aluminum(process=cast()), r"\(Alu_G6061_T6, cast\) is made by a process no "),
                                (metals.aluminum(), "no part declares one"), (None, "no part declares one")):
-            with self.subTest(said=said), self.assertRaisesRegex(ValueError, said + ".*give --process cnc, sheet"):
+            with self.subTest(said=said), self.assertRaisesRegex(ArgumentRefused, said + ".*give --process cnc, sheet"):
                 self._checked(self._part(material))
         # an option of another process is refused once the declared one is read
-        with self.assertRaisesRegex(ValueError, "--pull is not cnc's.*the parts' declared machined"):
+        with self.assertRaisesRegex(ArgumentRefused, "--pull is not cnc's.*the parts declare machined"):
             self._checked(self._part(metals.aluminum(process=machined())), pull="z")
+        # FDM parts whose layer heights differ: the technology's own, and said
+        parts = [("a", plastics.pla(process=fdm(layer_height_mm=0.2))), ("b", plastics.pla(process=fdm(layer_height_mm=0.3)))]
+        _, resolved, said = manufacturing.declared("step", parts, {})
+        self.assertIsNone(resolved["layer_height"])
+        self.assertIn("the technology's layer height: the parts declare 0.2, 0.3 mm", said["message"])
 
     def test_the_type_side_defers_the_process_to_a_brep_types_read(self) -> None:
         from types import SimpleNamespace
@@ -382,7 +533,7 @@ class DeclaredProcessTest(unittest.TestCase):
         from cad._internal.dfm import processes
 
         self.assertIsNone(manufacturing.options("model", None, {"material": "aluminum"}))
-        for document_type in ("stl", "threemf", "glb", "dxf"):
+        for document_type in ("stl", "threemf", "glb", "step"):  # a mesh has no process to declare; a STEP keeps none
             with self.subTest(document_type=document_type), self.assertRaisesRegex(ValueError, "give --process"):
                 manufacturing.options(document_type, None, {})
         for given, said in (({"units": "cm"}, "an xbf is in millimetres"), ({"rules": "acme"}, "--rules is one of"),
@@ -448,6 +599,16 @@ class SummaryTest(unittest.TestCase):
         # errors come first, then warnings, then the facts
         order = [{"error": 0, "warning": 1, "info": 2}[f.severity] for f in result.findings]
         self.assertEqual(order, sorted(order))
+
+    def test_the_digest_counts_a_process_error_and_an_ok_line_its_warnings(self) -> None:
+        from cad.build123d import cnc, printing, sheet_metal
+
+        block = bd.Box(40, 30, 15); block.label = "block"
+        self.assertTrue(cnc(block, turning=True).summary.endswith("failed: cnc.no_turning_axis x1"))
+        self.assertIn("failed: sheet.not_sheet x1", sheet_metal(block).summary)
+        warned = printing(block, technology="pbf", rules="hubs")
+        self.assertTrue(warned.ok)
+        self.assertRegex(warned.human_lines()[-1], r"^OK block: printing pbf: .* \(1 warning\(s\)\)$")
 
 
 if __name__ == "__main__":

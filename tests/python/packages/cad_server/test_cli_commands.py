@@ -89,7 +89,7 @@ class TheCommandTable(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
         from cad_server.cli.document_types import OPERATIONS
 
-        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": ["--process", "printing"]}
+        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
         for document_type, operation in sorted(OPERATIONS):
             entry = TYPES_TABLE[document_type]
             if not entry.has_file:

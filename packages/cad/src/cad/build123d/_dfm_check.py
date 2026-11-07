@@ -41,7 +41,7 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
 
 def measure(document_type: str, source: Any, process: str, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The report of ``source`` (a STEP's or an xbf's path, a document's id or handle) for ``process``, or
-    ``Unmeasured``."""
+    ``Unmeasured``; ``cad.engine.serve.NotHeld`` for a document id the engine does not hold."""
     return _measured(_dfm_brep.read(document_type, source), document_type, process, options, candidates)
 
 
@@ -66,8 +66,9 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
                      candidates: bool) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """``measure`` with no process given: ``source`` read first, then measured for the process its parts
     declare, its options (``given``, unresolved) resolved for that process (``manufacturing.declared``).
-    The process, the options and the report; ``Unmeasured``, or ``ValueError`` naming the fix for no process
-    declared."""
+    The process, the options and the report; ``Unmeasured``, or ``ArgumentRefused`` naming the fix for no
+    process declared, one no check measures, parts that declare different ones, or an option the declared
+    process does not take; ``cad.engine.serve.NotHeld`` for a document id the engine does not hold."""
     return _declared(_dfm_brep.read(document_type, source), document_type, given, candidates, document_type)
 
 
@@ -80,7 +81,8 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
     from cad._internal.dfm import Unmeasured
 
     if process is None:
-        manufacturing.options("step", None, given, candidates=candidates)
+        # A live shape keeps its parts' materials, as a model's document does (a STEP does not): read as a model's.
+        manufacturing.options("model", None, given, candidates=candidates)
         document = _dfm_brep.parts_of(shape, name=name)
         label = Path(document.name or "shape")
         try:
@@ -99,7 +101,7 @@ def cnc(shape: Any, *, rules: str | None = None, material: str | None = None, ax
         turning: bool = False, tools: str | None = None, stock: str | None = None) -> Any:
     """CNC machining's check of ``shape`` (a build123d ``Shape``; an assembly's every part): a ``CheckResult``
     whose findings are at refs (``plate/face 7``) and whose ``measurements`` is the report -- the options are
-    ``cad.step.check``'s for ``process="cnc"``."""
+    ``cad.step.dfm``'s for ``process="cnc"``."""
     return checked(shape, "cnc", {"rules": rules, "material": material, "axes": axes, "turning": turning,
                                   "tools": tools, "stock": stock})
 

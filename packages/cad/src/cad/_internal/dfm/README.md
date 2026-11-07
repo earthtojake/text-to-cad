@@ -12,7 +12,8 @@ holds (its id or a model's handle), a live build123d shape -- is measured on its
 integration (`cad/build123d/_dfm_<process>.py` over the shared core, `_dfm_brep.py`); a mesh -- an STL, a 3MF,
 a GLB -- by the trimesh integration (`cad/trimesh/_molding.py`, `_printing.py`); a DXF, a sheet's cut file,
 with ezdxf, build123d's own DXF library (`cad/build123d/_dfm_dxf.py`). CNC machining and sheet metal are
-measured on exact geometry alone: a mesh holds no radius, axis or thickness to read, and is refused by name.
+measured on exact geometry alone: a mesh holds no radius, axis or thickness to read, so a mesh type's `dfm`
+takes `molding` and `printing` alone, and a DXF's `sheet` alone (`manufacturing.processes_for`).
 Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`): numpy is the library's one
 required dependency, so neither integration imports the other's.
 
@@ -29,22 +30,38 @@ cannot be made as drawn under that rule) and `warning` where it is a recommendat
 
 ## The process and the options
 
-`--process` names the check. Given none, a STEP, an xbf or a model is checked for the process its parts
-declare: a part's `bd_materials` material carries how it is made (`part.material =
+`--process` names the check, one of the type's: `cnc`, `sheet`, `molding` or `printing` for a model, an xbf
+and a STEP; `molding` or `printing` for an STL, a 3MF and a GLB; `sheet` for a DXF, its default, so `cad dxf
+dfm cut.dxf` alone checks the cut file. Each type's signature (`manufacturing.dfm_for`) holds its processes'
+options alone: the command's choices and flags are the type's, and a mesh's help offers no `--axes`. Given
+none, an xbf or a model is checked for the process its parts declare (a STEP keeps no process: its parts'
+materials are not written to it, so one given none is refused before anything is read): a part's
+`bd_materials` material carries how it is made (`part.material =
 metals.aluminum(process=machined())`, its `.process` an `AppliedProcess`), and `processes.declared` maps the
 route: `machined` is cnc, `molded` molding, `fdm`, `sls`, `mjf`, `slm` and `vat` printing with `--technology`
 fdm, sls, mjf, pbf and sla, an FDM wall's `pitch_mm` its `--layer-height`. A technology or layer height given
-wins over the declared one (a technology given takes its own layer height). Cast and wrought stock have no
-check, and no route is sheet's: those, and parts that declare no process, are refused with the fix (`give
---process cnc, sheet, molding or printing`); a mesh (STL, 3MF, GLB) and a DXF always need `--process`.
+wins over the declared one (a technology given takes its own layer height; parts whose layer heights differ
+take the technology's, and `process_declared` says so). Cast and wrought stock have no check, and no route
+is sheet's: those, parts that declare no process and parts that declare different ones are refused with the
+fix (`give --process cnc, sheet, molding or printing`), the command line's mistake (exit 2); a mesh always
+needs `--process`.
+
+Every option has a kind (`manufacturing.KINDS`): a count is an `int` (never a `bool` or a float: `axes=3.7`
+is refused, not taken as 3), a flag a `bool` (`turning="no"` is refused, not truthy), a length or an angle a
+finite number, a list or a size text. A library call of another kind is refused by name
+(`_common.require_*`), as the command's parser refuses one, before the process's own `validate` judges the
+range.
 
 The options resolve in two steps when the process comes from the parts. `manufacturing.options(type, None,
-...)`, the type side, refuses what holds for every process before anything is read -- a units, a material, a
-rule set no process has, a pull beside `--candidates` -- and answers None; the command then starts the
-integration's environment, which reads the document (`_dfm_brep.read`), takes the declared process
-(`manufacturing.declared`) and resolves the options for it, refusing there an option of another process
-(`--pull` on a machined part) with the declared route named. Given `--process`, every option is resolved and
-refused before the read, as before.
+...)`, the type side, refuses what holds for every process before anything is read -- each option's kind, a
+units, a material, a rule set no process has, a pull beside `--candidates` -- and answers None; the command
+then starts the integration's environment, which reads the document (`_dfm_brep.read`), takes the declared
+process (`manufacturing.declared`) and resolves the options for it, refusing there an option of another
+process (`--pull` on a machined part) with the declared route named. A refusal there comes back to the
+command with its reason (`cad._internal.operation`'s answer carries `reason`: `invalid_argument` for an
+argument refused by name, `not_found` for a document the engine does not hold), so it exits 2 as the same
+refusal does in the command's own process. Given `--process`, every option is resolved and refused before
+the read.
 
 ## The result
 
@@ -59,7 +76,8 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
  "partial": false, "partial_sections": [],
  "rules": {"set", "title", "version", "generic", "note", "context", "evaluated", "failed": [ids], "none_found": [ids],
            "outcomes": [{"rule", "family", "field", "op", "limit", "unit", "severity", "source", "status",
-                         "evaluated", "unmeasured", "failures": [{"value", "location", "xyz"}], "reason"}],
+                         "evaluated", "unmeasured", "failures": [{"value", "location", "xyz"}], "reason",
+                         "variants"}],
            "sources": [{"id", "publisher", "title", "url", "accessed"}]}}
 ```
 
@@ -70,32 +88,49 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   part of an assembly is measured once, placed where its first occurrence stands.
 - **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and an error finding
   (`measurement_failed`); the other families are still reported.
-- **Every rule has an outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
+- **Every rule id has one outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
   wall under the family's threshold -- `passed` with `evaluated` 0, reason `none found`, listed in
-  `rules.none_found`), `failed` (each failing item's value, place and the limit), `not_evaluated` (the set
+  `rules.none_found`; with some items lacking the figure, reason `N item(s) not measured`), `failed` (each
+  failing item's value, place and the limit), `not_evaluated` (the set
   gives no limit for this material or technology, or the family or the figure was not measured: unverified)
   or `not_applicable` (the rule is for another context -- turning, a gauge, a cut file -- or reads a figure
   this source's items do not carry, which another rule judges). A set whose rules come in variants by one
   key (`RuleSet.selector`, printing's `technology`) and has no variant of a rule id for the part's value
   leaves that rule `not_evaluated`, not `not_applicable`: a technology the set has no figure for is unverified,
   and a set that evaluated nothing says so (`rules_none_evaluated`, a warning) instead of reading as a pass. A figure that was not
-  measured is never a pass. The record holds every failure; the findings are fewer, what a reader acts on:
-  failures of one rule at one ref are one finding (`and N more at this ref`), a warning on a figure that
-  already fails an error at the same place (the recommendation beside the feasibility limit it exceeds: `draft`
-  beside `draft_min`) is left to the record, at most eight refs of one rule are findings and the rest are counted
-  in one more. Findings come errors first, then warnings, then the facts and assumptions (info).
+  measured is never a pass. A rule id that comes in variants -- by the context (a tool given or not), by
+  its items (acute or square corners), a minimum and a maximum of one figure -- answers once
+  (`rules._one_per_rule`): the variants that judged are its outcome, merged where several did (`failed` if
+  any failed, each item counted once, each failure with its own `op`, `limit` and `severity` where they
+  differ, listed in `variants`), a variant that applied but had no limit said in `reason`; where none judged,
+  the one not evaluated, else one `not_applicable` (or `not_evaluated` for a selector value the set lacks).
+  The record holds every failure; the findings are fewer, what a reader acts on:
+  failures of one rule at one ref are one finding (`and N more at this ref`), a warning on a figure of an
+  item that already fails an error (the recommendation beside the feasibility limit it exceeds: `draft`
+  beside `draft_min`) is left to the record, at most eight refs of one rule are findings and the rest are
+  counted in one more, at `measurements.rules` with the rule's fix. Findings come in this order: what puts
+  every other figure in doubt first, whatever its severity (`not_watertight`, `not_sound`,
+  `measurement_failed`, `units_suspect`: `manufacturing._FIRST`), then errors, then warnings, then the facts
+  and assumptions (info).
+- **The summary** of a failed check is `<process> <what was measured>; failed: <code> xN, ...`: each rule
+  that failed with its count of error failures (the record's, not the findings shown), then every other
+  error by its code (`cnc.no_turning_axis`, `sheet.not_sheet`, `measurement_failed`). A check that passed
+  says `OK <source>: <process> <what was measured>`, and `(N warning(s))` at its end where it warned.
 - **Items** are sorted worst first and capped (a few hundred), with the family's `count`. Every figure is
   finite: the result is JSON (`allow_nan=False`), and a report that is not is `not_finite`.
 - **The material** is `--material`'s, else the one the parts declare (`part.material = metals.aluminum()`, a
   `bd_materials` material the document keeps: its family or its name's stem, `materials.declared`), when every
-  part that declares one names the same material of the table (`material_declared`, info); parts that disagree
-  are judged as with none (`material_mixed`, info), as is a material the table has no name for.
+  part that declares one names the same material of the table (`material_declared`, info; a `--material`
+  given beside another declared one is said there too); parts that disagree are judged as with none
+  (`material_mixed`, info), as is a material the table has no name for.
 - **The process** is `--process`'s, else the one the parts declare (above): `process_declared` (info) says
   what was read and from which material (`process cnc, read from the part's declared material
   (Alu_G6061_T6, machined): give --process to check another`), with the technology and layer height taken;
   each body's `process` is its declared route. Parts that declare different routes are not measured: the
-  result fails with one error, `process_mixed`, naming each route and its parts.
-- The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target`, a
+  call is refused (`ArgumentRefused`, exit 2), naming each route and its parts, as one that declares none is.
+- The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target` (the
+  command refuses one first, `not_found`), a document id the engine does not hold its `NotHeld` (the
+  command's `not_found`, exit 2), a
   document with no part that has a face `document_empty`; a part with no face beside others (an empty
   label an exporter left) is skipped and said, `empty_parts` (info).
 

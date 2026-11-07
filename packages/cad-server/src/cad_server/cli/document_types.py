@@ -9,9 +9,13 @@ wrote; ``dfm``, ``drc``, ``erc`` and ``validate`` their findings (each with a se
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
-check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
-<id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
+check, and a DXF's the check of a sheet's cut file: ``cad stl dfm part.stl --process molding --pull -z``,
+``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
+a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
+mesh's (STL, 3MF, GLB) the trimesh integration's, for molding or printing. Each runs here when this
+environment holds its integration, else in the environment that does -- for build123d the installation's
+base, for trimesh the one the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``) --
+and a call refused there is the command line's mistake as it is here (exit 2). A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
 environment of ``cad[kicad]``.
@@ -123,7 +127,7 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
     return run
 
 
-# --- a 3D type's manufacturing check: the trimesh integration's ---------------------------------------
+# --- a 3D type's manufacturing check, and a DXF's: build123d's for a B-rep and a DXF, trimesh's for a mesh ---
 
 
 def pull_value(argv: list[str]) -> list[str]:
@@ -142,11 +146,14 @@ def pull_value(argv: list[str]) -> list[str]:
 
 
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> dfm --process molding|printing``: the library's manufacturing check (``cad.<type>.dfm``),
-    run here when this environment holds the trimesh integration, else in the environment that holds it
-    (``cad_server._internal.integration_env``), its options refused here first, before one is made. A STEP,
-    an xbf or a model given no ``--process`` is checked for the one its parts declare: the options every
-    process shares are refused here, the rest in the integration once it has read the document."""
+    """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
+    type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF --
+    run here when this environment holds the type's integration (build123d for a B-rep and a DXF, trimesh for
+    a mesh), else in the environment that holds it (``cad_server._internal.integration_env``), its options
+    refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
+    its parts declare: the options every process shares are refused here, the rest in the integration once
+    it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
+    keeps no process, so one given none is refused here."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad_server._internal import integration_env
@@ -178,8 +185,9 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
 
     def measured() -> CheckResult:
         given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
-        # No --process on a B-rep type: the shared options are refused here, the process's in the integration,
-        # which reads the document, takes its parts' declared process and resolves the rest for it.
+        # No --process on a model or an xbf: the shared options are refused here, the process's in the
+        # integration, which reads the document, takes its parts' declared process and resolves the rest for it;
+        # what it refuses comes back with its reason (``integration_env.Refused``), the command line's mistake.
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
         python = integration_env.environment(integration, said)
         found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)

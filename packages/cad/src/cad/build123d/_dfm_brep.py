@@ -183,7 +183,9 @@ def _loaded(loaded: Any) -> Document:
 
 
 def read(document_type: str, source: Any) -> Document:
-    """The parts of a STEP or an xbf (a path), or of a document the engine holds (its id or handle)."""
+    """The parts of a STEP or an xbf (a path), or of a document the engine holds (its id or handle);
+    ``Unmeasured`` for one that does not read, and the engine's ``NotHeld`` as it is for an id it does not hold:
+    the caller's mistake (the command's ``not_found``), not the check's failure."""
     from cad.engine.document import Loaded
     from cad.engine.ids import is_id
 
@@ -201,6 +203,8 @@ def read(document_type: str, source: Any) -> Document:
             export(source, written, progress=False)  # the engine writes the document it holds
             return _loaded(Loaded(written))
         except Exception as error:  # noqa: BLE001
+            if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
+                raise
             raise Unmeasured("document_unreadable", f"failed to read the document: {error}") from None
 
 

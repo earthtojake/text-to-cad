@@ -94,7 +94,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         """An option's value it refuses is the command line's mistake, exit 2, named by its flag: a choice
         its parser does not take (``usage``), or a value the check refuses (``invalid_argument``)."""
         for argv, words, reason in (
-                ((str(self.box),), "give --process cnc, sheet, molding or printing", "invalid_argument"),
+                ((str(self.box),), "give --process molding or printing", "invalid_argument"),
                 ((str(self.box), "--process", "casting"), "argument --process: invalid choice: 'casting'", "usage"),
                 ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's",
                  "invalid_argument"),
@@ -142,17 +142,38 @@ class ManufacturingCheckCommand(unittest.TestCase):
 
     def test_without_trimesh_here_it_runs_in_the_integrations_environment(self) -> None:
         """The command's environment lacks the integration: the check runs in the one that holds it (this
-        interpreter stands in for it), answering exactly as it does here."""
+        interpreter stands in for it), answering exactly as it does here, a refusal before one is made."""
+        from build123d import Box, export_step
+
+        step = self.folder / "box.step"
+        export_step(Box(20, 20, 15), str(step))
         argv = (str(self.box), "--process", "molding", "--candidates", "--json")
         _code, here, _ = _run("stl", *argv)
         with mock.patch.object(integration_env, "carries", return_value=False), \
                 mock.patch.object(integration_env, "environment", return_value=sys.executable) as made:
             code, there, _ = _run("stl", *argv)
             refused, said, _ = _run("stl", str(self.box), "--process", "molding", "--samples", "3", "--json")
+            # a STEP keeps no process: refused here, not after the file is read there
+            unasked, kept, _ = _run("step", str(step), "--json")
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(there), json.loads(here))
         self.assertEqual((refused, made.call_count), (2, 1), "a refusal makes no environment")
         self.assertIn("--samples is not molding's", json.loads(said)["error"])
+        self.assertEqual((unasked, json.loads(kept)["reason"]), (2, "invalid_argument"))
+        self.assertIn("a STEP keeps no process: give --process cnc", json.loads(kept)["error"])
+
+    def test_each_type_offers_its_processes_and_their_flags(self) -> None:
+        from cad_server.cli.document_types import build_parser
+
+        def flags(document_type: str) -> dict:
+            return {action.dest: action for action in build_parser(document_type, "dfm")._actions}  # noqa: SLF001
+
+        stl, dxf = flags("stl"), flags("dxf")
+        self.assertEqual((list(stl["process"].choices), "axes" in stl, "pull" in stl), (["molding", "printing"], False, True))
+        self.assertEqual((list(dxf["process"].choices), dxf["process"].default, "pull" in dxf), (["sheet"], "sheet", False))
+        code, _, err = _run("stl", str(self.box), "--process", "cnc")
+        self.assertEqual(code, 2)
+        self.assertIn("argument --process: invalid choice: 'cnc'", err)
 
     def test_exact_geometry_runs_in_the_base_and_a_mesh_in_trimeshs(self) -> None:
         """A STEP's check is build123d's, whose environment is the base the engine's kernel runs in: no second
@@ -201,9 +222,10 @@ class ModelTest(unittest.TestCase):
             self.assertIn("use cad model dfm", json.loads(said)["error"])
 
     def test_a_model_given_no_process_is_checked_for_the_one_its_part_declares(self) -> None:
-        """Reads the part's declared process back from the engine's document. DEPENDS ON THE ENGINE ROUND-TRIP:
-        the material's process must survive the xbf (``cad.engine.document``); until it does, the loaded part's
-        ``material.process`` is None and this fails with "no part declares one"."""
+        """Reads the part's declared process back from the engine's document (the material's process survives
+        the xbf: ``cad.engine.document``). What the integration refuses once it has read the document -- an
+        option of another process -- and an id the engine does not hold are the command line's mistakes, exit 2,
+        here and through the integration's environment alike."""
         import os
 
         with tempfile.TemporaryDirectory(prefix="cad-dfm-declared-") as folder:
@@ -219,6 +241,18 @@ class ModelTest(unittest.TestCase):
             self.assertEqual((code, payload["measurements"]["process"]), (1, "cnc"))
             codes = {f["code"] for f in payload["findings"]}
             self.assertTrue({"process_declared", "material_declared", "cnc.internal_corner_sharp"} <= codes, codes)
+            unheld = "01234567-89ab-cdef-0123-456789abcdef"
+            cases = (((ident, "--pull", "z"), "invalid_argument", "--pull is not cnc's"),
+                     ((unheld, "--process", "cnc"), "not_found", f"no document {unheld} is held"))
+            answers = {"here": [_run("model", *argv, "--json") for argv, _, _ in cases]}
+            with mock.patch.object(integration_env, "carries", return_value=False), \
+                    mock.patch.object(integration_env, "environment", return_value=sys.executable):
+                answers["there"] = [_run("model", *argv, "--json") for argv, _, _ in cases]
+            for where, answered in answers.items():
+                for (argv, reason, words), (code, out, _) in zip(cases, answered, strict=True):
+                    with self.subTest(where=where, argv=argv):
+                        self.assertEqual((code, json.loads(out)["reason"]), (2, reason))
+                        self.assertIn(words, json.loads(out)["error"])
 
 
 if __name__ == "__main__":

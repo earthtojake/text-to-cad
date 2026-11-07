@@ -24,7 +24,9 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
-__all__ = ["Failed", "call", "carries", "environment", "found"]
+from cad_server._internal.cli_errors import REASONS, Failure
+
+__all__ = ["Failed", "Refused", "call", "carries", "environment", "found"]
 
 # The library's runner of one operation (``cad._internal.operation``).
 RUNNER = "cad._internal.operation"
@@ -32,6 +34,16 @@ RUNNER = "cad._internal.operation"
 
 class Failed(RuntimeError):
     """The operation's environment could not be made, or its runner gave no answer: said in one line."""
+
+
+class Refused(Failed, Failure):
+    """The operation refused its call in the integration's process -- an argument refused by name, a document
+    the engine does not hold -- said by the reason the runner gave (``invalid_argument``, ``not_found``): the
+    command line's mistake, exit 2, as the same call refused in this process is. A ``Failure`` the command's
+    report says as it is, and a ``Failed`` still to a caller that catches those."""
+
+    def __init__(self, words: str, reason: str) -> None:
+        Failure.__init__(self, words, reason)
 
 
 def carries(integration: str) -> bool:
@@ -83,7 +95,8 @@ def environment(integration: str, told: Callable[[str], None], *, engine: bool =
 
 def call(python: str, document_type: str, operation: str, args: list[Any], kwargs: dict[str, Any]) -> dict[str, Any]:
     """``cad.<document_type>.<operation>(*args, **kwargs)`` run by ``python`` (``RUNNER``): its result as
-    data. The operation's own failure is raised as a ``Failed`` in its words."""
+    data. The operation's own failure is raised as a ``Failed`` in its words; a refusal of its call, with
+    the reason the runner gave it (``cad._internal.operation.REASONS``), as a ``Refused`` of that reason."""
     request = json.dumps({"type": document_type, "operation": operation, "args": args, "kwargs": kwargs})
     try:
         done = subprocess.run([python, "-P", "-m", RUNNER], input=request, stdout=subprocess.PIPE, stderr=None,
@@ -98,5 +111,8 @@ def call(python: str, document_type: str, operation: str, args: list[Any], kwarg
     if not isinstance(answer, dict) or not ({"result", "error"} & set(answer)):
         raise Failed(f"the {document_type} {operation} gave no answer (its Python exited {done.returncode})")
     if "error" in answer:
+        reason = answer.get("reason")
+        if isinstance(reason, str) and REASONS.get(reason) == 2:  # the caller's mistake, never the work's
+            raise Refused(str(answer["error"]), reason)
         raise Failed(str(answer["error"]))
     return answer["result"]
