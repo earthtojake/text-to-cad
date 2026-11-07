@@ -62,6 +62,7 @@ jobs:
     outputs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
+      fea: ${{ steps.select.outputs.fea }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -239,6 +240,50 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
+        shell: bash
+
+  # The stress study (cad <type> fea) with its integrations installed as on a person's computer: netgen,
+  # cad[netgen], meshes, and CalculiX, the program the person installs, solves. Its suite
+  # (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and materials,
+  # the solves against hand calculations, assemblies, and the command through the library's runner of one
+  # operation. Only the study's code, its suite and runner, and the modules it reads through select it (and a
+  # full run). Linux only: the stack is the same wheels everywhere, and the solves are CPU-bound. About
+  # 2 minutes: 225 tests in 70 s locally, beside netgen (~10 MB) and calculix-ccx from apt.
+  fea:
+    name: fea
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      # The netgen integration's extra, with netgen pinned to the version the accuracy tests' margins were
+      # measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the floor.
+      - name: Install the netgen integration
+        run: uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen]" "netgen-mesher==6.2.2608"
+
+      # CalculiX solves every study and is installed as a person installs it; a missing or old
+      # one fails here by name rather than as every solve skipped.
+      - name: Install CalculiX
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q calculix-ccx
+          # ccx -v prints its version and exits non-zero; check what it says.
+          { ccx -v || true; } | grep "This is Version"
+
+      - name: Run the fea suite
+        run: scripts/test/test-fea.sh
         shell: bash
 
   core-js:

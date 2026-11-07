@@ -25,8 +25,8 @@ from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
     "model": ("export", "snapshot", "inspect", "dfm"),
-    "xbf": ("export", "snapshot", "inspect", "dfm"),
-    "step": ("export", "snapshot", "inspect", "dfm"),
+    "xbf": ("export", "snapshot", "inspect", "dfm", "fea"),
+    "step": ("export", "snapshot", "inspect", "dfm", "fea"),
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
@@ -187,7 +187,7 @@ class TheCommandTable(unittest.TestCase):
         code, out, err = _run(["step", "exprt", "--json"])
         self.assertEqual((code, err), (2, ""))
         self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
-            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm; "
+            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, fea; "
             "'cad step --help' says what each does")})
         self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
         code, out, err = _run(["stl"])

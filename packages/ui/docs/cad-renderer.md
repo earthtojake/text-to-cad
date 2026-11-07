@@ -472,6 +472,11 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
 - **Display**: `viewFeaturesForKind("glb", { parts, explodeParts })`: Solid and Clip, Parts where
   the file has several meshes, and Explode where it has two or more rigid nodes that draw
   (`explodeParts`); Preview draws Render.
+- **An FEA result** (a mesh a stress study's solve wrote, `cad step fea --study`) is drawn by its own surface
+  over the same shell (`glb/FeaSurface.jsx`, in the FEA viewer's chunk, `glb/feaView.jsx`, which a plain GLB
+  never fetches): the same tools, Select picking the result's faces, with Study (and an assembly's Parts)
+  as tabs of the view's panel, the colour bar and the study's markers on the model. Its layout is the viewer's own, the same
+  for every result: the file carries no view. See `settings-ui.md`, An FEA result.
 - **Tools** (`glb/tools.js`): **Select** (in hand as the file opens), **Pencil**, **Shapes**,
   **Measure**, **Explode** (several parts only) and **Clip**. Select picks a NODE: the glTF
   node a mesh belongs to, marked on load (`userData.gltfNode`, `glbMeshData.js`), named
@@ -849,7 +854,7 @@ as showing again a file the page left restores that file's:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a flat view's (a board's, a schematic's, a drawing's) plane transform with the pane it was framed in (`kit/viewport/flatView.js`), placed on the pane it opens in by what it shows, and exactly itself on a pane of that size. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, the person's alone: not a pick's reveal's nor an isolation's; hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, the person's alone: not a pick's reveal's nor an isolation's; hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). An FEA result: `fea` (the field, the deformation, the load and the markers' gate) against its fields and scale. Any other GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
