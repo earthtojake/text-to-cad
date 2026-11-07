@@ -91,6 +91,12 @@ trimesh = [
   "scipy>=1.14,<2",
   "networkx>=3.2,<4",
 ]
+# The xcaf_pmi integration's extra: xcaf-pmi, Paul Fremantle's AP242 writer (Apache-2.0), with quiddity under
+# it. Pinned to a commit: it is on no index yet, and a direct reference can't be published to PyPI, so
+# this waits on a release of xcaf-pmi before cad can ship with it. Its OCP pin (>=8.0,<8.1) is the kernel's.
+xcaf_pmi = [
+  "xcaf-pmi @ git+https://github.com/pzfreo/xcaf-pmi@fa974118dad3acfa74871ae51203062d3bcf2871",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

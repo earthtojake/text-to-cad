@@ -57,7 +57,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `xcaf_pmi`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -619,6 +619,8 @@ src/cad/
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_molding,
                          #   _printing), and the dfm every 3D type runs with them (_check)
+  xcaf_pmi/              # the xcaf_pmi integration: xcaf-pmi, Paul Fremantle's AP242 writer, as
+                         #   `cad run xcaf-pmi` runs it (_command)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,

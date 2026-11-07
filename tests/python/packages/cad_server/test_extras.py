@@ -300,6 +300,8 @@ class ChoosingTest(unittest.TestCase):
 
         self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
         self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("xcaf-pmi", "to-step", "a.xbf").integrations, ("xcaf_pmi",),
+                         "xcaf-pmi is the xcaf_pmi integration's")
         self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
                          "an explicit --with still works")
         self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))
