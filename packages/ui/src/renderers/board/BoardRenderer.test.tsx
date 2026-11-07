@@ -1097,7 +1097,7 @@ it("2D/3D is one view: the strip, the panel and the corner stay the same mounted
   again.dispose();
 });
 
-it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key; Flip is lit from the bottom; ⇧F flips as F still fits", async () => {
+it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key, neither ever in a pressed fill; ⇧F flips as F still fits", async () => {
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
@@ -1129,15 +1129,16 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
     paths: [...svg.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('fill-opacity')]) }; };
   const top = glyph();
   expect(top.paths.map(([, fill]) => fill)).toEqual(['0.85', null]);
-  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it, lit, its hint the way back.
+  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it by its icon alone, as
+  // Projection shows its state (no pressed fill), its hint the way back.
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
   expect(frames.at(-1)).toEqual(moved);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'secondary'], 'View from top⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'ghost'], 'View from top⇧F']);
   // The same drawing mirrored top to bottom, so the two sides weigh the same: the top's set 0.75 down, the bottom's 0.75 up.
   expect([top.place, glyph().place, glyph().paths]).toEqual(['translate(0 0.75)', 'matrix(1 0 0 -1 0 23.25)', top.paths]);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.side).toBe('bottom'));
-  // F is the fit, still, not a flip; ⇧F again, and the top is back, unlit.
+  // F is the fit, still, not a flip; ⇧F again, and the top is back.
   fireEvent.keyDown(canvas, { key: 'f', code: 'KeyF' });
   await waitFor(() => expect(frames.at(-1)).toEqual(fitted));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom' });
@@ -1163,7 +1164,7 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   expect(viewport3d.calls).toEqual(['setPerspective [10,40,-30]']);
   expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   report(true);
-  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   // Turned back over by hand (an orbit past the board's plane): the icon follows.
   report(false);
   expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
@@ -1181,7 +1182,7 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   cleanup();
   const again = await open('blinky.kicad_pcb', { state: stored });
   await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
-  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
+  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   again.dispose();
 });
 

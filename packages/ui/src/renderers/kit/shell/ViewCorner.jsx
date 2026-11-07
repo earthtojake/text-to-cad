@@ -23,7 +23,7 @@ import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
  * carrying the strip's surface itself, without the strip's border and shadow (`VIEW_CORNER_SURFACE_CLASS`:
  * the popover's colour at 90% under a small blur): one 24px square each, with no box round it (Display's
  * menu button, Home; a state the view is looked at in, Projection or a view's own, its state button,
- * `StateButton.jsx`, whose icon is the state on screen), its hover, open, pressed and lit fills states of
+ * `StateButton.jsx`, whose icon is the state on screen), its hover, open and pressed fills states of
  * that one surface, and its tooltip; the zoom pill is one 24px row of them on the same surface. Over an
  * empty canvas they stand a step off it, as the strip does; over the picture or the model the fill,
  * nearly opaque and blurred, keeps their glyphs at full contrast. They stand 4px apart; a column's
@@ -68,7 +68,7 @@ const CORNER_TILE_CLASS = cn(STRIP_BUTTON_CLASS, "aria-expanded:bg-sidebar-accen
 
 /**
  * A corner button's classes, for a `ToolbarButton` (or a trigger built on one): the strip's tile carrying the
- * corner's surface, one 24px square with nothing round it; hovered, open, pressed or lit, the strip's fill takes
+ * corner's surface, one 24px square with nothing round it; hovered, open or pressed, the strip's fill takes
  * that surface's place.
  */
 export const VIEW_CORNER_BUTTON_CLASS = cn(CORNER_TILE_CLASS, VIEW_CORNER_SURFACE_CLASS);

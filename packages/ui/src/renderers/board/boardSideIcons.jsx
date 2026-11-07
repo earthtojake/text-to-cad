@@ -2,7 +2,7 @@
 // seen from solid. From the top the upper layer is solid over the lower one's edge; from the bottom the same
 // glyph mirrored top to bottom, the solid layer under. Drawn at Lucide's line (2), as the corner's other glyphs
 // are, so the two states carry the same weight as each other and as their neighbours; the solid layer is the
-// line's colour at 85%, its own edge the line itself, so it reads as solid lit or not, light or dark.
+// line's colour at 85%, its own edge the line itself, so it reads as solid hovered or not, light or dark.
 //
 // Each is set 0.75 units off the grid's middle, toward its outline layer: the solid layer holds most of the ink,
 // and centred by its box the glyph's weight sat 1.4 units off the button's middle (0.8px at 14px); this puts it

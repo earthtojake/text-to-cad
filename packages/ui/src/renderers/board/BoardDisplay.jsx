@@ -134,13 +134,13 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
  * - **2D/3D**, the board drawn flat or as a board in 3D: the view's state button (`kit/shell/StateButton.jsx`,
  *   Projection's), a square while it is flat and a box in 3D, its name the state ("View: 2D"), its tooltip
  *   what a press does ("Switch to 3D", and its key, 3); on a phone More's row 3D view, ticked in 3D;
- * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the same state button, the board as
- *   two stacked layers, the side it is seen from solid (`boardSideIcons.jsx`), lit in the strip's pressed
- *   fill while it is seen from the bottom (the view people lose track of), its name the side ("Side: Bottom"),
- *   its tooltip what a press does ("View from top", and its key, ⇧F). From the bottom the board is mirrored, its back
+ * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the same state button, like
+ *   Projection with no selected state, in no pressed or lit fill from either side: the board as two stacked
+ *   layers, the side it is seen from solid (`boardSideIcons.jsx`), its name the side ("Side: Bottom"), its tooltip what a press does
+ *   ("View from top", and its key, ⇧F). From the bottom the board is mirrored, its back
  *   layers on top; in 3D the camera turns over to the other side (`onSide`), and the button follows the
  *   camera, whichever side of the board's plane it is on. On a phone More's row View from bottom, ticked
- *   while it is.
+ *   while it is (a menu's idiom, not the button's).
  *
  * The rest of how the board is drawn — its layers and its layer display — is the Layers tab's
  * (`LayersSection.jsx`), opened now and then.
@@ -176,7 +176,7 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
     }] : []),
     { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, tile: null, onSelect: flip,
       corner: <ViewCornerState icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
-        tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT} lit={below}
+        tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
         disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} /> }
   ];
 }

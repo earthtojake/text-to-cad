@@ -294,9 +294,10 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
       return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top',
         flip: [button.dataset.boardSide, button.getAttribute('aria-label'), button.dataset.variant] };
     }));
-  const top = { camera: 'top', flip: ['top', 'Side: Top', 'ghost'] }, bottom = { camera: 'bottom', flip: ['bottom', 'Side: Bottom', 'secondary'] };
+  // Like Projection, Flip's icon says its side, and neither side is drawn in a pressed fill.
+  const top = { camera: 'top', flip: ['top', 'Side: Top', 'ghost'] }, bottom = { camera: 'bottom', flip: ['bottom', 'Side: Bottom', 'ghost'] };
   assert.deepEqual(await rest(), top, 'Home, over the board');
-  // Flip: the camera turned over the board, and the button follows it under, lit; not one corner box moves.
+  // Flip: the camera turned over the board, and the button follows it under; not one corner box moves.
   await pane.locator('[data-board-side]').click();
   await page.waitForFunction(() => window.__cadCamera?.().position[2] < 0);
   assert.deepEqual(await rest(), bottom, 'Flip turned the camera under the board');
