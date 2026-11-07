@@ -1,4 +1,4 @@
-"""The isotropic material a ``cad fea`` study solves each part with.
+"""The isotropic material a stress study (``cad <type> fea``) solves each part with.
 
 A part's material is the model's own (``part.material = bd_materials.metals.aluminum()``), as the document holds
 it: its modulus, Poisson's ratio and yield strength are native ``Range`` values, and a study reads the low end of

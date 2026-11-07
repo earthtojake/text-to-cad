@@ -242,9 +242,13 @@ jobs:
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
 
-  # The solves need CalculiX, which no other job installs: without it every test_fea*.py skips
-  # its solves. Linux only: the stack is the same
-  # wheels everywhere, and the solves are CPU-bound.
+  # The stress study (cad <type> fea) with its integrations installed as on a person's computer: netgen,
+  # cad[netgen], meshes, and CalculiX, the program the person installs, solves. Its suite
+  # (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and materials,
+  # the solves against hand calculations, assemblies, and the command through the library's runner of one
+  # operation. Only the study's code, its suite and runner, and the modules it reads through select it (and a
+  # full run). Linux only: the stack is the same wheels everywhere, and the solves are CPU-bound. About
+  # 2 minutes: 225 tests in 70 s locally, beside netgen (~10 MB) and calculix-ccx from apt.
   fea:
     name: fea
     needs: changes
@@ -264,13 +268,13 @@ jobs:
           playwright: "false"
           npm: packages/core
 
-      # netgen is pinned to the version the accuracy tests' margins were measured with (the
-      # round rod's top-fibre stress is +8.6% against 10%); pyproject only sets the users' floor.
-      - name: Pin the mesher
-        run: uv pip install --system --python python "netgen-mesher==6.2.2608"
+      # The netgen integration's extra, with netgen pinned to the version the accuracy tests' margins were
+      # measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the floor.
+      - name: Install the netgen integration
+        run: uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen]" "netgen-mesher==6.2.2608"
 
       # CalculiX solves every study and is installed as a person installs it; a missing or old
-      # one fails here by name rather than as every fea test skipped.
+      # one fails here by name rather than as every solve skipped.
       - name: Install CalculiX
         run: |
           sudo apt-get update -q
@@ -278,8 +282,8 @@ jobs:
           # ccx -v prints its version and exits non-zero; check what it says.
           { ccx -v || true; } | grep "This is Version"
 
-      - name: Run the fea tests
-        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cad/test_fea*.py
+      - name: Run the fea suite
+        run: scripts/test/test-fea.sh
         shell: bash
 
   core-js:

@@ -1,4 +1,5 @@
-"""What the ``cad.fea`` verbs do, end to end."""
+"""What a stress study does, end to end: ``cad.<type>.fea`` (``cad._internal.fea.operation``) calls :func:`setup`
+with no study and :func:`solve_study` with one."""
 
 from __future__ import annotations
 
@@ -11,13 +12,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cad._internal.atomic_replace import replace_atomic, temp_suffix
-from cad._internal.fea.checks import finding, quoted
-from cad.results import FeaFace, FeaFacesResult, FeaPair, FeaPart, FeaPartsResult, FeaResult
+from cad._internal.fea.checks import as_check_finding, finding, quoted
+from cad.results import CheckFinding, FeaFace, FeaPair, FeaPart, FeaResult
 
 if TYPE_CHECKING:
     from cad._internal.fea.document import Document, Occurrence, Selection
 
-__all__ = ["list_assembly_parts", "list_faces", "progress_log", "solve_study"]
+__all__ = ["list_assembly_parts", "list_faces", "progress_log", "setup", "solve_study"]
 
 _AXES = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0), "Z": (0.0, 0.0, 1.0)}
 
@@ -113,11 +114,14 @@ def _rank_word(rank: int) -> str:
     return f"{rank}{suffix} largest"
 
 
-def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = False) -> FeaFacesResult:
+def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = False,
+               document: "Document | None" = None) -> tuple[str, tuple[FeaFace, ...]]:
+    """One part's faces: the part's ref and each face, with the ref a study names it by, its area, centre, surface,
+    normal (a plane's) and a hint. ``occurrence`` names the part where the document holds several."""
     from cad._internal.fea.mesh import face_area_center
 
     logger = Narration(verbose=verbose)
-    document = _open(Path(target))
+    document = document if document is not None else _open(Path(target))
     if occurrence:
         owner = _resolve_one(document, occurrence)
         if owner.kind != "occurrence":
@@ -152,7 +156,7 @@ def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = F
         ))
         for face in faces
     ]
-    return FeaFacesResult(ok=True, document=Path(target), occurrence=owner.ref, faces=tuple(faces))
+    return owner.ref, tuple(faces)
 
 
 # `fea parts` also lists pairs this far apart that the tolerance leaves unbonded,
@@ -174,16 +178,17 @@ def _detect_pairs(parts: list, tolerance: float, reach: float, logger: Narration
     return sorted(found + pressed, key=lambda c: sorted((order[c.a], order[c.b]))), overlaps, len(found)
 
 
-def list_assembly_parts(target: Path, *, verbose: bool = False) -> FeaPartsResult:
-    """The parts and the pairs that touch within the default tolerance a study bonds by; a study that bonds wider gaps
-    sets its own (``contact_tolerance_mm``), and the gaps listed are what it decides by."""
+def list_assembly_parts(target: Path, *, verbose: bool = False, document: "Document | None" = None
+                        ) -> tuple[float, tuple[FeaPart, ...], tuple[FeaPair, ...]]:
+    """The contact tolerance a study bonds by, the parts and the pairs that touch within it; a study that bonds wider
+    gaps sets its own (``contact_tolerance_mm``), and the gaps listed are what it decides by."""
     # Contact detection is OCP, numpy and scipy: no solver needed.
     from cad._internal.fea.assembly import display_names, list_parts
     from cad._internal.fea.study import CONTACT_TOLERANCE_MM as contact_tolerance_mm
 
     logger = Narration(verbose=verbose)
     logger.info("reading the parts")
-    parts = list_parts(_open(Path(target)))
+    parts = list_parts(document if document is not None else _open(Path(target)))
     logger.info(f"read {len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
     name = dict(zip((part.ref for part in parts), display_names(parts)))
     found, overlaps, near = _detect_pairs(parts, contact_tolerance_mm, max(contact_tolerance_mm, _NEAR_MISS_MM), logger)
@@ -198,10 +203,39 @@ def list_assembly_parts(target: Path, *, verbose: bool = False) -> FeaPartsResul
                 overlap_mm3=round(o.volume_mm3, 4))
         for o in overlaps
     ]
-    return FeaPartsResult(
-        ok=True, document=Path(target), contact_tolerance_mm=contact_tolerance_mm, pairs=tuple(pairs),
-        parts=tuple(FeaPart(ref=p.ref, name=p.name, volume_mm3=round(p.volume_mm3, 4)) for p in parts),
-    )
+    return (contact_tolerance_mm, tuple(FeaPart(ref=p.ref, name=p.name, volume_mm3=round(p.volume_mm3, 4)) for p in parts),
+            tuple(pairs))
+
+
+def setup(target: Path, *, occurrence: str | None = None, verbose: bool = False) -> FeaResult:
+    """A study's setup, before one is written, and nothing written: the parts and the pairs that touch (each
+    overlapping pair a warning: real parts can't, and a study does not bond them), and the faces of one part -- the
+    one part of a document of one, or ``occurrence`` -- with the refs a study names them by. A document of several
+    parts with no ``occurrence`` lists no faces, and says how to list them."""
+    from cad._internal.fea.checks import overlapping_parts
+
+    document = _open(Path(target))
+    tolerance, parts, pairs = list_assembly_parts(target, verbose=verbose, document=document)
+    owner, faces = "", ()
+    findings: list[CheckFinding] = []
+    if occurrence or len(parts) == 1:
+        owner, faces = list_faces(target, occurrence=occurrence, verbose=verbose, document=document)
+    else:
+        findings.append(CheckFinding("info", "faces_of_one_part",
+                                     f"the document holds {len(parts)} parts: name one with --occurrence (occurrence=) "
+                                     "to list its faces", ", ".join(part.ref for part in parts[:4])
+                                     + (" ..." if len(parts) > 4 else "")))
+    findings += [as_check_finding(overlapping_parts(*pair.between, pair.overlap_mm3)) for pair in pairs
+                 if pair.type == "overlapping"]
+    bonded = sum(1 for pair in pairs if pair.type == "bonded")
+    summary = (f"{_display_name(target)}: {len(parts)} part{'' if len(parts) == 1 else 's'}, {bonded} bonded "
+               f"pair{'' if bonded == 1 else 's'}" + (f"; {len(faces)} faces of {owner}" if faces else ""))
+    return FeaResult(ok=True, path=Path(target), findings=tuple(findings), summary=summary, occurrence=owner,
+                     contact_tolerance_mm=tolerance, parts=parts, pairs=pairs, faces=faces)
+
+
+def _display_name(path: Path) -> str:
+    return Path(path).name
 
 
 @dataclasses.dataclass
@@ -472,7 +506,9 @@ class _NotConnected(Exception):
 
 def _unsolved(document: Path, occurrence_ref: str, findings: list[dict]) -> FeaResult:
     """The result of a study that was stopped before the solve, by errors a person fixes in the study."""
-    return FeaResult(ok=False, document=document, occurrence=occurrence_ref, glb=None, findings=tuple(findings))
+    return FeaResult(ok=False, path=document, occurrence=occurrence_ref,
+                     findings=tuple(as_check_finding(found) for found in findings),
+                     summary=f"not solved: {_display_name(document)}")
 
 
 def _mesh_assembly(mesh_assembly, doc, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None, log, refine: float = 1.0, **mesh_options):
@@ -839,6 +875,13 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
     # ok is the validators' one rule: an error blocks. A part that yields, or misses a check, is a correct result of a
     # part unfit to use: its GLB is written, and the command exits 1 (README, "Finite element analysis").
     ok = not any(finding["severity"] == "error" for finding in findings)
-    return FeaResult(ok=ok, document=document, occurrence=occurrence_ref, glb=glb_path, vtu=vtu_path,
-                     summary=summary, mesh=mesh_info, timings=timings, warnings=tuple(warnings), findings=tuple(findings),
-                     **reported)
+    # Every finding as a check says it; a warning the solve gave beside them (a finer solve that failed) is one too.
+    said = (*(as_check_finding(found) for found in findings),
+            *(CheckFinding("warning", "solver_note", str(warning)) for warning in warnings))
+    reported["named_faces"] = reported.pop("faces")
+    weakest = f"weakest part '{summary['weakest_part']}', " if summary.get("weakest_part") else ""
+    line = (f"solved {occurrence_ref} of {_display_name(document)}: {weakest}peak {summary.get('max_von_mises_MPa')} MPa, "
+            f"safety factor {summary.get('safety_factor')}")
+    return FeaResult(ok=ok, path=document, findings=said, summary=line,
+                     measurements={**summary, "mesh": mesh_info, "timings": timings, **reported},
+                     occurrence=occurrence_ref, written=tuple(path for path in (glb_path, vtu_path) if path is not None))

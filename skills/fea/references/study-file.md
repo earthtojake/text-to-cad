@@ -118,7 +118,7 @@ Face references are the engine's refs, the ones the Viewer copies and `cad inspe
 `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
 face the document names is named by its name (`bracket/f:plate.relief.3`). A reference the user
 selected arrives after its document's path (`/work/bracket.step#bracket/face 17`); both forms are
-accepted, and the path must name the document being solved. `cad fea faces part.step` prints every face
+accepted, and the path must name the document being solved. `cad step fea part.step` (no study: the setup) prints every face
 with its area, centre, surface type and a hint. In a one-part study every face must belong to the
 same part occurrence (an assembly's may be on any part).
 
@@ -128,7 +128,7 @@ face's number can change (a face the document names keeps its name while its fea
 ## Assemblies
 
 A document of several parts is solved as an assembly, bonded where parts touch. Run
-`cad fea parts assembly.step` first to see the parts and the pairs.
+`cad step fea assembly.step` (the setup) first to see the parts and the pairs.
 
 ```json
 {
@@ -153,7 +153,7 @@ A document of several parts is solved as an assembly, bonded where parts touch. 
   and slide, and bolts, are not in this version.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap within it is closed to
   bond the pair, and so is an overlap no thicker than it (an interference; a `gap_closed` finding
-  says which). A thicker overlap is never bonded. It is set here alone: `cad fea parts` lists
+  says which). A thicker overlap is never bonded. It is set here alone: the setup lists
   against the 0.1 mm default and prints each near miss's gap, which is what to set it from.
 - Faces: `post/face 23` is face 23 of the part `post`; faces may be on any part. A face that
   another part only partly covers (a plate's top with a post standing on it) holds or loads its
@@ -219,21 +219,23 @@ or key. A failing displacement check is an error finding ("'Tip sag' moves 2.1 m
 
 ## What comes out
 
-`cad fea solve part.step OUT` writes the GLB `OUT` names (which must end in `.glb`), and nothing
-else unless asked:
+`cad step fea part.step --study study.json --out OUT` writes the GLB `OUT` names (which must end in
+`.glb`), and nothing else unless asked:
 
 - `OUT`: the boundary surface, deformed and coloured by von Mises (blue low, red high); the value
   itself rides along as the `_VON_MISES` vertex attribute, and the mesh `extras` carry the field,
   units, range and deformation scale, the `findings` and `checks`; for an assembly also `parts`,
   `connections` and a per-vertex `_PART` index beside `_FACE`.
 
-The numbers are the result's (`--json`): the study as given, the material, the resolved faces, the
-summary (max von Mises nodal and at the integration points, safety factor, max displacement and its
+The result (`--json`) is a check's: `ok`, the document (`path`), `findings` (each with its
+`severity`, `code`, `message`, `location` and `hint`), `written` (the GLB, then the VTU) and
+`measurements`, the numbers: the study as given (`study`), the material, the resolved faces
+(`named_faces`), the summary's figures at its top level (max von Mises nodal and at the integration points, safety factor, max displacement and its
 location, applied and reaction forces; for an assembly also `parts`, one entry per part with its
 material, peak stress, safety factor and displacement, and the weakest part's name and peak; and
 `checks`, each check judged), per-fixture reactions, mesh statistics (naming the mesher and the
 solver, `"solver": "calculix 2.23 (C3D10)"`, and `straightened`, the elements made straight so
-CalculiX could solve them: [Mesh](linear-static.md#mesh)), timings and warnings, the `findings`, and `refined`:
+CalculiX could solve them: [Mesh](linear-static.md#mesh)), timings, and `refined`:
 the first and the finer solve's element size and peak when the run solved twice, else `null`. For
 an assembly it also records `connections` (each joint: parts, type, area, gap, `interference_mm`
 when the parts overlapped by no more than the tolerance and were bonded, interface faces) and
@@ -249,7 +251,9 @@ not balance the applied load is such a failure: it is refused, never written wit
 `ok` (and the exit code) follow the validators' rule: an error blocks. A result with an error
 finding (it yields, a check fails) is `ok: false` and the command exits 1, with the GLB written all
 the same: the solve is right, and the part is unfit to use. A study stopped before the solve (a
-part nothing holds) is `ok: false` with no GLB (`glb: null`). Warnings never block.
+part nothing holds) is `ok: false` with no GLB (`written: []`). Warnings never block.
+
+A note about the run itself (a finer solve that failed, a slow solve) is a `solver_note` warning.
 
 For an assembly the summary mixes two scopes. `yield_MPa` and `safety_factor` are the weakest
 part's (the part named by `weakest_part`, whose own peak is `weakest_part_peak_MPa` at

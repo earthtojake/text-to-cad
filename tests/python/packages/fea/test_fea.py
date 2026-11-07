@@ -12,6 +12,7 @@ to a temporary STEP; nothing under ``models/`` is read.
 from __future__ import annotations
 
 import io
+import dataclasses
 import json
 import math
 import tempfile
@@ -21,6 +22,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from tests.python.support.fea_fixtures import (
+    notes, kinds,
     box_step, class_directory, ends, glb_array, glb_extras, needs_fea, quiet, read_glb, reported, solve, value_error,
 )
 from tests.python.support.fea_fixtures import AL6061_NUMBERS, AL7075_NUMBERS, PLA_NUMBERS, STEEL_NUMBERS  # noqa: E402
@@ -185,15 +187,15 @@ class Mesher(unittest.TestCase):
         import platform
         from unittest import mock
 
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
         real = importlib.util.find_spec
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch("importlib.util.find_spec", lambda name, *a: None if name == "netgen" else real(name, *a)), \
                 mock.patch.object(platform, "system", return_value="Linux"), \
                 mock.patch.object(platform, "machine", return_value="aarch64"):
-            with self.assertRaisesRegex(RuntimeError, r"needs netgen.*not installed.*\(macOS, Linux x86_64 and Windows "
-                                                      r"x86_64\), and this is Linux aarch64"):
+            with self.assertRaisesRegex(RuntimeError, r"meshes with netgen.*add `cad\[netgen\]`.*macOS, Linux x86_64 and "
+                                                      r"Windows x86_64 alone, and this is Linux aarch64"):
                 fea.solve(Path(tmp) / "absent.step", Path(tmp) / "r.glb", study=BASE)
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
@@ -203,9 +205,10 @@ class Mesher(unittest.TestCase):
         from cad.netgen._mesher import NETGEN_PLATFORMS
 
         pyproject = Path(__file__).resolve().parents[4] / "packages" / "cad" / "pyproject.toml"
-        # The kernel's extra: FEA reads the document's B-rep, so it runs where the kernel is.
-        kernel = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["optional-dependencies"]["build123d"]
-        (netgen,) = [d for d in kernel if d.startswith("netgen-mesher")]
+        # The netgen integration's extra, cad[netgen]; the kernel's holds no mesher.
+        extras = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["optional-dependencies"]
+        (netgen,) = [d for d in extras["netgen"] if d.startswith("netgen-mesher")]
+        self.assertFalse([d for d in extras["build123d"] if d.startswith("netgen")])
         self.assertEqual(netgen.split(";", 1)[1].strip(), "sys_platform == 'darwin' or (sys_platform == 'linux' and "
                          "platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')")
         self.assertEqual(NETGEN_PLATFORMS, "macOS, Linux x86_64 and Windows x86_64")
@@ -277,7 +280,7 @@ class Cantilever(unittest.TestCase):
     def setUpClass(cls):
         from unittest import mock
 
-        from cad import fea
+        from tests.python.support import fea_fixtures as fea
 
         directory = class_directory(cls)
         cls.step = box_step(directory, "cantilever", (LENGTH, WIDTH, WIDTH), "x")
@@ -310,28 +313,28 @@ class Cantilever(unittest.TestCase):
 
     def test_tip_deflection_matches_beam_theory(self):
         expected = _timoshenko_tip_deflection()
-        self.assertAlmostEqual(self.result.summary["max_displacement_mm"] / expected, 1.0, delta=0.04)
-        self.assertAlmostEqual(self.result.summary["max_displacement_at_mm"][0], LENGTH, delta=1e-6)
+        self.assertAlmostEqual(self.result.measurements["max_displacement_mm"] / expected, 1.0, delta=0.04)
+        self.assertAlmostEqual(self.result.measurements["max_displacement_at_mm"][0], LENGTH, delta=1e-6)
 
     def test_reactions_balance_the_load(self):
-        applied = self.result.summary["applied_force_N"]
-        reaction = self.result.summary["reaction_force_N"]
+        applied = self.result.measurements["applied_force_N"]
+        reaction = self.result.measurements["reaction_force_N"]
         self.assertEqual(applied, [0.0, 0.0, -FORCE])
         for a, r in zip(applied, reaction):
             self.assertAlmostEqual(a + r, 0.0, delta=1e-3 * FORCE)
-        self.assertEqual(self.result.warnings, ())
+        self.assertEqual(notes(self.result), ())
 
     def test_the_stress_scale_is_right(self):
         # The nodal peak sits at the clamped edge (a concentration), so the
         # check is bounded rather than exact: between the root bending stress
         # and twice it.
         root = _bending_stress(0.0)
-        peak = self.result.summary["max_von_mises_MPa"]
+        peak = self.result.measurements["max_von_mises_MPa"]
         self.assertGreater(peak, 0.9 * root)
         self.assertLess(peak, 2.0 * root)
         # The nodal field is each element's stress extrapolated from its integration points, so it peaks higher.
-        self.assertGreaterEqual(peak, self.result.summary["max_von_mises_gauss_MPa"] * 0.99)
-        self.assertAlmostEqual(self.result.summary["safety_factor"], STEEL.yield_strength / peak, places=2)
+        self.assertGreaterEqual(peak, self.result.measurements["max_von_mises_gauss_MPa"] * 0.99)
+        self.assertAlmostEqual(self.result.measurements["safety_factor"], STEEL.yield_strength / peak, places=2)
 
     def test_the_top_fibre_stress_a_quarter_along_matches_my_over_i(self):
         # Probe the VTU: von Mises at the corner nodes on the top face near x = L/4.
@@ -350,10 +353,10 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.out.parent.iterdir() if p.stem == self.out.stem),
                          sorted([self.out.name, self.out.with_suffix(".vtu").name]))
         said = reported(self.result)
-        self.assertEqual(said["study"], self.study)
-        self.assertEqual(said["summary"], self.result.summary)
-        self.assertEqual(glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
-        self.assertEqual(said["mesh"]["order"], 2)
+        self.assertEqual(said["measurements"]["study"], self.study)
+        self.assertEqual(said["measurements"], json.loads(json.dumps(self.result.measurements)))
+        self.assertEqual(glb_extras(self.result.glb)["fields"][0]["max"], self.result.measurements["max_von_mises_MPa"])
+        self.assertEqual(said["measurements"]["mesh"]["order"], 2)
 
     def test_the_glb_writes_von_mises_and_the_displacement(self):
         written = [field["attribute"] for field in glb_extras(self.result.glb)["fields"]]
@@ -361,12 +364,12 @@ class Cantilever(unittest.TestCase):
         self.assertNotIn("view", glb_extras(self.result.glb))
 
     def test_a_displacement_check_measures_the_tip_against_beam_theory(self):
-        stress, whole, tip, clamp = self.result.summary["checks"]
+        stress, whole, tip, clamp = self.result.measurements["checks"]
         # The whole model and the loaded face both find the tip, where beam theory puts the largest deflection.
         for check in (whole, tip):
             self.assertAlmostEqual(check["value"] / TIP, 1.0, delta=0.04)
             self.assertAlmostEqual(check["where"]["at"][0], LENGTH, delta=1e-6)
-        self.assertEqual(whole["value"], self.result.summary["max_displacement_mm"])
+        self.assertEqual(whole["value"], self.result.measurements["max_displacement_mm"])
         self.assertEqual((tip["label"], tip["faces"], tip["where"]["ref"], tip["unit"]), ("Tip sag", [self.load_ref], self.load_ref, "mm"))
         self.assertEqual((whole["label"], whole["status"], whole["close_at"]), ("Displacement", "passes", 0.9))
         self.assertAlmostEqual(whole["ratio"], whole["value"] / whole["limit"], places=5)
@@ -376,17 +379,17 @@ class Cantilever(unittest.TestCase):
         self.assertNotIn("faces", whole)
 
     def test_the_stress_check_is_the_safety_factors_verdict(self):
-        stress = self.result.summary["checks"][0]
-        factor = self.result.summary["safety_factor"]
+        stress = self.result.measurements["checks"][0]
+        factor = self.result.measurements["safety_factor"]
         self.assertEqual((stress["kind"], stress["label"], stress["unit"]), ("stress", "Strength", "MPa"))
-        self.assertEqual((stress["value"], stress["limit"]), (self.result.summary["max_von_mises_MPa"], STEEL.yield_strength))
+        self.assertEqual((stress["value"], stress["limit"]), (self.result.measurements["max_von_mises_MPa"], STEEL.yield_strength))
         self.assertEqual(stress["ratio"], round(1 / factor, 6))
         self.assertEqual((stress["margin"], stress["close_at"], stress["status"]), (2.0, 0.5, "passes" if factor >= 2 else "close"))
 
     def test_the_checks_are_written_into_the_glb_the_result_and_the_lines(self):
-        checks = self.result.summary["checks"]
+        checks = self.result.measurements["checks"]
         self.assertEqual(glb_extras(self.result.glb)["checks"], checks)
-        self.assertEqual(reported(self.result)["summary"]["checks"], checks)
+        self.assertEqual(reported(self.result)["measurements"]["checks"], checks)
         lines = self.result.human_lines()
         tip = checks[2]
         self.assertIn(f"check 'Tip sag': {tip['value']:g} mm against a {tip['limit']:g} mm limit, {tip['ratio']:.2f}× it, close", lines)
@@ -394,7 +397,7 @@ class Cantilever(unittest.TestCase):
 
     def test_the_glb_names_its_step_relative_to_its_own_folder(self):
         self.assertEqual(glb_extras(self.result.glb)["document"], f"../{self.step.name}")
-        self.assertEqual(reported(self.result)["document"], str(self.step))
+        self.assertEqual(reported(self.result)["path"], str(self.step))
 
     def test_the_glb_names_its_step_absolutely_when_no_relative_path_exists(self):
         from unittest import mock
@@ -416,11 +419,11 @@ class Cantilever(unittest.TestCase):
         # The attribute names and the fields' order.
         attributes = gltf["meshes"][0]["primitives"][0]["attributes"]
         extras = gltf["meshes"][0]["extras"]
-        self.assertEqual(extras["deformation_scale"], self.result.summary["deformation_scale"])
-        self.assertEqual((extras["fields"][0]["units"], extras["fields"][0]["max"]), ("MPa", self.result.summary["max_von_mises_MPa"]))
-        self.assertEqual(extras["fields"][1]["max"], self.result.summary["max_displacement_mm"])
+        self.assertEqual(extras["deformation_scale"], self.result.measurements["deformation_scale"])
+        self.assertEqual((extras["fields"][0]["units"], extras["fields"][0]["max"]), ("MPa", self.result.measurements["max_von_mises_MPa"]))
+        self.assertEqual(extras["fields"][1]["max"], self.result.measurements["max_displacement_mm"])
         self.assertEqual(len(extras["ramp"]), 5)
-        self.assertEqual(extras["safety_factor"], self.result.summary["safety_factor"])
+        self.assertEqual(extras["safety_factor"], self.result.measurements["safety_factor"])
         colour = gltf["accessors"][attributes["COLOR_0"]]
         self.assertEqual((colour["type"], colour["componentType"], colour.get("normalized")), ("VEC4", 5121, True))
         position = gltf["accessors"][attributes["POSITION"]]
@@ -437,9 +440,9 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(study["fixtures"], [{"type": "fixed", "faces": [self.fixed_ref]}])
         self.assertIn("/face ", self.fixed_ref)
         self.assertEqual(study["loads"], [{"type": "force", "faces": [self.load_ref], "vector_N": [0, 0, -FORCE]}])
-        self.assertEqual(study["mesh"]["size_mm"], self.result.mesh["size_mm"])
+        self.assertEqual(study["mesh"]["size_mm"], self.result.measurements["mesh"]["size_mm"])
         self.assertEqual((study["mesh"]["order"], study["mesh"]["elements"], study["mesh"]["refined_from_mm"]),
-                         (2, self.result.mesh["elements"], None))
+                         (2, self.result.measurements["mesh"]["elements"], None))
         self.assertEqual(study["margin"], 2.0)
 
     def test_every_surface_triangle_traces_to_a_source_face(self):
@@ -465,12 +468,13 @@ class Cantilever(unittest.TestCase):
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = cli.main(["fea", "solve", str(self.step), str(self.out.with_name("again.glb")), "--study", json.dumps(self.study), "--json"])
+            code = cli.main(["step", "fea", str(self.step), "--study", json.dumps(self.study),
+                             "--out", str(self.out.with_name("again.glb")), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["summary"]["max_displacement_mm"], self.result.summary["max_displacement_mm"])
-        self.assertEqual(payload["mesh"]["dofs"], self.result.mesh["dofs"])
+        self.assertEqual(payload["measurements"]["max_displacement_mm"], self.result.measurements["max_displacement_mm"])
+        self.assertEqual(payload["measurements"]["mesh"]["dofs"], self.result.measurements["mesh"]["dofs"])
         self.assertEqual(payload["findings"], [])
 
     def test_a_comfortable_part_solves_once_and_has_nothing_to_say(self):
@@ -478,9 +482,9 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(self.result.findings, ())
         written = reported(self.result)
         self.assertEqual(written["findings"], [])
-        self.assertIsNone(written["refined"])
+        self.assertIsNone(written["measurements"]["refined"])
         self.assertEqual(glb_extras(self.result.glb)["findings"], [])
-        self.assertEqual(self.result.mesh["size_mm"], 2.0)
+        self.assertEqual(self.result.measurements["mesh"]["size_mm"], 2.0)
 
     def test_a_face_on_a_different_part_or_a_non_face_is_refused(self):
         self.assertIn("faces", value_error(self, solve, self.step, self.out, {
@@ -597,11 +601,15 @@ class Yielding(unittest.TestCase):
 
     def test_it_yields_as_an_error_in_the_result_the_glb_and_the_cli(self):
         first = self.said["findings"][0]
-        self.assertEqual((first["check"], first["severity"], first["type"]), ("fea", "error", "yields"))
-        self.assertIn("The cantilever yields", first["summary"])
-        self.assertEqual(glb_extras(self.result.glb)["findings"], self.said["findings"])
-        self.assertEqual(list(self.result.findings), self.said["findings"])
-        self.assertIn(f"error: {first['summary']}", self.result.human_lines())
+        self.assertEqual((first["severity"], first["code"]), ("error", "yields"))
+        self.assertIn("The cantilever yields", first["message"])
+        # The GLB keeps each finding as the viewer's alert card reads it; the result says it as every check does.
+        drawn = glb_extras(self.result.glb)["findings"]
+        self.assertEqual([(f["severity"], f["type"], f["summary"]) for f in drawn],
+                         [(f["severity"], f["code"], f["message"]) for f in self.said["findings"]])
+        self.assertEqual(drawn[0]["check"], "fea")
+        self.assertEqual([dataclasses.asdict(f) for f in self.result.findings], self.said["findings"])
+        self.assertIn(self.result.findings[0].human_line(), self.result.human_lines())
 
     def test_a_part_that_yields_is_not_ok_and_its_glb_is_written_all_the_same(self):
         # ok is the validators' rule, an error blocks (the command exits 1); the GLB shows where it fails.
@@ -610,21 +618,21 @@ class Yielding(unittest.TestCase):
         self.assertEqual(self.result.human_lines()[-1], f"FAILED {self.step}: 1 blocking finding(s)")
 
     def test_with_no_checks_the_stress_check_alone_says_what_the_safety_factor_says(self):
-        (check,) = self.result.summary["checks"]
+        (check,) = self.result.measurements["checks"]
         self.assertEqual((check["kind"], check["status"]), ("stress", "fails"))
-        self.assertEqual(check["ratio"], round(1 / self.result.summary["safety_factor"], 6))
+        self.assertEqual(check["ratio"], round(1 / self.result.measurements["safety_factor"], 6))
         self.assertEqual(glb_extras(self.result.glb)["checks"], [check])
         # The stress check's findings are the yields finding already made; it adds none of its own.
-        self.assertEqual([f["type"] for f in self.result.findings].count("yields"), 1)
-        self.assertNotIn("displacement_over_limit", [f["type"] for f in self.result.findings])
+        self.assertEqual([f.code for f in self.result.findings].count("yields"), 1)
+        self.assertNotIn("displacement_over_limit", [f.code for f in self.result.findings])
 
     def test_a_close_call_is_solved_again_finer_and_the_finer_result_is_written(self):
         self.assertEqual(self.solver.calls, 2)
-        self.assertEqual(self.result.mesh["size_mm"], self.SIZE / 2)
-        refined = self.said["refined"]
+        self.assertEqual(self.result.measurements["mesh"]["size_mm"], self.SIZE / 2)
+        refined = self.said["measurements"]["refined"]
         self.assertEqual((refined["from_size_mm"], refined["size_mm"]), (self.SIZE, self.SIZE / 2))
-        self.assertEqual(refined["max_von_mises_MPa"], self.result.summary["max_von_mises_MPa"])
-        self.assertEqual(glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
+        self.assertEqual(refined["max_von_mises_MPa"], self.result.measurements["max_von_mises_MPa"])
+        self.assertEqual(glb_extras(self.result.glb)["fields"][0]["max"], self.result.measurements["max_von_mises_MPa"])
         mesh = glb_extras(self.result.glb)["study"]["mesh"]
         self.assertEqual((mesh["size_mm"], mesh["refined_from_mm"]), (self.SIZE / 2, self.SIZE))
 
@@ -635,13 +643,13 @@ class Yielding(unittest.TestCase):
         self.assertGreater(finer["refine"], 1.0)
 
     def test_the_findings_point_at_the_written_glbs_peak(self):
-        yields = self.said["findings"][0]
-        self.assertEqual(yields["items"][0]["at"], self.result.summary["max_von_mises_at_mm"])
+        yields = glb_extras(self.result.glb)["findings"][0]
+        self.assertEqual(yields["items"][0]["at"], self.result.measurements["max_von_mises_at_mm"])
         for got, want in zip(_glb_peak_at(self.result.glb), yields["items"][0]["at"]):
             self.assertAlmostEqual(got, want, delta=1e-3)
 
     def test_the_safety_factor_is_floored_never_rounded_up(self):
-        sf = self.result.summary["safety_factor"]
+        sf = self.result.measurements["safety_factor"]
         self.assertEqual(sf, math.floor(sf * 1000) / 1000)
 
     def test_the_summary_safety_factor_is_yield_over_the_written_peak_when_the_finer_peak_is_lower(self):
@@ -656,18 +664,18 @@ class Yielding(unittest.TestCase):
         solver = _CountingSolve(later=halve)
         with mock.patch("cad._internal.fea.solve.solve_linear_static", solver):
             result = solve(self.step, self.directory / "lower.glb", self.study)
-        refined = reported(result)["refined"]
+        refined = reported(result)["measurements"]["refined"]
         self.assertLess(refined["max_von_mises_MPa"], refined["from_max_von_mises_MPa"])
-        self.assertAlmostEqual(result.summary["safety_factor"], 250.0 / result.summary["max_von_mises_MPa"], places=2)
-        self.assertNotAlmostEqual(result.summary["safety_factor"], 250.0 / refined["from_max_von_mises_MPa"], places=2)
-        (moved,) = [f for f in result.findings if f["type"] == "mesh_not_converged"]
-        self.assertTrue(moved["summary"].startswith("The peak changed "), moved["summary"])
+        self.assertAlmostEqual(result.measurements["safety_factor"], 250.0 / result.measurements["max_von_mises_MPa"], places=2)
+        self.assertNotAlmostEqual(result.measurements["safety_factor"], 250.0 / refined["from_max_von_mises_MPa"], places=2)
+        (moved,) = [f for f in result.findings if f.code == "mesh_not_converged"]
+        self.assertTrue(moved.message.startswith("The peak changed "), moved.message)
 
     def test_a_peak_on_a_prefixed_fixture_is_at_the_fixture(self):
-        at_fixture = [f for f in self.said["findings"] if f["type"] == "peak_at_fixture"]
+        at_fixture = [f for f in self.said["findings"] if f["code"] == "peak_at_fixture"]
         self.assertEqual(len(at_fixture), 1)
-        self.assertEqual(at_fixture[0]["items"][0]["ref"], self.fixed_ref)
-        self.assertNotIn(".step", at_fixture[0]["items"][0]["ref"])
+        self.assertEqual(at_fixture[0]["location"], self.fixed_ref)
+        self.assertNotIn(".step", at_fixture[0]["location"])
 
     def test_a_failed_finer_solve_keeps_the_first_result(self):
         from unittest import mock
@@ -676,13 +684,13 @@ class Yielding(unittest.TestCase):
         with mock.patch("cad._internal.fea.solve.solve_linear_static", solver):
             result = solve(self.step, self.directory / "failed-resolve.glb", self.study)
         self.assertEqual(solver.calls, 2)
-        self.assertEqual(result.mesh["size_mm"], self.SIZE)
-        types = [finding["type"] for finding in result.findings]
+        self.assertEqual(result.measurements["mesh"]["size_mm"], self.SIZE)
+        types = [finding.code for finding in result.findings]
         self.assertEqual(types[0], "yields")
         self.assertNotIn("mesh_not_converged", types)
-        (why,) = [warning for warning in result.warnings if "finer" in warning]
+        (why,) = [warning for warning in notes(result) if "finer" in warning]
         self.assertIn("the mesher gave up at this size", why)
-        self.assertIsNone(reported(result)["refined"]["max_von_mises_MPa"])
+        self.assertIsNone(reported(result)["measurements"]["refined"]["max_von_mises_MPa"])
 
     def test_a_fault_in_the_finer_solve_fails_the_study(self):
         # Only the mesher or CalculiX failing is a second opinion lost; a fault of cad's is no warning at exit 0.
@@ -869,9 +877,9 @@ class ThinTube(unittest.TestCase):
         cls.result = solve(cls.step, directory / "tube.glb", cls.study)
 
     def test_it_solves_and_says_how_many_elements_were_straightened(self):
-        straightened = self.result.mesh["straightened"]
+        straightened = self.result.measurements["mesh"]["straightened"]
         self.assertGreater(straightened, 0)
-        self.assertEqual(reported(self.result)["mesh"]["straightened"], straightened)
+        self.assertEqual(reported(self.result)["measurements"]["mesh"]["straightened"], straightened)
         self.assertEqual(glb_extras(self.result.glb)["study"]["mesh"]["straightened"], straightened)
 
 
@@ -1031,13 +1039,13 @@ class DefaultSizeAccuracy(unittest.TestCase):
         })
 
     def test_the_rod_is_meshed_at_the_default_size(self):
-        self.assertIsNone(reported(self.rod)["refined"])
-        self.assertGreater(self.rod.mesh["size_mm"], 0.8 * self.ROD_RADIUS)
+        self.assertIsNone(reported(self.rod)["measurements"]["refined"])
+        self.assertGreater(self.rod.measurements["mesh"]["size_mm"], 0.8 * self.ROD_RADIUS)
 
     def test_the_round_rods_tip_deflection_matches_beam_theory(self):
         inertia = math.pi * self.ROD_RADIUS ** 4 / 4
         expected = self.ROD_FORCE * self.ROD_LENGTH ** 3 / (3 * STEEL.E * inertia)
-        self.assertAlmostEqual(self.rod.summary["max_displacement_mm"] / expected, 1.0, delta=0.10)
+        self.assertAlmostEqual(self.rod.measurements["max_displacement_mm"] / expected, 1.0, delta=0.10)
 
     def test_the_round_rods_top_fibre_stress_matches_my_over_i(self):
         # Not the peak: that sits on the clamped edge, a singularity that grows
@@ -1049,7 +1057,7 @@ class DefaultSizeAccuracy(unittest.TestCase):
         import numpy as np
 
         xyz, von_mises = _vtu_von_mises(self.rod.vtu)
-        size = self.rod.mesh["size_mm"]
+        size = self.rod.measurements["mesh"]["size_mm"]
         x, y, z = xyz.T
         top = (np.abs(x - self.ROD_LENGTH / 4) < size) & (z > 0.7 * self.ROD_RADIUS) & (np.hypot(y, z) > self.ROD_RADIUS - 1e-3)
         self.assertGreaterEqual(top.sum(), 3)
@@ -1064,9 +1072,9 @@ class DefaultSizeAccuracy(unittest.TestCase):
         ratio = self.HOLE / self.PLATE_WIDTH
         kt = 3.0 - 3.14 * ratio + 3.667 * ratio ** 2 - 1.527 * ratio ** 3
         net = self.PULL / ((self.PLATE_WIDTH - self.HOLE) * self.PLATE_THICKNESS)
-        x, y, _ = self.plate.summary["max_von_mises_at_mm"]
+        x, y, _ = self.plate.measurements["max_von_mises_at_mm"]
         self.assertAlmostEqual(math.hypot(x - self.PLATE_LENGTH / 2, y), self.HOLE / 2, delta=0.05)
-        self.assertAlmostEqual(self.plate.summary["max_von_mises_MPa"] / (kt * net), 1.0, delta=0.10)
+        self.assertAlmostEqual(self.plate.measurements["max_von_mises_MPa"] / (kt * net), 1.0, delta=0.10)
 
 
 @needs_fea
@@ -1099,8 +1107,8 @@ class HumanLine(unittest.TestCase):
         from cad.results import FeaResult
 
         result = FeaResult(
-            ok=True, document=Path("p.step"), occurrence="part", glb=Path("p.glb"),
-            summary={"safety_factor": 1.684}, mesh={},
+            ok=True, path=Path("p.step"), occurrence="part", written=(Path("p.glb"),),
+            measurements={"safety_factor": 1.684, "mesh": {}},
         )
         self.assertIn("safety factor 1.6", result.human_lines()[1])
         self.assertNotIn("1.684", result.human_lines()[1])
@@ -1131,12 +1139,12 @@ class CurvedFacetLoads(unittest.TestCase):
                      "loads": [{"faces": ["face 8"], "type": "force", "vector_N": [3600, 0, 0]}], "mesh": {"size_mm": 3.585}}
             result = solve(_write_link_bar(Path(tmp)), Path(tmp) / "bar.fea.glb", study)
         self.assertTrue(result.ok)
-        self.assertEqual(result.summary["applied_force_N"], [3600.0, 0.0, 0.0])
-        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -3600.0, places=3)
+        self.assertEqual(result.measurements["applied_force_N"], [3600.0, 0.0, 0.0])
+        self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -3600.0, places=3)
         # The net section past the hole carries 3600 N over (30 - 10) x 8 mm: 22.5 MPa; a pin-loaded lug peaks at
         # two to three times its net-section stress.
-        self.assertGreater(result.summary["max_von_mises_MPa"], 1.5 * 22.5)
-        self.assertLess(result.summary["max_von_mises_MPa"], 4.0 * 22.5)
+        self.assertGreater(result.measurements["max_von_mises_MPa"], 1.5 * 22.5)
+        self.assertLess(result.measurements["max_von_mises_MPa"], 4.0 * 22.5)
 
 
 
@@ -1147,9 +1155,9 @@ class CheckLines(unittest.TestCase):
         def stress(value, ratio):
             return {"label": "Strength", "value": value, "limit": 250.0, "unit": "MPa", "ratio": ratio, "status": "passes"}
 
-        result = FeaResult(ok=True, document=Path("p.step"), occurrence="part", glb=Path("p.glb"),
-                           summary={"safety_factor": 2.5, "checks": [stress(0.0053, 2.12e-05), stress(2.5, 0.01)]},
-                           mesh={"elements": 10})
+        result = FeaResult(ok=True, path=Path("p.step"), occurrence="part", written=(Path("p.glb"),),
+                           measurements={"safety_factor": 2.5, "checks": [stress(0.0053, 2.12e-05), stress(2.5, 0.01)],
+                                         "mesh": {"elements": 10}})
         lines = result.human_lines()
         self.assertIn("check 'Strength': 0.0053 MPa against a 250 MPa limit, under 1% of it, passes", lines)
         self.assertIn("check 'Strength': 2.5 MPa against a 250 MPa limit, 0.01× it, passes", lines)
@@ -1211,11 +1219,11 @@ class ModelMaterial(unittest.TestCase):
         from bd_materials import metals
 
         physics = metals.aluminum().material
-        said = reported(solve(self.xbf, self.directory / "own.glb", self.study))["material"]
+        said = reported(solve(self.xbf, self.directory / "own.glb", self.study))["measurements"]["material"]
         self.assertEqual((said["name"], said["source"]), (metals.aluminum().name, "document"))
         self.assertEqual(said["yield_MPa"], physics.yield_strength.min)    # the low end: the weakest it may be
         self.assertEqual(said["ranges"]["yield_MPa"], [physics.yield_strength.min, physics.yield_strength.max])
 
     def test_a_studys_own_numbers_win_over_the_models(self):
-        said = reported(solve(self.xbf, self.directory / "given.glb", {**self.study, "material": AL6061_NUMBERS}))["material"]
+        said = reported(solve(self.xbf, self.directory / "given.glb", {**self.study, "material": AL6061_NUMBERS}))["measurements"]["material"]
         self.assertEqual((said["name"], said["yield_MPa"], said["source"]), ("Aluminum 6061-T6", 276.0, "study"))

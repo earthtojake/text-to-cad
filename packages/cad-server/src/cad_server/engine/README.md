@@ -701,6 +701,14 @@ cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG
                                              the manufacturing check, the trimesh integration's: SRC a
                                              file of the type, or a model's id; its findings and every
                                              measurement
+cad xbf|step fea SRC [--occurrence PART] [--json]
+                                             a stress study's setup, the netgen integration's and the
+                                             kernel's: the parts, the pairs that touch and a part's faces
+                                             by ref; writes nothing
+cad xbf|step fea SRC --study STUDY --out RESULT.glb [--vtu] [--verbose] [--json]
+                                             the solve, meshed by netgen and solved by the person's
+                                             CalculiX: the result GLB written, its findings and every
+                                             number; exit 1 when a part yields or misses a check
 cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
@@ -1010,6 +1018,21 @@ holds trimesh (`cad_server._internal.integration_env.carries`: a checkout's, one
 extra); else in the environment of `cad[trimesh]` at the installation's release, made once by the engine
 as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
 (`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
+
+**The stress study.** A B-rep type's `fea` (`xbf`, `step`: the registry's `fea` operation of the `netgen`
+integration) is one function the library makes for each (`cad._internal.fea.operation.fea_for`, bound by
+`DocumentType`): with no study, the study's setup, which writes nothing; with a study and `--out`, the solve.
+The options of the other use (`--out` or `--vtu` with no study, `--occurrence` beside one, an `--out` that
+is no `.glb`) are refused there, the standard library alone, before anything is read. The study reads the
+document's B-rep with the kernel in its own process (`cad._internal.fea.document`), meshes it with netgen in
+a process of netgen's own (`cad.netgen._mesher`) and solves it with CalculiX (`cad.calculix`: the `calculix`
+integration's probe, `CAD_CCX`, then `ccx` on PATH, then FreeCAD's, run headless in a private folder by
+`cad._internal.programs`). Its answer is a `cad.results.FeaResult`, a check's: findings, `measurements` and
+the files `written`. The command runs it in its own process when its environment holds both the kernel and
+netgen (`integration_env.carries("netgen")`, the kernel being netgen's `alongside`: a checkout's with the extra, one installed with
+it); else in the environment of `cad[build123d,netgen]` at the installation's release, made once by the
+engine, by the library's runner of one operation, and the result is printed as it would be here
+(`FeaResult.from_data`). CalculiX is the person's program wherever the study runs; nothing installs it.
 
 **The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same

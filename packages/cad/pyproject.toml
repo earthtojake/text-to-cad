@@ -68,17 +68,10 @@ build123d = [
   # measurements with Pillow. Both run in the kernel's processes.
   "ezdxf",
   "pillow",
-  # `cad fea parts` finds the parts that touch with scipy (a KD-tree of sampled faces). build123d
-  # brings it already; it is named here because the library imports it itself.
-  "scipy",
-  # `cad fea solve` meshes with netgen (LGPL-2.1, its own OpenCascade, so it runs in a process of its
-  # own; about 8-11 MB). The kernel's rather than an extra of its own: FEA reads the document's B-rep
-  # with OCP, so it runs where the kernel is, and an extra is a second environment. netgen publishes
-  # wheels for macOS, Linux x86_64 and Windows x86_64 alone, and no sdist, so it is installed only
-  # there: anywhere else (Linux on ARM) the kernel installs without it and `cad fea solve` refuses,
-  # naming the platform (`_internal/fea/mesh.py`). CalculiX, which solves, is a program the person
-  # installs (or the one their FreeCAD carries).
-  "netgen-mesher>=6.2.2608; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+  # A stress study (`cad <type> fea`) finds the parts of an assembly that touch with scipy (a KD-tree
+  # of sampled faces) in the kernel's process, beside the B-rep it reads. build123d brings it already;
+  # it is named here because the library imports it itself.
+  "scipy>=1.14,<2",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
@@ -86,6 +79,20 @@ build123d = [
 # 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [
   "kicode==10.99.0.dev20261106",
+]
+# The netgen integration's extra: a stress study (`cad <type> fea`, cad._internal.fea) meshes a part's own
+# faces with netgen (LGPL-2.1, a wheel installed beside the library and imported only by the mesher's own
+# process, cad.netgen._mesher, since its OpenCascade and OCP's cannot share one; about 8-11 MB). A study
+# reads the document's B-rep with OCP too, so the `cad` command runs it in the environment of
+# cad[build123d,netgen]. Bounded above because the mesher reaches past netgen's entry points into its
+# geometry and meshing parameters (OCCGeometry, SecondOrder, curvaturesafety, grading), which a minor
+# release is free to change; the accuracy margins were measured at 6.2.2608, the floor. netgen publishes
+# wheels for macOS, Linux x86_64 and Windows x86_64 alone, and no sdist, so the extra installs it only
+# there: anywhere else (Linux on ARM) it installs nothing and a solve refuses, naming the platform
+# (cad._internal.fea.mesh). CalculiX, which solves, is the calculix integration's: a program the person
+# installs, with no extra (cad.registry).
+netgen = [
+  "netgen-mesher>=6.2.2608,<6.3; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
 ]
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and

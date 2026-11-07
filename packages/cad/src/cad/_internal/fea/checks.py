@@ -17,7 +17,7 @@ import math
 import re
 from dataclasses import dataclass
 
-__all__ = ["CLOSE_WITHIN", "CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "assembly_findings", "check_findings", "check_status", "displacement_check", "finding", "findings", "floored_factor", "gap_closed", "needs_finer", "safety_factor", "safety_factor_text", "stress_check"]
+__all__ = ["as_check_finding", "CLOSE_WITHIN", "CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "assembly_findings", "check_findings", "check_status", "displacement_check", "finding", "findings", "floored_factor", "gap_closed", "needs_finer", "safety_factor", "safety_factor_text", "stress_check"]
 
 #: Re-solve finer only when the safety factor is this close to failing.
 RESOLVE_BELOW = 3.0
@@ -33,6 +33,23 @@ GAUSS_RATIO = 1.5
 #: A check with no margin of its own (a displacement) is close to failing within this share of its
 #: limit: the model's own accuracy, the share a finer mesh may still move a number.
 CLOSE_WITHIN = CONVERGED_WITHIN
+
+
+def as_check_finding(found: dict):
+    """One finding as every check's result says it (``cad.results.CheckFinding``): its severity, its type as the
+    code, its summary as the message, the refs (else the places) its items name as the location, and its
+    description as the hint. The result GLB keeps the finding as it is, the viewer's alert card's shape."""
+    from cad.results import CheckFinding
+
+    def where(item: dict) -> str:
+        if item.get("ref"):
+            return str(item["ref"])
+        at = item.get("at")
+        return f"({', '.join(f'{float(c):g}' for c in at)})" if at else str(item.get("text") or "")
+
+    places = [where(item) for item in found.get("items") or () if isinstance(item, dict)]
+    return CheckFinding(str(found["severity"]), str(found["type"]), str(found["summary"]),
+                        ", ".join(place for place in places if place) or None, str(found.get("description") or "") or None)
 
 
 def finding(severity: str, kind: str, summary: str, description: str, items=()) -> dict:

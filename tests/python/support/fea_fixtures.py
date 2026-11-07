@@ -1,8 +1,8 @@
-"""Shared fixtures for the FEA suites (``tests/python/packages/cad/test_fea*.py``).
+"""Shared fixtures for the stress study's suite (``tests/python/packages/fea``, the fea job's: test-fea.sh).
 
-Importing this puts the packages' sources on ``sys.path`` and says whether CalculiX, which
-every solve needs, is installed; the heavy imports (build123d, numpy, cad.fea)
-stay inside the helpers, so a suite's parse tests run without it.
+Importing this puts the packages' sources on ``sys.path`` and says whether netgen and CalculiX, which
+every solve needs, are installed; the heavy imports (build123d, numpy, the study's modules)
+stay inside the helpers, so a suite's parse tests run without them.
 """
 
 from __future__ import annotations
@@ -49,12 +49,25 @@ def quiet():
         yield
 
 
-def solve(step: Path, out: Path, study: dict, **options):
-    """``cad.fea.solve`` with its progress lines silenced."""
-    from cad import fea
+def study_of(document: Path):
+    """``cad.<type>.fea`` for the document's type: ``cad.step.fea`` for a STEP, ``cad.xbf.fea`` for an .xbf."""
+    import importlib
 
+    from cad.registry import type_of
+
+    return importlib.import_module(f"cad.{type_of(document).id}").fea
+
+
+def solve(step: Path, out: Path, study: dict, **options):
+    """A solve (``cad.<type>.fea`` with a study) with its progress lines silenced."""
     with quiet():
-        return fea.solve(step, out, study=study, **options)
+        return study_of(step)(step, study=study, out=out, **options)
+
+
+def setup(document: Path, **options):
+    """A study's setup (``cad.<type>.fea`` with no study): the parts, the pairs and one part's faces, quietly."""
+    with quiet():
+        return study_of(document)(document, **options)
 
 
 def reported(result) -> dict:
@@ -108,9 +121,7 @@ def box_step(directory: Path, name: str, size: tuple[float, float, float], align
 
 def _listing(step_or_listing):
     if isinstance(step_or_listing, (str, Path)):
-        from cad import fea
-
-        return fea.faces(step_or_listing)
+        return setup(Path(step_or_listing))
     return step_or_listing
 
 
@@ -158,3 +169,18 @@ def glb_array(path: Path, name: str, width: int = 1):
     view = gltf["bufferViews"][accessor["bufferView"]]
     data = np.frombuffer(binary, np.float32, accessor["count"] * width, view["byteOffset"])
     return data.reshape(-1, width).astype(float)
+
+
+# The PR's verbs by their earlier names, as the suites call them: each a use of the one operation.
+faces = setup
+parts = setup
+
+
+def notes(result) -> tuple[str, ...]:
+    """What a solve said beside its findings (a finer solve that failed): its ``solver_note`` findings' words."""
+    return tuple(finding.message for finding in result.findings if finding.code == "solver_note")
+
+
+def kinds(result) -> list[str]:
+    """Each finding's code (its type), in order."""
+    return [finding.code for finding in result.findings]

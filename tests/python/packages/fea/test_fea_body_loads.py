@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import unittest
 
-from tests.python.support.fea_fixtures import box_step, class_directory, ends, glb_extras, needs_fea, solve
+from tests.python.support.fea_fixtures import notes, kinds, box_step, class_directory, ends, glb_extras, needs_fea, solve
 from tests.python.support.fea_fixtures import STEEL_NUMBERS  # noqa: E402
 
 from cad._internal.fea.materials import material_from_spec  # noqa: E402
@@ -38,20 +38,20 @@ class SelfWeight(unittest.TestCase):
         cls.lifted = solve(step, directory / "lifted.glb", {**base, "loads": [{"type": "acceleration", "vector_g": [0, 0, 1]}]})
 
     def test_the_tip_sags_as_beam_theory_says(self):
-        summary = self.gravity.summary
+        summary = self.gravity.measurements
         self.assertAlmostEqual(summary["max_displacement_mm"] / _tip_deflection(), 1.0, delta=0.03)
         self.assertAlmostEqual(summary["max_displacement_at_mm"][0], LENGTH, delta=1e-6)
 
     def test_the_weight_is_applied_and_the_clamp_carries_it(self):
         weight = STEEL.density * LENGTH * SIDE * SIDE * G0
-        applied, reaction = self.gravity.summary["applied_force_N"], self.gravity.summary["reaction_force_N"]
+        applied, reaction = self.gravity.measurements["applied_force_N"], self.gravity.measurements["reaction_force_N"]
         self.assertAlmostEqual(applied[2] / -weight, 1.0, delta=1e-3)
         self.assertAlmostEqual(reaction[2] / weight, 1.0, delta=1e-3)
-        self.assertEqual(self.gravity.warnings, ())
+        self.assertEqual(notes(self.gravity), ())
 
     def test_accelerating_up_loads_it_as_gravity_down(self):
-        self.assertEqual(self.lifted.summary["max_displacement_mm"], self.gravity.summary["max_displacement_mm"])
-        self.assertEqual(self.lifted.summary["applied_force_N"], self.gravity.summary["applied_force_N"])
+        self.assertEqual(self.lifted.measurements["max_displacement_mm"], self.gravity.measurements["max_displacement_mm"])
+        self.assertEqual(self.lifted.measurements["applied_force_N"], self.gravity.measurements["applied_force_N"])
 
     def test_the_glb_echoes_the_body_load_without_faces(self):
         extras = glb_extras(self.gravity.glb)

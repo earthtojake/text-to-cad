@@ -1,7 +1,9 @@
 """CalculiX (``ccx``), the program every study is solved by: found, checked and run. cad meshes, writes CalculiX's input
 (:mod:`._files`), runs it and reads its output; CalculiX assembles and solves.
 
-``ccx`` is installed by the person: ``CAD_CCX`` names the program, else the first of :data:`NAMES` on PATH, else the
+The ``calculix`` integration's probe (``cad.registry.INTEGRATIONS["calculix"]``: the program, its minimum, its install
+hint and ``CAD_CCX``), run by the library's one helper for the external programs our code runs
+(``cad._internal.programs``). ``ccx`` is installed by the person: ``CAD_CCX`` names the program, else the first of :data:`NAMES` on PATH, else the
 ``ccx`` a FreeCAD install carries (FreeCAD's own FEM solves with it). One that is missing, or older than
 :data:`CCX`'s minimum, is an error naming how to install it; cad downloads nothing and solves with nothing else.
 Every run is headless, in a private folder with homes of its own (``cad._internal.programs``), and on one thread, so
@@ -18,11 +20,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cad._internal import programs
+from cad.registry import INTEGRATIONS
 
 __all__ = ["CCX", "CCX_ENV", "NAMES", "TIMEOUT_S", "CalculixMissingError", "Ccx", "find_ccx", "install_hint", "run"]
 
+_PROBE = INTEGRATIONS["calculix"].probe
+assert _PROBE is not None
 #: The environment variable naming the ``ccx`` program.
-CCX_ENV = "CAD_CCX"
+CCX_ENV = _PROBE.override
 #: What ``ccx`` is called on PATH: the plain name, then the versioned names some packages install.
 NAMES = ("ccx", "ccx_2.23", "ccx_2.22", "ccx_2.21", "ccx_2.20")
 #: The longest one solve may take (s): past it CalculiX is stopped and the study says so.
@@ -35,8 +40,7 @@ class CalculixMissingError(programs.ProgramMissing):
 
 
 def install_hint() -> str:
-    return ("install CalculiX 2.20 or newer -- conda install -c conda-forge calculix, the calculix-ccx package on "
-            f"Debian and Ubuntu, or FreeCAD 1.0 or newer, which carries one -- or set {CCX_ENV} to its ccx program")
+    return _PROBE.install_hint
 
 
 def _in_freecad() -> list[str]:
@@ -89,8 +93,7 @@ class _Ccx(programs.Program):
 
 #: ``ccx`` as the helper finds it. The oldest CalculiX cad runs is 2.20: C3D10 elements and ``*TRANSFORM`` behave as
 #: written here from it. ``search_path`` is off because :func:`_installed` searches PATH, for the versioned names too.
-CCX = _Ccx("ccx", (2, 20), install_hint(), CCX_ENV, NAMES, installed=_installed, title="CalculiX 2.20",
-           search_path=False)
+CCX = _Ccx.from_probe(_PROBE, names=NAMES, installed=_installed, title=f"CalculiX {_PROBE.minimum}", search_path=False)
 
 
 def find_ccx() -> Ccx:

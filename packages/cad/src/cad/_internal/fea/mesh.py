@@ -34,9 +34,10 @@ __all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_cent
 
 
 def require_fea_stack() -> None:
-    """Fail before anything is meshed when netgen or CalculiX is missing: netgen, which meshes, is a dependency of every
-    install where it has wheels (``NETGEN_PLATFORMS``), and is looked for, never imported, in this process
-    (:mod:`cad.netgen._mesher`); the solver is the one program the person installs, and the error says how."""
+    """Fail before anything is meshed when netgen or CalculiX is missing. netgen, which meshes, is the netgen
+    integration's (``cad[netgen]``), installed only where it publishes wheels (``NETGEN_PLATFORMS``), and is looked
+    for, never imported, in this process (:mod:`cad.netgen._mesher`); CalculiX is the calculix integration's, the one
+    program the person installs, and its error says how."""
     import importlib.util
     import platform
 
@@ -44,9 +45,11 @@ def require_fea_stack() -> None:
     from cad.netgen._mesher import NETGEN_PLATFORMS
 
     if importlib.util.find_spec("netgen") is None:
+        here = f"{platform.system()} {platform.machine()}"
         raise RuntimeError(
-            f"cad fea solve needs netgen, which meshes, and it is not installed: cad installs it only where netgen "
-            f"publishes wheels ({NETGEN_PLATFORMS}), and this is {platform.system()} {platform.machine()}"
+            "a stress study meshes with netgen, cad's netgen integration, which this environment lacks: add "
+            "`cad[netgen]` (the cad command runs a study where it is installed; a script run with cad run names it in "
+            f"its header). netgen publishes wheels for {NETGEN_PLATFORMS} alone, and this is {here}"
         )
     try:
         find_ccx()

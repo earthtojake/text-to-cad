@@ -69,6 +69,9 @@ ALLOWED_CADGEN = {
     # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
     # is imported in the function that measures.
     "cad._internal.manufacturing",
+    # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
+    # and CalculiX are imported in the function that studies.
+    "cad._internal.fea.operation",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,

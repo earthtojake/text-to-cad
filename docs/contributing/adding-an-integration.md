@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`; later perhaps `netgen`, `calculix`), never for a capability. It is three
+(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`), never for a capability. It is three
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -17,9 +17,12 @@ How an integration gets installed on a person's computer is covered for a Python
 run` makes a program's environment with the integrations its imports use, and an operation the `cad`
 command runs that needs one its own environment lacks (a 3D type's `dfm`, the `trimesh`
 integration's) runs in the environment of that integration, made once by the engine the same way
-(`cad_server/_internal/integration_env.py`). An external program that ships as a Python package (KiCad's
+(`cad_server/_internal/integration_env.py`); an integration whose operations need another beside it says
+so in the registry (`alongside`), and its environment holds both (a B-rep type's `fea` reads the document with
+the kernel and meshes it with netgen: the environment of `cad[build123d,netgen]`). An external program that ships as a Python package (KiCad's
 `kicad-cli`, in kicode) is its integration's extra and installs the same way; any other is the person's to
-install, found by its probe. `cad doctor` says, for each integration with an extra but build123d (the
+install, found by its probe: an integration with no extra and a probe alone (`calculix`, CalculiX's `ccx`,
+which ships no package cad can install). `cad doctor` says, for each integration with an extra but build123d (the
 kernel's own line), whether this installation carries it or where its environment is and whether it is
 made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
@@ -50,7 +53,9 @@ an integration.
       comment saying why. An external program needs no extra until it ships as a package.
 - [ ] **The registry entry**, `INTEGRATIONS` in `packages/cad/src/cad/registry.py`: name, summary,
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
-      (the program, its minimum version, its install hint, the variable that names it outright).
+      (the program, its minimum version, its install hint, the variable that names it outright); and
+      `alongside`, the integrations its operations need in the same environment (netgen's: the kernel,
+      which reads the B-rep a study meshes), which the environment the `cad` command makes for it holds too.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a
