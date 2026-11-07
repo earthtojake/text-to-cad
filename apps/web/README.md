@@ -311,15 +311,16 @@ specification.
 The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
-controls are one row under the strip. An assembly's Features (Links for a robot), Position
+controls are one row under the strip. An assembly's Model (Links for a robot), Position
 and an SDF's metadata are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
-STEP and robot files have tools on a strip at the top centre; GLB, STL and 3MF have none,
-a GLB's clips or not.
+Every file's tools are on a strip at the top centre (each format's are the
+[design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
 Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
-Preview, with the view cube at the bottom-right and Quick Edit at the top-right. DXF is a
-2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar; one with layers and blocks
-to read has the view's panel, its Layers tab.
+Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube with
+Home at its upper-left, or a flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
+2D canvas with pan, zoom, snapshot and Quick Edit, with no view controls on its strip; one with
+layers and blocks to read has the view's panel, its Layers tab.
 
 The name menu is a popover under the file's name, two tabs over the explorer's own rows:
 **Models**, the library's eight latest models (no file), by last activity, each its glyph, its
@@ -500,7 +501,8 @@ is out, and Export over a file that writes formats. The app menu holds Back to h
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app, over a file and on the home alike.
-Projection, Display and Preview are the view's, at the tool strip's end, never the navbar's;
+Projection, Display and Preview (a board's Flip, 2D/3D and Display) are the view's, at the tool
+strip's end, never the navbar's;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
