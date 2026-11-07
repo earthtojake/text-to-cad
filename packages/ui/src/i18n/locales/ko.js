@@ -768,7 +768,6 @@ export default {
   "selection.padOf": "{part}의 패드",
   "selection.pinOf": "{part}의 핀",
   "selection.connectedTo": "{name}에 연결됨",
-  "view.home": "홈",
   "zoom.current": "확대/축소 {percent}",
   "zoom.in": "확대",
   "zoom.out": "축소",

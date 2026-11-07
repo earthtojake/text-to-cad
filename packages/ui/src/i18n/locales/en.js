@@ -796,7 +796,6 @@ export default {
   "selection.padOf": "Pad of {part}",
   "selection.pinOf": "Pin of {part}",
   "selection.connectedTo": "Connected to {name}",
-  "view.home": "Home",
   "zoom.current": "Zoom {percent}",
   "zoom.in": "Zoom in",
   "zoom.out": "Zoom out",

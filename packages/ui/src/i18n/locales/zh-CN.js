@@ -769,7 +769,6 @@ export default {
   "selection.padOf": "{part} 的焊盘",
   "selection.pinOf": "{part} 的引脚",
   "selection.connectedTo": "连接到 {name}",
-  "view.home": "主视图",
   "zoom.current": "缩放 {percent}",
   "zoom.in": "放大",
   "zoom.out": "缩小",

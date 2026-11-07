@@ -233,7 +233,7 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; Home is the cube's; the navbar holds none of them", async () => {
+it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; the corner is the cube's alone; the navbar holds none of them", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
   const actions = strip.querySelector<HTMLElement>('[data-view-controls]')!;
@@ -241,7 +241,7 @@ it("a robot is a 3D view: Projection, Display and Preview end the strip, in the 
   expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
   expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
   expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
-  expect(robot.pane.querySelector('[data-view-home]')?.getAttribute('aria-label')).toBe('Home');
+  expect(within(robot.pane).queryByRole('button', { name: 'Home' })).toBeNull();
   expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   robot.client.dispose();
 });

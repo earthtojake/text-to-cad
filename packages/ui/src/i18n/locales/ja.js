@@ -768,7 +768,6 @@ export default {
   "selection.padOf": "{part} のパッド",
   "selection.pinOf": "{part} のピン",
   "selection.connectedTo": "{name} に接続",
-  "view.home": "ホーム",
   "zoom.current": "ズーム {percent}",
   "zoom.in": "ズームイン",
   "zoom.out": "ズームアウト",
