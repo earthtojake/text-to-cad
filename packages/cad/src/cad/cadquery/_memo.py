@@ -87,6 +87,7 @@ _MEMO: "OrderedDict[tuple[int, int], _Entry]" = OrderedDict()
 _REGISTRY: dict[Any, "_Made"] = {}
 _SUBS: dict[Any, tuple["_Made", int, int]] = {}
 _KEY_IDS: dict[tuple, int] = {}
+_SEEN: set[int] = set()  # the key ids with an entry: a miss on one is another ordinal of a known call
 _KEY_IDS_NEXT = itertools.count(1)
 _RUN_IDS = itertools.count(1)
 _STATS = {"hits": 0, "misses": 0, "unkeyable": 0, "errors": 0, "runs": 0}
@@ -154,6 +155,7 @@ def clear() -> None:
         _REGISTRY.clear()
         _SUBS.clear()
         _KEY_IDS.clear()
+        _SEEN.clear()
 
 
 # --- the run --------------------------------------------------------------------------------------
@@ -196,6 +198,7 @@ def _sweep(current: int) -> None:
             del _MEMO[key]
         if gone:
             dropped = set(gone)
+            _SEEN.intersection_update({key_id for key_id, _n in _MEMO})
             for tshape in [tshape for tshape, made in _REGISTRY.items() if made.key in dropped]:
                 del _REGISTRY[tshape]
             for tshape in [tshape for tshape, (made, _kind, _index) in _SUBS.items() if made.key in dropped]:
@@ -390,7 +393,7 @@ def _call(label: str, function: Callable[..., Any], args: tuple, kwargs: dict, s
             if entry is not None and entry.inputs == given:
                 _MEMO.move_to_end((key_id, n))
             else:
-                why = "inputs differ" if entry is not None else ("ordinal" if any(k[0] == key_id for k in _MEMO) else "new key")
+                why = "inputs differ" if entry is not None else ("ordinal" if key_id in _SEEN else "new key")
                 entry = None
     if entry is not None:
         entry.used = state.id
@@ -419,6 +422,7 @@ def _call(label: str, function: Callable[..., Any], args: tuple, kwargs: dict, s
         return result
     with _LOCK:
         _MEMO[(key_id, n)] = entry
+        _SEEN.add(key_id)
     return result
 
 
