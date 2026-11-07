@@ -341,11 +341,9 @@ export default {
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",
   "whatsNew.0.11.boards.title": "KiCad.",
-  "whatsNew.0.11.boards.body": "Your agent can lay out, check and export KiCad boards and schematics, with KiCad built in.",
-  "whatsNew.0.11.install.title": "One-command install and updates.",
-  "whatsNew.0.11.install.body": "One command sets up every agent app on your computer, and the Update button keeps it current.",
-  "whatsNew.0.11.print.title": "Your own print tolerance.",
-  "whatsNew.0.11.print.body": "Export an STL or 3MF meshed finer than the viewer's mesh, for parts with tight fits.",
+  "whatsNew.0.11.boards.body": "Design PCBs with KiCad: “Design a 9-key macropad with USB-C and a rotary encoder, route it, and show me the board in 3D.”",
+  "whatsNew.0.11.updates.title": "Updates install themselves.",
+  "whatsNew.0.11.updates.body": "Patch releases install in the background and switch in when nothing is running. Turn it off with `cad update auto off`.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
