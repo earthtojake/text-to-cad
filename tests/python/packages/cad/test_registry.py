@@ -55,6 +55,10 @@ class TheTableIsTheSource(unittest.TestCase):
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        # CadQuery runs on an OCP build of its own: a separate process, whose values are handed over.
+        self.assertEqual(("cadquery",), registry.integrations_of(["cadquery.cq", "json"]))
+        self.assertEqual(registry.INTEGRATIONS["cadquery"].process, "separate")
+        self.assertNotIn("OCP", registry.INTEGRATIONS["cadquery"].modules, "OCP stays the kernel's module")
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -69,6 +73,12 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        self.assertEqual("cadquery", integrations.for_module("cadquery"))
+        self.assertEqual("cadquery", integrations.for_name("cad.cadquery.is_cadquery"))
+        # An OCP build is the kernel's and CadQuery's both; the first answers for one alone.
+        self.assertEqual(("build123d", "cadquery"), integrations.for_distributions("cadquery-ocp"))
+        self.assertEqual("build123d", integrations.for_distribution("cadquery_ocp"))
+        self.assertEqual(("cadquery",), integrations.for_distributions("CadQuery"))
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 
@@ -79,6 +89,9 @@ class TheTableIsTheSource(unittest.TestCase):
         class Box(Shape):
             pass
 
+        class Workplane:  # a CadQuery Workplane, by its module and name alone
+            __module__ = "cadquery.cq"
+
         for entry in registry.DOCUMENT_TYPES.values():
             with self.subTest(type=entry.id):
                 producers = registry.producers_for(entry.id)
@@ -86,8 +99,14 @@ class TheTableIsTheSource(unittest.TestCase):
                 for producer in producers:
                     self.assertTrue(set(producer.provides) <= set(entry.content), "a producer provides the type's content")
                     self.assertIn(producer.integration, registry.INTEGRATIONS)
+                    # A value of another kernel's build is handed over, never a body's result: its producer is
+                    # portable, and of the model alone (a file of it is an export of the document).
+                    self.assertEqual(producer.portable, producer.integration == "cadquery")
+                    if producer.portable:
+                        self.assertEqual(entry.id, "model")
                 if any(producer.integration == "build123d" for producer in producers):
                     self.assertEqual("build123d", registry.producer_for(entry.id, Box()).integration)
+        self.assertEqual("cadquery", registry.producer_for("model", Workplane()).integration)
 
     def test_an_unsupported_return_names_what_the_type_takes_and_the_integration(self) -> None:
         class Frame:

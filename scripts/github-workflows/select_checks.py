@@ -60,7 +60,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "cadquery")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -211,6 +211,14 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{LIBRARY_SRC}/_internal/integrations.py",
               f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
 KICAD_SUITE = "tests/python/packages/kicad"
+# CadQuery handed over: the cadquery integration (its producer and the bridge that describes a value portably),
+# the engine's reading of a portable description, and the server's environment of cad[cadquery] a program runs
+# in (cad run and the integrations table it reads). Each also reaches what its package reaches; the CadQuery
+# job, which makes that environment, runs on these, its own suite and runner, and a full run.
+CADQUERY_CODE = (f"{LIBRARY_SRC}/cadquery/**", f"{LIBRARY_SRC}/engine/portable.py",
+                 f"{LIBRARY_SRC}/_internal/integrations.py",
+                 f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/cli/run.py")
+CADQUERY_SUITE = "tests/python/packages/cadquery"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
 ALIAS_PROJECTS = ("packages/aliases/cadgen",)
@@ -271,6 +279,7 @@ RULES: tuple[Rule, ...] = (
     # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
+    Rule(CADQUERY_CODE, select(flags=["cadquery"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
@@ -301,6 +310,8 @@ RULES: tuple[Rule, ...] = (
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
     # installed), never the package jobs'.
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
+    # ...and the CadQuery suite its job's (test-cadquery.sh, with CadQuery's environment made).
+    Rule((f"{CADQUERY_SUITE}/**", "scripts/test/test-cadquery.sh"), select(flags=["cadquery"]), final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),

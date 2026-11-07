@@ -446,7 +446,9 @@ verbosity) key nothing. What it adds is two things:
   core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
   folder, its package, its project, following absolute and relative imports and the imports inside
   function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
-  build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
+  build123d integration; `kicode`: the kicad integration; `cadquery`: the cadquery integration, whose
+  environment holds no kernel of the engine's, so a CadQuery program hands its values over, **Shapes
+  handed over**), each of cad's names it imports or uses by the
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
   build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
@@ -967,6 +969,14 @@ must take the value (`registry.producer_for`), else the build fails, naming what
 and the integration that would take the value. Today the build123d integration's producers take a
 build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
 (`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
+A **portable** producer (`Producer.portable`) takes a value of another kernel's build than the engine's --
+the cadquery integration's, of the `model` type alone: CadQuery's OCP is not the kernel's -- which is handed
+over (`model(value, name=...)`), never a body's result: its writer describes the value as the engine's STEP
+reader describes a file (`reader.describe`'s header: products and roots) with one BinTools dump of the parts'
+shapes and the components' locations (`reader.pack`, format 4, which OCCT 8.0 reads of 7.9's writing), and the
+engine's documents worker reads it and makes the document (`cad/engine/portable.py`: `reader.unpack`,
+`reader.assemble`, then `document.collect`, `to_xcaf`, `to_bytes`). The header's `format` (`portable/1`) is
+checked first and frozen as every protocol is; a file of such a document is an export of it.
 
 **Edits.** A KiCad board or schematic is no producer's: it is changed in place by its type's edit
 (`cad.registry.Edit`), `with kicad_pcb.edit(path) as board:` and `with kicad_sch.edit(path) as
@@ -1398,7 +1408,12 @@ build123d shape a program holds, from a script or a REPL. In the caller, the sha
 document as a build makes one (`document.collect`, `to_xcaf`) and serialised (`document.to_bytes`),
 the declarations on it with it -- its joints, mechanism states, configuration sequences and
 couplings -- and its GLB animations, passed as `animations=[...]` (the `animation()` builders, each
-on the shape or a part of it), since there is no body to declare them in. The daemon (`{"op":
+on the shape or a part of it), since there is no body to declare them in. A value of another kernel's
+build -- a CadQuery `Workplane`, `Shape`, `Sketch` or `Assembly`, whose producer is portable (**Document
+types and integrations**) -- is described in the caller instead (`portable`, its header, and `bytes`, its
+BinTools dump), no kernel of the engine's imported there, and the documents worker makes its document and
+answers the bytes (`portable.document_bytes`, `whole`), so what follows is the same; it takes no
+`animations=`. The daemon (`{"op":
 "shape"}`, `Models.hand_over`) reads the bytes through the documents worker, holds them as a drained
 document is held (in memory, whole, and in the cache), registers its page, and records it as
 `kind: "shape"`, its scope as `home` and the program that handed it over as `program` (none from a

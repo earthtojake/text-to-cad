@@ -321,10 +321,18 @@ class Models:
 
             handed(held, ident, scope, name)  # one id is one document: a model's is not a shape's
         source = {"script": scope, "name": name}
-        data = base64.b64decode(request.get("xbf") or "")
+        # The shape as its caller wrote it: its document's bytes (``xbf``), or, from a kernel that is not
+        # this engine's (a CadQuery program's), a portable description (``portable``, its header, and
+        # ``bytes``, its dump: ``cad.engine.portable``), which the documents worker makes the document of
+        # and answers the bytes of (``whole``), so what is held and cached is an ordinary document either way.
+        portable = request.get("portable")
+        data = base64.b64decode(request.get("bytes" if portable is not None else "xbf") or "")
+        order: dict[str, Any] = {"id": 1, "op": "result", "document": True, "name": name}
+        if portable is not None:
+            order.update({"portable": portable, "whole": True})
         replies: list[dict[str, Any]] = []
-        self.daemon._call({"source": {"document": ident, "held": ident}, "cwd": request.get("cwd")},
-                          {"id": 1, "op": "result", "document": True, "name": name}, replies.append, data)
+        self.daemon._call({"source": {"document": ident, "held": ident}, "cwd": request.get("cwd")}, order,
+                          replies.append, data)
         answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
         if "done" not in answer:
             raise ValueError(f"{name}: the shape handed over is no document: {answer.get('failed')}")
@@ -334,6 +342,10 @@ class Models:
         for key, size in done["shapes"]:
             shapes[key] = payload[at:at + size]
             at += size
+        if portable is not None:
+            data = payload[at:at + int(done.get("xbf") or 0)]
+            if not data:
+                raise ValueError(f"{name}: the shape handed over made no document")
         from cad.engine.export.viewer import fingerprint
 
         version = secrets.token_hex(8)

@@ -76,6 +76,16 @@ build123d = [
 kicad = [
   "kicode==10.99.0.dev20261106",
 ]
+# The cadquery integration's extra: CadQuery itself, with the OCP build it pins. CadQuery 2.8 requires
+# cadquery-ocp 7.9 and the kernel (build123d 0.13) cadquery-ocp-novtk 8.0, and both provide the one `OCP`
+# module, so this extra is NEVER installed beside the build123d extra: a CadQuery program runs in an
+# environment of its own (cad[cadquery]: the library's core and CadQuery) and hands its result over to
+# the engine as a portable description (cad.cadquery._bridge), which the engine's kernel process reads.
+# Bounded above because the bridge reads CadQuery's Workplane, Shape, Sketch and Assembly objects, whose
+# attributes a minor release is free to rename.
+cadquery = [
+  "cadquery>=2.8,<2.9",
+]
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and
 # subdivision APIs (face adjacency, connected components, subdivide_to_size, intersects_location), which a

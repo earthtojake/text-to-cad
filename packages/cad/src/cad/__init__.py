@@ -12,7 +12,8 @@ operations, one to one with the ``cad <type> <operation>`` commands: ``.export``
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
-``orientations``). Process control (``cad serve``, ``status``, ``stop``,
+``orientations``); a CadQuery value is the cadquery integration's, handed over as a document by
+``model(value, name=...)`` from the environment of ``cad[cadquery]`` (``cad.cadquery``). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
@@ -55,7 +56,7 @@ del _install_font_guard
 _TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad", "trimesh")
+_INTEGRATIONS = ("build123d", "kicad", "trimesh", "cadquery")
 
 __all__ = [
     "__version__",

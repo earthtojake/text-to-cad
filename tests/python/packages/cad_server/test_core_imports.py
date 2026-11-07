@@ -147,7 +147,9 @@ class SidesTest(unittest.TestCase):
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
                                "PIL"},
                  "kicad": {"kicode"},
-                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
+                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 # CadQuery, with the OCP build it pins (7.9, not the kernel's): the bridge packs shapes with it.
+                 "cadquery": {"cadquery", "OCP"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.

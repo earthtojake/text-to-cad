@@ -446,9 +446,18 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     part's shape bytes (``[key, size]`` in ``shapes``, the bytes after the line in order)."""
     from cad.engine import build as engine_build
 
+    made: bytes | None = None
     if request.get("document"):
         # The engine's cache file of a document no worker holds: read as a held document's bytes are.
-        source = engine_build.held_source(request.get("payload") or b"", str(request.get("name") or "document"))
+        payload = request.get("payload") or b""
+        if request.get("portable") is not None:
+            # A value of another kernel's build handed over (``api.hand_over``): described, not written; its
+            # document is made here, in this kernel process (``portable.document_bytes``), and its bytes are
+            # what the daemon holds of it (``whole``).
+            from cad.engine import portable
+
+            made = payload = portable.document_bytes(request["portable"], payload, str(request.get("name") or "document"))
+        source = engine_build.held_source(payload, str(request.get("name") or "document"))
     else:
         source = engine_build.held(Path(request["script"]), request["name"])
     if source is None:
@@ -463,10 +472,11 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
               "placements": [[list(path), matrix] for path, matrix in source.locals().items()]}
     if request.get("whole"):
         # The drain's: the whole document as the xbf bytes ``@xbf`` writes, after the shapes -- for
-        # one taken from the engine's cache, the bytes it was taken with (a read is never written).
+        # one taken from the engine's cache, the bytes it was taken with (a read is never written); for a
+        # portable description, the bytes made of it here.
         from cad.engine import document
 
-        whole = (None if request.get("document") else engine_build.taken(Path(request["script"]), request["name"])) \
+        whole = made or (None if request.get("document") else engine_build.taken(Path(request["script"]), request["name"])) \
             or document.to_bytes(source.xcaf, source.shapes.values())
         answer["xbf"] = len(whole)
         data.append(whole)

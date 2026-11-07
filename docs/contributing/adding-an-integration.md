@@ -23,6 +23,20 @@ install, found by its probe. `cad doctor` says, for each integration with an ext
 kernel's own line), whether this installation carries it or where its environment is and whether it is
 made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
+## A tool on a kernel build of its own
+
+The engine's kernel is one OCP build (the `build123d` extra's), and a Python CAD library that pins another
+build of the same module -- CadQuery, on `cadquery-ocp` 7.9 where the kernel is 8.0 -- can never share a
+process with a worker, whatever its version says: two builds of `OCP` do not coexist in one environment. Such
+a tool is a `separate` integration whose extra holds the library's core and the tool, never the kernel; its
+values are handed over (`model(value, name=...)`) through a **portable producer** of the `model` type
+(`cad.registry.Producer.portable`): the producer's writer describes the value as the engine's STEP reader
+describes a file and packs the shapes with the tool's own OCP (`cad.cadquery._bridge` is the example), and
+the engine's kernel process makes the document of it (the server's `engine/portable.py`). A model body never
+returns such a value, and no file decorator takes one: a file of its document is an export. The tests that
+need the tool run in a job of their own that makes its environment as the server does (`test-cadquery.sh`),
+and the bridge and the engine's reading of it run on stand-ins in the package suites.
+
 ## Is it really an integration?
 
 cad supports a tool only where cad's own code calls it. A **dependency** -- one package or binary --

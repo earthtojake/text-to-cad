@@ -1256,7 +1256,8 @@ class Daemon:
             return self._call(request, order, send)
         if op == "shape":
             # A shape handed over (``api.hand_over``): held as a drained document is, nothing to run; its
-            # document was written in its caller's Python, and is read in the server's.
+            # document was written in its caller's Python, and is read in the server's -- or, from a kernel
+            # that is not the engine's (a CadQuery program's), described portably and made in the server's.
             try:
                 self.contracted(request)
                 send(self.models.hand_over(request))

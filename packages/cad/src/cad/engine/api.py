@@ -220,7 +220,7 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     builders, each on the shape or a shape below it)."""
     import build123d as bd
 
-    from cad.engine import document
+    from cad.engine import portable
     from cad.engine.animations import ANIMATIONS, Animation
 
     if not isinstance(shape, bd.Shape):
@@ -243,13 +243,21 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
                     found.name not in (found.assembly.__dict__.get(ANIMATIONS) or {}):
                 raise ValueError(f"animation {found.name!r} is on no shape of {name!r}: make it on the shape handed "
                                  "over, or on a part of it")
-    tree = document.collect(shape, name)
-    for part in tree.parts:
-        part.shape = document.direct(part.shape)
-        part.key = document.geometry_key(part.shape)
-    document.merge(tree)
-    doc = document.to_xcaf(tree, document.Kept())
-    return document.to_bytes(doc, [part.shape for part in tree.parts])
+    return portable.shape_bytes(shape, name)
+
+
+def _producer_of(shape: Any) -> Any:
+    """The producer of the ``model`` document that takes ``shape`` (``cad.registry.producer_for``): the kernel's
+    for a build123d shape, documented here; a portable one for a value of another kernel's build (a CadQuery
+    value), described here and documented by the engine. ``TypeError`` naming what is taken for anything else."""
+    from cad.registry import producer_for, producers_for
+
+    try:
+        return producer_for("model", shape, where="model(shape, name=...)")
+    except TypeError:
+        takes = " or ".join(producer.accepts for producer in producers_for("model"))
+        raise TypeError(f"model() takes a function to declare, or a shape and its name= -- {takes} -- not "
+                        f"{type(shape).__name__}") from None
 
 
 def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None) -> Document:
@@ -257,7 +265,15 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     REPL, no function, no body -- handed to the engine, which holds it as a drained document is (in
     memory, and in its cache), serves its page and exports it, and records that a program it did not
     run showed it: there is no command that builds it again. Its id is ``ids.derived_id`` of the
-    calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself."""
+    calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself.
+
+    A build123d shape is made its document here (``_handed_bytes``) and sent as its bytes (``xbf``). A value
+    of another kernel's build -- a CadQuery value, whose producer is portable (``cad.registry.Producer``) --
+    is described here by that producer's writer (``cad.engine.portable``'s header and dump) and sent so
+    (``portable``, ``bytes``), for the engine's kernel process to make the document of: this process holds
+    no kernel of the engine's, and imports none."""
+    from pkgutil import resolve_name
+
     from cad.engine import model as declaring
     from cad.engine.ids import canonical, check_name, derived_id
 
@@ -267,14 +283,23 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     if name is None:
         raise TypeError("model(shape, name=...): a shape handed over takes its document's name")
     check_name(name)
+    producer = _producer_of(shape)
     filename = frame.f_code.co_filename if frame is not None else ""
     scope = canonical(filename if filename and os.path.isfile(filename) else os.getcwd())
     ident = derived_id(scope, name)
-    data = _handed_bytes(shape, name, animations)
+    if producer.portable:
+        if animations:
+            raise TypeError(f"animations= goes with a build123d shape; {producer.accepts} takes none")
+        header, data = resolve_name(producer.writer)(shape, name)
+        carried = {"portable": header, "bytes": base64.b64encode(data).decode("ascii")}
+    else:
+        data = _handed_bytes(shape, name, animations)
+        carried = {"xbf": base64.b64encode(data).decode("ascii")}
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), **_interpreter()})
+                   "cwd": os.getcwd(), **carried, **_interpreter()})
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
-              "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}
+              "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data),
+              "integration": producer.integration}
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         print(f"{name}: handed over ({len(data) / 1e6:.1f} MB)")
         print(f"  id: {ident}")

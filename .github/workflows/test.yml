@@ -78,6 +78,7 @@ jobs:
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
       kicad: ${{ steps.select.outputs.kicad }}
+      cadquery: ${{ steps.select.outputs.cadquery }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -352,6 +353,35 @@ jobs:
       - name: Run the KiCad suite
         # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
         run: scripts/test/test-kicad.sh
+
+  # CadQuery handed over to the engine from the environment of cad[cadquery] the server makes, as on a
+  # person's computer: CadQuery runs on an OCP build of its own (7.9) that can never share a process with the
+  # kernel (8.0), so a program's Workplane or Assembly crosses as a portable description the engine's kernel
+  # process makes the document of. Only the integration's code, its suite and its runner select it (and a full
+  # run): the bridge and the engine's reading of it run on stand-ins in the package suites, with no CadQuery.
+  # CadQuery and cadquery-ocp are ~300 MB from PyPI for Linux (cadquery-ocp 7.9 carries VTK), about a minute.
+  cadquery:
+    name: CadQuery
+    needs: changes
+    if: needs.changes.outputs.cadquery == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Run the CadQuery suite
+        # Makes the environment of cad[cadquery] (the checkout's library, editable, and CadQuery) once, then runs.
+        run: scripts/test/test-cadquery.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.
