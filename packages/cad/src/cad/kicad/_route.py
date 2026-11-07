@@ -352,7 +352,7 @@ def _write(board: Any, tracks: Sequence[Any], vias: Sequence[Any], copper: Seque
         raise RuntimeError(f"route: KiCad kept {len(made)} of the {len(items)} items routed; nothing is saved")
 
 
-def route(board: Any, connections: Sequence[Any], *, layers: Any = None, width: float | None = None,
+def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any = None, width: float | None = None,
           clearance: float | None = None, vias: int | None = None, via_cost: float | None = None) -> Routed:
     """Route ``connections`` in the board an edit has open (``with kicad_pcb.edit(path) as board``), in the order
     given; see the module's doc. Each connection is a net (``"/CLK"``, ``"#net:/CLK"``), a pair of pads
