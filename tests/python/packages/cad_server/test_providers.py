@@ -639,24 +639,28 @@ class DetectionAndPlan(Fixture):
         (app / "codex-package.json").write_text(json.dumps({"variant": "codex", "version": "0.400.0"}), encoding="utf-8")
         self.assertEqual(providers.codex_cli(home.machine), str(bundled))
         calls = len(home.calls())
-        package = self.root / "npm" / "@openai" / "codex"
-        (package / "bin").mkdir(parents=True)
-        (package / "package.json").write_text(json.dumps({"name": "@openai/codex", "version": "0.500.0"}), encoding="utf-8")
-        script = package / "bin" / "codex.js"
-        script.write_text("", encoding="utf-8")
-        script.chmod(0o755)
-        linked = self.root / "linked"
-        linked.mkdir()
-        try:
+        # npm's command on macOS and Linux is a link into its package, whose package.json says it. Windows' npm
+        # writes a codex.cmd shim instead, and Windows finds a command by a PATHEXT name (as `tool` writes the
+        # fakes), never an extensionless link: there the app's bundle above is the whole case.
+        if os.name != "nt":
+            package = self.root / "npm" / "@openai" / "codex"
+            (package / "bin").mkdir(parents=True)
+            (package / "package.json").write_text(json.dumps({"name": "@openai/codex", "version": "0.500.0"}),
+                                                  encoding="utf-8")
+            script = package / "bin" / "codex.js"
+            script.write_text("", encoding="utf-8")
+            script.chmod(0o755)
+            linked = self.root / "linked"
+            linked.mkdir()
             (linked / "codex").symlink_to(script)
-        except OSError:  # no symlinks on this Windows: the bundle's was enough
-            return
-        home.machine.environ["PATH"] = str(linked)
-        self.assertEqual(providers.codex_cli(home.machine), str(linked / "codex"))
-        self.assertEqual(len(home.calls()), calls, "nothing run")
-        # One command, with no other to compare it with, is taken as it is.
+            home.machine.environ["PATH"] = str(linked)
+            self.assertEqual(providers.codex_cli(home.machine), str(linked / "codex"))
+            self.assertEqual(len(home.calls()), calls, "nothing run")
+        # One command, with no other to compare it with, is taken as it is: the one PATH finds.
         home.machine.bundled = {}
-        self.assertEqual(providers.codex_cli(home.machine), str(linked / "codex"))
+        on_path = home.machine.which("codex")
+        self.assertIsNotNone(on_path)
+        self.assertEqual(providers.codex_cli(home.machine), on_path)
         self.assertEqual(len(home.calls()), calls, "nothing run")
 
     def test_what_an_app_has_is_read_from_its_files_with_no_command_run(self) -> None:
