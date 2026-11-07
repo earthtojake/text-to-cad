@@ -79,7 +79,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     }),
     answers,
     asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
-    /** The settings' reads (each of the language's, the consent's, What's new's and automatic updates'), and the telemetry answers sent. */
+    /** The settings' reads (one, for the language, the consent, What's new and automatic updates), and the telemetry answers sent. */
     telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language && !request.body?.whats_new)
       .map(request => request.body && request.body.telemetry),
   };
@@ -443,8 +443,8 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
-  // The settings read once by each of the language, the consent, What's new and automatic updates: no answer sent.
-  expect(server.telemetry()).toEqual([null, null, null, null]);
+  // The settings read once, for the language, the consent, What's new and automatic updates together: no answer sent.
+  expect(server.telemetry()).toEqual([null]);
   // The app menu: Telemetry, then Automatic updates, each the person's setting on the server.
   expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
     expect.objectContaining({ id: 'automatic-updates', checked: true, label: 'Automatic updates' })]);
@@ -474,8 +474,8 @@ it("a tab says What's new once after an update, kept seen through the server; a 
     launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
   await act(async () => {});
   expect(viewer.props!.whatsNew).toBeUndefined();
-  // the language's, the consent's and automatic updates'
-  expect(card.server.asked('/api/v1/settings')).toEqual([null, null, null]);
+  // once, for the language, the consent and automatic updates
+  expect(card.server.asked('/api/v1/settings')).toEqual([null]);
 });
 
 it('an answer is never undone by a read sent just before it, and a choice the environment made is shown fixed', async () => {

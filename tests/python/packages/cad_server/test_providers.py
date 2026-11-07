@@ -3,8 +3,8 @@
 Every test builds a temporary home, a plugin folder in it (the one the server writes,
 ``cad_server._internal.plugin``: here its manifests and one skill), and puts on a temporary PATH fake
 ``claude``, ``codex``, ``gemini``, ``grok`` and ``npx`` commands: one small emulator (``EMULATOR``) that
-records each call and keeps each app's state the way the app does -- Claude Code's and Grok Build's
-behind their ``--json`` listings (Claude Code reading a local catalog's folder in place), Codex's in
+records each call and keeps each app's state the way the app does -- Claude Code's in its records and behind its
+``--json`` listing (a local catalog's folder read in place), Grok Build's in its registry, Codex's in
 ``config.toml`` and its cache (a copy of a local catalog's plugin), Gemini CLI's link and Cursor's copy
 in their folders -- so a plan is applied, read back and taken out again. Codex's and Cursor's commands
 are checked this way, in dry run; Claude Code and Gemini CLI themselves read a real folder in
@@ -33,13 +33,44 @@ RELEASE = "1.2.3"
 ID = providers.PLUGIN_ID
 NPX = ["--prefer-offline", "-y", "skills@latest"]
 
+# What Claude Code and Grok Build keep on disk of the state the emulator holds for them, as each writes it
+# (a copy claude.ai syncs is in Claude Code's listing alone): what `providers.detect` reads.
+RECORDS = r'''
+def write_records(world, home):
+    claude = world.get("claude")
+    if claude is not None:
+        folder = home / ".claude" / "plugins"
+        folder.mkdir(parents=True, exist_ok=True)
+        table = {}
+        for plugin in claude["plugins"]:
+            if plugin.get("scope") != "synced":
+                table.setdefault(plugin["id"], []).append({key: value for key, value in plugin.items() if key != "id"})
+        (folder / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": table}), encoding="utf-8")
+        known = {}
+        for market in claude["marketplaces"]:
+            kind = market.get("source")
+            known[market["name"]] = {"source": ({"source": "directory", "path": market.get("path")} if kind == "directory"
+                                                else {"source": kind, "repo": market.get("repo"), "ref": market.get("ref")})}
+        (folder / "known_marketplaces.json").write_text(json.dumps(known), encoding="utf-8")
+    grok = world.get("grok")
+    if grok is not None:
+        repos = {}
+        for plugin in grok["plugins"]:
+            repos[plugin["name"]] = {"path": plugin["path"], "plugins": {plugin["name"]: {"version": plugin["version"]}},
+                                     "kind": {"type": "Git", "url": plugin["source"], "git_ref": plugin.get("ref", "")}}
+        registry = home / ".grok" / "installed-plugins" / "registry.json"
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(json.dumps({"version": 1, "repos": repos}), encoding="utf-8")
+'''
+exec(RECORDS)
+
 # One program behind every fake command: `python EMULATOR <tool> ARGS...`. Its world is a JSON file
 # (FAKE_WORLD): the release the `latest` branch holds, the commands told to fail, and the state the
 # apps keep behind their commands; every call is logged beside it, one JSON line each.
 EMULATOR = r'''
 import json, os, shutil, sys
 from pathlib import Path
-
+''' + RECORDS + r'''
 tool, args = sys.argv[1], sys.argv[2:]
 world_file = Path(os.environ["FAKE_WORLD"])
 world = json.loads(world_file.read_text(encoding="utf-8"))
@@ -56,6 +87,7 @@ release = world["release"]
 
 def done():
     world_file.write_text(json.dumps(world), encoding="utf-8")
+    write_records(world, home)
     sys.exit(0)
 
 
@@ -141,6 +173,9 @@ if tool == "claude":
 elif tool == "codex":
     state = world.setdefault("codex", {})
     if args == ["--version"]:
+        # As the real one does: into CODEX_HOME, which it creates, even to say its version.
+        arg0 = Path(os.environ.get("CODEX_HOME") or home / ".codex") / "tmp" / "arg0"
+        arg0.mkdir(parents=True, exist_ok=True)
         print("codex-cli " + world.get("codex_version", "0.153.4"))
         sys.exit(0)
     markets, plugins = state.setdefault("marketplaces", {}), state.setdefault("plugins", {})
@@ -193,19 +228,11 @@ elif tool == "gemini":
         done()
 elif tool == "grok":
     state = world.setdefault("grok", {"plugins": []})
-    registry = home / ".grok" / "installed-plugins" / "registry.json"
-    if args == ["plugin", "list", "--json"]:
-        print(json.dumps(state["plugins"]))
-        sys.exit(0)
     if args[:2] == ["plugin", "install"]:
         repo, _, ref = args[2].partition("@")
         path = str(home / ".grok" / "installed-plugins" / "text-to-cad-1")
-        state["plugins"].append({"status": "installed", "name": "text-to-cad", "version": release, "path": path,
-                                 "source": "https://github.com/" + repo, "marketplace": None})
-        registry.parent.mkdir(parents=True, exist_ok=True)
-        registry.write_text(json.dumps({"version": 1, "repos": {"text-to-cad-1": {
-            "kind": {"type": "Git", "url": "https://github.com/" + repo, "git_ref": ref}, "path": path}}}),
-            encoding="utf-8")
+        state["plugins"].append({"name": "text-to-cad", "version": release, "path": path,
+                                 "source": "https://github.com/" + repo, "ref": ref})
         done()
     if args[:2] in (["plugin", "enable"], ["plugin", "update"]):
         for plugin in state["plugins"]:
@@ -309,7 +336,9 @@ class Home:
         self.world.write_text(json.dumps(world), encoding="utf-8")
 
     def set(self, **changes) -> None:
-        self.write_world({**self.read_world(), **changes})
+        world = {**self.read_world(), **changes}
+        self.write_world(world)
+        write_records(world, self.home)
 
     def release(self, version: str) -> None:
         """A new release: the `latest` branch's, and the plugin folder written again for it."""
@@ -477,7 +506,10 @@ class DetectionAndPlan(Fixture):
 
         def plan_for(scope: str) -> list:
             home.set(claude={"plugins": [{"id": official, "version": "1.2.2", "scope": scope}], "marketplaces": []})
-            return home.plan(only=["claude", "cursor"])
+            return providers.read_for(lambda apps: providers.plan(apps, release=RELEASE, folder=home.folder,
+                                                                  machine=home.machine, desktop_entry=ENTRY,
+                                                                  only=["claude", "cursor"]),
+                                      home.machine, folder=home.folder)[1]
 
         # Another scope's copy (a project's) is left as any other is, and ours is installed.
         steps = plan_for("project")
@@ -590,8 +622,8 @@ class DetectionAndPlan(Fixture):
         # Both write the one ~/.codex the app reads, so the newer command does: here the app's.
         home = self.make(("codex",))
         app = self.root / "app"
-        app.mkdir()
-        bundled = app / ("codex.cmd" if os.name == "nt" else "codex")
+        (app / "bin").mkdir(parents=True)
+        bundled = app / "bin" / ("codex.cmd" if os.name == "nt" else "codex")
         bundled.write_text("@echo codex-cli 0.200.0\r\n" if os.name == "nt" else "#!/bin/sh\necho codex-cli 0.200.0\n",
                            encoding="utf-8")
         bundled.chmod(bundled.stat().st_mode | stat.S_IXUSR)
@@ -600,6 +632,85 @@ class DetectionAndPlan(Fixture):
         home.set(codex_version="0.300.0")
         self.assertEqual(providers.codex_cli(home.machine), home.machine.which("codex"))
         self.assertEqual(home.detect()["codex"].command, home.machine.which("codex"))
+        # Asked in a folder thrown away: the command writes there as it starts, and no ~/.codex appears.
+        self.assertEqual(home.calls(), [["codex", "--version"]] * 3)
+        self.assertFalse((home.home / ".codex").exists())
+        # What the package keeps beside the command says it, and nothing runs: the app's bundle, the npm package.
+        (app / "codex-package.json").write_text(json.dumps({"variant": "codex", "version": "0.400.0"}), encoding="utf-8")
+        self.assertEqual(providers.codex_cli(home.machine), str(bundled))
+        calls = len(home.calls())
+        package = self.root / "npm" / "@openai" / "codex"
+        (package / "bin").mkdir(parents=True)
+        (package / "package.json").write_text(json.dumps({"name": "@openai/codex", "version": "0.500.0"}), encoding="utf-8")
+        script = package / "bin" / "codex.js"
+        script.write_text("", encoding="utf-8")
+        script.chmod(0o755)
+        linked = self.root / "linked"
+        linked.mkdir()
+        try:
+            (linked / "codex").symlink_to(script)
+        except OSError:  # no symlinks on this Windows: the bundle's was enough
+            return
+        home.machine.environ["PATH"] = str(linked)
+        self.assertEqual(providers.codex_cli(home.machine), str(linked / "codex"))
+        self.assertEqual(len(home.calls()), calls, "nothing run")
+        # One command, with no other to compare it with, is taken as it is.
+        home.machine.bundled = {}
+        self.assertEqual(providers.codex_cli(home.machine), str(linked / "codex"))
+        self.assertEqual(len(home.calls()), calls, "nothing run")
+
+    def test_what_an_app_has_is_read_from_its_files_with_no_command_run(self) -> None:
+        """Each app's command writes its own files as it starts, so reading what it has, for a dry run or a plan
+        that leaves it alone, runs none of them; a real run about to change Claude Code asks its listing too."""
+        home = self.make(("claude", "codex", "gemini", "grok"))
+        steps = home.plan()
+        self.assertEqual(home.calls(), [], "planning an install runs nothing")
+        self.assertFalse((home.home / ".codex").exists())
+        home.apply(steps)
+        self.assertNotEqual(home.calls(), [])
+        made = len(home.calls())
+        found = home.detect()
+        self.assertEqual(found["claude"].ours().version, RELEASE)
+        self.assertEqual((found["claude"].ours().recorded, found["claude"].ours().via), (RELEASE, "in place"))
+        self.assertEqual(found["codex"].ours().version, RELEASE)
+        self.assertEqual(found["gemini"].ours().via, "linked")
+        self.assertEqual(len(home.calls()), made, "reading what they have now runs nothing either")
+        # Nothing to do for any of them: a real run reads and leaves them, and runs none.
+        apps, steps, listed = providers.read_for(lambda apps: providers.plan(apps, release=RELEASE, folder=home.folder,
+                                                                             machine=home.machine, desktop_entry=ENTRY),
+                                                 home.machine, folder=home.folder)
+        self.assertFalse(listed)
+        self.assertEqual({step.action for step in steps if step.app != "claude-desktop"}, {"leave"})
+        self.assertEqual(len(home.calls()), made)
+        # A new release, for an app that reads the folder in place too, is a command of Claude Code's: its listing is
+        # asked first, and is what the plan is made from.
+        home.release("1.2.4")
+        apps, steps, listed = providers.read_for(lambda apps: providers.plan(apps, release="1.2.4", folder=home.folder,
+                                                                             machine=home.machine, desktop_entry=ENTRY),
+                                                 home.machine, folder=home.folder)
+        self.assertTrue(listed)
+        self.assertEqual(home.calls()[made:], [["claude", "plugin", "list", "--json"],
+                                               ["claude", "plugin", "marketplace", "list", "--json"]])
+
+    def test_grok_build_s_copy_is_read_from_its_registry(self) -> None:
+        home = self.make(("grok",))
+        home.set(grok={"plugins": [{"name": "text-to-cad", "version": "1.2.2", "path": "/x", "ref": providers.BRANCH,
+                                    "source": providers.REPOSITORY_URL},
+                                   {"name": "another", "version": "9", "path": "/y", "source": "https://example.com/y"}]})
+        grok = home.detect()["grok"]
+        self.assertEqual([(copy.name, copy.version, copy.path, copy.ours) for copy in grok.copies],
+                         [("text-to-cad", "1.2.2", "/x", True)])
+        self.assertEqual(home.calls(), [])
+        # An install from anywhere else is a second copy, and a registry that names no plugins says by its manifests.
+        registry = home.home / ".grok" / "installed-plugins" / "registry.json"
+        folder = self.root / "checkout"
+        (folder / ".cursor-plugin").mkdir(parents=True)
+        (folder / ".cursor-plugin" / "plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": "1.0.0"}),
+                                                               encoding="utf-8")
+        registry.write_text(json.dumps({"repos": {"r": {"path": str(folder), "kind": {"type": "Local", "path": "/co"}}}}),
+                            encoding="utf-8")
+        grok = home.detect()["grok"]
+        self.assertEqual([(copy.version, copy.ours, copy.detail) for copy in grok.copies], [("1.0.0", False, "from /co")])
 
     def test_claude_desktop_runs_the_person_s_uvx_never_one_that_goes_from_under_it(self) -> None:
         # The install command's `cad setup` runs with uvx's own environment first on PATH (uv's cache's,
