@@ -112,3 +112,20 @@ its own studio drawn without the model, and its IoU is n/a. `--only chromium` ke
 the OCCT pictures already there while the viewer's side is tuned (`--only occt`, the
 viewer's). OCCT's offscreen drawing is proven on macOS; on Linux it needs an X
 server (Xvfb on a machine with no screen).
+
+## Manufacturing checks on real parts
+
+```sh
+.venv/bin/python scripts/bench/dfm_bench.py --root ../text-to-cad/models --limit 40          # every process
+.venv/bin/python scripts/bench/dfm_bench.py --root "$KICAD_3DMODELS" --limit 60 --process printing
+.venv/bin/python scripts/bench/dfm_bench.py --dry-run --root models                           # the files, smallest first
+```
+
+`dfm_bench.py` runs `cad.step.check` for each process (`cnc`, `sheet`, `molding`, `printing`, or the
+`--process` given) on every STEP file under each `--root`, smallest first, `--limit` of them, in this
+process (the checkout's environment holds both integrations). A worktree holds no built model, so point
+`--root` at a checkout whose models are built, or at any folder of STEP files (KiCad's 3D models). It
+writes `tmp/bench/dfm-<time>/rows.jsonl` (each check's wall time, `ok`, findings by severity, failing rule
+ids, families not measured, faces and parts; a check that raised records its error) and `table.md`, per
+process: parts, median, p95 and max seconds, what raised or could not measure, and the most frequent
+failing rules. Its table and file order are the pure helpers the global suite tests.

@@ -104,11 +104,14 @@ run by kicode's `kicad-cli`: in this process where it runs KiCad itself (`CAD_KI
 as it makes the trimesh integration's. It runs headless with no display and private homes; a person's own
 KiCad is never run, the server never starts KiCad's app, Open in never opens a `.kicad_*` file, and
 viewing a board needs no KiCad installed: its first plot fetches kicode, the `kicad` integration's, to refill its pours on a copy, unless `CAD_KICAD_REFILL=0` in the server's environment, which draws them as the file saved them, as a failed fetch does. A KiCad schematic's are the same integration's, run the same way, on its project's root sheet whichever sheet is named: `cad kicad_sch erc` is KiCad's electrical rules check (it fails on errors and says the warnings, each with its sheet and where; the library checks a headless `kicad-cli` cannot make, the person's global libraries being out of its reach, are one note) and `cad kicad_sch export SCHEMATIC --to pdf|svg|netlist|bom -o DIR` its outputs; `cad kicad_sch snapshot --sheet /Power/` draws one sheet, and `cad kicad_sch inspect SCHEMATIC [REF]` says what it holds and what a reference names, the library's, with no KiCad.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
-molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
-support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
-in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
-engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`). `cad serve`,
+A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf
+dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process sheet` of a cut file) is
+the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
+STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
+`trimesh` integration, and judged against a cited rule set (`--rules`), every measurement and every rule's
+outcome under `--json`; it runs in this process where its environment holds the type's integration, else in
+that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
