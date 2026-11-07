@@ -27,7 +27,7 @@ def rig_drawing():
 ## `parts_list(source)`
 
 `source` is an assembly: a build123d `Compound` made with `children=`, as an
-assembly model's `.shape`, `cad.read_xbf(path)` and `cad.read_step(path)`
+assembly model's `.shape`, `cad.xbf.read(path)` and `cad.step.read(path)`
 hand one back. Returns a `PartsList`: one `Item` per
 distinct part, numbered in the order the assembly first holds them.
 Occurrences are one part when they have the same name, the same colour, the

@@ -20,12 +20,12 @@ decorator for a DXF: a cut layout is a toolpath, and a drawing is not.
 Usage::
 
     from pathlib import Path
-    from cadgen import read_xbf
+    from cad import xbf
     from cad.eng_drawing import eng_drawing, Sheet
 
     @eng_drawing(out="../PDF/bracket_drawing.pdf")
     def bracket_drawing():
-        part = read_xbf(Path(__file__).parent / "XBF/bracket.xbf")
+        part = xbf.read(Path(__file__).parent / "XBF/bracket.xbf")
         sheet = Sheet("A3", title="BRACKET", part_number="BRK-001", revision="A")
         top, front, right, iso = sheet.three_views(part, iso=True)
         front.section("A")                               # the front view, cut
@@ -42,7 +42,7 @@ what the sheet noticed (crowded views, a leader that crosses a dimension line)
 and what the drawing leaves unstated (a hole not called out, a size not
 dimensioned). There is no default location: ``out`` is the path the caller
 passes. The part is the engine's document of it, read in this process (a model's
-``.shape``, ``cad.read_xbf`` of an xbf, or ``cad.read_step`` of a vendor STEP);
+``.shape``, ``cad.xbf.read`` of an xbf, or ``cad.step.read`` of a vendor STEP);
 a live build123d shape works in its place: the part is whatever geometry the
 function has.
 
@@ -1768,7 +1768,7 @@ def _state_edges(sheet: Sheet, shape) -> None:
 
 def part_sheet(part, **fields: Any) -> Sheet:
     """A first-pass drawing of one part, a sheet the script refines before
-    returning it: ``part_sheet(read_step(path), title="BRACKET")``. ``fields`` are
+    returning it: ``part_sheet(step.read(path), title="BRACKET")``. ``fields`` are
     :class:`Sheet`'s own (``title``, ``part_number``, ``material`` ...); the sheet
     chooses its size and scale unless they are given.
 

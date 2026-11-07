@@ -79,7 +79,7 @@ every feature and tolerance none of them; say both.
 
 ### A picture per question
 
-Mark the feature with an annotation and render it with `cad snapshot`. An
+Mark the feature with an annotation and render it with `cad model snapshot`. An
 annotation is JSON in model millimetres: a closed `stroke` round the feature
 (points on its edge, x y z triples), and a `text` mark with its number (four
 corner points, in the plane the label should face).
@@ -98,8 +98,8 @@ corner points, in the plane the label should face).
 
 ```bash
 # ID: the id: line `cad run clevis.py` printed (an xbf or STEP path works too)
-cad snapshot "$ID" tmp/intent/2-bore.png --camera iso --annotation tmp/intent/2-bore.json
-cad snapshot "$RIG_ID" tmp/intent/3-pin.png --camera iso --display '{"mode": "shaded", "isolated": ["pin.2"]}'
+cad model snapshot "$ID" tmp/intent/2-bore.png --camera iso --annotation tmp/intent/2-bore.json
+cad model snapshot "$RIG_ID" tmp/intent/3-pin.png --camera iso --display '{"mode": "shaded", "isolated": ["pin.2"]}'
 ```
 
 `isolated` takes part refs, an occurrence's path of names: a parts list item's

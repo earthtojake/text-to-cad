@@ -519,7 +519,7 @@ def refuse_written(path: Any, verb: str) -> None:
 def read_step(path: Any) -> Any:
     """A STEP file as a build123d compound tree (see the module), parsed by the build's
     reader process, or by one of its own outside a build."""
-    refuse_written(path, "read_step")
+    refuse_written(path, "step.read")
     with _SESSION_LOCK:
         reader = _SESSION[-1] if _SESSION else None
     own = reader is None
@@ -544,8 +544,8 @@ def read_xbf(path: Any) -> Any:
 
     path = Path(os.fspath(path))
     if path.suffix.lower() != ".xbf":
-        raise ValueError(f"read_xbf reads an .xbf, not {path.name}: read a STEP with read_step")
-    refuse_written(path, "read_xbf")
+        raise ValueError(f"xbf.read reads an .xbf, not {path.name}: read a STEP with step.read")
+    refuse_written(path, "xbf.read")
     if not path.is_file():
         raise FileNotFoundError(f"no document {path}")
     doc = _read(path)
@@ -645,10 +645,10 @@ def read_mesh(path: Any) -> Mesh:
 
     suffix = Path(os.fspath(path)).suffix.lower()
     if suffix not in MESH_SUFFIXES:
-        other = {".step": "a STEP with read_step", ".stp": "a STEP with read_step", ".xbf": "an xbf with read_xbf"}
-        raise ValueError(f"read_mesh reads an .stl, not {Path(os.fspath(path)).name}"
+        other = {".step": "a STEP with step.read", ".stp": "a STEP with step.read", ".xbf": "an xbf with xbf.read"}
+        raise ValueError(f"stl.read reads an .stl, not {Path(os.fspath(path)).name}"
                          + (f": read {other[suffix]}" if suffix in other else ""))
-    refuse_written(path, "read_mesh")  # before the memo, as read_step's
+    refuse_written(path, "stl.read")  # before the memo, as read_step's
     if _READ_MESH is None:
         from cad.engine.kernel.memo import wrap_function
 

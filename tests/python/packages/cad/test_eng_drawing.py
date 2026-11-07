@@ -2521,7 +2521,7 @@ class AssemblyDrawingTests(unittest.TestCase):
             path = Path(tmp) / "fixture.step"
             export_step(Compound(children=[plate, *placed, steel, brass], label="fixture"), str(path))
             # What a STEP reads back as: a compound tree, the pin one prototype placed three times.
-            parts = parts_list(cad.read_step(path))
+            parts = parts_list(cad.step.read(path))
         self.assertEqual([(i.description, i.quantity) for i in parts],
                          [("PLATE", 1), ("PIN", 3), ("SPACER STEEL", 1), ("SPACER BRASS", 1)])
         self.assertEqual(parts[2].refs, ("pin.1", "pin.2", "pin.3"), "each as a ref names that occurrence")

@@ -10,6 +10,9 @@ a document of that kind, and the same id under another kind is a 404 that names 
   part's ``faces``/``edges``/``vertices/<ordinal>``, ``groups``, ``volume``), ``measure``,
   ``kinematics``, ``POST pose``, ``POST mesh``; a file's also its ``source``.
 * ``dxf``: ``drawing`` (the 2D payload), ``source``.
+* ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``drc`` (KiCad's design rule
+  check of it), ``source``.
+* ``kicad_sch``: ``plot`` (every sheet of the schematic a page of layers, and its index), ``source``.
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
@@ -18,21 +21,29 @@ from __future__ import annotations
 
 import os
 
+from cad.registry import DOCUMENT_TYPES
+
 API = "/api/v1"
 
-FILE_KINDS = {".xbf": "xbf", ".step": "step", ".stp": "step", ".stl": "stl", ".glb": "glb", ".3mf": "3mf",
-              ".dxf": "dxf", ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
-KINDS = ("model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf")
+# A file's kind is its document type as the API spells it (``cad.registry``'s ``wire``: the id, but
+# ``3mf`` for ``threemf``, the spelling released pages read).
+FILE_KINDS = {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
+# ``model`` is a document type of its own, the one with no file (``cad.registry``): a model's document.
+KINDS = tuple(entry.wire for entry in DOCUMENT_TYPES.values())
 # The documents the engine itself serves: their structure, parts and version are its reads.
-ENGINE_KINDS = frozenset({"model", "xbf", "step"})
-ROBOT_KINDS = frozenset({"urdf", "srdf", "sdf"})
+ENGINE_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")
+ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
-# (``exports.FORMATS``); ``dxf`` only where the view draws the document flat.
+# (``exports.FORMATS``); ``dxf`` only where the view draws the document flat. A KiCad board's are KiCad's
+# (``cad kicad_pcb export --to``, ``exports.BOARD``).
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
-           "dxf": [], "urdf": [], "srdf": [], "sdf": []}
+           "dxf": [], "urdf": [], "srdf": [], "sdf": [],
+           "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
+# A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
+EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]
 
 
 def file_kind(path) -> str | None:

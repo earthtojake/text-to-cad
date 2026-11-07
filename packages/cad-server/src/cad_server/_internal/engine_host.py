@@ -58,6 +58,37 @@ def making():
     return MAKING
 
 
+def automatic(daemon):
+    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``);
+    first, the folder of a release a switch failed to move to, removed once nothing runs from it
+    (``cad_server._internal.releases.discard``): a ``cad update`` whose switch went back ran from it until it
+    ended."""
+    try:
+        from cad_server._internal import releases
+
+        failed = releases.failed()
+        if failed is not None:
+            releases.discard(failed)
+    except Exception:  # noqa: BLE001 - the engine's tending never fails for a folder
+        pass
+    try:
+        from cad_server._internal.update import UPDATE
+
+        UPDATE.automatic(daemon)
+    except Exception:  # noqa: BLE001 - the engine's tending never fails for an update
+        pass
+
+
+def update():
+    """Where the engine's update is, for its ``status`` (``cad_server._internal.update.Update.status``)."""
+    try:
+        from cad_server._internal.update import UPDATE
+
+        return UPDATE.status()
+    except Exception:  # noqa: BLE001 - a status line, never a reason status fails
+        return None
+
+
 def halt():
     """The uv commands the engine runs now stopped, as it stops (``cad_server._internal.base.halt``)."""
     from cad_server._internal.base import halt as stop

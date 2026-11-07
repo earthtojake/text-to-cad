@@ -93,8 +93,14 @@ export function failureAlert(fileRef, error, failure, compile = false, t = engli
  * the card is no block and can be put away; the error is said, and held whole in the details (the
  * stage in English, as the details are). The view updates by itself when a build succeeds, so there
  * is nothing to retry here.
+ *
+ * The engine says whether the error is a mistake in CAD's own code (`reportable`, the daemon's
+ * `_reportable`: what telemetry counts as a crash of a build). One that is not -- the model's own
+ * code, a library it called, the kernel refusing an operation, CAD refusing what the model gave --
+ * is the model's to correct, and is no issue of the project's to report (`reportable: false`). A
+ * record that does not say (an engine before it) is reportable, as every failure was.
  * @param {string} fileRef
- * @param {{ model?: string, error?: string, progress?: { kind?: string, stage?: string, detail?: string } | null }} failed
+ * @param {{ model?: string, error?: string, reportable?: boolean, progress?: { kind?: string, stage?: string, detail?: string } | null }} failed
  * @param {boolean} hasModel  A version of the file is on screen.
  * @param {(key: string, params?: Record<string, unknown>) => string} [t]
  */
@@ -111,7 +117,8 @@ export function buildFailedAlert(fileRef, failed, hasModel, t = english) {
     summary: t(hasModel ? "alert.update.summary" : "alert.build.summary"),
     title: t(hasModel ? "alert.update.title" : "alert.build.title"),
     message: hasModel ? t("alert.update.message") : t("alert.build.message", { file: fileRef }),
-    recovery: t("alert.build.recovery"),
+    recovery: t(failed?.reportable === true ? "alert.build.recoveryInternal" : "alert.build.recovery"),
+    ...(failed?.reportable === false ? { reportable: false } : {}),
     ...(hasModel ? { blocking: false } : {})
   };
 }

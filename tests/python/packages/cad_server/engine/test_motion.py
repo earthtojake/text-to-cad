@@ -29,7 +29,7 @@ from tests.python.support import engine_cache
 ARM = """
 import math
 import build123d as bd
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 from cad.engine import xbf
 
 
@@ -93,7 +93,7 @@ class AuthoringTest(unittest.TestCase):
     def test_a_motion_is_one_of_waypoints_a_sweep_or_a_function_and_says_what_is_wrong(self) -> None:
         import build123d as bd
 
-        from cad.ap242 import configuration_sequence
+        from cad.build123d import configuration_sequence
 
         box = bd.Box(1, 1, 1)
         for call, error in (
@@ -250,7 +250,7 @@ def table(t):
 
 HINGE = """
 import build123d as bd
-from cad.ap242 import configuration_sequence
+from cad.build123d import configuration_sequence
 from cad.engine import xbf
 import moves
 
@@ -352,8 +352,8 @@ def unused():
 KEPT = """
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import configuration_sequence
-from cad.gltf import animation
+from cad.build123d import configuration_sequence
+from cad.build123d import animation
 import moves
 
 

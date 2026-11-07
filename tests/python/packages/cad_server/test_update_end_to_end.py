@@ -282,6 +282,21 @@ class UpdateEndToEndTest(unittest.TestCase):
         log = self.work / "state" / "update.log"
         return log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no update log)"
 
+    def running(self) -> str:
+        """Every process still running from this test's folder, its pid and command line: on a stalled update,
+        whether the engine before is still there, and whether the switch helper the update log names is."""
+        if WINDOWS:
+            listing = ["powershell", "-NoProfile", "-Command",
+                       "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"]
+        else:
+            listing = ["ps", "-axo", "pid=,command="]
+        try:
+            listed = subprocess.run(listing, capture_output=True, text=True, timeout=60).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            return f"(could not list the processes: {error})"
+        found = [line.strip() for line in listed.splitlines() if str(self.work) in line]
+        return "processes from the test's folder:\n" + ("\n".join(found) if found else "(none)")
+
     def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
         # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
         # release folder and sets it up from there. Claude Desktop's folder is there: its config gets CAD's
@@ -338,9 +353,13 @@ class UpdateEndToEndTest(unittest.TestCase):
         # same token -- its release changed, which a page reloads on.
         stages: list[str] = []
         gone = back = None
+        status, answer = None, {}
         deadline = clicked + 300
         while back is None:
-            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered\n{self.said()}")
+            # Where it stopped, when it does: the stages the page saw, and the engine's last answer.
+            if time.monotonic() >= deadline:  # the message made once, on failure: it lists the processes
+                self.fail(f"no engine of {B} answered; stages {stages}, last answer {status} "
+                          f"{json.dumps(answer)[:600]}\n{self.said()}\n{self.running()}")
             status, answer = self.version(token)
             if status is None:
                 gone = gone or time.monotonic()
@@ -367,7 +386,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
             self.assertTrue((self.release(version) / "cad-release.json").is_file(), version)
         self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
-        proxy = self.work / "bin" / ("cad.cmd" if WINDOWS else "cad")  # the cad command runs current
+        proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs current
         self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
         # The plugin folder is B's, written by B's setup; the helper, once B's engine answered, had B write it
         # again (`cad plugin --refresh`), which found it already B's.

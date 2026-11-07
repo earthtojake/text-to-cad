@@ -5,8 +5,8 @@ that key a view to it, and the general arrangement and part sheets
 A parts list is the assembly's distinct parts, each once, with how many times it
 occurs. Two occurrences are one part when they carry the same name, colour and
 material and the same geometry: one prototype placed several times (the kernel's shape
-shared, as the engine places a part used twice and as ``read_step`` and
-``read_xbf`` hand back a shared product), or an exact translated copy, which a
+shared, as the engine places a part used twice and as ``step.read`` and
+``xbf.read`` hand back a shared product), or an exact translated copy, which a
 boolean check confirms. A name, a colour or a shape alone never merges two
 parts: two parts that happen to have identical geometry can be different parts
 (a steel spacer and a brass one), a label's detail often names a finish
@@ -270,15 +270,15 @@ class PartsList:
 
 def parts_list(source) -> PartsList:
     """The parts list of an assembly: a build123d ``Compound`` built with
-    ``children=``, as an assembly model's ``.shape``, ``cad.read_xbf`` and
-    ``cad.read_step`` hand one back. Occurrences sharing one geometry (one
+    ``children=``, as an assembly model's ``.shape``, ``cad.xbf.read`` and
+    ``cad.step.read`` hand one back. Occurrences sharing one geometry (one
     prototype placed several times) are one item."""
     from build123d import Location
 
     if not getattr(source, "children", None):
         raise TypeError(
             "parts_list() reads an assembly: a build123d Compound made with children=[...], such as an "
-            "assembly model's .shape or cad.read_step(path). A single part has no parts list; draw it with "
+            "assembly model's .shape or cad.step.read(path). A single part has no parts list; draw it with "
             "Sheet.three_views()."
         )
     leaves = list(_walk(source, ()))

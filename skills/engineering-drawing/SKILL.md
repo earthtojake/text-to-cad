@@ -21,17 +21,16 @@ not documents, and a different job.
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 ## Workflow
 
@@ -44,7 +43,7 @@ says what to do, and `cad doctor` explains the installation.
      where parts meet: a pin in a bushing in a bore is two fits.
    - **Ask** the stage (concept, prototype, production) and the use, then
      propose which interfaces need a requirement, one numbered item at a
-     time, each with a picture of the part with that feature marked (`cad
+     time, each with a picture of the part with that feature marked (`cad model
      snapshot --annotation`).
    - **For an assembly, ask joint by joint what it does**: turns, slides,
      locates or stays fixed, which decides its fit; how it is held (a torque,
@@ -78,7 +77,7 @@ says what to do, and `cad doctor` explains the installation.
 1. **Get the part.** Call the model: `enclosure()`, imported from the model's
    script, is built by text-to-cad's server (a replay when the server already
    holds it), and its `.shape` is the part. For a part with no model, read its file:
-   `read_step` for a STEP, `read_xbf` for an xbf, anchored on
+   `step.read` for a STEP, `xbf.read` for an xbf, anchored on
    `Path(__file__).parent`. Any build123d shape works. The drawing documents
    geometry; it does not build it.
 2. **Write `<name>_drawing.py`** beside the model. For a single part, start

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as mount, screen } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PositionControls from '../../../dist/renderers/robot/PositionControls.js';
 import { createPoseStore } from '../../../dist/renderers/robot/poseStore.js';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 import { fixturePayload } from './__tests__/robotFixtures.js';
 
@@ -12,25 +12,27 @@ Object.assign(globalThis, { React });
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(cleanup);
 
-const render = (controls: React.ReactElement) => mount(<FileSidebar layout={{ panels: {}, collapsed: {} }} onLayoutChange={() => {}}>
-  <ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>
-</FileSidebar>);
+// As the shell draws it: the Position tab of the view's panel, open.
+const render = (controls: React.ReactElement) => mount(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+  sections={<ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>}
+  tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
 const poseLabel = () => screen.getByRole('button', { name: /^Pose: / }).getAttribute('aria-label');
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 
-it('opens on the pose row, full width over a slider per joint a person can drive, and Reset in the section\'s heading', () => {
+it('opens on the pose row, full width over a slider per joint a person can drive, and Reset at the pose row\'s end', () => {
   const pose = createPoseStore(fixturePayload('arm.urdf'));
   render(<PositionControls pose={pose}/>);
-  // One section's rows: the Position section around them is the panel's.
-  expect(screen.getAllByRole('heading').map(heading => heading.textContent)).toEqual(['Position']);
+  // One tab's rows: the Position list around them is the panel's only one, so no row of tabs, and no heading of its own.
+  expect([screen.queryAllByRole('tab').length, screen.getByRole('region', { name: 'Position controls' }) !== null, screen.queryAllByRole('heading').length]).toEqual([0, true, 0]);
   expect(poseLabel()).toBe('Pose: Default');
-  // The pose is the body's first row, not the heading's.
-  expect([document.querySelector('[data-sidebar-head] [data-pose-menu]'), document.querySelector('[data-tool-panel-body] [data-pose-row] [data-pose-menu]') !== null]).toEqual([null, true]);
-  expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
+  // The pose is the body's first row.
+  expect(document.querySelector('[data-tool-panel-body] [data-pose-row] [data-pose-menu]')).not.toBeNull();
+  // A slide in metres reads in millimetres.
+  expect([field('shoulder', 'deg').value, field('lift', 'mm').value]).toEqual(['0°', '0 mm']);
   expect(screen.queryByRole('textbox', { name: /camera_mount|grip_mirror/ })).toBeNull();
-  // Reset is the heading's, idle at the default pose, and takes a moved joint back.
+  // Reset is the pose row's, beside the dropdown on one line with nothing above, idle at the default pose, and takes a moved joint back.
   const reset = screen.getByRole('button', { name: 'Reset position' });
-  expect([reset.closest('[data-sidebar-head]') !== null, (reset as HTMLButtonElement).disabled]).toEqual([true, true]);
+  expect([reset.closest('[data-pose-row]'), (reset as HTMLButtonElement).disabled]).toEqual([screen.getByRole('button', { name: /^Pose: / }).closest('[data-pose-row]'), true]);
   act(() => { pose.write('shoulder', 30); });
   expect([poseLabel(), (reset as HTMLButtonElement).disabled]).toEqual(['Pose: Custom', false]);
   fireEvent.click(reset);
@@ -54,8 +56,9 @@ it('follows the pose store, and writes to it: a typed value is clamped, and a re
   render(<PositionControls pose={pose}/>);
   act(() => { pose.write('shoulder', 30); });
   expect(field('shoulder', 'deg').value).toBe('30°');
-  fireEvent.change(field('lift', 'm'), { target: { value: '5' } });
-  fireEvent.blur(field('lift', 'm'));
+  // Typed in the field's millimetres, and clamped to the joint's limit.
+  fireEvent.change(field('lift', 'mm'), { target: { value: '5000' } });
+  fireEvent.blur(field('lift', 'mm'));
   expect(pose.getSnapshot().values.lift).toBe(0.3);
   act(() => { pose.selectGroupState(pose.groupStates.find(state => state.id === 'arm/raised')); });
   expect(poseLabel()).toBe('Pose: raised');

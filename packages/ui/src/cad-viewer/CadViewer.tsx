@@ -20,6 +20,7 @@ import { normalizePath } from './catalog.js';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
+import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
 
 // A STEP: read by the cadgen engine, at a length its size decides (the home's pictures ask first, as
 // they do for a model's document, by its id).
@@ -37,7 +38,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   host: Omit<ViewerHost, 'navigation'>;
   /**
    * The tab's one store: the renderers' preferences, the viewer's state, the home's layout, and the
-   * view of the file on screen, the only file view it keeps: leaving a file drops its view.
+   * view of the file on screen, the only file view the tab keeps: leaving a file sets its view aside
+   * for the page, which gives it back as the file is shown again.
    */
   tabStore: TabStore;
   /** The host's handle on the mounted view: its agent reads it, and the library's pictures come through it. */
@@ -58,8 +60,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    * no home, no explorer, and no link to another file.
    */
   library?: ModelLibrarySource<Model>;
-  /** Keep the library's picture of a model: the file on screen once it has settled, and on the home a card's. */
-  onThumbnail?(png: Blob, file: string): Promise<unknown>;
+  /**
+   * Keep the library's picture of a model: the file on screen once it has settled, and on the home a
+   * card's; `png.dark`, where the view drew one, is its dark theme's, kept beside it.
+   */
+  onThumbnail?(png: Blob & { dark?: Blob }, file: string): Promise<unknown>;
   /** The person's colour scheme, its rows in the app menu over every file and on the home. */
   colorScheme?: ColorSchemeSetting;
   /**
@@ -91,6 +96,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   fullSize?: ReactNode;
   /** The chrome around the view (`FileViewerProps.chrome`): the navbar (`"page"`, the default), or the view alone (`"bare"`). */
   chrome?: "page" | "bare";
+  /**
+   * What's new (`@cad/ui/whats-new`'s `useWhatsNew`): the release whose notes to show, once something
+   * is on screen -- the home, or a file's view, never its loading page -- and how they are dismissed.
+   * A host leaves it out where a dialog has no room, or while a notice of its own covers the view.
+   */
+  whatsNew?: { entry: string | null; onDismiss(): void };
   onError?(error: Error): void;
 }
 
@@ -107,7 +118,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -132,15 +143,18 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   latest.current.shown = shown;
   useEffect(() => { latest.current.onShown?.(shown, shownId); }, [shown, shownId]);
 
-  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a model — for another
-  // file, or for the home — drops its camera, Display settings, pose and the rest, while a reload of
-  // the tab (which shows the same file) brings them back, and an update of the model keeps them. The
-  // departing renderer writes its view once more as it unmounts; that write is a cleanup of the
-  // commit that changed `file`, and every cleanup of a commit runs before its effects, this one
-  // included, so it cannot bring the view back. The tab's settings are not a file's, and stay.
-  // A view is kept under the file's own name (`shown`), and a host may address the file by its
-  // document's id: until the catalog says which file that is (a reload, as the page starts), nothing
-  // is dropped, or the reload would lose the very view it is meant to bring back.
+  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a file — for another
+  // file, or for the home — sets its camera, Display settings, pose and the rest aside for the page,
+  // and showing it again in the same page gives them back, as a reload of the tab (which shows the
+  // same file) brings back the file on screen's; an update of the model keeps them. The departing
+  // renderer writes its view once more as it unmounts; that write is a cleanup of the commit that
+  // changed `file`, and every cleanup of a commit runs before its effects, this one included, so the
+  // view set aside is its last. The file shown has its view back in the record before its renderer
+  // reads it: a file opens only once its document has loaded, after this effect. The tab's settings
+  // are not a file's, and stay. A view is kept under the file's own name (`shown`), and a host may
+  // address the file by its document's id: until the catalog says which file that is (a reload, as
+  // the page starts), nothing is set aside, or the reload would lose the very view it is meant to
+  // bring back.
   useEffect(() => { if (!path || shown) tabStore.files.retain(shown); }, [tabStore, path, shown]);
 
   // Refresh the catalog when the person comes back to the page: a model may have been rebuilt meanwhile.
@@ -162,6 +176,10 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // so a model rebuilt while it is open is pictured again as a file written again is.
   useModelThumbnail(live, shown, String(entry?.documentHash || entry?.hash || ''),
     (png, pictured) => latest.current.onThumbnail?.(png, pictured) ?? Promise.resolve());
+  // Something on screen to say What's new over: the home, or a file's view once its renderer is up
+  // (past the loading page), never a file that would not open.
+  const viewing = useSyncExternalStore(live.subscribe, live.current, live.current);
+  const onScreen = !path || Boolean(viewing);
 
   // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host.
   // A view with no library shows its file and nothing else: it opens no other, and has no home.
@@ -240,6 +258,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
+    {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </I18nProvider>;
 }

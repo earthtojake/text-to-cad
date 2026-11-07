@@ -15,7 +15,9 @@
 function Install-TextToCad {
     $ErrorActionPreference = 'Stop'
     # The release this script was published with, installed when the version feed cannot be read.
-    $CadVersion = "0.10.4"
+    $CadVersion = "0.11.0"
+    # The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
+    $ConsentSince = '0.11.0'
     $VersionFeed = 'https://api.texttocad.dev/v1/versions'
     $Releases = 'https://github.com/earthtojake/text-to-cad/releases/download'
 
@@ -159,7 +161,10 @@ function Install-TextToCad {
     # uvx's folder on PATH: `cad setup` writes uvx's absolute path into the apps' configs.
     $env:Path = "$(Split-Path $uvx);$env:Path"
 
-    # cad asks nothing: every other argument goes to it as given.
+    # --uninstall is the person's own word: `cad uninstall` is told yes for them (it would ask at a terminal),
+    # but a release from before it asked, which takes no --yes. A build named outright is taken as this one.
+    if ($verb -eq 'uninstall' -and ($from -or -not (Test-Older $version $ConsentSince))) { $rest += '--yes' }
+    # cad asks nothing here: every other argument goes to it as given.
     $arguments = @('--no-config', '--managed-python', '--python', '3.14') + $refresh + @('--from', $requirement, 'cad', $verb) + $rest
     Write-Host "text-to-cad: $version ($origin). The first run downloads it, which takes a minute."
     Write-Host "Running: $uvx $($arguments -join ' ')"

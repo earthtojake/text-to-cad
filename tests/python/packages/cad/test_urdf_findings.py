@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 
-from cad.urdf_source import symmetric_inertia_eigenvalues, validate_urdf_file
+from cad.urdf._source import symmetric_inertia_eigenvalues, validate_urdf_file
 
 
 def _wrap(body: str, name: str = "edge") -> str:

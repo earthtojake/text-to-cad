@@ -37,7 +37,7 @@ export interface ViewReporter {
  * navbar would carry that it still has (the update notice, Full size where the host offers it) is its
  * corner (`CardCorner`) at the viewport's top-right.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser, engineOrigin }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -66,6 +66,8 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
    * and on the home; in the file handler, the corner's notice under Full size.
    */
   update?: ReactNode;
+  /** What's new, where the view has the page to say it over (a tab): `CadViewerProps.whatsNew`. */
+  whatsNew?: { entry: string | null; onDismiss(): void };
   /** Inline, the card's way to full size, where the host can show it so: in the navbar just before the update button; the corner's first in the file handler. */
   fullSize?: ReactNode;
   /**
@@ -142,7 +144,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
       return first ? Promise.resolve(first.map(libraryRow)) : client.recents();
     },
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: model => client.thumbnail(model),
+    thumbnail: (model, scheme) => client.thumbnail(model, { scheme }),
     open: async entry => { navigate(normalizePath(entry.path)); },
     // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
     ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),
@@ -165,7 +167,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // The file on screen joins the library every CAD view shares, with its picture.
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
-    library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory}
+    library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     {...homed ? { update, fullSize } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

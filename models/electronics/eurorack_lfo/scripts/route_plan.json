@@ -1,0 +1,38 @@
+{
+ "order": [
+  "/LFO A/INTEG",
+  "/LFO B/INTEG",
+  "/LFO A/EXPO_E",
+  "/LFO B/EXPO_E",
+  "/LFO A/QB",
+  "/LFO B/QB",
+  "/LFO A/MIX",
+  "/LFO B/MIX",
+  "/LFO A/RATE_W",
+  "/LFO B/RATE_W",
+  "+12V",
+  "-12V",
+  "/LFO A/SQ",
+  "/LFO B/SQ",
+  "/LFO A/TRI",
+  "/LFO B/TRI",
+  "/LFO A/IABC",
+  "/LFO B/IABC"
+ ],
+ "layer": {
+  "+12V": "F",
+  "-12V": "B"
+ },
+ "other_layer_cost": 2.5,
+ "via_cost": 25.0,
+ "gnd_ties": [
+  [
+   "R113.2",
+   "U102.3"
+  ],
+  [
+   "R213.2",
+   "U202.3"
+  ]
+ ]
+}

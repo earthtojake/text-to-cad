@@ -12,7 +12,7 @@ prints each one's id and page:
 
 ```
 cd planetary_gear_assembly && python planetary_gear_assembly.py
-cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
+cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
 ```
 
 | Script | Model | What it is |
@@ -30,7 +30,7 @@ cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run pr
 | `motorcycle_shock_absorber/motorcycle_shock_absorber_drawing.py` | — | **Assembly drawing** (`@eng_drawing`, not a model) of the shock absorber, calling its model and writing `PDF/motorcycle_shock_absorber/motorcycle_shock_absorber_drawing.pdf` (gitignored), with example requirements labelled as such: a general arrangement with balloons, a parts list (material, spec, AR items) and flag notes for how each joint is held; a section through the damper part by part; a sheet per part, the eye bore's fit given |
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
 | `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |
-| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`cad export` writes it, by hand: `apps/docs/README.md`) |
+| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`cad <type> export` writes it, by hand: `apps/docs/README.md`) |
 | `planetary_gear_stage/planetary_gear_stage.py` | `planetary_gear_stage` | Simplified planetary gear stage (`lib/gear_teeth.py`) |
 | `research_humanoid/research_humanoid.py` | `research_humanoid` | Adult-scale humanoid: 28 body joints, and 15 per hand from `lib.build_hand(side)` |
 | `robotic_hand_end_effector/robotic_hand_end_effector.py` | `robotic_hand_end_effector` | Cybernetic robotic hand end-effector |
@@ -43,8 +43,8 @@ cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run pr
 
 - `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
   imported directly. Nothing else reads these models' STEP, so no model declares
-  one; `cad export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
-  is the planetary gear's, written by hand with `cad export`.
+  one; `cad model export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
+  is the planetary gear's, written by hand with `cad <type> export`.
 - No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
   hands are plain functions called in the one body (the hand models' two scripts
   are gone). The engine places a part used twice as one prototype.
