@@ -330,8 +330,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     **The earlier name.** `cadgen` is the library's deprecated alias, still published at every
     release for backwards compatibility. The `cadgen` distribution installs `cad` at the same
     release. The `cadgen` import is the library itself, every name and every module of it `cad`'s
-    own object (one copy), and unlike tier 2's aliases it warns of nothing: `import cadgen` raises no
-    `CadDeprecationWarning`. New text and examples name `cad`. Nothing else of 0.8's names is kept: the `cadgen`
+    own object (one copy), and it says so as tier 2's aliases do: once per process, with
+    `CadDeprecationWarning`, at the line that imported it ("cadgen is deprecated; use cad"). New text
+    and examples name `cad`. Nothing else of 0.8's names is kept: the `cadgen`
     command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
 
 

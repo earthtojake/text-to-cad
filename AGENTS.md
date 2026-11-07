@@ -74,8 +74,8 @@ text-to-cad is three distributions from this repository at one `VERSION`: the li
 CAD Viewer's server) and the shim `cad-mcp` (import `cad_mcp`, command `cad-mcp`: the stdio
 transport an agent app starts, the standard library alone). `cadgen` is the library's deprecated
 alias, still published at every release for backwards compatibility: the distribution installs `cad`
-at the same release, and the import `cadgen` is `cad` under that name. New text and examples name
-`cad`. A file's place: imported by a model or run in
+at the same release, and the import `cadgen` is `cad` under that name and warns that it is
+deprecated. New text and examples name `cad`. A file's place: imported by a model or run in
 a worker, the library; run in the daemon or a command, the server; run inside the host's process,
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the

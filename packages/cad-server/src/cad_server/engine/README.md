@@ -957,7 +957,8 @@ is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spe
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
 meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
 warning once per process from the lookup, at the caller's line (`skip_file_prefixes` skips the
-library's and the import system's frames).
+library's and the import system's frames). Importing `cadgen`, or any module under it, warns the same way, from
+`cadgen`'s own import.
 
 **Producers.** A producer is `(type, matcher, writer, integration)` with what it accepts and provides
 (`cad.registry.Producer`), registered by its integration (`cad/build123d/_producers.py`) and gathered
