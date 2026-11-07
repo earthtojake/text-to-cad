@@ -227,6 +227,8 @@ export default {
   "file.fileExplorer": "エクスプローラー",
   "file.fileManager": "ファイルマネージャー",
   "file.sourceMissing": "ソースは移動または削除されました。",
+  "file.kicadBoardTooNew": "{app} ではこの基板を開けません。新しいバージョンの KiCad で保存されています。",
+  "file.kicadSchematicTooNew": "{app} ではこの回路図を開けません。新しいバージョンの KiCad で保存されています。",
   "file.defaultApp": "既定のアプリ",
 
   "menu.backToHome": "ホームへ戻る",

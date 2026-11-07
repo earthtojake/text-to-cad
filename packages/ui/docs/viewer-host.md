@@ -48,7 +48,9 @@ origin, the CAD app the engine's origin from its launch (never its tunnel's), it
 through the tunnel. A host that cannot make a link offers no Copy link. A host that can open the document's files in this
 computer's apps adds `apps(entry, { signal })` — the files (`source`, a model's `export:<format>`s),
 whether each is on disk and the apps that take it (`OpenInFiles`, `GET /api/v1/local/open-in`'s
-answer; asked as the menu opens, null or a failure and the menu is as without) — and
+answer; asked as the menu opens, null or a failure and the menu is as without; an app with `refuses`,
+a KiCad older than the file's format, is drawn disabled with the reason, and a target's `default: false`
+leaves out Default app) — and
 `openApp(entry, target, app)`, which opens one in an app or in `"default"`, the OS's own: both or
 neither, the entry named as the document is (its path, a model's id). `createCadFileActions({ openIn: client })`
 makes both from a CAD client (`openInApps`, `openIn`, a file's id from `entryOf`); the web viewer
