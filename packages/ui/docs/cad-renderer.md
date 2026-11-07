@@ -847,7 +847,7 @@ as showing again a file the page left restores that file's:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a flat view's (a board's, a schematic's, a drawing's) plane transform with the pane it was framed in (`kit/viewport/flatView.js`), placed on the pane it opens in by what it shows, and exactly itself on a pane of that size. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, the person's alone: not a pick's reveal's nor an isolation's; hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
@@ -1077,7 +1077,9 @@ clicking an edge its chain: both are the engine's, read off the part's shape
 joined across tangent edges, edges that continue one another at a shared vertex), and the page
 grows the pick to the members of the same group in the same instance. Selection never crosses
 instances. Shift-click adds a group, or removes it if the whole group is already
-selected. The resulting faces use the existing highlight and Copy Reference
+selected; a plain click on a group that is, exactly, what is selected lets it go, as a plain
+click on the one face or edge selected does (`xbf/xbfSelectionFilter.js`'s `nextSelectionIds`).
+The resulting faces use the existing highlight and Copy Reference
 controls. This changes selection only, not CAD geometry.
 
 ### Engine document panels
@@ -1160,7 +1162,10 @@ leaf: its faces and edges are the viewport's to pick, never rows. An assembly's 
 button expands its children; the rest of the row selects it. A folded row (a part repeated under
 one name, `pin (8)`) is pressed the same way: its chevron opens and shuts it, and the rest of the
 row selects every part under it, which the row then holds, lit, as an assembly's row holds its own
-selection, so a press on a row selects it and opens nothing (`xbfTree.js`'s `xbfHeldPaths`). Labels keep the row's width;
+selection, so a press on a row selects it and opens nothing (`xbfTree.js`'s `xbfHeldPaths`), and a second plain press on
+it, while its parts are what is selected, lets them go, as any row's does (`xbfSelectionFilter.js`'s `nextSelectionIds`:
+the one thing selected, exactly, pressed again; Shift, Cmd or Ctrl add or take away each part). The rows walk by the
+keyboard (`primitives/tree-keys.js`, [Keyboard](settings-ui.md#keyboard)). Labels keep the row's width;
 measurements belong to Quick Edit's chips' cards. An assembly row's actions (`XbfPartActions.jsx`), shown on hover and kept
 shown while they are on, are Isolate (not in a part file; while that node is isolated, an X that
 leaves isolation, shown the whole time) and then Hide (the eye, off while isolated). A double-click
@@ -1220,7 +1225,11 @@ ancestor's disabled state into the isolated descendants. Hidden geometry stays
 unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. A reveal opens a row where its chevron opens
 and shuts it, the host's open rows (a folded row by its own id), so the chevron shuts
-whatever a reveal opened. Later expansion and manual scrolling
+whatever a reveal opened. The host keeps who opened a row the person did not (`xbf/xbfExpansion.js`): a
+pick's reveal, or an isolation and its reveal; the file's view keeps the person's rows alone, so a
+reload opens what they opened and nothing a pick did, a row a reveal opened is theirs once they open or
+shut it, and leaving isolation shuts what isolating opened (an isolation a reload brings back opens
+again as isolating opened it). Later expansion and manual scrolling
 must not pull the view back to that row.
 
 A chip's card is read-only: under the reference's name (which copies the reference) and its ID —

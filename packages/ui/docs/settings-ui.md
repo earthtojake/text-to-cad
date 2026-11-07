@@ -197,7 +197,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   loading is the spinner. A press on a subfolder opens it
   inline, under itself, its rows 10px further in and hung from a faint line under its
   chevron, read once when it first opens; another press closes it, and Right and Left do the
-  same from the keyboard. A double-click opens it in the explorer's place, as a crumb does —
+  same from the keyboard, as in every tree (Right on an open folder into its first row, Left on a
+  row up to its folder's, Home and End to the first and last rows: [Keyboard](#keyboard)). A
+  double-click opens it in the explorer's place, as a crumb does —
   the breadcrumb then names it. The breadcrumb is
   as many of the last three folders as fit whole: every crumb is its folder's whole name, the
   farthest giving way first to the "…" (an ellipsis icon), which lists every folder above the crumbs to jump to,
@@ -1212,8 +1214,10 @@ Viewport picks reach individual faces and edges, every one to hand from the star
 Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click, or a row's Isolate,
 isolates a component or subassembly, and the tree brings its row into view (its owners opened);
-double-click on empty space leaves isolation, as do the isolated row's X and the menu's Exit all
-isolates. No bar over the tree says what is isolated: its row does. A double-click on a face,
+double-click on empty space leaves isolation, as do the isolated row's X, the menu's Exit all
+isolates and Escape, and leaving it shuts again what isolating opened (a folded row double-clicked,
+the owners its reveal opened), so the tree is as it was before; a row open before, or opened or shut
+by the person meanwhile, stays as it is. No bar over the tree says what is isolated: its row does. A double-click on a face,
 an edge or ink turns the view square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
 selects nothing: the selection is as its first click found it.
 
@@ -1519,6 +1523,12 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.
+- **A tree's rows** (the Model tree, the name menu's Files) walk by the keyboard as the WAI-ARIA tree
+  pattern has it, one rule for every tree that walks its rows (`primitives/tree-keys.js`): from the row
+  with the keyboard, Down and Up the next and the previous row on screen, Home and End the first and the
+  last, Right a shut row's opening and an open one's first row, Left an open row's shutting and any other
+  row's owner; Enter and Space are the row's own press. With the keyboard in a row, the arrows are the
+  tree's, never the viewer's orbit.
 - **Undo and Redo** (⌘Z and ⇧⌘Z, Ctrl+Z and Ctrl+Y) walk the view's one history: each piece of
   ink put down, erased, restyled or cleared, and each measurement taken, deleted or cleared. The
   camera, the selection, Display, Explode, Clip, hiding and isolating, and Position's pose are

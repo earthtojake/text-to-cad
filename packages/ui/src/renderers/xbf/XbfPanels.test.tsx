@@ -9,6 +9,7 @@ import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeM
 import { presentXbfTree, xbfPickFrontier } from '../../../dist/renderers/xbf/xbfTree.js';
 import { useXbfSelectionChips, xbfDescriber, xbfMassText, xbfMeasurementRows, xbfTipper } from '../../../dist/renderers/xbf/xbfChips.js';
 import { nextSelectionIds, selectGeometryMode, treeShape } from '../../../dist/renderers/xbf/xbfSelectionFilter.js';
+import { NO_EXPANSION, openRows, personsRows, shutOpenedBy, toggleRow } from '../../../dist/renderers/xbf/xbfExpansion.js';
 import { xbfModelMenu, xbfPartMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
 import { selectRenderer } from '../../../dist/file-viewer/registry.js';
@@ -113,7 +114,7 @@ function HostedTree() {
   hostSelection = chosen;
   const partControls = { isAssemblyView: true, expandedTreeNodeIds: expanded, hiddenPartIds: [], onFocusTreeNode: () => {},
     onToggleTreeNode: (id: string) => setExpanded(now => now.includes(id) ? now.filter(item => item !== id) : [...now, id]),
-    onSelectTreeNode: (id: string, { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id], multiSelect)) };
+    onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
   return <InPanel tab="tree"><XbfModelTree tree={fixtureTree} active selectedIds={chosen} partControls={partControls} /></InPanel>;
 }
 // The rows as a person reads them: each name, "+" or "-" while its chevron says it is open or shut, "*" while it is lit.
@@ -162,6 +163,125 @@ it("a Model tree row's chevron opens and shuts it, whatever opened it, and a pre
     'arm (2) shut over the pick: - hinge, base, + arm (2), pin | i2',
     'pin picked: - hinge, base, + arm (2), pin * | i3',
   ]);
+});
+
+// The tree with the host's whole say over what is open (`XbfRenderer.jsx` over `xbfExpansion.js`): a person's
+// chevron or key, a pick's reveal and an isolation each open rows as theirs, leaving isolation shuts what it
+// opened, and the file's view keeps the person's rows alone.
+let hostIsolation: { exit(): void, persisted(): string[] } = { exit() {}, persisted: () => [] };
+function ExpandingHost() {
+  const [expansion, setExpansion] = useState(NO_EXPANSION);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [isolated, setIsolated] = useState<string[]>([]);
+  pickInView = ids => setChosen(ids);
+  hostSelection = chosen;
+  hostIsolation = { exit: () => { setExpansion((now: any) => shutOpenedBy(now, 'isolation')); setIsolated([]); }, persisted: () => personsRows(expansion) };
+  const partControls = { isAssemblyView: true, expandedTreeNodeIds: expansion.open, hiddenPartIds: [], focusedNodeIds: isolated,
+    onFocusTreeNode: (ids: string | string[]) => { const targets = [ids].flat(); setChosen([]); setIsolated(targets); setExpansion((now: any) => openRows(now, targets, 'isolation')); },
+    onToggleTreeNode: (id: string) => setExpansion((now: any) => toggleRow(now, id)),
+    onRevealTreeNodes: (ids: string[], reason: string) => setExpansion((now: any) => openRows(now, ids, reason)),
+    onSelectTreeNode: (id: string | string[], { multiSelect = false } = {}) => setChosen(now => nextSelectionIds(now, [id].flat(), multiSelect)) };
+  return <InPanel tab="tree"><XbfModelTree tree={fixtureTree} active selectedIds={chosen} partControls={partControls} /></InPanel>;
+}
+const nameOf = (row: string) => screen.getByRole('button', { name: `Select ${row}` });
+// A row's id in the host's open rows: an assembly's selection id, a folded row's own.
+const openIdOf = (label: string): string | undefined => {
+  const find = (nodes: any[]): string | undefined => { for (const node of nodes) { if (node.label === label) return node.selectionId || node.id; const hit = find(node.children || []); if (hit) return hit; } };
+  return find(fixtureTree.roots);
+};
+const chevronOf = (row: string) => nameOf(row).closest('li')!.querySelector<HTMLElement>('button[aria-expanded]')!;
+
+it("a row isolating opened shuts again as the isolation ends, a double-clicked folded row too; a row open before stays open", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  const seen: string[] = [];
+  const read = (step: string) => seen.push(`${step}: ${treeRows()}`);
+  await user.click(chevronOf('hinge'));
+  read('hinge opened');
+  // A double-click on a folded row isolates its parts, and the tree opens the row to bring them into view.
+  await user.dblClick(nameOf('arm (2)')); read('arm (2) isolated');
+  act(() => hostIsolation.exit()); read('isolation left');
+  // Opened by hand before, it stays open after.
+  await user.click(chevronOf('arm (2)'));
+  await user.dblClick(nameOf('arm (2)'));
+  act(() => hostIsolation.exit()); read('opened first, isolated, left');
+  // An assembly shut before it is isolated is shut again after, and the person's rows under it are theirs.
+  await user.click(chevronOf('hinge'));
+  await user.dblClick(nameOf('hinge'));
+  read('hinge isolated');
+  act(() => hostIsolation.exit()); read('hinge left');
+  expect(seen).toEqual([
+    'hinge opened: - hinge, base, + arm (2), pin',
+    'arm (2) isolated: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'isolation left: - hinge, base, + arm (2), pin',
+    'opened first, isolated, left: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'hinge isolated: - hinge, base, - arm (2), arm_1, arm_2, pin',
+    'hinge left: + hinge, pin',
+  ]);
+});
+
+it("the file's view keeps the rows the person opened, never the rows a pick's reveal opened, which are theirs once they press them", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  await user.click(chevronOf('hinge'));
+  // A pick of arm_2 on the model opens arm (2) to show it: kept for the page, not with the file.
+  act(() => pickInView(['i2']));
+  expect([treeRows(), hostIsolation.persisted()]).toEqual(['- hinge, base, - arm (2), arm_1, arm_2 *, pin', [openIdOf('hinge')]]);
+  // Its chevron shut and opened again: the person's now, and kept.
+  await user.click(chevronOf('arm (2)'));
+  await user.click(chevronOf('arm (2)'));
+  expect(hostIsolation.persisted()).toEqual([openIdOf('hinge'), openIdOf('arm (2)')]);
+});
+
+it("a second plain press on the one selected folded row lets its parts go; Shift adds and takes each away as before", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  await user.click(chevronOf('hinge'));
+  await user.click(nameOf('arm (2)'));
+  const first = [treeRows(), hostSelection.join(' ')];
+  await user.click(nameOf('arm (2)'));
+  const again = [treeRows(), hostSelection.join(' ')];
+  // Shift: the parts added, then taken away, each as before; with base selected first it stays.
+  await user.click(nameOf('base'));
+  await user.keyboard('{Shift>}');
+  await user.click(nameOf('arm (2)'));
+  const added = hostSelection.join(' ');
+  await user.click(nameOf('arm (2)'));
+  await user.keyboard('{/Shift}');
+  expect([first, again, added, hostSelection.join(' ')]).toEqual([
+    ['- hinge, base, + arm (2) *, pin', 'i1 i2'], ['- hinge, base, + arm (2), pin', ''], 'i0 i1 i2', 'i0']);
+});
+
+it("the rows walk by the keyboard, as the tree pattern has it: Up, Down, Home, End, Right open and into, Left up and shut", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  render(<ExpandingHost />);
+  const seen: string[] = [];
+  const at = () => document.activeElement?.getAttribute('aria-label') ?? '';
+  const step = async (key: string) => { await user.keyboard(key); seen.push(`${key} ${at()} | ${treeRows()}`); };
+  nameOf('hinge').focus();
+  for (const key of ['{ArrowRight}', '{ArrowRight}', '{ArrowDown}', '{ArrowRight}', '{ArrowRight}', '{ArrowDown}', '{ArrowLeft}', '{ArrowLeft}',
+    '{ArrowLeft}', '{End}', '{ArrowUp}', '{Home}', '{ArrowUp}', '{Enter}']) await step(key);
+  const shut = '- hinge, base, + arm (2), pin', open = '- hinge, base, - arm (2), arm_1, arm_2, pin';
+  expect(seen).toEqual([
+    `{ArrowRight} Select hinge | ${shut}`,
+    `{ArrowRight} Select base | ${shut}`,
+    `{ArrowDown} Select arm (2) | ${shut}`,
+    `{ArrowRight} Select arm (2) | ${open}`,
+    `{ArrowRight} Select arm_1 | ${open}`,
+    `{ArrowDown} Select arm_2 | ${open}`,
+    `{ArrowLeft} Select arm (2) | ${open}`,
+    `{ArrowLeft} Select arm (2) | ${shut}`,
+    `{ArrowLeft} Select hinge | ${shut}`,
+    `{End} Select pin | ${shut}`,
+    `{ArrowUp} Select arm (2) | ${shut}`,
+    `{Home} Select hinge | ${shut}`,
+    `{ArrowUp} Select hinge | ${shut}`,
+    '{Enter} Select hinge | - hinge *, base, + arm (2), pin',
+  ]);
+  // A row's arrows are the tree's at its ends and on a part too, never let through to the view's orbit;
+  // any other key is (`fireEvent` answers false for a key whose default was prevented).
+  expect([fireEvent.keyDown(nameOf('hinge'), { key: 'ArrowUp' }), fireEvent.keyDown(nameOf('pin'), { key: 'ArrowDown' }),
+    fireEvent.keyDown(nameOf('pin'), { key: 'ArrowRight' }), fireEvent.keyDown(nameOf('pin'), { key: 'x' })]).toEqual([false, false, false, true]);
 });
 
 it("Select's menu is a STEP's single choice: All when a file opens, or one kind alone", async () => {
