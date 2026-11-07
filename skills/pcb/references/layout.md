@@ -37,20 +37,26 @@ board at its block's end, and the next step reads what the last one saved. Each 
    ERC; never swap on the board alone.
 5. **Route the nets whose path matters by hand, then direct the router through the rest.** Tracks run
    octolinear (0°, 45°, 90°).
-   - **By hand:** power and its return, analog and reference nodes, crystals, fast nets and
-     differential pairs (the next section), and any net a datasheet's layout notes or the person gives
-     a reason for. Run a bus as parallel tracks at one even pitch. Take the shortest path a signal can,
-     with no detours. Give power the width or pour its current needs. Routes are written as geometry:
-     tracks, arcs and vias in a commit (`b.begin_commit()`, `b.create_items([...])`,
-     `b.push_commit(...)`); headless KiCad has no interactive router.
-   - **The rest with the router, as you direct it:** `route(b, plan)` (`from cad.kicad import route`)
-     routes the connections you name, in your order, each on the layers you allow it, at its netclass's
-     width and clearance (or yours, never under the board's rules), within your via limit or at your via
-     cost, round everything already on the board but the pours (KiCad refills those round it: a pad a pour
-     alone joins counts as apart); it moves and deletes nothing, and routes only what the plan names (it is
-     no autorouter: no plan, no copper; never hand a board to Freerouting). Put the
-     connections with the least room first (a pin between two others, a short link) and the long nets last. A connection it cannot route is answered by name with what walls it in:
-     move it before that net, allow it another layer, or route it by hand.
+   - **By hand:** power whose current or noise sets its path, and its return (a regulator's loops,
+     a high-current feed; a low-current rail can go to the router at its netclass's width), analog
+     and reference nodes, crystals, fast nets and differential pairs (the next section), and any net
+     a datasheet's layout notes or the person gives a reason for. Run a bus as parallel tracks at
+     one even pitch. Take the shortest path a signal can, with no detours. Give power the width or
+     pour its current needs. Routes are written as geometry: tracks, arcs and vias in a commit
+     (`b.begin_commit()`, `b.create_items([...])`, `b.push_commit(...)`); headless KiCad has no
+     interactive router.
+   - **The rest with the router, as you direct it:** `route(b, plan)` (`from cad.kicad import
+     route`) routes only the connections you name, in your order, each on the layers you allow it,
+     at its netclass's width and clearance (or yours, never under the board's rules), within its via
+     limit (for the whole entry) or at your via cost, round all the copper already there; it moves
+     and deletes nothing. It is no autorouter (no plan, no copper; never hand a board to
+     Freerouting), and it routes no differential pair: a net KiCad pairs by name (`D+`/`D-`,
+     `_P`/`_N`) is refused. Leave a poured net out of the plan: a pour is no connection to the
+     router, so it would track every pad; name as a pair only a pad its pour cannot reach, and
+     refill after. Put the connections with the least room first (a pin between two others, a short
+     link) and the long nets last. A connection it cannot route is answered by name with what walls
+     it in: move it before that net, allow it another layer, or route it by hand. A connection
+     already joined is said so and gets no copper, so the step runs again harmlessly.
    - **Check** with DRC and the copper stills (step 6), then **fix by hand** whatever reads badly: a
      detour, a needless via, a track crowding a pad.
 
@@ -70,7 +76,8 @@ board at its block's end, and the next step reads what the last one saved. Each 
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
    `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
    errors are what to fix now. Look at each side's copper too (`cad kicad_pcb snapshot board.kicad_pcb
-   tmp/copper.png --display copper`, and `'{"mode":"copper","side":"bottom"}'`). Moving a part after routing is fine: reroute what it touched. A pour's
+   tmp/copper.png --display copper`, and `--display '{"mode":"copper","side":"bottom"}'` for the back).
+   Moving a part after routing is fine: reroute what it touched. A pour's
    thermal reliefs round dense small pads can neck below the minimum connection width
    (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every

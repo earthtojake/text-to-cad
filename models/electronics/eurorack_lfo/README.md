@@ -61,7 +61,7 @@ Hardware modelled: Davies 1900H-style knobs, M6 hex nuts (jacks), M7 hex nuts (p
 
 ## How the board was routed
 
-`scripts/board_03_route.py` routes it with the pcb skill's router, `cad.kicad.route`, as its plan directs: the
+`scripts/board_03_route.py` routes it with `cad.kicad.route`, the library's router the pcb skill directs, as its plan directs: the
 order of the nets (each LFO's integrator node and rate wiper and the -12 V rail first, because they walled other
 connections in when they came later; then every other net, the shortest first; last the ground ties), the layer
 each keeps to (the back, a millimetre on the front costing 2.5, but +12V on the front) and what a via costs (2.5 mm
