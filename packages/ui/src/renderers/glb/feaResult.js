@@ -1,5 +1,5 @@
 /**
- * An FEA result inside a GLB, as `cad fea solve` writes it, and what the
+ * An FEA result inside a GLB, as `cad step fea --study` writes it, and what the
  * viewer can do with it without a second file.
  *
  * The writer (cadgen `_internal/fea/outputs.py`) stores the raw fields as
@@ -228,7 +228,7 @@ export function resultSourcePath(glbPath, document) {
 export const findingSelector = (ref) => String(ref).replace(/^#/, "");
 
 /**
- * The FEA result a loaded glTF scene root carries (a mesh `cad fea` generated), or null for any other GLB.
+ * The FEA result a loaded glTF scene root carries (a mesh a stress study wrote), or null for any other GLB.
  * Throws for a result without anything cadgen always writes: the viewer says so rather than show less than the
  * file should hold.
  */

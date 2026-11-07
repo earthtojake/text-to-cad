@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { useI18n } from "@cad/ui/i18n";
-import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
+import { TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowLabel, TreeRowSurface, TreeRowToggle } from "@cad/ui/primitives/tree-row";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { Checkbox } from "@cad/ui/primitives/checkbox";
-import { InfoRow } from "../kit/inspector/referenceRows.jsx";
 import { controlRow } from "./fea/controlRow.jsx";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { formatValue } from "./feaResult.js";
@@ -31,14 +30,13 @@ const controlText = (value, control) => (control.unit === "×" ? `×${stepped(va
  */
 function FeaResultControls({ controls, values, onChange, markers = null }) {
   const { t } = useI18n();
-  // One value box width for every number, the widest any of them shows, so their sliders end together.
-  const boxTexts = controls.filter((control) => control.type === "number")
-    .flatMap((control) => [values[control.id], control.min, control.max].map((value) => controlText(value, control)));
+  // Each number is the slider control, its slider the row's full width under its label and value, so every
+  // slider ends with the panel.
   return (
     // A select gives way before its label in the narrow panel ("Displacement" would squeeze "Show" away).
     <div className="flex flex-col gap-1.5 [&_span:has(+span>[data-slot=select-trigger])]:shrink-0 [&_span:has(>[data-slot=select-trigger])]:min-w-0 [&_span:has(>[data-slot=select-trigger])]:shrink [&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:max-w-full">
       {controls.map((control) => controlRow({
-        control, value: values[control.id], valueText: controlText, t, boxTexts,
+        control, value: values[control.id], valueText: controlText, t,
         onChange: (value) => onChange(control.id, value),
       }))}
       {markers ? <div className="flex min-w-0 items-center gap-2 px-2 text-tiny" data-fea-markers="">
@@ -82,9 +80,8 @@ function WrappedRowText({ row }) {
 function StudyFactRow({ row, depth }) {
   const hint = row.hint || [row.label, row.detail].filter(Boolean).join(" ");
   return <li className="min-w-0">
-    <TreeRowSurface dense className="h-auto min-h-6 gap-0 pr-0 hover:bg-transparent" style={{ height: "auto", paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id}>
-      <TreeRowGuides depth={depth} column={16} />
-      <span className="w-4 shrink-0" />
+    <TreeRowSurface dense depth={depth} className="h-auto min-h-6 hover:bg-transparent" style={{ height: "auto" }} data-study-row={row.id}>
+      <TreeRowGlyph />
       <TooltipHint content={hint} overflowOnly={!row.hint}>
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 py-1 pr-2">
           <span className={cn("min-w-0 max-w-full", row.wrap ? "[overflow-wrap:break-word]" : "truncate")}>{row.wrap ? unbroken(row.label) : row.label}</span>
@@ -104,10 +101,10 @@ function StudyHeadingRow({ row, depth, ...rest }) {
   const Glyph = STUDY_GLYPHS[row.glyph];
   // A little air above each heading after the first, so the setup reads as separate sentences.
   return <li className="min-w-0 [&:not(:first-child)]:pt-1">
-    <div className="relative flex h-6 min-w-0 items-center text-tiny text-muted-foreground" style={{ paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id} data-study-heading="">
-      <span className="grid w-4 shrink-0 place-items-center">{Glyph ? <Glyph /> : null}</span>
-      <span className="min-w-0 truncate pl-1.5">{row.label}</span>
-    </div>
+    <TreeRowSurface dense depth={depth} className="text-muted-foreground hover:bg-transparent" data-study-row={row.id} data-study-heading="">
+      <TreeRowGlyph>{Glyph ? <Glyph /> : null}</TreeRowGlyph>
+      <TreeRowLabel>{row.label}</TreeRowLabel>
+    </TreeRowSurface>
     <ul>{row.children.map((child) => <StudyRow key={child.id} row={child} depth={depth + 1} {...rest} />)}</ul>
   </li>;
 }
@@ -128,16 +125,13 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;
   return <li className={cn("min-w-0", depth === 0 && "[&:not(:first-child)]:pt-1")}>
-    <TreeRowSurface dense active={active} className={cn("gap-0 pr-0", row.wrap && "h-auto min-h-6")}
-      style={{ paddingLeft: depth * TREE_INDENT_PX, ...(row.wrap ? { height: "auto" } : {}) }} data-study-row={row.id}>
-      <TreeRowGuides depth={depth} column={16} />
-      {branch ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: row.label })} aria-expanded={open}
-        className="grid h-6 w-4 shrink-0 place-items-center self-start rounded focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
+    <TreeRowSurface dense depth={depth} active={active} className={cn(row.wrap && "h-auto min-h-6")}
+      style={row.wrap ? { height: "auto" } : undefined} data-study-row={row.id}>
+      {branch ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: row.label })}
+        onToggle={() => toggle(row.id)} /> : <TreeRowGlyph />}
       {choosable ? <TooltipHint content={row.hint || (row.wrap ? null : [row.label, row.detail].filter(Boolean).join(" "))} overflowOnly={!row.hint}>
         <button type="button" aria-label={t("tree.select", { name: row.name || row.label })} aria-pressed={active} onClick={() => onChoose(row)}
-          className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
+          className={cn(TREE_ROW_NAME_CLASS, "gap-1.5", row.wrap && "h-auto flex-wrap items-baseline py-1")}>
           {row.wrap ? <WrappedRowText row={row} /> : <RowText row={row} />}
         </button>
       </TooltipHint> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
@@ -149,7 +143,7 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
 }
 
 /**
- * One section of the file sidebar, headed by its title: Parts or Study, its rows in the sidebar's one scroll.
+ * One tab of the view's panel: Study or Parts, its rows on the panel's lines, in its one scroll.
  * `startsCollapsed`: the rows it opens with shut (every part but the weakest). Which rows are open is the
  * section's own, kept while it is mounted (open in the sidebar or not).
  */
@@ -181,15 +175,15 @@ export const FEA_PARTS_PANEL_ID = "parts";
 export const FEA_STUDY_PANEL_ID = "study";
 
 /**
- * An FEA result's sections of the file sidebar, whatever the tool, composed from what the file holds:
- * **Parts** only for an assembly whose panel shows (`parts`: `partRows`, each part with its joints under it,
- * the weakest part open; `feaShowsParts`, from six parts up), then **Study**: the verdict at the load shown
+ * An FEA result's tabs of the view's panel, whatever the tool, composed from what the file holds: **Study**
+ * first, then **Parts** only for an assembly whose tab shows (`parts`: `partRows`, each part with its joints
+ * under it, the weakest part open; `feaShowsParts`, from six parts up). Study: the verdict at the load shown
  * (`verdict`: `feaVerdict`, none where the file cannot say) over one list of the setup (`setup`,
  * `studySections`: where it is held, what pushes it, what it is made of, each only where the file records it),
  * What you see: the field, deformation and load controls and the markers' gate (`result`: `FeaResultControls`'
  * props), and Details (`details`), shut. Choosing a row that stands for faces or parts is `onChoose(row)`;
  * `chosen` is the row (or picked face) chosen. A face picked on the result is Quick Edit's chip, its card
- * `FaceCard`.
+ * `faceDetail`.
  *
  * @param {{ parts?: object[], openPart?: number, setup: object[], details: object[],
  *   verdict?: object | null, chosen: string, onChoose(row: object): void,
@@ -205,18 +199,19 @@ export default function FeaStudyPanel({ parts = NONE, openPart = -1, setup, deta
     ...(verdict ? [{ element: <FeaVerdict verdict={verdict} chosen={chosen} onChoose={onChoose} /> }] : NONE),
     { rows: [...setup, { ...RESULT_ROW, label: t(RESULT_ROW.key) }, ...details] },
   ];
+  // Two tabs of the view's panel: Study first, which opens with the verdict, then an assembly's Parts.
   const panels = [
-    parts.length ? { id: FEA_PARTS_PANEL_ID, title: t("fea.parts"), blocks: [{ rows: parts }], startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
     { id: FEA_STUDY_PANEL_ID, title: t("fea.study"), startsCollapsed: collapsedIds([...setup, ...details]), fit: "tree", blocks },
+    parts.length ? { id: FEA_PARTS_PANEL_ID, title: t("fea.parts"), blocks: [{ rows: parts }], startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
   ].filter(Boolean);
   return <>{panels.map((panel) => <StudyTreePanel key={panel.id} {...panel} chosen={chosen} onChoose={onChoose} contents={contents} />)}</>;
 }
 
-/** A face picked on the result, as its Quick Edit chip's card under the ref the chip names: what the study does to it, and its part. */
-export function FaceCard({ face }) {
-  const { t } = useI18n();
-  return <>
-    <InfoRow label={t("fea.study")}>{face.role}</InfoRow>
-    {face.part ? <InfoRow label={t("fea.part")}>{unbroken(face.part)}</InfoRow> : null}
-  </>;
+/** A face picked on the result, as its Quick Edit chip's card describes it (`DetailItem`'s facts, under the ref the
+ * chip names): what the study does to it, and its part. */
+export function faceDetail(face, t) {
+  return { facts: [
+    { label: t("fea.study"), value: face.role, copy: false },
+    ...(face.part ? [{ label: t("fea.part"), value: unbroken(face.part), copy: false }] : []),
+  ] };
 }

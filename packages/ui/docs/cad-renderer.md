@@ -472,10 +472,10 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
 - **Display**: `viewFeaturesForKind("glb", { parts, explodeParts })`: Solid and Clip, Parts where
   the file has several meshes, and Explode where it has two or more rigid nodes that draw
   (`explodeParts`); Preview draws Render.
-- **An FEA result** (a mesh `cad fea solve` wrote) is drawn by its own surface over the same shell
-  (`glb/FeaSurface.jsx`, in the FEA viewer's chunk, `glb/feaView.jsx`, which a plain GLB never fetches):
-  the same tools, Select picking the result's faces, with Study (and an assembly's Parts) in the file
-  sidebar, the colour bar and the study's markers on the model. Its layout is the viewer's own, the same
+- **An FEA result** (a mesh a stress study's solve wrote, `cad step fea --study`) is drawn by its own surface
+  over the same shell (`glb/FeaSurface.jsx`, in the FEA viewer's chunk, `glb/feaView.jsx`, which a plain GLB
+  never fetches): the same tools, Select picking the result's faces, with Study (and an assembly's Parts)
+  as tabs of the view's panel, the colour bar and the study's markers on the model. Its layout is the viewer's own, the same
   for every result: the file carries no view. See `settings-ui.md`, An FEA result.
 - **Tools** (`glb/tools.js`): **Select** (in hand as the file opens), **Pencil**, **Shapes**,
   **Measure**, **Explode** (several parts only) and **Clip**. Select picks a NODE: the glTF

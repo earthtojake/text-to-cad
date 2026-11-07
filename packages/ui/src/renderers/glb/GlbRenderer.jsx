@@ -25,7 +25,7 @@ const EXPLODE_OFF = Object.freeze({ exploded: { enabled: false, amount: 0 } });
 const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: false } });
 
 /**
- * Whether a loaded scene carries an FEA result: a mesh `cad fea solve` wrote. Its generator alone says so; what
+ * Whether a loaded scene carries an FEA result: a mesh `cad step fea --study` wrote. Its generator alone says so; what
  * else the result holds is `feaResult.js`'s to read, and one that does not read is the load's alert, never a plain GLB.
  */
 function carriesFeaResult(root) {
