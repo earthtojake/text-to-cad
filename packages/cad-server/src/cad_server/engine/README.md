@@ -1916,8 +1916,9 @@ environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the e
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
 plan cameras, annotation and measurements. Its render-service handle holds only a path; no
 board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
-No KiCad is required to view a board; KiCad's own CLI (kicode's, the `kicad` integration's) performs DRC
-and exports.
+Viewing a board needs no KiCad installed: its first plot fetches kicode, the `kicad` integration's, for the
+refill (`_internal/boards.refills`: `CAD_KICAD_REFILL=0` plots the pours as saved, fetching nothing), and
+KiCad's own CLI (kicode's) performs DRC and exports.
 A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
 the hierarchy from its project's root and builds the page the display names (`{sheet, border}`: the
 root, `/`, unless it names another; the page's edge off unless asked), and `render/schematic.py`
