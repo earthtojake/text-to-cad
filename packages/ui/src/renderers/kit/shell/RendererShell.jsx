@@ -400,7 +400,8 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       onSelect: () => frame.projection.onChange(otherProjection(frame.projection.value)) },
     { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
       tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
-      // In a phone's More, a standard nested submenu of the same list: the modes, then Grid.
+      // In a phone's More, the same list opened under its row, in More itself (`FloatingToolBar.js`'s TouchStrip):
+      // the modes, then Grid.
       submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
     ...(mobile ? [zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
