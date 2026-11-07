@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from cad.engine.formats.kicad import sexpr
 from tests.python.support import kicode
 
 # Stable KiCad 9 syntax, so the same file loads in 9, 10 and the nightly: a 40 x 30 mm board, one 0603-like
@@ -151,8 +152,10 @@ class StepWithoutModels(unittest.TestCase):
             root = Path(folder)
             (root / "only.wrl").write_text("#VRML V2.0 utf8\nShape { geometry Box { size 1 1 1 } }\n", encoding="utf-8")
             r1 = '(attr smd)\n  (pad "1"'
-            board = BOARD.replace(r1, f'(attr smd)\n  (model "{root / "gone" / "missing.step"}")\n  (pad "1"', 1)
-            board = board.replace('(attr board_only', f'(model "{root / "only.wrl"}")\n  (attr board_only', 1)
+            # The paths are written as KiCad writes a string: a Windows path's backslashes escaped.
+            gone, vrml = (sexpr.quote(str(path)) for path in (root / "gone" / "missing.step", root / "only.wrl"))
+            board = BOARD.replace(r1, f'(attr smd)\n  (model {gone})\n  (pad "1"', 1)
+            board = board.replace('(attr board_only', f'(model {vrml})\n  (attr board_only', 1)
             self.assertEqual(board.count("(model "), 2)
             path = root / "board.kicad_pcb"
             path.write_text(board, encoding="utf-8")

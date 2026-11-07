@@ -238,7 +238,8 @@ class PlotRoute(unittest.TestCase):
     def test_a_boards_models_are_answered_by_document_ids_as_the_files_are_now(self) -> None:
         library = self.folder / "library"
         (library / "Resistor_SMD.3dshapes").mkdir(parents=True)
-        (library / "Resistor_SMD.3dshapes" / "R_0603_1608Metric.step").write_text("ISO-10303-21; resistor\n", encoding="utf-8")
+        # Bytes, with both line endings: the source route serves the file as it is, on every platform.
+        (library / "Resistor_SMD.3dshapes" / "R_0603_1608Metric.step").write_bytes(b"ISO-10303-21;\r\nresistor\n")
         env = mock.patch.dict("os.environ", {"CAD_KICAD_3DMODELS": str(library)})
         env.start()
         self.addCleanup(env.stop)
@@ -250,13 +251,13 @@ class PlotRoute(unittest.TestCase):
         self.assertEqual((resistor["file"], resistor["api"]), ("R_0603_1608Metric.step", f"/api/v1/documents/step/{resistor['document']}"))
         # D1's model is the project's own, not there yet: missing, and no path in the answer.
         self.assertEqual(table["${KIPRJMOD}/models/led.step"], {"file": "led.step", "missing": "not-found"})
-        self.assertNotIn(str(self.folder).encode(), body)
+        self.assertNotIn(json.dumps(str(self.folder))[1:-1].encode(), body)
         # The engine's STEP routes know the resolved file by its id from now on.
         status, _, step = self.request("GET", f"{resistor['api']}/source")
-        self.assertEqual((status, step), (200, b"ISO-10303-21; resistor\n"))
+        self.assertEqual((status, step), (200, b"ISO-10303-21;\r\nresistor\n"))
         # The table is the files as they are now: the model added is the next answer's.
         (self.folder / "models").mkdir()
-        (self.folder / "models" / "led.step").write_text("ISO-10303-21; led\n", encoding="utf-8")
+        (self.folder / "models" / "led.step").write_bytes(b"ISO-10303-21; led\n")
         led = json.loads(self.request("GET", f"{api}/models")[2])["models"]["${KIPRJMOD}/models/led.step"]
         self.assertEqual((led["file"], led["api"].startswith("/api/v1/documents/step/")), ("led.step", True))
 
