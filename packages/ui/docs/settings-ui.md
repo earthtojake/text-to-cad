@@ -281,8 +281,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   light and dark, carrying the strip's fill itself, without the strip's border and shadow
   (`ViewCorner.jsx`'s `VIEW_CORNER_BUTTON_CLASS` on `VIEW_CORNER_SURFACE_CLASS`, `floatingSurface.js`'s
   `FLOATING_CHROME_FILL_CLASS`: the popover's colour at 90% under a small blur). One 24px square each,
-  with no box round it: its hover, open, pressed and lit fills are states of that one surface (lit, the
-  whole button in the strip's pressed fill), and its tooltip the strip's. The zoom pill is one 24px row
+  with no box round it: its hover, open and pressed fills are states of that one surface, and its tooltip
+  the strip's. The zoom pill is one 24px row
   of them on the same surface (`VIEW_CORNER_TOOLBAR_CLASS`): − and + either side of the 48px percentage
   in the type scale's `text-tiny`, 96px wide. A state of how
   the model is looked at is **one state button** (`kit/shell/StateButton.jsx`), the one control every
@@ -290,9 +290,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   and a board's 2D/3D and Flip. Its icon is the state on screen; its name says that state ("Projection:
   Orthographic", "View: 2D", "Side: Top"), so the name changes with it and it is a plain button, never a
   toggle with `aria-pressed` (the W3C APG button pattern); its tooltip says what a press does ("Switch to
-  Perspective", "Switch to 3D", "View from bottom"), with its key where it has one. A state a person loses
-  track of (a board seen from the bottom) is lit in the strip's pressed fill for as long as it holds, and
-  keeps its tooltip. Over an empty canvas they stand a step off it as the strip does; over the picture or the
+  Perspective", "Switch to 3D", "View from bottom"), with its key where it has one. It switches between its
+  states and never marks one as selected: no state is drawn in the strip's pressed fill or any other, so a
+  board seen from the bottom reads by Flip's icon alone, as an orthographic camera does by Projection's (a
+  phone's More row is a menu's, ticked while the state holds). Over an empty canvas they stand a step off it as the strip does; over the picture or the
   model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 4px apart, as the strip's
   tiles are; a column's tooltips and menus open beside it, away from the corner, the pill's above it. A state shows on the
   control itself, its icon (Projection's, a board's 2D/3D and side). A phone has no corner: its view's controls are
@@ -757,8 +758,13 @@ file.
   its name under the layer's name and, under its count, its handle as the entity's id it is, `#9C` (the
   payload carries no insertion point to show instead), its tooltip **Handle 9C**; Copy Reference names
   it by that handle (`drawing.dxf#h9C`), and the search finds it by it. Searching, the layers whose names match,
-  and the blocks whose names do under their layer, open: the search decides what shows, so a layer's
-  chevron is locked (a mark nobody can press) until it is cleared.
+  and the blocks whose names do under their layer, open, whatever the person had folded: the search
+  decides which rows are candidates, and among them a layer's chevron works as it does unsearched. A
+  collapse hides the hits under that layer (every block reference of a layer kept by its own name, the
+  matching ones of a layer kept by a block), never the layer's row, and an expand shows them again. Those
+  folds are the search's own, as its hits are: they hold while it is up, however the query is edited (a
+  layer folded stays folded as long as the search keeps it), and clearing the search drops them, so the
+  layers come back folded and open exactly as the person left them before searching.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
   often, so in the corner's column over the zoom pill, from the top down, the same in 2D and 3D:
   **Display**, the corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its
@@ -769,8 +775,9 @@ file.
   a box in 3D ("View: 2D", its hint "Switch to 3D 3"); and **Flip**, the side it is seen from (KiCad's View ▸
   Flip Board View), a state button too, the board as two stacked layers (Lucide's `layers-2`), the side it is
   seen from solid: the upper layer while it is seen from the top, the same glyph mirrored, the lower layer
-  solid, from the bottom (`board/boardSideIcons.jsx`; "Side: Top", its hint "View from bottom ⇧F"), lit in the strip's pressed fill
-  while it is seen from the bottom, the view a person loses track of; a press or ⇧F turns it over. From the bottom the board is mirrored, its back layers on top. The rest of how a
+  solid, from the bottom (`board/boardSideIcons.jsx`; "Side: Top", its hint "View from bottom ⇧F"); like
+  Projection it has no selected state, its icon the side on screen and no pressed or lit fill from either
+  side; a press or ⇧F turns it over. From the bottom the board is mirrored, its back layers on top. The rest of how a
   board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
   in the settings form's rows: under the layers, **Layer display**: **Others** (KiCad's high-contrast
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
@@ -786,7 +793,10 @@ file.
   each tab's hits under its name — the layers or sheets whose names match first, then the Parts' and
   the Nets' ranked hits (the arrows and Enter walk and pick the open tab's, else the first list's) —
   a tab with none left out, and one line when
-  nothing matches. Escape or the box's X clears it and the tabs come back.
+  nothing matches. Escape or the box's X clears it and the tabs come back, each tree folded and open as
+  the person left it: a search opens or shuts no tree's own rows. Most tabs list their hits flat, with
+  no chevron (the Model's, the Links', the Parts', the Nets', a board's layers, the Hierarchy); a
+  drawing's Layers keep each hit under its layer, whose chevron folds them for the search alone (above).
 - **Collapsed, it goes whole.** **Hide panel** takes it away and leaves **Show panel** (lucide's
   PanelLeftOpen) alone on a pill at the canvas's top-left, 8px in, on the strip's surface. No rail, no
   hover reveal, and a pick on the picture never opens it.
@@ -944,19 +954,24 @@ Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
 | The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
-| Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, eased, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right. Its icon (and its light) is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
+| Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, eased, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
 | Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
 | Projection | Display's menu's, after a rule under the presets: Orthographic or Perspective, kept with the file's view |
 | Home | none: Zoom to fit (F, a double-click on empty space under Select, the pill's or the view's menu) frames the board |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
 Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
-the eye where the face is drawn at the 2D scale), and eases to the 3D views' opening view, the board
-framed whole (or to the camera the file was left at in 3D); the 2D picture stays on screen until the 3D
+the eye where the face is drawn at the 2D scale), and eases, on that same side, to the 3D views' opening
+tilt, the board framed whole — from the bottom, that view turned over the board as Flip turns it (behind,
+right and below, the world's up still up) — or to the camera the file was left at in 3D, turned over to
+that side if it looks at the other: the ease never crosses the board's plane, so Flip shows the side the
+2D view showed throughout. The 2D picture stays on screen until the 3D
 view has drawn that same picture, so the switch shows no frame of anything else. Leaving with the camera
 where that left it (nothing turned, panned or zoomed since) gives the 2D view back exactly as it was,
 from its side; once the camera has been moved (a Flip is a move), leaving frames the 2D view on what the
-camera was centred on, at the matching scale, from its side, the side Flip showed. Either way the 3D view stays until the 2D canvas has painted
+camera was centred on, at the matching scale, from its side, the side Flip showed. That round trip is a 3D
+view entered from the 2D view in the same page: a file reopened in 3D opens on its stored camera with no 2D
+picture under it, so leaving it always frames the 2D view on the camera's window, moved or not. Either way the 3D view stays until the 2D canvas has painted
 the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
 The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
 of More, and in 3D Display's submenu ends with Projection.

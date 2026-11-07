@@ -271,6 +271,41 @@ test('2D to 3D and back with the camera left alone: every frame shows the board,
   assert.deepEqual(errors, []);
 });
 
+test('a board reopened in 3D leaves for 2D centred on what its camera centred on, nobody having moved it', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  // The tab's record in the page's sessionStorage (`?store=session`): a reload of the page is a reload of the tab.
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb&store=session`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  // In 3D, the camera turned onto R1 pad 2 from the front, right and above, and kept with the file's view.
+  await pane.locator('[data-board-dimension]').click();
+  const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await settled();
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [55, -45, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await page.waitForFunction(() => {
+    const board3d = value => (value && typeof value === 'object' ? value.board3d?.value ?? Object.values(value).map(board3d).find(Boolean) : null);
+    const kept = board3d(JSON.parse(sessionStorage.getItem('text-to-cad:tab:harness') || 'null'));
+    return kept?.mode === '3d' && Math.abs((kept.camera?.target?.[0] ?? 0) - 35.825) < 1e-6;
+  });
+  // Reopened, it is in 3D on that camera; the pad picked, then 2D with the camera untouched.
+  await page.reload();
+  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && Math.abs(camera.target[0] - 35.825) < 1e-6; });
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
+  await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
+  await pane.locator('[data-board-dimension="3d"]').click();
+  await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
+  const flat = await frame(pane);
+  const pad = litAt(flat);
+  assert.ok(pad && Math.hypot(pad[0] - flat.width / 2, pad[1] - flat.height / 2) <= 1, `R1 pad 2 at the centre: ${pad} in ${flat.width} x ${flat.height}`);
+  assert.equal(await pane.locator('[data-board-side]').getAttribute('data-board-side'), 'top');
+  assert.deepEqual(errors, []);
+});
+
 test('in 3D Flip turns the camera over and its icon is the side the camera is on, turned by Flip, ⇧F or a drag; 2D comes back on that side', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(() => page.close());
@@ -294,9 +329,10 @@ test('in 3D Flip turns the camera over and its icon is the side the camera is on
       return { camera: target[2] - position[2] > 0 ? 'bottom' : 'top',
         flip: [button.dataset.boardSide, button.getAttribute('aria-label'), button.dataset.variant] };
     }));
-  const top = { camera: 'top', flip: ['top', 'Side: Top', 'ghost'] }, bottom = { camera: 'bottom', flip: ['bottom', 'Side: Bottom', 'secondary'] };
+  // Like Projection, Flip's icon says its side, and neither side is drawn in a pressed fill.
+  const top = { camera: 'top', flip: ['top', 'Side: Top', 'ghost'] }, bottom = { camera: 'bottom', flip: ['bottom', 'Side: Bottom', 'ghost'] };
   assert.deepEqual(await rest(), top, 'Home, over the board');
-  // Flip: the camera turned over the board, and the button follows it under, lit; not one corner box moves.
+  // Flip: the camera turned over the board, and the button follows it under; not one corner box moves.
   await pane.locator('[data-board-side]').click();
   await page.waitForFunction(() => window.__cadCamera?.().position[2] < 0);
   assert.deepEqual(await rest(), bottom, 'Flip turned the camera under the board');
@@ -359,7 +395,7 @@ test('in 3D a part stands its model, a press on its body picks the part rather t
   assert.deepEqual(errors, []);
 });
 
-test('in 3D a revision of the board read while the camera looks at its back draws the back face', async (t) => {
+test('3D entered from the 2D bottom eases to Home’s tilt under the board, Flip the bottom all the way, and a revision read while the camera looks at the back draws the back face', async (t) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
   t.after(async () => { await page.close(); served = { plot: BOARD, models: null }; });
   page.setDefaultTimeout(30000);
@@ -369,12 +405,24 @@ test('in 3D a revision of the board read while the camera looks at its back draw
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  await pane.locator('[data-board-dimension]').click();
-  await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
-  const camera = () => page.evaluate(() => window.__cadCamera());
-  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  // Seen from the bottom in 2D, then in 3D, Flip's side read on every frame: head on from below, then eased to
+  // Home's tilt from below (the world's z up), the camera never over the board's plane.
   await pane.locator('[data-board-side]').click();
-  await page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling && camera.position[2] < 0; });
+  await pane.locator('[data-board-side="bottom"]').waitFor();
+  await page.evaluate(() => {
+    window.__sides = new Set();
+    const look = () => { if (!window.__sides) return; window.__sides.add(document.querySelector('[data-board-side]')?.dataset.boardSide); requestAnimationFrame(look); };
+    requestAnimationFrame(look);
+  });
+  await pane.locator('[data-board-dimension]').click();
+  await page.waitForFunction(() => {
+    const camera = window.__cadCamera?.();
+    return document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible') && camera && !camera.settling && camera.up[2] > 0.9;
+  });
+  const camera = () => page.evaluate(() => window.__cadCamera());
+  const eased = await camera();
+  assert.ok(eased.position[2] < -1.6 && eased.target[2] > eased.position[2], `the eye under the board, looking up at it: ${eased.position} to ${eased.target}`);
+  assert.deepEqual(await page.evaluate(() => { const sides = [...window.__sides]; window.__sides = null; return sides; }), ['bottom'], 'Flip said the bottom on every frame');
   await pane.locator('[data-board-3d][data-board-faces~="bottom"]').waitFor();
   const before = await camera();
   // The file saved again, a little thinner: a new plot, so a new stage, under the camera where it was.

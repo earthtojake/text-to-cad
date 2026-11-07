@@ -35,7 +35,8 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
 });
 // The board in 3D mounts the 3D views' viewport, which needs WebGL: a stand-in here, which says it has
 // presented and answers the camera calls; the pixels and the picks through it are the browser suite's.
-const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[] }));
+// `homes`: what each Home was asked to frame from (its direction and up).
+const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[] }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
   const React = await import('react');
   return {
@@ -45,7 +46,7 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
         captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }),
         getPerspective: () => ({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0, 1] }),
         setPerspective: (camera: any) => { viewport3d.calls.push(`setPerspective ${JSON.stringify(camera.position)}`); return true; },
-        goHome: () => { viewport3d.calls.push('goHome'); return true; },
+        goHome: (from?: any) => { viewport3d.calls.push('goHome'); viewport3d.homes.push(from ?? null); return true; },
         resetZoom: () => { viewport3d.calls.push('resetZoom'); return true; },
         zoomToBounds: () => true, zoomPercent: () => 100, subscribeCamera: () => () => {}, zoomBy: () => true, zoomTo100: () => true
       }));
@@ -1096,7 +1097,7 @@ it("2D/3D is one view: the strip, the panel and the corner stay the same mounted
   again.dispose();
 });
 
-it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key; Flip is lit from the bottom; ⇧F flips as F still fits", async () => {
+it("2D/3D and Flip each show the state on screen, name it and say what a press does, with its key, neither ever in a pressed fill; ⇧F flips as F still fits", async () => {
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
@@ -1128,15 +1129,16 @@ it("2D/3D and Flip each show the state on screen, name it and say what a press d
     paths: [...svg.querySelectorAll('path')].map(path => [path.getAttribute('d'), path.getAttribute('fill-opacity')]) }; };
   const top = glyph();
   expect(top.paths.map(([, fill]) => fill)).toEqual(['0.85', null]);
-  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it, lit, its hint the way back.
+  // ⇧F turns the board over, the window kept: drawn from the bottom, and Flip shows it by its icon alone, as
+  // Projection shows its state (no pressed fill), its hint the way back.
   fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
   expect(frames.at(-1)).toEqual(moved);
-  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'secondary'], 'View from top⇧F']);
+  expect([shown(flipButton(pane)), await hint(flipButton(pane))]).toEqual([['Side: Bottom', 'side-bottom', 'ghost'], 'View from top⇧F']);
   // The same drawing mirrored top to bottom, so the two sides weigh the same: the top's set 0.75 down, the bottom's 0.75 up.
   expect([top.place, glyph().place, glyph().paths]).toEqual(['translate(0 0.75)', 'matrix(1 0 0 -1 0 23.25)', top.paths]);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.side).toBe('bottom'));
-  // F is the fit, still, not a flip; ⇧F again, and the top is back, unlit.
+  // F is the fit, still, not a flip; ⇧F again, and the top is back.
   fireEvent.keyDown(canvas, { key: 'f', code: 'KeyF' });
   await waitFor(() => expect(frames.at(-1)).toEqual(fitted));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom' });
@@ -1162,7 +1164,7 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   expect(viewport3d.calls).toEqual(['setPerspective [10,40,-30]']);
   expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
   report(true);
-  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
+  expect(shown(flipButton(pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   // Turned back over by hand (an orbit past the board's plane): the icon follows.
   report(false);
   expect(shown(flipButton(pane))).toEqual(['Side: Top', 'side-top', 'ghost']);
@@ -1180,8 +1182,36 @@ it("in 3D Flip turns the camera over, and its icon is the side the camera is on:
   cleanup();
   const again = await open('blinky.kicad_pcb', { state: stored });
   await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
-  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'secondary']);
+  expect(shown(flipButton(again.pane))).toEqual(['Side: Bottom', 'side-bottom', 'ghost']);
   again.dispose();
+});
+
+it("entering 3D eases to a camera on the side 2D showed, so Flip keeps it: Home's tilt from below for the bottom, the camera left in 3D turned over to the top", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const side = () => flipButton(pane).getAttribute('data-board-side');
+  // Seen from the bottom in 2D, then in 3D: Home framed from the 3D views' Home direction turned over the board.
+  fireEvent.click(flipButton(pane));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
+  viewport3d.homes.length = 0;
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.homes).toHaveLength(1));
+  expect([viewport3d.homes[0], side()]).toEqual([{ direction: [2.1, 1.65, -1.08], up: [0, 0, 1] }, 'bottom']);
+  // The camera at rest under the board, kept with the file; back in 2D, still the bottom, which Flip turns to the top.
+  act(() => { viewport3d.props.onPerspectiveChange({ position: [10, 40, -30], target: [10, 0, 0], up: [0, 0, 1] }); });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.camera?.position).toEqual([10, 40, -30]));
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  expect(side()).toBe('bottom');
+  fireEvent.click(flipButton(pane));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'top' }));
+  // In 3D again, from the top: the camera it was left at, turned over the board to the top about its target, and no Home.
+  viewport3d.calls.length = 0;
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.calls).toContain('setPerspective [10,-40,30]'));
+  expect([viewport3d.homes.length, side()]).toEqual([1, 'top']);
+  dispose();
 });
 
 it("a part's card says its 3D model, or why it has none, and the Parts end with the parts that have none; the Layers' 3D models eye is kept with the file", async () => {

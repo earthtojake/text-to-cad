@@ -544,14 +544,16 @@ const ShellViewport = forwardRef(function ShellViewport({
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
     // Home: the view it opened with — from the opening direction, what is shown framed whole — the corner's
-    // Home button (`ViewCorner.jsx`), as Fusion's and Maya's cubes' Home is.
-    goHome() {
+    // Home button (`ViewCorner.jsx`), as Fusion's and Maya's cubes' Home is. A view seen from another side
+    // hands its own direction (`direction`, from the target to the eye, and its `up`), what is shown framed
+    // whole from there.
+    goHome({ direction = DEFAULT_VIEW_DIRECTION, up = WORLD_UP } = {}) {
       const runtime = runtimeRef.current;
       if (!runtime) return false;
       const live = fitSceneRef.current;
       const bounds = live?.shownBounds?.() || live?.bounds || runtime.zeroPoseBounds;
       const moved = zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate: true, modelOffset: modelTransformRef.current.offset,
-        resetZoomBaseline: true, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP });
+        resetZoomBaseline: true, viewDirection: direction, viewUp: up });
       if (moved) fitCamera(runtime);
       return moved;
     },

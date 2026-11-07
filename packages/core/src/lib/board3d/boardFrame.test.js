@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cameraTurnedOver, headOnCamera, millimetresPerPixel, perspectiveHeadOn, planFromCamera, rayOnBoard, sheetToWorld, worldToSheet } from "./boardFrame.js";
+import {
+  cameraOnSide, cameraTurnedOver, headOnCamera, leavingView, millimetresPerPixel, perspectiveHeadOn, planFromCamera, rayOnBoard, sheetToWorld,
+  sideSeenAlong, worldToSheet
+} from "./boardFrame.js";
 import { faceBox, faceRaster, faceTransform, faceUv, faceView } from "./boardFaces.js";
 import { fitBoardBounds } from "../plot2d/plot.js";
 import { panTransform, zoomLimits, zoomTransform } from "../drawing2d/transform.js";
@@ -90,6 +93,24 @@ test("a camera turned off the face hands the 2D view the face point it centres, 
   close([perspective.transform.scale], [height / (40 * along)], "perspective");
 });
 
+test("leaving 3D gives the 2D view back as it was only after a round trip from its picture nobody turned; else the camera's window, at its scale and side", () => {
+  const camera = { side: "bottom", transform: { scale: 3, offsetX: 10, offsetY: 20 } };
+  let asked = 0;
+  const plan = () => { asked += 1; return camera; };
+  const framed = { transform: camera.transform, side: "bottom" };
+  // Entered from the 2D picture and left alone: the 2D view as it was, from the side it showed; no camera read.
+  assert.deepEqual(leavingView({ flat: true, moved: false, side: "top", plan }), { transform: null, side: "top" });
+  assert.equal(asked, 0);
+  // Moved since it opened (a Flip is a move): the camera's window.
+  assert.deepEqual(leavingView({ flat: true, moved: true, side: "top", plan }), framed);
+  // Opened on the camera the file was left at (a reload in 3D), no 2D picture ever under it: the camera's window,
+  // whether or not anybody moved it.
+  assert.deepEqual(leavingView({ flat: false, moved: false, side: null, plan }), framed);
+  assert.deepEqual(leavingView({ flat: false, moved: true, side: null, plan }), framed);
+  // No camera to read yet (its viewport not up): the 2D view as it is.
+  assert.deepEqual(leavingView({ flat: false, moved: false, side: null, plan: () => null }), { transform: null, side: null });
+});
+
 test("Flip turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {
   const turned = cameraTurnedOver({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0.6, 0.8] });
   close(turned.position, [10, 40, -30], "eye");
@@ -103,6 +124,27 @@ test("Flip turns the camera over the board's left-to-right axis, up kept: the ba
   const flat = cameraTurnedOver({ position: [5, -5, 100], target: [5, -5, 0], up: [0, 1, 0] });
   close(flat.position, [5, -5, -100], "head on");
   close(flat.up, [0, 1, 0], "head on up");
+});
+
+test("entering 3D eases to a camera on the side the 2D view showed: Home's tilt from below for the bottom, a camera on the other side turned over as Flip turns it", () => {
+  // The 3D views' Home, its direction a camera on the origin: from the top it is Home itself.
+  const home = { position: [2.1, -1.65, 1.08], target: [0, 0, 0], up: [0, 0, 1] };
+  assert.equal(cameraOnSide(home, "top"), home);
+  // From the bottom, Home mirrored under the board: behind, right and below, the world's up still up, seen from the bottom.
+  const below = cameraOnSide(home, "bottom");
+  close(below.position, [2.1, 1.65, -1.08], "Home's eye from the bottom");
+  close(below.up, [0, 0, 1], "Home's up from the bottom");
+  assert.ok(below.position[2] < below.target[2], "the eye under the board's plane");
+  assert.equal(sideSeenAlong(below.target.map((value, axis) => value - below.position[axis])), "bottom");
+  // The same camera Flip turns Home to, so Flip goes back and forth between the two.
+  assert.deepEqual(below, { ...home, ...cameraTurnedOver(home) });
+  // The camera a file was left at in 3D, above the board, entered from the bottom: turned over about its target,
+  // its zoom kept; one already under the board is kept as it is.
+  const left = { position: [30, -60, 45], target: [20, -15, 4], up: [0, 0, 1], zoom: 1.5, projection: "orthographic" };
+  const turned = cameraOnSide(left, "bottom");
+  close(turned.position, [30, 30, -37], "the camera left in 3D, turned under");
+  assert.deepEqual([turned.target, turned.zoom, turned.projection], [[20, -15, 4], 1.5, "orthographic"]);
+  assert.equal(cameraOnSide(turned, "bottom"), turned);
 });
 
 test("a face's raster keeps to its budget and the GPU's largest texture, and maps the sheet onto it, mirrored from the back", () => {

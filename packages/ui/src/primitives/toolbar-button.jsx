@@ -20,16 +20,13 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
  * tooltip's text where it is shorter than the accessible name (Display's "Display"). `shortcut`, the
  * key that does what the button does ("V", "⇧L"), follows the name in the tooltip, muted, as a
  * design tool's tooltips show it, and is the button's `aria-keyshortcuts`. `active`: the tool in hand,
- * in the strip's pressed fill, with no tooltip (it is chosen already). `lit`: the same fill for a state
- * the button shows (`kit/shell/StateButton.jsx`: a view seen from its other side), its tooltip kept, as
- * a press on it still does something, which the tooltip says.
- * @param {{ label: string, active?: boolean, lit?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left",
+ * in the strip's pressed fill, with no tooltip (it is chosen already).
+ * @param {{ label: string, active?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left",
  *   className?: string, shortcut?: string, children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
 export function ToolbarButton({
   label,
   active = false,
-  lit = false,
   tooltip = true,
   tooltipSide = "bottom",
   shortcut = "",
@@ -42,7 +39,7 @@ export function ToolbarButton({
   const button = (
     <Button
       type="button"
-      variant={active || lit ? "secondary" : "ghost"}
+      variant={active ? "secondary" : "ghost"}
       size="icon-xs"
       className={cn(TOOLBAR_ICON_BUTTON_CLASS, className)}
       aria-label={label}
