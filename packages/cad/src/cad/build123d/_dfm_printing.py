@@ -69,6 +69,10 @@ SEAM_HIT_MM = 0.05
 #: Overhangs too small to need support: ``meshops_printing``'s floors, shared with the mesh path.
 OVERHANG_AREA_MM2 = mo.OVERHANG_AREA_MM2
 OVERHANG_REACH_MM = mo.OVERHANG_REACH_MM
+_OVERHANG_METHOD = ("each down-facing face's angle from horizontal off the plate; a slope, ceiling or cantilever "
+                    "under area_floor_mm2 below the limit, or a cantilever reaching under reach_floor_mm (the "
+                    "nozzle given, else one bead), is listed with counted false and judged by no rule: "
+                    "text-to-cad's own floors, no guide states them")
 #: An embossed or engraved step is a detail (text, a logo, a mark) only while it is narrower than this, mm:
 #: wider steps -- a lid's groove, a locating land, a ledge -- are the part's geometry, which the wall and gap
 #: rules judge.
@@ -296,17 +300,21 @@ class Context:
             normals = np.array([info.samples[k].normal for info, k in owners])
             walls = _first_hits(rays, points, -normals, 1e-5, 1e9)
             gaps = _first_hits(rays, points, normals, 1e-5, GAP_CEILING)
-            for (info, k), wall, gap in zip(owners, walls, gaps):
+            props: dict[int, Any] = {}
+            for (info, k), wall, gap, normal in zip(owners, walls, gaps, normals):
                 adjacent = self.adjacent(part, info.ordinal)
                 if wall is not None:
                     other = wall[1] + 1
-                    # a ray landing on a face that meets its own at a convex corner measures the corner;
-                    # at a knife edge (under KNIFE_DEG) it measures the sliver, which is real
-                    corner = any(not edge.concave and not edge.smooth and edge.angle_deg >= mo.KNIFE_DEG
-                                 for edge in adjacent.get(other, ()))
+                    # a wall's far face looks back along the ray: its normal where the ray lands within KNIFE_DEG
+                    # of the ray. A face turned further measures a corner, whether or not it shares an edge with
+                    # the ray's own (a rim whose sides meet at 50 deg, its top between them), and one that does
+                    # look back is a wall's far side wherever it is, as the mesh path counts both: the faces'
+                    # topology decides neither. A knife edge's other flank (under KNIFE_DEG) looks back: its
+                    # sliver is real, and the knife family's (``_walls``)
+                    facing = _facing(rays, props, wall, -normal)
                     # a ray re-hitting the neighbour across a shared edge at almost nothing met the seam
                     seam = other in adjacent and wall[0] < SEAM_HIT_MM
-                    if not corner and not seam:
+                    if facing and not seam:
                         info.thickness.append((wall[0], k, other))
                 if gap is not None:
                     other = gap[1] + 1
@@ -316,12 +324,35 @@ class Context:
                         info.gap.append((gap[0], k, other))
 
 
+#: A wall ray's hit counts while the face it lands on is turned toward it by at least cos(KNIFE_DEG).
+_FACING = math.cos(math.radians(mo.KNIFE_DEG))
+
+
+def _facing(rays: brep.Rays, props: dict[int, Any], hit: tuple, direction: np.ndarray) -> bool:
+    """Whether the face a ray of ``direction`` crossed (``hit``: distance, face index, u, v) looks back along it:
+    its outward normal there within ``KNIFE_DEG`` of the ray."""
+    from OCP.BRepGProp import BRepGProp_Face
+    from OCP.gp import gp_Pnt, gp_Vec
+
+    face = int(hit[1])
+    if face not in props:
+        props[face] = BRepGProp_Face(rays.faces[face])
+    point, normal = gp_Pnt(), gp_Vec()
+    props[face].Normal(float(hit[2]), float(hit[3]), point, normal)
+    length = normal.Magnitude()
+    if not length > 1e-300:
+        return True  # a degenerate point (a cone's apex): no normal to turn away
+    n = np.array([normal.X(), normal.Y(), normal.Z()]) / length
+    d = direction / (np.linalg.norm(direction) or 1.0)
+    return float(n @ d) > _FACING
+
+
 def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, start: float, end: float,
-                chunk: int = 64) -> list[tuple[float, int] | None]:
-    """The nearest crossing beyond ``start`` (up to ``end``) of each ray: its distance and the face's index in
-    ``rays.faces`` (its ordinal less one), or None. The rays' slab tests against every face box run a chunk
-    at a time (``Rays`` tests one ray at a time); each ray then intersects its boxes' faces exactly, nearest
-    box first, until no nearer crossing can follow."""
+                chunk: int = 64) -> list[tuple[float, int, float, float] | None]:
+    """The nearest crossing beyond ``start`` (up to ``end``) of each ray: its distance, the face's index in
+    ``rays.faces`` (its ordinal less one) and the crossing's parameters on that face, or None. The rays' slab
+    tests against every face box run a chunk at a time (``Rays`` tests one ray at a time); each ray then
+    intersects its boxes' faces exactly, nearest box first, until no nearer crossing can follow."""
     from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
 
     lows, highs = rays.boxes[:, :3], rays.boxes[:, 3:]
@@ -348,7 +379,7 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
             entries = np.maximum(enter[r, index], start)
             order = np.argsort(entries)
             line = gp_Lin(gp_Pnt(*map(float, o[r, 0])), gp_Dir(*map(float, d[r])))
-            best: tuple[float, int] | None = None
+            best: tuple[float, int, float, float] | None = None
             for face, entry in zip(index[order], entries[order]):
                 if best is not None and entry > best[0]:
                     break
@@ -359,7 +390,7 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
                 for k in range(1, intersector.NbPnt() + 1):
                     w = float(intersector.WParameter(k))
                     if start <= w <= end and (best is None or w < best[0]):
-                        best = (w, int(face))
+                        best = (w, int(face), float(intersector.UParameter(k)), float(intersector.VParameter(k)))
             found.append(best)
     return found
 
@@ -489,7 +520,8 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
             "largest_faces_below_limit": [{"location": item["location"], "location_xyz": item["xyz"],
                                            "surface_angle_deg": item["angle_deg"],
                                            "area_mm2": item["area_below_limit_mm2"]} for item in largest],
-            "plate_band_mm": plate_band, "area_floor_mm2": OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor}
+            "plate_band_mm": plate_band, "area_floor_mm2": OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
+            "method": _OVERHANG_METHOD}
 
 
 def _edge_points(edge: Any, step: float) -> np.ndarray:
@@ -577,9 +609,9 @@ def _connections(ctx: Context, part: int, ordinal: int) -> int:
     return count
 
 
-def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, float]]:
-    """Each knife edge of ``part`` as segments (starts, ends) and its thin depth: the sliver the knife family
-    reports, which the walls leave to it."""
+def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, float, frozenset[int]]]:
+    """Each knife edge of ``part`` as segments (starts, ends), its thin depth and its two faces (the flanks): the
+    sliver the knife family reports, which the walls leave to it."""
     minimum = rules.wall_minimum(ctx.options)
     edges = ctx.parts[part].edges()
     zones = []
@@ -589,7 +621,7 @@ def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, 
         depth = mo.thin_depth(minimum, edge.angle_deg)
         if depth:
             points = _edge_points(edges[edge.ordinal - 1], max(0.05, depth / 4.0))
-            zones.append((points[:-1], points[1:], float(depth)))
+            zones.append((points[:-1], points[1:], float(depth), frozenset(edge.faces)))
     return zones
 
 
@@ -604,12 +636,18 @@ def _walls(ctx: Context) -> dict[str, Any]:
             if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
                 continue
             thickness = info.thickness
-            if zones:
-                # a sample inside a knife edge's thin depth is that knife's sliver, reported once, by the knife
+            # a ray inside a knife edge's thin depth that starts or lands on one of its two faces (its flanks) is
+            # that knife's sliver -- from a flank, or from a face meeting them at the knife's end across to one --
+            # reported once, by the knife; a ray near it between two other faces (a fin beside the knife, across
+            # itself) measures its own wall
+            flanked = [zone for zone in zones if info.ordinal in zone[3] or any(o in zone[3] for _, _, o in thickness)]
+            if flanked:
                 points = np.array([info.samples[k].point for _, k, _ in thickness])
+                landed = np.array([other for _, _, other in thickness])
                 keep = np.ones(len(points), dtype=bool)
-                for starts, ends, depth in zones:
-                    keep &= mo.near_segments(points, starts, ends) > depth + ctx.tol
+                for starts, ends, depth, faces in flanked:
+                    on = np.isin(landed, list(faces)) | (info.ordinal in faces)
+                    keep &= ~on | (mo.near_segments(points, starts, ends) > depth + ctx.tol)
                 thickness = [row for row, kept in zip(thickness, keep) if kept]
                 if not thickness:
                     continue
@@ -621,7 +659,7 @@ def _walls(ctx: Context) -> dict[str, Any]:
             items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[thinnest[1]].point),
                           "thickness_mm": _r(thinnest[0], 4), "median_mm": _r(float(np.median(values)), 4),
                           "opposite": ctx.ref(part, thinnest[2]), "faces": [ctx.ref(part, thinnest[2])],
-                          "supported": joined >= 2, "joined_sides": joined, "samples": len(values)})
+                          "supported": joined >= 2, "joined_sides": joined, "samples": len(values), "sampled": True})
     if not every:
         return {"items": [], "samples_valid": 0, "note": "no ray met a wall: the shape is open or empty"}
     field_ = np.array(every)
@@ -636,7 +674,11 @@ def _walls(ctx: Context) -> dict[str, Any]:
     return {"items": items, "count": count, "samples_valid": int(len(field_)),
             "min_mm": _r(float(field_.min()), 4), "p05_mm": _r(float(np.percentile(field_, 5)), 4),
             "p25_mm": _r(float(np.percentile(field_, 25)), 4), "median_mm": _r(float(np.median(field_)), 4),
-            "max_mm": _r(float(field_.max()), 4), "method": "exact rays into the material from samples on every face",
+            "max_mm": _r(float(field_.max()), 4),
+            "method": "exact rays into the material from samples on every face, each to the first face it crosses "
+                      "that looks back along it (within 45 deg); none within a knife edge's thin depth that starts "
+                      "or lands on its flanks. Sampled (each item sampled: true): a face's thinnest sample, which can read above "
+                      "the wall's exact least thickness between the samples",
             "thinnest_samples": [{"location_xyz": _xyz(point), "thickness_mm": _r(value, 4)} for value, point in thinnest]}
 
 
@@ -800,7 +842,10 @@ def _details(ctx: Context) -> dict[str, Any]:
     items, count = _capped(list(found.values()), lambda item: (item["height_mm"], item["width_mm"] or 0.0))
     for item in items:
         item["faces"] = item["faces"][:12]
-    return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM}
+    return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM,
+            "method": "steps between parallel planes up to step_ceiling_mm high; a step is a detail while it is "
+                      "narrower than across_below_mm (text-to-cad's own figure: no guide states one), and wider "
+                      "the part's geometry, which the walls and gaps judge"}
 
 
 def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:

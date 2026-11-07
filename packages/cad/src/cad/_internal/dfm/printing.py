@@ -57,6 +57,8 @@ IN_PLACE = ("the check measures the parts as printed together, in place (print-i
 WARP_PRONE = ("abs", "nylon", "nylon_gf", "pc", "pc_abs", "pp", "peek", "pei", "pom", "pbt")
 
 _ACCESSED = "2026-11-03"
+#: The rule sets' own version (``RuleSet.version``), bumped when a set's rules change.
+_VERSION = "2026-11-06"
 
 
 def _src(ident: str, publisher: str, title: str, url: str) -> Source:
@@ -64,6 +66,9 @@ def _src(ident: str, publisher: str, title: str, url: str) -> Source:
 
 
 HUBS = "Protolabs Network (Hubs)"
+#: The source of a rule that is text-to-cad's own (no guide states it): ``printing.knife_edge``,
+#: ``printing.horizontal_hole``.
+OWN = "text-to-cad-own"
 SOURCES = {source.id: source for source in (
     _src("hubs-thin-walls", HUBS, "DFM tips for 3D printed parts with thin walls",
          "https://www.hubs.com/knowledge-base/dfm-tips-for-3d-printed-parts-with-thin-walls/"),
@@ -93,6 +98,10 @@ SOURCES = {source.id: source for source in (
          "https://www.xometry.com/capabilities/3d-printing-service/"),
     _src("xometry-guide", "Xometry (Xometry Pro)", "Ultimate 3D printing design guide",
          "https://xometry.pro/en-uk/3d-printing-design-guide/"),
+    # a rule no fetched guide states: text-to-cad's own figure, said as such in every verdict of it
+    Source(OWN, "text-to-cad", "text-to-cad's own figure; no fetched guide states one",
+           "https://github.com/earthtojake/text-to-cad/blob/main/packages/cad/src/cad/_internal/dfm/README.md",
+           _VERSION),
 )}
 
 #: Each set's machine (or largest part) per technology, mm, and the source it is read from: the build
@@ -118,25 +127,37 @@ BUILD_VOLUMES: dict[str, dict[str, tuple[tuple[float, float, float], str]]] = {
 _SUPPORT_KINDS = ("slope", "ceiling", "cantilever")  # overhangs a bridge or a hole's arch does not cover
 
 
-def _rules(rid: str, family: str, field: str, op: str, unit: str, what: str, rows: list[tuple[str, float, str, str]],
-           fix: str, item_when: dict[str, Any] | None = None, note: str = "") -> list[Rule]:
-    """One Rule per (source, severity) of ``rows`` (technology, limit, source, severity), keyed by technology."""
-    groups: dict[tuple[str, str], dict[str, float]] = {}
-    for technology, limit, source, severity in rows:
-        groups.setdefault((source, severity), {})[technology] = float(limit)
+Row = tuple[str, float, str, str, str]  # technology, limit, source, severity, the source's sentence
+
+
+def _rules(rid: str, family: str, field: str, op: str, unit: str, what: str, rows: list[Row],
+           fix: str, item_when: dict[str, Any] | None = None, note: str = "", when: dict[str, Any] | None = None,
+           detail: str = "") -> list[Rule]:
+    """One Rule per (source, severity) of ``rows``, keyed by technology; its note the rule's own (``note``) and
+    the sentences its rows cite. It applies where the technology is one its rows name, or, given ``when``, where
+    ``when`` holds: a technology no row names then has no limit there (``not_evaluated``, as the set's selector
+    has it), whichever variant applies."""
+    groups: dict[tuple[str, str], tuple[dict[str, float], list[str]]] = {}
+    for technology, limit, source, severity, said in rows:
+        limits, notes = groups.setdefault((source, severity), ({}, [note] if note else []))
+        limits[technology] = float(limit)
+        if said and said not in notes:
+            notes.append(said)
     return [Rule(rid, family, field, op, limits, unit, what, source, severity=severity, by="technology",
-                 when={"technology": tuple(limits)}, item_when=item_when or {}, fix=fix, note=note)
-            for (source, severity), limits in groups.items()]
+                 when=when if when is not None else {"technology": tuple(limits)}, item_when=item_when or {}, fix=fix,
+                 note="; ".join(notes), detail=detail)
+            for (source, severity), (limits, notes) in groups.items()]
 
 
-def _overhang(rows: list[tuple[str, float, str, str]], kinds_by_tech: dict[str, tuple[str, ...]]) -> list[Rule]:
+def _overhang(rows: list[Row], kinds_by_tech: dict[str, tuple[str, ...]]) -> list[Rule]:
     found = []
-    for technology, limit, source, severity in rows:
+    for technology, limit, source, severity, said in rows:
         found.append(Rule("printing.overhang_angle", "overhangs", "angle_deg", "min", {technology: limit}, "deg",
                           "down-facing surface angle from horizontal", source, severity=severity, by="technology",
                           when={"technology": technology},
                           item_when={"kind": kinds_by_tech[technology], "counted": True},
-                          fix="support it, chamfer it to at least {limit:g} deg from horizontal, or turn the part"))
+                          fix="support it, chamfer it to at least {limit:g} deg from horizontal, or turn the part",
+                          note=said))
     return found
 
 
@@ -147,31 +168,34 @@ _FIX_WALL = "thicken it to at least {limit:g} mm"
 def _generic_and_shop(name: str) -> tuple[Rule, ...]:
     H, P, X = name in ("generic", "hubs"), name in ("generic", "protolabs"), name in ("generic", "xometry")
     generic = name == "generic"
-    rows: dict[str, list[tuple[str, float, str, str]]] = {key: [] for key in (
+    rows: dict[str, list[Row]] = {key: [] for key in (
         "wall_s", "wall_u", "hole", "pin", "pin_aspect", "overhang", "bridge", "cantilever", "hhole", "clear", "gap",
         "escape_n", "escape_d", "hollow", "fit", "emboss", "engrave_d", "engrave_w", "warp", "section", "hround")}
 
-    def add(key: str, technology: str, limit: float, source: str, severity: str) -> None:
-        # generic: the first source to give a technology a figure wins (Hubs, then Protolabs, then Xometry)
-        if generic and any(row[0] == technology for row in rows[key]):
+    def add(key: str, technology: str, limit: float, source: str, severity: str, said: str = "") -> None:
+        # generic: the first source to give a technology a figure wins (Hubs, then Protolabs, then Xometry); a
+        # source may give one a recommendation and a limit (Hubs SLA holes: a warning at 0.8, an error at 0.5)
+        if generic and any(row[0] == technology and row[2] != source for row in rows[key]):
             return
-        rows[key].append((technology, limit, source, severity))
+        rows[key].append((technology, limit, source, severity, said))
 
     if H:
         for tech, supported, free in (("fdm", 0.8, 0.8), ("sla", 0.5, 1.0), ("sls", 0.8, 1.0), ("mjf", 0.7, 1.0),
                                       ("pbf", 0.4, 0.8)):
             add("wall_s", tech, supported, "hubs-thin-walls", "error")
             add("wall_u", tech, free, "hubs-thin-walls", "error")
-        add("hole", "sla", 0.8, "hubs-sla", "error")
-        add("hole", "sls", 1.5, "hubs-sls", "error")
-        add("hole", "pbf", 1.5, "hubs-metal", "error")
-        add("pin", "fdm", 5.0, "hubs-fdm", "warning")
-        add("pin", "sls", 0.8, "hubs-sls", "error")
-        add("pin", "mjf", 0.5, "hubs-mjf", "warning")
-        add("pin", "pbf", 0.6, "hubs-metal", "error")
-        add("pin_aspect", "pbf", 8.0, "hubs-metal", "warning")
-        add("overhang", "fdm", 45.0, "hubs-fdm", "warning")
-        add("overhang", "sla", 19.0, "hubs-sla", "warning")
+        # Hubs SLA: holes "less than 0.8mm ... may close off" (a risk), its table's "Minimum diameter of 0.5mm"
+        add("hole", "sla", 0.8, "hubs-sla", "warning", "holes less than 0.8 mm may close off")
+        add("hole", "sla", 0.5, "hubs-sla", "error", "minimum diameter of 0.5 mm")
+        add("hole", "sls", 1.5, "hubs-sls", "error", "all holes should be larger than 1.5 mm")
+        add("hole", "pbf", 1.5, "hubs-metal", "error", "minimum hole diameter DMLS/SLM: 1.5 mm")
+        # no FDM pin row: Hubs FDM says pins under 5 mm "can be made up of only perimeter prints", no minimum
+        add("pin", "sls", 0.8, "hubs-sls", "warning", "a minimum of 0.8 mm is recommended")
+        add("pin", "mjf", 0.5, "hubs-mjf", "warning", "minimum feature size 0.5 mm")
+        add("pin", "pbf", 0.6, "hubs-metal", "error", "minimum feature size DMLS/SLM 0.6 mm")
+        add("pin_aspect", "pbf", 8.0, "hubs-metal", "warning", "maximum aspect ratio 8:1")
+        add("overhang", "fdm", 45.0, "hubs-fdm", "warning", "overhangs up to 45 deg print without support")
+        add("overhang", "sla", 19.0, "hubs-sla", "warning", "at least 19 deg from level")
         add("bridge", "fdm", 5.0, "hubs-fdm", "warning")
         add("bridge", "sla", 21.0, "hubs-sla", "warning")
         add("cantilever", "sla", 1.0, "hubs-sla", "warning")
@@ -201,8 +225,8 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
             add("escape_n", "pbf", 1, "hubs-sls", "error")
             add("escape_d", "mjf", 3.5, "hubs-sls", "warning")
             add("escape_d", "pbf", 3.5, "hubs-sls", "warning")
-            # generic's own threshold on Hubs's advice for FDM's horizontal holes (HORIZONTAL_HOLE_MM)
-            add("hround", "fdm", HORIZONTAL_HOLE_MM, "hubs-fdm", "warning")
+            # text-to-cad's own threshold for FDM's horizontal holes (HORIZONTAL_HOLE_MM): no guide gives one
+            add("hround", "fdm", HORIZONTAL_HOLE_MM, OWN, "warning")
     if P:
         for tech, wall in (("sla", 0.305), ("sls", 0.762), ("mjf", 0.508), ("pbf", 0.381)):
             add("wall_s", tech, wall, "protolabs-toolkit", "error")
@@ -211,7 +235,10 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
             add("gap", tech, gap, "protolabs-toolkit", "error")
         add("hole", "sla", 0.508, "protolabs-7mistakes", "error")
         add("hole", "pbf", 0.635, "protolabs-7mistakes", "error")
-        add("overhang", "pbf", 45.0, "protolabs-metal", "warning")
+        # generic keeps Protolabs's 45 for metal: Hubs's metal guide lists "maximum overhang angle DMLS/SLM: 50
+        # deg" without saying from which axis, so no Hubs row stands for it
+        add("overhang", "pbf", 45.0, "protolabs-metal", "warning", "avoid overhangs less than 45 deg; Hubs metal "
+            "lists 50 deg, its reference unstated, and is not used")
         add("cantilever", "pbf", 0.5, "protolabs-metal", "warning")
         add("hhole", "pbf", 8.0, "protolabs-metal", "warning")
         add("clear", "pbf", 0.635, "protolabs-toolkit", "warning")
@@ -221,9 +248,9 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
             add("fit", tech, 1.0, "protolabs-toolkit", "error")
             add("emboss", tech, 0.3048, "protolabs-toolkit", "warning")
     if X:
-        add("wall_s", "fdm", 1.2, "xometry-fdm", "error")
-        add("wall_u", "fdm", 1.2, "xometry-fdm", "error")
-        add("hole", "fdm", 1.0, "xometry-fdm", "error")
+        add("wall_s", "fdm", 1.2, "xometry-fdm", "warning", "recommended at least 1.2-1.5 mm for supporting walls")
+        add("wall_u", "fdm", 1.2, "xometry-fdm", "warning", "recommended at least 1.2-1.5 mm for supporting walls")
+        add("hole", "fdm", 1.0, "xometry-fdm", "warning", "greater than 0.04 in (1 mm) to retain a circular shape")
         add("emboss", "fdm", 1.0, "xometry-fdm", "warning")
         add("fit", "fdm", 1.0, "xometry-fdm", "error")
         add("wall_s", "sla", 0.4, "xometry-sla", "error")
@@ -238,8 +265,10 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
         add("clear", "sla", 0.5, "xometry-sla", "warning")
         add("fit", "sla", 1.0, "xometry-sla", "error")
         for tech in ("fdm", "sls", "mjf", "pbf"):
-            add("clear", tech, 0.762, "xometry-3dp", "warning")
-            add("gap", tech, 0.762, "xometry-3dp", "error")
+            add("clear", tech, 0.762, "xometry-3dp", "warning", "clearance between features: at least 0.030 in")
+            # FDM's: the general line, no FDM limit -- a warning
+            add("gap", tech, 0.762, "xometry-3dp", "warning" if tech == "fdm" else "error",
+                "clearance between features: at least 0.030 in")
         for tech in ("sls", "mjf", "pbf"):
             add("wall_s", tech, 0.508, "xometry-3dp", "error")
             add("wall_u", tech, 0.508, "xometry-3dp", "error")
@@ -273,8 +302,9 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
     found += _rules("printing.horizontal_hole", "holes", "diameter_mm", "max", "mm", "horizontal round hole diameter",
                     rows["hround"], "give it a teardrop or flat top, or turn the part so the hole stands vertical: "
                     "above {limit:g} mm its crown sags", {"orientation": "horizontal", "teardrop": False},
-                    "generic's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support is "
-                    "hard to remove and turning the part 90 deg removes it")
+                    "text-to-cad's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support "
+                    "is hard to remove and turning the part 90 deg removes it",
+                    detail="text-to-cad's own figure: no fetched guide states one")
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
                     rows["clear"], "open the clearance to at least {limit:g} mm (parts printed together fuse); "
                     + IN_PLACE)
@@ -287,9 +317,18 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
                     "smallest escape hole of a cavity", rows["escape_d"], "open it to at least {limit:g} mm")
     found += _rules("printing.hollow_wall", "trapped_volumes", "min_wall_mm", "min", "mm",
                     "wall around a hollow", rows["hollow"], "thicken the hollow's wall to at least {limit:g} mm")
+    # the machine given (--build-volume) is the printer's: a part over it is not made, an error; the set's
+    # assumed machine is no printer of the user's: a warning that names it
     found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
                     "part size over the build volume (best axis orientation)", rows["fit"],
-                    "split the part, or print it on a larger machine (--build-volume)")
+                    "split the part, or print it on a larger machine", when={"machine_given": True},
+                    detail="against the {machine} mm machine given")
+    found += _rules("printing.build_volume", "build_volume", "fill_ratio", "max", "ratio",
+                    "part size over the build volume (best axis orientation)",
+                    [(*row[:3], "warning", row[4]) for row in rows["fit"]],
+                    "give the machine it prints on (--build-volume XxYxZ), or split the part",
+                    when={"machine_given": False},
+                    detail="against the {machine_set} set's assumed {machine} mm machine: give --build-volume")
     found += _rules("printing.emboss_height", "details", "height_mm", "min", "mm", "embossed detail height",
                     rows["emboss"], "raise it to at least {limit:g} mm", {"kind": "emboss"})
     found += _rules("printing.engrave_depth", "details", "height_mm", "min", "mm", "engraved detail depth",
@@ -298,10 +337,15 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
                     rows["engrave_w"], "widen it to at least {limit:g} mm", {"kind": "engrave"})
     found += _rules("printing.warp_length", "build_volume", "max_dimension_mm", "max", "mm", "part length",
                     rows["warp"], "keep walls near a uniform 3.2 mm and hollow thick sections; parts this long warp")
+    # text-to-cad's own rule (no guide defines a knife edge), a warning: the tip prints rounded (Hubs SLS: "a
+    # radius of less than 0.4mm on a design is printed as 0.4mm") and the part is still made
     found += _rules("printing.knife_edge", "knife_edges", "thickness_mm", "min", "mm",
-                    "material at a knife edge (a convex edge under 45 deg)", rows["wall_u"],
+                    "material at a knife edge (a convex edge under 45 deg)",
+                    [(technology, limit, OWN, "warning", "") for technology, limit, *_ in rows["wall_u"]],
                     "blunt it -- a flat or round at least {limit:g} mm across -- or open its angle to 45 deg or more",
-                    note="the material thins to nothing at an acute edge: judged against the unsupported-wall minimum")
+                    note="the material thins to nothing at an acute edge: judged against the set's unsupported-wall "
+                         "minimum; the tip prints rounded (Hubs SLS: a radius under 0.4 mm prints as 0.4 mm)",
+                    detail="text-to-cad's own figure: no fetched guide states one; the tip prints rounded")
     found += _rules("printing.section_thickness", "sections", "thickness_mm", "max", "mm", "solid section thickness",
                     rows["section"], "hollow or lattice it under {limit:g} mm: thick metal sections warp")
     return tuple(found)
@@ -311,7 +355,7 @@ def _set(name: str, title: str, note: str, generic: bool = False) -> RuleSet:
     rules = _generic_and_shop(name)
     cited = sorted({rule.source for rule in rules} | {source for source in
                                                       (s for _, s in BUILD_VOLUMES.get(name, {}).values())})
-    return RuleSet(name, "printing", title, _ACCESSED, rules, tuple(SOURCES[ident] for ident in cited),
+    return RuleSet(name, "printing", title, _VERSION, rules, tuple(SOURCES[ident] for ident in cited),
                    generic=generic, note=note, selector="technology")
 
 
@@ -398,11 +442,22 @@ def build_volume(text: str) -> tuple[float, float, float]:
     return values  # type: ignore[return-value]
 
 
+def _machine_set(resolved: dict[str, Any]) -> str:
+    """The rule set whose machine the fit is measured against when none is given (``machine_volume``)."""
+    chosen = resolved.get("rules") or "generic"
+    return chosen if resolved["technology"] in BUILD_VOLUMES.get(chosen, {}) else "generic"
+
+
 def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     material = materials.resolve(resolved.get("material"))
+    machine = machine_volume(resolved)
     return {"technology": resolved["technology"], "material": material,
             "material_class": materials.material_class(material), "angle_limit": angle_limit(resolved),
-            "layer_height": layer_height(resolved)}
+            "layer_height": layer_height(resolved),
+            # the build volume's: given (an error to pass it) or the set's assumed machine (a warning that names it)
+            "machine_given": machine["origin"] == "given",
+            "machine": " x ".join(f"{value:g}" for value in machine["volume_mm"]),
+            "machine_set": _machine_set(resolved)}
 
 
 # --- findings and summary -------------------------------------------------------------------------------------
@@ -425,6 +480,12 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         if (mesh.get("body_count") or 0) > 1:
             found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
                                       "measured per body", "mesh"))
+        overlap = _ok(report.get("gaps")).get("overlap")
+        if overlap:
+            found.append(CheckFinding("warning", "mesh_overlap", f"faces lie on faces {overlap['gap_mm']:g} mm apart "
+                                      f"({overlap['samples']} triangle(s)): doubled or overlapping triangles, a "
+                                      "defect of the mesh, not a gap -- a slicer may misread it", where(overlap["xyz"]),
+                                      "repair the mesh, or export it again from the model"))
     solid = _ok(report.get("solid"))
     for item in solid.get("items") or ():
         if item.get("closed") is False:

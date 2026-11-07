@@ -81,8 +81,10 @@ class OverhangTest(unittest.TestCase):
         self.assertIn("printing.overhang_angle", codes(result))
         overhang = next(f for f in result.findings if f.code == "printing.overhang_angle")
         self.assertEqual(overhang.severity, "warning", "support is a warning, not a failure")
-        errors = {f.code for f in result.findings if f.severity == "error"}
-        self.assertEqual(errors, {"printing.knife_edge"}, "the 30 deg tip is a knife, reported once")
+        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, set())
+        knife = next(f for f in result.findings if f.code == "printing.knife_edge")
+        self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
+        self.assertIn("text-to-cad's own figure", knife.message)
 
     def test_powder_holds_every_overhang(self) -> None:
         result = check(wedge(30.0), "wedge", technology="sls")
@@ -159,6 +161,46 @@ class KnifeEdgeTest(unittest.TestCase):
         self.assertTrue(clean.ok)
 
 
+class KnifeZoneTest(unittest.TestCase):
+    """A knife's sliver is measured from its two flanks alone, on both paths: another face within its thin depth
+    measures a wall of its own, and a face turned more than 45 deg from a ray is a corner wherever it is."""
+
+    @staticmethod
+    def both(shape, name: str) -> tuple:
+        shape.label = name
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / f"{name}.stl"
+            bd.export_stl(shape, str(path), tolerance=0.01)
+            return check(shape, name), cad.stl.dfm(path, process="printing")
+
+    @staticmethod
+    def wall_failures(result) -> list[tuple[str, float, list]]:
+        return [(o["rule"], f["value"], f["xyz"]) for o in result.measurements["rules"]["outcomes"]
+                if o["rule"].startswith("printing.wall") for f in o.get("failures") or ()]
+
+    def test_a_fin_beside_a_knife_is_a_wall_of_its_own(self) -> None:
+        # a 15 deg wedge (its sliver under 0.8 mm for 3.04 mm) and a 0.5 mm fin standing 1 mm from its tip
+        h = 20 * math.tan(math.radians(15))
+        wedge = bd.Rotation(90, 0, 0) * bd.extrude(bd.make_face(bd.Polyline((0, 0), (20, 0), (0, h), (0, 0))), 10)
+        fin = bd.Pos(19, -5, 0) * bd.Box(0.5, 10, 2.5, align=(bd.Align.CENTER, bd.Align.MIN, bd.Align.MIN))
+        for result in self.both(wedge + fin, "fin"):
+            with self.subTest(measured_as=result.measurements["source"]["measured_as"]):
+                self.assertIn("printing.knife_edge", codes(result))
+                at_fin = [value for _, value, xyz in self.wall_failures(result) if abs(xyz[0] - 19) <= 0.5]
+                self.assertTrue(at_fin, self.wall_failures(result))
+                self.assertAlmostEqual(min(at_fin), 0.5, delta=0.02)
+
+    def test_a_rim_whose_sides_meet_at_50_deg_reads_the_same_on_both_paths(self) -> None:
+        # a ridge 4 mm tall, its sides 50 deg apart, its top 0.3 mm wide: no knife, and a ray from one side to the
+        # other (no edge between them) meets a face turned 65 deg from it -- a corner, on both paths
+        half = 4.0 * math.tan(math.radians(25)) + 0.15
+        profile = bd.Polyline((-15, 0), (15, 0), (15, 2), (half, 2), (0.15, 6), (-0.15, 6), (-half, 2), (-15, 2),
+                              (-15, 0))
+        brep_result, mesh_result = self.both(bd.Rotation(90, 0, 0) * bd.extrude(bd.make_face(profile), 20), "rim")
+        self.assertEqual((items(brep_result, "knife_edges"), items(mesh_result, "knife_edges")), ([], []))
+        self.assertEqual((self.wall_failures(brep_result), self.wall_failures(mesh_result)), ([], []))
+
+
 class WallTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -226,7 +268,8 @@ class FeatureTest(unittest.TestCase):
         pin = near(self.pbf, "pins", (25, 0, 26.75), 1.0)
         self.assertEqual((pin["diameter_mm"], pin["height_mm"], pin["aspect_ratio"]), (1.5, 13.5, 9.0))
         self.assertIn("printing.pin_aspect", codes(self.pbf), "Hubs metal: 8:1")
-        self.assertIn("printing.pin_diameter", codes(self.fdm), "Hubs FDM: pins under 5 mm are perimeters alone")
+        # Hubs FDM: pins under 5 mm "can be made up of only perimeter prints" -- no minimum, so no FDM limit
+        self.assertEqual([o["status"] for o in outcome(self.fdm, "printing.pin_diameter")], ["not_evaluated"])
 
 
 class DetailAndGapTest(unittest.TestCase):
@@ -324,8 +367,13 @@ class PlateTest(unittest.TestCase):
         result = check(bar, "bar")
         fit = result.measurements["build_volume"]
         self.assertEqual((fit["fill_ratio"], fit["fits"], fit["volume_mm"]), (1.25, False, [200.0, 200.0, 200.0]))
-        self.assertIn("printing.build_volume", codes(result))
-        self.assertFalse(result.ok)
+        # against the set's assumed machine, a warning that names it; against the machine given, an error
+        assumed = next(f for f in result.findings if f.code == "printing.build_volume")
+        self.assertEqual(assumed.severity, "warning")
+        self.assertIn("generic set's assumed 200 x 200 x 200 mm machine: give --build-volume", assumed.message)
+        given = check(bar, "bar", build_volume="200x200x200")
+        self.assertEqual([f.severity for f in given.findings if f.code == "printing.build_volume"], ["error"])
+        self.assertFalse(given.ok)
         self.assertTrue(check(bar, "bar", build_volume="100x100x300").measurements["build_volume"]["fits"])
         self.assertTrue(check(bar, "bar", rules="hubs").ok, "Hubs's industrial FDM, 900 x 600 x 900")
 
@@ -438,12 +486,18 @@ class SeamTest(unittest.TestCase):
                    if info.ordinal != face.ordinal and info.ordinal not in ctx.adjacent(0, face.ordinal))
         original = measured._first_hits
 
+        from OCP.BRepTools import BRepTools
+
+        def middle(ordinal):  # a crossing's (u, v): the face's middle, where its normal faces the ray
+            umin, umax, vmin, vmax = BRepTools.UVBounds_s(ctx.info(0, ordinal).face.wrapped)
+            return (umin + umax) / 2, (vmin + vmax) / 2
+
         def fake(rays, points, directions, start, end, chunk=64):
             if end < 1e6:  # the gap rays: none
                 return [None] * len(points)
             owners = [(info.ordinal, k) for info in ctx.faces[0] for k in range(len(info.samples))]
-            return [(0.001, neighbour - 1) if (o, k) == (face.ordinal, 0) else
-                    (0.001, far - 1) if (o, k) == (face.ordinal, 1) else None for o, k in owners]
+            return [(0.001, neighbour - 1, *middle(neighbour)) if (o, k) == (face.ordinal, 0) else
+                    (0.001, far - 1, *middle(far)) if (o, k) == (face.ordinal, 1) else None for o, k in owners]
 
         measured._first_hits = fake
         try:

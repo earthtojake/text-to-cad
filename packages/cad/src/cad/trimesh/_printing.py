@@ -5,10 +5,12 @@
 - ``overhangs``: the down-facing triangles under the angle limit off the plate, as connected regions,
   each with its angle, area, height and kind (a slope, a bridge or cantilever over walls, a round on the
   plate's edge); ``bridges``: the regions walls carry, their span or reach;
-- ``wall_thickness``: rays into the material, per body; ``gaps``: rays out of it to a facing wall of the
-  same body; ``clearances``: the least distance between bodies;
+- ``wall_thickness``: rays into the material, per body (and one from every triangle on a mesh of at most
+  ``COVER_MAX_TRIANGLES``); ``gaps``: rays out of it to a facing wall of the same body (under ``GAP_DEFECT_MM``,
+  faces on faces: the mesh's ``overlap``); ``clearances``: the least distance between bodies;
 - ``trapped_volumes``: cavities from a voxel field (``cad._internal.meshops_printing``) and their openings;
-- ``knife_edges``: sharp convex creases (under 45 deg) chained into edges;
+- ``knife_edges``: sharp convex creases (under 45 deg, at least 2: a sharper one is a fold of the tessellation)
+  chained into edges, each at least as long as its thin depth;
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster's column fill), ``sections``;
   the candidate orientations ranked (``orientations``).
 
@@ -43,6 +45,10 @@ CAP = 300
 FLAT_DEG = 5.0
 #: Gaps are reported up to this width, mm.
 GAP_CEILING = 3.0
+#: A mesh's "gap" narrower than this, mm, is faces lying on faces -- doubled or overlapping triangles, the mesh's
+#: defect (a 0.005 mm one on an exporter's mounting plate) -- said once, never a slot: every published minimum
+#: gap is 0.3 mm or more.
+GAP_DEFECT_MM = 0.05
 #: A shallow slope stair-steps: above flat and under this many degrees from horizontal.
 SHALLOW_DEG = 20.0
 #: Clearances between bodies are reported up to this distance, mm.
@@ -210,6 +216,10 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
         "face_count_below_limit": int(counted.sum()),
         "down_facing_angle_histogram_mm2": hist,
         "largest_faces_below_limit": worst,
+        "area_floor_mm2": mo.OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor,
+        "method": "regions of down-facing triangles under the angle limit off the plate; one under area_floor_mm2, "
+                  "or a cantilever reaching under reach_floor_mm (the nozzle given, else one bead), is listed with "
+                  "counted false and judged by no rule: text-to-cad's own floors, no guide states them",
     }
 
 
@@ -276,59 +286,114 @@ def _bridge_facts(overhangs: dict) -> dict:
 
 
 #: Triangles a mesh has, at most, for every one to get a ray of its own (a small feature's few triangles
-#: would otherwise draw no sample of an area-weighted budget).
+#: would otherwise draw no sample of an area-weighted budget): the gaps' rays.
 COVER = 20000
+#: The walls add a ray from every triangle (``_cover``) to their random ones on a mesh of at most this many
+#: triangles, and on a larger one cast the random rays alone. Measured on 60 real meshes against their exact
+#: B-reps: the pass cost 26 times the wall family's time (343.6 s against 13.2 s), found 3 thin places the random
+#: rays missed and 9 that are not there (a triangle's centre on a fine fillet strip lands on its neighbour);
+#: on the 10 meshes of at most 5000 triangles it found the macropad knob's 0.27 mm web, which 2000 random rays
+#: miss, and no false one, for 3.7 s in all. 20000 random rays instead were no better (8 false fails).
+COVER_MAX_TRIANGLES = 5000
+#: A ray starts on (or lands on) a knife edge's flank when that triangle's normal is within this many degrees of
+#: the flank's (the triangle by the crease on either side): the knife's sliver is a ray within its thin depth that
+#: starts or lands on a flank, and any other ray there (a fin beside the knife, across itself) measures a wall.
+FLANK_DEG = 20.0
+#: Convex creases of material up to this many degrees are chained, and a chain whose angle (its creases' median
+#: by length) is under ``KNIFE_DEG`` is a knife edge: a curved knife's triangles scatter about its angle (an exact
+#: 41 deg edge of a finger tip meshes as creases of 4 to 58 deg), and the creases under 45 alone break it into
+#: pieces whose gaps leave its sliver to the walls (0.036 mm "walls" where the exact path finds 0.89).
+CREASE_DEG = 60.0
 
 
-def _knife_chains(mesh: trimesh.Trimesh) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The sharp convex creases (material angle under ``KNIFE_DEG``) as vertex pairs, each pair's material
-    angle, and the chain (creases sharing corners) each belongs to."""
+class _Knife:
+    """A knife edge of a mesh: its creases as segments, their two flanks' normals, its material angle (the
+    creases' median by length), length and thin depth (``meshops_printing.thin_depth``)."""
+
+    __slots__ = ("starts", "ends", "left", "right", "angle", "length", "depth")
+
+    def __init__(self, starts, ends, left, right, angle: float, length: float, depth: float | None) -> None:
+        self.starts, self.ends, self.left, self.right = starts, ends, left, right
+        self.angle, self.length, self.depth = angle, length, depth
+
+
+def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
+    """The knife edges: sharp convex creases (material angle under ``CREASE_DEG``, at least ``FOLD_DEG``: a
+    sharper one is a fold of the tessellation) chained by shared corners, a chain a knife where its angle (its
+    creases' median by length, as the exact path reads an edge at its middle) is under ``KNIFE_DEG`` and it is at
+    least as long as its thin depth -- a shorter one is a sliver triangle's crease, no edge of the part (a knife
+    whose sliver is deeper than the edge is long is not one a slicer or a part has)."""
     material = 180.0 - np.degrees(mesh.face_adjacency_angles)
-    sharp = mesh.face_adjacency_convex & (material < mo.KNIFE_DEG)
+    sharp = mesh.face_adjacency_convex & (material < CREASE_DEG) & (material >= mo.FOLD_DEG)
     if not sharp.any():
-        return np.zeros((0, 2), dtype=int), np.zeros(0), np.zeros(0, dtype=int)
-    pairs = mesh.face_adjacency_edges[sharp]
+        return []
+    pairs, sides, angle = mesh.face_adjacency_edges[sharp], mesh.face_adjacency[sharp], material[sharp]
     chain_of = np.full(len(mesh.vertices), -1)
     for k, chain in enumerate(trimesh.graph.connected_components(pairs, min_len=1)):
         chain_of[np.asarray(chain, dtype=int)] = k
-    return pairs, material[sharp], chain_of[pairs[:, 0]]
-
-
-def _knife_zones(mesh: trimesh.Trimesh, options: dict) -> list[tuple[np.ndarray, np.ndarray, float]]:
-    """Each knife edge as segments (starts, ends) and its thin depth: the sliver the knife family reports, which
-    the walls leave to it, as the exact path does (``_dfm_printing._knife_zones``)."""
-    from cad._internal.dfm import printing as rules
-
-    minimum = rules.wall_minimum(options)
-    pairs, angle, owner = _knife_chains(mesh)
-    zones = []
+    owner = chain_of[pairs[:, 0]]
+    lengths = np.linalg.norm(mesh.vertices[pairs[:, 0]] - mesh.vertices[pairs[:, 1]], axis=1)
+    found = []
     for k in np.unique(owner):
         mine = owner == k
-        depth = mo.thin_depth(minimum, float(angle[mine].min()))
-        if depth:
-            zones.append((mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]], float(depth)))
-    return zones
+        length = float(lengths[mine].sum())
+        # its least crease would make a curved knife far deeper than it is (and than it is long)
+        order = np.argsort(angle[mine])
+        weight = np.cumsum(lengths[mine][order])
+        typical = float(angle[mine][order][min(int(np.searchsorted(weight, weight[-1] / 2.0)), len(order) - 1)])
+        if not typical < mo.KNIFE_DEG:
+            continue
+        depth = mo.thin_depth(minimum, typical)
+        if depth is not None and length < depth:
+            continue
+        found.append(_Knife(mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]],
+                            mesh.face_normals[sides[mine, 0]], mesh.face_normals[sides[mine, 1]], typical, length,
+                            depth))
+    return found
 
 
-def _outside_knives(points: np.ndarray, zones: list[tuple[np.ndarray, np.ndarray, float]]) -> np.ndarray:
-    """Which ``points`` lie farther from every knife edge than its thin depth: a ray from inside that depth
-    measures the knife's sliver, which is real and reported once, by the knife family."""
+def _knife_zones(mesh: trimesh.Trimesh, options: dict) -> list[_Knife]:
+    """The knife edges, each with its thin depth against the rule set's unsupported-wall minimum: the sliver
+    the knife family reports, which the walls leave to it, as the exact path does
+    (``_dfm_printing._knife_zones``)."""
+    from cad._internal.dfm import printing as rules
+
+    return _knife_chains(mesh, rules.wall_minimum(options))
+
+
+def _outside_knives(points: np.ndarray, normals: np.ndarray, zones: list[_Knife],
+                    landed: np.ndarray | None = None) -> np.ndarray:
+    """Which rays (from ``points``, on faces of outward ``normals``, landing on faces of outward ``landed``)
+    measure a wall rather than a knife's sliver: all but those within a knife's thin depth that start or land on
+    one of its two flanks (``FLANK_DEG``) -- the sliver from either flank, or from a face that meets them at the
+    knife's end across to one. The sliver is real and reported once, by the knife family; a ray near the knife
+    between two other faces -- a fin beside it, across itself -- is a wall's."""
     keep = np.ones(len(points), dtype=bool)
-    for starts, ends, depth in zones:
-        lo = np.minimum(starts.min(axis=0), ends.min(axis=0)) - depth
-        hi = np.maximum(starts.max(axis=0), ends.max(axis=0)) + depth
+    flank = float(np.cos(np.radians(FLANK_DEG)))
+    for knife in zones:
+        if not knife.depth:
+            continue
+        lo = np.minimum(knife.starts.min(axis=0), knife.ends.min(axis=0)) - knife.depth
+        hi = np.maximum(knife.starts.max(axis=0), knife.ends.max(axis=0)) + knife.depth
         near = np.flatnonzero(keep & np.all((points >= lo) & (points <= hi), axis=1))
-        if len(near):
-            keep[near] &= mo.near_segments(points[near], starts, ends) > depth + 1e-6
+        if not len(near):
+            continue
+        distance, segment = mo.nearest_segments(points[near], knife.starts, knife.ends)
+        flanking = np.zeros(len(near), dtype=bool)
+        for faces in (normals, landed):
+            if faces is not None:
+                flanking |= (np.einsum("ij,ij->i", faces[near], knife.left[segment]) > flank) | \
+                    (np.einsum("ij,ij->i", faces[near], knife.right[segment]) > flank)
+        keep[near] &= ~((distance <= knife.depth + 1e-6) & flanking)
     return keep
 
 
 def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
-           zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> tuple[np.ndarray, ...]:
+           zones: list[_Knife] | None = None) -> tuple[np.ndarray, ...]:
     """One ray from every triangle's centre (``COVER`` of them, by area, on a larger mesh), into the material
     (``inward``) or out of it: each ray's length to a face that looks back at it, its origin, its face's
     normal and the triangle it landed on. Rays that meet nothing, or a face square to them, are dropped, as
-    are rays from inside a knife edge's thin depth (``zones``: the knife family's sliver)."""
+    are rays from a knife edge's flanks inside its thin depth (``zones``: the knife family's sliver)."""
     count = len(mesh.faces)
     if count == 0 or not float(mesh.area_faces.sum()) > 0:
         return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
@@ -352,7 +417,7 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
         np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -0.5
     keep = (length > 1e-3) & facing & (length < (reach or float(np.linalg.norm(mesh.extents))))
     if zones:
-        keep &= _outside_knives(origins[rays], zones)
+        keep &= _outside_knives(origins[rays], normals[rays], zones, mesh.face_normals[hit])
     return length[keep], origins[rays][keep], normals[rays][keep], faces[rays][keep], hit[keep]
 
 
@@ -361,13 +426,42 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, cell: float) -> list
     wall is joined on two sides is not known: ``supported`` None)."""
     found = _cluster(origins, thickness, cell)
     found.sort(key=lambda row: row[0])
-    return [{"xyz": _p(point), "thickness_mm": _r(value), "samples": count, "supported": None}
+    return [{"xyz": _p(point), "thickness_mm": _r(value), "samples": count, "supported": None, "sampled": True}
             for value, point, count in found[:CAP]]
+
+
+def _wall_stats(thickness: np.ndarray, origins: np.ndarray) -> dict:
+    """The thickness field's figures, over every ray that measured a wall: the summary reads the rays the items
+    are made of, so it never says a thinner place is not there."""
+    thin_idx = np.argsort(thickness)[:8]
+    return {
+        "samples_valid": int(len(thickness)),
+        "min_mm": round(float(thickness.min()), 3),
+        "p05_mm": round(float(np.percentile(thickness, 5)), 3),
+        "p25_mm": round(float(np.percentile(thickness, 25)), 3),
+        "median_mm": round(float(np.median(thickness)), 3),
+        "max_mm": round(float(thickness.max()), 3),
+        "thinnest_samples": [
+            {
+                "location_xyz": [round(float(v), 2) for v in origins[i]],
+                "thickness_mm": round(float(thickness[i]), 3),
+            }
+            for i in thin_idx
+        ],
+    }
+
+
+def _wall_method(cover: bool, samples: int) -> str:
+    return (f"{samples} rays into the material from points drawn at random over the surface"
+            + (", and one from every triangle's centre" if cover else
+               f"; no ray from every triangle (the mesh has more than {COVER_MAX_TRIANGLES} triangles)")
+            + ", per body: each ray's length to a face turned toward it (within 45 deg); none within a knife edge's "
+              "thin depth that starts or lands on its flanks")
 
 
 def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict | None = None,
                 split: tuple[list[trimesh.Trimesh], int] | None = None,
-                zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> dict:
+                zones: list[_Knife] | None = None) -> dict:
     """Ray-cast thickness field, measured one connected body at a time.
 
     Cast against a whole assembly, a ray leaving one body can cross a mating
@@ -376,23 +470,33 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     single part actually has. Splitting first makes that impossible, because
     each body is only ever measured against itself -- with the sealed voids it
     holds (``_bodies``, or ``split``, the bodies split once for every family), so
-    the skin over a cavity is one of its walls. A ray from inside a knife edge's
-    thin depth (``zones``) measures the knife's sliver, the knife family's alone.
+    the skin over a cavity is one of its walls. A ray from a knife edge's flanks
+    inside its thin depth (``zones``) measures the knife's sliver, the knife
+    family's alone. On a mesh of at most ``COVER_MAX_TRIANGLES`` triangles every
+    triangle adds a ray (``cover``); the figures and the items are of the same rays.
     """
     bodies, _voids = split if split is not None else _bodies(mesh)
     cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
+    cover = len(mesh.faces) <= COVER_MAX_TRIANGLES
+
+    def rays(body: trimesh.Trimesh, budget: int, at: int) -> dict:
+        found = _wall_facts_single(body, budget, at, zones)
+        if "_thickness" in found and cover:
+            extra = _cover(body, inward=True, zones=zones)
+            found["_thickness"] = np.concatenate([found["_thickness"], extra[0]])
+            found["_origins"] = np.vstack([found["_origins"], extra[1]])
+            found["_normals"] = np.vstack([found["_normals"], extra[2]])
+        return found
+
     if len(bodies) <= 1:
-        facts = _wall_facts_single(mesh, samples, seed, zones)
+        facts = rays(mesh, samples, seed)
         if "_thickness" in facts:
-            extra = _cover(mesh, inward=True, zones=zones)
-            t = np.concatenate([facts["_thickness"], extra[0]])
-            o = np.vstack([facts["_origins"], extra[1]])
-            facts["items"] = _wall_items(t, o, cell)
+            t, o = facts["_thickness"], facts["_origins"]
             if keep is not None:
-                keep.update(thickness=t, origins=o, normals=np.vstack([facts["_normals"], extra[2]]))
-        for key in [key for key in facts if key.startswith("_")]:
-            facts.pop(key)
-        return facts
+                keep.update(thickness=t, origins=o, normals=facts["_normals"])
+            facts = {**_wall_stats(t, o), "items": _wall_items(t, o, cell)}
+            facts.update(cover=cover, method=_wall_method(cover, samples))
+        return {key: value for key, value in facts.items() if not key.startswith("_")}
 
     areas = np.array([float(b.area) for b in bodies])
     if not np.isfinite(areas).all() or areas.sum() <= 0.0:
@@ -408,24 +512,18 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     pooled: list = []
     pooled_origins: list = []
     pooled_normals: list = []
-    covered: list = []
     per_body: list = []
     for i, (body, frac) in enumerate(zip(bodies, share)):
         budget = max(int(round(samples * frac)), 64)
-        facts = _wall_facts_single(body, budget, seed + i, zones)
-        per_body.append({
-            "body": i,
-            "min_mm": facts.get("min_mm"),
-            "p05_mm": facts.get("p05_mm"),
-            "median_mm": facts.get("median_mm"),
-            "samples_valid": facts.get("samples_valid", 0),
-        })
+        facts = rays(body, budget, seed + i)
+        row = {"body": i, "min_mm": None, "p05_mm": None, "median_mm": None, "samples_valid": 0}
         if "_thickness" in facts:
+            stats = _wall_stats(facts["_thickness"], facts["_origins"])
+            row.update({key: stats[key] for key in ("min_mm", "p05_mm", "median_mm", "samples_valid")})
             pooled.append(facts["_thickness"])
             pooled_origins.append(facts["_origins"])
             pooled_normals.append(facts["_normals"])
-            extra = _cover(body, inward=True, zones=zones)
-            covered.append(extra[:3])
+        per_body.append(row)
 
     if not pooled:
         return {
@@ -436,36 +534,21 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
 
     thickness = np.concatenate(pooled)
     origins = np.concatenate(pooled_origins)
-    every_t = np.concatenate([thickness, *[c[0] for c in covered]])
-    every_o = np.vstack([origins, *[c[1] for c in covered]])
     if keep is not None:
-        keep.update(thickness=every_t, origins=every_o,
-                    normals=np.vstack([np.concatenate(pooled_normals), *[c[2] for c in covered]]))
-    thin_idx = np.argsort(thickness)[:8]
-
+        keep.update(thickness=thickness, origins=origins, normals=np.concatenate(pooled_normals))
     return {
-        "items": _wall_items(every_t, every_o, cell),
+        "items": _wall_items(thickness, origins, cell),
         "body_count": len(bodies),
         "measured_per_body": True,
-        "samples_valid": int(len(thickness)),
-        "min_mm": round(float(thickness.min()), 3),
-        "p05_mm": round(float(np.percentile(thickness, 5)), 3),
-        "p25_mm": round(float(np.percentile(thickness, 25)), 3),
-        "median_mm": round(float(np.median(thickness)), 3),
-        "max_mm": round(float(thickness.max()), 3),
+        **_wall_stats(thickness, origins),
         "per_body": per_body,
-        "thinnest_samples": [
-            {
-                "location_xyz": [round(float(v), 2) for v in origins[i]],
-                "thickness_mm": round(float(thickness[i]), 3),
-            }
-            for i in thin_idx
-        ],
+        "cover": cover,
+        "method": _wall_method(cover, samples),
     }
 
 
 def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
-                       zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> dict:
+                       zones: list[_Knife] | None = None) -> dict:
     """Ray-cast thickness field for ONE connected body: ``samples`` rays, each from a point drawn at random over
     the surface (a triangle by its area, then anywhere on it), straight in along that face's normal to the face it
     leaves through. The points are the surface's, not the tessellation's: a coarse mesh and a fine one of the same
@@ -503,34 +586,17 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
         float(np.cos(np.radians(mo.KNIFE_DEG)))
     valid = (thickness > 1e-3) & (thickness < diag) & opposing
     if zones:
-        valid &= _outside_knives(origins[ray_ids], zones)
+        valid &= _outside_knives(origins[ray_ids], -directions[ray_ids], zones, mesh.face_normals[hit_tri])
     thickness = thickness[valid]
 
     if len(thickness) == 0:
         return {"error": "no valid thickness samples", "samples_requested": n}
 
-    hit_origins = origins[ray_ids][valid]
-    thin_idx = np.argsort(thickness)[:8]
-
+    # Underscore keys are internal: _wall_facts adds the triangles' rays, pools them across bodies, reads its
+    # figures from them and strips them before anything is printed (numpy arrays would not survive json.dumps).
     return {
-        "samples_valid": int(len(thickness)),
-        "min_mm": round(float(thickness.min()), 3),
-        "p05_mm": round(float(np.percentile(thickness, 5)), 3),
-        "p25_mm": round(float(np.percentile(thickness, 25)), 3),
-        "median_mm": round(float(np.median(thickness)), 3),
-        "max_mm": round(float(thickness.max()), 3),
-        "thinnest_samples": [
-            {
-                "location_xyz": [round(float(v), 2) for v in hit_origins[i]],
-                "thickness_mm": round(float(thickness[i]), 3),
-            }
-            for i in thin_idx
-        ],
-        # Underscore keys are internal: _wall_facts pools them across bodies
-        # and strips them before anything is printed. They are numpy arrays
-        # and would not survive json.dumps.
         "_thickness": thickness,
-        "_origins": hit_origins,
+        "_origins": origins[ray_ids][valid],
         "_normals": -directions[ray_ids][valid],
     }
 
@@ -602,16 +668,25 @@ def _gap_facts(mesh: trimesh.Trimesh, samples: int, split: tuple[list[trimesh.Tr
         shared = (body.faces[faces][:, :, None] == body.faces[hit][:, None, :]).any(axis=(1, 2))
         points.append(origins[~shared])
         widths.append(width[~shared])
-    items = []
+    items, overlap = [], None
     if points and sum(len(p) for p in points):
-        cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
-        found = _cluster(np.vstack(points), np.concatenate(widths), cell)
-        found.sort(key=lambda row: row[0])
-        items = [{"xyz": _p(point), "gap_mm": _r(value), "samples": count} for value, point, count in found[:CAP]]
+        points, widths = np.vstack(points), np.concatenate(widths)
+        # under GAP_DEFECT_MM the "gap" is faces lying on faces (doubled or overlapping triangles): the mesh's
+        # defect, said once (``overlap``), no slot a printer would close
+        defect = widths < GAP_DEFECT_MM
+        if defect.any():
+            at = int(np.flatnonzero(defect)[np.argmin(widths[defect])])
+            overlap = {"xyz": _p(points[at]), "gap_mm": _r(float(widths[at]), 5), "samples": int(defect.sum())}
+        if (~defect).any():
+            cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
+            found = _cluster(points[~defect], widths[~defect], cell)
+            found.sort(key=lambda row: row[0])
+            items = [{"xyz": _p(point), "gap_mm": _r(value), "samples": count} for value, point, count in found[:CAP]]
     return {"items": items, "count": len(items), "reported_below_mm": GAP_CEILING,
-            "min_mm": items[0]["gap_mm"] if items else None,
+            "min_mm": items[0]["gap_mm"] if items else None, "overlap": overlap, "defect_below_mm": GAP_DEFECT_MM,
             "method": "a ray out of the material from every triangle to a facing wall of the same body (holes read "
-                      "as gaps on a mesh)"}
+                      f"as gaps on a mesh); under {GAP_DEFECT_MM:g} mm, faces lying on faces: the mesh's defect "
+                      "(overlap), no gap"}
 
 
 def _clearance_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
@@ -748,30 +823,26 @@ def _stair_facts(mesh: trimesh.Trimesh, layer: float) -> dict:
             "area_mm2": _r(float(areas[shallow].sum()), 2)}
 
 
-def _knife_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
-    """The sharp convex creases between triangles whose material angle is under ``KNIFE_DEG``, chained into
-    edges where they share corners: each chain's length, least angle and thin depth (as the exact path's)."""
+def _knife_facts(mesh: trimesh.Trimesh, options: dict, zones: list[_Knife] | None = None) -> dict:
+    """The knife edges (``_knife_chains``; ``zones``, the walls' own, where made): each chain's length, angle
+    (its creases' median by length) and thin depth (as the exact path's)."""
     from cad._internal.dfm import printing as rules
 
     minimum = rules.wall_minimum(options)
-    pairs, angle, owner = _knife_chains(mesh)
     items = []
-    if len(pairs):
-        lengths = np.linalg.norm(mesh.vertices[pairs[:, 0]] - mesh.vertices[pairs[:, 1]], axis=1)
-        for k in np.unique(owner):
-            mine = owner == k
-            least = float(angle[mine].min())
-            length = float(lengths[mine].sum())
-            middle = mesh.vertices[pairs[mine]].reshape(-1, 3).mean(axis=0)
-            depth = mo.thin_depth(minimum, least)
-            items.append({"xyz": _p(middle), "angle_deg": _r(least, 3), "length_mm": _r(length, 4),
-                          "thickness_mm": 0.0, "thin_depth_mm": _r(depth, 4),
-                          "thin_area_mm2": _r(depth * length if depth else None, 4)})
+    for knife in zones if zones is not None else _knife_chains(mesh, minimum):
+        middle = np.vstack([knife.starts, knife.ends]).mean(axis=0)
+        items.append({"xyz": _p(middle), "angle_deg": _r(knife.angle, 3), "length_mm": _r(knife.length, 4),
+                      "thickness_mm": 0.0, "thin_depth_mm": _r(knife.depth, 4),
+                      "thin_area_mm2": _r(knife.depth * knife.length if knife.depth else None, 4)})
     items.sort(key=lambda item: item["angle_deg"])
     return {"items": items[:CAP], "count": len(items), "knife_below_deg": mo.KNIFE_DEG, "min_wall_mm": minimum,
-            "length_mm": _r(sum(item["length_mm"] for item in items), 4),
-            "method": "convex creases between triangles whose material angle is under knife_below_deg, chained by "
-                      "shared corners"}
+            "fold_below_deg": mo.FOLD_DEG, "length_mm": _r(sum(item["length_mm"] for item in items), 4),
+            "method": f"convex creases between triangles of material under {CREASE_DEG:g} deg, chained by shared "
+                      "corners, a chain a knife where its angle (its creases' median by length) is under "
+                      "knife_below_deg; a crease under "
+                      "fold_below_deg is a fold of the tessellation, and a chain shorter than its thin depth a "
+                      "sliver triangle's, neither a knife"}
 
 
 def _build_volume_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
@@ -862,7 +933,7 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         "clearances": _safe(_clearance_facts, mesh, split),
         "build_volume": _safe(_build_volume_facts, mesh, resolved),
         "bed": _safe(_bed_facts, mesh),
-        "knife_edges": _safe(_knife_facts, mesh, resolved),
+        "knife_edges": _safe(_knife_facts, mesh, resolved, zones),
         "stair_stepping": _safe(_stair_facts, mesh, resolved["layer"]),
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }

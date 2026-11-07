@@ -27,8 +27,10 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["ANGLE_EPS", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
-           "frame", "near_segments", "orientation_rows", "ranked", "rotation", "span", "support", "voxels"]
+__all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS",
+           "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
+           "frame", "near_segments", "nearest_segments", "orientation_rows", "ranked", "rotation", "span", "support",
+           "voxels"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
 # through a vertex or along an edge of a mesh built on round numbers (each crossing counted once).
@@ -55,11 +57,22 @@ OVERHANG_AREA_MM2 = 1.0
 OVERHANG_REACH_MM = 0.4
 
 
+#: A convex crease under this many degrees of material is no knife edge: on a mesh it is a fold (two triangles
+#: doubled back on each other) or a sliver of the tessellation, a defect of the triangles, and its thin depth
+#: would reach anywhere (0.8 mm's at 0.1 deg is 458 mm; a 0.227 deg crease on a watertight shin wiped every
+#: wall ray within 201 mm of it). Exact geometry has no folds: an edge this sharp is a sliver its walls read.
+FOLD_DEG = 2.0
+#: A knife's thin depth is at most this many mm: past it the sliver is a fin, which the walls measure (an edge of
+#: 4.6 deg stays under FDM's 0.8 mm for 10 mm).
+THIN_DEPTH_CAP_MM = 10.0
+
+
 def thin_depth(minimum: float | None, angle_deg: float) -> float | None:
-    """How far from an edge of material angle ``angle_deg`` the material stays thinner than ``minimum``."""
-    if minimum is None or not angle_deg > 0:
+    """How far from an edge of material angle ``angle_deg`` the material stays thinner than ``minimum``: None
+    under ``FOLD_DEG`` (no knife), at most ``THIN_DEPTH_CAP_MM``."""
+    if minimum is None or not angle_deg >= FOLD_DEG:
         return None
-    return float(minimum) / (2.0 * math.tan(math.radians(angle_deg) / 2.0))
+    return min(float(minimum) / (2.0 * math.tan(math.radians(angle_deg) / 2.0)), THIN_DEPTH_CAP_MM)
 
 
 def frame(V: np.ndarray, F: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -458,10 +471,19 @@ def _nearest(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[np.ndarr
 def near_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray, chunk: int = 2048) -> np.ndarray:
     """Each point's distance to the nearest of the segments ``starts[k] -> ends[k]``, ``chunk`` points at a
     time (the points-by-segments table is never larger than that)."""
-    found = np.empty(len(points))
+    return nearest_segments(points, starts, ends, chunk)[0]
+
+
+def nearest_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray,
+                     chunk: int = 2048) -> tuple[np.ndarray, np.ndarray]:
+    """Each point's distance to the nearest of the segments ``starts[k] -> ends[k]`` and that segment's ``k``,
+    ``chunk`` points at a time."""
+    found, which = np.empty(len(points)), np.zeros(len(points), dtype=int)
     for at in range(0, len(points), chunk):
-        found[at:at + chunk] = _nearest(points[at:at + chunk], starts, ends)[0].min(axis=1)
-    return found
+        table = _nearest(points[at:at + chunk], starts, ends)[0]
+        which[at:at + chunk] = table.argmin(axis=1)
+        found[at:at + chunk] = table[np.arange(len(table)), which[at:at + chunk]]
+    return found, which
 
 
 def spread_points(tri: np.ndarray, cap: int = 4000) -> np.ndarray:

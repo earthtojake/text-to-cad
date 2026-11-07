@@ -61,7 +61,7 @@ def features():
     planted = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
         ("printing.wall_supported", ALL, (-25, -10, 8), 8.0),
-        ("printing.pin_diameter", ALL, (-5, 12, 6), 3.0),
+        ("printing.pin_diameter", ("sla", "sls", "mjf", "pbf"), (-5, 12, 6), 3.0),  # FDM: no minimum pin
         ("printing.pin_aspect", ("pbf",), (-5, 12, 6), 3.0),
         ("printing.hole_diameter", ("fdm", "sla", "sls", "pbf"), (-5, -12, 2), 3.0),
         ("printing.gap", ALL, (10, 10, 2.5), 7.0),
