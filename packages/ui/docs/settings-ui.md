@@ -232,7 +232,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
   in hand, Projection's row switches the projection as its tile does, and Display's row opens its
-  choices as a nested submenu (`touchStripFit`).
+  choices under it, in More itself, as the app menu's Language does on a phone
+  ([mobile](#the-views-panel-and-the-tool-stack)) (`touchStripFit`).
 - **Sub-toolbar** under the strip, 8px below it, centred: the tool in hand's one row of
   controls (`SubToolbar`, `data-cad-sub-toolbar`), there for as long as the tool is up (see
   [Tools and lifecycle](#tools-and-lifecycle)). Select and Measure have none. On a phone its
@@ -297,9 +298,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 4px apart, as the strip's
   tiles are; a column's tooltips and menus open beside it, away from the corner, the pill's above it. A state shows on the
   control itself, its icon (Projection's, a board's 2D/3D and side). A phone has no corner: its view's controls are
-  rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's 3D view and View
+  rows of the strip's More (Projection, Display, the zoom's, Preview; a board's 3D view and View
   from bottom, ticked while they are, each with the icon the corner's button shows for that state, and in 3D
-  its projection in Display's submenu). A view drawn as a
+  its projection in Display's choices). A view drawn as a
   picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and
   Preview's own controls are its bar's (see [Preview](#camera-animation-and-preview)).
 - **A flat view's column** (`ViewCorner.jsx`'s `ViewPillColumn`, `viewportLayout.js`'s
@@ -783,7 +784,7 @@ file.
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More: Display a submenu of the presets (in 3D, then Projection), 3D view and View from bottom ticked while they are on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, each the [slider control](#the-slider-control). On a phone the three are rows of the strip's More: Display, its row opening the presets under it (in 3D, then Projection), 3D view and View from bottom ticked while they are on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
@@ -925,7 +926,12 @@ navbar, and Preview's bar in its place, a 48px row of 36px controls; the strip a
 at 375px, its style group under its tools, and a row that wrapped draws no rule between its groups, the line
 break parting them, `SubToolbar`'s `data-wrapped`).
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
-portalled menu, select or hint is the same size as the chrome it opened from. There is no view
+portalled menu, select or hint is the same size as the chrome it opened from. A phone has no room beside
+the app menu or the strip's More for a submenu (one placed beside More, which a board's rows make wide,
+ran off the screen's edge): there a submenu opens in place, its row showing the choices under it, in the
+menu itself and indented, the chevron turning down while they show; a press on the row, or Left, hides
+them again, and each opening of the menu starts them hidden (`primitives/dropdown-menu.jsx`'s
+`DropdownMenuInlineSub`: the app menu's Language, More's Display and Zoom). There is no view
 cube and no view's panel; and
 Quick Edit is a bottom sheet (see
 [Quick Edit](#quick-edit)). The explorer is the same popover, never wider than the window less
@@ -976,7 +982,7 @@ view entered from the 2D view in the same page: a file reopened in 3D opens on i
 picture under it, so leaving it always frames the 2D view on the camera's window, moved or not. Either way the 3D view stays until the 2D canvas has painted
 the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
 The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
-of More, and in 3D Display's submenu ends with Projection.
+of More, and in 3D Display's choices end with Projection.
 
 ## Display settings and section primitives
 
@@ -985,7 +991,7 @@ the cube, over Projection and Home; a board's at the top of its column over the 
 the current mode's sphere icon. It opens a stock shadcn dropdown menu
 (`DisplayPopover.jsx`): a muted **Display** label, the modes as a `DropdownMenuRadioGroup`,
 a separator, then **Grid**, a `DropdownMenuCheckboxItem`. On a phone the strip's **More**
-menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`), with no
+menu has a Display row that opens the same list (`DisplayMenuItems`) under it, in More itself, with no
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
@@ -1099,7 +1105,7 @@ Theme:
   before the chevron, centred on the column Theme's last segment and the checkboxes share. A
   phone has no room beside the menu for a submenu: there a press of the same row opens the
   choices under it, in the menu itself (closed each time the menu opens, the chevron turning
-  down while they show), and a choice closes them again.
+  down while they show: `DropdownMenuInlineSub`, as More's Display and Zoom), and a choice closes them again.
   Automatic is the default: the web infers the language from the browser's languages, the CAD
   app from its host's locale (then the frame's browser languages); Simplified script or
   mainland China and Singapore read 简体中文, Traditional script or Taiwan, Hong Kong and Macau
@@ -1346,7 +1352,7 @@ a fixed width, and the percentage, pressed, its menu — Zoom in, Zoom out (half
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
 tools do not: its corner's Home, F, a double-click on empty space under Select and the view's menu frame it, and the
 same keys zoom it. A board in 3D keeps its pill, which reads and steps its 3D camera
-(`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom submenu. **100% is the
+(`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom row, its choices opening under it. **100% is the
 model as authored, framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`; a board's
 slab) at the camera's angle — a
 fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which

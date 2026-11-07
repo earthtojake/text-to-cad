@@ -1,8 +1,8 @@
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { Ellipsis } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent,
-  DropdownMenuSubTrigger, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuInlineSub, DropdownMenuInlineSubContent,
+  DropdownMenuInlineSubTrigger, DropdownMenuItem, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
@@ -54,8 +54,9 @@ export { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS, useSt
  * @property {import("react").ReactNode} tile
  * @property {() => void} [onSelect]
  * @property {(props: { anchor: import("react").RefObject<HTMLElement>, open: boolean, onOpenChange(open: boolean): void }) => import("react").ReactNode} [popover]
- * @property {(props: { openPopover(): void }) => import("react").ReactNode} [submenu]  In More, its choices as a standard
- *   nested submenu of its row (Projection's, Display's modes); `openPopover` opens its `popover` from More (Display's settings page).
+ * @property {(props: { openPopover(): void }) => import("react").ReactNode} [submenu]  In More, its choices (Display's modes, the
+ *   zoom's), opened under its row in More itself, as a phone's menus open a submenu (`DropdownMenuInlineSub`: there is no room
+ *   beside More for one); `openPopover` opens its `popover` from More (Display's settings page).
  */
 
 // A tool with a menu is ONE control (Select, Measure): its button, then its menu's small chevron
@@ -206,14 +207,15 @@ function TouchStrip({ tools, views }) {
             }}>
             {hidden.map(entry => entry.view
               ? entry.control.submenu
-                ? <DropdownMenuSub key={entry.control.id}>
-                  <DropdownMenuSubTrigger disabled={entry.control.disabled}>
+                // A phone has no room beside More for a submenu: its choices open under its row, in More itself.
+                ? <DropdownMenuInlineSub key={entry.control.id}>
+                  <DropdownMenuInlineSubTrigger disabled={entry.control.disabled}>
                     <span className={MORE_ICON_CLASS} aria-hidden="true">{entry.control.icon}</span>{entry.control.label}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent aria-label={entry.control.label} collisionPadding={8} className={cn(FLOATING_SURFACE_CLASS, "data-[state=closed]:animate-none!")}>
+                  </DropdownMenuInlineSubTrigger>
+                  <DropdownMenuInlineSubContent aria-label={entry.control.label}>
                     {entry.control.submenu({ openPopover: () => { pending.current = entry.control.id; } })}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                  </DropdownMenuInlineSubContent>
+                </DropdownMenuInlineSub>
               : entry.control.active !== undefined
                 ? <DropdownMenuCheckboxItem key={entry.control.id} checked={entry.control.active === true} disabled={entry.control.disabled}
                   onSelect={() => entry.control.onSelect?.()}>
