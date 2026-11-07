@@ -314,9 +314,17 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertLessEqual({".github/workflows/install-linux.yml", "scripts/install/install.sh"}, linux)
         for name in ("install-windows.yml", "install-linux.yml"):
             self.assertEqual(jobs_for(f".github/workflows/{name}") - {"skills"}, set(), name)
-        # Dispatched with nothing said, Windows's rehearses this tree's wheel; the published release only when asked.
-        windows_text = (REPO_ROOT / ".github/workflows/install-windows.yml").read_text(encoding="utf-8")
-        self.assertRegex(windows_text, r"published:\n(?:        .*\n)*?        default: false\n")
+
+    def test_the_installer_rehearsals_take_the_same_inputs_and_rehearse_this_tree_unless_asked(self):
+        inputs = []
+        for name in ("install-windows.yml", "install-linux.yml"):
+            text = (REPO_ROOT / f".github/workflows/{name}").read_text(encoding="utf-8")
+            block = text.split("    inputs:\n", 1)[1].split("\n  push:", 1)[0]
+            inputs.append(re.findall(r"^      (\w+):$", block, re.M))
+            self.assertRegex(block, r"published:\n(?:        .*\n)*?        default: false", name)
+            self.assertIn("if: ${{ !inputs.published }}", text, name)
+        self.assertEqual(inputs[0], inputs[1])
+        self.assertEqual(inputs[0], ["ref", "published"])
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
         self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})

@@ -6,7 +6,8 @@ name: Linux installer rehearsal
 # doctor`. The Windows rehearsal goes further, through models and the uninstall (install-windows.yml); the
 # release smoke runs the wheels. A rehearsal, not a release gate: dispatched by hand, or by a push to main
 # that changes the installer or what it runs, as the Windows one is. No test.yml job runs it
-# (scripts/github-workflows/select_checks.py).
+# (scripts/github-workflows/select_checks.py). Dispatched with `published`, the same steps run against what
+# people install today: the site's install.sh and the newest release on PyPI, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +15,11 @@ on:
         description: "The ref to rehearse (default: the branch dispatched)"
         required: false
         default: ""
+      published:
+        description: "Rehearse the published release (the site's install.sh, PyPI), not this tree's wheel"
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [main]
     paths:
@@ -32,6 +38,7 @@ permissions:
 jobs:
   wheel:
     name: wheel
+    if: ${{ !inputs.published }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -68,6 +75,7 @@ jobs:
   linux:
     name: install.sh (${{ matrix.where }})
     needs: wheel
+    if: ${{ !cancelled() && needs.wheel.result != 'failure' }}
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     timeout-minutes: 15
@@ -81,6 +89,7 @@ jobs:
             image: python:3.12-slim-bookworm
     env:
       UV_NO_MODIFY_PATH: "1"
+      CAD_PUBLISHED: ${{ inputs.published }}
     steps:
       # What the one-line command itself needs: a person on this image has run `curl ... | sh`.
       - name: curl, on the slim image
@@ -94,27 +103,35 @@ jobs:
 
       # The workspace, not the runner's temporary folder: a container job's path to that differs from the host's.
       - name: Take the wheel
+        if: ${{ !inputs.published }}
         uses: actions/download-artifact@v8
         with:
           name: wheels
           path: wheels
 
       # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
-      # the release the server pins, which no index has before it is released.
+      # the release the server pins, which no index has before it is released. Published: the site's installer,
+      # and the release the version feed names, from PyPI.
       - name: Install, piped as the docs say (curl | sh)
         shell: sh
         run: |
-          CAD_INSTALL_FROM=$(ls "$PWD"/wheels/cad_server-*.whl)
-          UV_FIND_LINKS=$PWD/wheels
-          export CAD_INSTALL_FROM UV_FIND_LINKS
-          sh < scripts/install/install.sh
+          if [ "$CAD_PUBLISHED" = true ]; then
+            release=$(curl -fsS https://api.texttocad.dev/v1/versions | sed -n 's/.*"latest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            [ -n "$release" ]
+            curl -fsSL https://texttocad.dev/install.sh | sh
+          else
+            release=$(cat VERSION)
+            CAD_INSTALL_FROM=$(ls "$PWD"/wheels/cad_server-*.whl)
+            UV_FIND_LINKS=$PWD/wheels
+            export CAD_INSTALL_FROM UV_FIND_LINKS
+            sh < scripts/install/install.sh
+          fi
+          echo "CAD_RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: The cad command and the doctor
         shell: sh
-        env:
-          UV_FIND_LINKS: ${{ github.workspace }}/wheels
         run: |
           said=$("$HOME/.local/bin/cad" --version)
           echo "$said"
-          [ "$said" = "cad $(cat VERSION)" ]
+          [ "$said" = "cad $CAD_RELEASE" ]
           "$HOME/.local/bin/cad" doctor
