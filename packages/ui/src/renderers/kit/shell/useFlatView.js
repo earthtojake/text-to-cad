@@ -25,7 +25,8 @@ import { useWhenSettled } from "./useWhenSettled.js";
  * `useFlatHandover` is what goes out of the view: Quick Edit's props (its references and chips, the
  * annotation, and the prompt's views and files: the views with ink, the one on screen and the
  * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go, Delete deletes what
- * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, the copy key copies
+ * Select picked, ⌘Z walks the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
+ * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
  * the annotated view while a drawing tool is up, else what `copySelection` copies), a host's capture
  * request, the live binding, and the alert card with its dismissal.
  */
@@ -84,9 +85,12 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {((references: readonly object[], file: string) => string[]) | null} [options.packetReferences]  What the
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
+ * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
+ *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: its state
+ *   buttons' keys, `StateButton.jsx`), tried before the tools' letters; true when it took it.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -180,9 +184,19 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   };
   const chordRef = useRef(onChord);
   chordRef.current = onChord;
+  const viewKeyRef = useRef(onViewKey);
+  viewKeyRef.current = onViewKey;
+  // The view's panel, as the frame drew it (`FlatViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or
+  // hides it, / opens it on its search.
+  const panelControl = useRef(null);
+  // The view's zoom as the strip has it (the renderer writes it, Zoom to selection and all): what the zoom's keys reach.
+  const zoomKeys = useRef(null);
   useViewerShortcuts({
     viewerElement,
-    onChord: onChord ? event => Boolean(shown && chordRef.current?.(event)) : undefined,
+    onChord: event => {
+      if (event.key === "\\" && !event.shiftKey && panelControl.current) { panelControl.current.toggle(); return true; }
+      return Boolean(shown && chordRef.current?.(event));
+    },
     onCopy: () => copyAction(),
     onDelete: () => {
       if (annotating) return false;
@@ -194,8 +208,9 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     onUndo: () => history.undo(),
     onRedo: () => history.redo(),
     // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => shown && pressToolKey(event, { tools: toolKeys.current,
-      selectDrawing: tool => annotationRef.current.selectTool(tool), fit }),
+    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && (viewKeyRef.current?.(event) === true
+      || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
+    zoom: () => (shown ? zoomKeys.current : null),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
       if (hasOpenPopup(viewerElement?.current)) return;
@@ -224,7 +239,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     return attachLiveBinding(binding, () => runtimeRef.current, { commands, declined, ready: whenSettled });
   }, [binding, whenSettled]);
 
-  // ---- the file sidebar's layout: the person's, across files ------------------
+  // ---- the view's panel's layout: the person's, across files ------------------
   const toolStack = useMemo(() => normalizeToolStack(workspace.services.preferences?.toolStack), [workspace.services.preferences?.toolStack]);
   const toolStackRef = useRef(toolStack);
   toolStackRef.current = toolStack;
@@ -239,5 +254,5 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     resource: workspace.resource, references, chips, nameReference, annotation: quickEditAnnotation,
     prompt: quickEditPrompt, onCopy: copyAction, onEscape: letGo, onClear: clearQuickEdit, disabled: !shown
   };
-  return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, reportActionError: setActionError };
+  return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, panelControl, zoomKeys, reportActionError: setActionError };
 }

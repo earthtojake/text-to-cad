@@ -107,6 +107,29 @@ class WallThicknessTest(unittest.TestCase):
 
         self.assertLess(thin["median_mm"], thick["median_mm"])
 
+    def test_a_coarse_mesh_is_sampled_all_over_its_surface(self) -> None:
+        """A plate thinning from 6 mm to 0.6 mm, meshed as a dozen large triangles: every ray asked for is cast,
+        each from anywhere on the surface, so the thin end is measured. Rays from the triangles' centres, at most
+        one a triangle, found the plate's thinnest place 2.4 mm thick."""
+        plate = extrude(make_face(Polyline((0, 0, 0), (60, 0, 0), (60, 0.6, 0), (0, 6, 0), (0, 0, 0))), 30)
+        with tempfile.TemporaryDirectory() as td:
+            mesh = dfam_tool._load(_stl(plate, Path(td), "ramp"))
+            facts = dfam_tool._wall_facts(mesh, samples=2000)
+
+        self.assertLess(len(mesh.faces), 20)
+        self.assertGreater(facts["samples_valid"], 1900)
+        self.assertLess(facts["min_mm"], 1.0)
+
+    def test_a_corner_is_no_wall(self) -> None:
+        """A block 10 mm tall whose sides lean out 10 degrees: a ray from its top face by an edge leaves through the
+        side after a hair, past a corner, not across a wall, and is not counted, so the block measures its own
+        size."""
+        block = extrude(make_face(Polyline((5, 0, 0), (15, 0, 0), (16.76, 10, 0), (3.24, 10, 0), (5, 0, 0))), 30)
+        with tempfile.TemporaryDirectory() as td:
+            facts = dfam_tool._wall_facts(dfam_tool._load(_stl(block, Path(td), "flared")), samples=2000)
+
+        self.assertGreater(facts["min_mm"], 9.0)
+
 
 class OrientationTest(unittest.TestCase):
     def test_flipping_a_wedge_removes_its_support_requirement(self) -> None:
@@ -228,7 +251,7 @@ class CheckTest(unittest.TestCase):
 
         self.assertEqual(payload["overhangs"]["angle_limit_used_deg"], 30.0)
 
-    def test_candidates_rank_the_orientations(self) -> None:
+    def test_candidates_rank_the_orientations_beside_the_parts_own_figures(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(_wedge(30.0), tmp, "wedge30")
@@ -281,9 +304,40 @@ class MultiBodyWallTest(unittest.TestCase):
         # 0.3 mm is the fit gap; the thinnest real wall is the 1.7 mm socket.
         self.assertGreater(thinnest, 1.0)
 
+    def test_a_sealed_cavity_is_its_bodys_and_its_skin_a_wall(self) -> None:
+        """A groove that stops short of the top (the macropad's knob) is a sealed void inside one solid: one
+        body, with the void said, and the 0.5 mm skin over it measured as one of its walls."""
+        with tempfile.TemporaryDirectory() as td:
+            part = Box(20, 20, 10) - Pos(0, 0, 4.0) * Box(16, 16, 1)   # its top at 4.5, the box's at 5
+            result = cad.stl.dfm(_stl(part, Path(td), "sealed"), process="printing", samples=4000)
+
+        self.assertEqual((result.measurements["mesh"]["body_count"], result.measurements["mesh"]["internal_void_count"]),
+                         (1, 1))
+        codes = {finding.code for finding in result.findings}
+        self.assertIn("internal_void", codes)  # FDM prints it as infill; a resin or powder process traps material
+        self.assertNotIn("several_bodies", codes)
+        self.assertAlmostEqual(result.measurements["wall_thickness"]["min_mm"], 0.5, delta=0.01)
+
+    def test_a_body_resting_on_another_is_closed_and_measured(self) -> None:
+        """A two-material print: a 10 mm baffle standing on a 2 mm diffuser shares the diffuser's top, so
+        neither body is closed. Each is closed again as the bodies are split (trimesh's repair, which needs
+        networkx: the trimesh extra carries it) and measured against itself: the diffuser's 2 mm wall too."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "two.stl"
+            diffuser = trimesh.creation.box((20, 20, 2))
+            baffle = trimesh.creation.box((20, 20, 10))
+            baffle.apply_translation((0, 0, 6))
+            trimesh.util.concatenate([diffuser, baffle]).export(str(path))
+            result = cad.stl.dfm(path, process="printing", samples=400)
+
+        self.assertTrue(result.ok, [(finding.code, finding.message) for finding in result.findings])
+        self.assertFalse(result.measurements["mesh"]["watertight"])
+        walls = sorted(body["min_mm"] for body in result.measurements["wall_thickness"]["per_body"] if body["min_mm"])
+        self.assertEqual([round(wall, 3) for wall in walls], [2.0, 10.0])
+
     def test_per_body_carries_p05_for_the_same_judgement_rule_as_pooled(self) -> None:
-        """SKILL.md says judge on p05_mm (min_mm alone can be a sampling
-        outlier) and also says attribute a violation to its own body rather
+        """The printing reference judges walls on p05_mm (min_mm alone is a
+        small thin place) and attributes a violation to its own body rather
         than the pooled figure. Both rules only hold together if p05_mm is
         present per body, not only in the pooled result.
         """

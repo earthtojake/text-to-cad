@@ -120,9 +120,46 @@ never by eye from a snapshot: a guess is easily a few tenths of a millimetre out
 
 ## Move, then check
 
-Move each group in one `@kicad_pcb` script: position and rotation with `b.update_items(...)` on the
-footprints read back from the board, and a change of side with `b.flip_items(...)`, KiCad's own flip,
-which mirrors pads, courtyard and graphics to the other side. Never set a footprint's layer by hand.
+Move each group in one `kicad_pcb.edit` block: position and rotation with `b.update_items(...)` on the
+footprints read back from the board, set to where each belongs (never moved by an offset, so the block
+can run again), and a change of side with `b.flip_items(...)`, KiCad's own flip, which mirrors pads,
+courtyard and graphics to the other side, only for a part not on that side already. Never set a
+footprint's layer by hand.
+
+**On the back** a part keeps KiCad's orientation: its pads are its library footprint's mirrored top to
+bottom (each local y negated), then turned by its orientation. So 0 on the back is the library
+footprint upside down (a SOT-23's pin 1 at the bottom left), and `flip_items` leaves a part that was at
+θ on the front at 180° − θ, mirrored left to right as seen from the front. For a back part that reads
+as the front part at θ seen through the board, flip it and set 180° − θ; read the pads back to check.
+
+**A footprint's own zones** (a module's antenna keep-out, a jack's) are moved twice by KiPy's position
+setter: KiCad hands their outlines over in the footprint's frame, and KiPy shifts them by the move as if
+they were in the board's, so the keep-out lands off the part and keeps nothing out, DRC silent. Keep each
+outline as it was across the move; KiCad then places it with the footprint (a turn and a flip are right):
+
+```python
+from copy import deepcopy
+from kicode.board_types import Zone
+from kicode.geometry import Angle, Vector2
+
+def place(footprint, x_mm, y_mm, degrees):
+    zones = [item for item in footprint.definition.items if isinstance(item, Zone)]
+    outlines = [deepcopy(zone.proto.outline) for zone in zones]
+    footprint.position = Vector2.from_xy_mm(x_mm, y_mm)
+    footprint.orientation = Angle.from_degrees(degrees)
+    for zone, outline in zip(zones, outlines):
+        zone.proto.outline.CopyFrom(outline)
+```
+
+A zone already off its part (a board placed without this) goes back to its library footprint's outline, in the
+footprint's frame: each point as the library has it, its y negated on the back (KiCad's flip mirrors it), never
+turned and moved onto the board by hand, which KiCad then places a second time.
+
+KiPy also turns a footprint's pads and drawings itself, truncating to the nanometre: after a quarter or
+half turn some are 1 nm off (`7.499999`), and DRC warns `lib_footprint_mismatch` ("does not match copy in
+library") on a footprint nobody changed. On a turned part that warning is this rounding; KiCad's flip and
+a move are exact.
+
 After each group:
 
 - **DRC.** `cad kicad_pcb drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
@@ -142,7 +179,9 @@ shortest worst gap that still leaves every pad a way out. When one side of an IC
 parts, move or rotate the IC. Report what could not be satisfied, and why.
 
 Placement is iterative: routing shows where lanes run short, so expect to move parts again and to
-reroute what a move touched.
+reroute what a move touched. A routed part moved leaves its tracks and vias where they were, and those
+now cross other pads (`shorting_items` at the next DRC): delete its nets' copper round it before the
+move, and route them again after.
 
 ## What this establishes
 

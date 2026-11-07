@@ -7,7 +7,7 @@ import {
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
+import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
 import { ChangedDot } from "./ChangedDot.jsx";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -80,7 +80,7 @@ function toolButton(tool, className = STRIP_BUTTON_CLASS, touch = false) {
   return <span className={cn(SPLIT_CLASS, touch && "rounded-md")} data-tool-split="" data-active={active ? "" : undefined}>{button}{tool.menu}</span>;
 }
 
-const GROUP_CLASS = `pointer-events-auto inline-flex min-h-8 max-w-full items-center gap-1 rounded-md p-1 ${FLOATING_CHROME_SURFACE_CLASS}`;
+const GROUP_CLASS = `pointer-events-auto inline-flex min-h-8 max-w-full ${STRIP_SHAPE_CLASS} ${FLOATING_CHROME_SURFACE_CLASS}`;
 // A More row's icon at a menu item's standard size (16px) and one line weight, whatever drew it
 // (a tool's own glyph, a view control's), so the rows read as one list.
 const MORE_ICON_CLASS = "flex size-4 shrink-0 items-center justify-center [&_svg]:size-4! [&_:is(svg,path,circle,line,polyline,polygon,rect,ellipse)]:[stroke-width:2px]";

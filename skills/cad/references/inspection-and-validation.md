@@ -257,7 +257,11 @@ The state is the server's: `live` (a worker holds it), `held` (the server holds 
 worker), whether its cache has it on disk, and when it was built. `--json` prints the same as `{"summary", "closure"}`, and `--query closure` the
 closure alone. For the names alone, `--query structure` prints the same lists without the
 bounds, volume and masses, and measures nothing. Nothing is built or meshed, and each part is
-measured once: an inspection after an edit measures only the parts it changed.
+measured once: an inspection after an edit measures only the parts it changed. A part with a solid
+inside out (its faces pointing inward, a negative volume a boolean can leave, which a run and a
+snapshot do not show) is named under `volume` as `inside out` (`--json`: `inverted`, its occurrences):
+build it another way (a revolved profile in place of the stacked booleans that turned it) before
+trusting its volume or a fit.
 
 ## Measurements
 

@@ -1,206 +1,182 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { Eye, EyeOff, FlipHorizontal2, Layers2, PaintBucket, SlidersHorizontal, SunDim } from "lucide-react";
+import { Box, Square } from "lucide-react";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
-import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup,
-  DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger
-} from "@cad/ui/primitives/dropdown-menu";
-import { Slider } from "@cad/ui/primitives/slider";
-import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
-import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { Checkbox } from "@cad/ui/primitives/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
 import { cn } from "@cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
-import { FileSheetValueInput, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
-import { useStripButtonClass } from "../kit/tools/FloatingToolBar.js";
-import { SUB_TOOLBAR_SLIDER_CLASS } from "../kit/tools/SubToolbar.jsx";
-import { AssemblyModeIcon, BoardModeIcon, CopperModeIcon, PlacementModeIcon, TrackKindIcon, ZoneKindIcon } from "./boardIcons.jsx";
+import {
+  FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection, parseFileSheetNumberInput
+} from "../kit/inspector/FileSheet.js";
+import { SliderField } from "../kit/inspector/SliderField.jsx";
+import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerState, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
+import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
+import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
 /**
- * A board's view controls (`settings-ui.md`), the only ones a board has, because its picture is a
- * choice: two tiles at the strip's end, each a stock dropdown as a 3D view's Display is
- * (`kit/shell/DisplayPopover.jsx`), each hinted by its name.
+ * How a board is drawn (`settings-ui.md`), by how often it is changed (the rule: on the screen what is
+ * changed often, in the panel or behind a menu what is changed now and then):
  *
- * - **Display** (the mode on screen's glyph): **Display modes**, under a muted label, the modes as a
- *   radio group — each a layer set (`plot2d/boardDisplay.js`) — and **Custom** while the Layers
- *   section's eyes have left the mode's set (choosing the mode goes back to it). Choosing a mode
- *   closes the menu.
- * - **Settings** (a sliders glyph): the switches, kept through a change of mode as a 3D view's Grid
- *   is — **Copper pours** (while copper is drawn) and **View from below** (the board mirrored, its back
- *   layers on top) — then a rule and **Other layers**, KiCad's high-contrast modes, a radio group:
- *   every layer but the active one (which a press on its row in the Layers section chooses) **Shown**,
- *   **Dimmed** or **Hidden**, the board's outline and the holes through an active copper layer at full
- *   strength either way (`plot2d/plot.js`'s `focusedLayers`); Ctrl+H (⌘H) cycles them while the board
- *   has the keyboard, as KiCad's does — then a rule and **Opacity**, KiCad's Layer Display Options' — the **Zones**' fill (60%) and the **Tracks**'
- *   (100%), each a row of its glyph, its name, a slider and its committed percentage, as a settings
- *   form's slider is. Ticking or sliding leaves it open; Escape in a value puts the draft back.
+ * - **On the screen** (`boardViewControls`), the corner's column over the zoom pill
+ *   (`kit/shell/ViewCorner.jsx`; on a phone, rows of the strip's More): **Display**, the presets (the
+ *   modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board, Copper, Assembly,
+ *   Placement, and **Custom** while the Layers tab's eyes have left the mode's set: choosing a mode goes
+ *   back to it), and in 3D the camera's projection under them; **2D/3D**; and **Flip** (KiCad's View ▸
+ *   Flip Board View), the side the board is seen from, top or bottom: from the bottom the board is
+ *   mirrored, its back layers on top. 2D/3D and Flip are each one button whose icon is the state on screen.
+ * - **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), under its layers, as KiCad's
+ *   Appearance panel has them, KiCad's Layer
+ *   Display Options: **Others**, every layer but the active one (a press on its row chooses it) **Shown**,
+ *   **Dimmed** or **Hidden** — the board's outline and the holes through an active copper layer at full
+ *   strength either way (`plot2d/plot.js`'s `focusedLayers`); Ctrl+H (⌘H) cycles them while the board has
+ *   the keyboard, as KiCad's does — **Pours** (while copper is drawn), and the **Zones**' (60%) and
+ *   **Tracks**' (100%) opacities.
  *
- * A phone's More has a submenu of each, in the same order. The contract — `{ mode, side, poured,
- * layers, active, others, zones, tracks }` — is core's, shared with `cad <type> snapshot --display`, so
- * what is drawn here is drawn there, and kept with the file's view.
+ * The contract — `{ mode, side, poured, layers, active, others, zones, tracks }` — is core's, shared
+ * with `cad <type> snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 
 export const BOARD_MODE_OPTIONS = Object.freeze([
-  Object.freeze({ value: "board", labelKey: "board.text.board", Icon: BoardModeIcon }),
-  Object.freeze({ value: "copper", labelKey: "board.text.copper", Icon: CopperModeIcon }),
-  Object.freeze({ value: "assembly", labelKey: "board.text.assembly", Icon: AssemblyModeIcon }),
-  Object.freeze({ value: "placement", labelKey: "board.text.placement", Icon: PlacementModeIcon }),
+  Object.freeze({ value: "board", labelKey: "board.text.board" }),
+  Object.freeze({ value: "copper", labelKey: "board.text.copper" }),
+  Object.freeze({ value: "assembly", labelKey: "board.text.assembly" }),
+  Object.freeze({ value: "placement", labelKey: "board.text.placement" }),
 ]);
 const CUSTOM = "custom";
-const keepOpen = event => event.preventDefault();
 const percent = value => `${Math.round(value * 100)}%`;
-// A key in an opacity row is the slider's or the value's, never the menu's: no typeahead, no Tab
-// swallowed. Escape the menu's content takes first (`keepEscapeForField`).
-const keepKeys = event => { if (event.key !== "Escape") event.stopPropagation(); };
-/**
- * The menu's Escape, while a value is being typed, is the value's: it puts the draft back and leaves
- * the menu open, as a nested control owns Escape before its surface (`settings-ui.md`).
- */
-export function keepEscapeForField(event) {
-  if (event.target instanceof HTMLInputElement) event.preventDefault();
+// Every control fills the row's control column at the row's 24px height, a choice too: the room is the control's.
+// A row is as tall as its control where that is taller (a phone's 32px Select), never cut by it.
+const CONTROL_CLASS = "!h-6 w-full min-w-0";
+const ROW_CLASS = "h-auto min-h-6";
+
+/** What the layers but the active one are, as Others names them. */
+export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
+
+/** The mode on screen, or Custom, as Preset names it. */
+export function boardDisplayChoice(display, sheet) {
+  if (boardDisplayIsCustom(display, sheet)) return { value: CUSTOM, labelKey: "board.text.custom" };
+  return BOARD_MODE_OPTIONS.find(option => option.value === display.mode) || BOARD_MODE_OPTIONS[0];
 }
 
-/**
- * An opacity's row: its glyph and name where an item's are, so every row's text starts on one line,
- * then shadcn's slider and its committed percentage, which a draft changes only on Enter or blur.
- */
-function OpacityRow({ id, Icon, label, name, value, onChange }) {
+function Choice({ label, name, value, options, onChange, data }) {
+  return <FileSheetSettingRow label={label} className={ROW_CLASS}>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger aria-label={name} size="sm" className={cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, CONTROL_CLASS)} {...data}><SelectValue /></SelectTrigger>
+      <SelectContent>{options.map(([id, title]) => <SelectItem key={id} value={id} data-board-option={id}>{title}</SelectItem>)}</SelectContent>
+    </Select>
+  </FileSheetSettingRow>;
+}
+
+/** An opacity: the slider control, its committed percentage, which a draft changes only on Enter or blur. */
+function Opacity({ id, label, name, value, onChange }) {
   const { t } = useI18n();
   const commit = draft => {
     if (draft === percent(value)) return;
     const next = parseFileSheetNumberInput(draft, { fallback: value * 100, min: 0, max: 100 }) / 100;
     if (next !== value) onChange(next);
   };
-  return <div className="flex h-7 min-w-0 items-center gap-2 px-2" data-board-opacity={id} onKeyDown={keepKeys}>
-    <Icon className="size-4 shrink-0 text-muted-foreground" />
-    <TooltipHint content={name} overflowOnly><span className="w-10 shrink-0 truncate">{label}</span></TooltipHint>
-    <Slider className={cn(SUB_TOOLBAR_SLIDER_CLASS, "px-1")} value={[value]} min={0} max={1} step={0.01}
-      thumbProps={{ "aria-label": name }} onValueChange={([next]) => onChange(next)} />
-    <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={percent(value)} onValueCommit={commit} className="h-6 w-13 px-1.5" />
-  </div>;
-}
-
-/** What the layers but the active one are, as Other layers' rows name them. */
-export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({
-  value, labelKey: `board.text.others_${value}`, Icon: { shown: Eye, dimmed: SunDim, hidden: EyeOff }[value]
-})));
-
-/** The mode on screen, or Custom, as the Display tile and its rows name it. */
-export function boardDisplayChoice(display, sheet) {
-  if (boardDisplayIsCustom(display, sheet)) return { value: CUSTOM, labelKey: "board.text.custom", Icon: Layers2 };
-  return BOARD_MODE_OPTIONS.find(option => option.value === display.mode) || BOARD_MODE_OPTIONS[0];
+  return <SliderField data-board-opacity={id} label={label} name={name} value={value} min={0} max={1} step={0.01}
+    onValueChange={onChange} text={percent(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
 }
 
 /**
- * Display's rows, one list wherever it is shown (the Display tile's menu, a phone's More submenu):
- * the modes alone.
- * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
+ * The board's **Display**: its presets (KiCad's layer presets, `plot2d/boardDisplay.js`'s modes) as a
+ * 3D view's Display lists its modes (`kit/shell/DisplayPopover.jsx`), the one on screen ticked, and
+ * Custom, a state rather than a choice, while the Layers tab's eyes have left the preset's set
+ * (choosing a preset goes back to it).
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void, t?: Function }} options
  */
-export function BoardDisplayItems({ display, sheet, onChange }) {
-  const { t } = useI18n();
+export function boardPresetMode({ display, sheet, onChange, t = english }) {
   const choice = boardDisplayChoice(display, sheet);
-  return <>
-    <DropdownMenuLabel className="text-muted-foreground">{t("board.text.display_modes")}</DropdownMenuLabel>
-    <DropdownMenuRadioGroup aria-label={t("board.text.board_display_mode")} value={choice.value}
-      onValueChange={value => { if (value !== CUSTOM) onChange(selectBoardMode(display, value)); }}>
-      {BOARD_MODE_OPTIONS.map(({ value, labelKey, Icon }) => <DropdownMenuRadioItem key={value} value={value} data-board-mode-option={value}>
-        <Icon className="size-4" />{t(labelKey)}
-      </DropdownMenuRadioItem>)}
-      {choice.value === CUSTOM ? <DropdownMenuRadioItem value={CUSTOM} data-board-mode-option={CUSTOM}>
-        <Layers2 className="size-4" />{t("board.text.custom")}
-      </DropdownMenuRadioItem> : null}
-    </DropdownMenuRadioGroup>
-  </>;
+  const options = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => ({ value, label: t(labelKey) }));
+  if (choice.value === CUSTOM) options.push({ value: CUSTOM, label: t("board.text.custom"), disabled: true });
+  return { value: choice.value, options, onChange: value => { if (value !== CUSTOM && value !== choice.value) onChange(selectBoardMode(display, value)); } };
 }
 
 /**
- * Settings' rows, one list wherever it is shown (the Settings tile's menu, a phone's More submenu):
- * the switches, then the opacities.
+ * **Layer display**: the other layers, the pours and the opacities.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
  */
-export function BoardSettingsItems({ display, sheet, onChange }) {
+export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
   const { t } = useI18n();
-  return <>
-    <DropdownMenuLabel className="text-muted-foreground">{t("preview.settingsTitle")}</DropdownMenuLabel>
-    {/* Ticking leaves the menu open, as every checkbox row in a menu does: the board is seen changing. */}
-    {boardDisplayDrawsCopper(display, sheet) ? <DropdownMenuCheckboxItem checked={display.poured} onSelect={keepOpen}
-      onCheckedChange={value => onChange({ ...display, poured: value === true })} data-board-pours="">
-      <PaintBucket className="size-4" />{t("board.text.copper_pours")}
-    </DropdownMenuCheckboxItem> : null}
-    <DropdownMenuCheckboxItem checked={display.side === "bottom"} onSelect={keepOpen}
-      onCheckedChange={value => onChange({ ...display, side: value === true ? "bottom" : "top" })} data-board-side="">
-      <FlipHorizontal2 className="size-4" />{t("board.text.view_from_below")}
-    </DropdownMenuCheckboxItem>
-    <DropdownMenuSeparator />
-    {/* Choosing leaves the menu open, as a switch does: the board is seen changing. */}
-    <DropdownMenuLabel className="text-muted-foreground">{t("board.text.other_layers")}</DropdownMenuLabel>
-    <DropdownMenuRadioGroup aria-label={t("board.text.other_layers")} value={display.others}
-      onValueChange={value => { if (BOARD_DISPLAY_OTHERS.includes(value)) onChange({ ...display, others: value }); }}>
-      {BOARD_OTHERS_OPTIONS.map(({ value, labelKey, Icon }) => <DropdownMenuRadioItem key={value} value={value} onSelect={keepOpen} data-board-others={value}>
-        <Icon className="size-4" />{t(labelKey)}
-      </DropdownMenuRadioItem>)}
-    </DropdownMenuRadioGroup>
-    <DropdownMenuSeparator />
-    <DropdownMenuLabel className="text-muted-foreground">{t("render.opacity")}</DropdownMenuLabel>
-    <OpacityRow id="zones" Icon={ZoneKindIcon} label={t("board.text.zones")} name={t("board.text.zone_opacity")}
+  return <FileSheetSettingsSection title={t("board.text.layer_display")} sectionId="board-layer-display">
+    <Choice label={t("board.text.others")} name={t("board.text.other_layers")} value={display.others}
+      options={BOARD_OTHERS_OPTIONS.map(({ value, labelKey }) => [value, t(labelKey)])}
+      onChange={value => { if (BOARD_DISPLAY_OTHERS.includes(value)) onChange({ ...display, others: value }); }} data={{ "data-board-others": display.others }} />
+    {boardDisplayDrawsCopper(display, sheet) ? <FileSheetSettingRow label={t("board.text.pours")} className={ROW_CLASS}>
+      <Checkbox className="ml-auto" aria-label={t("board.text.copper_pours")} checked={display.poured}
+        onCheckedChange={value => onChange({ ...display, poured: value === true })} data-board-pours="" />
+    </FileSheetSettingRow> : null}
+    <Opacity id="zones" label={t("board.text.zones")} name={t("board.text.zone_opacity")}
       value={display.zones ?? BOARD_DISPLAY_DEFAULTS.zones} onChange={zones => onChange({ ...display, zones })} />
-    <OpacityRow id="tracks" Icon={TrackKindIcon} label={t("board.text.tracks")} name={t("board.text.track_opacity")}
+    <Opacity id="tracks" label={t("board.text.tracks")} name={t("board.text.track_opacity")}
       value={display.tracks ?? BOARD_DISPLAY_DEFAULTS.tracks} onChange={tracks => onChange({ ...display, tracks })} />
-  </>;
+  </FileSheetSettingsSection>;
 }
 
-/** A board's view-control tile and its menu: its glyph, its name as its hint, opening `children`. */
-function BoardMenuTile({ label, hint, Icon, disabled, tileProps, contentProps, className, children }) {
-  const tileClass = useStripButtonClass();
-  return <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild>
-      <ToolbarButton label={label} tooltip={hint} tooltipSide="top" disabled={disabled} className={tileClass} {...tileProps}>
-        <Icon />
-      </ToolbarButton>
-    </DropdownMenuTrigger>
-    {/* Closes with no exit animation, so a quick second press always reaches the tile. */}
-    <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} aria-label={hint} {...contentProps}
-      className={cn(FLOATING_SURFACE_CLASS, className, "data-[state=closed]:animate-none!")}>
-      {children}
-    </DropdownMenuContent>
-  </DropdownMenu>;
-}
-
-/** The Display tile: the mode on screen's glyph, opening the modes (`BoardDisplayItems`). */
-export function BoardDisplayPopover({ display, sheet, onChange, disabled = false }) {
-  const { t } = useI18n();
-  const choice = boardDisplayChoice(display, sheet);
-  return <BoardMenuTile label={t("display.modeCurrent", { mode: t(choice.labelKey) })} hint={t("display.label")} Icon={choice.Icon}
-    disabled={disabled} tileProps={{ "data-board-display": choice.value }} contentProps={{ "data-board-display-menu": "" }} className="w-44">
-    <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} />
-  </BoardMenuTile>;
-}
-
-/** The Settings tile: a sliders glyph, opening the switches and the opacities (`BoardSettingsItems`). */
-export function BoardSettingsPopover({ display, sheet, onChange, disabled = false }) {
-  const { t } = useI18n();
-  // As wide as an opacity row needs for its slider beside its name and value; a value's Escape is its own.
-  return <BoardMenuTile label={t("preview.settingsTitle")} hint={t("preview.settingsTitle")} Icon={SlidersHorizontal} disabled={disabled}
-    tileProps={{ "data-board-settings": "" }} contentProps={{ "data-board-settings-menu": "", onEscapeKeyDown: keepEscapeForField }} className="w-56">
-    <BoardSettingsItems display={display} sheet={sheet} onChange={onChange} />
-  </BoardMenuTile>;
-}
+/** The key that turns the board over, Flip's (EasyEDA's Shift+F: F is Zoom to fit, `kit/tools/toolShortcuts.js`). */
+export const BOARD_FLIP_SHORTCUT = "⇧F";
+/** The key that draws the board in 3D and flat again (KiCad's Alt+3 opens its 3D viewer). */
+export const BOARD_DIMENSION_SHORTCUT = "3";
 
 /**
- * The strip's view controls for a board, Display then Settings: each its tile, and in a phone's
- * More, a submenu of the same rows.
+ * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
+ * switched often enough to keep there: in the corner's column over the zoom pill, from the top down
+ * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, each one 24px corner
+ * button, and on a phone rows of the strip's More —
+ *
+ * - **Display**, the corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
+ *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
+ *   there and not a button of its own;
+ * - **2D/3D**, the board drawn flat or as a board in 3D: the view's state button (`kit/shell/StateButton.jsx`,
+ *   Projection's), a square while it is flat and a box in 3D, its name the state ("View: 2D"), its tooltip
+ *   what a press does ("Switch to 3D", and its key, 3); on a phone More's row 3D view, ticked in 3D;
+ * - **Flip**, the side it is seen from (KiCad's View ▸ Flip Board View): the same state button, like
+ *   Projection with no selected state, in no pressed or lit fill from either side: the board as two stacked
+ *   layers, the side it is seen from solid (`boardSideIcons.jsx`), its name the side ("Side: Bottom"), its tooltip what a press does
+ *   ("View from top", and its key, ⇧F). From the bottom the board is mirrored, its back
+ *   layers on top; in 3D the camera turns over to the other side (`onSide`), and the button follows the
+ *   camera, whichever side of the board's plane it is on. On a phone More's row View from bottom, ticked
+ *   while it is (a menu's idiom, not the button's).
+ *
+ * The rest of how the board is drawn — its layers and its layer display — is the Layers tab's
+ * (`LayersSection.jsx`), opened now and then.
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
+ *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,
+ *   onSide?: ((side: "top" | "bottom") => void) | null, projection?: { value: string, onChange(value: string): void } | null,
+ *   disabled?: boolean, boundary?: HTMLElement | null, t?: Function }} options
+ *   `onSide`: what choosing a side does where it is more than the Display's (a 3D view turns its camera to it).
+ *   `projection`: the 3D camera's, while the board is in 3D; null in 2D, which has none.
  */
-export function boardViewControls({ display, sheet, onChange, disabled, t = english }) {
-  const Icon = boardDisplayChoice(display, sheet).Icon;
-  return [{
-    id: "display", label: t("display.label"), icon: <Icon />, disabled,
-    tile: <BoardDisplayPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} />,
-    submenu: () => <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} />
-  }, {
-    id: "settings", label: t("preview.settingsTitle"), icon: <SlidersHorizontal />, disabled,
-    tile: <BoardSettingsPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} />,
-    submenu: () => <BoardSettingsItems display={display} sheet={sheet} onChange={onChange} />
-  }];
+export function boardViewControls({ display, sheet = null, onChange, dimension = "2d", onDimensionChange = null, onSide = null, projection = null,
+  disabled = false, boundary = null, t = english }) {
+  const below = display.side === "bottom";
+  const flip = () => { const next = below ? "top" : "bottom"; if (onSide) onSide(next); else onChange({ ...display, side: next }); };
+  const solid = dimension === "3d";
+  const switchDimension = () => onDimensionChange(solid ? "2d" : "3d");
+  const presets = boardPresetMode({ display, sheet, onChange, t });
+  const [flat, inThreeD] = [t("board.text.view_2d"), t("board.text.view_3d")];
+  // Each state's icon: Lucide's square for the board flat and box for it in 3D; the board's two layers, the
+  // side facing the viewer solid, from the top or the bottom.
+  return [
+    { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null,
+      submenu: () => <DisplayMenuItems mode={presets} projection={projection} />,
+      // Its tooltip and menu open beside it, away from the corner, as a 3D view's column's Display does.
+      corner: <ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
+        icon={SolidModeIcon} className={VIEW_CORNER_BUTTON_CLASS} tooltipSide={viewCornerAway(corner).side} side={viewCornerAway(corner).side}
+        align="end" />}</ViewCornerSided> },
+    ...(onDimensionChange ? [{
+      id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: solid, tile: null, onSelect: switchDimension,
+      corner: <ViewCornerState icon={solid ? Box : Square} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
+        tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
+        disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} />
+    }] : []),
+    { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, tile: null, onSelect: flip,
+      corner: <ViewCornerState icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
+        tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
+        disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} /> }
+  ];
 }

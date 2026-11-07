@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
 from cad._internal.dfm._common import mm, where
 from cad._internal.dfm.rules import Rule, RuleSet, Source
@@ -229,13 +230,34 @@ _XOMETRY = RuleSet(
 RULE_SETS: dict[str, RuleSet] = {"generic": _GENERIC, "protolabs": _PROTOLABS, "hubs": _HUBS, "xometry": _XOMETRY}
 
 
+_AXES = ("x", "y", "z")
+
+
+def pull(spec: str) -> None:
+    """A pull as the measurement reads it (``meshops_molding.pull_vector``), checked with the standard library
+    alone: an axis by its name (``z``, ``-y``, ``+x``) or three comma-separated components, not all zero."""
+    text = str(spec).strip().lower()
+    if (text[1:] if text[:1] in "+-" else text) in _AXES:
+        return
+    try:
+        parts = [float(value) for value in text.split(",")]
+    except ValueError:
+        parts = []
+    if len(parts) != 3:
+        raise ArgumentRefused(f"--pull is an axis (x, y, z, -z) or three comma-separated components, not {spec!r}")
+    if not all(part == part and abs(part) != float("inf") for part in parts) or not any(parts):
+        raise ArgumentRefused(f"--pull {spec!r} has no direction: give components that are finite and not all zero")
+
+
 def validate(resolved: dict[str, Any], document_type: str) -> None:
+    if resolved.get("pull") is not None:
+        pull(resolved["pull"])
     if not 0.0 < float(resolved["wall_limit"]) <= 90.0:
-        raise ValueError(f"--wall-limit is an angle in degrees above 0 and at most 90, not {resolved['wall_limit']}")
+        raise ArgumentRefused(f"--wall-limit is an angle in degrees above 0 and at most 90, not {resolved['wall_limit']}")
     if not 0.0 <= float(resolved["zero_tol"]) < 90.0:
-        raise ValueError(f"--zero-tol is an angle in degrees from 0 below 90, not {resolved['zero_tol']}")
+        raise ArgumentRefused(f"--zero-tol is an angle in degrees from 0 below 90, not {resolved['zero_tol']}")
     if resolved.get("cavities") is not None and int(resolved["cavities"]) < 1:
-        raise ValueError(f"--cavities is a count of at least 1, not {resolved['cavities']}")
+        raise ArgumentRefused(f"--cavities is a count of at least 1, not {resolved['cavities']}")
 
 
 def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:

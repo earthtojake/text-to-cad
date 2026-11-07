@@ -5,7 +5,7 @@ set -euo pipefail
 # environment of the kicad integration, cad[kicad], which the server makes (the library from this
 # checkout, editable, and kicode: some 100 MB from PyPI the first time, uv's cache after). DRC, every
 # export, a STEP and mesh round trip, a schematic's ERC, exports and nets held to KiCad's netlist, and a
-# @kicad_pcb board script through the headless api-server.
+# board's and a schematic's edit (kicad_pcb.edit, kicad_sch.edit) through the headless api-server.
 # The environment is made once here, in folders of this run's own (no engine of the person's is asked
 # to make it), and named to the tests (CAD_TEST_KICODE_PYTHON); the runner gives each test file its own
 # engine, state and cache folders. No person's KiCad, no libraries, no browser.

@@ -63,9 +63,10 @@ One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outlin
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
 decimals. The sheet is what the renderer frames; the whole canvas is its background: `background` is
-the dark canvas (the viewer's neutral dark grey, `#292929`, where KiCad's theme has navy), what a
-reader with no theme draws on. The viewer and `cad kicad_pcb snapshot` draw on their theme's own
-(`plot2d/theme.js`'s `boardPalette`: white or that grey) in its palette; no colour is the payload's. It
+a neutral dark grey (`#292929`, where KiCad's theme has navy), what a reader with no theme draws
+on. The viewer draws on its theme's own (`plot2d/theme.js`'s `boardPalette`: the app's canvas,
+`lib/appTheme.js`) and `cad kicad_pcb snapshot` on its own (white or that grey), each in its
+palette; no colour is the payload's. It
 clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
 where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
 
@@ -209,6 +210,15 @@ page origin (0, 0) lies on the sheet, so the viewer's index (`board2d/boardIndex
 position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2..x3y4`) back in
 KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's
 `Vector2.from_xy_mm`.
+
+What a 3D view of the board reads: `thickness`, the board's (its stack-up's `(general (thickness ..))`,
+millimetres; absent when the file says none), and a part's `models`, each of its footprint's 3D models as
+the file writes them: `name` (as written: `${KICAD9_3DMODEL_DIR}/…/R_0603.wrl`, `${KIPRJMOD}/…`, a
+relative or absolute path, `kicad-embed://…`), and where it differs from KiCad's default `offset`
+(millimetres), `rotate` (degrees about x, y, z), `scale`, `hidden: true` and `opacity`. Which file on the
+computer a name is, if any, is not the payload's (it is a function of the board's bytes alone): the board's
+`GET /api/v1/documents/kicad_pcb/<id>/models` answers it, each name a STEP by its document id (its mesh
+read through `GET /api/v1/documents/step/<id>/structure` and `/parts/<key>`), or the reason it has none.
 
 ## The schematic payload
 

@@ -39,9 +39,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-import numpy as np
-
 if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewer resolves a robot's meshes here)
+    import numpy as np
+
     from cad.engine.mesh_format import Mesh
 
 __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Placed", "ROBOTS", "assemble", "files_of",
@@ -125,6 +125,8 @@ def stale(files: dict[str, Any]) -> bool:
 
 
 def _column_major(matrix: np.ndarray) -> list[float]:
+    import numpy as np
+
     return [float(value) for value in np.asarray(matrix, float).T.reshape(-1)]
 
 

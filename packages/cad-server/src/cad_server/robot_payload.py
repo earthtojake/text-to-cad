@@ -64,7 +64,7 @@ The payload::
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
   moves both. ``poses`` are an SRDF's group states (``<group>/<name>``), ``opening`` every
   control at rest with the SRDF's ``home`` state(s) over it.
-- A URDF joint carrying ``<tcad:four_bar>`` (the simulation skill's four-bar reference: the input
+- A URDF joint carrying ``<tcad:four_bar>`` (the robot-simulation skill's four-bar reference: the input
   crank of a planar four-bar linkage, derived from the ``driver`` joint on the same ground
   link) is not a control either, and has no handle: its row is a ``curve`` over the driver's
   row, sampled here from the linkage's closed form over the
@@ -172,7 +172,7 @@ _ANGULAR = ("revolute", "continuous")
 FOUR_BAR_CURVE_TOLERANCE_DEG = 0.01
 _FOUR_BAR_INITIAL_INTERVALS = 64
 _FOUR_BAR_MAX_KEYS = 2049
-# The closed form's tolerances, as the simulation skill's four-bar reference has them.
+# The closed form's tolerances, as the robot-simulation skill's four-bar reference has them.
 _FOUR_BAR_INTERSECTION_TOLERANCE = 1e-12
 _FOUR_BAR_AXIS_ALIGNMENT_TOLERANCE = 1e-9
 _FOUR_BAR_GEOMETRY_ABSOLUTE_TOLERANCE_M = 1e-9
@@ -1195,7 +1195,7 @@ def _tree_order(joints: list[_Joint]) -> list[_Joint]:
 
 # --- the four-bar linkage --------------------------------------------------------------------
 #
-# The planar four-bar the simulation skill's four-bar reference describes: the ground link runs from
+# The planar four-bar the robot-simulation skill's four-bar reference describes: the ground link runs from
 # the input pivot (the derived joint's) to the output pivot (the driver's), ``ground_length``
 # apart along the x axis of a plane whose normal is the joints' shared axis; ``input_zero`` and
 # ``output_zero`` are the crank's and the rocker's angles from that x axis when both joints are

@@ -200,7 +200,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   }, [docked, open, boxNode]);
   useEffect(() => { if (docked && unfolded) takeKeyboard(); }, [docked, unfolded, takeKeyboard]);
   // While the sheet peeks, the view knows how tall the peek is (`--cad-quick-edit-peek`), so what
-  // runs down the view (a phone's file sidebar) stops above it.
+  // runs down the view stops above it.
   const peek = docked && open && !hidden && folded && stops ? stops[0] : null;
   useEffect(() => {
     const element = viewerElement?.current;

@@ -21,8 +21,10 @@ finer than a twentieth of a millimetre). It is meshed for that file and never ca
 through ``IMeshTools_Parameters`` with one knob set besides:
 ``EnableControlSurfaceDeflectionAllSurfaces``, which holds analytic faces (torus, sphere,
 cone) to the deflection -- measured across nine large documents, from 1.5-2x the deflection to
-under 1x, for 2-13 % more triangles on those parts. Every
-other knob was measured to change nothing useful and stays at its default.
+under 1x, for 2-13 % more triangles on those parts. An export's tolerance sets a second,
+``ForceFaceDeflection``: without it a face whose edges carry a looser tolerance is meshed from
+those edges, 0.15 mm off a sphere asked for 0.01 (#766); faces with tight edges mesh the same.
+Every other knob was measured to change nothing useful and stays at its default.
 
 **BRepMesh as it is.** No check, no second pass, no finer retry, no other tessellator: the
 same measurement found the faces left without triangles the same few hundredths of a per
@@ -207,6 +209,7 @@ def mesh_shape(shape: Any, *, parallel: bool = True, tolerance: float | None = N
     parameters = IMeshTools_Parameters()
     parameters.Deflection, parameters.Angle, parameters.Relative, parameters.InParallel = linear, ANGULAR, False, parallel
     parameters.EnableControlSurfaceDeflectionAllSurfaces = True
+    parameters.ForceFaceDeflection = tolerance is not None
     mesher = BRepMesh_IncrementalMesh(local, parameters)
     flags = mesher.GetStatusFlags()
     mesh = _extract(local, ", ".join(name for bit, name in _MESH_FLAGS if flags & bit) or "no status")
@@ -518,9 +521,10 @@ def measured(data: Any) -> dict[str, Any]:
     """What the kernel measures of a part as a whole, from its shape bytes (``shape_bytes``) read
     into a fresh shape, as the mesher reads them: its volume in cubic millimetres, of its solids
     (``BRepGProp``), and how many it has -- a part of faces or wires alone has none, and no volume to
-    weigh -- and its box in its own frame (``{"min", "max"}``, None for an empty part), which
-    ``cad <type> inspect`` places where each occurrence stands for the document's bounds. A function
-    of those bytes alone, so the engine keeps it by the part's geometry key."""
+    weigh -- how many of them are inside out (``inverted``: faces pointing inward, a negative volume,
+    which a boolean of build123d can make), and its box in its own frame (``{"min", "max"}``, None for
+    an empty part), which ``cad <type> inspect`` places where each occurrence stands for the document's
+    bounds. A function of those bytes alone, so the engine keeps it by the part's geometry key."""
     return _whole(read_shape(data))
 
 
@@ -533,15 +537,21 @@ def _whole(shape: Any) -> dict[str, Any]:
 
     solids = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
     TopExp.MapShapes_s(shape, TopAbs_SOLID, solids)
-    total = 0.0
+    total, inverted = 0.0, 0
     for at in range(1, solids.Extent() + 1):
         props = GProp_GProps()
         BRepGProp.VolumeProperties_s(solids.FindKey(at), props)
         total += abs(props.Mass())
+        inverted += props.Mass() < -_INSIDE_OUT
     box = optimal_box(shape)
     bounds = list(box_limits(box)) if not box.IsVoid() else None
-    return {"volume": total, "solids": solids.Extent(),
+    return {"volume": total, "solids": solids.Extent(), "inverted": inverted,
             "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}}
+
+
+# A solid whose volume is less than this many cubic millimetres below zero is inside out; nearer zero,
+# a degenerate one, which no sign says anything of.
+_INSIDE_OUT = 1e-9
 
 
 # --- extraction ----------------------------------------------------------------------------

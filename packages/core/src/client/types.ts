@@ -272,6 +272,11 @@ export interface CadWorkspaceService {
    * hierarchy's index out (the viewer reads it with the first sheet it shows).
    */
   plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  /**
+   * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
+   */
+  boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
@@ -345,6 +350,11 @@ export interface ExportService {
   /** Where the browser downloads a ready job's file: the session's own origin, never a token. */
   fileUrl(id: string): string;
 }
+
+/** One model of a board's 3D models table: a STEP the engine serves by its document id, or why there is none. */
+export type CadBoardModel =
+  | { file: string; document: string; api: string; stamp: string; missing?: undefined }
+  | { file: string; missing: "not-found" | "vrml-only" | "outside" | "too-large" | "not-step" | "embedded" | "too-many" | string };
 
 export interface CadPlotPayload {
   schemaVersion: number;

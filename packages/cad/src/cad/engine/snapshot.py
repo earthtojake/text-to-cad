@@ -131,6 +131,12 @@ class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders."""
 
 
+class NoSuchFile(SnapshotRefused):
+    """A file a flag names (``--annotation``, ``--measurements``, ``--job``) that is not there: refused as every
+    request is, and told apart as the input that is not there it is (the server's ``cad`` command says it
+    ``not_found``)."""
+
+
 # --- the request ---------------------------------------------------------------------------
 
 
@@ -331,7 +337,7 @@ def _load(value: Any, label: str) -> Any:
             raise SnapshotRefused(f"{label} is not JSON: {error}") from None
     path = Path(text).expanduser()
     if not path.is_file():
-        raise SnapshotRefused(f"{label} {text}: no such file")
+        raise NoSuchFile(f"{label} {text}: no such file")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:

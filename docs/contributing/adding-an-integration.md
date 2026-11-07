@@ -19,7 +19,9 @@ command runs that needs one its own environment lacks (a 3D type's `dfm`, the `t
 integration's) runs in the environment of that integration, made once by the engine the same way
 (`cad_server/_internal/integration_env.py`). An external program that ships as a Python package (KiCad's
 `kicad-cli`, in kicode) is its integration's extra and installs the same way; any other is the person's to
-install, found by its probe. `cad doctor` reports no integration.
+install, found by its probe. `cad doctor` says, for each integration with an extra but build123d (the
+kernel's own line), whether this installation carries it or where its environment is and whether it is
+made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
 
 ## Is it really an integration?
 
@@ -55,9 +57,9 @@ an integration.
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
-      accepts and which parts of the type's content it provides. A producer whose decorator does more
-      than the engine's model declares it (`declare`, for the targets `decorates` takes): KiCad's
-      `@kicad_pcb` board script, and the `@step`, `@glb` and `@dxf` stacked on one. A matcher reads type names and
+      accepts and which parts of the type's content it provides; it regenerates a file from what a model
+      returns. A tool that changes a native file in place is no producer but the type's edit
+      (`cad.registry.Edit`, `<type>.edit`, a `with` block: KiCad's `kicad_pcb.edit`). A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).
 - [ ] **An external program's probe and headless rules**: found through the library's one helper
@@ -67,6 +69,16 @@ an integration.
       the minimum version checked; run headless with a private home and no display;
       one missing-tool result saying the install hint. Only the program itself is ever run, never a
       desktop app or a wrapper that starts one; test each rule.
+- [ ] **The tool's own commands**, when its extra puts a command line in an environment (kicode's
+      `kicad-cli`): name each in the registry entry's `commands`, and give the integration a `_command`
+      module (`cad/<name>/_command.py`, `main(argv)`, argv the command's name and its arguments) that
+      runs it headless in the integration's private homes, the environment's own command first (the one
+      beside its Python) and never one on `PATH`, its arguments, stdio and exit code the tool's. `cad
+      run <command> …` then adds the extra as `--with cad[<name>]` would and runs that module in the
+      integration's environment (`cad_server.cli.run`; `cad.kicad._command` is the example). A typed
+      command wraps one only where it adds something (the library's law 30); the skill documents the
+      rest as `cad run <command> …`. Test that the bare command adds the integration, in the unit suite,
+      and that it runs, in the job that installs the tool.
 - [ ] **Licensing**: the tool's license allows how we call it (a library we import, a program we run)
       and how it would ship; say which in the pull request.
 - [ ] **A CI job** where its tests need the tool installed, reached by a runner under `scripts/test/`

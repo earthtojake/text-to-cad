@@ -728,7 +728,13 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     path = key(os.fspath(source))
     if isinstance(path, Path):
         if path.suffix.lower() not in (".xbf", ".step", ".stp"):
-            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a document id")
+            # A script is the commonest such source, as for an export (``_source``): its run makes the document.
+            from cad.engine.said import COMMAND
+
+            run = (f"; run `{COMMAND} run {os.fspath(source)}` first, then {verb} its document by id"
+                   if path.suffix.lower() == ".py" else "")
+            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a "
+                             f"document id{run}")
         if not path.is_file():
             raise ValueError(f"no document {named or source}")
     return path
@@ -967,10 +973,11 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
-    occurrences stand; its materials and their masses, where any part has one; its joints,
+    occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
+    materials and their masses, where any part has one; its joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
-    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume or masses, and
-    nothing measured for them -- the lists alone."""
+    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
+    masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
 
     model = None
@@ -1002,10 +1009,13 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     low, high, volume = [math.inf] * 3, [-math.inf] * 3, 0.0
     materials: dict[str, dict[str, Any]] = {}
     unweighed: list[str] = []
+    inverted: list[str] = []
     for instance in instances:
         prototype = prototypes[instance["prototype"]]
         facts = each[prototype["key"]] if measured else {}
         volume += facts.get("volume") or 0.0
+        if facts.get("inverted"):
+            inverted.append(instance["path"])
         if facts.get("box"):
             box = placed_facts({"box": facts["box"]}, instance["matrix"])["box"]
             low = [min(a, b) for a, b in zip(low, box["min"])]
@@ -1031,7 +1041,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     found = {
         "name": structure.get("name"), "id": ident, "state": state,
         "parts": {"occurrences": len(instances), "distinct": len(prototypes), "root": (structure.get("tree") or {}).get("name")},
-        "bounds": bounds, "volume": volume,
+        "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
         "unweighed": unweighed if materials else [],
         "joints": joints,
@@ -1044,7 +1054,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     }
     if not measured:
         # The lists alone: nothing was measured, so there are no bounds, volume or masses (never a zero).
-        for name in ("bounds", "volume", "mass"):
+        for name in ("bounds", "volume", "inverted", "mass"):
             del found[name]
         found["materials"] = [{key: value for key, value in row.items() if key != "mass"} for row in found["materials"]]
     return found

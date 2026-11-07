@@ -8,8 +8,10 @@ project BOM; do not infer purchase quantities from pad count.
 A native board embeds its footprints. `fp-lib-table` is needed to resolve or update the original
 library, not to display an existing board. A project-local footprint library is a `.pretty`
 folder containing `.kicad_mod` files, referenced with `${KIPRJMOD}`. Stock libraries use the
-installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`. Preserve
-project-local libraries when handing off a board. Read the library footprint before placing it.
+installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`, which DRC, ERC and an
+edit read in the KiCad you installed ([SKILL.md](../SKILL.md#setup)); with no KiCad installed, DRC warns
+`lib_footprint_issues` for each such footprint. Preserve project-local libraries when handing off a
+board. Read the library footprint before placing it.
 
 Several physical pads may share one number (a shield or thermal pad). `part.pads_numbered("1")`
 returns every shape for that logical pin; `part.pad("1")` returns the first. Check connectivity
@@ -18,6 +20,11 @@ and geometry across all those shapes. A hole without copper is not an electrical
 STEP export needs the footprint's actual 3D models. Verify model path, offset, scale and rotation.
 `--subst-models` can substitute a matching STEP/IGES model for VRML. Missing models must be
 reported; an enclosure check based on the bare board cannot establish component clearance.
+`cad kicad_pcb inspect board.kicad_pcb --json` lists each model missing (`models.missing`) before any
+export. KiCad's library has none for many parts a case is built round (keyboard switches, EC11
+encoders, 3.5 mm Eurorack jacks, 9 mm pots, several LEDs and USB-C receptacles): draw each from its
+datasheet with the cad skill, export it as STEP into the project (`board.3dshapes/`), and name it in the
+project's copy of the footprint as `${KIPRJMOD}/board.3dshapes/<name>.step`.
 
 ## Derate
 

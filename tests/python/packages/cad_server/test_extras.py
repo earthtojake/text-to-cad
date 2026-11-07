@@ -47,6 +47,21 @@ class NamingTest(unittest.TestCase):
         with self.assertRaisesRegex(extras.Refused, "^--with takes a requirement"):
             run.parse(["--with", "", "model.py"])
 
+    def test_a_script_or_a_folder_that_is_not_there_is_refused_before_any_environment(self) -> None:
+        # The command line's mistake, exit 2, in one line: no environment is made (the installation is never
+        # read) and the program's runner never starts, so there is no traceback.
+        from cad_server.cli import run
+
+        with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder), \
+                mock.patch.object(base.Installation, "here", side_effect=AssertionError("an environment was asked")):
+            Path("there").mkdir()
+            for argv, said in ((["missing.py"], "cad run: no such file: missing.py\n"),
+                               (["python", "missing.py", "--flag"], "cad run: no such file: missing.py\n"),
+                               (["--directory", "gone", "model.py"], "cad run: no such folder: gone\n"),
+                               (["--directory", "there", "missing.py"], "cad run: no such file: missing.py\n")):
+                with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual((run.main(argv), err.getvalue()), (2, said))
+
     def test_a_script_s_header_names_its_packages_and_its_python(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-header-"))
         self.addCleanup(shutil.rmtree, folder, True)
@@ -226,20 +241,22 @@ class ChoosingTest(unittest.TestCase):
         assert isinstance(found, extras.Spec)
         return found
 
-    def test_the_scan_finds_an_integration_through_local_imports_and_cad_s_decorators(self) -> None:
+    def test_the_scan_finds_an_integration_through_local_imports_and_cad_s_names(self) -> None:
         from cad_server._internal import scan
 
         self.write("lib/__init__.py", "from .shapes import plate\n")
         self.write("lib/shapes.py", "def plate():\n    import build123d as bd  # inside a body, as a model's\n"
                                     "    return bd.Box(1, 1, 1)\n")
-        self.write("boards.py", "from cad import kicad_pcb as board\n\n@board('b.kicad_pcb')\ndef b():\n    pass\n")
+        self.write("boards.py", "from cad import kicad_pcb as board\n\nwith board.edit('b.kicad_pcb') as b:\n    pass\n")
         self.write("model.py", "import numpy\nfrom lib import plate\nimport boards\n")
         self.write("plain.py", "import json\nfrom cad import model\n")
-        self.write("attribute.py", "import cad as c\n\n@c.kicad_pcb('x')\ndef x():\n    pass\n")
+        self.write("attribute.py", "import cad.kicad_pcb\n\nwith cad.kicad_pcb.edit('x.kicad_pcb') as b:\n    pass\n")
+        self.write("schematic.py", "from cad.kicad_sch import edit\n\nwith edit('d.kicad_sch') as s:\n    pass\n")
         self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
         self.assertEqual(scan.scan(script=self.folder / "model.py"), {"build123d", "kicad"})
         self.assertEqual(scan.scan(script=self.folder / "plain.py"), set(), "the core alone")
         self.assertEqual(scan.scan(script=self.folder / "attribute.py"), {"kicad"})
+        self.assertEqual(scan.scan(script=self.folder / "schematic.py"), {"kicad"}, "a schematic's edit, as a board's")
         self.assertEqual(scan.scan(script=self.folder / "dynamic.py"), set(), "an import by name is not seen")
         self.assertEqual(scan.scan(module="lib", cwd=self.folder), {"build123d"})
         self.assertEqual(scan.scan(code="import OCP.TopoDS", cwd=self.folder), {"build123d"})
@@ -279,6 +296,27 @@ class ChoosingTest(unittest.TestCase):
         self.write("read.py", "from pathlib import Path\nfrom cad import model, step\n\n@model\ndef holder():\n"
                               "    return step.read(Path(__file__).parent / 'part.step')\n")
         self.assertTrue(self.spec("read.py").default(), "a STEP read runs on the base: cad[build123d]")
+
+    def test_a_command_an_integration_declares_adds_it_and_any_other_adds_nothing(self) -> None:
+        from cad_server.cli import run
+
+        self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
+        self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
+                         "an explicit --with still works")
+        self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))
+        self.assertEqual(self.spec("--with", "cad[kicad]", "ruff", "check").integrations, ("kicad",))
+        for argv in (("ruff", "check"), ("kicad", "version"), ("./kicad-cli", "version")):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.spec(*argv).integrations, (), "a command no integration declares adds nothing")
+        # The declared one runs through the library's module for it, in the environment's Python, never a file
+        # on PATH; another is the environment's own file, or none.
+        python = str(self.write("env/bin/python", ""))
+        self.assertEqual(run._command(run.parse(["kicad-cli", "pcb", "render", "b.kicad_pcb"]), python),
+                         [python, "-P", "-m", "cad.kicad._command", "kicad-cli", "pcb", "render", "b.kicad_pcb"])
+        self.assertIsNone(run._command(run.parse(["ruff", "check"]), python))
+        ruff = self.write("env/bin/ruff", "")
+        self.assertEqual(run._command(run.parse(["ruff", "check"]), python), [str(ruff), "check"])
 
     def test_a_header_that_names_cad_decides_the_integrations_outright(self) -> None:
         self.write("forced.py", """\

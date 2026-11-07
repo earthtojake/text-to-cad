@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
@@ -82,44 +81,25 @@ const REVEAL_CLASS = "animate-in fade-in-0 zoom-in-75 duration-150 motion-reduce
  *   actions?: import("react").ReactNode,
  *   header?: import("react").ReactNode, collapsible?: boolean, onClose?: (() => void) | null, closeLabel?: string,
  *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
- *   lead?: boolean, icon?: import("react").ComponentType<object> | null, children?: import("react").ReactNode }} props
+ *   lead?: boolean, children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
  *   without; the chevron, the X and the grip take their names from it, unless the X says
- *   what it does itself (`closeLabel`, "Clear selection"). `icon`, in the file sidebar, is its
- *   tile's glyph where the section says what it is better than its kind's (a board's Circuit, a
- *   Layers list); without it the tile takes its kind's (`FileSidebar.jsx`).
+ *   what it does itself (`closeLabel`, "Clear selection").
  */
-// Where a section's body puts a control in its heading (`ToolPanelHeadAction`).
-const HeadSlotContext = createContext(null);
-
-/**
- * A control of a section's body drawn in its heading, before its X (Position's Reset). Nothing
- * outside a sidebar section's heading.
- */
-export function ToolPanelHeadAction({ children }) {
-  const slot = useContext(HeadSlotContext);
-  return slot ? createPortal(children, slot) : null;
-}
-
-export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, collapsible = true, onClose = null, closeLabel = "", changed = false,
-  icon = null, fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, lead = false, children }) {
+export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, collapsible = true, onClose = null, closeLabel = "",
+  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, lead = false, children }) {
   const { t } = useI18n();
-  const [headSlot, setHeadSlot] = useState(null);
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
-  // In the file sidebar (`FileSidebar.jsx`) a panel is one of its sections: a tile of the sidebar's
-  // toolbar opens it, alone, in the panel under it — the panel's width, its content's height, no
-  // surface, scroller or grip of its own, always headed, never folding, and closed by its X or its
-  // tile. Closed, it stays mounted out of sight.
-  const inSidebar = Boolean(stack?.sidebar);
-  if (inSidebar) collapsible = false;
-  // A section the sidebar does not offer just now (Preview's are Position and Animation) is as
-  // a hidden one: mounted, out of sight, and no tile.
-  if (inSidebar && !title) title = name || label;
-  const closedInSidebar = inSidebar && stack.openSection !== id;
-  const register = inSidebar ? stack.register : null;
-  const tileTitle = typeof title === "string" ? title : name || label;
-  useLayoutEffect(() => { if (register && id && !hidden) register(id, { title: tileTitle, fit, changed, icon }); }, [register, id, hidden, tileTitle, fit, changed, icon]);
+  // In a view's panel (`kit/shell/FlatPanel.jsx`) a panel is one of its tabs: its name the tab's, its
+  // body the tab's page, shown while its tab is open (or while the panel's search is up, under its
+  // name, left out when it holds no match). It draws no heading and pads nothing: the panel's body
+  // stands its rows on the panel's lines.
+  const tabbed = Boolean(stack?.tabbed);
+  if (tabbed) collapsible = false;
+  const registerTab = tabbed ? stack.register : null;
+  const tabName = typeof title === "string" && title ? title : name || label;
+  useLayoutEffect(() => (registerTab && id && !hidden ? registerTab(id, tabName) : undefined), [registerTab, id, hidden, tabName]);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
   const [ownCollapsed, setOwnCollapsed] = useState(defaultCollapsed);
   const collapsed = collapsible && (kept ? stack.collapsed(id, defaultCollapsed) : ownCollapsed);
@@ -130,13 +110,13 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
 
   // The size: dragged (`draft`), then as the person left it, then the defaults — every panel's
   // width, and the stack's cap for this id.
-  const sized = resizable && Boolean(id) && !inSidebar;
+  const sized = resizable && Boolean(id) && !tabbed;
   const [draft, setDraft] = useState(null);
   const [ownSize, setOwnSize] = useState({});
   const size = sized ? { ...(kept ? stack.size(id) : ownSize), ...draft } : {};
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
-  const width = inSidebar ? undefined : size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
+  const width = tabbed ? undefined : size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
   const cap = sized ? size.height ?? stack?.defaultHeight() ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
@@ -189,7 +169,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   };
 
   // The floor it gives way to: its content's own height when that is less (`FLOOR`).
-  const floored = fit !== "fixed" && !inSidebar && !collapsed && !hidden;
+  const floored = fit !== "fixed" && !tabbed && !collapsed && !hidden;
   const [natural, setNatural] = useState(null);
   useLayoutEffect(() => {
     if (!floored || !section.current || !body.current || !content.current) return undefined;
@@ -226,54 +206,30 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
       <CollapseButton panel={folding} className="hover:bg-transparent" />
     </div> : null;
 
-  // A sidebar section's head, under a rule: its heading row — its name, its actions and its X. A
-  // header (a tree's filter) takes the heading's place, the section's X still after it: the filter
-  // is the panel's top. The head pins to the top while the view is in the section (`FileSidebar.jsx`).
-  // The section's X ends its head, whether its heading or its search box is up: it closes the
-  // panel, its tile no longer pressed.
-  const sidebarToggle = inSidebar && stack.closeSection && stack.closeInHead !== false ? <button type="button" aria-label={t("panel.close", { name: tileTitle.toLowerCase() })} data-file-sidebar-close=""
-    className={TOOL_PANEL_BUTTON_CLASS} onClick={stack.closeSection}><X className="size-3" aria-hidden="true" /></button> : null;
-  const sidebarHead = inSidebar ? <div data-sidebar-head=""
-    className="sticky z-10 border-t border-border/60 px-1 pb-0.5 pt-1 data-[pinned]:z-20 data-[pinned]:bg-background data-[stuck]:bg-background data-[stuck]:shadow-[0_-1px_3px_rgb(0_0_0/0.12)] data-[pinned]:shadow-[0_1px_3px_rgb(0_0_0/0.12)]">
-    {header ? <div className="flex min-w-0 items-center gap-1 pr-0.5" data-tool-panel-header=""><div className="min-w-0 flex-1">{header}</div>{sidebarToggle}</div>
-      : <div data-tool-panel-heading=""
-      // The name is as far in from the bar's left edge as from its top (12px).
-      className="relative flex h-6 min-w-0 items-center gap-1 pl-2 pr-0.5 text-foreground">
-      <h3 className={cn("flex min-w-0 flex-1", TOOL_PANEL_HEADING_TEXT_CLASS)}>
-        <span className="min-w-0 truncate">{title}</span>
-      </h3>
-      {summary ? <span className="shrink-0 text-tiny text-muted-foreground">{summary}</span> : null}
-      {/* What the section's body puts in its heading (`ToolPanelHeadAction`: Position's Reset). */}
-      <span ref={setHeadSlot} className="contents" data-tool-panel-head-slot="" />
-      {actions}
-      {closeButton}
-      {sidebarToggle}
-    </div>}
-  </div> : null;
-
   const dragging = draft !== null;
+  if (tabbed) {
+    const searching = stack.searching;
+    return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role={stack.single ? "region" : "tabpanel"}
+      id={`flat-panel-body-${id}`} aria-labelledby={stack.single ? undefined : `flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
+      className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
+      {searching && !stack.single ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{tabName}</h3> : null}
+      <div ref={body} data-tool-panel-body="" className="min-w-0">
+        <div ref={content} className="flow-root">{children}</div>
+      </div>
+    </section>;
+  }
   return <section ref={section} aria-label={label} hidden={hidden} data-tool-panel={fit} data-tool-panel-id={id || undefined}
     data-collapsed={collapsed ? "" : undefined} data-resizable={sized ? "" : undefined} data-tool-panel-lead={lead ? "" : undefined}
-    data-sidebar-section={inSidebar ? "" : undefined} data-sidebar-closed={closedInSidebar ? "" : undefined}
-    className={inSidebar
-      // A section draws no box of its own: its heading, header and body are rows of the panel's one
-      // scrolling column, its head pinned to the column's top.
-      ? (hidden ? undefined : closedInSidebar ? "hidden" : "contents text-tiny")
-      : cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
-    style={{ width, maxHeight: inSidebar || collapsed || cap === null ? undefined : `${cap}px`, minHeight, order: lead && !inSidebar ? -1 : undefined }}>
-    {/* Where a section's heading sits when it is not docked: what the sidebar scrolls to. */}
-    {inSidebar ? <div aria-hidden="true" data-sidebar-anchor="" /> : null}
-    {inSidebar ? sidebarHead : heading}
+    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
+    style={{ width, maxHeight: collapsed || cap === null ? undefined : `${cap}px`, minHeight, order: lead ? -1 : undefined }}>
+    {heading}
     {/* Folded under a heading, the header (a tree's filter) goes with the body. */}
-    {inSidebar || (collapsed && heading) ? null : header}
-    {/* A panel that gives way scrolls in the chrome's one scroll region; a fixed one never scrolls,
-        nor does a sidebar section. */}
-    {/* In the sidebar the body is set in 4px more, so its rows of 8px padding start on the
-        section's name, 12px in; a tree keeps its rows' width and sets its glyphs on that column itself. */}
-    {fit === "fixed" || inSidebar ? <div ref={body} hidden={collapsed} data-tool-panel-body="" className={cn("min-w-0 overflow-x-clip rounded-b-md", inSidebar && fit !== "tree" && "px-1")}>
-      <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+    {collapsed && heading ? null : header}
+    {/* A panel that gives way scrolls in the chrome's one scroll region; a fixed one never scrolls. */}
+    {fit === "fixed" ? <div ref={body} hidden={collapsed} data-tool-panel-body="" className="min-w-0 overflow-x-clip rounded-b-md">
+      <div ref={content} className="flow-root">{children}</div>
     </div> : <ScrollArea hidden={collapsed} className="min-w-0 flex-1 rounded-b-md" viewportRef={body} viewportProps={{ "data-tool-panel-body": "" }}>
-      <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+      <div ref={content} className="flow-root">{children}</div>
     </ScrollArea>}
     {/* The person's to size, from its bottom-right corner alone: Quick Edit's grip, inside the
         panel's border, moving both its width and its cap. A folded panel has none: there is no

@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the robot-simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -38,8 +38,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
-explains any other failure.
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
@@ -149,8 +149,9 @@ is the script's folder; two explicit names in it must differ.
 - **`import build123d as bd`, and use it attribute-style** (`bd.Box`). The import is lazy:
   the kernel loads on first use, in the worker. `from build123d import Box`, or a
   module-level `bd.Color(...)` or `bd.Align` default, loads it at that line instead.
-- **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"`, or 0-255
-  integers. Import `metals` from `bd_materials`; assign a native material with
+- **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"` (`"#4a6fa5cc"` with
+  alpha). `part.color` is build123d's: it takes no 0-255 integers (OCCT's `Color out`), which
+  `paint` does. Import `metals` from `bd_materials`; assign a native material with
   `part.material = metals.aluminum()`
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
 - **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
@@ -183,7 +184,7 @@ cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bra
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
-calls `export(x, path, ...)` on each (`x` a model call's handle); running it rewrites every deliverable
+calls `model.export(x, path, ...)` on each (`from cad import model`; `x` a model call's handle); running it rewrites every deliverable
 ([exports](references/exports.md)). An export takes a document and its destinations,
 and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a

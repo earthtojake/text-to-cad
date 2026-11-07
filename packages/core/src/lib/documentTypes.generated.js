@@ -193,7 +193,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "inspect",
         "drc"
       ],
-      "decorator": true
+      "decorator": false
     },
     {
       "id": "kicad_sch",

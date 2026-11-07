@@ -1,34 +1,39 @@
 import { useI18n } from "@cad/ui/i18n";
-import { useMemo } from "react";
-import { CircuitBoard } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
-import { boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
+import { NO_MODEL_BLOCK, boardRowOwners, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
 
-// The Nets group's row (`boardTree.js`): shut as the tab opens.
-const CLOSED = Object.freeze(["group:nets"]);
+// The pins on nothing and the parts with no 3D model (`boardTree.js`): shut as the tab opens.
+const CLOSED = Object.freeze(["group:unconnected", NO_MODEL_BLOCK]);
 // A row's kind, in the glyphs Select's filter and the chips name the kinds with: a pad's copper, a part's body and legs, a net's trace.
 const KIND_GLYPHS = Object.freeze({ part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
 
+/** A board's lists, built once for both its tabs (`boardTree.js`), the Parts' No 3D model block once its models table is in. */
+export function useBoardTrees(index, models = null) {
+  const { t } = useI18n();
+  return useMemo(() => (index ? buildBoardTree(index, t, models) : null), [index, t, models]);
+}
+
 /**
- * A board's **Circuit**, a tab of the file sidebar (`boardTree.js`): its parts in blocks — the
- * schematic sheets their footprints record, else their kinds — each part with its pads, then its
- * nets, each with the pads on it, as the kit's Circuit tree draws one (`kit/inspector/CircuitTree.jsx`:
- * its filter, a part's reference, value, footprint name and MPN, a net's name; its rules for what opens,
- * what a press selects and frames, what a pick on the board reveals, and a part's or a net's eye). A
- * selected net is lit on the board, the rest stepped back, as KiCad's net highlight; the blocks and
- * "Nets (N)" open closed.
+ * A board's **Parts** or its **Nets** (`list`), each a tab of the view's panel (`boardTree.js`): its
+ * parts in blocks — the schematic sheets their footprints record, else their kinds — or its nets,
+ * as the kit's Circuit list draws one (`kit/inspector/CircuitTree.jsx`: its search, a part's reference,
+ * value, footprint name and MPN, a pad's number and name, a net's name; its rules for what opens, what a
+ * press selects and a double-click frames, what a pick on the board reveals, and a part's or a net's
+ * eye). A selected net is lit on the board, the rest stepped back, as KiCad's net highlight; the
+ * blocks of several parts and the pins on nothing open shut.
  *
- * @param {{ index: object, selection: ReturnType<typeof import("../kit/tools/select/useSceneSelection.js").useSceneSelection>,
+ * @param {{ index: object, trees: ReturnType<typeof buildBoardTree>, list: "parts" | "nets",
+ *   selection: ReturnType<typeof import("../kit/tools/select/useSceneSelection.js").useSceneSelection>,
  *   isolated: readonly string[], onIsolate(selector: string): void, onSelect(): void, onFrame?(selectors: readonly string[]): void }} props
  */
-export default function BoardSection({ index, ...props }) {
+export default function BoardSection({ index, trees, list, ...props }) {
   const { t } = useI18n();
-  const tree = useMemo(() => buildBoardTree(index, t), [index, t]);
-  const panel = useMemo(() => ({
-    id: "board", label: t("board.text.circuit"), icon: CircuitBoard, filterLabel: t("board.text.filter_circuit"),
-    listLabel: t("board.text.board_parts_and_nets"), treeLabel: t("board.text.board"), resultsLabel: t("board.text.board_search_results"),
-    nothingMatches: query => t("board.text.nothing_on_the_board_matches_query", { query })
-  }), [t]);
-  return <CircuitTree tree={tree} nodeIdsOf={boardTreeNodeIds} glyphs={KIND_GLYPHS} closedGroups={CLOSED} data="board" panel={panel} {...props} />;
+  const parts = list === "parts";
+  const panel = useMemo(() => ({ listLabel: t(parts ? "board.text.board_parts" : "board.text.board_nets"), treeLabel: t(parts ? "board.text.board_parts" : "board.text.board_nets"),
+    resultsLabel: t("board.text.board_search_results") }), [t, parts]);
+  const ownerOf = useCallback(selector => boardRowOwners(index, selector), [index]);
+  return <CircuitTree tree={parts ? trees.parts : trees.nets} searchRoots={parts ? trees.partsSearch : null} nodeIdsOf={boardTreeNodeIds} ownerOf={ownerOf}
+    glyphs={KIND_GLYPHS} closedGroups={CLOSED} data="board" panel={panel} {...props} />;
 }

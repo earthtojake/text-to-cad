@@ -52,49 +52,14 @@ class DocumentType(types.ModuleType):
         declare the file a model writes, of this type."""
         entry = self.entry
         if not entry.decorator:
-            raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model "
-                            f"(its operations: {', '.join(entry.operation_names)})")
-        # The engine's decorator, its path checked now, where a model is what the function is; else the
-        # producer that declares what the decorator does (``cad.registry.declarer_for``), by its target.
-        engine = None
-        if any(not producer.declare for producer in _producers(entry.id)):
-            from cad.engine import model
+            how = (f"; a file of it is changed in place with `with cad.{entry.id}.edit(path) as {entry.edit.noun}:`"
+                   if entry.edit is not None else "")
+            raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model"
+                            f"{how} (its operations: {', '.join(entry.operation_names)})")
+        from cad.engine import model
 
-            # An STL's or a 3MF's own mesh tolerance goes to the engine's decorator, which alone takes it.
-            engine = getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}))
-        elif tolerance is not None:
-            raise TypeError(f"@{entry.id} takes no tolerance: only an STL's or a 3MF's file is meshed")
-
-        # A type whose own producer declares every target (``decorates`` None) checks its path now too.
-        own = next((producer for producer in _producers(entry.id) if producer.declare and producer.decorates is None),
-                   None)
-        prepared = _resolve(own.declare)(entry.id, out, name) if own is not None else None
-
-        def apply(target: Any) -> Any:
-            from cad.registry import declarer_for, decorators_taking
-
-            declarer = declarer_for(entry.id, target)
-            if declarer is own and prepared is not None:
-                return prepared(target)
-            if declarer is not None:
-                return _resolve(declarer.declare)(entry.id, out, name)(target)
-            taking = decorators_taking(target)
-            if taking:
-                # A target only some producers declare for (a @kicad_pcb board script): never the engine's model.
-                raise TypeError(f"@{entry.id} takes no {type(target).__name__}: one takes "
-                                f"{', '.join('@' + document_type for document_type in taking)}")
-            if engine is None:
-                raise TypeError(f"@{entry.id} takes no {type(target).__name__}")
-            scripts = _script_types()
-            if scripts and _parameters(target):
-                # A function of the open board under @<type>: the board script's decorator is missing, or below.
-                raise TypeError(f"@{entry.id} over a function of parameters: a model takes none; a function of "
-                                f"the open board is a board script, declared by "
-                                f"{' or '.join('@' + kind + '(...)' for kind in scripts)} directly on it, "
-                                f"with @{entry.id} above that")
-            return engine(target)
-
-        return apply
+        # An STL's or a 3MF's own mesh tolerance goes to the engine's decorator, which alone takes it.
+        return getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}))
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
@@ -160,7 +125,7 @@ def refuse_other(document_type: str, source: Any) -> None:
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:
-            raise ValueError(f"cad.model takes a model's handle or its document id (python SCRIPT.py prints it), "
+            raise ValueError(f"cad.model takes a model's handle or its document id (cad run SCRIPT.py prints it), "
                              f"not {text!r}")
         return
     if entry.has_file:
@@ -182,31 +147,6 @@ class ModelType(DocumentType):
         from cad.engine import model
 
         return model.model(target, name=name, animations=animations)
-
-
-def _script_types() -> tuple[str, ...]:
-    """The types whose own producer declares a function itself (a board script's ``kicad_pcb``)."""
-    from cad.registry import _producers as every
-
-    return tuple(dict.fromkeys(producer.document_type for producer in every()
-                               if producer.declare and producer.decorates is None))
-
-
-def _parameters(target: Any) -> bool:
-    """Whether ``target`` is a function some of whose parameters have no default."""
-    import inspect
-
-    if not inspect.isfunction(target):
-        return False
-    return any(parameter.default is inspect.Parameter.empty
-               and parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
-               for parameter in inspect.signature(target).parameters.values())
-
-
-def _producers(document_type: str) -> tuple[Any, ...]:
-    from cad.registry import producers_for
-
-    return producers_for(document_type)
 
 
 def _operation(owner: DocumentType, name: str) -> Any:

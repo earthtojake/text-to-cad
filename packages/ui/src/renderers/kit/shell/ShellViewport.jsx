@@ -21,7 +21,7 @@ import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiv
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
 import {
   DEFAULT_DAMPING_FACTOR, applyPerspectiveSnapshot, boundsModelRadius, cancelCameraTransition, captureRuntimeViewportFitScale,
-  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, stepCameraTransition,
+  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, setRuntimeZoomPercent, CAMERA_ZOOMED_EVENT, stepCameraTransition,
   syncRuntimeCameraClipPlanes, syncRuntimeCameraProjection, syncRuntimeViewportFraming, transitionCameraToPerspectiveSnapshot,
   zoomRuntimeToBounds
 } from "../camera/runtimeCamera.js";
@@ -214,6 +214,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const activeViewPlaneFaceRef = useRef("");
   const previewRef = useRef(preview);
   useLayoutEffect(() => { runtimeRef.current?.setSuspended?.(suspended); }, [suspended, viewerReadyTick]);
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
   const perspectivePropRef = useRef(perspective);
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
@@ -317,12 +319,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     finally { suppressPerspectiveEventsRef.current = Math.max(0, suppressPerspectiveEventsRef.current - 1); }
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
+  // Zoom to fit frames what is shown now: the scene's own word for it (`shownBounds`: hidden and
+  // ghosted parts left out), else where it stands posed (`bounds`). 100% is the authored box's still.
+  const fitSceneRef = useRef(scene);
+  fitSceneRef.current = scene;
+  const fitBounds = useCallback(() => {
+    const live = fitSceneRef.current;
+    return live ? live.shownBounds?.() || live.bounds || null : null;
+  }, []);
   const {
     activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef,
-    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKeyRef,
+    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, shownBounds: fitBounds, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef,
     runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
     setViewPlaneOrientation, suppressPerspectiveEventsRef
@@ -368,7 +378,11 @@ const ShellViewport = forwardRef(function ShellViewport({
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // A covered view (the editor's, under Preview) is resized with the page around it, not by
+    // anyone looking at it: it rescales and is never re-fitted to a size it is not seen at. A fit
+    // frames in the room under the strip, which depends on the height, so a fit to Preview's
+    // height kept after it would leave the view off the open fit when it is uncovered.
+    if (suspendedRef.current || !refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.
@@ -417,6 +431,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
     if (moved) touchCamera(runtime, CAMERA_TOUCH.LOOK_AT);
     return moved;
+  };
+  // The strip's zoom set to `next(percent now)` about the camera's target: the camera touched, as a wheel's.
+  const zoomTo = next => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.camera) return false;
+    const applied = setRuntimeZoomPercent(runtime, next(readRuntimeZoomPercent(runtime)));
+    if (applied) {
+      runtime.openFitPending = false;
+      touchCamera(runtime, CAMERA_TOUCH.WHEEL);
+      emitPerspectiveChange(runtime);
+      // An orthographic step moves only the zoom, which the controls do not report: say so for them.
+      runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
+    }
+    return applied;
   };
   useImperativeHandle(ref, () => ({
     async prepareViewSettings(nextScene, signal) {
@@ -515,6 +543,37 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    // Home: the view it opened with — from the opening direction, what is shown framed whole — the corner's
+    // Home button (`ViewCorner.jsx`), as Fusion's and Maya's cubes' Home is. A view seen from another side
+    // hands its own direction (`direction`, from the target to the eye, and its `up`), what is shown framed
+    // whole from there.
+    goHome({ direction = DEFAULT_VIEW_DIRECTION, up = WORLD_UP } = {}) {
+      const runtime = runtimeRef.current;
+      if (!runtime) return false;
+      const live = fitSceneRef.current;
+      const bounds = live?.shownBounds?.() || live?.bounds || runtime.zeroPoseBounds;
+      const moved = zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate: true, modelOffset: modelTransformRef.current.offset,
+        resetZoomBaseline: true, viewDirection: direction, viewUp: up });
+      if (moved) fitCamera(runtime);
+      return moved;
+    },
+    // The strip's zoom readout (`ZoomControl.jsx`): the zoom against the authored box (100%, which
+    // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
+    zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },
+    zoomBy(factor) { return zoomTo(percent => percent * factor); },
+    // 100%: the authored box framed at the camera's angle, about its target (`zoomPercent`'s ruler).
+    zoomTo100() { return zoomTo(() => 100); },
+    subscribeCamera(listener) {
+      const controls = runtimeRef.current?.controls;
+      controls?.addEventListener?.("change", listener);
+      controls?.addEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+      window.addEventListener("resize", listener);
+      return () => {
+        controls?.removeEventListener?.("change", listener);
+        controls?.removeEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+        window.removeEventListener("resize", listener);
+      };
+    },
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
     syncSceneBounds() {
@@ -1226,7 +1285,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         showViewPlane
         isLoading={isLoading}
         meshData={scene}
-        // Close into the bottom-right corner, clear of the file sidebar down the left: the cube's box
+        // Close into the bottom-right corner, clear of the canvas's left edge: the cube's box
         // is larger than the cube, whose labels overhang it.
         viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
         viewPlaneOffsetBottom={VIEWPORT_CUBE_BOTTOM}

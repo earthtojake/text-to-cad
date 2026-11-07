@@ -9,6 +9,7 @@ vocabulary of its ``gz_check`` option.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, get_args
 
 from cad.results import CheckResult
 
@@ -16,17 +17,17 @@ __all__ = ["validate"]
 
 SUFFIX = ".sdf"
 
-#: What `gz sdf --check` may be asked to do. Not a parser `choices=` list: a
-#: generated parser derives types, not enumerations, so the verb validates its
-#: own argument and the CLI reports the error.
-GZ_CHECK_MODES = ("auto", "required", "never")
+#: What `gz sdf --check` may be asked to do: ``gz_check``'s type, an enumeration, so the command's
+#: generated parser takes these alone (``--gz-check``'s choices) and refuses any other by its flag.
+GzCheck = Literal["auto", "required", "never"]
+GZ_CHECK_MODES: tuple[str, ...] = get_args(GzCheck)
 
 
 def validate(
     path: Path,
     *,
     strict: bool = False,
-    gz_check: str = "auto",
+    gz_check: GzCheck = "auto",
     gz_remote: bool = False,
     verbose: bool = False,
 ) -> CheckResult:
@@ -50,7 +51,9 @@ def validate(
     from cad._internal.validation_door import blocks, failed, resolved_target, result_from_findings
 
     if gz_check not in GZ_CHECK_MODES:
-        raise ValueError(f"gz_check must be one of {', '.join(GZ_CHECK_MODES)}, got {gz_check!r}")
+        from cad._internal.refused import ArgumentRefused
+
+        raise ArgumentRefused(f"gz_check must be one of {', '.join(GZ_CHECK_MODES)}, got {gz_check!r}")
     target = resolved_target(path, label="sdf")
     if verbose:
         print(f"[sdf] validating {target}", file=sys.stderr)

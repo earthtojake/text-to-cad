@@ -96,7 +96,9 @@ const glbTools = async (pane) => {
   }
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'its view\'s controls end the strip');
+    ['Preview'], 'Preview ends the strip');
+  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'the view\'s controls are the corner\'s, over the cube');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
@@ -117,16 +119,11 @@ function projector(camera, box) {
     return [box.x + (dot(offset, right) / halfWidth * 0.5 + 0.5) * box.width, box.y + (0.5 - dot(offset, up) / camera.halfHeight * 0.5) * box.height];
   };
 }
-// The file sidebar's tiles (an animated GLB's Animation), and a section opened by its tile.
-const tileNames = pane => pane.locator('[data-file-sidebar-tools] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
-async function openSection(pane, name) {
-  const tile = pane.getByRole('group', { name: 'File sidebar' }).getByRole('button', { name, exact: true });
-  if (await tile.getAttribute('aria-pressed') !== 'true') await tile.click();
-  await pane.locator(`[data-tool-panel][aria-label="${name}"]`).waitFor();
-}
-const animationSection = pane => pane.locator('[data-tool-panel][aria-label="Animation"]');
-const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
-// Preview's playbar, under the model, for a file with routines (Preview has no file sidebar).
+// The tools view's playbar under the model, for a file with routines (an animated GLB): always there,
+// never a section of a panel (a GLB has none).
+const animationSection = pane => pane.locator('[data-playbar="tools"]');
+const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
+// Preview's playbar, under the model, for a file with routines (Preview has no panel).
 const playbar = pane => pane.getByRole('toolbar', { name: 'Animation playback', exact: true });
 // Display's menu: the modes, then the Grid switch.
 async function openDisplay(pane) {
@@ -229,7 +226,7 @@ test('a static GLB opens on its native scene in Select: its tools, its display m
   assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'Quick Edit opens on a pick or a mark, never by itself');
   assert.equal(await pane.locator('[data-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
     'a GLB is 3D: Preview ends the strip after Display');
-  assert.equal(await pane.locator('[data-file-sidebar-tools]').count(), 0, 'a static GLB has nothing for the file sidebar');
+  assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill], [data-playbar]').count(), 0, 'a static GLB has no panel and no playbar');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens, so the model has the room.
@@ -280,23 +277,29 @@ test('a static GLB opens on its native scene in Select: its tools, its display m
   assert.deepEqual(errors, []);
 });
 
-test('an animated GLB opens at rest, its clips the file sidebar\'s Animation section; in Preview, from its playbar, they play in Render without moving the camera or the floor, Orbit turns the camera, and leaving restores the tools routine\'s held frame', async (t) => {
+test('an animated GLB opens at rest, its clips its playbar\'s, under the model; in Preview, from its playbar, they play in Render without moving the camera or the floor, Orbit turns the camera, and leaving restores the tools routine\'s held frame', async (t) => {
   const { page, pane, errors } = await open(t, 'animated.glb');
   await ready(pane);
   await glbTools(pane);
-  // Its routines are the sidebar's: one tile, its section closed as the file opens.
-  assert.deepEqual(await tileNames(pane), ['Animation']);
-  assert.equal(await animationSection(pane).isVisible(), false, 'no section open as the file opens');
+  // Its routines are its playbar's, under the model, as in Preview: no panel, no tab for them.
+  assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a GLB has no panel');
+  await animationSection(pane).waitFor();
+  // Reset is the last item of its Playback settings, not a button of the row: idle at rest.
+  assert.equal(await animationSection(pane).getByRole('button', { name: 'Reset animation', exact: true }).count(), 0, 'no Reset on the row');
+  await animationSection(pane).getByRole('button', { name: 'Playback settings' }).click();
+  const resetItem = page.getByRole('menu', { name: 'Playback settings', exact: true }).getByRole('menuitem', { name: 'Reset animation', exact: true });
+  assert.equal(await resetItem.getAttribute('aria-disabled'), 'true', 'Reset, idle at rest');
+  await page.keyboard.press('Escape');
+  await resetItem.waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const toolsRest = await stillCapture(page);
   const panelTime = () => page.evaluate(() => Number(document.querySelector(
-    '[data-testid="one"] [data-tool-panel][aria-label="Animation"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')));
+    '[data-testid="one"] [data-playbar="tools"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')));
   // The panel plays the clip in the tools view, and its start is the rest pose.
-  await openSection(pane, 'Animation');
   const panel = animationSection(pane);
   await panel.getByRole('button', { name: 'Play animation', exact: true }).click();
   await page.waitForFunction(() => Number(document.querySelector(
-    '[data-testid="one"] [data-tool-panel][aria-label="Animation"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+    '[data-testid="one"] [data-playbar="tools"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
   await panel.getByRole('button', { name: 'Pause animation', exact: true }).click();
   assert.ok(differingPixels(toolsRest, await capture(page)) > 200, 'the panel moved the rider');
   await panel.getByRole('slider', { name: 'Animation time', exact: true }).focus();
@@ -306,14 +309,14 @@ test('an animated GLB opens at rest, its clips the file sidebar\'s Animation sec
   // The panel's routine left at its end: preview has a routine of its own, at rest.
   await page.keyboard.press('End');
   await page.waitForFunction(() => Number(document.querySelector(
-    '[data-testid="one"] [data-tool-panel][aria-label="Animation"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+    '[data-testid="one"] [data-playbar="tools"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
   const panelHeld = await panelTime();
   const heldCapture = await stillCapture(page);
   assert.ok(differingPixels(toolsRest, heldCapture) > 200, 'the panel holds the rider at the end of its clip');
 
   await togglePreview(page, pane, true);
-  // Preview has no sidebar: its routine is the playbar's, under the model; the model in Render, on its floor.
-  assert.equal(await pane.locator('[data-file-sidebar-room]').isHidden(), true, 'no file sidebar in Preview');
+  // Preview's routine is its own playbar's, under the model; the model in Render, on its floor.
+  assert.equal(await animationSection(pane).count(), 0, 'the tools view\'s playbar goes with the tools');
   const section = playbar(pane);
   await section.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
   await page.waitForFunction(() => window.__cadStage()?.studioGround);
@@ -353,7 +356,7 @@ test('an animated GLB opens at rest, its clips the file sidebar\'s Animation sec
   assert.deepEqual(errors, []);
 });
 
-test("an animated GLB's Speed and Loop are the file's: chosen in its Animation section, Preview's routine plays with them, and every visit to Preview opens still", async (t) => {
+test("an animated GLB's Speed and Loop are the file's: chosen on its playbar, Preview's routine plays with them, and every visit to Preview opens still", async (t) => {
   const { page, pane, errors } = await open(t, 'animated.glb');
   await ready(pane);
   // Playback settings: the Animation section's in the tools view, Preview's playbar's in Preview.
@@ -379,7 +382,6 @@ test("an animated GLB's Speed and Loop are the file's: chosen in its Animation s
     await menu.waitFor({ state: 'detached' });
   };
   const orbit = pane.getByRole('region', { name: 'Preview settings' }).getByRole('checkbox', { name: 'Orbit', exact: true });
-  await openSection(pane, 'Animation');
   assert.deepEqual(await settings(), ['Animation speed: 1×', 'true'], 'the clip\'s own');
   await choose(0.5);
   assert.deepEqual(await settings(), ['Animation speed: 0.5×', 'false']);

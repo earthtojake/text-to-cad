@@ -1,14 +1,17 @@
 """Automatic updates: the person's setting, and the rules the engine keeps when it updates by itself.
 
-**Automatic updates take patch releases only** (``takes``): 0.11.0 to 0.11.1, never 0.11.x to 0.12.0. A
-patch release carries nothing a person or an agent must change for, so it can land under a running
-agent thread unannounced; a minor or major release may (a command renamed, a migration guide), so it
-waits for the person's click -- the update button, ``cad update``, the install command -- as every
-update did before. The release process holds a patch to that (the release check refuses a patch
-release that adds or changes a migration guide).
+**Automatic updates take a release that breaks nothing, as Semantic Versioning numbers it** (``takes``).
+A breaking change bumps the major from 1.0, and below 1.0, which the standard leaves to the project, the
+minor, so the engine takes a later patch or minor release from 1.0 (1.4.2 to 1.4.3 or 1.5.0) and a later
+patch release below it (0.11.0 to 0.11.1). Such a release carries nothing a person or an agent
+must change for, so it can land under a running agent thread unannounced. One that bumps the breaking
+part may (a command renamed, a migration guide) -- a major release from 1.0 (1.9.3 to 2.0.0), a minor or
+major one below it (0.11.3 to 0.12.0 or 1.0.0) -- so it waits for the person's click: the update button,
+``cad update``, the install command. The release process holds a release to that (the release check
+refuses a migration guide in a release this takes).
 
 With automatic updates on -- the default (``DEFAULT``) -- the device's engine reads the version feed
-once an hour (``cad_server/updates.py``) and, when it names a patch release newer than this one, updates
+once an hour (``cad_server/updates.py``) and, when it names a newer release that it takes, updates
 to it with no click (``cad_server._internal.update.Update.automatic``): the release is installed and its
 CAD kernel environment made at once, in the background, and the agent apps' plugins are moved to it
 and the engine switched (``cad_server._internal.switch``) only once nothing has run for a minute
@@ -42,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from cad_server.settings import read_section, update_section
+from cad_server.updates import parse_release
 
 LOG = logging.getLogger("cad_server.auto_updates")
 
@@ -58,20 +62,24 @@ RETRY_SECONDS = 24 * 60 * 60
 _OFF = ("0", "off", "false", "no")
 
 
-def _release(version: Any) -> tuple[int, int, int] | None:
-    """``X.Y.Z`` as numbers, or None for anything else (a development or pre-release version)."""
-    parts = str(version).split(".") if isinstance(version, str) else []
-    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+def bump(version: Any, latest: Any) -> str | None:
+    """The part of ``version`` that ``latest`` moves on: ``"major"``, ``"minor"`` or ``"patch"``; None
+    when ``latest`` is no later release, or either is not a plain ``X.Y.Z`` (``updates.parse_release``)."""
+    have, want = parse_release(version), parse_release(latest)
+    if have is None or want is None or want <= have:
         return None
-    return int(parts[0]), int(parts[1]), int(parts[2])
+    return "major" if want[0] != have[0] else "minor" if want[1] != have[1] else "patch"
 
 
 def takes(version: Any, latest: Any) -> bool:
-    """Whether the engine at ``version`` updates to ``latest`` by itself: a later patch release of the
-    same minor release (``0.11.0`` to ``0.11.3``), never a minor or major one (``0.11.3`` to ``0.12.0``),
-    which waits for a click. Anything that is not a plain ``X.Y.Z`` is never taken."""
-    have, want = _release(version), _release(latest)
-    return have is not None and want is not None and want[:2] == have[:2] and want > have
+    """Whether the engine at ``version`` updates to ``latest`` by itself: a later release that keeps the
+    part a breaking change bumps -- from 1.0 the major, so a patch or minor release (``1.4.2`` to
+    ``1.4.3`` or ``1.5.0``); below 1.0 the minor, so a patch release (``0.11.0`` to ``0.11.3``). One that
+    bumps it waits for a click: ``1.9.3`` to ``2.0.0``, ``0.11.3`` to ``0.12.0`` or ``1.0.0``. Anything
+    that is not a plain ``X.Y.Z`` is never taken. Every update that decides by itself asks this, and the
+    release check keeps its own copy of it in step (a test holds the two equal)."""
+    moved = bump(version, latest)
+    return moved == "patch" or (moved == "minor" and parse_release(version)[0] >= 1)
 
 
 def _environment_off() -> bool:
@@ -249,6 +257,6 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
             line += f"; the update to {last['release']} on {_when(last['at'])} failed: {last['error']}"
     newer = updates.notice()
     if found["automatic"] and newer is not None and not takes(newer["version"], newer["latest"]):
-        line += (f"; text-to-cad {newer['latest']} is out, a new minor release: automatic updates take "
-                 "patch releases only, so update with the button or `cad update`")
+        line += (f"; text-to-cad {newer['latest']} is out, a new {bump(newer['version'], newer['latest'])} "
+                 "release, which waits for you: update with the button or `cad update`")
     return line

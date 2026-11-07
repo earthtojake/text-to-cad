@@ -27,6 +27,9 @@ the sheet ``Child``, where the hierarchical label ``Q[0..1]``'s bus enters wires
 ``Q1`` on ``R3`` and ``R4`` (a bus's members meet by index: ``D0`` is ``Q0``); ``U1``'s hidden power
 input ``VCC`` (a legacy part's), which is the net of the ``VCC`` power symbol on ``R2``; and ``U1``'s
 pin ``SCL`` on ``R1`` alone, a net only pins name (``Net-(U1-SCL)``: the pin's name over its pad's).
+
+:func:`write_symbol_libraries` writes the libraries ``divider``'s symbols name, its own drawings, where a
+test stands them for KiCad's.
 """
 
 from __future__ import annotations
@@ -34,7 +37,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-__all__ = ["BUS_NETS", "NETS", "ROOT_UUID", "SHEET_UUID", "UUIDS", "at", "write_bus_schematic", "write_schematic"]
+__all__ = ["BUS_NETS", "NETS", "ROOT_UUID", "SHEET_UUID", "UUIDS", "at", "write_bus_schematic", "write_library_project",
+           "write_schematic", "write_symbol_libraries"]
 
 ROOT_UUID = "5c4e0000-0000-4000-8000-000000000001"
 LOAD_UUID = "5c4e0000-0000-4000-8000-000000000002"  # the child file's own uuid
@@ -214,6 +218,30 @@ def _project() -> str:
                        "sheets": [[ROOT_UUID, "Root"], [SHEET_UUID, "Load"]]}, indent=2)
 
 
+def write_symbol_libraries(folder: Path | str) -> list[str]:
+    """Write the libraries the project's symbols name (``Device``, ``Connector``, ``power``) into ``folder``, each
+    a ``<library>.kicad_sym`` holding its symbols as the schematic embeds them, as KiCad's own libraries would;
+    return their names."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    found: dict[str, list[str]] = {}
+    start = _LIB_SYMBOLS.find('(symbol "', 1)
+    while start != -1:
+        depth = 0
+        for end in range(start, len(_LIB_SYMBOLS)):
+            depth += {"(": 1, ")": -1}.get(_LIB_SYMBOLS[end], 0)
+            if depth == 0:
+                break
+        library, _, symbol = _LIB_SYMBOLS[start + len('(symbol "'):end + 1].partition(":")
+        found.setdefault(library, []).append('(symbol "' + symbol)
+        start = _LIB_SYMBOLS.find('(symbol "', end)
+    for library, symbols in found.items():
+        (folder / f"{library}.kicad_sym").write_text(
+            '(kicad_symbol_lib (version 20241209) (generator "kicad_symbol_editor")\n  ' + "\n  ".join(symbols) + "\n)\n",
+            encoding="utf-8")
+    return list(found)
+
+
 def write_schematic(folder: Path | str) -> Path:
     """Write the project into ``folder`` and return its root sheet, ``divider.kicad_sch``."""
     global _counter
@@ -322,4 +350,33 @@ def write_bus_schematic(folder: Path | str) -> Path:
     (folder / "child.kicad_sch").write_text(_bus_child(), encoding="utf-8")
     root = folder / "busses.kicad_sch"
     root.write_text(_bus_root(), encoding="utf-8")
+    return root
+
+
+# --- a project with a symbol library of its own ----------------------------------------------------
+
+LIBRARY_ROOT_UUID = "11b50000-0000-4000-8000-000000000001"
+
+
+def write_library_project(folder: Path | str, *, schematic: bool = True) -> Path:
+    """Write ``design``, a project with a symbol library of its own (``parts.kicad_sym``: ``parts:R``, the
+    resistor drawn as ``Device:R`` is, its pin 1 at (0, -3.81) and pin 2 at (0, 3.81) from its origin, y down),
+    listed in the project's ``sym-lib-table``, into ``folder``; with ``schematic``, its root sheet, an empty
+    page, and the ``.kicad_pro``. Return the root sheet's path, ``design.kicad_sch`` (there or not)."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    resistor = _LIB_SYMBOLS[_LIB_SYMBOLS.index('(symbol "Device:R"'):_LIB_SYMBOLS.index('(symbol "Device:C"')].rstrip()
+    (folder / "parts.kicad_sym").write_text(
+        '(kicad_symbol_lib (version 20241209) (generator "kicad_symbol_editor")\n  '
+        + resistor.replace('(symbol "Device:R"', '(symbol "R"', 1) + "\n)\n", encoding="utf-8")
+    (folder / "sym-lib-table").write_text(
+        '(sym_lib_table\n  (version 7)\n  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.kicad_sym")'
+        '(options "")(descr ""))\n)\n', encoding="utf-8")
+    root = folder / "design.kicad_sch"
+    if schematic:
+        (folder / "design.kicad_pro").write_text(
+            json.dumps({"meta": {"filename": "design.kicad_pro", "version": 3}}), encoding="utf-8")
+        root.write_text(f'(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") '
+                        f'(uuid "{LIBRARY_ROOT_UUID}") (paper "A4") (lib_symbols) '
+                        f'(sheet_instances (path "/" (page "1"))) (embedded_fonts no))\n', encoding="utf-8")
     return root

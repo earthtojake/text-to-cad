@@ -18,7 +18,9 @@ cad kicad_pcb drc board.kicad_pcb --json
 
 Each `kicad_pcb.read` call reads the current file. Its dataclasses hold a read-only view of that
 revision: parts, pads, tracks, vias, zones, holes, nets, outline, texts, dimensions and graphics
-(`shapes`), in board millimetres with y down. It does not launch KiCad, validate electrical design, or serve as a file serializer.
+(`shapes`), in board millimetres with y down. An arc or a circle among the graphics and the outline
+is points along it, every chord within 0.005 mm of it, so a part fitted to the outline read back fits
+the board as drawn; a track's arc is coarser (10 degree chords). It does not launch KiCad, validate electrical design, or serve as a file serializer.
 Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
 `from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
@@ -55,7 +57,7 @@ one they were working on (the copper nearest them, or the layer they isolated), 
 ask for there unless the note says otherwise. A `<uuid>` is the one the
 board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it
 still names the item after you move it: find it in the file by that uuid (case-insensitive), or
-in a `@kicad_pcb` script with `board.get_items_by_id(KIID(value=uuid))` (`from
+in a `kicad_pcb.edit` block with `board.get_items_by_id(KIID(value=uuid))` (`from
 kicode.proto.common.types import KIID`). Copies of one footprint can share their items' uuids; such
 an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
 item is gone raises `ValueError`.

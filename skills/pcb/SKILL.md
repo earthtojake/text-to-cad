@@ -18,20 +18,28 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
-only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
-explains any other failure.
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
-kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and a `@kicad_pcb` board script run KiCad's command line, `kicad-cli`,
+kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
+(`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
-board script's environment it. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
-another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for a
-board script). It runs headless, with private settings, and never opens KiCad's app; never open a
-board in KiCad's app to check it.
+script that edits a board its environment. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
+another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for an
+edit). It runs headless, with private settings, and never opens KiCad's app; never open a
+board in KiCad's app to check it. Its library variables name KiCad's own libraries, never your
+variables or KiCad settings: a project's `sym-lib-table` or `fp-lib-table` row that names a stock
+library as KiCad's own tables do (`${KICAD10_SYMBOL_DIR}/Device.kicad_sym`,
+`${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty`, any major's spelling) reads it in the libraries of the
+KiCad you installed (the newest, if several; or the installation whose `3dmodels` folder
+`CAD_KICAD_3DMODELS` names): nothing to set. With no KiCad installed, ERC warns `lib_symbol_issues` that
+each such library was not found and DRC `lib_footprint_issues` that it is not enabled; a project that
+carries its libraries (`${KIPRJMOD}`) needs no KiCad.
 
-kicode's KiCad is a nightly (10.99), so a board it saves is in the nightly's format, which a stable
-KiCad app refuses; viewing and snapshots still work.
+kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
+stable KiCad app refuses; viewing and snapshots still work.
 
 ## Native files are the source
 
@@ -41,31 +49,46 @@ model, build step, or generated-board ownership marker. A helper script may make
 but reread the current file before editing and preserve unknown records and UUIDs. Do not regenerate
 an existing project from an incomplete description.
 
-A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` hands the function
-the open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`), saves it when the function
-returns and saves nothing when it raises. Run it with `cad run board.py`, which gives it the `kicad`
-extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a `kicad-cli` that
-`CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import KiPy's names
-from `kicode` (`from kicode.proto.common.types import KIID`), never from `kipy`: the two cannot share a
-process. Saving writes the board in the nightly's format: a board from an older KiCad is upgraded,
-which the run says, and that older KiCad can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
-step --subst-models`), and a `@glb` its GLB the same way; parts whose 3D model is missing (or, in a STEP,
-only in VRML) have no body in it, which the run names. A `@dxf` writes its outline and drilled holes, for
-an enclosure (`cad kicad_pcb export --to dxf`'s file):
+Change a board through KiCad's IPC API in an edit, a `with` block: `kicad_pcb.edit` hands the block the
+open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`) and saves it at the block's end
+when the block changed it; a block that changes nothing leaves the file byte for byte, one that raises
+saves nothing (its exception goes on), and a save KiCad cannot finish leaves every file as it was,
+saying why. A board not there yet is made by KiCad, with its project,
+and saved. `kicad_sch.edit` does the same for a schematic ([schematic](references/schematic.md#edit-it));
+the two of one project, one inside the other, share one KiCad. Run the script with `cad run board.py`,
+which gives it the `kicad` extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a
+`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import
+KiPy's names from `kicode` (`from kicode.proto.common.types import KIID`, `from kicode.util.units import
+from_mm`), never from `kipy`: the two cannot share a process. Saving writes the file in the nightly's
+format: one from an older KiCad is upgraded, which the run says, and that older KiCad can no longer open
+it. Checks and exports of the saved board are calls after the block (`kicad_pcb.drc`, `kicad_pcb.export`);
+a STEP or GLB export holds each part's 3D model where the board's 3D view finds it ([board
+views](#board-views)), and leaves out, naming them, the parts whose model is missing (or, in a STEP, only in
+VRML); `--to dxf` writes the outline and drilled holes, for an enclosure:
 
 ```python
-from cad import dxf, kicad_pcb, step
+from cad import kicad_pcb
+from kicode.util.units import from_mm
 
-@step("STEP/board.step")
-@dxf("DXF/board-outline.dxf")
-@kicad_pcb("board.kicad_pcb")          # the board file is the source; the function edits it
-def board(b):
-    for footprint in b.get_footprints():
-        ...
+BOARD = "board.kicad_pcb"
 
-if __name__ == "__main__":
-    board()
+with kicad_pcb.edit(BOARD) as b:       # the board file is the source; the block edits it in place
+    power = [t for t in b.get_tracks() if t.net.name in {"+5V", "+3V3"}]
+    for track in power:
+        track.width = from_mm(0.8)
+    b.update_items(power)
+    b.refill_zones()
+drc = kicad_pcb.drc(BOARD)
+if not drc.ok:
+    raise SystemExit("\n".join(drc.human_lines()))  # each finding, then FAILED and the count
+for kind in ("gerbers", "drill", "pos", "bom", "step"):
+    kicad_pcb.export(BOARD, to=kind, out=f"fab/{kind}")
 ```
+
+An edit states the result it wants, so running it again is harmless: "U1 is at (10, 20)", "the power
+tracks are 0.8 mm", never "move U1 5 mm" or "widen the tracks by 0.2 mm". Set absolute positions,
+rotations, widths and nets; create an item only when the board does not hold it yet (find it first by its
+reference, net or place). A script stopped halfway and run again then ends where one run would.
 
 A board's design starts at its schematic, which says what connects to what: read it, check it with
 ERC and look at each sheet ([schematic](references/schematic.md)) before laying out, and hold the board
@@ -78,15 +101,33 @@ footprint-local positions and rotations must be transformed into the board frame
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
 
+## KiCad's own command line
+
+Use the typed commands first (`cad kicad_pcb drc|export`, `cad kicad_sch erc|export`): their results are
+the ones the checks and the viewer read. For anything they do not cover, run KiCad's own command line
+with `cad run kicad-cli …`: the pinned kicode `kicad-cli` with its own subcommands and flags (`cad run
+kicad-cli pcb --help`), no `--with` needed, headless with private settings, its output and exit code
+KiCad's. `CAD_KICAD_CLI` does not change which one runs.
+
+```bash
+cad run kicad-cli pcb render --side top --rotate -45,0,45 -o tmp/board.png board.kicad_pcb
+cad run kicad-cli project downgrade --dry-run --target 10.0 board.kicad_pro   # then -o DIR without --dry-run
+```
+
+Most commands write only their `-o`, though kicad-cli may leave a `.kicad_prl` beside a board it reads.
+These rewrite the source: `pcb upgrade` and `sch upgrade`, `fp upgrade` and `sym upgrade` without `-o`,
+and `pcb drc --refill-zones --save-board`. `project downgrade` exits 2 without writing when the target
+cannot represent the board.
+
 ## Edit
 
 1. Inspect the saved board with `from cad import kicad_pcb` in a script run with
    `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
-2. Edit the native files, or the board in a board script. Keep net assignments, layer stack, track
-   widths, clearances and custom rules consistent with the chosen fab and electrical requirements.
-   Refill changed copper zones with KiCad (`b.refill_zones()` in a board script) before relying on
-   their saved fill.
+2. Edit the board in a `kicad_pcb.edit` block (or, as a fallback, the native file). Keep net assignments,
+   layer stack, track widths, clearances and custom rules consistent with the chosen fab and electrical
+   requirements. Refill changed copper zones with KiCad (`b.refill_zones()` in the block) before relying
+   on their saved fill.
 
 ## Check each change
 
@@ -170,20 +211,43 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 
 ## Board views
 
-The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
-KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
-Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
-area, a box on the layer the person works on. The sidebar's **Circuit** lists the parts in the
-schematic blocks their footprints record (by kind on a board that records none) and the nets: a
-block picks every part in it, a net picks the whole net. Each arrives as a reference
-([checks](references/checks.md#references) says what each names and how to resolve it). The
-**Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
-Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Other
-layers (KiCad's high-contrast modes: the layers but the active one **Shown**, **Dimmed** or **Hidden**,
-Ctrl+H cycling them; the outline, and the drills and vias through an active copper layer, always stay
-at full strength) and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
+The board view supports layers, selection, Measure, annotations and Quick Edit, in 2D and in 3D.
+Select works as KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or
+graphic, as its Selection Filter ticks them (locked items only when the person ticks them), and a
+drag names an area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\
+hides and shows it, / searches it) has one search over three tabs. **Parts** lists the parts in the
+schematic blocks their footprints record (by kind on a board that records none): a block picks every
+part in it. **Nets** lists the nets: a net picks the whole net. Each arrives as a reference
+([checks](references/checks.md#references) says what each names and how to resolve it). **Layers**
+lists the layers: each layer's eye, and a press for the active layer (drawn on top); under them, how
+the board is drawn: Other layers (KiCad's high-contrast modes: the layers but the active one
+**Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and vias
+through an active copper layer, always stay at full strength), the copper pours and the zones' and
+tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
+tabs, the picked part's or net's pads. The view's corner, over the zoom, has **Display** (the
+preset: the mode), **2D/3D** (a square while the board is flat, a box in 3D) and **Flip** (the side
+seen: the board as two stacked layers, the side facing you solid; ⇧F).
+Each button's icon is what is on screen and its tooltip what a press does. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
+
+In 3D (**2D/3D**, or the key 3) the board is a slab whose two faces are drawn as the 2D view draws
+them, each part standing its 3D model. A press picks what the 2D view picks where the pointer's ray
+meets the face, or the part whose body is in front of it; a drag turns the view; **Flip** (or ⇧F)
+turns the camera over, and its icon shows the side the camera is on. A part's model is the STEP its footprint names, looked for only in the
+board's folder (`${KIPRJMOD}`), KiCad's installed 3D library (every `${KICADn_3DMODEL_DIR}`) and the
+folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is); a `.wrl` name is read as the `.step` or
+`.stp` beside it. `CAD_KICAD_3DMODELS` is read from the server's environment: a server already
+running does not see a variable set in a shell afterwards, so set it before the server starts
+(`cad stop`, then run any `cad` command with it set). A part without a model stands as a block, and
+**Parts** lists it under **No 3D model**, with why: VRML only (no STEP beside the VRML), not found,
+outside the folders above, too large, not a STEP, embedded in the board, or too many models.
+`cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way (`models`: found,
+missing with the reason, and the parts that name none), and a STEP or GLB export (`cad kicad_pcb export
+--to step|glb`, `kicad_pcb.export`) holds exactly the models found, a `CAD_KICAD_3DMODELS` read from
+the command's environment. `cad run kicad-cli` reads KiCad's library as KiCad does: every
+`${KICADn_3DMODEL_DIR}` is the first of those library folders, and a `.wrl` name needs its `.wrl` file
+there (KiCad 10's library ships STEP alone), so prefer the typed export.
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
 theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
@@ -200,7 +264,6 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
-The board view is 2D only. For a 3D look, export the board to GLB (`cad kicad_pcb export board.kicad_pcb --to glb -o out/`, or a `@glb` on the board script) and open that file in the viewer.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
@@ -210,12 +273,13 @@ solid inferred from the 2D plot.
 ## Schematic views
 
 `cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
-selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy**, after the Circuit, is KiCad's
+selection, Measure, annotations and Quick Edit, and its panel: one search over **Parts**, **Nets**
+and, for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
 junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
-The **Circuit** lists the parts by the sheet they are placed on, each with its pins, and the nets with
-the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
+**Parts** lists the parts by the sheet they are placed on, each with its pins, and **Nets** the nets
+with the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
 that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
 `#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
 app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No

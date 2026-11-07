@@ -8,7 +8,8 @@ installs them all.
 Models are written against the library, `cad`, which the server imports without
 its CAD kernel: the kernel lives in the environments the server makes, on first need, for models and
 its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
-`uv run` does, with cad pinned at the server's release and the integrations its imports use.
+`uv run` does, with cad pinned at the server's release and the integrations its imports use; a tool's
+own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -53,8 +54,9 @@ src/cad_server/
                          #   whats_new), and whether a device was updated or is new
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
-  auto_updates.py        # automatic updates: the person's setting (on by default), patch
-                         #   releases only (takes), the idle and retry rules the engine's own
+  auto_updates.py        # automatic updates: the person's setting (on by default), the
+                         #   releases they take by Semantic Versioning (takes: patch below 1.0,
+                         #   patch or minor from 1.0), the idle and retry rules the engine's own
                          #   update keeps
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
@@ -73,7 +75,9 @@ src/cad_server/
                          #   (engine_daemon) and what it is composed of (engine_host), the
                          #   server's observer of the engine and the telemetry sender, the
                          #   install channel, file locks (the state folder's one lock:
-                         #   `file_lock.state`), the CLI derivation
+                         #   `file_lock.state`), the CLI derivation, the one parser every
+                         #   command reads its options by (cli_parser) and the one failure
+                         #   contract every command fails by (cli_errors)
   _runtime/              # BUILT: the CAD Viewer client, the CAD app page and the agent-app
                          #   plugin (its manifests and skills) -- produced when the wheel is
                          #   packaged, never committed, never edited
@@ -107,8 +111,11 @@ outcome under `--json`; it runs in this process where its environment holds the 
 that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
-installation registered, the `cad` command written, whether the CAD kernel environment is made, the engine started;
-the releases on disk, the current one, the engine's and each app's plugin's) and what earlier releases
+installation registered, the `cad` command written, whether the CAD kernel environment is made and the
+integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
+and each app's plugin's: the whole report on stdout, exit 1 when the kernel is installed and does not load;
+`--check` the report alone, which registers, writes and starts nothing, what a bug report wants; `--json` it
+as one document, each check's name, status and detail) and what earlier releases
 left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
 records of an older format, the bytecode of installations no longer registered, cache folders no record
 names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among
@@ -116,17 +123,22 @@ them; none written in the last seven days; and the release folders but the curre
 before, a release an update failed to move to among them, `_internal/releases.py`); `cad run` a program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
 integrations its imports use (`_internal/extras.py`, `_internal/scan.py`, by the library's registry), in an
-environment the engine makes, its own folder last on its path; `cad requirement [INTEGRATION ...]` the
+environment the engine makes, its own folder last on its path, and a command an integration declares
+(`kicad-cli`) with that integration, through its `_command` module, headless; `cad requirement [INTEGRATION ...]` the
 exact requirement a Python of a program's own installs this release's cad by
 (`cad[build123d]==<release>`); `cad viewer` the engine page launcher;
 `cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets
 up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
 made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
-`cad setup`, as the update button does, and `cad update auto on|off` turns automatic updates on or off
-(on by default: the engine installs a newer patch release in the background and switches to it once
-idle; a minor or major release waits for the update button or `cad update`);
-`cad uninstall` takes text-to-cad out; `cad plugin` writes
+`cad setup`, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the
+release it would install before the plan), and `cad update auto on|off` turns automatic updates on or off
+(on by default: the engine installs a newer release that breaks nothing -- a patch release below 1.0, a
+patch or minor release from 1.0 -- in the background and switches to it once idle; one that may break
+something waits for the update button or `cad update`);
+`cad uninstall` takes text-to-cad out, asked first as every command that destroys is (`cad delete`, `cad
+doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`);
+`cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.
 

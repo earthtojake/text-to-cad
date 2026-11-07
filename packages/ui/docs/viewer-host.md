@@ -135,14 +135,15 @@ relative viewport below it. The generic FileViewer knows nothing about export jo
 ## A CAD renderer's controls
 
 The controls of a CAD renderer (an engine document's, GLB, mesh, robot) are its own, over the viewport: its
-tool strip, the tool in hand's sub-toolbar and its file sidebar, its view's controls (Projection,
+tool strip, the tool in hand's sub-toolbar and its docked panel, its view's controls (Projection,
 Display, Preview) ending the strip and, in Preview, Preview's own bar
 (`settings-ui.md#camera-animation-and-preview`), the same with a navbar or without; a
 DXF's are its own canvas's. Nothing a renderer does opens or closes the explorer (only the
-file's name opens that). The layout a person gives the file sidebar — each section's size —
-and the tool stack's panels is one
+file's name opens that). The layout a person gives the tool stack's panels is one
 of the tab's settings (`settings.toolStack` of the tab record, `@cad/ui/tab-store`),
-beside the appearance and the home's layout.
+beside the appearance and the home's layout; the view's panel — open or collapsed, its width,
+its tab — is the file's, kept in its view as its camera is (`file-viewer/filePanel.js`, merged
+into the renderer's record by `FileViewer`).
 
 ## Preview and renderer navigation actions
 
@@ -168,8 +169,8 @@ mode. Preview is a view of its own, mounted over the tools view's while it is op
 (`kit/shell/PreviewView.jsx`), with its own scene, camera, pose and routine, sharing only the
 page's GPU device; the tools view's viewport stays mounted under it and nothing of it changes.
 Nothing of Preview's state — its camera, pose, routine, whether it orbits — is persisted; its
-Render settings are the file's view's (`preview`). Routines play from the file sidebar's
-Animation section in the tools view and from Preview's playbar in Preview. Preview opens still: Orbit is off every time it opens, and its settings panel turns it
+Render settings are the file's view's (`preview`). Routines play from the playbar under the
+model, in the tools view and in Preview alike (`PreviewPlaybar.jsx`). Preview opens still: Orbit is off every time it opens, and its settings panel turns it
 on. The file's view's `playback` — Orbit's speed, Autoplay, and the chosen speed and loop —
 is kept between visits to Preview and across a reload, and a file's routine plays on entry
 only when its Autoplay is on. The rules are in
@@ -454,7 +455,7 @@ the defaults), thrown out with the tab and kept across a reload. The host suppli
 lives through one adapter, `TabRecordStorage` — a synchronous read and write of the
 whole record: the web over `sessionStorage`, the CAD app over memory
 (`memoryTabRecord`) — and the package owns the record's shape, version and normalization. `settings` is
-`{ toolStack, appearance, library, explorer }`: tab-wide (the file sidebar's and tool stack's layout, the
+`{ toolStack, appearance, library, explorer }`: tab-wide (the tool stack's layout, the
 appearance, the home's layout, the folder the explorer was last in), and what every renderer reads as its preferences;
 `files` holds the view of the file on screen, under `[absolute path, renderer id]`, and no
 other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` drops the view
@@ -615,7 +616,7 @@ not open that file" and the reason otherwise, each with a Go home button where t
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre, ending in the view's own controls (Projection, Display and Preview, a 3D view's), the tool in
-hand's sub-toolbar under it, the file sidebar down the left edge, Quick Edit at the
+hand's sub-toolbar under it, the view's panel docked at the left edge, Quick Edit at the
 top-right, and the view cube at the bottom-right. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
@@ -650,14 +651,19 @@ Nothing of the tools view sits at the bottom centre (Preview's playbar does). A 
 that edge (a chat's composer) sets `--cad-host-bottom-inset` on an ancestor to the height it
 covers: the model library scrolls its last rows clear of it. A host whose own control
 floats over the view's bottom-right corner sets `--cad-viewport-corner-bottom` to the room
-it takes from the bottom edge, and the view cube sits that much higher. To choose the
+it takes from the bottom edge, and the view's whole corner sits that much higher. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
-`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset.
+`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset. All of the
+corner follows, as one group mirrored at the bottom-left: the cube, the column over it, a flat
+view's zoom pill and the column over the pill (a board's Display, 2D/3D and Flip, flush with
+the pill's left edge), their tooltips and menus opening away from the corner (`viewportLayout.js`'s
+`viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views.
 The shared viewer consumes these layout values without identifying the host.
 
-A renderer's update status is its own: the CAD renderers show it centred under the tool
-strip and its sub-toolbar. The navbar carries none.
+The update status is the view's own: every renderer's frame (`ViewFrame.jsx`) shows it centred under
+the tool strip and its sub-toolbar, or at the top centre where there is no strip. The navbar carries
+none.
 
 
 A retained predecessor is useful for a Quick Edit's note and references, but does not prove

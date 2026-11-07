@@ -133,7 +133,7 @@ Each of these fails the run, by name:
 ## Reviewing
 
 Export the GLB and give the person its path; when they ask to see it, open it in the CAD
-Viewer ([Show the model](../SKILL.md#show-the-model)). Its Animation section lists the motions and the animations, and plays, pauses, scrubs
+Viewer ([Show the model](../SKILL.md#show-the-model)). Its playbar, under the model, lists the motions and the animations, and plays, pauses, scrubs
 and loops them, at a chosen speed. While one plays, it owns the parts' places; putting
 it down puts them back at rest. A snapshot shows the model as built: it never plays an
 animation.

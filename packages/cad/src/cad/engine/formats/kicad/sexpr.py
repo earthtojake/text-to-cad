@@ -44,9 +44,11 @@ __all__ = [
     "find_all",
     "format_number",
     "head",
+    "is_number",
     "number",
     "pair",
     "parse",
+    "unescape",
     "value",
 ]
 
@@ -70,10 +72,17 @@ _INTEGER = re.compile(r"[-+]?\d+\Z")
 _UNESCAPE = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
 
 
-def _unescape(text: str) -> str:
+def unescape(text: str) -> str:
+    """A quoted atom's text (between its quotes, as the file writes it) as :func:`parse` reads it."""
     if "\\" not in text:
         return text
     return re.sub(r"\\(.)", lambda match: _UNESCAPE.get(match.group(1), match.group(1)), text, flags=re.DOTALL)
+
+
+def is_number(text: str) -> bool:
+    """Whether :func:`parse` reads the bare atom ``text`` as a number rather than a :class:`Sym`."""
+    return _NUMBER.match(text) is not None
+
 
 
 def _atom(text: str):
@@ -110,7 +119,7 @@ def parse(text: str) -> list:
         elif not stack:
             raise SexprError("an atom outside any list")
         elif quoted is not None:
-            stack[-1].append(_unescape(quoted))
+            stack[-1].append(unescape(quoted))
         else:
             stack[-1].append(_atom(bare))
     if text[position:].strip():

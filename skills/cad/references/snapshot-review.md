@@ -84,7 +84,9 @@ an `azimuth:elevation` pair in degrees, a camera object (`position`, `target`, `
 `direction`, `zoom`, `orthographicHalfHeight`), or `authored` (below). A camera
 object's lengths are in the viewer's scene coordinates, as a Quick Edit packet carries
 them: a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit.
-Projection and focal length belong in `display.camera`.
+Projection and focal length belong in `display.camera`. The presets are the world's axes, Z up,
+not a part's own front: `front` looks from -Y along +Y, `top` from +Z down, so a panel modelled
+lying flat (its face to +Z, as its DXF is drawn) faces `top` and shows edge-on from `front`.
 
 `--size-profile` is one of exactly these names; anything else is refused with this
 list:
@@ -108,7 +110,9 @@ the picture is drawn; a file of the pose is a posed model
 ([exports](exports.md#posed-files-and-parts-on-their-own)).
 
 `--json` prints what was drawn and each stage's milliseconds as one JSON object,
-and a failure as `{"ok": false, "error": ...}` on stdout, with exit status 1.
+and a failure as one `{"ok": false, "error": ..., "reason": ...}` on stdout. The exit status
+is the failure's class with `--json` and without: 2 for a request refused before anything ran
+(`reason`: `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for a render that failed.
 
 ## Clipped views
 

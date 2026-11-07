@@ -280,6 +280,54 @@ class ItemsTest(unittest.TestCase):
             drawn = sorted(item["id"] for layer in build_plot(path)["sheets"][0]["layers"] for item in layer["items"] if "id" in item)
             self.assertEqual(drawn, sorted(shape.id for shape in board.shapes))
 
+    def test_a_footprints_own_keepout_is_where_kicad_holds_it(self) -> None:
+        # KiCad 10 wrote a footprint's zone in the board's frame; KiCad 11, which places a footprint by its
+        # transform, writes it in the footprint's frame, as its pads. The same keep-out, at (60..70, 30..50)
+        # under a footprint at (50, 40) turned a quarter turn, as each saves it (KiCad 11's numbers are what
+        # kicode's KiCad saved of the KiCad 10 board, and where its refill kept copper out).
+        head = """(kicad_pcb (version {version}) (generator "pcbnew")
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+          (footprint "x:keep" (layer "F.Cu") {placed}
+            (property "Reference" "U1" (at 0 0 90) (layer "F.Cu"))
+            (pad "1" smd rect (at 0 0 90) (size 1 1) (layers "F.Cu"))
+            (zone (net 0) (net_name "") (layers "F.Cu") (uuid "b0000000-0000-4000-8000-000000000004")
+              (keepout (tracks not_allowed) (vias not_allowed) (pads not_allowed) (copperpour not_allowed) (footprints not_allowed))
+              (polygon (pts {points})))))"""
+        kicad10 = head.format(version=20241229, placed="(at 50 40 90)",
+                              points="(xy 60 30) (xy 70 30) (xy 70 50) (xy 60 50)")
+        kicad11 = head.format(version=20261030, placed="(transform (translate 50 40) (rotate 90))",
+                              points="(xy 10 10) (xy 10 20) (xy -10 20) (xy -10 10)")
+        for text in (kicad10, kicad11):
+            index = read_index(text)
+            (keepout,) = index.rule_areas
+            self.assertEqual([tuple(round(value, 6) for value in point) for point in keepout.outline],
+                             [(60, 30), (70, 30), (70, 50), (60, 50)])
+            # The plot draws it there too: its outline on F.Cu, in sheet millimetres (KiCad's 0, 0 at origin).
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "keep.kicad_pcb"
+                path.write_text(text, encoding="utf-8")
+                payload = build_plot(path)
+            dx, dy = payload["board"]["origin"]
+            drawn = [item["pts"] for layer in payload["sheets"][0]["layers"] if layer["id"] == "F.Cu"
+                     for item in layer["items"] if item["t"] == "path" and item.get("closed")]
+            self.assertIn([[60 + dx, 30 + dy], [70 + dx, 30 + dy], [70 + dx, 50 + dy], [60 + dx, 50 + dy]], drawn)
+
+    def test_an_outline_of_arcs_reads_back_within_five_microns_of_them(self) -> None:
+        # A round board, 120 mm across, of two half arcs, and a 30 mm round window: each chord of the outline
+        # read back lies within 0.005 mm of the arc it stands for, so a part fitted to it fits the board.
+        text = """(kicad_pcb (version 20241229) (generator "pcbnew")
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (gr_arc (start 40 100) (mid 100 40) (end 160 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts"))
+          (gr_arc (start 160 100) (mid 100 160) (end 40 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts"))
+          (gr_circle (center 100 100) (end 115 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts")))"""
+        loops = sorted(read_index(text).outline, key=len)
+        self.assertEqual(len(loops), 2)
+        for line, radius in zip(loops, (15.0, 60.0)):
+            off = [abs(math.hypot(x - 100, y - 100) - radius) for x, y in line]
+            sagitta = [radius - math.hypot((a[0] + b[0]) / 2 - 100, (a[1] + b[1]) / 2 - 100) for a, b in zip(line, line[1:])]
+            self.assertLess(max(off), 1e-9, radius)
+            self.assertLessEqual(max(sagitta), 0.005, radius)
+
 
 class OlderBoardTest(unittest.TestCase):
     def test_a_board_with_numbered_nets_reads_by_name(self) -> None:

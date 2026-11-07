@@ -24,7 +24,9 @@ its pads and graphics are in its own frame (a pad's position relative to the
 footprint, before its rotation; its angle absolute), a bottom-side footprint's
 already flipped; a pad's shape
 is a polygon (rect, roundrect, oval, circle, trapezoid, chamfered rect; a
-custom pad's is the hull of its primitives); arcs and circles are sampled; a
+custom pad's is the hull of its primitives); arcs and circles are sampled, a
+graphic's (an Edge.Cuts outline, a courtyard) with chords within ``CHORD_TOLERANCE``
+(0.005 mm) of it, so a part fitted to the outline read back fits the board as drawn; a
 part's outline is its courtyard (else the box around its pads and fabrication
 drawing); the outline's segments are joined where their ends meet within
 KiCad's own chaining epsilon. Net names are unescaped as KiCad displays them
@@ -50,7 +52,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from cad.engine.formats.kicad.ref_path import ref_prefix_names
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.geometry import (
-    XY, arc_points, area, bezier_points, box, format_xy, hull, inside, polygon_distance, polyline_distance, rotate,
+    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, format_xy, hull, inside, polygon_distance,
+    polyline_distance, rotate,
 )
 from cad.engine.formats.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
 from cad.engine.formats.kicad.refs import (
@@ -67,6 +70,7 @@ __all__ = [
     "Dimension",
     "FootprintFrame",
     "Hole",
+    "Model3d",
     "Net",
     "Pad",
     "Part",
@@ -90,6 +94,7 @@ __all__ = [
     "read_board",
     "read_board_index",
     "read_index",
+    "zone_outline",
 ]
 
 #: How far beyond a piece of copper a ``#net:NAME@x..y..`` point may land and still name it, mm.
@@ -139,6 +144,23 @@ class Pad:
 
 
 @dataclass(frozen=True)
+class Model3d:
+    """One of a footprint's 3D models (``(model "<name>" (offset ..) (scale ..) (rotate ..))``), as its file
+    writes it: ``name`` the file as written (``${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603.wrl``,
+    ``${KIPRJMOD}/...``, a relative or absolute path, ``kicad-embed://...``); ``offset`` in millimetres
+    (a KiCad 5 board's ``(at ..)``, in inches, read into millimetres), ``rotate`` in degrees about x, y and
+    z, ``scale`` per axis, in the footprint's frame, as KiCad places them; ``hidden`` for a model KiCad
+    does not draw. Which file on this computer the name is, if any, is :mod:`.models3d`'s."""
+
+    name: str
+    offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    rotate: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    hidden: bool = False
+    opacity: float = 1.0
+
+
+@dataclass(frozen=True)
 class Part:
     """A footprint on the board, by its reference designator."""
 
@@ -155,6 +177,7 @@ class Part:
     in_bom: bool = True  # False when the footprint is excluded from the BOM (or on the board only)
     locked: bool = False  # KiCad's lock: its pads, texts and graphics are locked with it
     sheet: str | None = None  # the schematic sheet that placed it (``(sheetname ...)``), its name alone
+    models: tuple[Model3d, ...] = ()  # its 3D models, as the file writes them
 
     kind = "part"
 
@@ -496,7 +519,8 @@ class BoardIndex:
     vias: tuple[Via, ...]
     zones: tuple[Zone, ...]
     holes: tuple[Hole, ...]
-    outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts as polylines; a closed one repeats its first point
+    outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts as polylines (an arc's chords within CHORD_TOLERANCE of it);
+    # a closed one repeats its first point
     nets: tuple[tuple[str, str], ...]  # (name, class), in natural order
     origin: XY
     texts: tuple[Text, ...] = ()
@@ -568,6 +592,7 @@ class BoardIndex:
                     "at": xy(part.at), "rotation": num(part.rotation), "fields": dict(part.fields),
                     "dnp": part.dnp, "outline": path(part.outline), **({"locked": True} if part.locked else {}),
                     **({"sheet": part.sheet} if part.sheet else {}),
+                    **({"models": [_model_json(model, num) for model in part.models]} if part.models else {}),
                 }
                 for part in self.parts
             ],
@@ -697,8 +722,8 @@ def _closed(line: Sequence[XY]) -> bool:
 # --- reading graphics ------------------------------------------------------------------
 
 
-def points_of(node: list | None) -> list[XY]:
-    """A ``(pts ...)`` list: its points, an ``(arc ...)`` in it sampled."""
+def points_of(node: list | None, tolerance: float | None = None) -> list[XY]:
+    """A ``(pts ...)`` list: its points, an ``(arc ...)`` in it sampled (within ``tolerance`` of it, given one)."""
     out: list[XY] = []
     for child in (node or [])[1:]:
         head = sexpr.head(child)
@@ -707,7 +732,7 @@ def points_of(node: list | None) -> list[XY]:
         elif head == "arc":
             start, mid, end = (sexpr.pair(sexpr.find(child, key)) for key in ("start", "mid", "end"))
             if None not in (start, mid, end):
-                sampled = arc_points(start, mid, end)
+                sampled = arc_points(start, mid, end, tolerance)
                 out.extend(sampled[1:] if out and _close(out[-1], sampled[0]) else sampled)
     return out
 
@@ -725,7 +750,8 @@ def _legacy_arc(center: XY, start: XY, angle: float) -> tuple[XY, XY, XY]:
 
 def graphic(node: list) -> tuple[list[XY], bool] | None:
     """A graphic item (``gr_*``, ``fp_*`` or a custom pad's primitive) as points, and whether
-    they close on themselves (a rectangle, a circle, a polygon; a line, an arc or a curve do not)."""
+    they close on themselves (a rectangle, a circle, a polygon; a line, an arc or a curve do not). An
+    arc's and a circle's chords lie within :data:`CHORD_TOLERANCE` of it: an outline read back fits as drawn."""
     head = sexpr.head(node) or ""
     kind = head.split("_", 1)[-1]
     if kind == "line":
@@ -735,19 +761,20 @@ def graphic(node: list) -> tuple[list[XY], bool] | None:
         start, mid, end = (sexpr.pair(sexpr.find(node, key)) for key in ("start", "mid", "end"))
         if start and end and mid is None and sexpr.value(node, "angle") is not None:
             start, mid, end = _legacy_arc(start, end, sexpr.number(sexpr.value(node, "angle")))
-        return (arc_points(start, mid, end), False) if start and mid and end else None
+        return (arc_points(start, mid, end, CHORD_TOLERANCE), False) if start and mid and end else None
     if kind == "circle":
         center, end = sexpr.pair(sexpr.find(node, "center")), sexpr.pair(sexpr.find(node, "end"))
         if not center or not end:
             return None
-        return _circle(center, math.hypot(end[0] - center[0], end[1] - center[1])), True
+        radius = math.hypot(end[0] - center[0], end[1] - center[1])
+        return _circle(center, radius, max(_CIRCLE_SEGMENTS, chords(radius, 2 * math.pi, CHORD_TOLERANCE))), True
     if kind == "rect":
         start, end = sexpr.pair(sexpr.find(node, "start")), sexpr.pair(sexpr.find(node, "end"))
         if not start or not end:
             return None
         return [start, (end[0], start[1]), end, (start[0], end[1])], True
     if kind == "poly":
-        points = points_of(sexpr.find(node, "pts"))
+        points = points_of(sexpr.find(node, "pts"), CHORD_TOLERANCE)
         return (points, True) if points else None
     if kind == "curve":
         points = points_of(sexpr.find(node, "pts"))
@@ -1171,11 +1198,14 @@ class FootprintFrame:
 
     A footprint is placed by ``(at x y angle)`` or, since KiCad 11, by ``(transform (translate x y)
     (rotate angle) (scale sx sy))``; the angle is degrees counter-clockwise on screen either way, and
-    a scale (1 1 on every board KiCad writes today) multiplies a child's point before the turn.
+    a scale (1 1 on every board KiCad writes today) multiplies a child's point before the turn. A
+    footprint's own zones are in its frame too where it is placed by a transform (``zones_placed``), and
+    in the board's where it is placed by ``at``, as KiCad 10 and before wrote them.
     """
 
     def __init__(self, node: list):
         transform = sexpr.find(node, "transform")
+        self.zones_placed = transform is not None
         if transform is not None:
             self.x, self.y = sexpr.pair(sexpr.find(transform, "translate"), (0.0, 0.0))
             self.angle = sexpr.number(sexpr.value(transform, "rotate"), 0.0)
@@ -1272,7 +1302,7 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
                 holes.append(hole)
             continue
         if head == "zone":
-            named.add("zone", _read_zone(child, table, copper), owner)  # stored in the board's frame
+            named.add("zone", _read_zone(child, table, copper, frame if frame.zones_placed else None), owner)
             continue
         if head in ("property", "fp_text"):
             named.add("text", [_footprint_text(child, frame, ref, value, shown)], owner)
@@ -1317,8 +1347,47 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
         in_bom=in_bom,
         locked=locked(node),
         sheet=sheet_name(node),
+        models=tuple(model for model in map(_read_model, sexpr.find_all(node, "model")) if model is not None),
     )
     return part, holes, edges
+
+
+def _xyz(node: list, name: str) -> tuple[float, float, float] | None:
+    """A model's ``(name (xyz x y z))``; ``None`` when it has none."""
+    found = sexpr.find(node, name)
+    xyz = sexpr.find(found, "xyz") if found is not None else None
+    if xyz is None:
+        return None
+    values = list(xyz[1:4]) + [0.0] * 3
+    return sexpr.number(values[0]), sexpr.number(values[1]), sexpr.number(values[2])
+
+
+def _read_model(node: list) -> Model3d | None:
+    """One ``(model ...)`` of a footprint: its name and its placement in the footprint's frame."""
+    if len(node) < 2 or not isinstance(node[1], str) or not node[1].strip():
+        return None
+    offset = _xyz(node, "offset")
+    if offset is None:
+        inches = _xyz(node, "at")  # KiCad 5 wrote the offset as (at (xyz ..)), in inches
+        offset = (inches[0] * 25.4, inches[1] * 25.4, inches[2] * 25.4) if inches is not None else (0.0, 0.0, 0.0)
+    hide = sexpr.find(node, "hide")
+    hidden = any(isinstance(item, Sym) and str(item) == "hide" for item in node[2:]) or (
+        hide is not None and (len(hide) < 2 or str(hide[1]) != "no"))
+    opacity = sexpr.number(sexpr.value(node, "opacity"), 1.0)
+    return Model3d(name=str(node[1]), offset=offset, scale=_xyz(node, "scale") or (1.0, 1.0, 1.0),
+                   rotate=_xyz(node, "rotate") or (0.0, 0.0, 0.0), hidden=hidden, opacity=min(max(opacity, 0.0), 1.0))
+
+
+def _model_json(model: Model3d, num: Callable[[float], float]) -> dict:
+    """A model as the plot payload's part carries it (``models``): what differs from KiCad's default, written."""
+    return {
+        "name": model.name,
+        **({"offset": [num(value) for value in model.offset]} if any(model.offset) else {}),
+        **({"scale": [num(value) for value in model.scale]} if model.scale != (1.0, 1.0, 1.0) else {}),
+        **({"rotate": [num(value) for value in model.rotate]} if any(model.rotate) else {}),
+        **({"hidden": True} if model.hidden else {}),
+        **({"opacity": num(model.opacity)} if model.opacity < 1 else {}),
+    }
 
 
 def _counted(pads: list[Pad]) -> tuple[Pad, ...]:
@@ -1340,19 +1409,26 @@ def _outline(items: list[tuple[list[XY], bool]]) -> list[XY]:
     return hull(point for points, _closed_ in items for point in points)
 
 
-def _read_zone(node: list, table, copper: Sequence[str]) -> list[Zone]:
+def zone_outline(node: list, frame: FootprintFrame | None = None) -> list[XY]:
+    """A zone's outline on the board: as written, or placed through ``frame``, its footprint's, when the
+    footprint holds it in its own frame (``FootprintFrame.zones_placed``)."""
+    outline = points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts"))
+    return [frame.place(point) for point in outline] if frame is not None else outline
+
+
+def _read_zone(node: list, table, copper: Sequence[str], frame: FootprintFrame | None = None) -> list[Zone]:
     rule = sexpr.find(node, "keepout") is not None
     layers = expand_copper(item_layers(node), copper)
     if rule:
         # A rule area keeps out of its copper and of the other layers it names, as the plot draws it.
         layers = list(dict.fromkeys([*layers, *(layer for layer in item_layers(node) if not _COPPER.match(layer) and "*" not in layer and "&" not in layer)]))
-        outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
+        outline = tuple(zone_outline(node, frame))
         name = sexpr.value(node, "name")
         return [Zone(net=None, layer=layer, outline=outline, id=item_id(node), name=str(name) if isinstance(name, str) and name else None,
                      layers=tuple(layers), locked=locked(node), rule=True) for layer in layers]
     if not layers:
         return []
-    outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
+    outline = tuple(zone_outline(node, frame))
     fills: dict[str, list[tuple[XY, ...]]] = {}
     for filled in sexpr.find_all(node, "filled_polygon"):
         layer = layer_of(filled) or layers[0]

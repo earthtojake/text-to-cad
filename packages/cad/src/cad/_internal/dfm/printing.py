@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
 from cad._internal.dfm._common import mm, where
 from cad._internal.dfm.rules import Rule, RuleSet, Source
@@ -370,17 +371,17 @@ def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
 
 def validate(resolved: dict[str, Any], document_type: str) -> None:
     if resolved["technology"] not in TECHNOLOGIES:
-        raise ValueError(f"--technology is one of {', '.join(TECHNOLOGIES)}, not {resolved['technology']!r}")
+        raise ArgumentRefused(f"--technology is one of {', '.join(TECHNOLOGIES)}, not {resolved['technology']!r}")
     given = resolved.get("angle_limit")
     if given is not None and not 0.0 <= float(given) <= 90.0:
-        raise ValueError(f"--angle-limit is an angle in degrees from 0 to 90, not {given}")
+        raise ArgumentRefused(f"--angle-limit is an angle in degrees from 0 to 90, not {given}")
     if int(resolved["samples"]) < 1:
-        raise ValueError(f"--samples is a count of at least 1, not {resolved['samples']}")
+        raise ArgumentRefused(f"--samples is a count of at least 1, not {resolved['samples']}")
     for name in ("layer_height", "nozzle"):
         if resolved.get(name) is not None and not float(resolved[name]) > 0:
-            raise ValueError(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
+            raise ArgumentRefused(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
     if resolved.get("nozzle") is not None and resolved["technology"] != "fdm":
-        raise ValueError(f"--nozzle is FDM's (a filament printer's nozzle), not {resolved['technology']}'s")
+        raise ArgumentRefused(f"--nozzle is FDM's (a filament printer's nozzle), not {resolved['technology']}'s")
     if resolved.get("build_volume") is not None:
         build_volume(resolved["build_volume"])
 
@@ -393,7 +394,7 @@ def build_volume(text: str) -> tuple[float, float, float]:
     except ValueError:
         values = ()
     if len(values) != 3 or not all(value > 0 for value in values):
-        raise ValueError(f"--build-volume is three lengths in millimetres, X x Y x Z (256x256x256), not {text!r}")
+        raise ArgumentRefused(f"--build-volume is three lengths in millimetres, X x Y x Z (256x256x256), not {text!r}")
     return values  # type: ignore[return-value]
 
 

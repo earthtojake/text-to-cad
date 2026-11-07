@@ -55,15 +55,20 @@ class TheTableIsTheSource(unittest.TestCase):
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
-        self.assertEqual("kicad", registry.DOCUMENT_TYPES["kicad_pcb"].decorator_integration)
-        self.assertEqual("build123d", registry.DOCUMENT_TYPES["step"].decorator_integration)
-        self.assertIsNone(registry.DOCUMENT_TYPES["urdf"].decorator_integration)
+        # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
+        # type is.
+        self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
+                         {entry.id: entry.edit.integration for entry in registry.DOCUMENT_TYPES.values() if entry.edit})
+        for kind in ("kicad_pcb", "kicad_sch"):
+            self.assertFalse(registry.DOCUMENT_TYPES[kind].decorator, "an edit, no producer: the type has no decorator")
         # What cad run reads of the integrations is the registry's view, not a table of its own.
         from cad._internal import integrations
 
         self.assertEqual(sorted(integrations.INTEGRATIONS), sorted(i.extra for i in registry.INTEGRATIONS.values() if i.extra))
-        self.assertEqual(("kicad_pcb",), integrations.INTEGRATIONS["kicad"].decorators)
-        self.assertEqual((), integrations.INTEGRATIONS["build123d"].decorators, "the engine's models need no choice")
+        # A use of an edit needs its integration in the caller's process; a reader of our own, none.
+        self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
+        self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
+        self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 
@@ -74,9 +79,6 @@ class TheTableIsTheSource(unittest.TestCase):
         class Box(Shape):
             pass
 
-        from cad.kicad._session import BoardScript
-
-        script = BoardScript(lambda board: None, __import__("pathlib").Path("board.kicad_pcb"))
         for entry in registry.DOCUMENT_TYPES.values():
             with self.subTest(type=entry.id):
                 producers = registry.producers_for(entry.id)
@@ -86,13 +88,6 @@ class TheTableIsTheSource(unittest.TestCase):
                     self.assertIn(producer.integration, registry.INTEGRATIONS)
                 if any(producer.integration == "build123d" for producer in producers):
                     self.assertEqual("build123d", registry.producer_for(entry.id, Box()).integration)
-        # A board script's step is the kicad integration's, a shape's the build123d one's: one producer each,
-        # and @step declared on a board script by the kicad producer (``declarer_for``).
-        self.assertEqual("kicad", registry.producer_for("step", script).integration)
-        for kind in ("step", "glb", "dxf"):
-            self.assertEqual("kicad", registry.declarer_for(kind, script).integration)
-        self.assertIsNone(registry.declarer_for("step", lambda: None), "a function under @step is the engine's model")
-        self.assertEqual("kicad", registry.declarer_for("kicad_pcb", lambda board: None).integration)
 
     def test_an_unsupported_return_names_what_the_type_takes_and_the_integration(self) -> None:
         class Frame:
@@ -111,6 +106,10 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIn("carries: geometry", said)
         self.assertIn('@step("out.step")', said)
         self.assertIn("written by: no producer", registry.help_text("urdf"))
+        # A board and a schematic are written by their edits (``cad kicad_pcb --help``, ``cad kicad_sch --help``).
+        self.assertIn('with kicad_pcb.edit("board.kicad_pcb") as board: the open board', registry.help_text("kicad_pcb"))
+        self.assertIn('with kicad_sch.edit("schematic.kicad_sch") as schematic: the open schematic',
+                      registry.help_text("kicad_sch"))
 
     def test_the_registry_imports_no_kernel(self) -> None:
         code = ("import sys; import cad.registry as r; r.help_text('step'); "

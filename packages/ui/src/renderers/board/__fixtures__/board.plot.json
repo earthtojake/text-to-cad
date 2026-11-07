@@ -4839,6 +4839,21 @@
       20.73,
       25.48
      ]
+    ],
+    "models": [
+     {
+      "name": "${KIPRJMOD}/models/led.step",
+      "offset": [
+       0.1,
+       0.0,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       90.0
+      ]
+     }
     ]
    },
    {
@@ -4901,6 +4916,11 @@
       33.52,
       15.73
      ]
+    ],
+    "models": [
+     {
+      "name": "${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl"
+     }
     ]
    }
   ],
@@ -5812,6 +5832,7 @@
     ]
    }
   ],
-  "dimensions": []
+  "dimensions": [],
+  "thickness": 1.6
  }
 }

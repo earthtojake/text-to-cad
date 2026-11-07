@@ -22,10 +22,20 @@ import { markPoints } from "../../../../annotation/geometry.js";
  * sheet under `transform`, the board mirrored about `mirrorX` (null: seen from the top).
  */
 export function placeOnPlot(mark, transform, mirrorX = null) {
-  const screen = markPoints(mark);
+  return placeOnSheet(mark, point => planToSheet(screenToModel(transform, point.x, point.y), mirrorX));
+}
+
+/**
+ * A screen mark as the session keeps it on a plot, each of its points put on the sheet by `toSheet`
+ * (a pane point to sheet millimetres, or null where it meets no sheet: that point is dropped). The flat
+ * view's is its transform (`placeOnPlot`); a 3D view of the sheet's, the point its camera's ray meets.
+ * Null when no point lands.
+ */
+export function placeOnSheet(mark, toSheet) {
+  const screen = markPoints(mark).map(toSheet).filter(Boolean);
+  if (!screen.length) return null;
   const points = new Float32Array(screen.length * 3);
-  screen.forEach((point, index) => {
-    const [x, y] = planToSheet(screenToModel(transform, point.x, point.y), mirrorX);
+  screen.forEach(([x, y], index) => {
     points[index * 3] = x;
     points[index * 3 + 1] = y;
   });

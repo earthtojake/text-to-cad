@@ -27,6 +27,8 @@ import importlib
 from types import ModuleType
 from typing import Any
 
+from cad._internal.refused import ArgumentRefused
+
 __all__ = ["COMMON", "PROCESSES", "Unmeasured", "module"]
 
 #: The processes a check measures for, in the order the help lists them.
@@ -48,5 +50,5 @@ class Unmeasured(Exception):
 def module(process: str) -> ModuleType:
     """The process's module (``cad._internal.dfm.<process>``)."""
     if process not in PROCESSES:
-        raise ValueError(f"--process is {', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}, not {process!r}")
+        raise ArgumentRefused(f"--process is {', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}, not {process!r}")
     return importlib.import_module(f"{__name__}.{process}")

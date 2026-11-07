@@ -204,6 +204,18 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
     return path, REGISTERED
 
 
+def registration(version: str, found: tuple[str, str, str] | None = None, folder=None) -> tuple[str, str]:
+    """What ``register`` would find, read and nothing written (``cad doctor --check``): ``(path, OK)`` when
+    the record of ``version`` names this installation as it is, else ``(path, MISSING)``, which ``register``
+    writes."""
+    folder = folder or state()
+    found = found or targets()
+    inside = _inside(version)
+    before = installation_record(folder.read(inside))
+    named = found is not None and before and (before["cad"], before["python"], before["prefix"]) == tuple(found)
+    return str(folder.path(inside)), OK if named else MISSING
+
+
 def _forget_read() -> None:
     """The records changed in this process: the version its environment is registered as
     (``cad.engine.places.registered``, read once per process) is read again."""
@@ -345,11 +357,23 @@ def _registered_environment(path: str) -> bool:
 
 
 def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
-    """Remove the launchers earlier releases published in the proxy's folder (``where``): 0.8's proxy,
-    ``cadgen`` carrying ``EARLIER_MARK``, each ``cadgen-python-<version>`` carrying ``LEGACY_MARK``, and
-    each ``cadgen-<version>`` symlink into a cadgen environment (on Windows the ``.exe`` copy beside a
-    marked ``.cmd``). Anything else there -- the proxy, another program's file -- is left alone. The
-    paths removed."""
+    """Remove the launchers earlier releases published in the proxy's folder (``where``): those
+    ``legacy_launchers`` finds. The paths removed."""
+    removed = []
+    for path in legacy_launchers(where, windows):
+        try:
+            os.remove(path)
+        except OSError:
+            continue
+        removed.append(path)
+    return removed
+
+
+def legacy_launchers(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
+    """The launchers earlier releases published in the proxy's folder (``where``), read and none removed:
+    0.8's proxy, ``cadgen`` carrying ``EARLIER_MARK``, each ``cadgen-python-<version>`` carrying
+    ``LEGACY_MARK``, and each ``cadgen-<version>`` symlink into a cadgen environment (on Windows the ``.exe``
+    copy beside a marked ``.cmd``). Anything else there -- the proxy, another program's file -- is not one."""
     folder = where or proxy_folder()
     try:
         names = sorted(os.listdir(folder))
@@ -361,7 +385,7 @@ def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]
         if stem.startswith("cadgen-python-") and VERSION.fullmatch(stem[len("cadgen-python-"):]) \
                 and _legacy_python(os.path.join(folder, name)):
             marked.add(stem[len("cadgen-python-"):])
-    removed = []
+    found = []
     for name in names:
         path = os.path.join(folder, name)
         stem = name[:-4] if windows and name.lower().endswith((".cmd", ".exe")) else name
@@ -380,12 +404,8 @@ def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]
         else:
             legacy = False
         if legacy:
-            try:
-                os.remove(path)
-            except OSError:
-                continue
-            removed.append(path)
-    return removed
+            found.append(path)
+    return found
 
 
 def forget(version: str, folder=None) -> None:

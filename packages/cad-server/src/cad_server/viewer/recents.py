@@ -9,9 +9,16 @@ a CAD file opened on a page is a record of its own (``kind: "file"``: its path, 
 opened, ``created``, and last, ``opened``, whether it is pinned), and every model a script built is one already (``kind: "model"``, which the
 engine writes when it registers the build), as is every shape a program handed over (``kind:
 "shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
-``recents/thumbnails`` named by its content, and, for a document whose picture its view draws in
-the dark theme's own colours too (a KiCad board's), a second PNG beside it (``thumbnailDark``) the
-home shows in the dark theme; an entry without one shows its one picture in both. Removing a file's entry forgets its record, the file
+``recents/thumbnails`` named by the record and its content, and, for a document whose picture its view
+draws in the dark theme's own colours too (a KiCad board's), a second PNG beside it (``thumbnailDark``)
+the home shows in the dark theme; an entry without one shows its one picture in both.
+
+The pictures are bounded however often a document is edited: a record names at most two, a new
+picture replaces them at once (``RecentStore.thumbnail``: the old ones go as the new are named), only
+the ``LIMIT`` records the home lists first keep theirs, within ``THUMBNAIL_BYTES`` in all (the rest,
+least recently used first, lose theirs, which a page takes again when it shows them), a forgotten
+record's go with it (``Registry.delete``), and a PNG no record names goes once no writer can still be
+about to name it (``THUMBNAIL_GRACE_SECONDS``: a crash's, or an earlier release's). Removing a file's entry forgets its record, the file
 untouched; a model's entry is deleted with its document (``cad_server.engine.models.delete``: its record
 and its document in the engine's cache). Nothing goes on its own: a model whose script is gone stays
 listed, ``missing``, until the person deletes it.
@@ -36,11 +43,15 @@ from pathlib import Path
 from typing import Any
 
 from cad.engine.places import cache_dir, state_dir
+from cad_server.engine.registry import PICTURES as THUMBNAILS
+from cad_server.engine.registry import pictures
 
 LIMIT = 200
 MAX_THUMBNAIL_BYTES = 512 * 1024
+# Every picture kept, in all: the ``LIMIT`` records' first, until this is reached (a board's pair is
+# about 250 KB, a part's one picture a few tens).
+THUMBNAIL_BYTES = 64 * 1024 * 1024
 THUMBNAIL_GRACE_SECONDS = 600
-THUMBNAILS = "recents/thumbnails"
 
 
 def thumbnail_png(encoded) -> bytes:
@@ -197,21 +208,27 @@ class RecentStore:
 
     def thumbnail(self, path: str, png: bytes, dark: bytes | None = None) -> str:
         """Keep a PNG for an entry (a file's path, or a model's id), and its dark theme's where its view
-        draws one: the light one's content name. A picture taken without a dark one has none."""
-        name = self._keep(png)
-        preview = {"thumbnail": name, "pictured": time.time()}
+        draws one: the light one's name. A picture taken without a dark one has none. It replaces the
+        record's pictures in place: written and named under the record's lock, the ones it named before
+        then removed (``_sweep_thumbnails``). An entry with no record keeps nothing."""
+        ident = self._ident(path)
+        named = {"thumbnail": _picture_name(ident, png)}
         if dark is not None:
-            preview["thumbnailDark"] = self._keep(dark)
-        self._change(path, lambda record: {**record, "preview": preview})
-        self._sweep_thumbnails()
-        return name
+            named["thumbnailDark"] = _picture_name(ident, dark, "dark")
+        before: set[str] = set()
 
-    def _keep(self, png: bytes) -> str:
-        """A PNG under its content's name, written once."""
-        name = hashlib.sha256(png).hexdigest()[:32] + ".png"
-        if not (self.thumbnails / name).exists():
-            self.state.write(f"{THUMBNAILS}/{name}", png)
-        return name
+        def change(record):
+            if record is None:
+                return None
+            before.update(pictures(record))
+            for key, data in (("thumbnail", png), ("thumbnailDark", dark)):
+                if key in named and not (self.thumbnails / named[key]).exists():
+                    self.state.write(f"{THUMBNAILS}/{named[key]}", data)
+            return {**record, "preview": {**named, "pictured": time.time()}}
+
+        self.registry.update(ident, change)
+        self._sweep_thumbnails(before - set(named.values()))
+        return named["thumbnail"]
 
     def read_thumbnail(self, name: str) -> bytes | None:
         if not name or "/" in name or "\\" in name or not name.endswith(".png"):
@@ -255,16 +272,57 @@ class RecentStore:
         ordered = sorted(entries, key=lambda entry: (not entry.pinned, -entry.activity))
         return ordered[:LIMIT]
 
-    def _sweep_thumbnails(self) -> None:
-        """A picture no record shows goes once it is old enough that no writer can still be about to
-        name it (a writer saves the PNG, then writes its record)."""
-        shown = {name for record in self.registry.list() for name in
-                 ((record.get("preview") or {}).get("thumbnail"), (record.get("preview") or {}).get("thumbnailDark"))}
+    def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
+        """The pictures held to their bound (the module): the pictures of the ``LIMIT`` records used
+        most recently (pinned first, then by when they were last opened, built or pictured) are kept
+        while they fit in ``THUMBNAIL_BYTES``, and every other record's are taken off it and removed;
+        ``replaced`` (a record's pictures a new one replaced) go now; any other picture no record
+        names goes once it is old enough that no writer can still be about to name it (a writer saves
+        the PNG, then writes its record)."""
+        ranked = sorted((record for record in self.registry.list() if pictures(record)),
+                        key=lambda record: (not record.get("pinned"), -_used(record)))
+        kept: set[str] = set()
+        gone = set(replaced)
+        total = 0
+        for rank, record in enumerate(ranked):
+            names = pictures(record)
+            size = sum(self._size(name) for name in names - kept)
+            if rank < LIMIT and total + size <= THUMBNAIL_BYTES:
+                kept |= names
+                total += size
+                continue
+            preview = record.get("preview")
+            self.registry.update(record["id"], lambda found, preview=preview: (
+                {key: value for key, value in found.items() if key != "preview"}
+                if found is not None and found.get("preview") == preview else None))
+            gone |= names
         cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
         for name in self.state.names(THUMBNAILS):
+            if not name.endswith(".png") or name in kept:
+                continue
             try:
-                if name.endswith(".png") and name not in shown and (self.thumbnails / name).stat().st_mtime < cutoff:
+                if name in gone or (self.thumbnails / name).stat().st_mtime < cutoff:
                     self.state.remove(f"{THUMBNAILS}/{name}")
             except OSError:
                 continue
 
+    def _size(self, name: str) -> int:
+        try:
+            return (self.thumbnails / name).stat().st_size
+        except OSError:
+            return 0
+
+
+def _picture_name(ident: str, png: bytes, theme: str = "") -> str:
+    """A picture's file name: of its record, its theme and its bytes, so no two records share one (a
+    record's pictures go with it) and a new picture is a new name (a page keeps a picture by it)."""
+    digest = hashlib.sha256(f"{ident}\0{theme}\0".encode("utf-8"))
+    digest.update(png)
+    return digest.hexdigest()[:32] + ".png"
+
+
+def _used(record: dict) -> float:
+    """When a record was last used, as far as its record says: opened, built or pictured."""
+    preview = record.get("preview") if isinstance(record.get("preview"), dict) else {}
+    times = (record.get("opened"), record.get("built"), preview.get("pictured"))
+    return max((float(value) for value in times if isinstance(value, (int, float)) and not isinstance(value, bool)), default=0.0)

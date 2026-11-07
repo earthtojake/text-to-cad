@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { APP_THEME_COLORS } from "../appTheme.js";
 import { BOARD_PALETTES, boardPalette, itemColor, layerColor } from "./theme.js";
 
 // sRGB to linear light, OKLab's hue, and WCAG's contrast ratio: what the light palette is chosen by.
@@ -22,21 +23,23 @@ const LAYERS = ["F.Cu", "B.Cu", ...Array.from({ length: 30 }, (_, at) => `In${at
   "F.CrtYd", "B.CrtYd", "F.Adhes", "B.Adhes", "Edge.Cuts", "Margin", "Dwgs.User", "Cmts.User", "Eco1.User", "Eco2.User",
   ...Array.from({ length: 9 }, (_, at) => `User.${at + 1}`), "vias", "drills"];
 
-test("each theme draws on the app's own canvas: the light one on white, the dark one on its neutral grey", () => {
-  assert.equal(boardPalette("light").background, "#FFFFFF");
-  assert.equal(boardPalette("dark").background, "#292929");
+test("each theme draws on the app's own canvas, its neutral grey in each", () => {
+  assert.equal(boardPalette("light").background, APP_THEME_COLORS.light.canvas);
+  assert.equal(boardPalette("dark").background, APP_THEME_COLORS.dark.canvas);
   // Anything but light is dark, and without a theme the board is KiCad's own colours.
   assert.equal(boardPalette(undefined), BOARD_PALETTES.dark);
   assert.equal(layerColor("F.SilkS"), BOARD_PALETTES.dark.layer("F.SilkS"));
   assert.equal(itemColor("F.Cu", { t: "path" }), "#C83434");
 });
 
+// The rule derived the light palette on white, the light canvas before it moved to `--canvas`; on that
+// canvas (#ebebeb) the colours at the rule's edge read at about 2.5:1, still plain on a board.
 test("the light palette is KiCad's, every opaque colour reading at 3:1 on white with its hue kept, the copper as it is", () => {
   const light = boardPalette("light"), dark = boardPalette("dark");
   for (const id of LAYERS) {
     const [was, is] = [dark.layer(id), light.layer(id)];
     assert.ok(OPAQUE.test(was) && OPAQUE.test(is), id);
-    assert.ok(contrast(is, light.background) >= 3, `${id} ${is} reads on white: ${contrast(is, light.background).toFixed(2)}`);
+    assert.ok(contrast(is, "#FFFFFF") >= 3, `${id} ${is} reads on white: ${contrast(is, "#FFFFFF").toFixed(2)}`);
     // A colour that already read is kept; one that did not keeps its hue (a grey has none to keep).
     if (contrast(was, "#FFFFFF") >= 3) assert.equal(is, was, `${id} already read on white`);
     else if (hue(was).chroma > 0.02) assert.ok(Math.abs(hue(is).hue - hue(was).hue) < 3, `${id} keeps its hue: ${hue(was).hue.toFixed(0)} -> ${hue(is).hue.toFixed(0)}`);
@@ -45,7 +48,7 @@ test("the light palette is KiCad's, every opaque colour reading at 3:1 on white 
   // The silkscreen's yellow turns ochre rather than vanishing.
   assert.ok(contrast(dark.layer("F.SilkS"), "#FFFFFF") < 1.5 && contrast(light.layer("F.SilkS"), "#FFFFFF") >= 3);
   for (const hole of Object.values(light.holes)) for (const color of [hole.fill, hole.wall].filter(Boolean)) {
-    assert.ok(contrast(color, light.background) >= 3, `a hole's ${color} reads on white`);
+    assert.ok(contrast(color, "#FFFFFF") >= 3, `a hole's ${color} reads on white`);
   }
 });
 

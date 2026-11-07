@@ -80,8 +80,11 @@ back, and a line says where to install it from again; with no receipt, every cop
 but a store's -- removes the ``cad`` command when it is text-to-cad's own, stops the engine (``cad
 stop``), and removes the release folders and the plugin folder; with ``--purge`` it then
 removes the state and cache folders. ``--only`` limits either to some apps (and then leaves the
-command, the engine, the releases and the plugin folder alone). Neither asks: the plan is printed and
-done, and ``--dry-run`` prints it alone.
+command, the engine, the releases and the plugin folder alone). ``cad setup`` asks nothing: the plan is
+printed and done -- installing is what was asked. ``cad uninstall`` destroys, so after its plan it asks
+(``cad_server._internal.consent``): at a terminal ``Take text-to-cad out as planned? (y/N)``, and where no
+one can be asked it changes nothing without ``--yes`` (``confirmation_required``, exit 2); the install
+command's ``--uninstall`` passes ``--yes``, the person's own word. ``--dry-run`` prints either plan alone.
 
 Never done here: restarting an app, anything that needs sudo or a password, removing a ``cad``
 command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
@@ -136,11 +139,12 @@ PREPARE_ENV = "CAD_UPDATE_PREPARE"
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
     """``cad setup``'s parser, or with ``uninstall`` ``cad uninstall``'s, or with ``update``
     ``cad update``'s (``cad_server.cli.update``): setup's options, and the switch helper's own."""
+    from cad_server._internal.cli_parser import parser as command_parser
     from cad_server._internal.providers import APPS, SKILLS_AGENTS
     from cad_server.updates import INSTALL, INSTALL_WINDOWS
 
     if uninstall:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Take text-to-cad out of every agent app on this machine: what earlier `cad setup` runs "
@@ -148,7 +152,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
                         "cad command when it is text-to-cad's own; this installation's engine stopped.",
         )
     elif update:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
@@ -157,7 +161,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
     else:
-        parser = argparse.ArgumentParser(
+        parser = command_parser(
             prog=prog,
             allow_abbrev=False,
             description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
@@ -171,7 +175,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
                         help=f"only these apps: {', '.join(APPS)}; and the agents the skills go to through "
                              f"the Skills CLI: {', '.join(SKILLS_AGENTS)}")
     if uninstall:
+        from cad_server._internal.consent import add_yes
+
         parser.add_argument("--purge", action="store_true", help="remove text-to-cad's state and cache folders too")
+        add_yes(parser, "take it out as planned")
     else:
         parser.add_argument("--no-telemetry", action="store_true",
                             help="turn telemetry off, as `cad telemetry off` does")
@@ -188,8 +195,10 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
     return parser
 
 
-def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninstall: bool = False) -> int:
-    """``cad setup``, or with ``uninstall`` ``cad uninstall`` (``cad_server.cli.uninstall`` calls it so)."""
+def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninstall: bool = False,
+         update: dict[str, Any] | None = None) -> int:
+    """``cad setup``, or with ``uninstall`` ``cad uninstall`` (``cad_server.cli.uninstall`` calls it so);
+    ``update``: what ``cad update --dry-run`` read of the version feed, which its ``--json`` carries."""
     from cad_server._internal.providers import APPS, SKILLS_AGENTS
     from cad_server.engine.daemon import default_port, environment_port
 
@@ -207,7 +216,8 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
     except ValueError as error:
         parser.error(str(error))
     port, source = (named, "CAD_ENGINE_PORT") if named is not None else (default_port(), "default")
-    installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]))
+    installer = Installer(args, only, port, source, list(argv if argv is not None else sys.argv[1:]), prog)
+    installer.update = update
     return installer.uninstall() if uninstall else installer.install()
 
 
@@ -281,12 +291,15 @@ class Installer:
     """One run of ``cad setup`` or ``cad uninstall``: its plan, what it did, and how it says so."""
 
     def __init__(self, args: argparse.Namespace, only: list[str], port: int, source: str,
-                 argv: list[str] | None = None) -> None:
+                 argv: list[str] | None = None, prog: str = DEFAULT_PROG) -> None:
         from cad_server import __version__
         from cad_server._internal import plugin, providers
 
         self.args, self.only, self.port, self.source = args, only, port, source
         self.argv = list(argv or [])
+        self.prog = prog
+        # What `cad update --dry-run` read of the version feed (``cad_server.cli.update``), for its --json.
+        self.update: dict[str, Any] | None = None
         self.providers = providers
         self.machine = providers.Machine.here()
         self.release = __version__
@@ -307,6 +320,15 @@ class Installer:
     def say(self, line: str = "") -> None:
         self.out.write(line + "\n")
         self.out.flush()
+
+    def _failed(self, words: str) -> int:
+        """A run that stops before its plan, said already in its lines: exit 1, and under ``--json`` its one
+        JSON document on stdout (``cad_server._internal.cli_errors``), so a caller reading it finds an answer."""
+        if not self.args.json:
+            return 1
+        from cad_server._internal.cli_errors import Failure, write
+
+        return write(Failure(words), prog=self.prog, as_json=True)
 
     def stage(self, stage: str, detail: str = "") -> None:
         """The engine's own run (``--engine-update``): the update's stage it reached, a progress frame
@@ -350,7 +372,7 @@ class Installer:
             from cad_server.updates import command
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
-            return 1
+            return self._failed(f"text-to-cad {self.release}'s release folder was not made: {refused}")
         run = [made["cad"], "setup", *self.argv]
         self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
@@ -413,7 +435,8 @@ class Installer:
                 {"app": row["app"], "label": row["label"], "action": row["action"], "subject": row["subject"],
                  "commands": [], "edit": None} for row in extra]
             document = {"schema": SCHEMA, "plan": plan, "actions": self.actions, "stopped": self.stopped,
-                        "verified": verified, "restart": restart}
+                        "verified": verified, "restart": restart,
+                        **({"update": self.update} if self.update is not None else {})}
             sys.stdout.write(json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n")
             sys.stdout.flush()
         return code
@@ -691,14 +714,16 @@ class Installer:
 
     def _telemetry(self) -> str:
         """The telemetry line: the notice the first time, else what is sent and why; ``--no-telemetry``
-        turns it off first, as ``cad telemetry off`` does."""
+        turns it off first, as ``cad telemetry off`` does. Under ``--json`` the notice is not said: an answer
+        a program reads tells no person, so it waits for a run a person reads, and nothing is sent by
+        default until then."""
         from cad_server import analytics
         from cad_server.cli.telemetry import describe
 
         if self.args.no_telemetry:
             chosen = analytics.choose(False, by="cli", forget=analytics.request_deletion)
             said = describe() if chosen.get("saved") else "unchanged: the choice could not be saved in the state folder"
-        elif analytics.notify(self.out):
+        elif not self.args.json and analytics.notify(self.out):
             return describe()
         else:
             said = describe()
@@ -832,7 +857,7 @@ class Installer:
             self.say(f"Not installed: {installations.packaged_words(package)}. Run the install command from "
                      f"a terminal of its own (Windows Terminal or PowerShell), not from an app's: {command()}")
             if not self.args.dry_run:
-                return 1
+                return self._failed(f"Not installed: {installations.packaged_words(package)}")
         if not self.args.dry_run and not self.engine_update:
             relocated = self._relocated()
             if relocated is not None:
@@ -992,6 +1017,20 @@ class Installer:
         if self.args.dry_run:
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
+        # The plan above is what it does: asked of a person at a terminal, else said yes to by --yes
+        # (``cad_server._internal.consent``).
+        from cad_server._internal.cli_errors import Failure, write
+        from cad_server._internal.consent import confirm, retry
+
+        try:
+            confirm("taking text-to-cad out" + (f" of {', '.join(self.only)}" if self.only else " of this computer")
+                    + (" and removing its state and cache folders" if self.args.purge else ""),
+                    "Take text-to-cad out as planned?", yes=bool(self.args.yes), as_json=bool(self.args.json),
+                    command=retry(self.prog, self.argv),
+                    preview=["This cannot be undone: --purge removes text-to-cad's state folder (your settings, the "
+                             "documents' records, Recents) and its cache folder."] if self.args.purge else [])
+        except Failure as failure:
+            return write(failure, prog=self.prog, as_json=bool(self.args.json))
         failed, changed = False, set()
         from cad_server._internal.file_lock import exclusive
 

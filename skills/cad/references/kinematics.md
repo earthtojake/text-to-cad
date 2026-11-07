@@ -295,8 +295,8 @@ drawn. An unknown state, joint or coupling, a value out of range and a coupling'
 set alone are refused by name before anything renders.
 
 On the model's page, Position poses the document live: a slider per coupling and per
-joint no coupling moves, and the mechanism states as presets. The sidebar's Motion section
-and Preview's playbar play the document's configuration sequences (play, pause, scrub, loop, speed), so the page is
+joint no coupling moves, and the mechanism states as presets. The playbar under the model, in the
+tools view and Preview alike, plays the document's configuration sequences (play, pause, scrub, loop, speed), so the page is
 where to review one.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures

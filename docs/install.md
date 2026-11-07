@@ -29,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.10.3 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.10.4 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -94,6 +94,11 @@ the receipt records, or, with no receipt, every copy of text-to-cad it finds but
 store's, removes the `cad` command and stops the server. A plugin directory's copy that
 the install command replaced is not put back: install it from the directory again to
 get it back. `--purge` with it also removes text-to-cad's state and cache folders.
+Asking for it is the yes: the install command passes `--yes` to `cad uninstall`. Run
+`cad uninstall` yourself and it prints the same plan and asks before it changes
+anything (`Take text-to-cad out as planned? (y/N)`); where nothing can ask (a script,
+an agent), it changes nothing without `--yes`, and says the command with it.
+`cad delete`, `cad doctor --prune` and `cad server --rotate-token` ask the same way.
 `--version <release>` installs that release instead of the latest; a release from
 before the install command has no `cad setup` to run. To read the script before it
 runs, download it first, then run it:
@@ -210,7 +215,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.10.3", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.10.4", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -370,7 +375,7 @@ misses new ones — which matters here, because releases do add skills.
 
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
-now covered by the CAD and simulation skills, and the retired
+now covered by the CAD and robot-simulation skills, and the retired
 `cad-mcp-setup` by the install command and this page. Remove old standalone
 installs with `npx skills remove cad-viewer cad-mcp-setup`.
 
@@ -379,8 +384,13 @@ No plugin for your agent yet?
 
 ## Updates
 
-text-to-cad updates itself with its patch releases: fixes, like 0.11.0 to 0.11.1. Once an
-hour the CAD server checks whether a newer release is out, and when it is a patch release, it
+text-to-cad updates itself with every release that breaks nothing, which needs nothing of
+you: fixes, additions, and new names for what a model imports with the old names still working
+(a model that still uses an old name says so in a warning naming the new one). Its version
+numbers follow [Semantic Versioning](https://semver.org), so the number says which kind a
+release is: before 1.0, a patch release, like 0.11.0 to
+0.11.1; from 1.0, a patch or minor release, like 1.4.2 to 1.4.3 or 1.5.0. Once an hour the
+CAD server checks whether a newer release is out, and when it is one of those, it
 installs it in the background at once, then, once nothing
 has run for a minute (no build, picture, export or agent's request underway), updates
 text-to-cad in every agent app on your computer as the install command does and
@@ -389,7 +399,8 @@ itself into it. Should an update fail, the server stays on, or goes back to, the
 release it ran, and that release is not tried again by itself for a day; a newer one
 is tried when it comes out. With no network nothing happens, and nothing waits.
 
-A new minor or major release, like 0.11 to 0.12, never installs itself: it can rename a
+A release that may break something never installs itself: before 1.0, a new minor or major
+release, like 0.11 to 0.12; from 1.0, a new major release, like 1.5 to 2.0. It can rename a
 command or change how a model is written (its migration guide says what), so it waits for
 you. CAD shows its update button for it, and `cad update auto` says it is out; click the
 button or run `cad update` when you are ready.
@@ -410,7 +421,9 @@ command.
 
 Running the install command again does the same, and so does `cad update` in a
 terminal: each installs the newest release, updates every app, moves the server to
-it and lists the apps to restart. To update one app by hand, run the update
+it and lists the apps to restart. `cad update --dry-run` changes nothing: it reads the
+version feed and says the release an update would install (or that it would set this
+one up again, and why), then prints the plan. To update one app by hand, run the update
 commands under its heading, then restart it.
 
 An update writes the plugin folder again for the new release
@@ -428,7 +441,8 @@ Each release is kept in a folder of its own in text-to-cad's state folder
 new one not start, and older ones go at the next update. A release whose update failed
 and went back is removed once the release before is running again (it is still not tried
 again by itself for a day), and `cad doctor --prune` removes any release folder but the
-current one and the one before. `cad doctor` says
+current one and the one before, once you say yes to the list it prints (`--yes` where it
+cannot ask). `cad doctor` says
 which releases are there, which one is current, the release the server runs, the
 plugin folder's, and where each app's plugin comes from and its release.
 
@@ -494,8 +508,8 @@ model has used for a week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.10.3'` (`cad requirement build123d` prints the exact
-requirement; `pip install cad==0.10.3` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.10.4'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.10.4` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says
@@ -505,7 +519,7 @@ once which to update for the other's fixes.
 
 ## Windows 11: Smart App Control
 
-The CAD kernel behind the `cad`, `engineering-drawing` and `simulation`
+The CAD kernel behind the `cad`, `engineering-drawing` and `robot-simulation`
 skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
 native module. Windows 11's Smart App Control blocks unsigned native code, so
 on a machine where it is on (the default on a fresh install) every `cad`

@@ -10,8 +10,8 @@ it spells (``from cad.step import read``, ``step.read`` with ``step`` imported f
 an earlier spelling is read as the name it is now, by the alias table, and a name needs what the registry
 says it does -- an integration's namespace that integration, a document type's reader its
 ``reader_integration`` (a STEP's: build123d), an operation the calling process runs its integration (a
-``dfm``: trimesh), one the engine runs none (``for_name``) -- and each of cad's decorators it applies
-(``@cad.kicad_pcb``, or a ``kicad_pcb`` imported from cad). A type alone (``from cad import step``) needs
+``dfm``: trimesh), one the engine runs none, an edit its integration (``kicad_pcb.edit``: kicad;
+``for_name``). A type alone (``from cad import step``) needs
 nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
 extra it lacks, in one line, and its header names it.
@@ -118,8 +118,7 @@ class _Reader:
     def read(self, source: str, path: Path) -> None:
         """One file's imports, its uses of cad's names and its decorators (see the module); a file that does
         not parse is passed over: Python says what is wrong with it when it runs."""
-        from cad._internal.aliases import current
-        from cad._internal.integrations import decorated, for_name
+        from cad._internal.integrations import for_name
 
         try:
             tree = ast.parse(source, filename=str(path))
@@ -146,15 +145,6 @@ class _Reader:
             if isinstance(node, ast.Attribute):  # ``step.read``, ``cad.read_step``, ``c.step.dfm``
                 dotted = _dotted(node, bound)
                 key = for_name(dotted) if dotted else None
-                if key is not None:
-                    self.found.add(key)
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                continue
-            for decorator in node.decorator_list:
-                target = decorator.func if isinstance(decorator, ast.Call) else decorator
-                dotted = _dotted(target, bound)
-                parts = current(dotted).split(".") if dotted else []
-                key = decorated(parts[1]) if len(parts) == 2 else None  # ``@cad.kicad_pcb``, ``@board``
                 if key is not None:
                     self.found.add(key)
 

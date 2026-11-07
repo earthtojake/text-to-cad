@@ -66,6 +66,9 @@ These words mean one thing each, in the code, the commands and every document.
   tool: OCP is a dependency of `build123d`, not an integration.
 - **Producer**: code that makes a document type from some input. Many integrations can produce one type.
   Each type documents the content it carries, and each producer states which parts of it it provides.
+- **Edit**: code that changes a native file of a type in place, in the caller's process, rather than
+  making it: `kicad_pcb.edit` and `kicad_sch.edit`, a `with` block over the open document. An edit is no
+  producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
   (a 3D type's manufacturing check), `drc` (a board's design rule check), `erc` (a schematic's electrical
@@ -122,7 +125,7 @@ the two disagree, the engine's README is right.
 ## The design laws
 
 These are LAWS, not conventions: a change that violates them is wrong even when it works.
-Each of the 29 says, after its title, what it binds: *every document*; *models* (a model's document,
+Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
 (the distributions alike).
@@ -339,16 +342,20 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     no file this run wrote; an earlier file stays byte for byte.
 18. **Nothing waits on the network.** *The package.* Once installed, text-to-cad works offline: every command,
     build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
-    counts under a random id, sent by default once a `cad` command has said so, and never
+    counts under a random id, sent by default once a `cad` command has said so -- never its help, nor an
+    answer in JSON, which no person reads --, and never
     after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
-    and leaves everything as it was. An automatic update (on by default, `cad update auto off` to
+    and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
+    feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
-    background and switches only once it has been idle for a minute. It takes patch releases
-    only; a minor or major release waits for the person's click.
+    background and switches only once it has been idle for a minute. It takes a release that breaks
+    nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
+    from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
+    person's click.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s) is fetched once, the
     first time a command needs it, from uv's cache and the network, and works offline after that; a
     first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
@@ -444,8 +451,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 24. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
-    integration each needs, and whether it has a decorator; each integration's name, extra, process kind
-    and, for an external program, its probe (the program, the oldest version our code supports, the
+    integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
+    process kind and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -479,9 +486,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     it and its integration -- decide which makes the file of the returned value. A matcher reads the
     value's type names and modules, never importing a library to ask. Exactly one producer per return
     type per document type; a return none takes fails loudly, naming the types the document is made of and
-    the integration that would add more. A producer may also declare what its decorator does with the
-    function it is given (a KiCad board script, `@kicad_pcb`, run through KiCad's IPC API; the `@step`
-    stacked on one, written by `kicad-cli`); which one is the registry's, by what is decorated.
+    the integration that would add more.
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
@@ -505,7 +510,30 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
     No module of the server imports an integration's code: the runner does, in whichever process
     runs it. A function of the library called where its integration is missing says which extra to
-    add, or to run the script with `cad run`.
+    add, or to run the script with `cad run`. A command line an integration's extra installs
+    (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
+    and the integration's `_command` module runs the environment's own command there, headless in
+    private homes, never one on PATH.
+
+30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
+    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+    findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
+    output path), or parity with the viewer (the same check, the same export). Everything else of the
+    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
+    skill documents with the tool's own flags at the pinned version; no typed command is added to
+    rename one.
+
+31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
+    A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
+    `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
+    and the file is written again from the model whenever it runs. An edit is a native file's own: the file
+    is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
+    hands the block the tool's live document, and saves it where it is at the block's end only when the
+    block changed it, and not at all when the block raises (a KiCad board's and schematic's,
+    `kicad_pcb.edit` and `kicad_sch.edit`, through KiCad's IPC API, one KiCad per project for both). An
+    edit declares nothing, writes no other file and is never a model: what is made from an edited file (a
+    STEP, Gerbers, a check) is an explicit call after the block (`kicad_pcb.export`, `kicad_pcb.drc`). A
+    type has a decorator or an edit, never both; the registry says which (`Producer`, `Edit`).
 
 
 ## Agent operations
@@ -549,7 +577,8 @@ before starting. An agent's explicit host path is a different destination contra
 documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
-`cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
+`cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
+inside out, a solid's faces pointing inward), materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
 `--query closure`, and `cad.<type>.inspect()` with no reference, the closure alone);
@@ -575,16 +604,17 @@ src/cad/
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
-                         #   still engine/render/board.py); drc and export, the kicad
-                         #   integration's; @kicad_pcb is the kicad integration's board script
+                         #   still engine/render/board.py); drc, export and edit (a with
+                         #   block), the kicad integration's
   kicad_sch/             # a saved KiCad schematic: read (its hierarchy, its nets and
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
-                         #   erc and export, the kicad integration's
+                         #   erc, export and edit, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
-                         #   on _internal/programs), a board script through its headless
-                         #   api-server and KiPy (_session), DRC (_check), its exports (_export),
-                         #   a schematic's ERC and exports (_schematic) and producers
+                         #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
+                         #   a board or a schematic through its headless api-server and KiPy
+                         #   (_session), DRC (_check), its exports (_export), a schematic's ERC
+                         #   and exports (_schematic)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, walls, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, trapped volumes, support), orientations (ranked) --
@@ -653,6 +683,20 @@ board's shape, every sheet a page, drawn from the symbols' own drawings the file
 the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
 kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
+
+A board or a schematic is changed in place through KiCad's IPC API by an edit of it, a `with` block:
+`with kicad_pcb.edit("board.kicad_pcb") as board:` or `with kicad_sch.edit("design.kicad_sch") as schematic:`
+hands the block the open document (KiPy's, kicode's), through kicode's headless `kicad-cli api-server` on
+the file, in private KiCad homes (a person's own KiCad settings and library tables are never read or
+written; `cad.kicad._session`). A file not there yet is made by KiCad, with its project, and saved; an
+existing one is saved at the block's end only when the block changed it (KiCad's own modified state), so a
+block that changes nothing leaves it byte for byte, in its own format; nothing is saved when the block
+raises, and the exception goes on; a save KiCad cannot finish puts back every file it wrote and says why.
+One KiCad serves a project: the board's and the schematic's edits of one
+project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
+are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
+lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
+made is removed. Exports and checks of the edited file are explicit calls after the block.
 
 ## Manufacturing checks
 

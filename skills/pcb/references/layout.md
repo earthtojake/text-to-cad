@@ -1,20 +1,25 @@
 # Lay out a board
 
-Place and route a board from its schematic in board scripts (`@kicad_pcb`), one checked step at a time.
-A layout of 100 or more nets takes hours, so work in steps: each board script saves the board when its
-function returns, and the next step reads what the last one saved.
+Place and route a board from its schematic in edits (`with kicad_pcb.edit("board.kicad_pcb") as b:`), one
+checked step at a time. A layout of 100 or more nets takes hours, so work in steps: each edit saves the
+board at its block's end, and the next step reads what the last one saved. Each states the board it wants
+("U1 at (10, 20)", "VBUS 0.8 mm"), so running a step again is harmless.
 
 ## The method
 
-1. **Start from the schematic.** Export its netlist with KiCad's command line (`kicad-cli sch export
-   netlist -o tmp/board.net board.kicad_sch`; `kicode.executable()` is that command line, run with
-   `kicode.environment()`), then bring the parts and nets onto the board in a board script:
+1. **Start from the schematic.** Export its netlist (`cad kicad_sch export board.kicad_sch --to netlist
+   -o tmp`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")` in the script), then bring the
+   parts and nets onto the board in an edit:
    `b.import_netlist("tmp/board.net")` (`dry_run=True` first to see what it would change). The
    schematic, not the footprints, says what connects to what.
 2. **Rules before copper.** Set the clearances, netclasses and track widths from the fab's limits and
    each net's current (`b.get_design_rules()`, `b.set_design_rules(...)`, the project's
    `.kicad_pro`). Width for current: IPC-2221, `I = k * dT^0.44 * A^0.725` (A in mil², k = 0.048 on
    outer layers, 0.024 inner); size power nets and their pours from it, signals at the netclass width.
+   `set_design_rules` sets the board's minimums; a netclass's clearance and width, which DRC holds a
+   track to over them (a board an edit makes has KiCad's `Default`, 0.2 mm), are the `.kicad_pro`'s
+   `net_settings.classes` (JSON), which an edit's save leaves as it is: write them outside an edit
+   block, and read DRC to see them taken.
 3. **Place one part or one small functional group at a time,** as [placement](placement.md) sets
    out: fixed parts first (connectors, mounting holes, anything the enclosure locates), then each IC
    with its own group, in order of how little distance each connection tolerates. Draw the outline
@@ -37,7 +42,9 @@ function returns, and the next step reads what the last one saved.
    headless KiCad has no interactive router. Fast nets and differential pairs follow the next section.
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
    `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
-   errors are what to fix now. Moving a part after routing is fine: reroute what it touched.
+   errors are what to fix now. Moving a part after routing is fine: reroute what it touched. A pour's
+   thermal reliefs round dense small pads can neck below the minimum connection width
+   (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every
    step (below). Fix what it finds the same way.
 
@@ -159,7 +166,9 @@ from cad import kicad_pcb
 
 board = kicad_pcb.read(sys.argv[1] if len(sys.argv) > 1 else "board.kicad_pcb")
 
-# 1. Octolinear: every straight segment runs at a multiple of 45 degrees (arcs excluded).
+# 1. Octolinear: every straight segment runs at a multiple of 45 degrees (arcs excluded). On a board
+# whose parts are turned to their place (a ring of LEDs on a round board), measure a part's escapes
+# against its own rotation instead.
 off_angle = []
 for track in board.tracks:
     if track.arc:

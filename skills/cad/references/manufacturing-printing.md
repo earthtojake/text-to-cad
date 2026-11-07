@@ -66,7 +66,12 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
 
 - Report `not_watertight` or `not_sound` first: it blocks slicing for every technology.
 - Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum.
-  A mesh cannot say which, so it is judged against the supported minimum (`printing.wall`).
+  A mesh cannot say which, so it is judged against the supported minimum (`printing.wall`). On a mesh
+  the field is `--samples` rays (2000) from random points over the surface, plus one from every
+  triangle, each straight in to the face it leaves through: a thin `min_mm` beside a thick `p05_mm` is
+  a small thin place (a web between two cuts, a chamfered rim), never noise; name it from its item's
+  `xyz`. A place smaller than the rays' spacing is found by chance: before a print, check the file that
+  will be sliced with `--samples 20000`.
 - `printing.knife_edge` is a convex edge under 45 degrees of material, which thins to nothing:
   `thin_depth_mm` says how far in it stays under the minimum wall. Blunt it, chamfer it at 45 degrees
   or more, or move the cut that made it.

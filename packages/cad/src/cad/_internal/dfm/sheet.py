@@ -23,6 +23,7 @@ import math
 from dataclasses import replace
 from typing import Any
 
+from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
 from cad._internal.dfm._common import mm
 from cad._internal.dfm.rules import Rule, RuleSet, Source
@@ -130,7 +131,7 @@ def sheet_size(text: str | None) -> tuple[float, float] | None:
     except ValueError:
         values = ()
     if len(values) != 2 or not all(value > 0 and math.isfinite(value) for value in values):
-        raise ValueError(f"--sheet-size is two lengths in millimetres, X x Y (1219x2438), not {text!r}")
+        raise ArgumentRefused(f"--sheet-size is two lengths in millimetres, X x Y (1219x2438), not {text!r}")
     return (max(values), min(values))
 
 
@@ -547,11 +548,11 @@ RULE_SETS: dict[str, RuleSet] = {name: _guarded(rule_set) for name, rule_set in 
 def validate(resolved: dict[str, Any], document_type: str) -> None:
     for name in ("thickness", "bend_radius"):
         if resolved.get(name) is not None and not float(resolved[name]) > 0:
-            raise ValueError(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
+            raise ArgumentRefused(f"--{name.replace('_', '-')} is a length in millimetres above 0, not {resolved[name]}")
     if resolved.get("kerf") is not None and not float(resolved["kerf"]) >= 0:
-        raise ValueError(f"--kerf is a width in millimetres from 0, not {resolved['kerf']}")
+        raise ArgumentRefused(f"--kerf is a width in millimetres from 0, not {resolved['kerf']}")
     if resolved.get("k_factor") is not None and not 0.0 < float(resolved["k_factor"]) <= 0.5:
-        raise ValueError(f"--k-factor is the neutral axis's place in the thickness, above 0 and at most 0.5, "
+        raise ArgumentRefused(f"--k-factor is the neutral axis's place in the thickness, above 0 and at most 0.5, "
                          f"not {resolved['k_factor']}")
     sheet_size(resolved.get("sheet_size"))
 

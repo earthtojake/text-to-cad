@@ -12,6 +12,8 @@ by what the model says the part is made of.
 
 from __future__ import annotations
 
+from cad._internal.refused import ArgumentRefused
+
 __all__ = ["CLASSES", "MATERIALS", "declared", "material_class", "resolve"]
 
 #: Each material, its class and the spellings it is also given.
@@ -64,7 +66,7 @@ def resolve(name: str | None) -> str | None:
         return None
     found = _ALIASES.get(name.strip().lower().replace(" ", "_"))
     if found is None:
-        raise ValueError(f"--material is one of {', '.join(MATERIALS)}, not {name!r}")
+        raise ArgumentRefused(f"--material is one of {', '.join(MATERIALS)}, not {name!r}")
     return found
 
 

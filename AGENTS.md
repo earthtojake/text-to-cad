@@ -37,10 +37,11 @@ exact version, ask which one. A release pull request comes one of two ways:
   `main`'s and stamps the derived metadata and every pin of the release's own
   (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
-A patch release installs itself on every device (automatic updates take patch releases only), so a
-release that renames, removes or needs a migration guide is a minor one: Version Check refuses a patch
-that adds or changes a migration guide ([CONTRIBUTING.md, "Shipping a
-release"](CONTRIBUTING.md#shipping-a-release)).
+Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
+bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
+every device (a patch below 1.0, a patch or minor from 1.0), so Version Check refuses a migration guide
+in one. What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
+bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
@@ -239,7 +240,7 @@ which points both at the checkout.
 - The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
   `packages/cad-server`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
-  checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, simulation) documents that verb directly.
+  checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, robot simulation) documents that verb directly.
   Nothing in `cad_server.viewer` imports the CAD kernel at module scope — a STEP or
   `.xbf` it shows is read and meshed by the server's kernel processes (`viewer/documents.py`),
   never by a request's thread.

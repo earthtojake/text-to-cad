@@ -28,7 +28,7 @@ from typing import Any, Callable
 import numpy as np
 
 __all__ = ["ANGLE_EPS", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
-           "frame", "orientation_rows", "ranked", "rotation", "span", "support", "voxels"]
+           "frame", "near_segments", "orientation_rows", "ranked", "rotation", "span", "support", "voxels"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
 # through a vertex or along an edge of a mesh built on round numbers (each crossing counted once).
@@ -453,6 +453,15 @@ def _nearest(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> tuple[np.ndarr
     s = np.clip(np.einsum("pkj,kj->pk", rel, ab) / np.where(length > 0, length, 1.0), 0.0, 1.0)
     near = a[None, :, :] + s[:, :, None] * ab[None, :, :]
     return np.linalg.norm(points[:, None, :] - near, axis=2), near
+
+
+def near_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray, chunk: int = 2048) -> np.ndarray:
+    """Each point's distance to the nearest of the segments ``starts[k] -> ends[k]``, ``chunk`` points at a
+    time (the points-by-segments table is never larger than that)."""
+    found = np.empty(len(points))
+    for at in range(0, len(points), chunk):
+        found[at:at + chunk] = _nearest(points[at:at + chunk], starts, ends)[0].min(axis=1)
+    return found
 
 
 def spread_points(tri: np.ndarray, cap: int = 4000) -> np.ndarray:

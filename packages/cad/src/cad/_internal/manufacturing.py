@@ -38,25 +38,37 @@ import json
 from collections import Counter
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 from cad._internal import dfm
+from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding, CheckResult
 
 __all__ = ["BREP_TYPES", "DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for", "finish", "options"]
 
+#: The enumerations ``process``, ``rules``, ``units`` and ``technology`` take, so the command's generated parser
+#: takes their values alone (each flag's choices); each is asserted against the modules that define it.
+Process = Literal["cnc", "sheet", "molding", "printing"]
+RuleSet = Literal["generic", "protolabs", "hubs", "xometry", "sendcutsend", "none"]
+Unit = Literal["mm", "cm", "m", "in", "ft"]
+Technology = Literal["fdm", "sls", "sla", "mjf", "pbf"]
 PROCESSES = dfm.PROCESSES
+assert get_args(Process) == PROCESSES
 #: The types measured on their B-rep (the build123d integration); the rest are meshes (trimesh), but a DXF,
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
 BREP_TYPES = ("model", "step", "xbf")
 CUT_TYPES = ("dxf",)
 #: Length units a mesh file may carry, as a factor to millimetres. An STL is unitless, so the caller says
 #: which one; the other types declare theirs.
-UNITS_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "ft": 304.8}
+UNITS_MM = dict(zip(get_args(Unit), (1.0, 10.0, 1000.0, 25.4, 304.8), strict=True))
 
 
 def _options() -> dict[str, dict[str, Any]]:
     return {process: dict(dfm.module(process).OPTIONS) for process in PROCESSES}
+
+
+assert set(get_args(RuleSet)) == {name for process in PROCESSES for name in dfm.module(process).RULE_SETS} | {"none"}
+assert get_args(Technology) == dfm.module("printing").TECHNOLOGIES
 
 
 #: Each process's own options and their defaults (``dfm.COMMON``'s are every process's, ``candidates`` too).
@@ -75,15 +87,16 @@ def _flag(name: str) -> str:
     return "--" + name.replace("_", "-")
 
 
-def _give_process(document_type: str, why: str = "") -> ValueError:
-    return ValueError(f"cad.{document_type}.dfm measures for a process{why}: give --process "
+def _give_process(document_type: str, why: str = "") -> ArgumentRefused:
+    return ArgumentRefused(f"cad.{document_type}.dfm measures for a process{why}: give --process "
                       f"{', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}")
 
 
 def options(document_type: str, process: str | None, given: dict[str, Any], *,
             candidates: bool = False) -> dict[str, Any] | None:
     """The options a check of ``process`` runs with: those ``given`` (None, or False for a flag: not given),
-    the defaults for the rest. ``ValueError`` naming the fix for no process or another, an option of another
+    the defaults for the rest. ``ArgumentRefused`` (a ``ValueError``; the command says it as the command
+    line's mistake, exit 2) naming the fix for no process or another, an option of another
     process, a pull beside ``candidates`` (which ranks every pull), ``candidates`` of a process that ranks
     none, a units the type does not take, a rule set the process has not, or a value out of range.
 
@@ -97,32 +110,32 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
         return _preflight(document_type, given, candidates)
     module = dfm.module(process)
     if document_type in CUT_TYPES and process != "sheet":
-        raise ValueError(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
+        raise ArgumentRefused(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
     own = {**dfm.COMMON, **module.OPTIONS}
     foreign = [name for name, value in given.items() if value is not None and value is not False and name not in own]
     if foreign:
         takes = ", ".join(_flag(name) for name in (*module.OPTIONS, *dfm.COMMON,
                                                     *(("candidates",) if process in _RANKED else ())))
-        raise ValueError(f"{', '.join(_flag(name) for name in foreign)} {'is' if len(foreign) == 1 else 'are'} not "
+        raise ArgumentRefused(f"{', '.join(_flag(name) for name in foreign)} {'is' if len(foreign) == 1 else 'are'} not "
                          f"{process}'s: a {process} check takes {takes}")
     if candidates and process not in _RANKED:
-        raise ValueError(f"--candidates ranks molding's pulls or printing's orientations; a {process} check has none")
+        raise ArgumentRefused(f"--candidates ranks molding's pulls or printing's orientations; a {process} check has none")
     if candidates and given.get("pull") is not None:
-        raise ValueError("--candidates ranks every pull: give it no --pull")
+        raise ArgumentRefused("--candidates ranks every pull: give it no --pull")
     resolved = {name: given[name] if given.get(name) is not None else default for name, default in own.items()}
     units = resolved["units"]
     if units not in UNITS_MM:
-        raise ValueError(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
+        raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
-        raise ValueError(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
     if resolved["rules"] != "none" and resolved["rules"] not in module.RULE_SETS:
-        raise ValueError(f"--rules for {process} is one of {', '.join((*module.RULE_SETS, 'none'))}, "
+        raise ArgumentRefused(f"--rules for {process} is one of {', '.join((*module.RULE_SETS, 'none'))}, "
                          f"not {resolved['rules']!r}")
     from cad._internal.dfm import materials
 
     materials.resolve(resolved.get("material"))
     if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
-        raise ValueError(f"a {process} check measures exact geometry -- radii, axes, thicknesses -- that a mesh "
+        raise ArgumentRefused(f"a {process} check measures exact geometry -- radii, axes, thicknesses -- that a mesh "
                          f"does not hold: check the part's STEP, xbf or model (cad step dfm, cad xbf dfm, cad model dfm)")
     module.validate(resolved, document_type)
     return resolved
@@ -133,16 +146,16 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
     takes, a units, a material, a rule set no process has, a pull beside ``candidates``. Each option of one
     process is judged once the declared process is read (``declared``)."""
     if candidates and given.get("pull") is not None:
-        raise ValueError("--candidates ranks every pull: give it no --pull")
+        raise ArgumentRefused("--candidates ranks every pull: give it no --pull")
     units = given.get("units")
     if units is not None and units != "mm":
         if units not in UNITS_MM:
-            raise ValueError(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
-        raise ValueError(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+            raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
+        raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
     chosen = given.get("rules")
     sets = sorted({name for process in PROCESSES for name in dfm.module(process).RULE_SETS})
     if chosen is not None and chosen != "none" and chosen not in sets:
-        raise ValueError(f"--rules is one of {', '.join((*sets, 'none'))}, not {chosen!r}")
+        raise ArgumentRefused(f"--rules is one of {', '.join((*sets, 'none'))}, not {chosen!r}")
     from cad._internal.dfm import materials
 
     materials.resolve(given.get("material"))
@@ -155,7 +168,7 @@ def declared(document_type: str, parts: list[tuple[str, Any]], given: dict[str, 
     ``bd_materials.FinishedMaterial`` or None), the options resolved for it (``options``) and the info finding
     that says so (``process_declared``). A declared technology or layer height is taken where none is
     given (``given``'s wins). ``dfm.Unmeasured`` (``process_mixed``) for parts that declare different
-    routes; ``ValueError`` naming the fix for none declared or one no check measures (cast, wrought)."""
+    routes; ``ArgumentRefused`` naming the fix for none declared or one no check measures (cast, wrought)."""
     from cad._internal.dfm import processes
 
     routes: dict[str, list[tuple[str, Any]]] = {}
@@ -197,7 +210,7 @@ def declared(document_type: str, parts: list[tuple[str, Any]], given: dict[str, 
     try:
         resolved = options(document_type, process, chosen, candidates=candidates)
     except ValueError as error:
-        raise ValueError(f"{error} (the process is {process}, the parts' declared {route}: give --process to "
+        raise ArgumentRefused(f"{error} (the process is {process}, the parts' declared {route}: give --process to "
                          f"check another)") from None
     assert resolved is not None
     detail = f" ({', '.join(took)})" if took else ""
@@ -341,16 +354,17 @@ def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict
     return resolved
 
 
+
 def dfm_for(document_type: str) -> Any:
     """``cad.<document_type>.dfm``: the manufacturing check, for a source of that type."""
 
     def dfm(
         source: Path,
         *,
-        process: str | None = None,
-        rules: str | None = None,
+        process: Process | None = None,
+        rules: RuleSet | None = None,
         material: str | None = None,
-        units: str | None = None,
+        units: Unit | None = None,
         axes: int | None = None,
         turning: bool = False,
         tools: str | None = None,
@@ -364,7 +378,7 @@ def dfm_for(document_type: str) -> Any:
         wall_limit: float | None = None,
         zero_tol: float | None = None,
         cavities: int | None = None,
-        technology: str | None = None,
+        technology: Technology | None = None,
         build_volume: str | None = None,
         angle_limit: float | None = None,
         samples: int | None = None,

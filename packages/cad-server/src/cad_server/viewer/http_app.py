@@ -226,7 +226,7 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
                   "kinematics, POST pose, POST mesh")
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
-                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, drc, source"}
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
 # A model's document has no file, so no source.
 _KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
@@ -902,6 +902,8 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
         if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
             return self._methods(request, {"GET": lambda: self._handle_board(request, response, path, rest[0])})
+        if kind == "kicad_pcb" and rest == ["models"]:
+            return self._methods(request, {"GET": lambda: self._handle_board_models(response, path)})
         if kind == "kicad_sch" and rest == ["plot"]:
             return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
@@ -1382,6 +1384,15 @@ class CadApp:
         if isinstance(body, Coded):
             send(request, response, status, body, "application/json; charset=utf-8", tag)
             return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_board_models(self, response, path):
+        """``GET /api/v1/documents/kicad_pcb/<id>/models``: the board's 3D models table (``plots.BoardAnswers.models``):
+        each model a footprint names, the STEP it is by a document id (known from now on, ``remember``) or why
+        it has none. It reads the board and ``stat``s the model files, and writes nothing."""
+        status, body = self.boards.models(path or "", self.remember)
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)

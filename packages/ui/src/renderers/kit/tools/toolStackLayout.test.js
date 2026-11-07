@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  DEFAULT_TOOL_STACK, FILE_SIDEBAR_MIN_WIDTH, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
-  clampToolPanelHeight, clampToolPanelWidth, fileSidebarSizeId, normalizeToolStack, toolPanelDefaultHeight
+  DEFAULT_TOOL_STACK, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
+  clampToolPanelHeight, clampToolPanelWidth, flatDetailHeight, normalizeToolStack, toolPanelDefaultHeight
 } from "./toolStackLayout.js";
 
 test("the layout is the sizes a person set, by panel, and the folded panels — nothing else, whatever a store hands back", () => {
@@ -18,10 +18,15 @@ test("the layout is the sizes a person set, by panel, and the folded panels — 
   assert.deepEqual(normalizeToolStack({ panels: { tree: { width: 99999 } } }).panels.tree, { width: 4000 }, "a stored size is bounded; the viewer bounds what is drawn");
 });
 
-test("each file sidebar section's panel keeps a size of its own, as narrow as the sidebar may be", () => {
-  assert.deepEqual([fileSidebarSizeId("tree"), fileSidebarSizeId(null)], ["sidebar:tree", "sidebar"]);
-  assert.deepEqual(normalizeToolStack({ panels: { "sidebar:tree": { width: 12, height: 300 }, "sidebar:position": { width: 240 }, "sidebar:": { width: 200 }, "sidebar:a:b": { width: 200 } } }).panels,
-    { "sidebar:tree": { width: FILE_SIDEBAR_MIN_WIDTH, height: 300 }, "sidebar:position": { width: 240 } });
+test("the old shared form of the view's panel's tab, by the kind of file, reads as it was written until the panel drops it: a word for a word, nothing else", () => {
+  assert.deepEqual(normalizeToolStack({ tabs: { board: "layers", schematic: "sheets", "Not an id": "layers", dxf: 3, sdf: "Layers!" } }).tabs,
+    { board: "layers", schematic: "sheets" });
+  assert.equal("tabs" in normalizeToolStack({ tabs: {} }), false, "no tab chosen is no key");
+});
+
+test("the view's panel's old shared width reads as a panel's until the panel drops it; the old floating sidebar's sizes are nobody's", () => {
+  assert.deepEqual(normalizeToolStack({ panels: { flat: { width: 260 }, "sidebar:tree": { width: 200, height: 300 }, "sidebar:position": { width: 240 } } }).panels,
+    { flat: { width: 260 } });
 });
 
 test("every panel is a six-tool strip wide; a resizable one is only ever wider, up to half the viewer", () => {
@@ -45,4 +50,18 @@ test("every resizable panel opens capped at the whole stack, on desktop and phon
   assert.equal(toolPanelDefaultHeight(600), 600);
   assert.equal(toolPanelDefaultHeight(600.4), 600);
   assert.equal(toolPanelDefaultHeight(0), null, "an unmeasured stack sets no cap yet");
+});
+
+test("the Selected pane fits its content up to min(320px, 40% of the panel), and a person's height wins within the bounds", () => {
+  assert.equal(flatDetailHeight({ panelHeight: 900 }).height, 320, "content not measured: the cap");
+  assert.equal(flatDetailHeight({ panelHeight: 500 }).height, 200);
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 131 }).height, 131, "content under the cap: fitted");
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 50 }).height, 96, "never under the minimum");
+  assert.equal(flatDetailHeight({ panelHeight: 900, content: 700 }).height, 320, "past the cap it scrolls");
+  assert.equal(flatDetailHeight({ panelHeight: 500, content: 700 }).height, 200);
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200, content: 131 }).height, 200, "a kept height is not resized by content");
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200 }).height, 200);
+  assert.deepEqual(flatDetailHeight({ panelHeight: 400, kept: 300 }), { height: 240, max: 240 }, "the lists keep 160px");
+  assert.equal(flatDetailHeight({ panelHeight: 0 }).height, 96, "unmeasured: the minimum");
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200, draft: 400 }).height, 400, "a drag wins over the kept height");
 });

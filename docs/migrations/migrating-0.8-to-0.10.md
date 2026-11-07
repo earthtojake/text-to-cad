@@ -72,10 +72,12 @@ opens again once its script runs (`cad run model.py`), and the old cache folder 
 deleted, as can the old state folder once nothing of 0.8 runs. A `CAD_STATE_DIR` you set names a folder that moves
 nowhere.
 
-**6. Updates come by themselves**: the CAD server installs a newer release once it is
-out and switches to it once nothing is running. `cad update auto off` (or Automatic
-updates in the menu under CAD's logo) leaves them to you: the update button in the CAD
-Viewer and the CAD app, `cad update`, or the install command again.
+**6. Updates come by themselves**: the CAD server installs a newer release that breaks
+nothing once it is out (a patch release before 1.0, a patch or minor release from 1.0) and
+switches to it once nothing is running; one that may break something waits for you.
+`cad update auto off` (or Automatic updates in the menu under CAD's logo) leaves them all
+to you: the update button in the CAD Viewer and the CAD app, `cad update`, or the install
+command again.
 
 **7. The engine's HTTP API is `/api/v1`**: a script that read the engine's port by hand reads
 `GET /api/v1/server` for 0.8's `/__cad/server` and `/__cad/version`, a document by its id at

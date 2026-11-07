@@ -35,7 +35,7 @@ export const SCHEMATIC_FILE = /\.kicad_sch$/i;
 /**
  * A `.kicad_sch` is a flat view, as a board is: the backend reads the hierarchy from its files and
  * answers a sheet at a time (`GET /api/v1/documents/kicad_sch/<id>/plot?sheet=<path>`), and the client
- * paints it on a canvas, with Select, Annotate and Measure, its Hierarchy and Circuit in the file sidebar,
+ * paints it on a canvas, with Select, Annotate and Measure, its Hierarchy and Circuit in the view's panel,
  * and its Export. Registering loads no three.js, no viewport and no backend connection.
  *
  * It still opens a render session it never draws from, as a board does: that session is what registers

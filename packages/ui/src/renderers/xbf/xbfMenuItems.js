@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { english } from "../../i18n/core.js";
 import { useI18n } from "@cad/ui/i18n";
+import { menuEntry, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 
 // An engine document's menus, which read as the STEP renderer's did.
 //
@@ -17,13 +18,8 @@ import { useI18n } from "@cad/ui/i18n";
 // header, and nothing replaced them. Framing cannot contradict the active tool,
 // and every action here returns to Select first anyway (`partMenuActions`). Every item is said in
 // the language of the `t` the caller hands over (English unless it does).
-function AssemblyContextMenuItemLabel({ children }) {
-  return <span className="min-w-0 truncate">{children}</span>;
-}
-
-const entry = (id, text, disabled, onSelect, separatorBefore = false) => ({
-  id, label: <AssemblyContextMenuItemLabel>{text}</AssemblyContextMenuItemLabel>, disabled: disabled === true, separatorBefore, onSelect
-});
+// The entries are the kit's (`kit/shell/viewMenu.js`), every view's menu's: the same words, ids and framing.
+const entry = (id, text, disabled, onSelect, separatorBefore = false) => menuEntry(id, text, { disabled, onSelect, separatorBefore });
 
 /**
  * The framing group, identical wherever the menu was asked for: over a part, over a
@@ -33,10 +29,9 @@ const entry = (id, text, disabled, onSelect, separatorBefore = false) => ({
  */
 function zoomEntries(menu, { disabled = false, actions = {}, t = english } = {}) {
   const run = (action) => () => action?.(menu);
-  return [
-    entry("zoom-fit", t("menu.zoomToFit"), disabled, run(actions.onZoomFit), true),
-    entry("zoom-selection", t("menu.zoomToSelection"), disabled || menu.zoomSelectionAvailable !== true, run(actions.onZoomSelection))
-  ];
+  const [fit, selection] = zoomGroup({ onZoomFit: run(actions.onZoomFit), onZoomSelection: run(actions.onZoomSelection),
+    selectionAvailable: menu.zoomSelectionAvailable === true, disabled, t });
+  return [{ ...fit, separatorBefore: true }, selection];
 }
 
 /**
@@ -51,9 +46,7 @@ function zoomEntries(menu, { disabled = false, actions = {}, t = english } = {})
  * when there is nothing to copy. What goes to the agent goes through Quick Edit, which a pick opens.
  */
 function referenceEntries(menu, { disabled = false, actions = {}, t = english } = {}) {
-  const run = (action) => () => action?.(menu);
-  const copyDisabled = disabled || !String(menu.copyText || "").trim();
-  return [entry("copy-reference", t("menu.copyReference"), copyDisabled, run(actions.onCopyReference))];
+  return referenceGroup({ copyText: menu.copyText, onCopy: () => actions.onCopyReference?.(menu), disabled, t });
 }
 
 export function assemblyPartMenuEntries(menu, { disabled = false, actions = {}, t = english } = {}) {

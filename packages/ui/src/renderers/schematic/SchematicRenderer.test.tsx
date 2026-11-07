@@ -96,7 +96,7 @@ async function open({ colorScheme = 'light' } = {}) {
   }
   render(<Pane />);
   const pane = screen.getByTestId('pane');
-  return { pane, get controller() { return controller; }, dispose: () => client.dispose() };
+  return { pane, get controller() { return controller; }, get state() { return latest; }, dispose: () => client.dispose() };
 }
 
 const canvasOf = (pane: HTMLElement) => pane.querySelector<HTMLCanvasElement>('[data-schematic-surface] canvas[data-schematic-sheet]')!;
@@ -122,7 +122,7 @@ const zoomIn = async (pane: HTMLElement) => {
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 
-it('opens on the root sheet, read with the index, drawn in the theme, with a Hierarchy and a Circuit and no view controls', async () => {
+it('opens on the root sheet, read with the index, drawn in the theme, its panel the Parts, the Nets, then the Hierarchy, and its zoom the corner pill', async () => {
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
@@ -130,14 +130,23 @@ it('opens on the root sheet, read with the index, drawn in the theme, with a Hie
   await waitFor(() => expect(drawn.includes('light')).toBe(true));
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  // No view controls on the strip: its zoom is the corner's pill.
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
+  // The panel: one search over every tab, the Parts open first.
+  const panel = pane.querySelector<HTMLElement>('[data-flat-panel]')!;
+  expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Search');
+  expect(within(panel).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Hierarchy', 'false']]);
+  fireEvent.click(within(panel).getByRole('tab', { name: 'Hierarchy' }));
   // The Hierarchy: the root by its file's name, Load under it, the root shown.
   const rows = [...pane.querySelectorAll<HTMLElement>('[data-schematic-sheet-row]')];
   expect(rows.map(row => [row.dataset.schematicSheetRow, row.textContent])).toEqual([['/', 'divider1'], ['/Load/', 'Load2']]);
   expect(within(rows[0]).getByRole('button', { name: 'Show sheet divider' }).getAttribute('aria-current')).toBe('page');
-  // The Circuit: a block per sheet, shut while it holds several parts, then the Nets, shut.
-  const blocks = [...pane.querySelectorAll<HTMLElement>('[data-schematic-row^="sheet:"], [data-schematic-row^="group:"]')].map(row => row.dataset.schematicRow);
-  expect(blocks).toEqual(['sheet:/', 'sheet:/Load/', 'group:nets']);
+  // The Parts: a block per sheet, shut while it holds several parts; the Nets a list of their own.
+  const blocks = [...pane.querySelectorAll<HTMLElement>('[data-flat-panel-section="parts"] [data-schematic-row]')].map(row => row.dataset.schematicRow);
+  expect(blocks).toEqual(['sheet:/', 'sheet:/Load/']);
+  expect([...pane.querySelectorAll<HTMLElement>('[data-flat-panel-section="nets"] [data-schematic-row]')].map(row => row.dataset.schematicRow))
+    .toEqual(['net:/MID', 'net:+5V', 'net:GND', 'net:VOUT', 'group:unconnected']);
   expect(pane.querySelector('[data-schematic-row="part:R1"]')).toBeNull();
   // Its Export is KiCad's: the PDF, the SVGs, the netlist and the BOM.
   expect(exportChoices({ file: '/models/divider.kicad_sch', planar: false }).map(choice => choice.format)).toEqual(['pdf', 'svg', 'netlist', 'bom']);
@@ -153,6 +162,7 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   // The root zoomed in before leaving it: coming back finds it as it was left.
   await zoomIn(pane);
   const left = { ...frames.at(-1)! };
+  await user.click(within(pane).getByRole('tab', { name: 'Hierarchy' }));
   await user.click(within(pane).getByRole('button', { name: 'Show sheet Load' }));
   await onSheet(pane, '/Load/');
   expect(reads).toEqual(['?sheet=%2F', '?sheet=%2FLoad%2F&index=0']);
@@ -160,7 +170,9 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   expect(pane.querySelector('[data-schematic-trail]')).toBeNull();
   const fitted = { ...frames.at(-1)! };
   expect(fitted.scale).toBeLessThan(left.scale);
-  await user.click(within(pane).getByRole('button', { name: 'Show sheet divider' }));
+  // A sheet found by the panel's search is shown from its hit, the tree stepping aside.
+  fireEvent.change(within(pane).getByRole('textbox', { name: 'Search the schematic' }), { target: { value: 'divid' } });
+  await user.click(within(pane.querySelector<HTMLElement>('[data-flat-panel-section="hierarchy"] [data-flat-panel-hit]')!).getByRole('button', { name: 'Show sheet divider' }));
   await onSheet(pane, '/');
   await waitFor(() => expect(frames.at(-1)).toEqual(left));
   // The sheet's symbol, double-clicked, enters it: read before, so read no more.
@@ -168,19 +180,49 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   await onSheet(pane, '/Load/');
   expect(reads).toHaveLength(2);
   expect((await controllerOf(view)).readState().schematicDisplay.sheet).toBe('/Load/');
+  // Each sheet's view is kept with the file, so a reopen finds the root where it was left.
+  await waitFor(() => expect(JSON.stringify(view.state)).toContain(`"views":{"/":{"scale":${left.scale}`));
+  // The menu over bare paper in a sheet entered goes up one; Zoom to fit is there too.
+  const right = { ...point([20, 20]), button: 2, pointerId: 3 };
+  fireEvent.pointerDown(canvasOf(pane), right);
+  fireEvent.pointerUp(canvasOf(pane), right);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Up one sheet', 'Zoom to fit', 'Zoom to selection']);
+  await user.click(within(menu).getByRole('menuitem', { name: 'Up one sheet' }));
+  await onSheet(pane, '/');
   view.dispose();
 });
 
-it('a press picks what is under it and reveals its row; a net from the tree lights; a part on another sheet shows that sheet', async () => {
+// A double-click fits under Select alone, as in every view: under Measure (or Pencil, Shapes) it is the tool's.
+it('a double-click on bare paper fits under Select, and under Measure leaves the view where it is', async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const fitted = { ...frames.at(-1)! };
+  await zoomIn(pane);
+  const zoomed = { ...frames.at(-1)! };
+  await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getByRole('button', { name: /^Measure/ }));
+  fireEvent.dblClick(canvasOf(pane), point([20, 20]));
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(frames.at(-1)!.scale).toBe(zoomed.scale);
+  await user.click(within(pane.querySelector<HTMLElement>('[data-cad-toolbar]')!).getAllByRole('button', { name: /^Select/ })[0]);
+  fireEvent.dblClick(canvasOf(pane), point([20, 20]));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
+  view.dispose();
+});
+
+it('a press picks what is under it and reveals its row; a net from the Nets lights, its pins under the lists; a part on another sheet shows that sheet', async () => {
   const user = userEvent.setup();
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
   const controller = await controllerOf(view);
   await zoomIn(pane);
-  // R1's body, in the middle of its symbol: its part, its row revealed under its opened block.
+  // R1's body, in the middle of its symbol: its part, said under the lists, its block opened and its row brought into view.
   tap(pane, [101.6, 59.69]);
   await waitFor(() => expect(selected(controller)).toEqual(['#R1']));
+  expect(pane.querySelector('[data-schematic-detail-head]')!.textContent).toBe('R1');
   await waitFor(() => expect(pane.querySelector('[data-schematic-row="part:R1"] button[aria-pressed="true"]')).not.toBeNull());
   // The MID label's text, then its wire to the sheet: each by its uuid.
   tap(pane, [115.2, 63.4]);
@@ -190,12 +232,25 @@ it('a press picks what is under it and reveals its row; a net from the tree ligh
   // Nothing: nothing.
   tap(pane, [20, 20]);
   await waitFor(() => expect(selected(controller)).toEqual([]));
-  // The Nets opened, /MID pressed: the net selected, on the sheet shown.
-  await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="group:nets"]')!).getByRole('button', { name: /Expand/ }));
+  // /MID pressed in the Nets: the net selected, on the sheet shown, its pins under the lists.
+  await user.click(within(pane).getByRole('tab', { name: 'Nets' }));
   await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="net:/MID"]')!).getByRole('button', { name: 'Select /MID' }));
   expect(selected(controller)).toEqual(['#net:/MID']);
   expect(canvasOf(pane).dataset.schematicSheet).toBe('/');
-  // C1 is on Load alone: selecting it shows Load.
+  expect([...pane.querySelectorAll('[data-flat-panel-detail] [data-schematic-detail-row]')].map(row => row.textContent)).toEqual(['C1.1', 'R1.2', 'R2.1']);
+  // C1 is on Load alone: pressed in the Parts, Load is shown, at its own view.
+  await user.click(within(pane).getByRole('tab', { name: 'Parts' }));
+  await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="sheet:/Load/"]')!).getByRole('button', { name: 'Expand Load' }));
+  await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="part:C1"]')!).getByRole('button', { name: 'Select C1' }));
+  await onSheet(pane, '/Load/');
+  expect(selected(controller)).toEqual(['#C1']);
+  // A double-click frames it there.
+  const atView = { ...frames.at(-1)! };
+  await user.dblClick(within(pane.querySelector<HTMLElement>('[data-schematic-row="part:C1"]')!).getByRole('button', { name: 'Select C1' }));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(atView.scale));
+  // Selected from outside, it shows its sheet too.
+  await controller.select('#R1');
+  await onSheet(pane, '/');
   await controller.select('#C1');
   await onSheet(pane, '/Load/');
   expect(selected(controller)).toEqual(['#C1']);

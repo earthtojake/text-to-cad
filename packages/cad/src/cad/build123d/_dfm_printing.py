@@ -593,16 +593,6 @@ def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, 
     return zones
 
 
-def _near_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
-    """Each point's distance to the nearest of the segments."""
-    d = ends - starts
-    length2 = np.maximum((d * d).sum(axis=1), 1e-300)
-    rel = points[:, None, :] - starts[None, :, :]
-    t = np.clip((rel * d[None]).sum(axis=2) / length2[None], 0.0, 1.0)
-    closest = starts[None] + t[..., None] * d[None]
-    return np.linalg.norm(points[:, None, :] - closest, axis=2).min(axis=1)
-
-
 def _walls(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, every, where = [], [], []
@@ -619,7 +609,7 @@ def _walls(ctx: Context) -> dict[str, Any]:
                 points = np.array([info.samples[k].point for _, k, _ in thickness])
                 keep = np.ones(len(points), dtype=bool)
                 for starts, ends, depth in zones:
-                    keep &= _near_segments(points, starts, ends) > depth + ctx.tol
+                    keep &= mo.near_segments(points, starts, ends) > depth + ctx.tol
                 thickness = [row for row, kept in zip(thickness, keep) if kept]
                 if not thickness:
                     continue

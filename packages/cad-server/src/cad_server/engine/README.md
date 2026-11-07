@@ -301,13 +301,16 @@ lines `update.log`.
 default (`cad_server.auto_updates`: the `updates` section of `settings.json`, `cad update auto`, the app
 menu's Automatic updates) -- the engine asks as it tends itself (`Daemon.tend`,
 `Update.automatic`) whether a release newer than its own is known: the feed as last read, read again
-in the background once an hour, or an agent app's newer server. **It takes patch releases only**
-(`auto_updates.takes`: 0.11.0 to 0.11.1, never to 0.12.0). A patch release carries nothing a person or
-an agent must change for, so it may land under a running agent thread unannounced; a minor or major
-release may rename a command or need a migration guide, so it waits for a click, the update button
-offering it as ever, and `cad status` says it is out. The release process holds a patch to that: a
-patch release may add, never rename or remove, and never comes with a migration guide. A patch
-release is installed at once, in the
+in the background once an hour, or an agent app's newer server. **It takes a release that breaks
+nothing, as Semantic Versioning numbers it** (`auto_updates.takes`): a breaking change bumps the major
+from 1.0 and the minor below it, so the engine takes a patch or minor release from 1.0 (1.4.2 to 1.4.3
+or 1.5.0) and a patch release below it (0.11.0 to 0.11.1). Such a release carries nothing a person or
+an agent must change for, so it may land under a running agent thread unannounced; one that bumps the
+breaking part (1.9.3 to 2.0.0; 0.11.3 to 0.12.0 or 1.0.0) may rename a command or need a migration
+guide, so it waits for a click, the update button offering it as ever, and `cad status` says it is out.
+The release process holds a release to that: one the engine takes may add, and may move a library name
+whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
+migration guide. Such a release is installed at once, in the
 background -- its folder, and its own `cad setup --engine-update` with `CAD_UPDATE_PREPARE=1`, which
 registers it and makes its base and stops there, so nothing of the apps or the engine changes -- and
 the rest, its setup whole (the apps' plugins) and the switch above, waits until the engine is idle:
@@ -346,8 +349,8 @@ stop`, a crash, a reboot and an update until the token is rotated, the session i
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, with no
-engine running (it refuses while one runs), and every link and session
-made before stops working. `cad status` says the
+engine running (it refuses while one runs) and once the person says yes (**Consent**, `--yes`), and
+every link and session made before stops working. `cad status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
 
@@ -447,10 +450,12 @@ verbosity) key nothing. What it adds is two things:
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
   build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
-  runs, an `export`, none; a type alone, `from cad import step`, none), and each of cad's decorators it
-  applies (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
+  runs, an `export`, none; a type's edit its integration, `kicad_pcb.edit` kicad; a type alone, `from cad
+  import step`, none) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
-  (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
+  (`--with build123d`); and for a bare command, the integration that declares it (`kicad-cli`: the
+  kicad integration's, the registry's `commands`). `--with cad[...]` adds to either. None found: the
+  core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming
   the device's release (`extras.pinned`: `plate.py's header pins cad to ==0.9.0, and this device runs
   cad 0.10.0: drop the pin, ...`); a pin of the device's own release is as none, and an unpinned
@@ -460,7 +465,14 @@ verbosity) key nothing. What it adds is two things:
   cache, with the base's link mode, find-links and index settings; with no engine of its installation
   answering, `cad run` makes it itself. Then `cad run`, which may run in an agent's sandbox, runs the
   program with that environment's Python, in the caller's folder and environment, its folder last on
-  its module search path (`cad._internal.program`). The environment of the build123d integration
+  its module search path (`cad._internal.program`). A command is the environment's own file, never
+  one on PATH; one an integration declares runs through that integration's `_command` module in the
+  environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
+  script; with a kicode that has none, `kicode.executable()`), headless in private homes
+  (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
+  libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
+  the person's), its arguments, stdio and exit code kicad-cli's, and never the one
+  `CAD_KICAD_CLI` names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
 **What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.
@@ -653,7 +665,9 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              uv run, cad pinned at this release with the integrations
                                              the program's imports use: the models the script
                                              explicitly calls (and python SCRIPT.py in an environment
-                                             of the library's, with its kernel)
+                                             of the library's, with its kernel); a command an
+                                             integration declares (kicad-cli) with that integration,
+                                             headless
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
 cad model export ID DST [DST ...] [--tolerance MM] [--json]
@@ -680,12 +694,12 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
-cad xbf|step dfm SRC --process cnc [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
-cad xbf|step dfm SRC --process sheet [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+cad model|xbf|step dfm SRC --process cnc [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
+cad model|xbf|step dfm SRC --process sheet [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
-cad xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
+cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
                 [--zero-tol DEG] [--cavities N] [--units U] [--candidates]
-cad xbf|step|stl|glb|threemf dfm SRC --process printing [--technology fdm|sls|sla|mjf|pbf]
+cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--technology fdm|sls|sla|mjf|pbf]
                 [--build-volume XxYxZ] [--angle-limit DEG] [--layer-height H] [--nozzle D]
                 [--samples N] [--units U] [--candidates]
 cad dxf dfm FILE --process sheet [--thickness T] [--kerf W] [--sheet-size XxY]
@@ -694,17 +708,33 @@ cad dxf dfm FILE --process sheet [--thickness T] [--kerf W] [--sheet-size XxY]
                                              exact geometry the build123d integration's (findings at
                                              face refs), a mesh the trimesh integration's (at x, y, z);
                                              the rule set's verdicts and every measurement
-cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
-cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
+cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
+                                             KiCad's DRC and fabrication outputs, by kicad-cli; the board
+                                             in one look, by the library's reader
+cad kicad_sch erc SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
+                                             KiCad's ERC and the schematic's outputs, by kicad-cli, run on
+                                             the project's root sheet whichever sheet is named
+cad kicad_sch inspect SCHEMATIC [REF] [--json]
+                                             its sheets, parts and nets; with REF (#U3, #U3.7, #net:VBUS,
+                                             #sheet:/Power/, #wire:<uuid>), what that names
+cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display light|dark|JSON] [...]
+                                             one sheet drawn flat (the root unless --sheet names another)
+cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
+                                             each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
-                                             file of yours
+                                             file of yours. Asked first; --dry-run says what and how many
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
 (`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
 has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
-before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`). A model's document
+before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
+file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
+there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
+names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
+schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
 is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
 one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
 the same way. The commands are the server's
@@ -725,13 +755,48 @@ one, nor does an MCP host closing its session.
 and debugging only: it runs in this process, cold, and no document is served: no page, and
 nothing for `inspect` to read by its id.
 
-A verb's `--json` (`export`, `snapshot`, `status`, `stop`, `delete`) prints its answer as one JSON object
-on stdout, and a failure as `{"ok": false, "error": ...}` there too, exit status 1, so a caller
-reading stdout always finds an answer (`cli.answered`); without `--json` a failure is its words
-on stderr, exit 2 for a request refused by name before anything ran and 1 for one that failed.
-A refusal keeps its type across the daemon: the worker answers its kind beside its words
-(`worker.refusal`) and the caller raises it as that type (`api._failed`), so a pose a document
-lacks is refused the same, exit 2, whether a worker or the caller's own process refused it.
+**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help step export`) -- prints
+the help on stdout and exits 0, and does nothing else: it moves no earlier release's state, writes nothing
+and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
+person reads, and nothing is sent by default until it is said.
+
+**Consent.** A command that destroys -- `cad uninstall` (and `--purge`), `cad delete`, `cad doctor --prune`,
+`cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
+says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
+nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
+without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
+(`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
+installing is what was asked, and the install command passes `--yes` to an uninstall, which a person asked
+for by `--uninstall`.
+
+**The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
+sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
+command or an option it does not take, an argument missing or out of range, a file of another type, an
+input that is not there, a destructive command where no one can be asked and no `--yes` -- which fails
+the same way until the call changes; 1 for a failure of the work (a build, a render, an export, a tool,
+the engine out of reach, a mistake of ours, a destructive command the person said no to); 130 for an
+interrupt (Ctrl-C). A command's `--json` prints
+its answer as one JSON object on stdout, and every failure as one JSON document there too, so a caller
+reading stdout always finds an answer, with nothing else on stdout and no traceback (`--verbose`, where
+a command takes it, puts one on stderr):
+
+```
+{"ok": false, "error": "part.glb is a glb, not a stl: use cad glb snapshot", "reason": "wrong_type"}
+```
+
+`reason` is one of a fixed set, added to and never renamed (`cli_errors.REASONS`): `usage` (a command,
+option or argument the command line got wrong), `invalid_argument` (a value refused by name before
+anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
+there, a document the engine has no record of or does not hold), `confirmation_required` (with
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`,
+`engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
+failure is its words on stderr. A
+command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are
+read by the one parser, which takes no abbreviation of an option -- `--js` is no `--json` -- and suggests
+at most one option, choice or command it is closest to, never running it). A refusal keeps its type
+across the daemon: the worker answers its kind beside its words (`worker.refusal`) and the caller raises
+it as that type (`api._failed`), so a pose a document lacks is refused the same, exit 2, whether a worker
+or the caller's own process refused it.
 
 `python SCRIPT.py` executes normal Python. Decoration only registers a model;
 imports and definitions build nothing. A call such as `arm()` asks the daemon to
@@ -856,7 +921,14 @@ A served STEP is read in a reader process of the server's, never in the daemon
 (the XCAF reader's working memory is many times its result's, and its allocator
 keeps it): one read per process, the next process started and warm meanwhile,
 answering the structure and each part's shape bytes, which are all the daemon
-keeps. The read is held by the file's bytes, so the same bytes served again --
+keeps. Reads that come while one is under way (a board's part models: 22 files at once on
+KiCad's "video" demo) are read beside it by up to three helper processes (`serve.READERS`: four
+reads at once at most, and never every core), each reading up to 16 files before it goes: only
+files of at most 8 MB (what such a parse leaves in a process is about 100 MB), never under memory
+pressure, and the helpers go once no read has been under way for 10 seconds, so with no page
+reading the daemon's children are what they were. A larger file waits for the one reader. Measured
+on a 10-core Mac, that board's 22 models: 19.0 s to read one at a time in fresh processes, 3.0 s
+so. The read is held by the file's bytes, so the same bytes served again --
 the file touched, copied, or put back -- are not parsed again while the daemon
 lives, and a part's key is made from those bytes and its label, so its mesh is
 not made again either. A STEP is read outside the server's lock (every other
@@ -901,20 +973,31 @@ it (`model.check_result`): for the document and each file the model declares, ex
 must take the value (`registry.producer_for`), else the build fails, naming what the type is made of
 and the integration that would take the value. Today the build123d integration's producers take a
 build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
-(`document.py`) and its translations (`export.translate`) -- make the files, as before. A producer that
-declares (`Producer.declare`) decides what its type's decorator does with what it decorates, found by
-`registry.declarer_for`: the kicad integration's `@kicad_pcb` makes a board script, which runs in the
-caller's process through kicode's headless `api-server` and KiPy (`cad.kicad._session`), never in a
-worker, and a `@step`, `@glb` or `@dxf` stacked on one is written from the saved board by `kicad-cli` (the
-board and its parts in 3D, or its outline and holes). Every other
-decorated function is the engine's model.
+(`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
+
+**Edits.** A KiCad board or schematic is no producer's: it is changed in place by its type's edit
+(`cad.registry.Edit`), `with kicad_pcb.edit(path) as board:` and `with kicad_sch.edit(path) as
+schematic:`, run in the caller's process, never in a worker or the daemon (`cad.kicad._session.edit`): a
+private headless `kicad-cli api-server` on the file (kicode's, in private KiCad homes), KiPy connected to
+it and the open document handed to the block -- a schematic's project symbol libraries loaded first; a file
+not there yet made by KiCad (`CreateDocument`) -- and saved at the block's end when the block changed it
+or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
+inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
+declared, and nothing is written from the edited file but what explicit calls after the block write
+(`kicad_pcb.export`, `kicad_pcb.drc`, `kicad_sch.export`, `kicad_sch.erc`).
 
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
 runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
 without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
-repeats). `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
+repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
+choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
+parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
+`ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
+(`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
+reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
+its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
@@ -1074,8 +1157,8 @@ answers in frames; today's children keep their bulk in frames as they always hav
 document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
 STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
 which run with no daemon too) and the processes that outlive the engine (the telemetry sender, an
-update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's,
-count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
+update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's
+and its helpers', count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
 machine, below; 2.3 GB parsing a 354 MB STEP).
 
 **The protocol** (`cad.engine.frames`), every service's: requests are one JSON object per line on the
@@ -2491,8 +2574,9 @@ assign it to `material.pbr`. The existing controls use their native PBR names:
 `transmission`, `attenuation_color`, `attenuation_distance` (metres), `clearcoat`,
 `clearcoat_roughness`, `emissive`, `emissive_intensity`, and `opacity`. Base `color` floats
 are sRGB ratios; emission and attenuation floats are linear RGB. Hex strings are converted
-by the upstream library. Shape colours and plain face paints keep their sRGB hex,
-0–255 integer and build123d `Color` inputs; documents and glTF base factors use linear RGB.
+by the upstream library. Shape colours keep build123d's sRGB inputs (a hex string, a name, a
+`Color`, 0–1 floats: its setter refuses 0–255 integers), and plain face paints take sRGB hex, 0–255
+integers and a build123d `Color`; documents and glTF base factors use linear RGB.
 
 XBF stores the native physical dataclass, the complete resolved PBR data, including
 embedded textures and texture transforms, and the part's declared manufacturing process
@@ -2673,8 +2757,9 @@ tube is 47 segments round at the engine's tolerance, its facets 0.095 mm deep; 2
 0.01). Each part is meshed at the finer of its own deflection and the ceiling, so a tolerance never
 makes a part coarser than the viewer draws it -- most of a robot's parts are under 60 mm across,
 where a quarter per cent is already finer than 0.05 mm, and meshed coarser their faces were seen to
-lose triangles. It is meshed for that file alone and never cached, so the viewer, the snapshot and
-every other export keep the engine's mesh; the file says what it was meshed to
+lose triangles. An explicit tolerance also sets `ForceFaceDeflection`, so loose edge tolerances do
+not override the requested face deflection. It is meshed for that file alone and never cached, so the
+viewer, the snapshot and every other export keep the engine's mesh; the file says what it was meshed to
 (**Translation formats**). It is refused by name for any other kind (a GLB is the viewer's own
 mesh) and for a mesh file's source, whose triangles are the file's. Since which faces the mesher
 leaves without triangles changes with the tolerance, the export names each part it left faces of,
@@ -2738,7 +2823,8 @@ measures nothing: the lists alone.
 **What an inspection costs.** It meshes nothing: it reads the structure through the engine's door
 (`Server.read`), which sends no part to the mesher, where a page's read sends every part not held
 yet, as it is about to ask for them all. What it measures of a part as a whole -- its volume, its
-solids and its box in its own frame (`mesh.measured`) -- are the part's facts, kept by its geometry
+solids, how many of them are inside out (`inverted`) and its box in its own frame (`mesh.measured`)
+-- are the part's facts, kept by its geometry
 key beside its tessellation (`serve.FactCache`), under the same memory budget and evicted after the
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
 in the cache folder would be a derived file (law 2), and the cache holds a document's bytes alone.
@@ -2966,7 +3052,7 @@ below holds it, so a document of one part takes its elements by the document's n
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
 JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
-path, or a document's id (a model's, which `python SCRIPT.py` prints, or a file's), and must be the
+path, or a document's id (a model's, which `cad run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds
 it. A canonical ref -- what `inspect` answers --

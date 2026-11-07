@@ -29,8 +29,11 @@ import { boardAirwires } from "./airwires.js";
  * toward white on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad
  * is the side looked at), its holes and its airwires: thin, under everything a person points at.
  */
-const overlayTheme = (selection, rgb, { dim, airwire }) => Object.freeze({
+const overlayTheme = (selection, rgb, { dim, airwire, inkEdge }) => Object.freeze({
   selection,
+  // The ink's keyline (`drawing2d/marks.js`'s `keyline`): ink in a neon over copper of its own hue
+  // reads by its edge, as the canvas's contrast, dark on the dark canvas and light on the light one.
+  inkKeyline: Object.freeze({ color: inkEdge, width: 1.25 }),
   hover: `rgba(${rgb}, 0.55)`,
   dim,
   part: `rgba(${rgb}, 0.10)`,
@@ -47,8 +50,8 @@ const overlayTheme = (selection, rgb, { dim, airwire }) => Object.freeze({
   airwire
 });
 export const BOARD_OVERLAY_THEMES = Object.freeze({
-  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)" }),
-  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)" })
+  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)", inkEdge: "rgba(0, 0, 0, 0.85)" }),
+  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)", inkEdge: "rgba(255, 255, 255, 0.95)" })
 });
 /** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
 export function boardOverlayColors(scheme) {

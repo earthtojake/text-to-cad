@@ -1,6 +1,7 @@
 """A reader or mesh child that dies must not disable the shared engine daemon until restart: the
 next read or mesh rebuilds the pool, as the STEP path already does. Covers serve.Server._readers
-and serve.Mesher.processes self-healing a broken ProcessPoolExecutor."""
+and serve.Mesher.processes self-healing a broken ProcessPoolExecutor, and where a STEP read goes
+when reads come at once (``Server._reading``: the reader, else one of its helpers)."""
 
 from __future__ import annotations
 
@@ -66,6 +67,55 @@ class PoolRecoveryTest(unittest.TestCase):
         rebuilt = mesher.processes()
         self.assertIsNot(rebuilt, first)
         self.assertTrue(first.shut)
+
+
+class ReaderLanesTest(unittest.TestCase):
+    """A board's part models come at once: small files are read beside the one reader, by helpers
+    that go once no read is under way; a large file, or any under memory pressure, waits for it."""
+
+    def setUp(self):
+        FakePool.instances = []
+        saved = {name: getattr(serve, name) for name in ("READERS", "HELPERS_LINGER")}
+        self.addCleanup(lambda: [setattr(serve, name, value) for name, value in saved.items()])
+        real = serve.concurrent.futures.ProcessPoolExecutor
+        self.addCleanup(setattr, serve.concurrent.futures, "ProcessPoolExecutor", real)
+        serve.concurrent.futures.ProcessPoolExecutor = FakePool
+        serve.READERS, serve.HELPERS_LINGER = 4, 0.01
+        server = self.server = serve.Server.__new__(serve.Server)
+        server.foreign_lock = threading.Lock()
+        server.reader = server.helpers = server.helpers_idle = None
+        server.reading = {"reader": 0, "all": 0}
+        server.pressure = serve.Pressure()
+        server.pressure.simulate(False)
+        server.stopping = threading.Event()
+
+    def test_small_reads_at_once_go_beside_the_reader_and_its_helpers_go_once_none_is_under_way(self):
+        server = self.server
+        self.assertEqual(server._reading(40_000), "reader", "the reader, warm, takes a read when it is free")
+        self.assertEqual([server._reading(40_000) for _ in range(3)], ["helpers"] * 3)
+        self.assertEqual(server._reading(serve.HELPER_BYTES + 1), "reader", "a large file waits for the one reader")
+        server.pressure.simulate(True)
+        self.assertEqual(server._reading(40_000), "reader", "under memory pressure nothing is read beside it")
+        helpers = server._helpers()
+        for lane in ("reader", "helpers", "helpers", "helpers", "reader", "reader"):
+            server._read_done(lane)
+        self.assertEqual(server.reading, {"reader": 0, "all": 0})
+        server.helpers_idle.join()
+        self.assertIsNone(server.helpers)
+        self.assertTrue(helpers.shut, "the helpers went once no read was under way")
+
+    def test_a_read_that_comes_before_the_helpers_go_keeps_them(self):
+        server = self.server
+        server.reading["reader"] = server.reading["all"] = 1
+        self.assertEqual(server._reading(40_000), "helpers")
+        helpers = server._helpers()
+        server._read_done("helpers")
+        server._read_done("reader")
+        waiting = server.helpers_idle
+        self.assertEqual(server._reading(40_000), "reader")
+        waiting.join()
+        self.assertIs(server.helpers, helpers)
+        self.assertFalse(helpers.shut)
 
 
 if __name__ == "__main__":

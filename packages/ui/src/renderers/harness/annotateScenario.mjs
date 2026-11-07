@@ -14,7 +14,7 @@ import { PNG } from 'pngjs';
 
 // The chrome over the viewport (the strip and its panels, the cube and its axes, menus) and the
 // stroke preview: none of it is ink in the model.
-const HIDDEN = '[data-cad-tool-groups], [data-file-sidebar-room], [aria-label="View cube"], [data-slot=popover-content], '
+const HIDDEN = '[data-cad-tool-groups], [data-flat-panel-pill], [aria-label="View cube"], [data-slot=popover-content], '
   + '[data-cad-annotation-overlay] canvas { visibility: hidden !important; }';
 // Neon red (#ff2d55, the pen's default) and neon green (#39ff14). The fixture's parts are blue and
 // grey-blue, neither of them red or green.

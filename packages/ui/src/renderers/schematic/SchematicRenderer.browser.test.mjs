@@ -5,11 +5,12 @@ import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
+import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { SCHEMATIC_COLORS, SCHEMATIC_DARK_COLORS, fitPlotTransform, layoutPlot, pageToScreen } from '@cad/core/lib/plot2d/index.js';
 
 // A schematic's one load path, in a real browser: the COMMITTED payload (`__fixtures__/schematic.plot.json`,
 // the Python suite's divider), served a sheet at a time as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=`
-// serves it, painted on a real canvas in the host's theme — the sheet's paper on the app's grey — and a
+// serves it, painted on a real canvas in the host's theme — the sheet's paper on the app's canvas — and a
 // press on a wire's pixels picking it and lighting it. What the tab offers is the jsdom suite's.
 const SCHEMATIC = JSON.parse(await readFile(new URL('./__fixtures__/schematic.plot.json', import.meta.url), 'utf8'));
 const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
@@ -68,10 +69,10 @@ const near = (left, right, tolerance = 40) => Math.abs(left[0] - right[0]) + Mat
 const hex = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
 
 for (const [scheme, paper, surround, lit] of [
-  ['dark', SCHEMATIC_DARK_COLORS.background, '#292929', [141, 197, 255]],
-  ['light', SCHEMATIC_COLORS.background, '#E5E5E5', [31, 111, 235]]
+  ['dark', SCHEMATIC_DARK_COLORS.background, APP_THEME_COLORS.dark.canvas, [141, 197, 255]],
+  ['light', SCHEMATIC_COLORS.background, APP_THEME_COLORS.light.canvas, [31, 111, 235]]
 ]) {
-  test(`in the ${scheme} theme the sheet is its paper on the app's grey, and a press on a wire lights it`, async (t) => {
+  test(`in the ${scheme} theme the sheet is its paper on the canvas, and a press on a wire lights it`, async (t) => {
     const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
     t.after(() => page.close());
     page.setDefaultTimeout(20000);
@@ -87,7 +88,7 @@ for (const [scheme, paper, surround, lit] of [
     const layout = layoutPlot({ ...SCHEMATIC, sheets: [SCHEMATIC.sheets[0]] });
     const transform = fitPlotTransform(layout, Math.round(canvas.width), Math.round(canvas.height), { top });
     const at = ([x, y]) => pageToScreen(transform, x, y);
-    assert.ok(near(pixel(fitted, 2, canvas.height - 2), hex(surround), 12), `the app's grey round the sheet: ${pixel(fitted, 2, canvas.height - 2)}`);
+    assert.ok(near(pixel(fitted, 2, canvas.height - 2), hex(surround), 12), `the canvas round the sheet: ${pixel(fitted, 2, canvas.height - 2)}`);
     const [inX, inY] = at([20, 20]);
     assert.ok(near(pixel(fitted, inX, inY), hex(paper), 12), `the paper: ${pixel(fitted, inX, inY)}`);
     // The MID wire to the sheet Load (y = 64.77, x 101.6..127): drawn as the sheet draws it, until a press lights it.

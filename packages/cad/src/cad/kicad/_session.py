@@ -1,26 +1,38 @@
-"""``@kicad_pcb("board.kicad_pcb")``: a persistent board script, run through KiCad's IPC API.
+"""``kicad_pcb.edit(path)`` and ``kicad_sch.edit(path)``: a KiCad board or schematic edited in place, through
+KiCad's IPC API, in a ``with`` block::
 
-The board file is the source; the decorated function edits it::
+    from cad import kicad_pcb, kicad_sch
 
-    from cad import dxf, kicad_pcb, step
+    with kicad_sch.edit("design.kicad_sch") as s, kicad_pcb.edit("design.kicad_pcb") as b:
+        ...                                # s, b: KiPy's open Schematic and Board (kicode's)
 
-    @step("board.step")                    # the saved board's STEP, by kicad-cli (--subst-models)
-    @dxf("board.dxf")                      # its outline and holes (a @glb stacks the same way)
-    @kicad_pcb("board.kicad_pcb")          # beside the script, as the engine's decorators' paths are
-    def board(b):                          # b: KiPy's open Board (kicode.board.Board)
-        ...
+An edit is no producer: the file is the source, changed where it is, in the caller's process. Entering the
+block starts a private, headless ``kicad-cli api-server --socket <path> <file>`` (the finder and the private
+homes of ``_program``: kicode's kicad-cli and ``kicode.environment``; one ``CAD_KICAD_CLI`` names without
+``api-server``, any stable KiCad's for now, refused before it starts; ``--socket`` takes a plain path, KiPy
+the ``ipc://`` form) and connects KiPy (kicode's, ``kicode.KiCad``) to it: ready when it answers, never when a
+path appears (Windows serves a named pipe, no file). One server holds a project (a board and a schematic of
+one ``.kicad_pro``): an edit of the other file of a project an enclosing edit already serves joins that
+server, KiCad opening the file in it (``OpenDocument``), and the server stops when the edit that started it
+ends.
 
-    if __name__ == "__main__":
-        board()
+The block is handed the open document. A file not there yet is made by KiCad (``CreateDocument``, with its
+project where it has none). On a normal exit the document is saved when the block changed it (KiCad's own
+``is_document_modified``) or KiCad made it, so a block that changes nothing leaves the file byte for byte, in
+its own format; when the block raises, nothing is saved and the exception goes on. A save is whole or none:
+when KiCad's fails (it may have written some files of a hierarchy first), every file the save writes -- the
+document, its project and, for a schematic, each sheet file of its hierarchy as KiCad holds it -- is put
+back as it was, a file it made is removed, and the edit raises ``KicadRunError`` with KiCad's words and what
+its server logged. Each document of a
+shared server is saved at its own block's exit, by the same rules. A ``.kicad_prl`` (KiCad's local
+settings) the edit made beside its file is removed once its server stops, and so is a folder made for a new
+file that ends with no file in it.
 
-A call runs it: a private, headless ``kicad-cli api-server --socket <path> <board>`` (the finder and the
-private homes of ``_program``: kicode's kicad-cli and ``kicode.environment``; one ``CAD_KICAD_CLI`` names
-without ``api-server``, any stable KiCad's for now, refused before it starts; ``--socket`` takes a plain
-path, KiPy the ``ipc://`` form), KiPy (kicode's, ``kicode.KiCad``) connected to it (ready
-when it answers, never when a path appears: Windows serves a named pipe, no file), the function handed the
-open board, the board saved when the function returns and nothing saved when it raises; then the server
-stopped and its folder removed, whatever happened. The files stacked on it (``@step``, ``@glb``, ``@dxf``)
-are written from the saved board afterwards, each by its producer (``cad.registry``).
+A schematic's symbol libraries are its project's own ``sym-lib-table`` (beside the ``.kicad_pro``,
+``${KIPRJMOD}`` its folder), which KiCad reads; they are loaded before the block runs (headless, KiCad loads
+none until asked), and a placement from a library the project does not have is refused in one line naming
+the library and how to add it. The server's KiCad homes are private, with no global table: a person's own
+KiCad configuration is never read or written.
 
 KiPy's ``KiCad.check_version()`` is never called: kicode's KiPy is the one built with its kicad-cli, and a
 kicad-cli ``CAD_KICAD_CLI`` names may be another nightly's, which KiPy still reads and edits. Upstream
@@ -38,88 +50,23 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from pkgutil import resolve_name
 from typing import Any
 
 from ._program import (KicadRunError, check_api_server, check_version, find_kicad_cli, kicad_version, private_run,
                        quiet)
 
-__all__ = ["BoardRun", "BoardScript", "declare", "run"]
+__all__ = ["edit"]
 
-# How long kicad-cli api-server may take to answer for its board, and to stop when asked.
+# How long kicad-cli api-server may take to answer for its document, and to stop when asked; how long a
+# schematic's symbol libraries may take to load.
 START_SECONDS = 120.0
 STOP_SECONDS = 10.0
+LIBRARY_SECONDS = 120.0
 _POLL = 0.05
-
-
-@dataclass
-class BoardScript:
-    """A function ``@kicad_pcb`` declared: the board it edits and the files stacked on it."""
-
-    function: Callable[[Any], Any]
-    board: Path
-    outputs: list[tuple[str, Path]] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        self.__name__ = getattr(self.function, "__name__", "board")
-        self.__doc__ = getattr(self.function, "__doc__", None)
-
-    def __call__(self) -> "BoardRun":
-        return run(self)
-
-
-@dataclass(frozen=True)
-class BoardRun:
-    """What a run of a board script did: the board it saved and the files it wrote from it."""
-
-    board: Path
-    written: tuple[Path, ...]
-
-
-def _beside(function: Callable[..., Any], out: Any) -> Path:
-    """``out`` resolved beside the script that defines ``function``, as the engine's decorators resolve theirs."""
-    path = Path(os.fspath(out)).expanduser()
-    if path.is_absolute():
-        return path
-    source = getattr(getattr(function, "__code__", None), "co_filename", None)
-    folder = Path(source).resolve().parent if source and os.path.isfile(source) else Path.cwd()
-    return folder / path
-
-
-def declare(out: Any, *, name: str | None = None) -> Callable[[Callable[[Any], Any]], BoardScript]:
-    """``@kicad_pcb(out)``: the function edits the board at ``out``, a ``.kicad_pcb`` beside its script."""
-    if out is None or not isinstance(out, (str, os.PathLike)) or not os.fspath(out):
-        raise TypeError("@kicad_pcb requires the board's path: @kicad_pcb(\"board.kicad_pcb\")")
-    if Path(os.fspath(out)).suffix.lower() != ".kicad_pcb":
-        raise ValueError(f"@kicad_pcb(out=...): the file must end in .kicad_pcb, not {os.fspath(out)!r}")
-    if name is not None:
-        raise TypeError("@kicad_pcb takes no name=: a board script is its board, not a model")
-
-    def apply(function: Callable[[Any], Any]) -> BoardScript:
-        if isinstance(function, BoardScript) or not callable(function):
-            raise TypeError("@kicad_pcb decorates a function of one argument, the open board")
-        return BoardScript(function, _beside(function, out))
-
-    return apply
-
-
-def declare_output(kind: str, script: BoardScript, out: Any) -> BoardScript:
-    """A file stacked on a board script (``@step("board.step")``, ``@glb``, ``@dxf``), written from its saved
-    board. Its path ends in its type's extension, as the engine's decorators check theirs."""
-    from cad.registry import DOCUMENT_TYPES
-
-    extensions = DOCUMENT_TYPES[kind].extensions
-    if Path(os.fspath(out)).suffix.lower() not in extensions:
-        raise ValueError(f"@{kind}(out=...): the file must end in {' or '.join(extensions)}, not {os.fspath(out)!r}")
-    path = _beside(script.function, out)
-    if any(existing == kind for existing, _ in script.outputs):
-        raise TypeError(f"board script {script.__name__!r} declares @{kind} twice")
-    script.outputs.insert(0, (kind, path))
-    return script
 
 
 # A Unix socket's path is at most 104 bytes on macOS (108 on Linux), and a sandbox's TMPDIR can be deep.
@@ -153,7 +100,7 @@ def _socket(folder: Path) -> Iterator[Path]:
         finally:
             shutil.rmtree(short, ignore_errors=True)
         return
-    raise KicadRunError(f"a board script's KiCad api-server listens on a socket whose path is at most {_SOCKET_PATH_MAX} "
+    raise KicadRunError(f"an edit's KiCad api-server listens on a socket whose path is at most {_SOCKET_PATH_MAX} "
                         f"bytes, and no folder here gives one ({'; '.join(why)}): set TMPDIR to a shorter folder this "
                         "program may write, then run it again")
 
@@ -184,10 +131,13 @@ def _stopped_on_signals(server: subprocess.Popen) -> Iterator[None]:
             signal.signal(getattr(signal, name), handler)
 
 
-def _format_of(board: Path) -> str | None:
-    """The board file's format, its ``(version YYYYMMDD)``."""
-    with board.open("rb") as file:
-        head = file.read(512).decode("utf-8", "replace")
+def _format_of(path: Path) -> str | None:
+    """A board's or a schematic's file format, its ``(version YYYYMMDD)``; None for a file not there."""
+    try:
+        with path.open("rb") as file:
+            head = file.read(512).decode("utf-8", "replace")
+    except FileNotFoundError:
+        return None
     found = re.search(r"\(version\s+(\d+)\)", head)
     return found.group(1) if found else None
 
@@ -206,10 +156,11 @@ def _kipy() -> Any:
     """KiPy's ``KiCad`` class (kicode's), imported before any server is started: without it there is nothing
     to run."""
     try:
-        from kicode import KiCad  # pyrefly: ignore[missing-import] - the kicad extra, installed where a board script runs
+        from kicode import KiCad  # pyrefly: ignore[missing-import] - the kicad extra, installed where an edit runs
     except ImportError:
-        raise ImportError("a @kicad_pcb script edits its board through KiCad's IPC API, whose client and kicad-cli "
-                          "are the kicad extra's (kicode): install cad[kicad], or run the script with cad run") from None
+        raise ImportError("kicad_pcb.edit and kicad_sch.edit change a file through KiCad's IPC API, whose client and "
+                          "kicad-cli are the kicad extra's (kicode): install cad[kicad], or run the script with cad run"
+                          ) from None
     return KiCad
 
 
@@ -224,99 +175,321 @@ def _connecting(error: BaseException) -> bool:
     return isinstance(error, OSError) or type(error).__name__ == "ConnectionError"
 
 
-def _board(kicad: Any, server: subprocess.Popen, log: Path) -> Any:
-    """The open board, once the server answers for it. Ready is a connection, on every OS: KiPy dials the
+def _document(kicad: Any, server: subprocess.Popen, log: Path, kind: "_Kind", path: Path, create: bool) -> Any:
+    """The open document, once the server answers for it. Ready is a connection, on every OS: KiPy dials the
     server and pings it until it answers (a connection error until it listens), and the server says it is
-    not ready to reply until it has loaded the board. Any other refusal, a server that exits, or one that
-    has not answered within ``START_SECONDS``, is a failure."""
-    deadline, listened = time.monotonic() + START_SECONDS, False
+    not ready to reply until it has loaded the file. A file not there yet is made first (``create``: KiCad's
+    ``CreateDocument``, once the server listens). Any other refusal, a server that exits, or one that has not
+    answered within ``START_SECONDS``, is a failure."""
+    deadline, listened, made = time.monotonic() + START_SECONDS, False, not create
     while True:
         try:
             kicad.ping()
             listened = True
-            return kicad.get_board()
+            if not made:
+                kicad.create_document(str(path), kind.doctype())
+                made = True
+            return getattr(kicad, kind.getter)()
         except Exception as error:  # noqa: BLE001 - KiPy's errors, by kind and by the words it says while loading
             if not _connecting(error) and "not ready" not in str(error).lower():
                 raise
             if server.poll() is not None:
                 said = quiet(log.read_text(encoding="utf-8", errors="replace")) if log.exists() else ""
-                stage = "loaded the board" if listened else "listened"
+                stage = f"loaded the {kind.noun}" if listened else "listened"
                 raise KicadRunError(f"kicad-cli api-server stopped before it {stage} (exit status "
                                     f"{server.returncode})" + (f": {said}" if said else "")) from None
             if time.monotonic() > deadline:
-                stage = "load the board" if listened else "answer"
+                stage = f"load the {kind.noun}" if listened else "answer"
                 raise KicadRunError(f"kicad-cli api-server did not {stage} within {START_SECONDS:g} s") from None
         time.sleep(_POLL)
 
 
-def run(script: BoardScript, *, cli: Path | None = None) -> BoardRun:
-    """Run ``script`` on its board: saved when the function returns, untouched when it raises."""
-    board = script.board
-    if not board.is_file():
-        raise FileNotFoundError(f"no board {board}: a @kicad_pcb script edits a saved board; make it in KiCad first")
-    kicad = _kipy()
+@dataclass(frozen=True)
+class _Kind:
+    """What an edit opens: a board or a schematic -- the word for it, its document type's id, KiPy's getter of
+    the open document and KiCad's document type for it."""
+
+    noun: str
+    type_id: str
+    getter: str
+    doctype_name: str
+
+    def doctype(self) -> Any:
+        from kicode.proto.common.types import DocumentType  # pyrefly: ignore[missing-import] - the kicad extra
+
+        return getattr(DocumentType, self.doctype_name)
+
+
+_BOARD = _Kind("board", "kicad_pcb", "get_board", "DOCTYPE_PCB")
+_SCHEMATIC = _Kind("schematic", "kicad_sch", "get_schematic", "DOCTYPE_SCHEMATIC")
+_KINDS = {".kicad_pcb": _BOARD, ".kicad_sch": _SCHEMATIC}
+
+
+def _modified(document: Any) -> bool:
+    """Whether the function changed the open document since it was loaded (KiCad's own modified state). A
+    server that cannot say (a nightly ``CAD_KICAD_CLI`` names that predates the request) is answered as
+    changed, so the document is saved as it was before the rule."""
+    try:
+        return bool(document.is_document_modified())
+    except Exception as error:  # noqa: BLE001 - KiPy's ApiError, by kind
+        if type(error).__name__ == "ApiError" or isinstance(error, AttributeError):
+            return True
+        raise
+
+
+@contextmanager
+def _made_for(path: Path) -> Iterator[None]:
+    """``path``'s folder, made for KiCad to make the file in (the edit's path is the request), and removed
+    again, as far up as this made it, when the edit leaves no file there."""
+    made = [folder for folder in (path.parent, *path.parent.parents) if not folder.exists()]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        yield
+    finally:
+        if not path.exists():
+            for folder in made:
+                try:
+                    folder.rmdir()
+                except OSError:
+                    break
+
+
+@contextmanager
+def _local_settings_as_found(path: Path) -> Iterator[None]:
+    """A ``.kicad_prl`` (KiCad's local settings: the editor's view of the project) an edit makes beside
+    ``path`` is removed afterwards; one that was there is never touched."""
+    prl = path.with_suffix(".kicad_prl")
+    was = prl.exists()
+    try:
+        yield
+    finally:
+        if not was:
+            try:
+                prl.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _library_of(lib_id: Any) -> str:
+    """The library nickname of a symbol's id: ``"Device"`` of ``"Device:R"`` or of a ``LibraryIdentifier``."""
+    if isinstance(lib_id, str):
+        return lib_id.partition(":")[0]
+    return str(getattr(lib_id, "library", "") or getattr(getattr(lib_id, "proto", None), "library_nickname", ""))
+
+
+def _no_library(nickname: str, table: Path, have: list[str]) -> str:
+    """The one line a placement from a library the project does not list says: the library, the project's table
+    (or that it has none), and the row that adds it."""
+    row = f'(lib (name "{nickname}")(type "KiCad")(uri "${{KIPRJMOD}}/{nickname}.kicad_sym")(options "")(descr ""))'
+    if table.is_file():
+        return (f"no symbol library {nickname!r} in this project's sym-lib-table ({table}, which lists "
+                f"{', '.join(have) or 'none'}): add {row} to it, the uri naming the library's .kicad_sym file, "
+                "and run the script again")
+    return (f"no symbol library {nickname!r}: this project has no sym-lib-table ({table}), and its symbol "
+            f"libraries are that table's alone; write it, (sym_lib_table (version 7) {row}), the uri naming the "
+            "library's .kicad_sym file, and run the script again")
+
+
+def _with_libraries(kicad: Any, schematic: Any, path: Path) -> Any:
+    """The open schematic, its project's symbol libraries loaded first (headless, KiCad loads none until it is
+    asked; its ``place_symbol_from_library`` says "symbol not found" until then), and a placement from a
+    library the project does not list refused before KiCad is asked, in one line: the library, the
+    project's table, and the row that adds it. A library listed that did not load is said once, here, and
+    named again by a placement from it."""
+    from kicode.proto.common.types.library_types_pb2 import LibraryLoadStatus, LibraryType  # pyrefly: ignore[missing-import]
+    from kicode.schematic import Schematic  # pyrefly: ignore[missing-import] - the kicad extra
+
+    kicad.load_all_libraries(LibraryType.LT_SYMBOL)
+    statuses = kicad.wait_for_libraries(LibraryType.LT_SYMBOL, timeout_s=LIBRARY_SECONDS)
+    libraries = {status.nickname: status for status in statuses}
+    loaded = LibraryLoadStatus.LLS_LOADED
+    for nickname, status in libraries.items():
+        if status.status != loaded:
+            message = getattr(status, "error_message", "") or "it did not load"
+            print(f"warning: symbol library {nickname} did not load: {message}", file=sys.stderr)
+    table = path.parent / "sym-lib-table"  # KiCad reads the project's own, in its folder
+
+    class ProjectSchematic(Schematic):  # pyrefly: ignore[invalid-inheritance]
+        """KiPy's Schematic, its placements from a library checked against the project's libraries."""
+
+        def place_symbol_from_library(self, lib_id: Any, *args: Any, **options: Any) -> Any:
+            nickname = _library_of(lib_id)
+            status = libraries.get(nickname)
+            if status is None:
+                raise LookupError(_no_library(nickname, table, sorted(libraries)))
+            if status.status != loaded:
+                raise LookupError(f"symbol library {nickname!r} did not load: "
+                                  f"{getattr(status, 'error_message', '') or 'KiCad gave no reason'}")
+            return super().place_symbol_from_library(lib_id, *args, **options)
+
+        def for_sheet(self, sheet: Any) -> Any:
+            scoped = super().for_sheet(sheet)
+            return ProjectSchematic(scoped.client, scoped.document)
+
+    return ProjectSchematic(schematic.client, schematic.document)
+
+
+@dataclass
+class _Server:
+    """One headless api-server, serving a project's board and schematic to the edits of this thread: KiPy's
+    client of it, the files its edits have open, and what is undone once it stops (``after``: a folder made
+    for a new file, the local settings KiCad wrote); ``log``, what the server says."""
+
+    client: Any
+    open: set[Path] = field(default_factory=set)
+    after: ExitStack = field(default_factory=ExitStack)
+    said: set[Path] = field(default_factory=set)  # the projects KiCad made for its edits, said once
+    log: Path | None = None
+
+
+def _saved_files(opened: Any, path: Path, kind: _Kind) -> list[Path]:
+    """The files a save of ``opened`` may write: ``path``, its project's ``.kicad_pro`` and, for a schematic,
+    every sheet file of its hierarchy as KiCad holds it (a sheet the block made among them), and the
+    schematics beside it."""
+    files = [path, path.with_suffix(".kicad_pro")]
+    if kind is _SCHEMATIC:
+        try:
+            sheets = list(opened.get_hierarchy())
+        except Exception:  # noqa: BLE001 - KiPy's ApiError: a server without the request; the files beside it
+            sheets = []
+        files += [path.parent / name for name in (getattr(sheet, "filename", "") for sheet in sheets) if name]
+        files += sorted(path.parent.glob("*.kicad_sch"))
+    return list(dict.fromkeys(Path(os.path.abspath(file)) for file in files))
+
+
+def _logged(log: Path | None, since: int) -> str:
+    """The errors the server logged after byte ``since`` of its log, one line."""
+    if log is None:
+        return ""
+    try:
+        with log.open("rb") as file:
+            file.seek(since)
+            text = file.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    # wxWidgets stamps each line with the time ("01:47:22 PM: ", a narrow no-break space before PM on macOS).
+    lines = [re.sub(r"^\d\d:\d\d:\d\d(\s?[AP]M)?:\s*", "", line.strip()) for line in quiet(text).splitlines()]
+    return "; ".join(line for line in lines if "error" in line.lower())
+
+
+def _save(opened: Any, path: Path, kind: _Kind, server: _Server) -> None:
+    """``opened`` saved whole, or none of it: when KiCad's save fails, each file it may have written is put back
+    as it was (one it made removed) and ``KicadRunError`` says why, in KiCad's words and its server's log."""
+    from cad._internal.atomic_replace import write_bytes_atomic
+
+    files = _saved_files(opened, path, kind)
+    kept = {file: file.read_bytes() if file.is_file() else None for file in files}
+    since = server.log.stat().st_size if server.log is not None and server.log.exists() else 0
+    try:
+        opened.save()
+    except Exception as error:  # noqa: BLE001 - KiPy's ApiError, by kind: KiCad's own refusal
+        if type(error).__name__ != "ApiError":
+            raise
+        for file, data in kept.items():
+            try:
+                if data is None:
+                    file.unlink(missing_ok=True)
+                elif not file.is_file() or file.read_bytes() != data:
+                    write_bytes_atomic(file, data)
+            except OSError:
+                pass
+        said = str(error).removeprefix("KiCad returned error: ")
+        logged = _logged(server.log, since)
+        raise KicadRunError(f"KiCad could not save {path.name}: {said}" + (f" ({logged})" if logged else "")
+                            + "; nothing is saved: every file the save writes is as it was") from None
+
+
+# The servers the edits of this process run, by project: its folder, its name and the thread editing it.
+_SERVERS: dict[tuple[Path, str, int], _Server] = {}
+
+
+def _project(path: Path) -> tuple[Path, str, int]:
+    return path.parent, path.stem, threading.get_ident()
+
+
+@contextmanager
+def _serving(path: Path, kind: _Kind, create: bool, cli: Path | None, kicad: Any) -> Iterator[tuple[_Server, Any]]:
+    """A new server for ``path``'s project, with ``path`` opened in it (made by KiCad when ``create``):
+    yields the server, registered for the project's other file to join, and the open document; stopped, its
+    folder removed and what it leaves undone afterwards, whatever happened."""
     if cli is None:
         cli = find_kicad_cli()
         check_version(cli, kicad_version(cli))
     check_api_server(cli)
-    before = _format_of(board)
-    with private_run("cad-kicad-api-", cli) as (folder, env), _socket(folder) as socket:
-        log = folder / "api-server.log"
-        with log.open("w", encoding="utf-8") as said:
-            server = subprocess.Popen([str(cli), "api-server", "--socket", str(socket), str(board)], env=env,
-                                      stdin=subprocess.DEVNULL, stdout=said, stderr=subprocess.STDOUT)
-            try:
-                with _stopped_on_signals(server):
-                    opened = _board(_client(kicad, socket), server, log)
-                    script.function(opened)  # a raise leaves the board as it was: nothing is saved
-                    opened.save()
-            finally:
-                _stop(server)
-        after = _format_of(board)
-        if before and after and before != after:
-            print(f"warning: {board.name} is saved in the board format of the KiCad that ran it ({after}, was "
-                  f"{before}): a KiCad older than that can no longer open it", file=sys.stderr)
-        written = tuple(_write_outputs(script, cli, folder))
-    return BoardRun(board, written)
+    with ExitStack() as after:
+        if create:
+            after.enter_context(_made_for(path))
+        after.enter_context(_local_settings_as_found(path))
+        with private_run("cad-kicad-api-", cli) as (folder, env), _socket(folder) as socket:
+            log = folder / "api-server.log"
+            command = [str(cli), "api-server", "--socket", str(socket), *([] if create else [str(path)])]
+            with log.open("w", encoding="utf-8") as said:
+                process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=said,
+                                           stderr=subprocess.STDOUT)
+                key = _project(path)
+                try:
+                    with _stopped_on_signals(process):
+                        client = _client(kicad, socket)
+                        opened = _document(client, process, log, kind, path, create)
+                        server = _Server(client, {path}, after, log=log)  # what a joining edit leaves undone goes there too
+                        _SERVERS[key] = server
+                        yield server, opened
+                finally:
+                    _SERVERS.pop(key, None)
+                    _stop(process)
+        # Here, once the server has stopped (KiCad writes its local settings until then), ``after`` undoes
+        # what the edits left: the local settings they made, a folder made for a file that is not there.
 
 
-def _write_outputs(script: BoardScript, cli: Path, folder: Path) -> list[Path]:
-    """Each file stacked on the script, written from the saved board by its producer's writer."""
-    from cad.registry import producer_for
-
-    written = []
-    for kind, path in script.outputs:
-        producer = producer_for(kind, script, where=f"board script {script.__name__}")
-        writer = resolve_name(producer.writer)
-        written.append(writer(script.board, path, cli=cli, scratch=folder))
-    return written
-
-
-def _write(to: str, suffix: str, board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's ``to`` export (``cad.kicad._export``: what is said beside it, a part without its 3D
-    model, said on stderr), moved into place at ``out``."""
-    from ._export import export
-
-    made = export(board, to, scratch / to, cli=cli)
-    written = next(path for path in made if path.suffix.lower() == suffix)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(written, out)
-    print(f"wrote {out}", file=sys.stderr)
-    return out
+def _join(server: _Server, kind: _Kind, path: Path, create: bool) -> Any:
+    """``path`` opened in the project's server an enclosing edit started (made by KiCad when ``create``)."""
+    if path in server.open:
+        raise RuntimeError(f"{kind.type_id}.edit: {path} is open in an edit already; one edit a file")
+    if create:
+        server.after.enter_context(_made_for(path))
+    server.after.enter_context(_local_settings_as_found(path))
+    if create:
+        server.client.create_document(str(path), kind.doctype())
+    else:
+        server.client.open_document(str(path), kind.doctype())
+    server.open.add(path)
+    return getattr(server.client, kind.getter)()
 
 
-def write_step(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's STEP (``kicad-cli pcb export step --subst-models``), moved into place at ``out``."""
-    return _write("step", ".step", board, out, cli=cli, scratch=scratch)
-
-
-def write_glb(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's GLB (``kicad-cli pcb export glb --subst-models``), moved into place at ``out``; the
-    parts written without a 3D model named, as the STEP's are."""
-    return _write("glb", ".glb", board, out, cli=cli, scratch=scratch)
-
-
-def write_dxf(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's outline and drilled holes (``kicad-cli pcb export dxf``, Edge.Cuts, millimetres, as
-    ``cad kicad_pcb export --to dxf`` writes them), moved into place at ``out``."""
-    return _write("dxf", ".dxf", board, out, cli=cli, scratch=scratch)
+@contextmanager
+def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> Iterator[Any]:
+    """``kicad_pcb.edit(path)`` and ``kicad_sch.edit(path)``: the open board or schematic at ``path``, in a
+    ``with`` block (the module's doc). ``document_type`` is the type whose ``edit`` was called; a file of the
+    other is refused by name before anything starts."""
+    path = Path(os.fspath(path)).expanduser().absolute()
+    kind = _KINDS.get(path.suffix.lower())
+    if kind is None or kind.type_id != document_type:
+        found = f"a {kind.type_id}" if kind is not None else "no KiCad file"
+        raise ValueError(f"{path.name} is {found}, not a {document_type}"
+                         + (f": use cad.{kind.type_id}.edit" if kind is not None else ""))
+    if path.exists() and not path.is_file():
+        raise IsADirectoryError(f"{document_type}.edit: {path} is not a file")
+    create = not path.exists()
+    kicad = _kipy()
+    before, project = _format_of(path), path.with_suffix(".kicad_pro").exists()
+    with ExitStack() as stack:
+        server = _SERVERS.get(_project(path))
+        if server is None:
+            server, opened = stack.enter_context(_serving(path, kind, create, cli, kicad))
+        else:
+            opened = _join(server, kind, path, create)
+            stack.callback(server.open.discard, path)
+        if kind is _SCHEMATIC:
+            opened = _with_libraries(server.client, opened, path)
+        yield opened  # a raise leaves the file as it was: nothing is saved, and the exception goes on
+        saved = create or _modified(opened)
+        if saved:
+            _save(opened, path, kind, server)
+    if create:
+        made = None if project or path.with_suffix(".kicad_pro") in server.said else path.with_suffix(".kicad_pro")
+        server.said.add(path.with_suffix(".kicad_pro"))
+        print(f"made {path}, a new {kind.noun}" + (f", and its project {made.name}" if made else ""), file=sys.stderr)
+    after = _format_of(path)
+    if saved and before and after and before != after:
+        print(f"warning: {path.name} is saved in the {kind.noun} format of the KiCad that ran it ({after}, was "
+              f"{before}): a KiCad older than that can no longer open it", file=sys.stderr)

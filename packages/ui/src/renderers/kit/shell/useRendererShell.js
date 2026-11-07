@@ -9,8 +9,8 @@ import { useI18n } from "@cad/ui/i18n";
 import { DRAWING_SHORTCUTS, pressToolKey } from "../tools/toolShortcuts.js";
 import { useViewerHistory } from "./useViewerHistory.js";
 import { promptView, promptViews } from "../../../annotation/views.js";
-import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
-import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
+import { sceneEdgeColor } from "../look/canvasColor.js";
+import { useCanvasColor } from "../look/useCanvasColor.js";
 import { previewViewScene } from "../viewport/previewViewScene.js";
 import { CAD_ANNOTATION_DEFAULTS } from "../tools/annotate/AnnotationOverlay.jsx";
 import { annotationDocumentOf } from "../tools/annotate/annotation3d.js";
@@ -25,6 +25,7 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
+import { projectionControl } from "./useStageViewport.js";
 import { DISPLAY_MODE_OPTIONS } from "../view-settings/DisplayModeOptions.js";
 import { normalizeViewFeatures } from "@cad/core/common/viewSettings.js";
 import { useWhenSettled } from "./useWhenSettled.js";
@@ -137,7 +138,7 @@ const EMPTY = Object.freeze({});
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
  *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
  * @param {object | null} [options.animation]  The tools view's routine runtime (with its own `clock`),
- *   when the file has routines. They play from the file sidebar's Animation section, whose frame stays
+ *   when the file has routines. They play from the playbar under the model, whose frame stays
  *   on the model as a pose does. Preview's routine is its own, on its own scene (`RendererShell`'s
  *   `previewView.animation`).
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
@@ -245,7 +246,9 @@ export function useRendererShell({
   // A renderer whose own work needs the display settings BEFORE it can hand this hook a scene
   // — one that reads them while it is still deciding what to load — creates them itself and passes
   // them in. It is the same store either way; owning it here is a convenience, not a rule.
-  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings);
+  // The canvas (`--canvas`): the tools view's scene is drawn on it, as every view's content is.
+  const canvasColor = useCanvasColor(colorScheme === "dark");
+  const { display: displaySettings, preview: previewLook, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme, viewSettings, canvasColor);
   useLayoutEffect(() => { viewSettingsStore.configure({ features }); }, [viewSettingsStore, features]);
   // Before the first paint, like every later edit: through the store, never around it.
   useLayoutEffect(() => { viewSettingsStore.restore(restored.display, restored.preview); }, [viewSettingsStore, restored]);
@@ -354,13 +357,13 @@ export function useRendererShell({
   }, [scheduleSessionSave]);
 
   // ---- host chrome ----------------------------------------------------------
-  const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
-  const sceneBackdrop = useMemo(
+  // The box the scene fills: the colour the scene reaches its edges with, the canvas in the tools view.
+  const stageColor = useMemo(
     () => resolvedScene.view.background.enabled && resolvedScene.view.background.opacity === 1
       ? resolvedScene.view.background.color
-      : resolvedScene.view.background.enabled ? chromeBackdropColor
-        : sceneBackdropEdgeColor(resolvedScene.theme?.background, chromeBackdropColor),
-    [chromeBackdropColor, resolvedScene.theme, resolvedScene.view.background]
+      : resolvedScene.view.background.enabled ? canvasColor
+        : sceneEdgeColor(resolvedScene.theme?.background, canvasColor),
+    [canvasColor, resolvedScene.theme, resolvedScene.view.background]
   );
   // The tab's settings (`@cad/ui/tab-store`): the person's, in every file of the tab. Read
   // through their own normalizers, so a host that hands over less is still whole here.
@@ -539,6 +542,7 @@ export function useRendererShell({
   // selection can lose (`deleteSelection`: a measurement), and Escape lets go of it first.
   // The strip's tools as the frame last drew them (`RendererShell.jsx`): what a tool's letter takes up.
   const toolKeysRef = useRef([]);
+  const zoomKeysRef = useRef(null);
   const deleteSelectionRef = useRef(deleteSelection);
   deleteSelectionRef.current = deleteSelection;
   // Everything Select has picked that can go: the annotation's ink and the renderer's own; true if any went.
@@ -548,8 +552,16 @@ export function useRendererShell({
     if (ink) session.remove(session.selected);
     return Boolean(deleteSelectionRef.current?.()) || ink;
   }, []);
+  // The view's panel, as the shell drew it (`RendererShell.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or
+  // hides it, / opens it on its search.
+  const panelControl = useRef(null);
   useViewerShortcuts({
     viewerElement,
+    onChord: event => {
+      if (event.key !== "\\" || event.shiftKey || previewing || !panelControl.current) return false;
+      panelControl.current.toggle();
+      return true;
+    },
     onCopy: () => copyActionRef.current?.() || false,
     onDelete: () => !previewing && !annotateToolActive && deletePicked(),
     // ⌘Z and ⇧⌘Z walk the annotation's history, whatever tool is in hand; never in preview.
@@ -557,9 +569,11 @@ export function useRendererShell({
     onRedo: () => !previewing && historyRef.current.redo(),
     // A tool's letter takes it up, F frames the model (`toolShortcuts.js`), over the strip the frame
     // has on screen (`toolKeys`, RendererShell's); never in preview.
-    onKey: event => !previewing && !idle && pressToolKey(event, {
+    onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search() : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
-      fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } }),
+      fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),
+    // The zoom's keys (`pressZoomKey`): the strip's zoom (`zoomKeys`, RendererShell's); never in preview.
+    zoom: () => (!previewing && !idle ? zoomKeysRef.current : null),
     escapeActive: Boolean(escape.active || previewing || annotation.selected.length || (toolModes && toolMode !== toolModes.defaultMode)),
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
@@ -672,10 +686,7 @@ export function useRendererShell({
       for (const [group, change] of Object.entries(patch || {})) for (const field of Object.keys(change || {})) controls.changed(previewControl(group, field));
       viewSettingsStore.patchPreview(patch);
     }} />;
-  const projection = {
-    value: desiredScene.view.camera.projection,
-    onChange: value => { controls.used(`projection_${value}`); viewSettingsStore.patch({ camera: { projection: value } }); },
-  };
+  const projection = projectionControl(viewSettingsStore, desiredScene, value => controls.used(`projection_${value}`));
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
@@ -715,12 +726,12 @@ export function useRendererShell({
     viewSettings: { view: desiredScene.view, store: viewSettingsStore },
     // Frame-facing (RendererShell).
     frame: {
-      view, hostRef, hostElement, sceneBackdrop, modelKey, presentationKey, sceneScaleMode, scene,
+      view, hostRef, hostElement, stageColor, modelKey, presentationKey, sceneScaleMode, scene,
       viewerRef, previewViewRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       onCameraSettled: reportCameraSettled,
       preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
       runtimeLifecycle: stableRuntimeLifecycle,
-      previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, viewerLoading, loading, presentationState,
+      previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, panelControl, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyAnnotation, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
       // Quick Edit's: the file it is about, how a copied prompt spells its paths, its annotation, and
@@ -728,7 +739,7 @@ export function useRendererShell({
       resource, captureView, escape: escapeView, currentView, quickEditPrompt,
       // Select is the tool in hand (the default one), where a press on ink picks it before a part.
       selecting: !previewing && Boolean(toolModes) && toolMode === toolModes.defaultMode,
-      annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
+      annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, zoomKeys: zoomKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
       previewDesiredScene
     }
   };

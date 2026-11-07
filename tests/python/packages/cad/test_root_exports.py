@@ -132,11 +132,10 @@ class RootExports(unittest.TestCase):
             self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
                 ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
                 ("animations", inspect.Parameter.KEYWORD_ONLY)])
-        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf", "kicad_pcb"):
+        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
-                if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's
-                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
-                                     ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
+                self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
+                                 ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
                 # The type's decorator passes an STL's or a 3MF's mesh tolerance to the engine's; any other
                 # type's engine decorator refuses it, as Python refuses an unknown keyword.
                 self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name", "tolerance"])
@@ -158,26 +157,6 @@ class RootExports(unittest.TestCase):
         for call in (lambda: step(), lambda: step("a.step", "b"), lambda: step(path="a.step")):
             with self.subTest(call=call), self.assertRaises(TypeError):
                 call()
-
-    def test_a_board_script_takes_no_decorator_but_its_own(self):
-        """A @kicad_pcb board script is never made a model: a decorator no producer of its type declares for
-        it is refused at decoration, naming the ones that take it."""
-        from cad import dxf, glb, kicad_pcb, step, stl, threemf, xbf
-
-        script = kicad_pcb("board.kicad_pcb")(lambda board: None)
-        for decorator in (xbf, stl, threemf):
-            with self.subTest(decorator=decorator), self.assertRaises(TypeError) as caught:
-                decorator(f"board{decorator.entry.suffix}")(script)
-            self.assertIn("one takes @step, @glb, @dxf", str(caught.exception))
-        # The board's STEP and GLB (the board and its parts) and its DXF (outline and holes), each written by
-        # kicad-cli from the saved board, in the order they are stacked, innermost first.
-        self.assertIs(script, step("board.step")(glb("board.glb")(dxf("board.dxf")(script))))
-        self.assertEqual([(kind, path.name) for kind, path in script.outputs],
-                         [("step", "board.step"), ("glb", "board.glb"), ("dxf", "board.dxf")])
-        with self.assertRaises(TypeError):
-            glb("again.glb")(script)  # declared twice
-        with self.assertRaisesRegex(ValueError, r"must end in \.glb"):
-            glb("board.step")(kicad_pcb("other.kicad_pcb")(lambda board: None))
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

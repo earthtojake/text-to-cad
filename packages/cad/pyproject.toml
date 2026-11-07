@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.10.3"
+version = "0.10.4"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
 license = "MIT"
@@ -70,7 +70,7 @@ build123d = [
   "pillow",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
-# (KiPy, as `kicode`) in one package -- what a check, an export and a @kicad_pcb board script run; a
+# (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
 # person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
 # 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [
@@ -79,17 +79,17 @@ kicad = [
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and
 # subdivision APIs (face adjacency, connected components, subdivide_to_size, intersects_location), which a
-# major release is free to change. rtree and scipy are trimesh's optional extras, and ours are not
-# optional: the undercut and wall-thickness ray casts need rtree's index, and mesh.split, body_count and
-# the connected-component graphs need scipy -- without them a family dies on a ModuleNotFoundError.
-# Meshes are read by the library's own readers (a 3MF and a GLB written as an STL first), so trimesh's
-# 3MF loader and the packages it alone needs (lxml, networkx) are not ours. networkx is also what
-# mesh.split's default repair of open pieces needs: the measurements split with repair=False, so an open
-# mesh is measured as it is.
+# major release is free to change. rtree, scipy and networkx are trimesh's optional extras, and ours are
+# not optional: the undercut and wall-thickness ray casts need rtree's index; mesh.split, body_count and
+# the connected-component graphs need scipy; and mesh.split's repair of an open body (fill_holes: two
+# bodies printed one on the other share a face, so neither is closed) needs networkx -- without them a
+# family dies on a ModuleNotFoundError. Meshes are read by the library's own readers (a 3MF and a GLB
+# written as an STL first), so trimesh's 3MF loader and lxml, which it alone needs, are not ours.
 trimesh = [
   "trimesh>=4.6,<6",
   "rtree>=1.2,<2",
   "scipy>=1.14,<2",
+  "networkx>=3.2,<4",
 ]
 
 [project.urls]

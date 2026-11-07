@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+from cad._internal.refused import ArgumentRefused
 from cad._internal.dfm import materials
 from cad._internal.dfm._common import mm
 from cad._internal.dfm.rules import Rule, RuleSet, Source
@@ -337,7 +338,7 @@ def tools(text: str | None) -> tuple[float, ...] | None:
     except ValueError:
         values = ()
     if not values or not all(value > 0 for value in values):
-        raise ValueError(f"--tools is end mill diameters in millimetres, comma separated (3,6,10), not {text!r}")
+        raise ArgumentRefused(f"--tools is end mill diameters in millimetres, comma separated (3,6,10), not {text!r}")
     return values
 
 
@@ -351,13 +352,13 @@ def stock(text: str | None) -> tuple[float, float, float] | None:
     except ValueError:
         values = ()
     if len(values) != 3 or not all(value > 0 for value in values):
-        raise ValueError(f"--stock is three lengths in millimetres, X x Y x Z (100x60x25), not {text!r}")
+        raise ArgumentRefused(f"--stock is three lengths in millimetres, X x Y x Z (100x60x25), not {text!r}")
     return values  # type: ignore[return-value]
 
 
 def validate(resolved: dict[str, Any], document_type: str) -> None:
     if int(resolved["axes"]) not in (3, 4, 5):
-        raise ValueError(f"--axes is 3, 4 or 5, not {resolved['axes']}")
+        raise ArgumentRefused(f"--axes is 3, 4 or 5, not {resolved['axes']}")
     tools(resolved.get("tools"))
     stock(resolved.get("stock"))
 

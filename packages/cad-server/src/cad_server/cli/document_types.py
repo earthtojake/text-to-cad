@@ -19,7 +19,9 @@ environment of ``cad[kicad]``.
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
 anything runs: ``part.glb is a glb, not a stl: use cad glb snapshot``; a model's document id given to a
-file's type, and a file given to ``model``, the same.
+file's type, and a file given to ``model``, the same -- a check of the operation's parser (``_typed``), so
+it is the command line's failure (``wrong_type``, exit 2) with ``--json`` and without
+(``cad_server._internal.cli_errors``).
 
 Each type's command is its own module (``cad_server.cli.<type>``), so ``python -m
 cad_server.cli.step export ...`` runs what ``cad step export ...`` does. Dispatch stays lazy: the
@@ -29,6 +31,7 @@ engine and the checks import when an operation runs, never for ``--help``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -46,8 +49,9 @@ def _urdf_parser(prog: str) -> argparse.ArgumentParser:
     """``cad urdf validate``'s parser, an ADAPTER's: ``--packages NAME=PATH`` repeats, a key/value map no
     signature derives (``cad_server._internal.cli_from_function``)."""
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
 
-    parser = argparse.ArgumentParser(prog=prog, description="Check one URDF robot description for conformance.")
+    parser = command_parser(prog, description="Check one URDF robot description for conformance.")
     parser.add_argument("path", metavar="PATH", type=Path, help="The .urdf file to validate.")
     parser.add_argument("--strict", action="store_true", help="Treat warnings as blocking.")
     parser.add_argument("--packages", action="append", default=[], metavar="NAME=PATH",
@@ -61,8 +65,9 @@ def _urdf_parser(prog: str) -> argparse.ArgumentParser:
 def _urdf_validate(argv: list[str], prog: str) -> int:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST, call_verb
 
-    args = _urdf_parser(prog).parse_args(argv)
-    _refuse_other_type("urdf", "validate", str(args.path))
+    parser = _typed(_urdf_parser(prog), "urdf", "validate", "path")
+    parser.checks.append(lambda parsed: _refused_value(package_map, parsed.packages))  # type: ignore[attr-defined]
+    args = parser.parse_args(argv)
     return call_verb(("cad.urdf", "validate"),
                      lambda validate: validate(args.path, strict=bool(args.strict), packages=package_map(args.packages),
                                          verbose=bool(args.verbose)),
@@ -70,16 +75,31 @@ def _urdf_validate(argv: list[str], prog: str) -> int:
 
 
 def package_map(entries: Sequence[str]) -> "dict[str, Path] | None":
-    """``NAME=PATH`` pairs as the map ``cad.urdf.validate`` takes, or None for no roots."""
+    """``NAME=PATH`` pairs as the map ``cad.urdf.validate`` takes, or None for no roots; ``ArgumentRefused``
+    (a ``ValueError``) naming ``--packages`` for one that is no such pair."""
     if not entries:
         return None
+    from cad._internal.refused import ArgumentRefused
+
     roots: dict[str, Path] = {}
     for entry in entries:
         name, separator, raw = str(entry).partition("=")
         if not separator or not name.strip() or not raw.strip():
-            raise ValueError(f"--packages expects NAME=PATH, got {entry!r}")
+            raise ArgumentRefused(f"--packages expects NAME=PATH, got {entry!r}")
         roots[name.strip()] = Path(raw.strip()).expanduser()
     return roots
+
+
+def _refused_value(check: Callable[..., object], *args: object) -> None:
+    """``check(*args)``, an argument's own check, with the value it refuses by name (``ArgumentRefused``) the
+    command line's failure (``invalid_argument``), said before anything runs."""
+    from cad._internal.refused import ArgumentRefused
+    from cad_server._internal.cli_errors import Failure
+
+    try:
+        check(*args)
+    except ArgumentRefused as refused:
+        raise Failure(str(refused), "invalid_argument") from None
 
 
 def _generated(document_type: str, operation: str) -> Callable[[list[str], str], int]:
@@ -97,11 +117,8 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
     def run(argv: list[str], prog: str) -> int:
         from cad_server.engine.cli import VERBS, answered, parser_for
 
-        args = parser_for(verb, prog, document_type=document_type).parse_args(argv)
-        source = getattr(args, _ENGINE_SOURCES[verb], None)
-        if source is not None:
-            _refuse_other_type(document_type, verb, str(source))
-        return answered(VERBS[verb][2], args, prog)
+        parser = _typed(parser_for(verb, prog, document_type=document_type), document_type, verb, _ENGINE_SOURCES[verb])
+        return answered(VERBS[verb][2], parser.parse_args(argv), prog)
 
     return run
 
@@ -152,9 +169,8 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
                                                         _verb, emit, generated_parser)
 
-    parser = generated_parser(target, prog=prog)
+    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
     parsed = parser.parse_args(argv)
-    _refuse_other_type(document_type, target[1], str(parsed.source))
     positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
 
     def said(line: str) -> None:
@@ -179,13 +195,14 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
 
 def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
 
     descriptions = {
         "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, "
                   "into a folder.",
         "inspect": "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
     }
-    parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
+    parser = command_parser(prog, description=descriptions[operation])
     parser.add_argument("board", metavar="BOARD", type=Path, help="the .kicad_pcb (its .kicad_pro beside it)")
     if operation == "export":
         from cad.kicad._export import EXPORTS
@@ -230,9 +247,9 @@ def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str
         from cad.results import CheckFinding, CheckResult
         from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser
 
-        parsed = generated_parser(target, prog=prog).parse_args(argv)
+        parsed = _typed(generated_parser(target, prog=prog), document_type, operation,
+                        _first_parameter(target)).parse_args(argv)
         source = vars(parsed)[_first_parameter(target)]
-        _refuse_other_type(document_type, operation, str(source))
 
         def checked() -> CheckResult:
             found = _kicad_elsewhere(document_type, operation, [str(Path(source).expanduser().resolve())], {}, prog)
@@ -255,14 +272,33 @@ def _first_parameter(target: tuple[str, str]) -> str:
 
 def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
     """A generated operation's run: its file, the function's first parameter as the parser read it (wherever
-    it stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
-    from cad_server._internal.cli_from_function import generated_main, generated_parser
+    it stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's, and each
+    file its options name refused when it is not there (``_present``)."""
+    from cad_server._internal.cli_from_function import _verb, generated_parser, run_cli
 
-    parsed = generated_parser(target, prog=prog).parse_args(argv)
-    source = getattr(parsed, _first_parameter(target), None)
-    if source is not None:
-        _refuse_other_type(document_type, target[1], str(source))
-    return generated_main(target, argv, prog=prog)
+    parser = _present(_typed(generated_parser(target, prog=prog), document_type, target[1], _first_parameter(target)))
+    return run_cli(_verb(target), argv, prog=prog, parser=parser)
+
+
+def _present(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """A generated operation's ``parser`` (``cli_from_function``) with the check that each file one of its
+    options names is there -- a ``Path`` option of a check is a file it reads (``cad srdf validate --urdf
+    robot.urdf``) --, a file that is not there being the command line's failure (``not_found``), as the
+    operation's own file is (``_typed``), said before anything runs. Only a generated parser's: a hand-written
+    one's ``Path`` may be a folder to write (``cad kicad_pcb export -o DIR``)."""
+    from cad_server._internal.cli_errors import Failure
+
+    named = [action for action in parser._actions if action.option_strings and action.type is Path]  # noqa: SLF001
+
+    def check(parsed: argparse.Namespace) -> None:
+        for action in named:
+            given = getattr(parsed, action.dest, None)
+            if given is not None and not os.path.exists(os.path.expanduser(str(given))):
+                raise Failure(f"{max(action.option_strings, key=len)} {given}: no such file", "not_found")
+
+    if named:
+        parser.checks.append(check)  # type: ignore[attr-defined]
+    return parser
 
 
 def _answer(as_json: bool, payload: dict, lines: list[str]) -> int:
@@ -275,14 +311,11 @@ def _answer(as_json: bool, payload: dict, lines: list[str]) -> int:
     return 0
 
 
-def _failed(as_json: bool, prog: str, words: str, status: int = 1) -> int:
-    import json
+def _failed(as_json: bool, prog: str, words: str, reason: str = "failed") -> int:
+    """A failure said by the contract (``cli_errors.write``): its words, the status its ``reason`` sets."""
+    from cad_server._internal.cli_errors import Failure, write
 
-    if as_json:
-        print(json.dumps({"ok": False, "error": words}, separators=(",", ":")))
-        return 1
-    sys.stderr.write(f"{prog}: {words}\n")
-    return status
+    return write(Failure(words, reason), prog=prog, as_json=as_json)
 
 
 def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
@@ -293,9 +326,9 @@ def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
         from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
         parser = _board_parser if document_type == "kicad_pcb" else _schematic_parser
-        args = parser(prog, "export").parse_args(argv)
-        given = args.board if document_type == "kicad_pcb" else args.schematic
-        _refuse_other_type(document_type, "export", str(given))
+        named = "board" if document_type == "kicad_pcb" else "schematic"
+        args = _typed(parser(prog, "export"), document_type, "export", named).parse_args(argv)
+        given = getattr(args, named)
         as_json = bool(getattr(args, JSON_FLAG_DEST))
         source, out = Path(given).expanduser().resolve(), Path(args.out).expanduser().resolve()
         try:
@@ -326,11 +359,10 @@ def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
 def _board_inspect(argv: list[str], prog: str) -> int:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
-    args = _board_parser(prog, "inspect").parse_args(argv)
-    _refuse_other_type("kicad_pcb", "inspect", str(args.board))
+    args = _typed(_board_parser(prog, "inspect"), "kicad_pcb", "inspect", "board").parse_args(argv)
     as_json = bool(getattr(args, JSON_FLAG_DEST))
     if not args.board.is_file():
-        return _failed(as_json, prog, f"no board {args.board}", 2)
+        return _failed(as_json, prog, f"no board {args.board}", "not_found")
     from cad.kicad_pcb import inspect
 
     try:
@@ -358,6 +390,7 @@ def _board_inspect(argv: list[str], prog: str) -> int:
 
 def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+    from cad_server._internal.cli_parser import parser as command_parser
 
     if operation == "snapshot":
         from cad_server.engine.cli import parser_for
@@ -374,7 +407,7 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
         "inspect": "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; "
                    "with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
     }
-    parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
+    parser = command_parser(prog, description=descriptions[operation])
     parser.add_argument("schematic", metavar="SCHEMATIC", type=Path,
                         help="the .kicad_sch (any sheet of its project: the whole hierarchy is read)")
     if operation == "export":
@@ -393,11 +426,10 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
 def _schematic_inspect(argv: list[str], prog: str) -> int:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
-    args = _schematic_parser(prog, "inspect").parse_args(argv)
-    _refuse_other_type("kicad_sch", "inspect", str(args.schematic))
+    args = _typed(_schematic_parser(prog, "inspect"), "kicad_sch", "inspect", "schematic").parse_args(argv)
     as_json = bool(getattr(args, JSON_FLAG_DEST))
     if not args.schematic.is_file():
-        return _failed(as_json, prog, f"no schematic {args.schematic}", 2)
+        return _failed(as_json, prog, f"no schematic {args.schematic}", "not_found")
     from cad.kicad_sch import inspect
 
     try:
@@ -429,20 +461,26 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
 
     from cad_server.engine.cli import VERBS, answered
 
-    args = _schematic_parser(prog, "snapshot").parse_args(argv)
-    if args.document is not None:
-        _refuse_other_type("kicad_sch", "snapshot", str(args.document))
+    args = _typed(_schematic_parser(prog, "snapshot"), "kicad_sch", "snapshot", "document").parse_args(argv)
     sheet, border = args.sheet, args.border
     del args.sheet, args.border
     if sheet is not None or border:
         given = args.display
         if given and not given.strip().startswith("{") and not given.strip().endswith(".json"):
             given = json.dumps({"appearance": given.strip()})
-        if given and given.strip().endswith(".json"):
-            given = Path(given).read_text(encoding="utf-8")
-        display = json.loads(given) if given else {}
+        # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
+        # that does not read, are the command line's, said before anything renders.
+        if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
+            return _failed(bool(args.json), prog, f"--display {given.strip()}: no such file", "not_found")
+        try:
+            if given and given.strip().endswith(".json"):
+                given = Path(given.strip()).expanduser().read_text(encoding="utf-8")
+            display = json.loads(given) if given else {}
+        except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
+            return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
         if not isinstance(display, dict):
-            raise _Refused("--display is a schematic's display object: {sheet, border, appearance}")
+            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border, appearance}",
+                           "invalid_argument")
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)
     return answered(VERBS["snapshot"][2], args, prog)
@@ -506,10 +544,26 @@ def operations_of(document_type: str) -> tuple[str, ...]:
     return tuple(name for name in DOCUMENT_TYPES[document_type].operation_names if (document_type, name) in OPERATIONS)
 
 
+def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, attribute: str) -> argparse.ArgumentParser:
+    """``parser`` (the command's, ``cad_server._internal.cli_parser``) with the check that the source it reads
+    as ``attribute`` is the type's and is there (``_refuse_other_type``): a source of another type, and a file
+    that is not there, are the command line's failures, said the same for every type before anything runs."""
+
+    def check(parsed: argparse.Namespace) -> None:
+        source = getattr(parsed, attribute, None)
+        if source is not None:
+            _refuse_other_type(document_type, operation, str(source))
+
+    parser.checks.append(check)  # type: ignore[attr-defined]
+    return parser
+
+
 def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
-    """A source of another type, refused by name before anything runs: a file of another type, a model's
-    document id given to a file's type, a file given to ``model``."""
+    """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
+    of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
+    and a file of the type's that is not there (``not_found``), whichever the type."""
     from cad.engine.ids import is_id
+    from cad_server._internal.cli_errors import Failure
 
     def use(other: str) -> str:
         return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
@@ -519,18 +573,28 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     entry = DOCUMENT_TYPES[document_type]
     if is_id(given):
         if entry.has_file:
-            raise _Refused(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}")
+            raise Failure(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}", "wrong_type")
         return
+    script = given.partition("::")[0]
+    if script.lower().endswith(".py"):
+        # A model's script where its document is wanted: what builds the document, and what takes it.
+        import shlex
+
+        then = (f", which cad model {operation} takes" if ("model", operation) in OPERATIONS else "")
+        raise Failure(f"{source} is a model's script, not {'a document id' if not entry.has_file else f'a {document_type} file'}"
+                      f": `cad run {shlex.quote(script)}` builds its models and prints each one's id{then}", "wrong_type")
     suffix = Path(given).suffix
     found = by_extension(suffix) if suffix else None
     if found is not None and found.id != document_type:
-        raise _Refused(f"{source} is a {found.id}, not a {document_type}{use(found.id)}")
-    if found is None and not entry.has_file:
-        raise _Refused(f"cad model takes a model's document id (python SCRIPT.py prints it), not {source!r}")
-
-
-class _Refused(Exception):
-    """A request refused by name before anything ran: exit status 2."""
+        raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
+    if not entry.has_file:
+        raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
+                      "wrong_type")
+    if found is None:
+        raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
+                      f"{' or '.join(entry.extensions)}", "wrong_type")
+    if not os.path.exists(os.path.expanduser(given)):
+        raise Failure(f"no such file: {source}", "not_found")
 
 
 def type_usage(document_type: str) -> str:
@@ -548,21 +612,28 @@ def type_main(document_type: str, argv: Sequence[str] | None = None, prog: str |
         sys.stdout.write(type_usage(document_type))
         return 0
     if not argv:
-        sys.stderr.write(f"{prog}: cad {document_type} needs an operation\n\n" + type_usage(document_type))
-        return 2
+        return _no_operation(prog, document_type, f"cad {document_type} needs an operation", argv, usage=True)
     operation, rest = argv[0], argv[1:]
     run = OPERATIONS.get((document_type, operation))
     if run is None:
-        problem = f"cad {document_type} has no operation {operation!r}; it has {', '.join(operations_of(document_type))}"
-        sys.stderr.write(f"{prog}: {problem}\n\n" + type_usage(document_type))
-        return 2
-    try:
-        return run(rest, f"{prog} {operation}")
-    except _Refused as refused:
-        if "--json" in rest:
-            import json
+        from cad_server._internal.cli_parser import suggest
 
-            print(json.dumps({"ok": False, "error": str(refused)}))
-            return 1
-        sys.stderr.write(f"{prog} {operation}: {refused}\n")
-        return 2
+        close = suggest(operation, operations_of(document_type))
+        return _no_operation(prog, document_type, f"cad {document_type} has no operation {operation!r}"
+                             + (f" (did you mean {close!r}?)" if close else "")
+                             + f"; it has {', '.join(operations_of(document_type))}; 'cad {document_type} --help' "
+                               "says what each does", rest)
+    return run(rest, f"{prog} {operation}")
+
+
+def _no_operation(prog: str, document_type: str, problem: str, argv: list[str], *, usage: bool = False) -> int:
+    """A type's command line that names none of its operations: the command line's failure (``usage``), said
+    as an unknown command is (``cad_server.cli._unknown``) -- under ``--json`` its JSON document alone, else
+    its line on stderr, the type's help after it only for a command line that names no operation at all
+    (``usage``), never after one it does not have."""
+    from cad_server._internal.cli_errors import Failure, wants_json, write
+
+    if wants_json(argv) or not usage:
+        return write(Failure(problem, "usage"), prog=prog, as_json=wants_json(argv))
+    sys.stderr.write(f"{prog}: {problem}\n\n" + type_usage(document_type))
+    return 2

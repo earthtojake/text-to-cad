@@ -121,7 +121,9 @@ const meshTools = async (pane, expected) => {
   expected);
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'its view\'s controls end the strip');
+    ['Preview'], 'Preview ends the strip');
+  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'the view\'s controls are the corner\'s, over the cube');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
@@ -142,7 +144,7 @@ function projector(camera, box) {
     return [box.x + (dot(offset, right) / halfWidth * 0.5 + 0.5) * box.width, box.y + (0.5 - dot(offset, up) / camera.halfHeight * 0.5) * box.height];
   };
 }
-const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
+const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
 // Display's menu: the modes, then the Grid switch.
 async function openDisplay(pane) {
   await displayButton(pane).click();
@@ -283,8 +285,8 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
     requestAnimationFrame(step);
   }));
 
-  // A secondary press on the canvas is the camera's: the viewer opens no menu of
-  // its own, and the browser's own stays off the canvas.
+  // A secondary tap on the canvas opens the view's menu, an STL's the framing alone (it picks
+  // nothing), and the browser's own stays off the canvas.
   await page.evaluate(() => {
     window.nativeMenu = [];
     document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
@@ -293,8 +295,10 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   // The press has reached the page, and a menu it opened would be up two frames on.
   await page.waitForFunction(() => window.nativeMenu.length > 0);
   await settle(page);
-  assert.equal(await page.getByRole('menu').count(), 0);
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Zoom to fit', 'Zoom to selection']);
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu is still prevented');
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu').waitFor({ state: 'detached' });
 
   // Host commands drive the mounted view, and one that makes no sense here fails loudly.
   const camera = await page.evaluate(async () => {

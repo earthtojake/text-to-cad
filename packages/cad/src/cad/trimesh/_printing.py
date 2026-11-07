@@ -80,20 +80,6 @@ def _components(mesh: trimesh.Trimesh, mask: np.ndarray) -> list[np.ndarray]:
             trimesh.graph.connected_components(pairs[keep], nodes=chosen, min_len=1)]
 
 
-def _bodies(mesh: trimesh.Trimesh) -> list[trimesh.Trimesh]:
-    """The mesh's parts: its connected bodies, but a closed one turned inside out (a void's shell, which a
-    solid's cavity is) and slivers of no area worth a thousandth of the whole."""
-    found = []
-    total = float(mesh.area) or 1.0
-    for body in mesh.split(only_watertight=False, repair=False):  # repair needs networkx, not ours
-        if body.is_watertight and float(body.volume) < 0:
-            continue
-        if not body.is_watertight and float(body.area) < 1e-3 * total:
-            continue
-        found.append(body)
-    return found
-
-
 def _cluster(points: np.ndarray, values: np.ndarray, cell: float) -> list[tuple[float, np.ndarray, int]]:
     """The smallest value in each cube of side ``cell`` with its point and the samples it stands for."""
     keys = np.floor(points / cell).astype(np.int64)
@@ -113,16 +99,60 @@ def _load(path: str) -> trimesh.Trimesh:
     return mesh
 
 
-def _mesh_facts(mesh: trimesh.Trimesh) -> dict:
-    return {
+def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
+    """The mesh's bodies, each solid with the sealed voids inside it, and how many voids there are.
+
+    A shell's normals point away from its material, so a sealed void's signed volume is negative and a
+    solid's positive (``_molding._shells`` reads them so too): a cavity a part encloses -- a groove that
+    does not reach the surface -- is that part's, and its walls are measured with it, never as a body
+    of its own. A void goes with the solid that holds its centre, else with the largest. An open sliver of no
+    area worth a thousandth of the whole (an exporter's stray facets) is no body: a ray from one measured
+    a wall the part has not."""
+    parts = list(mesh.split(only_watertight=False))  # repair: two bodies sharing a face are closed again
+    if len(parts) <= 1:
+        return [mesh], 0
+    total = float(mesh.area) or 1.0
+    solids, voids = [], []
+    for part in parts:
+        try:
+            signed = float(part.volume)
+        except Exception:  # noqa: BLE001 - an open shell has no signed volume
+            signed = 0.0
+        if part.is_watertight and signed < 0.0:
+            voids.append(part)
+        elif part.is_watertight or float(part.area) >= 1e-3 * total:
+            solids.append(part)
+    if not solids:
+        return parts, 0
+    held: list[list[trimesh.Trimesh]] = [[solid] for solid in solids]
+    for void in voids:
+        centre = void.bounds.mean(axis=0)
+        holder = next((at for at, solid in enumerate(solids) if solid.is_watertight and solid.contains([centre])[0]),
+                      max(range(len(solids)), key=lambda at: solids[at].area))
+        held[holder].append(void)
+    return [group[0] if len(group) == 1 else trimesh.util.concatenate(group) for group in held], len(voids)
+
+
+def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
+    """The mesh as a whole; ``body_count`` None where its bodies could not be split (the wall family then
+    says why)."""
+    facts: dict = {
         "bbox_mm": [round(float(v), 2) for v in mesh.extents],
         "volume_mm3": round(float(abs(mesh.volume)), 1) if mesh.is_volume else None,
         "surface_area_mm2": round(float(mesh.area), 1),
         "triangle_count": int(len(mesh.faces)),
         "watertight": bool(mesh.is_watertight),
         "euler_number": int(mesh.euler_number),
-        "body_count": int(mesh.body_count),
+        "body_count": None,
     }
+    try:
+        bodies, voids = split if split is not None else _bodies(mesh)
+    except Exception:  # noqa: BLE001 - a split that fails is the wall family's error, in its own words
+        return facts
+    facts["body_count"] = len(bodies)
+    if voids:
+        facts["internal_void_count"] = voids
+    return facts
 
 
 def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.2, regions: bool = True,
@@ -250,10 +280,55 @@ def _bridge_facts(overhangs: dict) -> dict:
 COVER = 20000
 
 
-def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None) -> tuple[np.ndarray, ...]:
+def _knife_chains(mesh: trimesh.Trimesh) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The sharp convex creases (material angle under ``KNIFE_DEG``) as vertex pairs, each pair's material
+    angle, and the chain (creases sharing corners) each belongs to."""
+    material = 180.0 - np.degrees(mesh.face_adjacency_angles)
+    sharp = mesh.face_adjacency_convex & (material < mo.KNIFE_DEG)
+    if not sharp.any():
+        return np.zeros((0, 2), dtype=int), np.zeros(0), np.zeros(0, dtype=int)
+    pairs = mesh.face_adjacency_edges[sharp]
+    chain_of = np.full(len(mesh.vertices), -1)
+    for k, chain in enumerate(trimesh.graph.connected_components(pairs, min_len=1)):
+        chain_of[np.asarray(chain, dtype=int)] = k
+    return pairs, material[sharp], chain_of[pairs[:, 0]]
+
+
+def _knife_zones(mesh: trimesh.Trimesh, options: dict) -> list[tuple[np.ndarray, np.ndarray, float]]:
+    """Each knife edge as segments (starts, ends) and its thin depth: the sliver the knife family reports, which
+    the walls leave to it, as the exact path does (``_dfm_printing._knife_zones``)."""
+    from cad._internal.dfm import printing as rules
+
+    minimum = rules.wall_minimum(options)
+    pairs, angle, owner = _knife_chains(mesh)
+    zones = []
+    for k in np.unique(owner):
+        mine = owner == k
+        depth = mo.thin_depth(minimum, float(angle[mine].min()))
+        if depth:
+            zones.append((mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]], float(depth)))
+    return zones
+
+
+def _outside_knives(points: np.ndarray, zones: list[tuple[np.ndarray, np.ndarray, float]]) -> np.ndarray:
+    """Which ``points`` lie farther from every knife edge than its thin depth: a ray from inside that depth
+    measures the knife's sliver, which is real and reported once, by the knife family."""
+    keep = np.ones(len(points), dtype=bool)
+    for starts, ends, depth in zones:
+        lo = np.minimum(starts.min(axis=0), ends.min(axis=0)) - depth
+        hi = np.maximum(starts.max(axis=0), ends.max(axis=0)) + depth
+        near = np.flatnonzero(keep & np.all((points >= lo) & (points <= hi), axis=1))
+        if len(near):
+            keep[near] &= mo.near_segments(points[near], starts, ends) > depth + 1e-6
+    return keep
+
+
+def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
+           zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> tuple[np.ndarray, ...]:
     """One ray from every triangle's centre (``COVER`` of them, by area, on a larger mesh), into the material
     (``inward``) or out of it: each ray's length to a face that looks back at it, its origin, its face's
-    normal and the triangle it landed on. Rays that meet nothing, or a face square to them, are dropped."""
+    normal and the triangle it landed on. Rays that meet nothing, or a face square to them, are dropped, as
+    are rays from inside a knife edge's thin depth (``zones``: the knife family's sliver)."""
     count = len(mesh.faces)
     if count == 0 or not float(mesh.area_faces.sum()) > 0:
         return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
@@ -276,6 +351,8 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None) -> t
     facing = np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) > square if inward else \
         np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -0.5
     keep = (length > 1e-3) & facing & (length < (reach or float(np.linalg.norm(mesh.extents))))
+    if zones:
+        keep &= _outside_knives(origins[rays], zones)
     return length[keep], origins[rays][keep], normals[rays][keep], faces[rays][keep], hit[keep]
 
 
@@ -288,21 +365,26 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, cell: float) -> list
             for value, point, count in found[:CAP]]
 
 
-def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict | None = None) -> dict:
+def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict | None = None,
+                split: tuple[list[trimesh.Trimesh], int] | None = None,
+                zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> dict:
     """Ray-cast thickness field, measured one connected body at a time.
 
     Cast against a whole assembly, a ray leaving one body can cross a mating
     clearance and land on its neighbour, which records the fit gap as a wall.
     A tight-clearance assembly then reports a wall-thickness violation that no
     single part actually has. Splitting first makes that impossible, because
-    each body is only ever measured against itself.
+    each body is only ever measured against itself -- with the sealed voids it
+    holds (``_bodies``, or ``split``, the bodies split once for every family), so
+    the skin over a cavity is one of its walls. A ray from inside a knife edge's
+    thin depth (``zones``) measures the knife's sliver, the knife family's alone.
     """
-    bodies = mesh.split(only_watertight=False, repair=False)  # repair needs networkx, not ours
+    bodies, _voids = split if split is not None else _bodies(mesh)
     cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
     if len(bodies) <= 1:
-        facts = _wall_facts_single(mesh, samples, seed)
+        facts = _wall_facts_single(mesh, samples, seed, zones)
         if "_thickness" in facts:
-            extra = _cover(mesh, inward=True)
+            extra = _cover(mesh, inward=True, zones=zones)
             t = np.concatenate([facts["_thickness"], extra[0]])
             o = np.vstack([facts["_origins"], extra[1]])
             facts["items"] = _wall_items(t, o, cell)
@@ -330,7 +412,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     per_body: list = []
     for i, (body, frac) in enumerate(zip(bodies, share)):
         budget = max(int(round(samples * frac)), 64)
-        facts = _wall_facts_single(body, budget, seed + i)
+        facts = _wall_facts_single(body, budget, seed + i, zones)
         per_body.append({
             "body": i,
             "min_mm": facts.get("min_mm"),
@@ -342,7 +424,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             pooled.append(facts["_thickness"])
             pooled_origins.append(facts["_origins"])
             pooled_normals.append(facts["_normals"])
-            extra = _cover(body, inward=True)
+            extra = _cover(body, inward=True, zones=zones)
             covered.append(extra[:3])
 
     if not pooled:
@@ -382,14 +464,19 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     }
 
 
-def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> dict:
-    """Ray-cast thickness field for ONE connected body."""
-    rng = np.random.default_rng(seed)
-    n = min(samples, max(len(mesh.faces), 1))
+def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
+                       zones: list[tuple[np.ndarray, np.ndarray, float]] | None = None) -> dict:
+    """Ray-cast thickness field for ONE connected body: ``samples`` rays, each from a point drawn at random over
+    the surface (a triangle by its area, then anywhere on it), straight in along that face's normal to the face it
+    leaves through. The points are the surface's, not the tessellation's: a coarse mesh and a fine one of the same
+    part are sampled alike. A ray counts when it leaves through a face turned away from its own (at least
+    ``KNIFE_DEG`` off parallel, as the exact path counts it): a wall's other side, or a knife edge's; one started by
+    a convex edge leaves through the edge's neighbour after a hair, which is no wall."""
+    n = max(int(samples), 1)
 
     # Area weighting needs a positive total. A mesh of only degenerate faces
     # has none, and is not something a thickness field can describe - say so
-    # rather than dividing by zero inside rng.choice.
+    # rather than dividing by zero in the sampling.
     total_area = float(mesh.area_faces.sum())
     if not np.isfinite(total_area) or total_area <= 0.0:
         return {
@@ -397,10 +484,7 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
             "note": "no positive face area; mesh is degenerate, thickness not measured",
         }
 
-    face_idx = rng.choice(len(mesh.faces), size=n,
-                          p=mesh.area_faces / total_area)
-
-    origins = mesh.triangles_center[face_idx]
+    origins, face_idx = trimesh.sample.sample_surface(mesh, n, seed=seed)
     directions = -mesh.face_normals[face_idx]
     origins = origins + directions * 1e-4
 
@@ -413,10 +497,13 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
     thickness = np.linalg.norm(locations - origins[ray_ids], axis=1)
     diag = float(np.linalg.norm(mesh.extents))
     # a wall's two faces look away from each other; a ray that lands on a face meeting its own at a corner
-    # (KNIFE_DEG or more between them) measures the corner, not a wall -- a knife edge's sliver is counted
+    # (KNIFE_DEG or more between them) measures the corner, not a wall -- a knife edge's sliver is counted,
+    # but for rays from inside a knife's thin depth, which the knife family reports once
     opposing = np.einsum("ij,ij->i", mesh.face_normals[hit_tri], directions[ray_ids]) > \
         float(np.cos(np.radians(mo.KNIFE_DEG)))
     valid = (thickness > 1e-3) & (thickness < diag) & opposing
+    if zones:
+        valid &= _outside_knives(origins[ray_ids], zones)
     thickness = thickness[valid]
 
     if len(thickness) == 0:
@@ -503,11 +590,12 @@ def _orientation_facts(mesh: trimesh.Trimesh, angle_limit: float, technology: st
     }
 
 
-def _gap_facts(mesh: trimesh.Trimesh, samples: int) -> dict:
+def _gap_facts(mesh: trimesh.Trimesh, samples: int, split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
     """Rays out of the material from every triangle of each body to a wall of the same body that faces back
     (not a triangle sharing a corner with it): the narrow slots, per cube the narrowest."""
     points, widths = [], []
-    for body in _bodies(mesh):
+    bodies, _voids = split if split is not None else _bodies(mesh)
+    for body in bodies:
         width, origins, _, faces, hit = _cover(body, inward=False, reach=GAP_CEILING)
         if not len(width):
             continue
@@ -526,10 +614,10 @@ def _gap_facts(mesh: trimesh.Trimesh, samples: int) -> dict:
                       "as gaps on a mesh)"}
 
 
-def _clearance_facts(mesh: trimesh.Trimesh) -> dict:
+def _clearance_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
     """The least distance between each pair of bodies (vertices and triangle centres of each to the other's
     surface, both ways), within ``CLEARANCE_REACH``."""
-    bodies = _bodies(mesh)
+    bodies, _voids = split if split is not None else _bodies(mesh)
     items = []
     for i in range(len(bodies)):
         for j in range(i + 1, len(bodies)):
@@ -666,17 +754,9 @@ def _knife_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
     from cad._internal.dfm import printing as rules
 
     minimum = rules.wall_minimum(options)
-    material = 180.0 - np.degrees(mesh.face_adjacency_angles)
-    sharp = mesh.face_adjacency_convex & (material < mo.KNIFE_DEG)
+    pairs, angle, owner = _knife_chains(mesh)
     items = []
-    if sharp.any():
-        pairs = mesh.face_adjacency_edges[sharp]
-        angle = material[sharp]
-        chains = trimesh.graph.connected_components(pairs, min_len=1)
-        chain_of = np.full(len(mesh.vertices), -1)
-        for k, chain in enumerate(chains):
-            chain_of[np.asarray(chain, dtype=int)] = k
-        owner = chain_of[pairs[:, 0]]
+    if len(pairs):
         lengths = np.linalg.norm(mesh.vertices[pairs[:, 0]] - mesh.vertices[pairs[:, 1]], axis=1)
         for k in np.unique(owner):
             mine = owner == k
@@ -763,15 +843,23 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
     ``options``: the check's (``technology``, ``layer_height``, ``build_volume``, ``rules``)."""
     resolved = _options(options, angle_limit)
     kept: dict = {}
+    try:  # the bodies, split once for the families that read them
+        split = _bodies(mesh)
+    except Exception:  # noqa: BLE001 - each family then fails in its own words
+        split = None
+    try:  # the knife edges' slivers, which the walls leave to the knife family
+        zones = _knife_zones(mesh, resolved)
+    except Exception:  # noqa: BLE001 - the knife family says so; the walls then count every ray
+        zones = None
     report = {
         "technology": resolved["technology"],
-        "mesh": _safe(_mesh_facts, mesh),
+        "mesh": _safe(_mesh_facts, mesh, split),
         "scale": _safe(_scale_hint, mesh),
         "overhangs": _safe(_overhang_facts, mesh, angle_limit, resolved["layer"], True,
                            float(resolved.get("nozzle") or mo.OVERHANG_REACH_MM)),
-        "wall_thickness": _safe(_wall_facts, mesh, samples, 42, kept),
-        "gaps": _safe(_gap_facts, mesh, samples),
-        "clearances": _safe(_clearance_facts, mesh),
+        "wall_thickness": _safe(_wall_facts, mesh, samples, 42, kept, split, zones),
+        "gaps": _safe(_gap_facts, mesh, samples, split),
+        "clearances": _safe(_clearance_facts, mesh, split),
         "build_volume": _safe(_build_volume_facts, mesh, resolved),
         "bed": _safe(_bed_facts, mesh),
         "knife_edges": _safe(_knife_facts, mesh, resolved),

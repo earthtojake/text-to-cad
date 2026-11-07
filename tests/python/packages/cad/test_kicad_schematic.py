@@ -57,6 +57,19 @@ class TheHierarchy(SchematicFixture):
         self.assertEqual(self.view.parts, ("C1", "J1", "R1", "R2", "R3"))
         self.assertTrue(all(symbol.power for symbol in self.view.symbols if symbol.ref.startswith("#PWR")))
 
+    def test_a_symbol_saved_with_body_style_0_has_its_first_styles_pins(self) -> None:
+        """KiCad's IPC API places a symbol that it saves with ``(body_style 0)``, and draws and connects it as
+        style 1: so is it read."""
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-style-") as folder:
+            root = write_schematic(Path(folder))
+            text = root.read_text(encoding="utf-8")
+            root.write_text(text.replace('(lib_id "Device:R") (at 101.6 59.69 0) (unit 1)',
+                                         '(lib_id "Device:R") (at 101.6 59.69 0) (unit 1) (body_style 0)', 1),
+                            encoding="utf-8")
+            self.assertIn("(body_style 0)", root.read_text(encoding="utf-8"))
+            [r1] = read_schematic(root).part("R1")
+            self.assertEqual(["1", "2"], [pin.number for pin in r1.pins])
+
 
 class TheNets(SchematicFixture):
     def test_nets_are_kicads_names_and_pins(self) -> None:
@@ -152,6 +165,44 @@ class ThePayload(SchematicFixture):
         self.assertNotIn("#PWR01", fields)  # a hidden field is not drawn
         self.assertEqual([part["ref"] for part in payload["schematic"]["parts"]], ["C1", "J1", "R1", "R2", "R3"])
 
+    def test_a_sheet_block_draws_its_own_sheets_pins_in_any_order_in_the_file(self) -> None:
+        """KiCad saves a sheet's blocks in uuid order, which need not be page order: each block draws its own
+        sheet's pins, every one, under its own sheet's reference."""
+        from cad.engine.formats.kicad.schematic import read_schematic_index
+        from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
+
+        def block(uuid: str, name: str, y: float, page: str, pins: tuple[str, ...]) -> str:
+            drawn = "".join(f'\n    (pin "{pin}" input (at 100 {y + 2.54 * (index + 1):g} 180) (uuid "{uuid[:-1]}{index + 1}")'
+                            f' (effects (font (size 1.27 1.27)) (justify left)))' for index, pin in enumerate(pins))
+            return f"""
+  (sheet (at 100 {y:g}) (size 20 10) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (stroke (width 0.1524) (type solid)) (fill (color 0 0 0 0.0000)) (uuid "{uuid}")
+    (property "Sheetname" "{name}" (at 100 {y - 0.7:g} 0) (effects (font (size 1.27 1.27)) (justify left bottom)))
+    (property "Sheetfile" "{name.lower()}.kicad_sch" (at 100 {y + 10.6:g} 0) (effects (font (size 1.27 1.27)) (justify left top))){drawn}
+    (instances (project "pages" (path "/{ROOT_UUID}" (page "{page}")))))"""
+
+        folder = Path(self.folder.name) / "pages"
+        folder.mkdir()
+        for name in ("Sensors", "Lights"):
+            (folder / f"{name.lower()}.kicad_sch").write_text(
+                '(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") (paper "A4") (embedded_fonts no))\n',
+                encoding="utf-8")
+        root = folder / "pages.kicad_sch"
+        # Lights (page 3) saved before Sensors (page 2), its uuid the lower.
+        root.write_text(f"""(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") (uuid "{ROOT_UUID}") (paper "A4")
+  (lib_symbols){block("00000000-0000-4000-8000-0000000000b0", "Lights", 80, "3", ("DIN",))}{block(
+      "00000000-0000-4000-8000-0000000000c0", "Sensors", 40, "2", ("SDA", "SCL"))}
+  (sheet_instances (path "/" (page "1")))
+  (embedded_fonts no)
+)
+""", encoding="utf-8")
+        index, _warnings = read_schematic_index(root)
+        self.assertEqual([sheet.path for sheet in index.sheets], ["/", "/Sensors/", "/Lights/"])
+        page = build_schematic_plot(root, sheets=["/"], index=False)["sheets"][0]
+        (sheets,) = [layer["items"] for layer in page["layers"] if layer["id"] == "sheets"]
+        drawn = {(item["ref"], item["text"]) for item in sheets if item.get("role") == "pin" and item["t"] == "text"}
+        self.assertEqual(drawn, {("#sheet:/Sensors/", "SDA"), ("#sheet:/Sensors/", "SCL"), ("#sheet:/Lights/", "DIN")})
+
     def test_a_page_alone(self) -> None:
         from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
 
@@ -238,6 +289,24 @@ class TheType(SchematicFixture):
                 cad.kicad_sch.export(self.root, "netlist", Path(self.folder.name) / "out")
         with self.assertRaisesRegex(ValueError, "is a kicad_pcb, not a kicad_sch"):
             cad.kicad_sch.snapshot("board.kicad_pcb", "out.png")
+
+    def test_erc_counts_the_warnings_it_lists(self) -> None:
+        # KiCad, in homes of its own, cannot see the person's global libraries: those checks are one note,
+        # and the summary counts the one warning it lists, not the 220 library checks of the demos.
+        from unittest import mock
+
+        import cad
+        from cad.kicad import _schematic
+
+        unseen = [_schematic.ErcFinding("warning", "lib_symbol_issues", f"The current configuration does not include "
+                                        f"the symbol library 'Device{index}'", "/", (), None) for index in range(220)]
+        real = _schematic.ErcFinding("warning", "label_dangling", "Label not connected", "/", ("MID",), (90.0, 51.0))
+        with mock.patch.object(_schematic, "ready", lambda: Path("kicad-cli")), \
+                mock.patch.object(_schematic, "run_erc", lambda cli, target: [*unseen, real]):
+            checked = cad.kicad_sch.erc(self.root)
+        self.assertEqual([(finding.severity, finding.code) for finding in checked.findings],
+                         [("warning", "label_dangling"), ("info", "libraries_not_checked")])
+        self.assertTrue(checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
 
     def test_a_file_that_is_no_schematic_is_refused(self) -> None:
         folder = Path(self.folder.name)

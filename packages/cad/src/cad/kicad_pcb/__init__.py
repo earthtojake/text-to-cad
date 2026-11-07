@@ -1,9 +1,7 @@
 """``cad.kicad_pcb``: the KiCad PCB document type (``cad.registry``), a saved KiCad board.
 
-A ``.kicad_pcb`` is an AUTHORED file, edited in KiCad or as text, never a document a model makes. Its
-decorator, ``@kicad_pcb("board.kicad_pcb")``, declares a board script that edits that saved board through
-KiCad's IPC API (the ``kicad`` integration's producer, ``cad.kicad._session``; a ``@step`` stacked on it
-writes the saved board's STEP), never a model. Its functions take paths and our own board objects, so
+A ``.kicad_pcb`` is an AUTHORED file, edited in KiCad, as text or in place by :func:`edit`, never a
+document a model makes: the type has no decorator. Its functions take paths and our own board objects, so
 they are the type's, not the ``kicad`` integration's (the signature rule):
 
 * :func:`read` parses the file and the ``.kicad_pro`` beside it with the standard library
@@ -13,6 +11,9 @@ they are the type's, not the ``kicad`` integration's (the signature rule):
 * :func:`inspect` is the board in one look as plain data -- its format, thickness, size, layers, parts
   and nets -- what ``cad kicad_pcb inspect`` prints; ``snapshot`` draws it flat, as ``cad kicad_pcb
   snapshot`` does.
+* :func:`edit` opens the saved board in KiCad's IPC API for a ``with`` block, the ``kicad`` integration's
+  (``cad.kicad._session``): the block gets KiPy's open board, which is saved at its end when it was changed
+  (made by KiCad when the file is not there yet) and not at all when the block raises.
 * :func:`drc` (KiCad's design rule check) and :func:`export` (its fabrication, assembly and 3D outputs)
   run KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``): they are the
   commands ``cad kicad_pcb drc`` and ``cad kicad_pcb export``, one to one. Where this environment lacks
@@ -22,13 +23,14 @@ they are the type's, not the ``kicad`` integration's (the signature rule):
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 from typing import Any
 
 from cad.results import CheckResult, ExportResult
 
-__all__ = ["drc", "export", "inside", "inspect", "read"]
+__all__ = ["drc", "edit", "export", "inside", "inspect", "read"]
 
 # The reader and the even-odd test load when first used: the formats package they live in imports
 # numpy, and a command's help (``cad kicad_pcb drc --help``) is made from this module without it.
@@ -57,6 +59,19 @@ def inspect(path: Path | str) -> dict:
     from cad.engine.formats.kicad.summary import inspect_board
 
     return inspect_board(path)
+
+
+def edit(board: Path | str) -> AbstractContextManager[Any]:
+    """The board at ``board`` open in KiCad, for a ``with`` block: ``with kicad_pcb.edit("board.kicad_pcb") as
+    b:`` hands the block KiPy's open board (kicode's ``kicode.board.Board``), through kicode's headless
+    ``kicad-cli api-server``. At the block's end the board is saved when it was changed (KiCad's own modified
+    state), so a block that changes nothing leaves the file byte for byte; when the block raises, nothing is
+    saved and the exception goes on. A board not there yet is made by KiCad, with its project, and saved. A
+    ``kicad_sch.edit`` of the same project inside the block shares its KiCad. Needs the kicad extra
+    (``cad[kicad]``; ``cad run`` gives a script that calls it the extra)."""
+    from cad.kicad._session import edit as editing
+
+    return editing(board, "kicad_pcb")
 
 
 def drc(board: Path) -> CheckResult:

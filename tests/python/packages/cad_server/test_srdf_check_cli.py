@@ -86,7 +86,10 @@ class SrdfValidateCliTests(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            exit_code = cli.main(list(argv))
+            try:
+                exit_code = cli.main(list(argv))
+            except SystemExit as exited:  # a command line its parser refuses: the file of no type, not there
+                exit_code = exited.code
         return exit_code, stdout.getvalue() + stderr.getvalue()
 
     def test_valid_pair_passes_with_summary(self) -> None:
@@ -125,13 +128,13 @@ class SrdfValidateCliTests(unittest.TestCase):
     def test_non_srdf_suffix_fails(self) -> None:
         path = self._write("robot.xml", SAMPLE_SRDF)
         exit_code, output = self._run(str(path))
-        self.assertEqual(exit_code, 1)
-        self.assertIn("must be a .srdf file", output)
+        self.assertEqual(exit_code, 2)  # the command line's: a file of no type, before anything is read
+        self.assertIn("is not a srdf file: cad srdf takes .srdf", output)
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.srdf"))
-        self.assertEqual(exit_code, 1)
-        self.assertIn("file not found", output)
+        self.assertEqual(exit_code, 2)
+        self.assertIn("no such file", output)
 
 
 if __name__ == "__main__":

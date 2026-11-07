@@ -201,8 +201,8 @@ draws the model in Render whatever the file's mode (the store's `renderScene()`,
 `kit/viewport/previewViewScene.js` draws it), and the tools view never does. Preview's own
 settings are its settings panel (`kit/shell/PreviewSettings.jsx`: Orbit, then
 `PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree and Position are
-sections of the file sidebar (see
-[settings-ui.md](./settings-ui.md#the-file-sidebar-and-the-tool-stack)); nothing in them is
+tabs of the view's panel (see
+[settings-ui.md](./settings-ui.md#the-views-panel-and-the-tool-stack)); nothing in them is
 a display setting.
 
 Display and Preview, the view's controls at the strip's end, are offered by a 3D view
