@@ -283,8 +283,12 @@ test('a board reopened in 3D leaves for 2D centred on what its camera centred on
   await frame(pane);
   // In 3D, the camera turned onto R1 pad 2 from the front, right and above, and kept with the file's view.
   await pane.locator('[data-board-dimension]').click();
-  const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
-  await settled();
+  // Up in place of the flat canvas and eased from head on to Home (the world's z up), as 3D opens: the camera at
+  // rest head on, before its ease has begun, is not yet where 3D stays, and the ease would carry a camera set then away.
+  await page.waitForFunction(() => {
+    const camera = window.__cadCamera?.();
+    return document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible') && camera && !camera.settling && camera.up[2] > 0.9;
+  });
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [55, -45, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
   await page.waitForFunction(() => {
     const board3d = value => (value && typeof value === 'object' ? value.board3d?.value ?? Object.values(value).map(board3d).find(Boolean) : null);
