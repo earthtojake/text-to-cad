@@ -50,7 +50,11 @@ an integration.
       comment saying why. An external program needs no extra until it ships as a package.
 - [ ] **The registry entry**, `INTEGRATIONS` in `packages/cad/src/cad/registry.py`: name, summary,
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
-      (the program, its minimum version, its install hint, the variable that names it outright).
+      (the program, its minimum version, its install hint, the variable that names it outright). A
+      program nothing on PyPI carries (OpenSCAD: `openscad`) has no extra and names no modules or
+      distributions: the person installs it, the probe finds it, `cad run` has nothing to install for
+      it, and `cad doctor` reports it from the integration's `_program` module (`find`, `version`,
+      `check_version`).
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a

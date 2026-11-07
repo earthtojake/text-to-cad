@@ -764,7 +764,13 @@ def _integrations() -> list[tuple[str, str]]:
 
         lines = []
         for name, integration in INTEGRATIONS.items():
-            if name == "build123d" or not integration.extra:
+            if name == "build123d":
+                continue
+            if not integration.extra:
+                # A program the person installs (openscad): found and its version asked, by the integration's own
+                # module for it (``cad.<name>._program``: ``find``, ``version``); nothing run but the program's
+                # own version line, nothing made.
+                lines.append(_program_line(name, integration))
                 continue
             state, folder, release = integration_env.found(name)
             if state == "carried":
@@ -777,6 +783,22 @@ def _integrations() -> list[tuple[str, str]]:
         return lines
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [(WARNING, f"extras unknown ({type(error).__name__}: {error})")]
+
+
+def _program_line(name: str, integration) -> tuple[str, str]:
+    """The line of an integration that is a program the person installs, with no extra: where it is and its
+    version, checked against the oldest our code supports; else INFO with its install hint."""
+    import importlib
+
+    from cad._internal.programs import ProgramMissing
+
+    module = importlib.import_module(f"cad.{name}._program")
+    try:
+        path = module.find()
+        found = module.check_version(path, module.version(path))
+    except ProgramMissing as error:
+        return INFO, f"{name} {error}"
+    return OK, f"{name} {integration.probe.program} {found} at {_home(str(path))}"
 
 
 if __name__ == "__main__":

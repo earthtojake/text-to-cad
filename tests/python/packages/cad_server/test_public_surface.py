@@ -43,9 +43,10 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
     # KiCad's electrical rules check of a saved schematic: the document type's, run by the kicad integration's kicad-cli.
     "kicad_sch erc": ("cad.kicad_sch", "erc"),
-    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
+    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type (an OpenSCAD
+    # program's mesh rendered first).
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "scad")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -71,6 +72,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
                              "kicad_pcb")},
+    # An OpenSCAD program's: the engine's mesh export and snapshot of the STL OpenSCAD renders of it, and the
+    # library's summary of what it renders to.
+    "scad export": frozenset({"source", "destinations", "json"}),
+    "scad snapshot": SNAPSHOT,
+    "scad inspect": frozenset({"source"}),
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),

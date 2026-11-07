@@ -4,8 +4,9 @@ process=...)`` runs once its options are resolved (``cad._internal.manufacturing
 **The mesh.** An STL is measured as it is; a 3MF or a GLB is read by the library's own readers (its
 objects placed by its build, its units -- a 3MF's declared unit, a GLB's glTF metres, Y up -- made
 millimetres, Z up, as the viewer reads it) and written as one STL in a temporary folder, with no CAD
-kernel; a STEP, an xbf or a document the engine holds is exported to that STL by the engine, which
-tessellates it in its own kernel processes. The temporary folder is gone when the check returns: the
+kernel; an OpenSCAD program is rendered to that STL by OpenSCAD, headless (the openscad integration,
+``cad.openscad._render``); a STEP, an xbf or a document the engine holds is exported to that STL by the
+engine, which tessellates it in its own kernel processes. The temporary folder is gone when the check returns: the
 check writes nothing beside its source.
 
 **The result** is a ``CheckResult``: ``measurements`` the report the measurement made (``_molding``,
@@ -56,6 +57,10 @@ def _mesh_file(path: Path | None, source: Any, folder: Path) -> Path:
     if path is not None and path.suffix.lower() == ".stl":
         return path
     written = folder / "measured.stl"
+    if path is not None and path.suffix.lower() == ".scad":
+        from cad.openscad._render import render
+
+        return render(path, written).mesh  # OpenSCAD renders it, headless: the openscad integration's
     if path is not None and path.suffix.lower() in _MESHES:
         export(path, written, daemon=False, progress=False)  # numpy alone: no kernel, no engine
     else:

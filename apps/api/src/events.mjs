@@ -85,6 +85,7 @@ const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
+const KINDS_9 = new Set([...KINDS_8, 'scad']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
@@ -347,6 +348,9 @@ const SCHEMAS = new Map([
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
   // A live model is distinct from an actual file, even an xbf. Older schemas keep their own vocabulary.
   [8, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
+  // An OpenSCAD program (`scad`), a file whose mesh OpenSCAD renders, counted as a kind of its own.
+  [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_9,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
 ]);
 

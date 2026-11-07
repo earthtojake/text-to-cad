@@ -50,17 +50,19 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
-  because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
-  and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`, `scad`. 3MF's id is
+  `threemf` because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids
+  (`.step` and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone. `scad` is an OpenSCAD program, a
+  file authored as text whose every view is the mesh OpenSCAD renders of it (below, **OpenSCAD programs**).
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `openscad`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
-  kind: in-process, separate process, or both.
+  kind: in-process, separate process, or both. An integration whose tool is a program nothing on PyPI
+  carries (`openscad`) has no extra: the person installs the program, and its probe finds it.
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -156,7 +158,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    of its script (a shape's by the program that handed it over), so a restart opens every project
    at once; and, for a file document, the views derived from its bytes under that document, keyed by
    those bytes (a KiCad board's plot, its refilled pours, its DRC and its kept exports:
-   `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
+   `documents/<id>/kicad/<key>/`; an OpenSCAD program's rendered mesh and the files it read:
+   `documents/<id>/openscad/<key>/`), so a changed file is a new entry and nothing stale is served --
    every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
    deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
@@ -609,6 +612,13 @@ src/cad/
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
                          #   erc, export and edit, the kicad integration's
+  scad/                  # an OpenSCAD program: read (the program rendered as mesh data), export (its
+                         #   mesh as STL, 3MF or GLB), snapshot and inspect, each rendering first with
+                         #   the openscad integration, then the engine's mesh code; dfm every 3D type's
+  openscad/              # the openscad integration, no extra: OpenSCAD found and run headless (_program,
+                         #   on _internal/programs: CAD_OPENSCAD, PATH, its installer's places; the
+                         #   person's libraries kept reachable), one render of a program to a binary
+                         #   STL and the files it read, for the key of what is kept of it (_render)
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
                          #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
                          #   a board or a schematic through its headless api-server and KiPy
@@ -693,11 +703,41 @@ are its project's own `sym-lib-table`'s, loaded before the block runs; a placeme
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
 made is removed. Exports and checks of the edited file are explicit calls after the block.
 
+## OpenSCAD programs
+
+A `.scad` is source, authored as text (`cad.scad`, the `scad` document type): no decorator declares one and no
+edit changes one in place; the agent edits the file. OpenSCAD's kernel makes triangle meshes and no B-rep, so
+what a person reviews of a program is the mesh OpenSCAD renders of it, and every function of the type renders
+first, then hands the engine's mesh code the STL as an `.stl`'s own functions take it: `scad.read(path)` is the
+program as mesh data (a `Mesh`, what `stl.read` gives); `scad.export(path, *destinations)` writes its mesh to
+`.stl` (the rendered file, byte for byte), `.3mf` and `.glb`, and refuses a `.step`, an `.xbf` or a `.dxf` by
+name (there is no B-rep to write); `scad.snapshot(path, out, ...)` draws it as the CAD Viewer does;
+`scad.inspect(path)` says the OpenSCAD that rendered it, the files it includes, its triangles and its bounds;
+`scad.dfm(path, process=...)` measures it, its numbers millimetres. Each is the `cad scad <operation>` command,
+one to one. No verb or function sets a variable of the program (`-D`) or gives it a parameter file: a verb's
+option is about the picture or the path, never the model (law 22), and a variant of a program is a program.
+A 2D program (a `square`, a `circle`) is refused in one line: OpenSCAD renders it to a DXF or an SVG, which
+this type does not take.
+
+The render is the `openscad` integration's (`cad.openscad`), an external program our code runs with no extra:
+nothing on PyPI carries OpenSCAD, so the person installs it (2021.01 or newer; `cad doctor` says where it is
+and its version), and the probe finds it -- `CAD_OPENSCAD` first, refused unless it names an `openscad`
+(`openscad.exe`, the macOS bundle's `OpenSCAD`), then `PATH`, then its installer's places. Every run is
+headless, in a private folder: no display, OpenSCAD's own settings and cache out of the person's, and only the
+program itself ever run. One thing of the person's reaches a run: their OpenSCAD libraries (`OPENSCADPATH`
+and their home's library folder), since an `include` of one is an input of the program, as a Python package
+is of a script. OpenSCAD's dependency file says every file a render read (`include`, `use`, `import`), and the
+server keeps a program's mesh by the bytes of the program and of those files, with OpenSCAD's version, so an
+edit to a library renders the program again as an edit to the program does, and the same bytes are never
+rendered twice (law 2: `documents/<id>/openscad/<key>/`). The CAD Viewer shows a `.scad` as the mesh the
+server renders of it, read as an STL is, its page following the file on disk.
+
 ## Manufacturing checks
 
 A 3D document's `dfm` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
-`cad.glb.dfm`, one to one with `cad <type> dfm --process molding|printing`. The source is a file of
+(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm`,
+`cad.glb.dfm` and `cad.scad.dfm` (the program rendered first, by OpenSCAD), one to one with `cad <type> dfm
+--process molding|printing`. The source is a file of
 the type or, for `model`, a document the engine holds (its id, or the handle a model's call returns), so a
 check script measures the model it builds:
 

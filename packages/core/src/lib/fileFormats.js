@@ -20,7 +20,10 @@ export const RENDER_FORMAT = Object.freeze({
   XBF: TYPES.xbf.wire,
   KICAD_PCB: TYPES.kicad_pcb.wire,
   // A KiCad schematic, drawn from its files as a board is, a sheet at a time (`packages/ui/src/renderers/schematic`).
-  KICAD_SCH: TYPES.kicad_sch.wire
+  KICAD_SCH: TYPES.kicad_sch.wire,
+  // An OpenSCAD program: a mesh view whose bytes the server renders of it with OpenSCAD (its document's `mesh`,
+  // an STL); its own bytes are its text (`packages/ui/src/renderers/mesh`).
+  SCAD: TYPES.scad.wire
 });
 
 export const MESH_RENDER_FORMATS = Object.freeze(

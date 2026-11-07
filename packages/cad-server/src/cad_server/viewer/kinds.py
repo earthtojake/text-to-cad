@@ -16,6 +16,8 @@ a document of that kind, and the same id under another kind is a 404 that names 
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
+* ``scad``: ``mesh`` (the binary STL OpenSCAD renders of the program, kept by its bytes: ``scads.py``), which
+  the page parses as an STL's source, and ``source``, the program's own text.
 """
 from __future__ import annotations
 
@@ -44,6 +46,8 @@ EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID,
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 # A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
 EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]
+# An OpenSCAD program's page offers none yet: its mesh is written by ``cad scad export`` (stl, 3mf, glb).
+EXPORTS["scad"] = []
 
 
 def file_kind(path) -> str | None:

@@ -1,6 +1,6 @@
 """The manufacturing check every 3D document type shares: ``cad.<type>.dfm(source, process=...)``.
 
-``model``, ``xbf``, ``step``, ``stl``, ``threemf`` and ``glb`` each answer ``dfm`` with the same function,
+``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb`` and ``scad`` each answer ``dfm`` with the same function,
 made for the type here (``dfm_for``): its signature takes a file of the type (or, for ``model``, a document
 the engine holds: its id or handle) and plain values alone, so it is the type's (the signature rule), and
 its measuring is the trimesh integration's (``cad.trimesh._check``), imported when it runs. Two processes:
@@ -47,7 +47,7 @@ DEFAULTS = {name: value for given in OPTIONS.values() for name, value in given.i
 # The types that declare their own units, read as millimetres: a units option is the STL's alone.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
-             "model": "a model is in millimetres"}
+             "model": "a model is in millimetres", "scad": "an OpenSCAD program's numbers are millimetres"}
 
 
 def _flag(name: str) -> str:
@@ -130,7 +130,7 @@ def dfm_for(document_type: str) -> Any:
         with no draft, undercut candidates, overhangs, units that look wrong) as warnings; a family that
         could not be measured is an error, and fails the check. --json carries every measurement.
 
-        source: what to measure: a file of the type (an .stl, .3mf, .glb, .step or .xbf), or a model's
+        source: what to measure: a file of the type (an .stl, .3mf, .glb, .step, .xbf or .scad), or a model's
           document id the engine holds (cad model dfm), or the handle its call returns.
         process: molding or printing.
         pull: molding: the pull direction, an axis (z, -y) or x,y,z components; default z.

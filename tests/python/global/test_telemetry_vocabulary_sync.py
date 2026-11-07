@@ -59,12 +59,14 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         extra = names(CADGEN, "KINDS = frozenset({", "})")
         receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_6 = new Set([", "]);")
-                       + names(RECEIVER, "const KINDS_8 = new Set([", "]);"))
+                       + names(RECEIVER, "const KINDS_8 = new Set([", "]);")
+                       + names(RECEIVER, "const KINDS_9 = new Set([", "]);"))
         self.assertEqual(formats | set(extra), receiver)
         self.assertIn("model", extra)
         self.assertIn("xbf", formats)
+        self.assertIn("scad", formats)
         schema = ast.literal_eval(assignments["SCHEMA"])
-        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_8")
+        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_9")
 
 
 if __name__ == "__main__":
