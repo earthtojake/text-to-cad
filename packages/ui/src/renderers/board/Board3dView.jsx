@@ -298,7 +298,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     /** Whether anybody has moved the camera since it was shown and eased to where it opens: leaving a 3D view opened on the
      *  2D picture then frames its `plan`, as leaving one opened on a stored camera always does (`boardFrame.js`'s `leavingView`). */
     moved: () => opened.current !== null && cameraHands(runtime()) !== opened.current,
-    /** The 3D camera as the 2D view's window: what leaving 3D frames once the camera has moved, and what a prompt's view is. */
+    /** The 3D camera as the 2D view's window: what leaving 3D frames but after an untouched round trip (`leavingView`), and what a prompt's view is. */
     plan(mirrorX) {
       const current = camera(), target = runtime()?.controls?.target, { width, height } = paneSize();
       if (!current || !target) return null;
