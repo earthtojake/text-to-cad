@@ -16,6 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Iterable, Mapping
 
+from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE
+
 __all__ = ["NetClass", "Rules", "custom_limits"]
 
 
@@ -64,7 +66,10 @@ class Rules:
 
     @property
     def edge(self) -> float:
-        return max(self.edge_clearance, self.custom.get("edge_clearance", 0.0))
+        """What copper keeps from the outline as the router reads it: the edge clearance (the board's, or a custom
+        rule's where larger) and ``CHORD_TOLERANCE``, since the outline's arcs are read as chords within it and a
+        concave arc (a cutout's circle, a notch) passes its chords' middles on the board's side."""
+        return max(self.edge_clearance, self.custom.get("edge_clearance", 0.0)) + CHORD_TOLERANCE
 
     @property
     def hole_gap(self) -> float:

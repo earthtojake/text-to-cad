@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import random
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 from tests.python.support.paths import add_repo_path
@@ -344,6 +345,33 @@ class Plans(unittest.TestCase):
         self.assertEqual({"clearance": 0.5, "edge_clearance": 0.4}, limits)
         self.assertEqual(["no"], refused)
         self.assertEqual(0.5, RULES.with_custom(limits).clearance("A"))
+
+
+class Edges(unittest.TestCase):
+    def test_the_edge_is_kept_from_the_true_arc_not_its_chords(self) -> None:
+        """The outline is read as chords within CHORD_TOLERANCE of its arcs, and a circular cutout's chords lie
+        inside the circle, so the board's true edge passes each chord's middle on the board's side. A track kept
+        its edge clearance from the chords alone would come short of it there: a track parallel to each chord, a
+        micron short of the clearance from the true circle, is refused, even with KiCad's arc error at nothing;
+        one a few microns past it is allowed."""
+        cx, cy, r = 15.0, 10.0, 3.0
+        cut = (f'(gr_circle (center {cx} {cy}) (end {cx + r} {cy}) (stroke (width 0.1) (type default)) (fill no) '
+               f'(layer "Edge.Cuts") (uuid "{_uuid()}"))')
+        copper = read_copper(board(resistor("R1", 4, 4, 0, "A", "B"), resistor("R2", 26, 16, 0, "A", "C"), cut))
+        rules = replace(RULES, max_error=0.0)
+        router = Router(copper, rules, [want("A")])
+        clear = router._clear(want("A"), router._net("A"), 0, None, None)
+        ring = next(ring for ring in copper.outline if max(math.dist(p, (cx, cy)) for p in ring) < r + 1e-6)
+        need = rules.edge_clearance + 0.125  # the edge clearance and the track's half width
+        for (px, py), (qx, qy) in zip(ring, ring[1:]):
+            mx, my = (px + qx) / 2 - cx, (py + qy) / 2 - cy
+            ux, uy = mx / math.hypot(mx, my), my / math.hypot(mx, my)
+            tx, ty = qx - px, qy - py
+            tx, ty = tx / math.hypot(tx, ty) * 0.02, ty / math.hypot(tx, ty) * 0.02
+            for gap, ok in ((need - 0.001, False), (need + 0.007, True)):
+                ox, oy = cx + ux * (r + gap), cy + uy * (r + gap)
+                a, b = (round((ox - tx) * 1e6), round((oy - ty) * 1e6)), (round((ox + tx) * 1e6), round((oy + ty) * 1e6))
+                self.assertEqual(ok, clear(a, b), (gap, a, b))
 
 
 class Keepouts(unittest.TestCase):

@@ -248,7 +248,7 @@ class Router:
         local = [pad.clearance or 0.0 for pad in board.pads]
         widest = max([w.width / 2 for w in wants] + [w.via_diameter / 2 for w in wants] + [0.0])
         biggest = max([rules.clearance(net) for net in self.net_id] + [w.clearance for w in wants] + local
-                      + [rules.holes, rules.edge + 0.005, rules.hole_gap + max(w.via_drill for w in wants) / 2, 0.0])
+                      + [rules.holes, rules.edge, rules.hole_gap + max(w.via_drill for w in wants) / 2, 0.0])
         self.reach = biggest + widest + 0.2
         self._region()
         self.fields = Fields(self.i0, self.j0, self.nx, self.ny, self.pitch, self.copper, self.reach)
@@ -333,7 +333,8 @@ class Router:
                 obstacles.add("tracks", keepout.shape, layers, NO_NET)
             if keepout.vias:
                 obstacles.add("vias", keepout.shape, [], NO_NET)
-        # The outline as KiCad's chords: its arcs may lie up to CHORD_TOLERANCE outside them (Rules.edge adds it).
+        # The outline as chords within CHORD_TOLERANCE of its arcs, a concave arc passing them on the board's side
+        # by up to that: Rules.edge adds it.
         fields.set_edge(board.outline)
         obstacles.set_edge(board.outline)
 
