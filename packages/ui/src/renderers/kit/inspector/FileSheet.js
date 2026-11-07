@@ -26,7 +26,7 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
 // The value of the slider control (`SliderField.jsx`): no border, outline or ring in any state; plain
-// right-aligned text at rest, the view's corner buttons' soft wash under the pointer and the keyboard.
+// right-aligned text at rest, a soft wash (the foreground at 9%) under the pointer and the keyboard.
 const FILE_SHEET_QUIET_INPUT_CLASSES = [
   "m-0 box-border min-w-0 shrink-0 rounded-sm border-0 bg-transparent px-1 text-right text-tiny leading-4 tabular-nums text-foreground",
   "shadow-none outline-none ring-0 theme-none transition-colors hover:bg-foreground/[0.09] focus:bg-foreground/[0.09] focus-visible:ring-0",

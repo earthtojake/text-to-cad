@@ -230,7 +230,7 @@ route's `?sheet=<path>` answers that sheet's page alone and `index=0` leaves the
 hierarchy once per revision of its files, stamped by every sheet file and folder it read, and keeps
 each page it answered beside it. The colours are the
 reader's: the viewer's theme (`plot2d/theme.js`'s `schematicColors`, KiCad's light paper or a dark
-sheet), as the snapshot's `appearance`. A
+sheet); a snapshot's are always the light theme's. A
 schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the

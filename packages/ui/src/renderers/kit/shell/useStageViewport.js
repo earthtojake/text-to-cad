@@ -7,7 +7,7 @@ import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 
 /**
- * The projection as the corner's Projection button and a phone's More row switch it: the view's
+ * The projection as Projection's tile on the strip and a phone's More row switch it: the view's
  * settings' own, written back through its store. `used(value)` counts the press, where the view counts them.
  */
 export function projectionControl(store, scene, used = null) {

@@ -432,7 +432,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (moved) touchCamera(runtime, CAMERA_TOUCH.LOOK_AT);
     return moved;
   };
-  // The strip's zoom set to `next(percent now)` about the camera's target: the camera touched, as a wheel's.
+  // The zoom set to `next(percent now)` about the camera's target: the camera touched, as a wheel's.
   const zoomTo = next => {
     const runtime = runtimeRef.current;
     if (!runtime?.camera) return false;
@@ -543,10 +543,10 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
-    // Home: the view it opened with — from the opening direction, what is shown framed whole — the corner's
-    // Home button (`ViewCorner.jsx`), as Fusion's and Maya's cubes' Home is. A view seen from another side
-    // hands its own direction (`direction`, from the target to the eye, and its `up`), what is shown framed
-    // whole from there.
+    // Home: the view it opened with — from the opening direction, what is shown framed whole — the ghost
+    // button at the cube's upper-left (`ViewCorner.jsx`'s `ViewHome`), as Fusion's and Maya's cubes' Home is.
+    // A view seen from another side hands its own direction (`direction`, from the target to the eye, and its
+    // `up`), what is shown framed whole from there.
     goHome({ direction = DEFAULT_VIEW_DIRECTION, up = WORLD_UP } = {}) {
       const runtime = runtimeRef.current;
       if (!runtime) return false;
@@ -557,7 +557,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (moved) fitCamera(runtime);
       return moved;
     },
-    // The strip's zoom readout (`ZoomControl.jsx`): the zoom against the authored box (100%, which
+    // The zoom's reading (`ZoomControl.jsx`'s `viewportZoom`): the zoom against the authored box (100%, which
     // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
     zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },
     zoomBy(factor) { return zoomTo(percent => percent * factor); },

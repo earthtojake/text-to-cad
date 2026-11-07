@@ -3,10 +3,10 @@
 The kicad integration declares the command (``cad.registry.INTEGRATIONS["kicad"].commands``), so the server's
 ``cad run`` makes the environment of ``cad[kicad]`` for it and runs this module with that environment's
 Python (``python -P -m cad.kicad._command kicad-cli ARGS``). The program is the environment's own
-``kicad-cli``, kicode's console script beside this Python; with a kicode that installs none (those before
-the script), ``kicode.executable()`` itself. Never one on PATH, in KiCad's installation
+``kicad-cli``, kicode's console script beside this Python. Never one on PATH, in KiCad's installation
 folders or named by ``CAD_KICAD_CLI``, which picks the kicad-cli of cad's typed commands and edits:
-this runs the pinned one.
+this runs the pinned one. An environment with no script (a kicode that installs none, older than the pin)
+has no kicad-cli to run: the run says so, with the extra's install hint, and exits 2.
 
 It runs in a private folder of its own, the homes the typed commands' runs get (``_program.private_run``:
 kicode's ``environment``, no display, KiCad's library variables naming KiCad's own libraries: the first 3D
@@ -27,11 +27,10 @@ __all__ = ["main", "program"]
 
 
 def program(name: str = "kicad-cli") -> Path | None:
-    """The ``kicad-cli`` to run: the environment's own (beside this Python), else kicode's executable; None
-    where this environment holds neither."""
+    """The ``kicad-cli`` to run: the environment's own, kicode's console script beside this Python; None
+    where this environment has none."""
     folder = Path(sys.executable).parent
-    found = next((folder / item for item in (name, f"{name}.exe") if (folder / item).is_file()), None)
-    return found or _program.packaged()
+    return next((folder / item for item in (name, f"{name}.exe") if (folder / item).is_file()), None)
 
 
 def main(argv: list[str] | None = None) -> int:

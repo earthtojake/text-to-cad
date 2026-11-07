@@ -165,12 +165,11 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                              "sizeProfile); the other flags override every job")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
                                           "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), or "
-                                          "the display JSON object (mode, grid, appearance, camera, clip, exploded, "
+                                          "the display JSON object (mode, grid, camera, clip, exploded, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
-                                          "a JSON file of it; a drawing takes appearance alone: light or dark, as the word "
-                                          "or as {\"appearance\": ...}; a KiCad board a board mode (board, copper, assembly, "
-                                          "placement) or {mode, side, poured, layers, active, others, zones, tracks, appearance}; a KiCad schematic "
-                                          "{sheet, border, appearance}")
+                                          "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
+                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks}; "
+                                          "a KiCad schematic {sheet, border}. Every snapshot is drawn light")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "

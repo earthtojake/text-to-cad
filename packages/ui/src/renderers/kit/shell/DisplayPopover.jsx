@@ -53,13 +53,12 @@ export function DisplayMenuItems({ mode, grid = null, projection = null }) {
 }
 
 /**
- * The Display tile: the mode on screen's sphere, opening Display's list (`DisplayMenuItems`). A
- * mode chosen closes it, as a projection chosen does; the Grid switch leaves it open. Projection is
- * otherwise a tile of its own that switches on a click (`ProjectionToggle.jsx`); on a phone Display is
- * More's submenu instead (`RendererShell.jsx`).
+ * The Display tile, on the strip after Projection's (a board's after its Flip and 2D/3D): the mode on
+ * screen's sphere, opening Display's list (`DisplayMenuItems`) under it. A mode chosen closes it, as a
+ * projection chosen does; the Grid switch leaves it open. Projection is otherwise a tile of its own that
+ * switches on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
  */
-export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, className = null,
-  side = "bottom", align = "center", icon = null }) {
+export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid = null, projection = null, icon = null }) {
   const { t } = useI18n();
   const tileClass = useStripButtonClass();
   const current = mode.options.find(option => option.value === mode.value) || mode.options[0];
@@ -69,12 +68,12 @@ export default function DisplayPopover({ disabled = false, boundary = null, tool
   return <DropdownMenu modal={false} onOpenChange={onOpenChange}>
     <DropdownMenuTrigger asChild>
       <ToolbarButton label={t("display.modeCurrent", { mode: currentLabel })} tooltip={t("display.label")} tooltipSide={tooltipSide} disabled={disabled}
-        className={className || tileClass} data-display-mode={current?.value}>
+        className={tileClass} data-display-mode={current?.value}>
         {Icon ? <Icon /> : null}
       </ToolbarButton>
     </DropdownMenuTrigger>
     {/* Closes with no exit animation, so a quick second press always reaches the tile. */}
-    <DropdownMenuContent side={side} align={align} sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
+    <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuLabel className="text-muted-foreground">{t("display.label")}</DropdownMenuLabel>
       <DisplayMenuItems mode={mode} grid={grid} projection={projection} />

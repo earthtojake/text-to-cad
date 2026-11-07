@@ -43,7 +43,7 @@ function LayerEye({ id, hidden, onToggle, label = null }) {
  * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Under the
  * layers, **Layer display** (the other layers, the pours, the opacities), as
  * KiCad's Appearance panel has them (`BoardDisplay.jsx`): how the board is drawn, changed now and then, so
- * the panel's; the preset (Display) and the side, changed often, are the view's corner's. Last in Other,
+ * the panel's; the preset (Display) and the side (Flip), changed often, end the strip. Last in Other,
  * **3D models**: the parts' models in the 3D view (how many parts stand on one, and an eye), a seldom-used
  * control kept here in both modes so the panel never differs between them; in 2D it changes nothing drawn.
  *

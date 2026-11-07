@@ -94,7 +94,7 @@ async function frame(pane, before = null) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await settle(pane.page());
     // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-view-corner] { visibility: hidden !important; }' });
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill] { visibility: hidden !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }

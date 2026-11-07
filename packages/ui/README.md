@@ -257,7 +257,9 @@ centre holds the file's tools — a STEP's Select (its selection filter the chev
 Pencil and Shapes (plain buttons: what each draws with is the row under the strip), Measure, then, after a thin rule, Explode and Clip; a robot's Select, Pencil, Shapes, Measure and Clip; a GLB's
 Select (its nodes), Pencil, Shapes, Measure, Explode (several parts) and Clip; a 3MF's Select (its
 objects), Pencil, Shapes, Measure and Clip; an STL's Pencil, Shapes and Clip — then, with no rule between, a
-3D view's Display (its settings, a popover that opens down) and Preview. The tool in hand's
+3D view's Projection (the state button), Display (its settings, a popover that opens down) and Preview; a
+board's are Flip, 2D/3D and Display. The corner at the bottom-right holds the cube and its Home, or a flat
+view's zoom pill. The tool in hand's
 controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
 the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.

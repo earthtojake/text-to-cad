@@ -211,9 +211,9 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   expect([robot.filter(), robot.knobs(), picks.latest!.enabled]).toEqual(['Selection filter: Position', 1, false]);
   expect(robot.toolNames()).toEqual(SELECT_IN_HAND);
 
-  // Display is not a tool: its menu (the modes and Grid), from its button in the view's corner, opens over
+  // Display is not a tool: its menu (the modes and Grid), from its tile at the strip's end, opens over
   // Select and leaves it the tool, with its knobs; Escape puts it away.
-  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-view-corner]')!).getByRole('button', { name: /^Display mode: / }));
+  await user.click(within(robot.pane.querySelector<HTMLElement>('[data-cad-toolbar] [data-view-controls]')!).getByRole('button', { name: /^Display mode: / }));
   await waitFor(() => expect(document.querySelector('[role=menu][aria-label="Display"]')).not.toBeNull());
   expect([robot.toolNames(), robot.knobs()]).toEqual([SELECT_IN_HAND, 1]);
   await user.keyboard('{Escape}');
@@ -233,15 +233,15 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Preview ends the strip, in the section of Clip's, one rule in all; Display, Projection and Home are the corner's; the navbar holds none of them", async () => {
+it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; Home is the cube's; the navbar holds none of them", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
   const actions = strip.querySelector<HTMLElement>('[data-view-controls]')!;
   // Two sections: the tools that pick, a rule, then Clip and the view's controls, nothing between them.
   expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
   expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
-  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Preview']);
-  expect([...robot.pane.querySelectorAll('[data-view-corner] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display mode: Solid', 'Projection: Orthographic', 'Home']);
+  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
+  expect(robot.pane.querySelector('[data-view-home]')?.getAttribute('aria-label')).toBe('Home');
   expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   robot.client.dispose();
 });

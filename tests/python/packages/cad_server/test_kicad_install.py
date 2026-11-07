@@ -11,6 +11,7 @@ kicad-cli. No KiCad: the candidates are small scripts, and kicode a stand-in mod
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import stat
@@ -80,7 +81,7 @@ class Discovery(unittest.TestCase):
         with self.assertRaisesRegex(install.KicadMissingError, "not found.*cad\\[kicad\\].*CAD_KICAD_CLI"):
             self._find(self.stable.parent, self.nightly.parent, self.app.parent)
 
-    def test_cad_run_kicad_cli_runs_the_environment_s_then_kicode_s_never_path_s_or_the_variable_s(self) -> None:
+    def test_cad_run_kicad_cli_runs_the_environment_s_console_script_alone(self) -> None:
         from cad.kicad import _command
 
         packaged = self._executable(self.root / "kicode", "kicad-cli")
@@ -90,10 +91,14 @@ class Discovery(unittest.TestCase):
         variables = {"PATH": str(self.stable.parent), "CAD_KICAD_CLI": str(self.stable)}
         with mock.patch.object(_command.sys, "executable", str(python)), mock.patch.dict(os.environ, variables), \
                 mock.patch.dict(sys.modules, {"kicode": self._kicode(packaged)}):
-            self.assertEqual(_command.program(), packaged, "a kicode with no console script: its executable")
+            self.assertIsNone(_command.program(), "no console script: none, never kicode's executable itself")
+            stderr = io.StringIO()
+            with mock.patch.object(_command.sys, "stderr", stderr):
+                self.assertEqual(_command.main(["kicad-cli", "version"]), 2)
+            self.assertIn("cad run: kicad-cli is not in this environment: ", stderr.getvalue())
             script = self._executable(environment / "scripts", "kicad-cli")
             script.replace(environment / script.name)
-            self.assertEqual(_command.program(), environment / script.name, "kicode's console script comes first")
+            self.assertEqual(_command.program(), environment / script.name, "kicode's console script")
         with mock.patch.object(_command.sys, "executable", str(self.empty / "python")), \
                 mock.patch.dict(os.environ, variables), mock.patch.dict(sys.modules, {"kicode": None}):
             self.assertIsNone(_command.program(), "never one on PATH or CAD_KICAD_CLI's")

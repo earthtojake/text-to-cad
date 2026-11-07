@@ -41,7 +41,8 @@ contains `colorMode` (`original`, `single`, `by-part`), `color` and `colors`; `l
 contains `quality`, `exposure`, `rotation`, `size`, `fill`; `background` contains `color`,
 `opacity`; `floor` contains `enabled`, `placement`, `color`, `opacity`, `finish`.
 
-Viewer appearance inherits the host; snapshots default to light. Preview's lighting quality
+Viewer appearance inherits the host. A snapshot is always light, whatever the viewer's: `cad <type> snapshot`'s
+display takes no `appearance`, and a view a Quick Edit packet carries names none. Preview's lighting quality
 defaults to Preview. There is no Custom state, legacy alias or
 migration. A stored display or Preview settings record is read setting by setting at the
 file-session read boundary (`readViewSettings`, `readPreviewSettings`): what this build

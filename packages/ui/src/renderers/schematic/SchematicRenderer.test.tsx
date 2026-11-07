@@ -150,7 +150,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   expect(pane.querySelector('[data-schematic-row="part:R1"]')).toBeNull();
   // Its Export is KiCad's: the PDF, the SVGs, the netlist and the BOM.
   expect(exportChoices({ file: '/models/divider.kicad_sch', planar: false }).map(choice => choice.format)).toEqual(['pdf', 'svg', 'netlist', 'bom']);
-  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false, appearance: 'light' });
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
   view.dispose();
 });
 
@@ -276,10 +276,10 @@ it("Select's filter is KiCad's boxes, each its name alone; without Pins a press 
   view.dispose();
 });
 
-it('in the dark theme the sheet is drawn dark', async () => {
+it('in the dark theme the sheet is drawn dark, and the view a snapshot replays names no theme: it is drawn light', async () => {
   const view = await open({ colorScheme: 'dark' });
   await onSheet(view.pane, '/');
   await waitFor(() => expect(drawn.includes('dark')).toBe(true));
-  expect((await controllerOf(view)).readState().schematicDisplay.appearance).toBe('dark');
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
   view.dispose();
 });

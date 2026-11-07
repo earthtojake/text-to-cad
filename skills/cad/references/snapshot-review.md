@@ -60,8 +60,9 @@ cad model snapshot "$ID" tmp/top.png --camera top
 cad model snapshot "$ID" tmp/front.png --camera front
 ```
 
-With no flags a snapshot is the `solid` display, Light appearance, an orthographic
-isometric camera fitted to the model, 1600x1200.
+With no flags a snapshot is the `solid` display, an orthographic isometric camera fitted
+to the model, 1600x1200. A snapshot is always light, whatever theme the viewer is in or the
+view it replays was seen in: no flag or packet names a theme.
 
 ## Display, camera and size
 
@@ -71,7 +72,7 @@ colour), `xray` (translucent surfaces, hidden edges visible), `hidden-line`
 (linework with occluded edges suppressed) and `wireframe` (edges only). It also takes
 `exploded=AMOUNT` (the parts moved apart as the viewer's Explode moves them, 0 to 1),
 alone or after a mode (`hidden-line,exploded=0.6`), or the viewer's display object,
-inline or as a JSON file: `mode`, `grid`, `appearance` (`light` or `dark`), `camera`
+inline or as a JSON file: `mode`, `grid`, `camera`
 (`projection`: `orthographic` or `perspective`; `focalLength`), `clip` and `exploded`
 (`{"enabled": true, "amount": 0.5}`). `parts` and `exploded` are refused for a
 document of one part. Unknown keys and out-of-range values are refused.
@@ -211,8 +212,8 @@ still on it.
   of the Parts palette, where the viewer opens it. `--pose` names an SRDF group state
   or gives joint values (degrees, metres) over that pose.
 - **A drawing** (`.dxf`) is drawn whole from above in its pens, as the viewer's
-  drawing pane draws it. It takes `--display` with `appearance` alone (`--display dark`,
-  or `{"appearance": "dark"}`), and the size flags; every other flag is refused by name.
+  drawing pane draws it, on white paper. It takes no `--display`; the size flags, a plan-view
+  `--camera`, `--annotation` and `--measurements` apply, and every other flag is refused by name.
 
 ## Output paths
 

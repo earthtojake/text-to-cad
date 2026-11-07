@@ -94,23 +94,21 @@ export function toolPanelDefaultHeight(stackHeight) {
   return Math.round(Number(stackHeight)) || null;
 }
 
-export const FLAT_DETAIL_MAX_FIT_HEIGHT = 320;
-export const FLAT_DETAIL_FIT_FRACTION = 0.4;
+// The Selected pane's share of the view's panel's height (`flatDetailHeight`): its height whatever is picked.
+export const FLAT_DETAIL_SHARE = 0.4;
 export const FLAT_DETAIL_MIN_HEIGHT = 96;
 export const FLAT_LISTS_MIN_HEIGHT = 160;
 
 /**
- * The height of the 2D views' Selected pane, and the most it may have. A person's (`kept`, or `draft`
- * during a drag) is used as it is; else the pane fits its content (`content`, the whole height the
- * content needs), up to the smaller of 320px and 40% of the panel, past which it scrolls; with the
- * content not measured yet, that cap. Always within 96px and what leaves the lists above it 160px;
- * 96px where the panel is not measured yet.
+ * The height of the views' Selected pane, and the most it may have. A person's (`kept`, or `draft` during a drag)
+ * is used as it is; else a steady share of the panel (`FLAT_DETAIL_SHARE`, 40%), whatever is picked and however
+ * much of it there is: the lists above it stop jumping with every pick, a tall screen gets a tall pane, and what is
+ * picked scrolls inside it. Always within 96px and what leaves the lists above it 160px; 96px where the panel is not
+ * measured yet.
  */
-export function flatDetailHeight({ panelHeight = 0, kept = null, draft = null, content = null } = {}) {
+export function flatDetailHeight({ panelHeight = 0, kept = null, draft = null } = {}) {
   const panel = Number(panelHeight) || 0;
   const max = Math.max(FLAT_DETAIL_MIN_HEIGHT, panel - FLAT_LISTS_MIN_HEIGHT);
-  const cap = Math.min(FLAT_DETAIL_MAX_FIT_HEIGHT, panel * FLAT_DETAIL_FIT_FRACTION);
-  const fit = typeof content === "number" && Number.isFinite(content) ? Math.min(cap, content) : cap;
-  const wanted = draft ?? kept ?? fit;
+  const wanted = draft ?? kept ?? panel * FLAT_DETAIL_SHARE;
   return { height: Math.round(Math.min(max, Math.max(FLAT_DETAIL_MIN_HEIGHT, wanted))), max };
 }

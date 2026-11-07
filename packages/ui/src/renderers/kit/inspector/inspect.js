@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react";
-import { english } from "@cad/ui/i18n";
 
 /**
  * What a view says of what it picks: ONE shape, which the Selected pane, a Quick Edit chip's card and
@@ -22,7 +21,7 @@ import { english } from "@cad/ui/i18n";
  *
  * @typedef {object} DetailItem
  * @property {string} id  Stable while it describes the same pick.
- * @property {string} pick  What a press on its name selects again ("" for none: several picks).
+ * @property {string} pick  What a press on its name selects again ("" for none: a chip's card, which copies).
  * @property {string} kind  Its glyph: a key of the view's `glyphs`, else a pick glyph (`pickGlyph.jsx`).
  * @property {string} title  Its name ("U3.5", "Circle on CUT", "upper_arm").
  * @property {string} [tip]  What it is, short, after its name in the hover tip ("U12.57 · /TVRAM12").
@@ -58,17 +57,33 @@ export function hoverTipText(item) {
 }
 
 /**
- * The Selected pane's item for what is picked: the one pick as the view describes it; several, how many
- * and each of them (its name, and its short kind), each a row that picks it alone. Null for nothing.
+ * The picks as the Selected pane's switcher lists them (`ItemDetail.jsx`'s `SelectedPane`): each its glyph, its name
+ * and its short kind, in the order they were picked, those the view can describe.
+ * @param {readonly string[]} ids
+ * @param {(id: string) => DetailItem | null} describe
+ * @returns {{ id: string, kind: string, label: string, detail: string }[]}
  */
-export function selectionItem(inspect, t = english) {
-  const ids = inspect?.selected || [];
-  if (!ids.length) return null;
-  if (ids.length === 1) return inspect.describe(ids[0]);
-  const rows = ids.map((id) => {
-    const item = inspect.describe(id);
-    return item ? { id, kind: item.kind, pick: id, label: item.title, detail: item.tip || "" } : null;
+export function pickRows(ids, describe) {
+  return ids.map(id => {
+    const item = describe(id);
+    return item ? { id, kind: item.kind, label: item.title, detail: item.tip || "" } : null;
   }).filter(Boolean);
-  return { id: `many:${ids.join(",")}`, pick: "", kind: "", title: t("selection.count", { count: ids.length }), facts: [],
-    related: { title: t("selection.items"), count: "", rows } };
+}
+
+/**
+ * The active pick among several (Blender's active object), once the picks go from `before` to `after`: a pick added
+ * becomes it (the last of those added, as they were picked); else it stays while it is picked, and when it is let go
+ * of, the nearest pick left takes over, the one after it, else the one before it. "" with nothing picked.
+ * @param {readonly string[]} before
+ * @param {readonly string[]} after
+ * @param {string} active
+ */
+export function nextActivePick(before, after, active) {
+  if (!after.length) return "";
+  const added = after.filter(id => !before.includes(id));
+  if (added.length) return added.at(-1);
+  if (after.includes(active)) return active;
+  const at = before.indexOf(active);
+  if (at < 0) return after.at(-1);
+  return before.slice(at + 1).find(id => after.includes(id)) ?? before.slice(0, at).reverse().find(id => after.includes(id)) ?? after.at(-1);
 }

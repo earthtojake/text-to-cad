@@ -223,7 +223,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // A pane narrower than a phone's breakpoint (each of two side by side) has a phone's strip: the
   // view's controls are rows of its More menu, Projection and Preview items, Display's and the zoom's
   // choices opened under their rows in More itself (a phone has no room beside More for a submenu).
-  const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
+  const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
   const moreButton = pane => pane.locator('[data-cad-toolbar] [data-strip-more]');
   const moreMenu = page.getByRole('menu', { name: 'More tools', exact: true });
   const display = moreMenu.getByRole('group', { name: 'Display', exact: true });
@@ -514,9 +514,9 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  // The cube has no Home of its own: Home is the view's corner's, over it.
+  // The cube draws no Home of its own: Home is the corner's ghost button at its upper-left.
   assert.equal(await pane.getByLabel('View cube', { exact: true }).getByRole('button', { name: 'Home', exact: true }).count(), 0);
-  assert.equal(await pane.locator('[data-view-corner]').getByRole('button', { name: 'Home', exact: true }).count(), 1);
+  assert.equal(await pane.locator('[data-view-home]').getAttribute('aria-label'), 'Home');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
@@ -705,26 +705,27 @@ test('a renderer says more about its load than a download: finding the file, edi
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
   const offBottom = frameBox.y + frameBox.height - cubeBox.y - cubeBox.height;
-  // Its box 2px off the bottom, its drawing 8px, as every corner control.
-  assert.ok(offBottom >= 0 && offBottom < 16, `the view cube sits just off the bottom-right corner: ${offBottom}px`);
+  // Its box 8px off the bottom and 2px from the right edge, so its axes stay inside the view.
+  assert.ok(Math.abs(offBottom - 8) < 0.5, `the view cube sits 8px off the bottom: ${offBottom}px`);
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
-  // The cube's box overhangs the right edge by 6px, so its drawing stands 8px in, as every corner control does.
-  assert.ok(offRight >= -6 && offRight < 20, `the view cube stays against the right edge: ${offRight}px`);
+  assert.ok(Math.abs(offRight - 2) < 0.5, `the view cube stays 2px from the right edge: ${offRight}px`);
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
   assert.deepEqual(await pane.locator('[data-cad-toolbar] [data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Preview'], 'Preview at the strip\'s end');
-  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'Display, Projection, then Home over the cube');
-  // Each the strip's own 24px button, 4px apart, flush with the cube's right face (20px inside its box) and
-  // the lowest standing on the box's top.
-  const column = await pane.locator('[data-view-corner] > button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().toJSON()));
-  assert.equal(column.length, 3);
-  for (const [index, box] of column.entries()) {
-    assert.deepEqual([box.width, box.height], [24, 24], `corner button ${index} is 24px square`);
-    assert.ok(Math.abs(box.x + box.width - (cubeBox.x + cubeBox.width - 20)) < 0.5, `corner button ${index} flush with the cube's right face`);
-    if (index) assert.ok(Math.abs(box.y - column[index - 1].y - 28) < 0.5, `corner button ${index} 4px under the one over it`);
-  }
-  assert.ok(Math.abs(column.at(-1).y + 24 - cubeBox.y) < 0.5, 'the column stands on the cube box\'s top');
+    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'Projection, Display then Preview at the strip\'s end');
+  // Home, the corner's one button: a 24px ghost tile at the cube's upper-left, over its box's corner by 16px across
+  // and 10px down, with no surface of its own (no fill, border or shadow) until the pointer is on it.
+  const homeButton = await pane.locator('[data-view-home]').elementHandle();
+  const home = await homeButton.evaluate(button => {
+    const style = getComputedStyle(button);
+    const shadowed = (style.boxShadow.match(/rgba?\([^)]*\)/g) || []).some(color => !/rgba\([^)]*,\s*0\)$/.test(color));
+    return { ...button.getBoundingClientRect().toJSON(), fill: style.backgroundColor, border: style.borderTopWidth, shadowed };
+  });
+  assert.deepEqual([home.width, home.height], [24, 24], 'Home is a 24px tile');
+  assert.ok(Math.abs(home.x + 24 - (cubeBox.x + 16)) < 0.5 && Math.abs(home.y + 24 - (cubeBox.y + 10)) < 0.5, `Home at the cube's upper-left: ${JSON.stringify([home, cubeBox])}`);
+  assert.deepEqual([home.fill, home.border, home.shadowed], ['rgba(0, 0, 0, 0)', '0px', false], 'Home has no surface at rest');
+  await homeButton.hover();
+  await page.waitForFunction(button => getComputedStyle(button).backgroundColor !== 'rgba(0, 0, 0, 0)', homeButton);
+  await page.mouse.move(frameBox.x + 40, frameBox.y + frameBox.height / 2);
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
 

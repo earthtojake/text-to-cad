@@ -224,10 +224,10 @@ the board is drawn: Other layers (KiCad's high-contrast modes: the layers but th
 **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and vias
 through an active copper layer, always stay at full strength), the copper pours and the zones' and
 tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
-tabs, the picked part's or net's pads. The view's corner, over the zoom, has **Display** (the
-preset: the mode), **2D/3D** (a square while the board is flat, a box in 3D) and **Flip** (the side
-seen: the board as two stacked layers, the side facing you solid; ⇧F).
-Each button's icon is what is on screen and its tooltip what a press does. These are the display, so a Quick Edit's packet
+tabs, the picked part's or net's pads. The tool strip ends, after its rule, with **Flip** (the side
+seen: the board as two stacked layers, the side facing you solid; ⇧F), **2D/3D** (a square while the
+board is flat, a box in 3D) and **Display** (the preset: the mode); the zoom is the pill at the
+bottom-right. Flip's and 2D/3D's icons are what is on screen and their tooltips what a press does. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
@@ -249,13 +249,12 @@ the command's environment. `cad run kicad-cli` reads KiCad's library as KiCad do
 `${KICADn_3DMODEL_DIR}` is the first of those library folders, and a `.wrl` name needs its `.wrl` file
 there (KiCad 10's library ships STEP alone), so prefer the typed export.
 
-Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
-theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
-light unless the display says `dark`, as every snapshot is:
+Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes
+are `board`, `copper`, `assembly`, and `placement`. A still is always light (the light canvas and its
+colours), whatever the viewer's theme, as every snapshot is:
 
 ```bash
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
-cad kicad_pcb snapshot board.kicad_pcb tmp/copper-dark.png --display copper,dark
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
@@ -285,8 +284,9 @@ that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, 
 app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
 drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
 menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
-a Quick Edit packet carries the sheet and theme the view showed:
+a Quick Edit packet carries the sheet the view showed. A still is always on KiCad's light paper,
+whatever the viewer's theme:
 
 ```bash
-cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","appearance":"dark"}'
+cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
 ```

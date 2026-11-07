@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FlatPanel from './FlatPanel.jsx';
 
-// The Selected pane fits its content up to min(320px, 40% of the panel); the person's height, once
-// dragged, wins until a double-click on the separator clears it.
+// The Selected pane is 40% of the panel, whatever it holds; the person's height, once set, wins until a
+// double-click on the separator clears it.
 let panelHeight = 800, contentHeight = 100;
 const observers = new Set<() => void>();
 const remeasure = () => act(() => { observers.forEach(callback => callback()); });
@@ -32,27 +32,29 @@ const pane = () => document.querySelector<HTMLElement>('[data-flat-panel-detail]
 const height = () => pane().style.height;
 const grip = () => screen.getByRole('separator', { name: 'Resize details' });
 
-it('fits its content under the cap, caps at min(320px, 40% of the panel), and keeps the height a person drags', () => {
+it('is 40% of the panel whatever it holds, with no ceiling, and keeps the height a person sets until a double-click resets it', () => {
   render(<Panel />);
-  expect(height()).toBe('101px'); // 100px of content and the pane's top rule
-  contentHeight = 150; remeasure();
-  expect(height()).toBe('151px');
+  expect(height()).toBe('320px'); // 40% of 800, with 100px of content in it
   contentHeight = 40; remeasure();
-  expect(height()).toBe('96px'); // never under the minimum
+  expect(height()).toBe('320px'); // what it holds does not size it: the lists above it stay put
   contentHeight = 900; remeasure();
-  expect(height()).toBe('320px'); // 40% of 800 is 320; scrolls inside past it
-  panelHeight = 600; remeasure();
-  expect(height()).toBe('240px'); // 40% of 600
-  panelHeight = 800; contentHeight = 150; remeasure();
+  expect(height()).toBe('320px'); // it scrolls inside
+  panelHeight = 1200; remeasure();
+  expect(height()).toBe('480px'); // a tall panel, a tall pane
+  panelHeight = 300; remeasure();
+  expect(height()).toBe('120px');
+  panelHeight = 200; remeasure();
+  expect(height()).toBe('96px'); // never under the minimum
+  panelHeight = 800; remeasure();
 
   expect(grip().getAttribute('aria-description')).toMatch(/Double-click/);
-  fireEvent.keyDown(grip(), { key: 'ArrowUp' }); // a person's height: 151 + 16
-  expect(height()).toBe('167px');
-  contentHeight = 300; remeasure();
-  expect(height()).toBe('167px'); // content no longer resizes it
+  fireEvent.keyDown(grip(), { key: 'ArrowUp' }); // a person's height: 320 + 16
+  expect(height()).toBe('336px');
+  panelHeight = 900; remeasure();
+  expect(height()).toBe('336px'); // the panel no longer sizes it
 
   fireEvent.doubleClick(grip());
-  expect(height()).toBe('301px'); // back to fitting
+  expect(height()).toBe('360px'); // back to 40% of the panel
 });
 
 // "/" puts the keyboard in the search once per press: the panel closed and opened again, or mounted

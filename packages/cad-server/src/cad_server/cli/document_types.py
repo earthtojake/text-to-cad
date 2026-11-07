@@ -462,8 +462,6 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
     del args.sheet, args.border
     if sheet is not None or border:
         given = args.display
-        if given and not given.strip().startswith("{") and not given.strip().endswith(".json"):
-            given = json.dumps({"appearance": given.strip()})
         # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
         # that does not read, are the command line's, said before anything renders.
         if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
@@ -475,7 +473,7 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
         except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
             return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
         if not isinstance(display, dict):
-            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border, appearance}",
+            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border}",
                            "invalid_argument")
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)

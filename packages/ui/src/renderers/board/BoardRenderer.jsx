@@ -72,9 +72,9 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * controls are the view's corner's (`kit/shell/ViewCorner.jsx`), in its column over the zoom pill
- * (`BoardDisplay.jsx`): Display (the preset), 2D/3D and Flip (the side, top or bottom; ⇧F), each of the
- * two a button whose icon is the state on screen; the Layers tab has the
+ * controls end the strip, after its rule (`BoardDisplay.jsx`): Flip (the side, top or bottom; ⇧F), 2D/3D
+ * and Display (the preset), the first two each a button whose icon is the state on screen; the corner
+ * holds the zoom pill alone; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  *
@@ -83,7 +83,7 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
  * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
  * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
- * camera's projection; there is no cube and no Home button (Zoom to fit frames the board). A press
+ * camera's projection; there is no cube and no Home (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
  * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.
@@ -563,9 +563,9 @@ function BoardSurface({ view, data }) {
     const transform = plan ? plan.transform : current?.transformRef.current;
     const camera = transform && size ? planCamera(transform, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
-    // The view as it was seen: its Display and the theme it was drawn in (a snapshot's `appearance`).
+    // The view as it was seen: its Display, never its theme (a snapshot is drawn light whatever the viewer's).
     const shownDisplay = plan ? { ...displayRef.current, side: plan.side } : displayRef.current;
-    return seen ? { ...seen, display: { ...viewDisplay(shownDisplay), appearance: schemeRef.current } } : null;
+    return seen ? { ...seen, display: viewDisplay(shownDisplay) } : null;
   }, [mirrorFor]);
 
   // Measure's layer: the measurements, the one being drawn, and the snap under the pointer.
@@ -651,7 +651,7 @@ function BoardSurface({ view, data }) {
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences,
     // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back. ⇧F, Flip's: the board seen from
-    // its other side (in 3D the camera turned over), as the corner's button does.
+    // its other side (in 3D the camera turned over), as Flip's tile on the strip does.
     onViewKey: event => {
       if (!layered) return false;
       if (event.key === BOARD_DIMENSION_SHORTCUT && !event.shiftKey) {
