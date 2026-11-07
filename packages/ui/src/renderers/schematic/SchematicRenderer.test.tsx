@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-async function open({ colorScheme = 'light' } = {}) {
+async function open({ colorScheme = 'light', promptFiles = undefined as any } = {}) {
   const file = '/models/divider.kicad_sch';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -82,6 +82,7 @@ async function open({ colorScheme = 'light' } = {}) {
   const live = { bind(next: unknown) { controller = next; return () => { controller = null; }; } };
   const renderers = [createSchematicRenderer({ client, live })];
   const host = {
+    promptFiles,
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'kicad_sch' }) },
     navigation: { openFile: noop },
     environment: { colorScheme, locale: 'en' },
@@ -119,6 +120,7 @@ const zoomIn = async (pane: HTMLElement) => {
   fireEvent.wheel(canvasOf(pane), { deltaY: -700, clientX: 600, clientY: 350 });
   await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(before * 2));
 };
+const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 
@@ -281,5 +283,28 @@ it('in the dark theme the sheet is drawn dark, and the view a snapshot replays n
   await onSheet(view.pane, '/');
   await waitFor(() => expect(drawn.includes('dark')).toBe(true));
   expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false });
+  view.dispose();
+});
+
+it("a note on a pick hands over the view and its sheet, and no references: lighting them is a board's snapshot's alone", async () => {
+  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/divider.snapshot.json' })), read: vi.fn(), save: vi.fn() };
+  const view = await open({ promptFiles });
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const controller = await controllerOf(view);
+  await zoomIn(pane);
+  tap(pane, [101.6, 59.69]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#R1']));
+  const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
+  const note = within(quickEdit).getByRole('textbox', { name: 'Describe your changes' });
+  note.textContent = 'Make R1 10k.';
+  fireEvent.input(note);
+  fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
+  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
+  // `cad kicad_sch snapshot --job` refuses a packet's references (a schematic's still lights none), as the prompt-files
+  // route does any but a board's: a packet that named the pick would answer 400 and the note would not go.
+  const request = promptFiles.create.mock.calls[0][0] as any;
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: false } })]);
+  expect(request).not.toHaveProperty('references');
   view.dispose();
 });

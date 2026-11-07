@@ -78,9 +78,6 @@ function readSheetViews(raw) {
 }
 const sheetViewsRecord = views => Object.fromEntries([...views].filter(([, view]) => view).map(([path, view]) => [path, { ...view }]));
 const readSheet = raw => (typeof raw?.sheet === "string" && raw.sheet ? canonicalSheetPath(raw.sheet) : "/");
-const schematicPacketReferences = (references, file) => [...new Set(references
-  .filter(reference => reference?.resource?.path === file && reference.target?.kind === "cad-selector")
-  .flatMap(reference => reference.target.selectors))];
 
 function SchematicSurface({ view, data }) {
   const { t } = useI18n();
@@ -463,10 +460,12 @@ function SchematicSurface({ view, data }) {
     capture,
     thumbnail
   };
+  // A note's packet names no references: `cad kicad_sch snapshot --job` lights none yet (a board's alone does), and the
+  // prompt-files route refuses them for any file but a board. The note itself still names every pick.
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: SCHEMATIC_LIVE,
-    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: schematicPacketReferences
+    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed")
   });
 
   // ---- the menu: a secondary tap on the sheet, under Select (`kit/shell/viewMenu.js`'s groups) ----
