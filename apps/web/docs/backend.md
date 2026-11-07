@@ -105,12 +105,11 @@ the engine holds (`file` is its id, `name` its function, `sourcePath` null: it h
 browse); else a 404 whose `error` is the engine's words for why, naming the command that builds
 it again, and whose `state` the engine's (`unsaved`, `detached`). A script is never a row. An
 envelope says what the document is: `id`, `kind` (`model`, or a file's by its extension: `xbf`,
-`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `sdf`), `name`, `version`, `state` (a model's,
+`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `sdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
 the engine's: `live`, `held`, `building`, `failed`; a file's `live`), `source` (a model's script and
 function, a file's path), `producers`, `api` (where its kind's reads are,
 `/api/v1/documents/<kind>/<id>`), `exports` (the formats its Export offers), and for a document
-the engine serves, `held` (whether the engine holds its read now, asked without starting one). A row is computed from the file when it is asked for, so it is never
-stale. It also carries `revision`, a digest of its entries that moves whenever
+the engine serves, `held` (whether the engine holds its read now, asked without starting one). A row is computed from the file when it is asked for. It also carries `revision`, a digest of its entries that moves whenever
 anything a client would see in them does: a host that cannot afford to read the
 catalog on a timer (the CAD app relays every request through its host's few
 shared slots) compares the revision it is told with the client's
@@ -189,7 +188,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | Route | Purpose |
 |---|---|
 | `GET /api/v1/server` | Server identity: `app` (`cad-viewer`), `release` (the release the engine runs: a page that reconnects to another reloads), `identityToken`, `platform` (which file manager Reveal opens), `user`, `home` (the person's home folder: where a model's Files starts with nowhere else to start), `start` (the folder of the most recent launch, which its relative files are read from), `pick` (whether the home offers Open: the machine has a file chooser), `port`, `pid`; `instance`, a random token of this start of the engine (a page that reconnects to another reloads); `kinds` (`reads`, the document kinds, and `exports`, each kind's formats); and `notice` and `update` (below). |
-| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks). PUT takes part of it, `{language: {locale}}` (null is Automatic) or `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
+| `GET`/`PUT /api/v1/settings` | The person's settings, one for every CAD view: `{language: {locale}, telemetry: {share, reason, policy}, updates: {automatic, reason}}` (`cad_server/language.py`; whether usage stats are sent, and why: nothing asks; whether the engine updates by itself, and why: `cad_server/auto_updates.py`). PUT takes part of it, `{language: {locale}}` (null is Automatic), `{telemetry: {share}}` (the app menu's toggle; `saved` says whether it was kept) or `{updates: {automatic}}` (the app menu's Automatic updates), and answers the whole; it takes what GET answers, the read-only `reason` and `policy` ignored, so a page puts back what it read with one value changed. `telemetry` is null on a server that keeps no usage stats. |
 | `GET /api/v1/look`, `/api/v1/look/environment` | The look the regular display modes are drawn in, and its Radiance image. |
 | `GET /api/v1/documents` | The model library every CAD view shares, `{documents}`: pinned first, then by last activity; each row with `opened` (when a page last opened it) and `updated` (a file's time on disk, a model's run: a script is never read for it), its document's `id`, `kind` and `api`, and its record's kind (`record`: `file`, `model`, `shape`). `?kind=`, `?q=` (in its name or path), `?limit=`; `?path=<abs>` one file's envelope (above). `GET /api/v1/documents/<kind>` is that kind's rows. |
 | `POST /api/v1/documents` | `{path}` (or `{id}`): a file opened as a document (above). |
@@ -199,7 +198,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `GET /api/v1/documents/<id>/version` | Its version, waited on (`?after=&wait=&progress=`): the engine's version wait. |
 | `GET /api/v1/documents/<id>/thumbnail` | Its library picture (`?v=` its name, which the page sends to keep an older one out of a cache). |
 | `POST /api/v1/documents/<id>/exports` | An export of it (below). |
-| `GET /api/v1/documents/<kind>/<id>/...` | Its kind's reads: a model's, an `.xbf`'s and a STEP's `structure`, `parts/<key>` (and `faces\|edges\|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`, `POST mesh`; a DXF's `drawing` (below); a robot description's `structure` (`cad_server.robot_payload`: its articulation, its visuals at rest) and `parts/<hash>`, a primitive the engine meshed, by its digest; and every file's `source`, its bytes. |
+| `GET /api/v1/documents/<kind>/<id>/...` | Its kind's reads: a model's, an `.xbf`'s and a STEP's `structure`, `parts/<key>` (and `faces\|edges\|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`, `POST mesh`; a DXF's `drawing` (below); a KiCad board's `plot` and `drc`, and a schematic's `plot` (`cad_server.viewer.plots`; the payload is `@cad/core`'s `docs/plot-payload.md`); a robot description's `structure` (`cad_server.robot_payload`: its articulation, its visuals at rest) and `parts/<hash>`, a primitive the engine meshed, by its digest; and every file's `source`, its bytes. |
 | `GET /api/v1/local/files?path=...` | A CAD file's bytes, by its absolute path (a robot's link mesh, a file a model's file names beside it). |
 | `GET /api/v1/local/folder?path=...[&q=...]` | One folder's subfolders and CAD files; with `q`, the CAD files under it whose path holds `q`, bounded. |
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |
@@ -210,7 +209,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `GET /api/v1/local/update` | `{notice, release, instance, update}`: whether a newer text-to-cad is out (the update button's `notice`, `{latest, version}`, or null), the release the engine runs, and the update a press started (`state`: `idle`, `working`, `restarting` or `failed`; its `target`, its last `progress` frame, its `error`): on the engine a failed switch started again, `failed` with that switch's error, for minutes (`Update.recall`). `GET /api/v1/server` says the same. |
 | `POST /api/v1/local/update` | The update button's press (`cad_server._internal.update`): the newest release installed, set up and switched to; answers `202` with what `GET /api/v1/local/update` says, at once. Not on an engine that cannot hand itself over (409). |
 | `GET /app` | The CAD app's module (`app.js`), which the shell a host keeps loads (`cad_server.mcp.ui`); 404 with none built. |
-| `POST /api/v1/local/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cad snapshot --job` draws the packet later. Carries `x-cad-viewer`, as the GET below does. |
+| `POST /api/v1/local/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cad <type> snapshot --job` draws the packet later. Carries `x-cad-viewer`, as the GET below does. |
 | `GET /api/v1/local/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |
 
 Every request that changes something (POST, PUT, PATCH, DELETE) must send `x-cad-viewer: 1`.
@@ -242,9 +241,9 @@ drawing add-on over the `.dxf`'s modelspace and returns what every entity
 flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
-`cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
+`cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
-hairlines in their pens, on the light or dark paper. This route
+hairlines in their pens, on white paper (every snapshot is light). This route
 (`GET /api/v1/documents/dxf/<id>/drawing`) is the pane's alone.
 
 The drawing is opened by its absolute path (`POST /api/v1/documents`), as every file is: a

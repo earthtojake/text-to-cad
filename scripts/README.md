@@ -29,12 +29,14 @@ where those files ship, so these scripts are what produces them.
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
 - `cadgen-runtime.sh` — builds the three runtime stages: `--viewer` (vite build of
-  `apps/web`), `--mcp` (vite build of `apps/mcp`, one `index.html`) and `--plugin` (a copy of
+  `apps/web`), `--mcp` (vite build of `apps/mcp`: `shell.html`, the shell a host keeps, and `app.js`,
+  the app it loads from the engine) and `--plugin` (a copy of
   the root's plugin files and of every skill file git keeps, which the server writes the plugin
   folder from), first removing any entry under `_runtime` that no stage builds, and saying so.
   `--print-outputs` lists the directories a bundle always produces, `--print-plugin-files` the
   plugin's files beside `skills/`; `--check` builds them and asserts each page stage's
-  `index.html` and the `THIRD_PARTY_LICENSES.txt` its build writes
+  pages (the viewer's `index.html`, the CAD app's `shell.html` and `app.js`) and the
+  `THIRD_PARTY_LICENSES.txt` its build writes
   (`@cad/core/third-party-licenses`), and the plugin stage's every file, byte for byte.
   Called by `bundle.sh` and `check-builds.sh`; pinned by `test_js_runtime_reproducibility.py`.
   Call it directly only to debug one stage.
@@ -83,6 +85,11 @@ where those files ship, so these scripts are what produces them.
   suite, narrowed to PATHs as `test-python.sh` is.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
   marks' tests. Called by `test.yml`.
+- `test-kicad.sh` — native board DRC, every export, a STEP/mesh round trip and the board's and
+  schematic's edits (`kicad_pcb.edit`, `kicad_sch.edit`), through kicode's `kicad-cli` and KiPy in the environment of `cad[kicad]`, which it makes once
+  as the server does (in `tmp/kicad-suite`, naming its Python to the tests, `CAD_TEST_KICODE_PYTHON`):
+  `tests/python/packages/kicad`, each file with private engine, state and cache folders. Called by
+  `test.yml`'s KiCad job; no KiCad install, footprint library or browser is needed.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.
@@ -99,7 +106,8 @@ where those files ship, so these scripts are what produces them.
   gates, exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
-  `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness, and every
+  `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
+  every renderer draws its chrome through the one frame, `kit/shell/ViewFrame.jsx`), and every
   string the CAD Viewer and the CAD app show read through the locale files. Run by `test-js.sh`
   (the first two also as `npm run check:boundaries`).
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
@@ -118,8 +126,10 @@ where those files ship, so these scripts are what produces them.
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
   merging it releases: nothing when `VERSION` is unchanged against the target
   branch; otherwise the bump must come from a branch of this repository (never a
-  fork) and pass both the target's version and the latest tag. Called by
-  `test.yml` (Version Check).
+  fork) and pass both the target's version and the latest tag, and a release that
+  installs itself (a patch below 1.0, a patch or minor from 1.0) may not add or change
+  a migration guide. Called by `test.yml` (Version Check); see `CONTRIBUTING.md`,
+  "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
   (`PROJECTS`: `cad`, `cad-server`, `cad-mcp`, `cadgen`, in the order they go up) and what its GitHub Release attaches: of
@@ -169,7 +179,10 @@ where those files ship, so these scripts are what produces them.
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
-  `0.4.x` releases before 0.5.0) and for comparing versions. Sourced by
+  `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
+  among them: the part a release bumps, the breaking part, and whether a device takes a
+  release by itself (`version_installs_itself`, the release check's copy of the server's
+  `auto_updates.takes`, which a test holds equal to it). Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s
@@ -263,7 +276,7 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, the release's pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, the release's pins, the tracked tree's rules; on a pull request, what merging it releases); the package suites on Linux and Windows (`cadgen (Linux)`, `cadgen (Windows)`, the names the jobs keep); the KiCad suite (`KiCad boards`); `core-js` (`@cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |

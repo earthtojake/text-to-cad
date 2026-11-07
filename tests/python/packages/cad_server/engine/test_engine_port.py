@@ -207,8 +207,10 @@ class EnginePortTest(unittest.TestCase):
         port = held_port(self)
         done = self.started(CAD_ENGINE_PORT=str(port))
         self.assertEqual(done.returncode, 1, done.stdout)
-        (said,) = done.stderr.strip().splitlines()[-1:]
-        self.assertRegex(said, rf"^CAD Viewer: port {port} is held by (.+ \(pid (\d+)\)|another process): "
+        found = json.loads(done.stdout)  # the launch answers in JSON: its failure is its one document there
+        said = found["error"]
+        self.assertEqual(found["reason"], "failed")
+        self.assertRegex(said, rf"^port {port} is held by (.+ \(pid (\d+)\)|another process): "
                                r"stop it, or start the server with another CAD_ENGINE_PORT$")
         if os.name != "nt":  # the system names the holder: this process
             self.assertIn(f" (pid {os.getpid()}): ", said)
@@ -226,8 +228,7 @@ class EnginePortTest(unittest.TestCase):
         done = engine_daemon.run([sys.executable, "-m", "cad_server.viewer", "--api-only", "--json", "--port", str(port)],
                                  env=self.env, cwd=self.root)
         self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertRegex(done.stderr.strip().splitlines()[-1],
-                         rf"^CAD Viewer: port {port} is held by .+: stop it, or pass another --port$")
+        self.assertRegex(json.loads(done.stdout)["error"], rf"^port {port} is held by .+: stop it, or pass another --port$")
         after = engine_daemon.run([sys.executable, "-c", "from cad.engine import client; "
                                    "print((client.request({'op': 'pid'}, start=False) or {}).get('pid'))"], env=self.env)
         self.assertEqual(after.stdout.strip(), before.stdout.strip(), "the same engine answers")
@@ -385,10 +386,15 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(self.ask(moved["port"], f"/api/v1/server?token={link}")[0], 200)
         self.stop()
         # --port on ``cad server`` outranks CAD_ENGINE_PORT; --rotate-token retires every link
-        # and every session: each page then needs a new link.
+        # and every session: each page then needs a new link. It destroys, so it asks first: where no one
+        # can be asked (here), nothing is replaced and nothing starts without --yes.
         other = free_port()
         self.env["CAD_ENGINE_PORT"] = str(named)
-        self.server("--port", str(other), "--rotate-token")
+        asked = self.cli("server", "--port", str(other), "--rotate-token")
+        self.assertEqual(asked.returncode, 2, asked.stderr)
+        self.assertIn(f"`python -m cad_server.engine server --rotate-token --port {other} --yes` says yes", asked.stderr)
+        self.assertEqual(self.token(), first["token"])
+        self.server("--port", str(other), "--rotate-token", "--yes")
         for headers in ({"Cookie": cookie}, {}):
             self.assertEqual(self.ask(other, "/" if headers else f"/?token={link}", Sec_Fetch_Dest="document",
                                       **headers)[::2], (403, TOKEN_NEEDED_PAGE))
@@ -396,7 +402,7 @@ class EnginePortTest(unittest.TestCase):
         self.assertEqual(rotated["port"], other)
         self.assertNotEqual(rotated["token"], first["token"])
         self.assertEqual(self.token(), rotated["token"])
-        # Refused while an engine runs, which keeps the token it started with.
+        # Refused while an engine runs, which keeps the token it started with -- before anything is asked.
         refused = self.cli("server", "--rotate-token")
         self.assertEqual(refused.returncode, 1)
         self.assertIn("run cad stop first", refused.stderr)
@@ -437,6 +443,56 @@ class BuildBoundNoticeTest(unittest.TestCase):
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True, "notice": said}])
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True}])
 
+
+class PortHolderTest(unittest.TestCase):
+    def test_windows_console_tools_are_read_in_the_oem_code_page_and_a_failed_read_is_unknown(self) -> None:
+        """``netstat`` and ``tasklist`` write in the console's OEM code page (cp950 on a zh-TW
+        Windows), which UTF-8 under ``PYTHONUTF8=1`` cannot decode; a read that died leaves no
+        output, and the holder is then unknown, never an error that ends ``cad setup`` (#758)."""
+        from cad_server.engine import daemon
+
+        said = {"netstat": "\u5354\u5b9a   \u672c\u6a5f\u4f4d\u5740\n  TCP    127.0.0.1:3245   0.0.0.0:0   LISTENING   4321\n",
+                "tasklist": '"python.exe","4321","Console","1","52,000 K"\n'}
+        asked = []
+
+        def run(argv, **options):
+            asked.append(options)
+            return subprocess.CompletedProcess(argv, 0, stdout=said[argv[0]])
+
+        with mock.patch.object(daemon, "WINDOWS", True), mock.patch("sys.platform", "win32"), \
+                mock.patch.object(daemon.subprocess, "run", run):
+            self.assertEqual(daemon.port_holder(3245), (4321, "python.exe", None))
+            self.assertTrue(all(o["encoding"] == "oem" and o["errors"] == "replace" for o in asked))
+            said["netstat"] = None
+            self.assertEqual(daemon.port_holder(3245), (None, None, None))
+
+
+
+class MirroredPortFileTest(unittest.TestCase):
+    def test_on_windows_the_port_file_is_mirrored_where_0_10_s_clients_look_and_goes_with_the_engine(self) -> None:
+        """0.10.0's clients look for the engine in the temporary folder (``places.appdata_engine_dir``): for
+        one release the engine's port file is written there too, never over a 0.10.0 engine's that answers,
+        and removed with its own (#759)."""
+        from cad_server.engine import daemon
+
+        root = Path(tempfile.mkdtemp(prefix="mirror-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        own, old = root / "engine" / "engine.port", root / "temp" / "cad-engine"
+        own.parent.mkdir()
+        own.write_text("3245 tok\n", encoding="utf-8")
+        with mock.patch.object(daemon, "port_path", return_value=own), \
+                mock.patch("cad.engine.places.appdata_engine_dir", return_value=old):
+            daemon._mirror(3245, "tok")
+            self.assertEqual((old / "engine.port").read_text(encoding="utf-8"), "3245 tok\n")
+            daemon._unmirror()
+            self.assertFalse((old / "engine.port").exists())
+            (old / "engine.port").write_text("3999 theirs\n", encoding="utf-8")
+            with mock.patch.object(daemon, "_answers", return_value=True):
+                daemon._mirror(3245, "tok")
+                daemon._unmirror()
+            self.assertEqual((old / "engine.port").read_text(encoding="utf-8"), "3999 theirs\n", "a 0.10 engine's own")
+        with mock.patch("cad.engine.places.appdata_engine_dir", return_value=None):
+            daemon._mirror(3245, "tok")  # elsewhere: nothing
 
 if __name__ == "__main__":
     unittest.main()

@@ -978,7 +978,7 @@ clear error.
 When you explicitly run a model's source, its original build key is compared with the
 current one and the model builds normally when they differ. Saved-document access does
 not imply build-cache reuse. See the
-[persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
+[persisted-document policy](../../packages/cad/README.md#the-design-laws).
 
 The independent startup identity pass still gives each JSON record its namespace and
 name, and a model's record the fingerprint of its script. A record that a `key=` named

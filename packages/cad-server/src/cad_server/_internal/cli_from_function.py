@@ -13,7 +13,9 @@ an argument-parsing framework:
 * Keyword-only parameters become ``--kebab-case`` flags; ``bool`` becomes
   ``store_true`` (and must default to ``False``, since a flag can only turn
   something on).
-* The allowed annotation set is ``str, int, float, bool, Path`` and ``X | None``
+* The allowed annotation set is ``str, int, float, bool, Path``, a ``Literal`` of
+  strings -- an enumeration, whose values are the flag's ``choices``, so a value
+  outside them is the parser's usage error, naming the flag -- and ``X | None``
   over those. Anything richer DISQUALIFIES the function from mirror status: it
   must be an ADAPTER instead — a hand-written parser plus an explicit
   signature-sync allowlist.
@@ -21,10 +23,12 @@ an argument-parsing framework:
   ``name: description`` lines in its body become per-argument help. A plain
   convention, so no docstring-parser dependency rides in the runtime.
 * The return value is a dataclass: ``--json`` serializes it to one line,
-  otherwise it prints human lines. A raised exception becomes
-  ``{"ok": false, "error": ...}`` + exit 1.
+  otherwise it prints human lines. A raised exception is the ``cad`` command's
+  failure contract's (``cli_errors``): under ``--json``
+  ``{"ok": false, "error": ..., "reason": ...}``, its class's exit status either way.
 * A flag the signature does not take is argparse's ``unrecognized arguments``:
-  the parser holds the signature and nothing else.
+  the parser holds the signature and nothing else -- the ``cad`` command's one
+  parser (``cli_parser``), which reads no abbreviation of a flag.
 
 Stdlib only, and light: building a parser at dispatch costs microseconds, and
 nothing here may pull the CAD stack in — ``cad <verb> --help`` must stay off
@@ -75,8 +79,18 @@ def _scalar(annotation: Any, *, where: str) -> Any:
     )
 
 
-def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool]:
-    """``(scalar type, optional?)`` for one annotation, or raise :class:`NotDerivable`."""
+def _literal(annotation: Any, *, where: str) -> tuple[str, ...] | None:
+    """A ``Literal`` of strings' values -- an enumeration, a flag's ``choices`` -- or None for no ``Literal``."""
+    if typing.get_origin(annotation) is not typing.Literal:
+        return None
+    values = typing.get_args(annotation)
+    if not values or not all(isinstance(value, str) for value in values):
+        raise NotDerivable(f"{where}: only a Literal of strings is derivable, got {annotation!r}")
+    return tuple(values)
+
+
+def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool, tuple[str, ...] | None]:
+    """``(scalar type, optional?, choices or None)`` for one annotation, or raise :class:`NotDerivable`."""
     origin = typing.get_origin(annotation)
     if origin is typing.Union or origin is types.UnionType:
         args = typing.get_args(annotation)
@@ -85,14 +99,20 @@ def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool]:
         # (a saved name, inline JSON, or a path); the verb interprets it, and
         # library callers pass real dicts through the same parameter.
         if len(args) == 3 and set(non_none) == {str, dict}:
-            return str, True
+            return str, True, None
         if len(args) != 2 or len(non_none) != 1:
             raise NotDerivable(
                 f"{where}: only ``X | None`` and ``str | dict | None`` unions are "
                 f"derivable, got {annotation!r}"
             )
-        return _scalar(non_none[0], where=where), True
-    return _scalar(annotation, where=where), False
+        choices = _literal(non_none[0], where=where)
+        if choices is not None:
+            return str, True, choices
+        return _scalar(non_none[0], where=where), True, None
+    choices = _literal(annotation, where=where)
+    if choices is not None:
+        return str, False, choices
+    return _scalar(annotation, where=where), False, None
 
 
 def _repeatable(annotation: Any) -> bool:
@@ -187,8 +207,11 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
     # Generated commands have one exact signature-derived vocabulary. Prefix
     # abbreviations would parse successfully but are not part of that surface,
     # and make it impossible to tell which canonical keyword was supplied
-    # without reimplementing argparse's matching rules.
-    parser = argparse.ArgumentParser(prog=prog, description=summary, allow_abbrev=False)
+    # without reimplementing argparse's matching rules: the command's parser
+    # reads none (``cli_parser``).
+    from cad_server._internal.cli_parser import parser as command_parser
+
+    parser = command_parser(prog, description=summary)
     hints = _type_hints(func)
     where = func.__qualname__
     metavars = _flag_metavars([
@@ -218,7 +241,7 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                 help=help_text,
             )
             continue
-        base, _optional = _resolve_annotation(hints[name], where=f"{where}.{name}")
+        base, _optional, choices = _resolve_annotation(hints[name], where=f"{where}.{name}")
         if parameter.kind is parameter.KEYWORD_ONLY:
             flag = "--" + name.replace("_", "-")
             if base is bool:
@@ -229,17 +252,20 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                     )
                 parser.add_argument(flag, action="store_true", help=help_text)
                 continue
+            # An enumeration's values are its choices, which its usage shows in place of a metavar.
             parser.add_argument(
                 flag,
                 type=base,
                 default=None if parameter.default is parameter.empty else parameter.default,
-                metavar=metavars[name],
+                **({"choices": choices} if choices is not None else {"metavar": metavars[name]}),
                 help=help_text,
             )
             continue
         if base is bool:
             raise NotDerivable(f"{where}: positional {name!r} may not be a bool")
         options: dict[str, Any] = {"type": base, "help": help_text, "metavar": name.upper()}
+        if choices is not None:
+            options["choices"] = choices
         if parameter.default is not parameter.empty:
             options["nargs"] = "?"
             options["default"] = parameter.default
@@ -346,27 +372,24 @@ def report_failure(
     stdout: Any | None = None,
     stderr: Any | None = None,
 ) -> int:
-    """The ONE failure envelope of every generated command, and its exit code (1).
+    """The ONE failure envelope of every generated command, and its exit code: the
+    ``cad`` command's failure contract (``cli_errors.report``).
 
-    Under ``--json`` a failure is ``{"ok": false, "error": ...}`` on STDOUT -- the
-    result channel, so a caller parsing the last stdout line always finds an
-    answer; otherwise it is the one-line ``[tool] FAILED: ...`` report on stderr.
+    Under ``--json`` a failure is ``{"ok": false, "error": ..., "reason": ...}`` on
+    STDOUT -- the result channel, so a caller parsing the last stdout line always
+    finds an answer; otherwise a refusal is its words on stderr, and any other
+    exception the one-line ``[tool] FAILED: ...`` report. Its class sets the exit
+    status: 2 for an argument refused by name, 1 for a failure.
 
     A failure that is a mistake in cadgen's own code, not the person's or one cadgen
     raised on purpose, is also a crash telemetry reports (``cad_server.analytics.report``,
     kept with the command's counts). Reporting it changes nothing here.
     """
     _report_crash(exc)
-    from cad_server._internal.cli_errors import failure_text, report_cli_error
+    from cad_server._internal.cli_errors import report
 
-    if as_json:
-        out = stdout if stdout is not None else sys.stdout
-        print(json.dumps({"ok": False, "error": failure_text(exc)}, separators=(",", ":")), file=out)
-        return 1
-
-    return report_cli_error(
-        exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
-    )
+    return report(exc, prog=prog, as_json=as_json, verbose=verbose, verbose_hint=verbose_hint,
+                  stdout=stdout, stderr=stderr)
 
 
 def _report_crash(exc: BaseException) -> None:
@@ -393,8 +416,8 @@ def emit(
     Every command in the schema prints through here, generated or not, so a
     hand-written ADAPTER cannot end up serializing differently from a mirror:
     one JSON line under ``--json``, the Result's human lines otherwise (and its
-    warning lines on stderr), and ``{"ok": false, "error": ...}`` + exit 1 for an
-    exception.
+    warning lines on stderr), and for an exception the failure contract's answer
+    (``report_failure``).
     """
     out = stdout if stdout is not None else sys.stdout
     try:
@@ -441,10 +464,12 @@ def run_cli(
     *,
     prog: str,
     stdout: Any | None = None,
+    parser: argparse.ArgumentParser | None = None,
 ) -> int:
-    """Parse ``argv`` against ``func``'s generated parser, call it, print the result."""
+    """Parse ``argv`` against ``func``'s generated parser (or ``parser``, that one with checks of a command's
+    own: ``cad_server.cli.document_types``), call it, print the result."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
-    parser = cli_from_function(func, prog=prog)
+    parser = parser if parser is not None else cli_from_function(func, prog=prog)
     args = parser.parse_args(tokens)
     positional, keywords = _call_arguments(
         func,

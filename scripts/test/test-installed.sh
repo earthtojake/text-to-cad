@@ -131,14 +131,14 @@ step "The installed packages are the WHEELS', not the checkout's; cadgen is the 
 "$VENV/bin/python" - <<'PY' || exit 1
 import pathlib, sys
 import cad, cad_mcp, cad_server, cadgen
-import cadgen.ap242
+import cadgen.build123d
 for package in (cad, cad_server, cad_mcp, cadgen):
     where = pathlib.Path(package.__file__).resolve()
     if "site-packages" not in where.parts:
         sys.exit(f"FAIL: imported {package.__name__} from {where}, not an installed wheel")
     print(f"   {package.__name__} at {where.parent}")
-import cad.ap242
-if cadgen.ap242 is not cad.ap242 or cadgen.model is not cad.model:
+import cad.build123d
+if cadgen.build123d is not cad.build123d or cadgen.model is not cad.model:
     sys.exit("FAIL: the cadgen alias is not the library's own modules and names")
 releases = {cad.__version__, cad_server.__version__, cad_mcp.__version__}
 if len(releases) != 1:
@@ -258,8 +258,9 @@ if os.path.realpath(record["prefix"]) != os.path.realpath(sys.argv[2]):
 PY
 [ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
-same "$("$PROXY" run -c 'import sys; print(sys.prefix)')" "$VENV" \
-  || fail "$COMMAND run does not run the installation's python"
+# cad run is uv run with cad pinned at the installation's release: the program runs on that release's library.
+[ "$("$PROXY" run -c 'import cad; print(cad.__version__)' | tail -n 1)" = "$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')" ] \
+  || fail "$COMMAND run does not run the installation's release of cad"
 # The first installation on this machine is its current one, the one the command runs.
 [ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
   || fail "$VERSION_INSTALLED is not the current installation"
@@ -296,8 +297,8 @@ echo "   built an xbf and the STEP and STL it declares"
 # The script above wrote the files the model DECLARES. This is the other half: an export of
 # the document to a destination the command names.
 step "Export the document"
-"$PROXY" export models/XBF/probe.xbf models/exported.step models/exported.stl \
-  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND export"; }
+"$PROXY" xbf export models/XBF/probe.xbf models/exported.step models/exported.stl \
+  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND xbf export"; }
 for written in exported.step exported.stl; do
   [ -s "$EMPTY/models/$written" ] || { cat "$WORK/export.log" >&2; fail "export wrote no models/$written"; }
 done

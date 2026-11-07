@@ -1,10 +1,11 @@
 """``cad doctor`` — the skills' one-time setup step and the repair command: it registers the
-installation where none is current, writes the ``cad`` command, makes the CAD kernel environment,
-starts the engine, and reports what the device runs -- the current installation, the releases on
-disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 4 when
+installation where none is current, writes the ``cad`` command, says whether the CAD kernel environment
+is made (never making it: it is made on first need), starts the engine, and reports what the device runs -- the current installation, the releases on
+disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 1 when
 the CAD kernel is installed but cannot be loaded -- naming Smart App Control on Windows, where a
 refused ``OCP`` load is otherwise a bare ImportError. A kernel that is simply absent is reported and
 exits 0: the release workflow installs the wheel --no-deps and runs doctor as its smoke test.
+``--check`` is the report alone, read-only; ``--json`` is it as one document.
 
 The kernel probe is a fresh-interpreter ``import OCP``; it is stubbed here so the contract tests cost
 no kernel load, and exercised once for real. The apps are read by a stand-in: no test reads the
@@ -70,6 +71,32 @@ class DoctorTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
 
+    def test_a_check_registers_nothing_writes_nothing_and_starts_nothing(self) -> None:
+        """``--check`` is the report alone: what is there, and what ``cad doctor`` would write."""
+        from cad_server._internal import installations
+
+        env = self.state / "env"
+        env.mkdir()
+        found = tuple(str(env / name) for name in ("cad.exe" if installations.WINDOWS else "cad", "python", ""))
+        for path in found[:2]:
+            Path(path).write_text("", encoding="utf-8")
+        before = sorted(path.relative_to(self.state).as_posix() for path in self.state.rglob("*"))
+        command = installations.proxy_path(str(self.state / "bin"))
+        with mock.patch.object(installations, "targets", return_value=found), \
+                mock.patch.dict("os.environ", {"CAD_INSTALLATION_VERSION": "1.2.3-dev.1"}), \
+                mock.patch("cad.engine.client.request", return_value=None) as asked:
+            code, out, err = _run(["--check"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn(f"  registry {self.state / 'installations' / '1.2.3-dev.1.json'} not registered: `cad doctor` "
+                      "registers it\n", out)
+        self.assertIn(f"  command  {command} missing: `cad doctor` writes it\n", out)
+        self.assertEqual(sorted(path.relative_to(self.state).as_posix() for path in self.state.rglob("*")), before,
+                         "nothing written: no record, no command, no setting")
+        self.assertTrue(all(call.kwargs.get("start") is False for call in asked.call_args_list), "no engine started")
+        self.assertEqual(doctor._probe_kernel.call_args.kwargs, {"read_only": True}, "its import writes no bytecode")
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            doctor.main(["--check", "--prune"])
+
     def test_the_report_registers_and_writes_the_command_and_says_so(self) -> None:
         from cad_server._internal import installations
 
@@ -90,7 +117,7 @@ class DoctorTests(unittest.TestCase):
             for path in found[:2]:
                 Path(path).unlink()
             gone = _run([])[1]
-            pruned = _run(["--prune"])[1]
+            pruned = _run(["--prune", "--yes"])[1]
         self.assertIn(f"registry {record} registered\n", out)
         # Its folder off PATH: the full path to run it by, until the folder is on it.
         folder = os.path.dirname(command)
@@ -199,7 +226,7 @@ class DoctorTests(unittest.TestCase):
              "prefix": str(registered.parent)}), encoding="utf-8")
         into = folder / "cadgen-0.8.3"
         into.symlink_to(registered / "cadgen")
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
         for path in (console, python, gone, earlier, into):
             self.assertIn(f"removed {path}, a launcher the cad command replaces\n", out)
@@ -218,6 +245,7 @@ class DoctorTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             _, out, _ = _run([])
         self.assertIn("sharing  off: not until a cad command says so", out)
+        self.assertIn("updates  automatic on (by default); feed not read yet: the engine reads it within the hour\n", out)
         # Told, and nothing chosen: on by default, from the day it was said.
         (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:
@@ -267,7 +295,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_kernel_environment_not_made_is_reported_and_is_not_a_failure(self) -> None:
         # The release workflow installs the wheel --no-deps and runs doctor: no kernel environment
-        # there (no uv, no network) is a correct install, and the first build makes it.
+        # there (no uv, no network) is a correct install, and the first need makes it.
         from cad_server._internal import base
 
         refused = base.Refused("the CAD kernel environment needs the network once: dns error")
@@ -277,44 +305,96 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("  kernel   not made — the CAD kernel environment needs the network once: dns error\n", out)
         self.assertNotIn("FAILED", err)
 
-    def test_the_report_makes_the_kernel_environment_and_loads_the_kernel_there(self) -> None:
+    def test_the_report_makes_no_kernel_environment_and_loads_the_kernel_where_one_is_made(self) -> None:
         from cad_server._internal import base
 
         made = base.Environment("/cache/base/k/bin/python", "/cache/base/k", False, ("/cache/base/k/site",))
-
-        def ensure(installation=None, *, make=True, told=None):
-            told("making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in /cache/base/k")
-            return made
-
-        with mock.patch.object(base, "ensure", side_effect=ensure) as asked, TemporaryDirectory() as tmp:
+        with mock.patch.object(base, "ensure", return_value=made) as asked, TemporaryDirectory() as tmp:
             code, out, _err = _run([])
             _code, quiet, _err = _run(["--no-server"])
         self.assertEqual(code, 0)
-        self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [True, False],
-                         "--no-server makes nothing: it says whether it is there")
-        self.assertIn("  kernel   making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in "
-                      "/cache/base/k\n  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n",
-                      out)
+        self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [False, False],
+                         "never made here: it is made on first need")
+        self.assertIn("  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n", out)
         doctor._probe_kernel.assert_called_with("/cache/base/k/bin/python")
         self.assertIn("kernel   OK", quiet)
+        with mock.patch.object(base, "ensure", return_value=None), TemporaryDirectory() as tmp:
+            code, out, err = _run([])
+        self.assertEqual(code, 0)
+        self.assertRegex(out, r"  kernel   not made — \S+, made on first need: the first build or view that needs it\n")
+        self.assertNotIn("FAILED", err)
 
-    def test_a_kernel_that_will_not_load_exits_4(self) -> None:
+    def test_a_kernel_that_will_not_load_exits_1_and_the_whole_report_is_on_stdout(self) -> None:
+        # `cad doctor > report.txt` keeps all of it, the failure among it.
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "linux"), TemporaryDirectory() as tmp:
             code, out, err = _run([])
-        self.assertEqual(code, 4)
-        self.assertIn("kernel   FAILED", err)
-        self.assertIn(REFUSED, err, "the exception line is the evidence")
-        self.assertNotIn("Smart App Control", err, "off Windows the cause is not known")
+        self.assertEqual((code, err), (1, ""))
+        self.assertIn(f"  kernel   FAILED — {REFUSED}\n", out, "the exception line is the evidence")
+        self.assertNotIn("Smart App Control", out, "off Windows the cause is not known")
         self.assertIn("  server   ", out, "the rest of the report still prints")
 
     def test_a_refused_load_on_windows_names_smart_app_control(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "win32"), TemporaryDirectory() as tmp:
-            code, _, err = _run([])
-        self.assertEqual(code, 4)
-        self.assertIn("Smart App Control", err)
-        self.assertIn("3077", err)
+            code, out, _err = _run([])
+            _code, said, _err = _run(["--json"])
+        self.assertEqual(code, 1)
+        self.assertIn("Smart App Control", out)
+        self.assertIn("3077", out)
+        kernel = next(check for check in json.loads(said)["checks"] if check["name"] == "kernel")
+        self.assertEqual((kernel["status"], kernel["detail"]), ("failed", f"FAILED — {REFUSED}"))
+        self.assertTrue(any("Smart App Control" in line for line in kernel["more"]))
+
+    def test_the_report_as_json_is_one_document_of_every_check(self) -> None:
+        with TemporaryDirectory() as tmp:
+            code, out, _ = _run(["--no-server"])
+            code_json, said, err = _run(["--no-server", "--json"])
+        found = json.loads(said)
+        self.assertEqual((code, code_json, found["ok"], err), (0, 0, True, ""))
+        self.assertEqual(said.count("\n"), 1, "one line")
+        names = [check["name"] for check in found["checks"]]
+        self.assertEqual(names[:2], ["python", "install"])
+        self.assertLessEqual({"registry", "command", "cache", "kernel", "server", "trimesh", "kicad"}, set(names))
+        self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
+        # The same lines as the report a person reads, line for line.
+        self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]],
+                         out.splitlines()[1:])
+
+    def test_prune_removes_a_release_folder_but_the_current_one_and_the_one_before(self) -> None:
+        # An update to 1.2.0 that failed and went back left its folder: --prune takes it, and its failure stays.
+        from cad_server import auto_updates
+        from cad_server._internal import base, installations, releases, switch
+
+        for version in ("1.0.0", "1.1.0", "1.2.0"):
+            folder = releases.where(version)
+            python, command = base.interpreter(folder), releases.console(folder)
+            python.parent.mkdir(parents=True)
+            for path in (python, command):
+                path.write_text("", encoding="utf-8")
+            (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
+                                                  encoding="utf-8")
+        installations.point("1.1.0")
+        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "its engine exited 3",
+                        "at": "2026-11-03T21:00:00+0000"})
+        auto_updates.attempt("1.2.0", error="its engine exited 3", now=1000.0)
+        out = _run(["--no-server"])[1]
+        self.assertIn("  releases 1.0.0 (the release before), 1.1.0 (current), 1.2.0 (cad doctor --prune removes it) "
+                      f"in {releases.root()}\n", out)
+        self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
+        # What it asks a yes for names the folder, with how many, as its help says it removes them.
+        self.assertIn("1 release folder but the current release's and the one before's: 1.2.0", doctor._prune_plan())
+        with redirect_stdout(io.StringIO()) as helped, self.assertRaises(SystemExit):
+            doctor.main(["--help"])
+        self.assertIn("every release folder but the current release's and the one before's",
+                      " ".join(helped.getvalue().split()))
+        with mock.patch.object(releases, "running", return_value=False):
+            code, out, _ = _run(["--prune", "--yes"])
+        self.assertEqual(code, 0)
+        self.assertIn(f"removed {releases.where('1.2.0')}\n", out)
+        self.assertEqual([release["version"] for release in releases.listing()], ["1.0.0", "1.1.0"])
+        self.assertEqual((switch.last()["to"], switch.last()["ok"]), ("1.2.0", False), "the failure stays recorded")
+        self.assertEqual(auto_updates.attempted()["error"], "its engine exited 3")
 
     def test_the_report_says_what_the_device_runs(self) -> None:
         from cad_server._internal import installations, releases, switch
@@ -335,7 +415,7 @@ class DoctorTests(unittest.TestCase):
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
         self.assertIn(f"  current  text-to-cad 1.1.0 ({releases.where('1.1.0')})\n", out)
-        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}\n", out)
+        self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
         self.assertIn("  update   2026-10-31T09:00:00+0000: switched to text-to-cad 1.1.0 from 1.0.0, 640 ms without an "
                       "engine\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
@@ -516,8 +596,14 @@ class LeftoversTest(PrivateFolders):
         self.assertEqual(self.tree(), before, "nothing is removed without --prune")
         self.assertIn(f"  cache    {self.cache}: 1 document · 1 B, kept until deleted\n", out,
                       "the documents the cache keeps, each a record names, with no cap")
+        # It destroys, so it asks; where no one can be asked, nothing is removed without --yes.
+        code, out, err = _run(["--prune"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "cad doctor: removing 5 kinds of leftovers needs a yes, and no one can be asked here (no "
+                              "terminal, or --json): nothing was changed; `cad doctor --prune --yes` says yes\n")
+        self.assertEqual(self.tree(), before)
 
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(code, 0)
         self.assertEqual(out, "no registered installation has lost its interpreter\n"
                               "removed 1 engine record of an older format\n"
@@ -535,7 +621,7 @@ class LeftoversTest(PrivateFolders):
             self.assertTrue(kept.exists(), kept)
         self.assertFalse((self.cache / "pycache" / "bbbbbbbbbbbb").exists())
         self.assertFalse((self.cache / "documents" / forgotten).exists())
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, "no registered installation has lost its interpreter\n", "nothing is left to remove")
 
 
@@ -571,7 +657,7 @@ class SevenLeftoversTest(PrivateFolders):
         self.assertEqual(code, 0)
         self.assertIn(f"  0.7      {said}: cad doctor --prune removes it\n", out)
         self.assertTrue(all(path.exists() for path in made), "nothing is removed without --prune")
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
         for gone in ("cache/objects", "cache/index", "state/sidebar-views", "state/snapshot-browser.lock",
                      "state/recents/recents.jsonl", "state/install-channels.json.lock"):
@@ -585,23 +671,45 @@ class SevenLeftoversTest(PrivateFolders):
         code, out, _ = _run(["--no-server"])
         self.assertIn(f"  0.7      {said}: cad doctor --prune removes it once nothing has written it for 7 days, "
                       "or now with --all-versions\n", out)
-        code, out, _ = _run(["--prune"])
+        code, out, _ = _run(["--prune", "--yes"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nkept {said}: a cadgen 0.7 still "
                               "installed may use it; it goes once nothing has written it for 7 days, or now with "
                               "--all-versions\n")
         self.assertTrue(all(path.exists() for path in made), "a 0.7 written this week may be in use")
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             doctor.main(["--all-versions"])  # with --prune alone
-        code, out, _ = _run(["--prune", "--all-versions"])
+        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
         self.assertEqual(out, f"no registered installation has lost its interpreter\nremoved {said}\n")
         self.assertFalse(any(path.exists() for path in made))
         self.assertTrue(all(path.exists() for path in ours), "0.8's own files stay")
 
     def test_a_folder_of_the_store_s_name_that_is_not_0_7_s_store_is_left_alone(self) -> None:
         theirs = [self.file("cache/objects/notes.txt", "another program's"), self.file("cache/index/README", "")]
-        code, out, _ = _run(["--prune", "--all-versions"])
+        code, out, _ = _run(["--prune", "--yes", "--all-versions"])
         self.assertEqual(out, "no registered installation has lost its interpreter\n")
         self.assertTrue(all(path.exists() for path in theirs))
+
+
+class TenWindowsLeftoversTest(PrivateFolders):
+    """0.10.0's Windows folders in the local application data, what this release took of them moved out:
+    ``cad doctor`` names each, and ``--prune`` removes each whole once nothing has written it for a week."""
+
+    def test_a_quiet_folder_goes_whole_and_a_recent_one_stays(self) -> None:
+        from cad.engine import places
+
+        state, cache = self.root / "AppData" / "cad-state", self.root / "AppData" / "cad"
+        self.file("AppData/cad-state/installations/0.10.0.json", "{}")
+        self.file("AppData/cad/base/0123/pyvenv.cfg", "", old=False)
+        with mock.patch.object(places, "appdata_state_dir", return_value=state), \
+                mock.patch.object(places, "appdata_cache_dir", return_value=cache):
+            _code, out, _ = _run(["--no-server"])
+            self.assertIn(f"  0.10     {state}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it\n", out)
+            self.assertIn(f"  0.10     {cache}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
+                          "nothing has written it for 7 days\n", out)
+            _code, out, _ = _run(["--prune", "--yes"])
+        self.assertIn(f"removed {state}, a folder 0.10.0 kept on Windows\n", out)
+        self.assertFalse(state.exists())
+        self.assertTrue((cache / "base" / "0123" / "pyvenv.cfg").exists(), "written this week: it stays")
 
 
 class KernelProbeTest(unittest.TestCase):

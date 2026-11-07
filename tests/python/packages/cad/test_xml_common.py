@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from cad import sdf_validation, srdf_source, urdf_source  # noqa: E402
-from cad.xml_common import children, display_path, duplicate_values, local_name  # noqa: E402
+from cad._internal.xml_common import children, display_path, duplicate_values, local_name  # noqa: E402
 
 
 class DisplayPath(unittest.TestCase):

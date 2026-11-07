@@ -14,9 +14,9 @@ Build from this folder: `python f1.py`.
 
 ```
 python f1.py                                         # prints the car's id: and view:
-cad snapshot "$ID" drs.png --pose drs_open
-cad snapshot "$ID" lock.png --pose full_lock_left
-cad export "$ID" GLB/f1.glb                       # the five clips
+cad model snapshot "$ID" drs.png --pose drs_open
+cad model snapshot "$ID" lock.png --pose full_lock_left
+cad model export "$ID" GLB/f1.glb                       # the five clips
 ```
 
 ## How it is built

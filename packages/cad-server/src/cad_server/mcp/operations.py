@@ -43,7 +43,12 @@ SNAPSHOT = {"source": STRING,
             "height": {"type": "integer", "minimum": 1}, "size_profile": STRING,
             "annotation": JSON_VALUE, "measurements": JSON_VALUE}
 START = {
-    "cad_export": obj({"source": STRING, "destinations": {"type": "array", "minItems": 1, "maxItems": 32, "items": STRING}},
+    "cad_export": obj({"source": STRING, "destinations": {"type": "array", "minItems": 1, "maxItems": 32, "items": STRING},
+                       "tolerance": {"type": "number", "minimum": 0.001,
+                                     "description": "Mesh the .stl/.3mf destinations to within this absolute tolerance "
+                                                    "in mm, where it is finer than the viewer's (a quarter per cent of "
+                                                    "each part): for a print whose fits are finer. Every destination is "
+                                                    "then .stl or .3mf."}},
                       ("source", "destinations")),
     "cad_snapshot": obj(SNAPSHOT),
     "cad_inspect": obj({"source": STRING, "ref": STRING,
@@ -54,9 +59,9 @@ START = {
 STARTS = {"cad_export": (("source", "destinations"),), "cad_snapshot": (("source", "output"), ("packet",)),
           "cad_inspect": (("source",),)}
 DESCRIPTIONS = {
-    "cad_export": "Export a document to explicit absolute destinations on the engine host (.xbf/.step/.glb/.stl/.3mf/.dxf). The source is an absolute CAD file path or a document id (a model's, which running its script prints); a document id is exported as the engine holds it. A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only, each holding what its format carries. Reuses the Python export operation. Viewer downloads instead choose a destination in the user's browser and use temporary artifacts.",
+    "cad_export": "Export a document to explicit absolute destinations on the engine host (.xbf/.step/.glb/.stl/.3mf/.dxf). The source is an absolute CAD file path or a document id (a model's, which running its script prints); a document id is exported as the engine holds it. A mesh source (.glb/.stl/.3mf) exports to the other two mesh kinds only, each holding what its format carries. An .stl or .3mf is meshed as the viewer meshes it unless tolerance gives an absolute ceiling in mm. Reuses the Python export operation. Viewer downloads instead choose a destination in the user's browser and use temporary artifacts.",
     "cad_snapshot": "Render an explicit source/output PNG or a Quick Edit packet, using the Python snapshot operation. The source is an absolute CAD file path or a document id; paths must be absolute on the engine host. A failed snapshot or packet leaves existing pictures unchanged.",
-    "cad_inspect": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cad inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again.",
+    "cad_inspect": "Inspect an existing CAD file (.xbf, .step, a mesh) or a document id. Without a ref it answers what `cad <type> inspect SOURCE` prints: the summary (parts, bounds, volume, materials and mass, joints, states, sequences, animations) as data and as its text, with the build closure where there is one. With a ref (or SOURCE#REF), that element's or part's geometry. query picks one answer instead: summary, structure (the summary's lists without bounds, volume or mass, so nothing is measured), closure, geometry (requires ref) or build (file metadata or live build metadata). Never builds a model, meshes a part or writes its declared outputs; a document the engine no longer holds is refused with the command that builds it again.",
 }
 
 
@@ -150,14 +155,15 @@ def checked(value, schema, label="arguments"):
     """Validate the small JSON schema vocabulary our operation contracts use."""
     kinds = schema.get("type", [])
     kinds = [kinds] if isinstance(kinds, str) else kinds
-    types = {"object": dict, "array": list, "string": str, "integer": int, "boolean": bool}
-    if kinds and not any(type(value) is types[k] for k in kinds):
+    types = {"object": (dict,), "array": (list,), "string": (str,), "integer": (int,), "number": (int, float),
+             "boolean": (bool,)}
+    if kinds and not any(type(value) in types[k] for k in kinds):
         raise JobError(f"{label} must be {' or '.join(kinds)}")
     if "enum" in schema and value not in schema["enum"]:
         raise JobError(f"Invalid {label}: choose from {schema['enum']}")
     if isinstance(value, str) and not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", 1000000):
         raise JobError(f"Invalid length for {label}")
-    if type(value) is int and not schema.get("minimum", -math.inf) <= value <= schema.get("maximum", math.inf):
+    if type(value) in (int, float) and not schema.get("minimum", -math.inf) <= value <= schema.get("maximum", math.inf):
         raise JobError(f"Invalid range for {label}")
     if isinstance(value, dict) and "properties" in schema:
         missing = set(schema.get("required", [])) - value.keys()
@@ -364,7 +370,7 @@ class Operations(Jobs):
                 result = {"pictures": [serial(api.snapshot(**args, out=absolute(output), progress=progress))]}
         elif name == "cad_inspect":
             if "ref" not in args and "query" not in args and "#" not in args["source"]:
-                args["query"] = "summary"  # what `cad inspect SOURCE` prints (``engine.cli``)
+                args["query"] = "summary"  # what `cad <type> inspect SOURCE` prints (``engine.cli``)
             found = serial(api.inspect(**args, progress=progress))
             if isinstance(found, dict) and isinstance(found.get("summary"), dict):
                 from cad_server.engine.cli import summary_text

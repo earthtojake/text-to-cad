@@ -236,7 +236,7 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(json.loads(self.fixture.request("GET", "/api/v1/server")[2])["instance"], info["instance"])
         # Where an update a click started is, and the kinds of documents it reads with what each exports.
         self.assertIn(info["update"]["state"], ("idle", "working", "restarting", "failed"))
-        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf"])
+        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch"])
         self.assertEqual(info["kinds"]["exports"]["xbf"], ["step", "stl", "threemf", "glb", "dxf", "original"])
         self.assertEqual(info["kinds"]["exports"]["dxf"], [])
 

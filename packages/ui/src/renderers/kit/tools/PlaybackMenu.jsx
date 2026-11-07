@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { Settings } from "lucide-react";
 import {
-  DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger
 } from "@cad/ui/primitives/dropdown-menu";
 import { Button } from "@cad/ui/primitives/button";
@@ -12,8 +12,8 @@ import { PLAYBACK_SPEEDS } from "./playbar/AnimationTimeControl.js";
 import ToolPopover from "./ToolPopover.jsx";
 import { useI18n } from "@cad/ui/i18n";
 
-// The file sidebar's Animation section's Playback settings (`playbar/AnimationSection.jsx`), opening
-// down from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds
+// The playbar's Playback settings (`playbar/PreviewPlaybar.jsx`, the tools view's and Preview's), opening
+// from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds
 // (`kit/shell/PreviewSettings.jsx`).
 
 export const ORBIT_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
@@ -48,12 +48,15 @@ const keepOpen = event => event.preventDefault();
  * The Animation section's Playback settings, at the end of its transport: a cog whose dropdown opens
  * from it, with the routine's **Speed**, **Loop**, and **Autoplay** (whether entering Preview
  * starts it). Ticking a checkbox leaves the menu open. All three are the file's, kept in its view.
+ * In the tools view, `reset` ends it after a rule: the routine let go of, the model back at rest,
+ * idle while it is.
  *
  * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void,
- *   side?: "top" | "bottom", disabled?: boolean }} props
+ *   side?: "top" | "bottom", disabled?: boolean,
+ *   reset?: { label: string, disabled?: boolean, onSelect(): void } | null }} props
  *   `animation` is the routine runtime; `side` is where the menu opens.
  */
-export default function PlaybackMenu({ animation, autoplay, onAutoplayChange, side = "top", disabled = false }) {
+export default function PlaybackMenu({ animation, autoplay, onAutoplayChange, side = "top", disabled = false, reset = null }) {
   const { t } = useI18n();
   return <ToolPopover allowInactive side={side} align="end" label={t("playback.settings")} className="w-40"
     trigger={<MenuTrigger label={t("playback.settings")} disabled={disabled} className={MENU_TRIGGER_CLASS}><Settings className="size-3.5" strokeWidth={1.5} aria-hidden="true" /></MenuTrigger>}>
@@ -62,5 +65,9 @@ export default function PlaybackMenu({ animation, autoplay, onAutoplayChange, si
       onCheckedChange={checked => animation.onLoopToggle(checked === true)}>{t("playback.loop")}</DropdownMenuCheckboxItem>
     <DropdownMenuCheckboxItem checked={autoplay === true} onSelect={keepOpen}
       onCheckedChange={checked => onAutoplayChange?.(checked === true)}>{t("playback.autoplay")}</DropdownMenuCheckboxItem>
+    {reset ? <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={reset.disabled} onSelect={() => reset.onSelect()} data-animation-reset="">{reset.label}</DropdownMenuItem>
+    </> : null}
   </ToolPopover>;
 }

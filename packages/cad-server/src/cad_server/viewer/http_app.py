@@ -39,6 +39,8 @@ from .content_types import content_type_for_path, content_type_for_static_asset,
 from .encoding import UriError, strict_decode_uri_component
 from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entry, node_basename, to_posix_path
 from .documents import EngineDocuments
+from cad.registry import DOCUMENT_TYPES
+
 from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
@@ -58,10 +60,20 @@ import threading
 _EXPORTS_LOCK = threading.Lock()
 
 POST_GUARD_HEADER = "x-cad-viewer"
-# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
-_LIBRARY_BODY_LIMIT = 768 * 1024
+# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, its dark theme's beside it where
+# its view draws one, and room for the rest.
+_LIBRARY_BODY_LIMIT = 1536 * 1024
 # A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.
 _THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
+
+
+def _dark_thumbnail(payload):
+    """A thumbnail change's dark theme's picture (``dark``, base64, as ``png``), where its view drew one."""
+    from .recents import thumbnail_png
+
+    return thumbnail_png(payload["dark"]) if payload.get("dark") else None
+
+
 _CAD_EXTENSIONS = ", ".join(sorted(VIEWER_EXTENSIONS))
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -212,10 +224,12 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
-_KIND_ROUTES = {"model": _ENGINE_ROUTES, "xbf": _ENGINE_ROUTES + ", source", "step": _ENGINE_ROUTES + ", source",
-                "dxf": "drawing, source", "urdf": "structure, parts/<digest>, source",
-                "srdf": "structure, parts/<digest>, source", "sdf": "structure, parts/<digest>, source",
-                "stl": "source", "glb": "source", "3mf": "source"}
+# What each kind's collection answers, by how its document type is viewed (``cad.registry``).
+_VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
+# A model's document has no file, so no source.
+_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+                for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)
@@ -271,10 +285,13 @@ class CadApp:
         from cad_server._internal.picker import available
 
         from .drawings import DrawingRenders
+        from .plots import BoardAnswers
         from .prompt_files import PromptFiles
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
+        # A board's plot and DRC, made with KiCad off the request and kept by its bytes (``plots.py``).
+        self.boards = BoardAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -599,26 +616,42 @@ class CadApp:
 
     def settings(self, share=None) -> dict:
         """``GET /api/v1/settings``: the person's settings every CAD view reads -- the language they
-        chose (``cad_server/language.py``) and whether usage stats are shared (``telemetry``: null
-        where this server keeps none)."""
-        from cad_server import language
+        chose (``cad_server/language.py``), whether usage stats are shared (``telemetry``: null
+        where this server keeps none), the releases whose What's new they have seen, with the one
+        this installation runs (``whats_new``, ``cad_server/whats_new.py``), and whether the engine
+        updates by itself (``updates``: ``cad_server/auto_updates.py``, one setting for every CAD app)."""
+        from cad_server import auto_updates, language, whats_new
 
-        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None}
+        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None,
+                "whats_new": whats_new.read(), "updates": auto_updates.read()}
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
-        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are. It takes
-        what ``GET`` answers: the telemetry's read-only ``reason``, ``policy`` and ``saved`` ride along
-        and are ignored, and a null telemetry (a server that keeps none) changes nothing, so a page
-        that puts back what it read, one value changed, changes that value."""
-        from cad_server import language
+        ``{"telemetry": {"share"}}``, ``{"whats_new": {"seen"}}``, ``{"updates": {"automatic"}}`` or
+        several -- answered with the settings as they now are. It takes what ``GET`` answers: the
+        telemetry's read-only ``reason``, ``policy`` and ``saved``, What's new's ``release`` and the
+        updates' ``reason`` ride along and are ignored, a null telemetry (a server that keeps none)
+        changes nothing, and What's new's ``seen`` is added to what is kept, never taken from it, so a
+        page that puts back what it read, one value changed, changes that value."""
+        from cad_server import auto_updates, language, whats_new
 
         self._limit(request, 4096)
         payload = json.loads(request.body() or b"{}")
-        if type(payload) is not dict or not set(payload) <= {"language", "telemetry"}:
-            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}}")
+        if type(payload) is not dict or not set(payload) <= {"language", "telemetry", "whats_new", "updates"}:
+            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}, "
+                             "\"whats_new\"?: {\"seen\"}, \"updates\"?: {\"automatic\"}}")
         if "language" in payload:
             language.change(payload["language"])
+        if "whats_new" in payload:
+            whats_new.change(payload["whats_new"])
+        if "updates" in payload:
+            updates = payload["updates"]
+            if type(updates) is not dict or not set(updates) <= {"automatic", "reason"}:
+                raise ValueError("an updates change is {\"automatic\": true or false}")
+            # The app menu's Automatic updates: the person's setting, one for every CAD app. What a read
+            # answered, put back as it was, changes nothing: a default stays a default.
+            if updates != auto_updates.read():
+                auto_updates.change({"automatic": updates.get("automatic")})
         share = None
         if payload.get("telemetry") is not None:
             telemetry = payload["telemetry"]
@@ -658,7 +691,7 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._relay(request, response, f"/api/doc/{ident}/version",
                                                                       request.query)})
         if rest[1:] == ["thumbnail"]:
-            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident)})
+            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident, request.query.get("scheme"))})
         if rest[1:] == ["exports"]:
             return self._methods(request, {"POST": lambda: self._export(request, response, ident)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
@@ -866,10 +899,17 @@ class CadApp:
         if kind in ENGINE_KINDS:
             return self._engine_route(request, response, kind, ident, rest)
         if kind == "dxf" and rest == ["drawing"]:
-            return self._methods(request, {"GET": lambda: self._handle_drawing(response, path)})
+            return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
+        if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
+            return self._methods(request, {"GET": lambda: self._handle_board(request, response, path, rest[0])})
+        if kind == "kicad_pcb" and rest == ["models"]:
+            return self._methods(request, {"GET": lambda: self._handle_board_models(response, path)})
+        if kind == "kicad_sch" and rest == ["plot"]:
+            return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None
-            return self._methods(request, {"GET": lambda: self._handle_robot(response, path, mesh, document_api(kind, ident))})
+            return self._methods(request, {"GET": lambda: self._handle_robot(request, response, path, mesh,
+                                                                             document_api(kind, ident))})
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
 
     def _engine_route(self, request, response, kind, ident, rest) -> None:
@@ -1034,14 +1074,17 @@ class CadApp:
     def open_in(self, ident) -> dict:
         """``GET /api/v1/local/open-in?id=<id>``: the document's files (``_open_targets``), each with
         its ``name``, whether it is there now (``present``) and the apps this computer has that take
-        its kind (``apps``, as last found: never looked for on a request), and the desktop's file
-        manager (``fileManager``)."""
-        from cad_server._internal.apps import DETECTED, apps_for, file_manager
+        its kind (``apps``, as last found: never looked for on a request), whether the operating system's
+        own handler may not open it (``default: false``: a KiCad file's, ``apps.NEVER_OPENED``), and the
+        desktop's file manager (``fileManager``)."""
+        from cad_server._internal.apps import DETECTED, apps_for, file_manager, opens
 
         found = DETECTED.found()
         return {"targets": [{"target": target["target"], "kind": target["kind"],
                              "name": node_basename(target["path"]) if target["path"] else "",
-                             "present": _is_file(target["path"]), "apps": apps_for(target["kind"], found)}
+                             "present": _is_file(target["path"]),
+                             **({"apps": apps_for(target["kind"], found)} if opens(target["path"])
+                                else {"apps": [], "default": False})}
                             for target in self._open_targets(ident)],
                 "fileManager": file_manager()}
 
@@ -1062,6 +1105,9 @@ class CadApp:
         if chosen is None:
             raise ApiError(400, f"the document has no target {payload['target']!r}",
                            f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
+        if not apps.opens(chosen["path"]):
+            raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in an app from here",
+                           "reveal it in the file manager and open it there")
         app = None
         if payload["app"] != "default":
             found = apps.DETECTED.found()
@@ -1123,7 +1169,7 @@ class CadApp:
         return self._picker
 
     def _change_recents(self, payload) -> None:
-        """A change to the library -- ``{action, path, png?}``, a file by its absolute path, a model by
+        """A change to the library -- ``{action, path, png?, dark?}``, a file by its absolute path, a model by
         its id (its entry's ``path``). A file opened is
         also counted for analytics, and so is a model's page, under its own ``model`` kind; a model's entry
         is the engine's, written when it builds, so only when a page opened it (``open``), pinning, its
@@ -1141,7 +1187,7 @@ class CadApp:
             elif action == "delete":
                 self.delete_document(ident)
             elif action == "thumbnail":
-                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")))
+                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
             elif action == "open":
                 # The page of a document the library holds: a file shown, as a file's is (``files``).
                 if self.recents.opened(ident) is not None and self.analytics is not None:
@@ -1164,7 +1210,7 @@ class CadApp:
         elif action == "remove":
             self.recents.remove(key)
         elif action == "thumbnail":
-            self.recents.thumbnail(key, thumbnail_png(payload.get("png")))
+            self.recents.thumbnail(key, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
         else:
             raise ValueError(f"unknown recents action {action!r}")
 
@@ -1176,14 +1222,16 @@ class CadApp:
 
         delete(self.recents.registry, ident)
 
-    def _thumbnail(self, response, ident):
+    def _thumbnail(self, response, ident, scheme=None):
         """``GET /api/v1/documents/<id>/thumbnail``: the picture the library keeps of the document, by
-        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``)."""
+        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``); with
+        ``?scheme=dark``, its dark theme's where it has one, else that same picture."""
         try:
             record = self.recents.registry.get(ident) if is_id(ident) else None
         except OSError:
             record = None
-        name = str(((record or {}).get("preview") or {}).get("thumbnail") or "")
+        preview = (record or {}).get("preview") or {}
+        name = str((scheme == "dark" and preview.get("thumbnailDark")) or preview.get("thumbnail") or "")
         png = self.recents.read_thumbnail(name) if _THUMBNAIL_NAME.fullmatch(name) else None
         if png is None:
             raise ApiError(404, f"no picture of {ident}", "a document's picture is taken when its page shows it")
@@ -1283,23 +1331,73 @@ class CadApp:
 
     # --- routes ----------------------------------------------------------
 
-    def _handle_drawing(self, response, path):
+    def _handle_drawing(self, request, response, path):
         """``GET /api/v1/documents/dxf/<id>/drawing``: the ``.dxf`` flattened to 2D primitives
         (``drawings.py`` owns the rules); 202 while it renders.
 
         The payload is already JSON bytes, held in memory by the file's bytes,
         so it goes out through ``send_bytes`` rather than being decoded and
-        re-encoded on the way past.
+        re-encoded on the way past, compressed where the browser takes it (``compressed``).
         """
+        from .compressed import send
+
         status, body = self.drawings.response(path or "")
         if isinstance(body, bytes):
-            response.send_bytes(status, body, "application/json; charset=utf-8")
+            send(request, response, status, body, "application/json; charset=utf-8")
             return
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
 
-    def _handle_robot(self, response, path, mesh, api):
+    def _handle_schematic(self, request, response, path):
+        """``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files,
+        every sheet a page of layers (``plots.py``); ``?sheet=/Power/`` that sheet's page alone, ``index=0``
+        without the hierarchy's index. Each request reads the files as they are now, and the answer is
+        compressed where the browser takes it (``compressed``). A sheet the hierarchy has not is a 400."""
+        from .compressed import send
+        from .plots import schematic_payload_response
+
+        query = request.query
+        sheet = query.get("sheet") or None
+        index = (query.get("index") or "1") not in ("0", "false")
+        status, body = schematic_payload_response(path or "", sheet=sheet, index=index)
+        if isinstance(body, bytes):
+            send(request, response, status, body, "application/json; charset=utf-8")
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_board(self, request, response, path, product):
+        """``GET /api/v1/documents/kicad_pcb/<id>/plot`` (the board as geometry per layer, its pours KiCad's
+        refill) and ``.../drc`` (KiCad's design rule check of it): ``plots.py`` owns the rules. Each is made
+        off the request and kept by the board's bytes, answered 202 while it is made, 304 for the key a
+        request names (``If-None-Match``), compressed where the browser takes it (``compressed``). A file
+        that is not a readable board is a 400 saying why (``PlotError``)."""
+        from .compressed import Coded, send
+
+        status, body, key = self.boards.response(product, path or "", if_none_match=request.header("if-none-match"))
+        tag = (("etag", f'"{key}"'),) if key else ()
+        if status == 304:
+            response.send_bytes(304, b"", "", tag)
+            return
+        if isinstance(body, Coded):
+            send(request, response, status, body, "application/json; charset=utf-8", tag)
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_board_models(self, response, path):
+        """``GET /api/v1/documents/kicad_pcb/<id>/models``: the board's 3D models table (``plots.BoardAnswers.models``):
+        each model a footprint names, the STEP it is by a document id (known from now on, ``remember``) or why
+        it has none. It reads the board and ``stat``s the model files, and writes nothing."""
+        status, body = self.boards.models(path or "", self.remember)
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_robot(self, request, response, path, mesh, api):
         """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
         for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
         (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
@@ -1308,6 +1406,11 @@ class CadApp:
         from .robots import robot_response
 
         status, body, content_type = robot_response(path or "", mesh, api=api)
+        if isinstance(body, bytes) and content_type.startswith("application/json"):
+            from .compressed import send
+
+            send(request, response, status, body, content_type)
+            return
         if isinstance(body, bytes):
             response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
             return

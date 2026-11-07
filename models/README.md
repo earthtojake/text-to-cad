@@ -10,7 +10,7 @@ Each project has one layout, the cad skill's: its sources in `src/` (shared modu
 `src/lib/`), each model a `@model` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cad export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad model export <id> STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -25,9 +25,16 @@ and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git hi
 `examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
 (`src/<group>/`), and a 2D drawing a script in `drawings/src/`, its DXF added to
 `drawings/src/exports.py`. A model that needs helper modules, several scripts or notes
-of its own gets a project of its own here.
+of its own gets a project of its own here. A KiCad board is no model: its native files
+(`.kicad_pcb`, `.kicad_pro`, `.kicad_dru`, `fp-lib-table`, and where it has them its schematic's sheets and
+the project's own libraries) are the source, one folder each in `electronics/`, with the pcb skill's checks
+of it as a script (`cad run check_<board>.py`). Four are boards alone (`blinky`, `usb_uart`, `servo_power`,
+`pi_servo_hat`); three are ECAD samples, a board with the CAD built around it in the cad skill's layout
+beside it (`src/`), read from the board file, and the scripts that made the board (`scripts/`):
+[`macropad`](electronics/macropad/README.md), [`eurorack_lfo`](electronics/eurorack_lfo/README.md) and
+[`orbit_clock`](electronics/orbit_clock/README.md).
 
-Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, docs); never what a run
+Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, KiCad's board files, docs); never what a run
 or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
 XBF), review media (`.gitignore` keeps images and video out of this tree) or runtime debris.
 
@@ -38,14 +45,16 @@ project delivers them and because something outside the model reads them:
 
 | Project | Files | How | Why |
 | --- | --- | --- | --- |
-| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
+| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad <type> export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
 | `examples` (`mounting_plate`, `spur_gear_blank`) | `STL/`, `3MF/`, `GLB/<name>.*` | `@stl`, `@threemf`, `@glb` on the model | the example of declared files: a print part whose files every run writes |
 | `branding` (the three logos) | `STEP/logo_*.step` | `src/exports.py` | the STEP deliverable, kept current by an `exports.py` |
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
 | `juno`, `lyra` (every link model) | `3MF/<link>.3mf` | `src/exports.py` | the URDFs reference them |
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
-| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
+| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.model.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
+| `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
+| `electronics` (the same three) | `3MF/`, `STEP/`, `GLB/`, `DXF/` | `src/exports.py` | the printed parts in their print orientation, the panel's cut and art DXFs, the assemblies' STEP and GLB (the GLB carries the explode) |
 
 ## Build and snapshot
 
@@ -53,8 +62,8 @@ From a model's `src/` folder, with the engine's environment (the library on the 
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cad snapshot "$ID" OUT.png            # drawn by OCCT
-cad export "$ID" GLB/NAME.glb         # a file of it, on request
+cad model snapshot "$ID" OUT.png            # drawn by OCCT
+cad model export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each
@@ -136,6 +145,9 @@ marker costs a model body that is no longer one piece.
 | [`tests`](tests/README.md) | the three original manual cases plus four photographic Preview models in `preview_studio/source.py` (`joint_playground.urdf`, no model and named nowhere, kept in `unported/`) | manual-validation fixtures, never CI input: the Render floor, a 32-part rebuild during a load, materials and motion on 11 parts; plus machined metal, a painted regulator, glass/liquid contents and an open mixed-material instrument for matched rendering review |
 | [`w16`](w16/src/README.md) | 13 system files (`@memo` stages, 10-281 s cold each) + one model | a 2,575-occurrence (794-part) quad-turbo W16 whose museum cutaway is its own geometry; finishes as catalogue materials by colour (restored after native material assignment); OCCT's fuzzy booleans run through build123d's, so the memo keys them; the crank train as 180 joints paired by label (prismatic pistons and valves; revolute crank, rods, cams, sprockets, followers, pump, pulleys, rotors) and rigid fastenings, the slider-crank and valve loops solved in Python: the `crank` motion, one 720-degree cycle, and the `explode` and `running_reveal` GLB animations, the old tables' translations on top of the running engine and the crankcase hidden |
 | [`f14d`](f14d/src/README.md) | 10 system files (9 `@memo` stages, 2.4-574 s cold each; `nozzles` a plain function) + one model | a 2,392-occurrence (903-part) F-14D: one lofted skin cut by the diverter slots and the cockpit opening (574 s of a 644 s cold build); instanced fastener, wick and perforation rows as placed prototypes; `lib` made a package (a namespace package is never imported afresh: see its README); colours; the `teardown` and `explodedHold` clips as GLB animations of the systems and their act-2 groups |
+| [`macropad`](electronics/macropad/README.md) | a KiCad project (4 sheets, a 2-layer board) + 6 CAD scripts | a board made through KiCad's API from its schematic and checked (ERC, DRC, `check_macropad.py`); a printed tray, switch plate, keycaps and knob read from the board file (`kicad_pcb.read`) and from its STEP (an xbf), an exploding assembly, a fit over every board solid; the project's own footprint models as declared STEP files |
+| [`eurorack_lfo`](electronics/eurorack_lfo/README.md) | a KiCad project (3 sheets, one placed twice; a 2-layer board) + 8 CAD scripts | a 10HP panel whose every hole is a part's axis on the board, a laser-cut DXF and its facts for a cutting service, hardware on the real stack-up, the explode; the board routed by an agent-directed search (`scripts/assist_route.py`) |
+| [`orbit_clock`](electronics/orbit_clock/README.md) | a KiCad project (5 sheets, a 4-layer round board) + 4 CAD scripts | 144 parts placed on two rings from a radius and a count, the LED chain routed as arcs, project libraries; a baffle with a cell over every LED read from the board, a diffuser, a stand and a two-material 3MF |
 
 Each model's README (linked above) says what was ported and what was dropped.
 

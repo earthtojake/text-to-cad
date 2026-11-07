@@ -14,7 +14,6 @@ import io
 import os
 import subprocess
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -38,7 +37,7 @@ class Fake:
         self.steps: list[list[str]] = []
         self.answers = list(answers)
 
-    def __call__(self, step: list[str], folder: Path) -> subprocess.CompletedProcess:
+    def __call__(self, step: list[str], folder: Path, settings=None) -> subprocess.CompletedProcess:
         self.steps.append(list(step))
         if step[1] == "venv":
             python = base.interpreter(Path(step[-1]))
@@ -126,18 +125,16 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(found, base.Environment(own.executable, own.prefix, True))
         self.assertEqual(fake.steps, [])
 
-    def test_the_engine_makes_its_base_in_the_background_and_a_follower_hears_its_lines(self) -> None:
-        # The engine that finds no base makes it (``Making``), outside the sandbox an agent's command runs in:
-        # whoever asks for it follows the making from its first line, and the engine is told once it is made
-        # (``made``: its standby stands then). Its start at the engine's own start is test_daemon's.
-        fake, making, made = Fake(), base.Making(), threading.Event()
-        making.made = made.set
+    def test_the_engine_makes_its_base_on_first_need_and_a_follower_hears_its_lines(self) -> None:
+        # The engine that finds no base makes it when asked (``Making``), outside the sandbox an agent's command
+        # runs in: whoever asks for it follows the making from its first line. That a kernel process's start asks
+        # for it, and the engine's own start does not, is test_daemon's.
+        fake, making = Fake(), base.Making()
         heard: list[str] = []
         with self.made(fake), mock.patch.object(base.Installation, "here", return_value=self.installation), \
                 contextlib.redirect_stderr(io.StringIO()) as log:
             self.assertEqual(making.key(), base.where(self.installation).name)
             self.assertIsNone(making.follow(heard.append), "absent: made now, and followed from its first line")
-            self.assertTrue(made.wait(30))
             self.assertFalse(making.start(), "made: nothing to make again")
             self.assertIsNone(making.follow(heard.append), "made: nothing more to hear")
         env = base.where(self.installation)
@@ -198,13 +195,14 @@ class BaseTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
-    """``cad run``: the arguments run by the base's Python, in the caller's folder, the program's own folder last
-    on its path (the library's runner, ``cad._internal.program``)."""
+    """``cad run``: a script whose imports use the build123d integration alone run by the base's Python, in
+    the caller's folder, the program's own folder last on its path (the library's runner,
+    ``cad._internal.program``)."""
 
     def test_the_script_runs_with_the_bases_python(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "model.py"
-            script.write_text("", encoding="utf-8")
+            script.write_text("import build123d\n", encoding="utf-8")
             with mock.patch.object(run.os, "execv") as execv, mock.patch("subprocess.call", return_value=0) as call:
                 self.assertEqual(run.main([str(script), "--size", "2"]), 1 if os.name != "nt" else 0)
         found = base.ensure(make=False)
@@ -218,8 +216,10 @@ class RunTest(unittest.TestCase):
         err = io.StringIO()
         with mock.patch.object(base, "ensure", side_effect=base.Refused("the CAD kernel environment needs the network "
                                                                         "once: dns error")), \
-                mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err):
-            self.assertEqual(run.main(["model.py"]), 1)
+                mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err), \
+                tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "model.py").write_text("import build123d\n", encoding="utf-8")
+            self.assertEqual(run.main([str(Path(folder) / "model.py")]), 1)
         execv.assert_not_called()
         self.assertEqual(err.getvalue(), "cad run: the CAD kernel environment needs the network once: dns error\n")
 

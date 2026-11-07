@@ -244,8 +244,10 @@ _KERNEL_LOADED = False
 def kernel(say: Callable[[str], None]) -> None:
     """The kernel loaded before a build of this worker, unless it is (``load_kernel``): a load that
     takes longer than ``KERNEL_PATIENCE`` is said once, while it goes on (``KERNEL_NOTICE``), and
-    a warm worker says nothing."""
-    if _KERNEL_LOADED:
+    a warm worker says nothing. An environment without the build123d integration (a script whose
+    imports name none of it: the server's ``cad run`` makes it with the integrations they name) loads
+    none: what its build imports is its own."""
+    if _KERNEL_LOADED or not _has_kernel():
         return
     told = threading.Timer(KERNEL_PATIENCE, say, (KERNEL_NOTICE,))
     told.daemon = True
@@ -255,6 +257,16 @@ def kernel(say: Callable[[str], None]) -> None:
     finally:
         told.cancel()
         told.join()  # gone before the build: a profile records every thread's calls (``profiling``)
+
+
+def _has_kernel() -> bool:
+    """Whether this environment has build123d installed (found, not loaded)."""
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("build123d") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def kept() -> dict[str, str]:
@@ -301,11 +313,13 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     it; a mesh file read as its triangles, no kernel loaded) -- written
     to each destination, and drawn into ``draw``'s
     PNG where the request has one (``{"out", option: value}``, the snapshot verb's: a
-    model's picture is drawn from the document in this worker's memory). Answers what was
-    written."""
+    model's picture is drawn from the document in this worker's memory). An STL or a 3MF is
+    meshed to within the request's ``tolerance`` where it gives one (``export/__init__.py``), and its
+    row says it. Answers what was written."""
     from cad.engine import build as engine_build
     from cad.engine import export
 
+    tolerance = export.tolerance_of(request.get("tolerance"), request["destinations"])
     source_spec = request["source"]
     built: list[dict[str, Any]] = []
     if "id" in source_spec:
@@ -371,11 +385,12 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
             from cad.engine.export.viewer import original
             size = original(source, target, request["expected"])
         else:
-            size = export.translate(source, None, target)
+            size = export.translate(source, None, target, tolerance, log)
         seconds = time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
-                      "seconds": round(seconds, 4), "written": before is None or _stat(target) != before})
+                      "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
+                      **({"tolerance": tolerance} if tolerance is not None else {})})
     drawn = None
     if request.get("draw"):
         from cad.engine import snapshot

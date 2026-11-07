@@ -30,7 +30,6 @@ import socket
 import stat
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -65,16 +64,21 @@ RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 # --- where things are -----------------------------------------------------------------------------
 
 
+def _local_state() -> Path:
+    """The platform's place for state: macOS's Application Support, else ``$XDG_STATE_HOME`` or
+    ``~/.local/state`` -- on Windows too, out of the local application data an app package (the Claude
+    desktop app, which starts this server) virtualizes."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+
+
 def state_dir() -> Path:
     """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it)."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:
         return Path(override)
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "cad"
-    if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "cad-state"
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "cad"
+    return _local_state() / "cad"
 
 
 def engine_dir() -> Path:
@@ -86,10 +90,11 @@ def engine_dir() -> Path:
 def default_engine_dir() -> str:
     """The engine folder when ``CAD_ENGINE_DIR`` names none: ``$XDG_RUNTIME_DIR/cad-engine``, else
     ``cad-engine`` in the user's own temporary folder (on macOS the one the system names, whatever
-    ``TMPDIR`` a sandbox sets), else ``/tmp/cad-<uid>``; on Windows ``cad-engine`` in the temporary
-    folder. 0.8's engines are in ``cadgen-engine``, which this never reads."""
+    ``TMPDIR`` a sandbox sets), else ``/tmp/cad-<uid>``; on Windows ``cad-engine`` beside the state folder,
+    out of the local application data an app package virtualizes. 0.8's engines are in ``cadgen-engine``,
+    which this never reads."""
     if WINDOWS:
-        return os.path.join(tempfile.gettempdir(), "cad-engine")
+        return str(_local_state() / "cad-engine")
     for parent in (os.environ.get("XDG_RUNTIME_DIR"), _darwin_temp() or os.environ.get("TMPDIR")):
         if parent and os.path.isabs(parent) and _users_own(parent):
             return os.path.join(parent, "cad-engine")

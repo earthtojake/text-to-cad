@@ -328,16 +328,21 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return request(`${API}/documents`, { method: 'PATCH', headers: JSON_POST, body: change, operation: 'recents' }).then(libraryRows);
     },
     async keepThumbnail(png, path) {
-      return client.changeRecents({ action: 'thumbnail', path, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
+      // A picture drawn in the dark theme's own colours too (a board's) carries it as `dark`: kept beside it.
+      const encode = async (blob) => encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+      return client.changeRecents({ action: 'thumbnail', path, png: await encode(png), ...(png.dark ? { dark: await encode(png.dark) } : {}) });
     },
-    async thumbnail(model, { signal } = {}) {
+    async thumbnail(model, { signal, scheme } = {}) {
       // A document's picture, by its id; the picture's name (its content's) keeps an older one out of any cache.
-      const response = await fetchImpl(client.thumbnailUrl(model), { signal, cache: 'no-store' });
+      const response = await fetchImpl(client.thumbnailUrl(model, { scheme }), { signal, cache: 'no-store' });
       if (!response.ok) return null;
       return `data:image/png;base64,${encodeBase64(new Uint8Array(await response.arrayBuffer()))}`;
     },
-    thumbnailUrl(model) {
-      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
+    thumbnailUrl(model, { scheme } = {}) {
+      // In the dark theme, its dark theme's picture where it has one; else its one picture.
+      const dark = scheme === 'dark' && model.thumbnailDark;
+      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`,
+        { origin, params: dark ? { v: model.thumbnailDark, scheme: 'dark' } : { v: model.thumbnail } });
     },
     pick() {
       return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
@@ -374,6 +379,20 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { language: { locale } }, operation: 'language' }))
         .then((settings) => settings.language);
     },
+    // What's new: the releases whose notes the person has seen and the one the engine runs; with
+    // `seen`, the releases to add (the server adds, never takes away). A server before it answers none.
+    whatsNew(seen) {
+      return (seen === undefined ? request(`${API}/settings`, { operation: 'whats-new' })
+        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { whats_new: { seen } }, operation: 'whats-new' }))
+        .then((settings) => settings.whats_new ?? null);
+    },
+    // Whether the engine updates by itself (`/api/v1/settings`' `updates`); with `automatic`, the
+    // person's answer (the app menu's Automatic updates).
+    automaticUpdates(automatic) {
+      return (automatic === undefined ? request(`${API}/settings`, { operation: 'updates' })
+        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { updates: { automatic } }, operation: 'updates' }))
+        .then((settings) => settings.updates);
+    },
     // Who the engine is, this start of it (`instance`), whether a newer text-to-cad is out and where
     // an update is (`GET /api/v1/server`); and the update button's click (`POST /api/v1/local/update`),
     // which answers the notice, the release, the instance and the update.
@@ -389,6 +408,37 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     },
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl(`${API}/local/activity`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
+    },
+    async plotPayload(file, { signal, sheet, index } = {}) {
+      // A `.kicad_pcb` drawn from its file on the SERVER, as geometry per layer and the board's
+      // index, its pours KiCad's refill of a copy: a plain GET of the document's `plot`. The server
+      // keeps it by the board's bytes, so a saved edit is the next read's; the client only paints.
+      // Bytes the server has not plotted yet it plots off the request (KiCad's refill, the plot),
+      // answering 202 { state: 'plotting', retryMs } until it has, and the client asks again after
+      // `retryMs`, as a drawing's does; each request's 10 s is the time the server may stay silent.
+      // A `.kicad_sch`'s plot is its sheets', each a page: `sheet` asks for one alone, `index: false` without the
+      // hierarchy's index, which the first read carries.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'plotting' });
+      const query = new URLSearchParams();
+      if (typeof sheet === 'string' && sheet) query.set('sheet', sheet);
+      if (index === false) query.set('index', '0');
+      const route = query.size ? `${api}/plot?${query}` : `${api}/plot`;
+      for (;;) {
+        const reply = await request(route, { signal, timeoutMs: 10_000, operation: 'plotting' });
+        if (reply?.state !== 'plotting') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
+    async boardModels(file, { signal } = {}) {
+      // A `.kicad_pcb`'s 3D models table (`GET <board>/models`): each model its footprints name, answered by the
+      // SERVER as this computer has it now -- `{ file, document, api, stamp }`, a STEP the engine serves by that
+      // document id (`engineDocument`), or `{ file, missing }` with the reason. The page names no path.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'board-models' });
+      const reply = await request(`${api}/models`, { signal, timeoutMs: 10_000, operation: 'board-models' });
+      return reply?.models && typeof reply.models === 'object' ? reply.models : {};
     },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the

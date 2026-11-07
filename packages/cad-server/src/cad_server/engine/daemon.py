@@ -37,8 +37,11 @@ fresh worker's, a restart. Each such document is also kept in the engine's cache
 its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
 
 The workers keep a standby with the kernel loaded (``services.WORKER``, ``Supervisor.stand``): started
-with the daemon, and again each time a build takes it or starts a worker of its own while there is
-room for it. A build for a script with no live worker takes the standby when its environment shapes
+once the installation's default environment, the base, exists -- with the daemon when it is made already,
+else the moment the engine's making of it, on first need, is done (``made_base``); never before, and
+nothing waits on a standby that cannot stand -- and again each time a build takes it or starts a worker
+of its own while there is room for it. The engine never makes the base to stand one: it is made on first
+need (``places.kernel``, ``base.kernel``), and a kernel process asked for meanwhile waits on its making. A build for a script with no live worker takes the standby when its environment shapes
 the interpreter as the standby's does (``places.RESTARTS``), and starts a fresh worker otherwise;
 taken, the standby is that script's worker from then on (``Process.adopt``), so a new script's first
 build pays no kernel load. The standby counts toward the cap, is the first retired for room or
@@ -122,6 +125,21 @@ def _making() -> Any:
     from cad_server._internal.engine_host import making
 
     return making()
+
+
+def _automatic(daemon: Any) -> None:
+    """The automatic update asked for as the daemon tends itself (``cad_server._internal.engine_host.automatic``):
+    nothing but a look at the settings and the feed as last read, its work in the background."""
+    from cad_server._internal.engine_host import automatic
+
+    automatic(daemon)
+
+
+def _update() -> dict[str, Any] | None:
+    """Where the engine's update is, for ``status`` (``cad_server._internal.engine_host.update``)."""
+    from cad_server._internal.engine_host import update
+
+    return update()
 
 
 def _halt() -> None:
@@ -496,8 +514,15 @@ def _proc_holder(port: int) -> tuple[int | None, str | None, str | None]:
     return None, None, None
 
 
+def _console(argv: list[str]) -> str:
+    """What a Windows console tool printed. Such tools write in the console's OEM code page, not
+    the one ``text=True`` assumes (UTF-8 under ``PYTHONUTF8=1``), and a localized header in it
+    must not end the read: ``netstat`` on a zh-TW Windows writes cp950."""
+    return subprocess.run(argv, capture_output=True, encoding="oem", errors="replace", timeout=10).stdout or ""
+
+
 def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
-    said = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10).stdout
+    said = _console(["netstat", "-ano", "-p", "TCP"])
     pid = None
     for line in said.splitlines():
         fields = line.split()
@@ -506,8 +531,7 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
             break
     if pid is None:
         return None, None, None
-    listed = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True,
-                            text=True, timeout=10).stdout.strip()
+    listed = _console(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"]).strip()
     name = listed.split('","', 1)[0].strip('"') if listed.startswith('"') else None
     return pid, name, None
 
@@ -526,6 +550,22 @@ def rotate_token() -> str | None:
     token = secrets.token_urlsafe(32)
     held.put_token(token)
     return token
+
+
+def _reportable(report: dict[str, Any]) -> bool:
+    """Whether a failed build's error is a mistake in cadgen's own code, for its page to offer to report:
+    what telemetry counts as a crash of a build (``analytics.told_signature`` of the report's error as the
+    verbs tell it, ``api.told_error``). The model's own error -- its code, a library it called, the kernel
+    refusing a call, cadgen refusing what it was given -- is the model's to correct, and is not. One rule
+    for both, so the tracker hears of what telemetry would. Never raises: a failure it cannot tell is
+    reported."""
+    try:
+        from cad.engine.api import told_error
+        from cad_server import analytics
+
+        return analytics.told_signature(told_error(report), "build") is not None
+    except Exception:  # noqa: BLE001 - a failure that cannot be told is offered to report, as every one was
+        return True
 
 
 class Daemon:
@@ -561,6 +601,9 @@ class Daemon:
         self.last = time.monotonic()
         self.busy = 0
         self.busy_lock = threading.Lock()
+        # When the last build, draw, export or request that serves ended (monotonic): an automatic update
+        # switches only once nothing has run for a while (``cad_server._internal.update.Update._wait``).
+        self.worked = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
         # runs), which ``status`` counts.
@@ -589,29 +632,31 @@ class Daemon:
         self.last = time.monotonic()
 
     def stand(self) -> None:
-        """At the daemon's start: the engine's kernel environment, the base, made in the background when
-        it is absent (``base.Making``): an engine a host's CAD app starts runs outside any sandbox, and an
-        agent's sandboxed first command cannot write the cache folder -- nothing waits on the making
-        (nor on the network it may ask) but what needs the kernel. Then each service's standby
-        (``Supervisor.stand``) -- the workers', a worker with the kernel loaded, so a new script's first
-        build pays no kernel load -- nor, on a fresh installation, the operating system's first look at
-        its native libraries (macOS checks each once: 43 s measured on a new uvx environment, against 2.5 s
-        loaded again), which the standby pays while nobody waits. Started in the environment of the client
-        that started the daemon (``environment``), in the base, once that is made (``made_base``); each
-        standby after it in that of the lease that took the last one. And the bytecode folders of
-        installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in the background
-        (``prune_bytecode``). With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby is
-        enabled: none stands by, and none replaces one."""
+        """At the daemon's start: each service's standby (``Supervisor.stand``) -- the workers', a worker
+        with the kernel loaded, so a new script's first build pays no kernel load, nor, on a fresh
+        installation, the operating system's first look at its native libraries (macOS checks each once:
+        43 s measured on a new uvx environment, against 2.5 s loaded again), which the standby pays while
+        nobody waits -- once the engine's kernel environment, the base, exists: now, where it is made
+        already (or the installation carries the kernel), else the moment the engine's making of it is done
+        (``made_base``). The base is never made here: it is made on first need (``base.kernel``), and until
+        then no standby stands and nothing waits on one. Started in the environment of the client that
+        started the daemon (``environment``); each standby after it in that of the lease that took the last
+        one. And the bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in
+        the background (``prune_bytecode``). With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby
+        is enabled: none stands by, and none replaces one."""
         prune_bytecode()
-        making = _making()
-        making.made = self.made_base
-        making.start()
+        _making().made = self.made_base
         if not standby():
             return
         for service in SERVICES:
             if service.standby is not None:
                 self.supervisor.enable_standby(service.name)
-                self.supervisor.stand(service.name, self.environment())
+        try:
+            made = _kernel(False) is not None
+        except Exception:  # noqa: BLE001 - none to stand in: its first need makes it, and the standby follows
+            made = False
+        if made:
+            self.made_base()
 
     def made_base(self) -> None:
         """The base made here (``base.Making``): each service's standby, when standbys are enabled,
@@ -624,19 +669,20 @@ class Daemon:
 
     def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
-        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``with``, the environment of a
-        model's own packages beside it (``cad run --with``, a script's header: ``extras.ensure``): made here
-        when it is not -- the making under way followed, or one started (``base.Making.follow``) -- each of
-        its lines a ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one
-        line. One of another installation's (``key``) is not this engine's to make: ``{"ok": false,
-        "other": true}``."""
-        named = request.get("with")
-        if isinstance(named, list) and named and all(isinstance(item, str) for item in named):
+        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``spec``, the environment ``cad run``
+        makes for a program beside it (its integrations, packages and uv's options: ``extras.Spec``,
+        ``extras.ensure``; ``with`` alone, an earlier client's: those requirements): made here when it is not
+        -- the making under way followed, or one started (``base.Making.follow``) -- each of its lines a
+        ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one line. One of
+        another installation's (``key``) is not this engine's to make: ``{"ok": false, "other": true}``."""
+        named, spec = request.get("with"), request.get("spec")
+        if isinstance(spec, dict) or (isinstance(named, list) and named
+                                      and all(isinstance(item, str) for item in named)):
             from cad_server._internal import extras
 
             try:
-                making = extras.making(named)
-            except extras.Refused as refused:  # an option of uv's handed as a requirement: uv never sees it
+                making = extras.making(spec if isinstance(spec, dict) else named)
+            except extras.Refused as refused:  # no spec, or an option of uv's handed as a requirement
                 send({"failed": str(refused), "base": True})
                 return
         else:
@@ -729,7 +775,7 @@ class Daemon:
         for report in reports if isinstance(reports, list) else []:
             frame = report.get("progress") or {}
             failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
-                                                    "progress": frame}
+                                                    "reportable": _reportable(report), "progress": frame}
             for ident in self.models.paths(worker, report.get("model")):
                 outcomes[ident] = failed
             # Each child model the run built is a document of its own, built as its own row says: its
@@ -737,10 +783,13 @@ class Daemon:
             for identity, child in (report.get("child_models") or {}).items():
                 if child.get("id"):
                     outcomes[child["id"]] = None if child.get("ok") else {
-                        "model": identity, "error": child.get("error"), "progress": frame}
+                        "model": identity, "error": child.get("error"), "reportable": _reportable(child),
+                        "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "progress": frame}
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report.
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": True,
+                               "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
             server.built(outcomes)
@@ -1056,6 +1105,7 @@ class Daemon:
         finally:
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
@@ -1071,6 +1121,7 @@ class Daemon:
         finally:
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def _handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
@@ -1176,7 +1227,8 @@ class Daemon:
             order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
                      "cwd": request.get("cwd"),
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
-                     "expected": request.get("expected"), "original": request.get("original")}
+                     "expected": request.get("expected"), "original": request.get("original"),
+                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
@@ -1195,7 +1247,7 @@ class Daemon:
                 order = {"id": 1, "op": "result", "script": source["script"], "name": source["function"],
                          "cwd": request.get("cwd")}
             else:
-                send({"failed": f"{ident} is a file's document: read_xbf or read_step reads its shape"})
+                send({"failed": f"{ident} is a file's document: xbf.read or step.read reads its shape"})
                 return
             return self._call({**request, "source": source}, order, send, payload)
         if op == "result":
@@ -1294,6 +1346,7 @@ class Daemon:
             finally:
                 with self.busy_lock:
                     self.busy -= 1
+                    self.worked = time.monotonic()
                 self.touch()
         elif op == "serve":
             server = self.serve(request)
@@ -1394,6 +1447,7 @@ class Daemon:
             said.close()
             with self.busy_lock:
                 self.busy -= 1
+                self.worked = time.monotonic()
             self.touch()
 
     def status(self) -> dict[str, Any]:
@@ -1439,6 +1493,7 @@ class Daemon:
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
+                "update": _update(),
                 "sessions": (self.server.http.app.sessions() if self.server is not None
                              and hasattr(self.server.http, "app") else [])}
 
@@ -1466,6 +1521,7 @@ class Daemon:
             self.door.sweep()
         self.supervisor.shed(self.pressure.under())
         self.models.prune()
+        _automatic(self)
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a
@@ -1654,12 +1710,56 @@ def let_go(held: Any, *, failed: bool = False) -> None:
     while it is still held, so no daemon starting meanwhile can take a lock on a file that is gone
     (``lock`` takes the one the name names); on Windows, where a file open is never removed,
     once it is let go. The door is gone already (``Door.close``)."""
+    _unmirror()
     for path in (port_path(), *(() if failed else (failure_path(),))):
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
     _drop_lock(held, lock_path())
+
+
+def _mirrored() -> Path | None:
+    """The port file 0.10.0's clients read on Windows (``places.appdata_engine_dir``), else None."""
+    from cad.engine.places import appdata_engine_dir
+
+    folder = appdata_engine_dir()
+    return folder / f"{NAME}.port" if folder is not None else None
+
+
+def _mirror(port: int, token: str) -> None:
+    """For one release, this engine's port file written where 0.10.0's clients look for it too, on
+    Windows: a CAD app's server of 0.10.0 still running in an app not restarted since the update finds
+    this engine there, and starts none of its own beside it. Never over a 0.10.0 engine's own that
+    answers. Quiet: a client of this release never reads it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        held = int(path.read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        held = None
+    if held is not None and held != port and _answers("127.0.0.1", held):
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(f"{port} {token}\n", encoding="utf-8")
+        replace_atomic(temporary, path)
+    except OSError:
+        pass
+
+
+def _unmirror() -> None:
+    """The mirrored port file removed before this engine's own (``_mirror``), when it is a copy of it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        if path.read_text(encoding="utf-8") == port_path().read_text(encoding="utf-8"):
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _drop_lock(held: Any, path: Path) -> None:
@@ -1781,6 +1881,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             temporary = port_path().with_suffix(".tmp")
             temporary.write_text(f"{port} {daemon.token}\n", encoding="utf-8")
             replace_atomic(temporary, port_path())
+            _mirror(port, daemon.token)
             daemon.reached_by(port_path())
             listener.settimeout(0.5)
             while not daemon.stopping.is_set():

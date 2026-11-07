@@ -70,6 +70,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from cad.registry import DOCUMENT_TYPES
+
 from cad_server.viewer.scanner import VIEWER_EXTENSIONS
 
 from . import host
@@ -89,9 +91,11 @@ TITLE = "CAD"
 PROTOCOL = 9
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
-EXTENSIONS = sorted(VIEWER_EXTENSIONS)
-# The formats every surface opens, as the agent is told them: a cadgen engine document (XBF) among them.
-FORMATS = "STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF"
+# The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
+# cadgen engine document (XBF) among them, and a KiCad board and schematic.
+EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
+# File formats alone: a model, the one type with no file, is shown by its document id.
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.has_file)
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
 # from an inline cad_show) to sync for the first time: the host loads the page, then the page its
@@ -1015,7 +1019,7 @@ class Server:
     def _tool_cad_screenshot(self, arguments, context):
         deadline = time.monotonic() + CAPTURE_SECONDS
         if self._no_app(context):
-            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad snapshot`.", "no_view")
+            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad <type> snapshot`.", "no_view")
         if self.tabs:
             view = self._target(context, arguments.get("view"), needs_model=True)
             if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
@@ -1027,7 +1031,7 @@ class Server:
             raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
-                             "or render headless with `cad snapshot`.", "no_view")
+                             "or render headless with `cad <type> snapshot`.", "no_view")
         if isinstance(view, SidebarView):
             reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
             if reply is None:

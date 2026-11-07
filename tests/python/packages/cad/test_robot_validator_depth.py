@@ -10,11 +10,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cad.findings import FindingsReport
-from cad.sdf_validation import validate_sdf_xml
-from cad.srdf_source import SrdfPlanningGroup
-from cad.srdf_validation import _check_subgroup_cycles
-from cad.urdf_source import validate_urdf_file
+from cad._internal.findings import FindingsReport
+from cad.sdf._validation import validate_sdf_xml
+from cad.srdf._source import SrdfPlanningGroup
+from cad.srdf._validation import _check_subgroup_cycles
+from cad.urdf._source import validate_urdf_file
 
 DEPTH = 5000
 LINK = '<link name="base"><inertial><mass>1</mass><inertia><ixx>1</ixx><iyy>1</iyy><izz>1</izz></inertia></inertial></link>'

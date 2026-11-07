@@ -19,7 +19,8 @@ as it drains for the button (``spawn``); ``cad setup`` -- ``cad update`` from a 
 install command run again -- asks the engine to drain and is that process itself (``handover``). With
 no engine running there is nothing to hand over: ``current`` is pointed at the release under the
 engine's lock, and the next client starts its engine. After a switch the release folders but this
-one and the one before go, once nothing runs from them (``releases.collect``), and the plugin folder
+one and the one before go, once nothing runs from them (``releases.collect``); after one that went
+back, the folder of the release it failed to move to goes (``releases.discard``), and the plugin folder
 follows the release left current (``follow``: its own ``cad plugin --refresh``, which writes the folder
 again and, should that change it -- a switch that went back --, the copies the apps keep of it).
 
@@ -85,8 +86,14 @@ def spawn(target: str, *, port: int | None, previous: str | None) -> subprocess.
     try:
         options: dict[str, Any] = ({"creationflags": DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                                    else {"start_new_session": True})
-        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True,
-                                cwd=str(folder), **options)
+        started = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True,
+                                   cwd=str(folder), **options)
+        # The engine's own line, before it exits: that the helper was started, and which process it is, so
+        # an update log with nothing of the helper's after it says the helper never got to its first line.
+        log.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} cad update: the engine (pid {os.getpid()}) started the "
+                  f"switch helper (pid {started.pid})\n".encode("utf-8"))
+        log.flush()
+        return started
     finally:
         log.close()
 
@@ -225,6 +232,14 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
             if not back:
                 told(f"text-to-cad {previous}'s engine did not start again either: {why_not}")
     _record(result)
+    if result.get("restored"):
+        # The release it failed to move to, for nothing now: its folder goes, its failure kept above. One a
+        # process still runs from (this one, a `cad update` run from it) goes as the engine tends itself.
+        try:
+            for path in releases.discard(target):
+                told(f"removed {path}")
+        except OSError:
+            pass
     return result
 
 

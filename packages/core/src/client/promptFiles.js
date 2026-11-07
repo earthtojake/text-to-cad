@@ -3,7 +3,8 @@ import { cadApiUrl } from './client.js';
 /**
  * Prepare a Quick Edit snapshot: small packets inline, larger packets by path, without rendering.
  * `read` fetches a JSON file.
- * @typedef {{ name: string, input: string, views: object[], annotation: object | null }} PromptFilesRequest
+ * @typedef {{ name: string, input: string, views: object[], annotation: object | null, references?: string[] }} PromptFilesRequest
+ *   `references`: what the prompt names in the file, a board's selectors, which the packet carries for its snapshot to light.
  * @typedef {{ snapshot: string, inline?: never } | { inline: string, snapshot?: never }} PromptFiles
  * @param {{ origin?: string, fetch?: typeof globalThis.fetch }} [options]
  * @returns {{ create(request: PromptFilesRequest): Promise<PromptFiles>, read(path: string): Promise<Blob> }}

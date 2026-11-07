@@ -6,7 +6,8 @@ its ``build123d`` extra. So an installation of the core, as uvx makes the plugin
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
 processes (the standby, the documents worker, the meshing and reading pools, the render processes:
-``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``).
+``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``). The engine's standby stands once it
+exists (``Making.made``), never before.
 
 - **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
@@ -25,10 +26,14 @@ processes (the standby, the documents worker, the meshing and reading pools, the
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
-- **The engine makes it** when it starts and finds none (``Making``, in the background): an engine a
-  host's CAD app starts runs outside any sandbox, so an agent's sandboxed first ``cad run``, which cannot
-  write the cache folder, asks it over its door (``ensure``'s ``engine``) and follows its making; with no
-  engine to ask, the command makes it itself.
+- **Made on first need**, never ahead of it: nothing makes it at install time or at the engine's
+  start. The one exception is an automatic update's first half (``cli.setup``'s ``PREPARE_ENV``): the
+  release the engine will switch to by itself makes its base before the switch, so that the person's first
+  build after it, which they never asked to wait for an update, waits on nothing. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
+  worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
+  ``Making``), and what needs it waits on its making. An engine a host's CAD app starts runs outside any
+  sandbox, so an agent's sandboxed ``cad run``, which cannot write the cache folder, asks it over its door
+  (``ensure``'s ``engine``) and follows its making; with no engine to ask, the command makes it itself.
 """
 
 from __future__ import annotations
@@ -45,7 +50,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -84,6 +89,19 @@ WHAT = "the CAD kernel environment"
 # A folder of wheels uv reads beside its index for every cadgen it installs (``--find-links``): a test's
 # seam, a local release a test publishes there, never a setting of a person's.
 FIND_LINKS_ENV = "CAD_UPDATE_FIND_LINKS"
+# The variables of uv's that say how it resolves -- its indexes, find-links, strategy, credentials' provider,
+# TLS, pre-releases, timeouts, build settings, its configuration file, the Python it asks for -- which ``cad
+# run`` hands the making from its caller's environment, as ``uv run`` reads them from its own (an environment
+# made for a run is made with the caller's alone: one of these in the engine's own is not read). The settings
+# the engine owns -- its cache, its link mode, where it installs Pythons, whether it goes online -- stay its.
+UV_SETTINGS = frozenset({
+    "UV_INDEX", "UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS", "UV_INDEX_STRATEGY",
+    "UV_KEYRING_PROVIDER", "UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_PRERELEASE", "UV_HTTP_TIMEOUT", "UV_RESOLUTION",
+    "UV_FORK_STRATEGY", "UV_EXCLUDE_NEWER", "UV_NO_BUILD", "UV_NO_BUILD_PACKAGE", "UV_NO_BINARY",
+    "UV_NO_BINARY_PACKAGE", "UV_NO_BUILD_ISOLATION", "UV_NO_BUILD_ISOLATION_PACKAGE", "UV_NO_SOURCES",
+    "UV_INSECURE_HOST", "UV_CONFIG_FILE", "UV_NO_CONFIG", "UV_TORCH_BACKEND", "UV_PYTHON", "UV_MANAGED_PYTHON",
+    "UV_NO_MANAGED_PYTHON", "UV_PYTHON_DOWNLOADS", "UV_LOCKED", "UV_FROZEN",
+})
 
 
 class Refused(Exception):
@@ -120,14 +138,16 @@ class Installation:
                 pass
         return _own()
 
-    def requirement(self) -> list[str]:
-        """What installs this installation's library with its kernel: the library's source tree editable,
-        the wheel it was installed from, or its release."""
+    def requirement(self, extras: tuple[str, ...] | list[str] = (EXTRA,)) -> list[str]:
+        """What installs this installation's library with ``extras`` (its integrations: by default its
+        kernel's), exactly its own: the library's source tree editable, the wheel it was installed from, or
+        its release, pinned (``cad[build123d]==0.10.0``; with no extras, ``cad==0.10.0``)."""
+        named = f"[{','.join(extras)}]" if extras else ""
         if self.source is None:
-            return [f"{LIBRARY}[{EXTRA}]=={self.release}"]
+            return [f"{LIBRARY}{named}=={self.release}"]
         if os.path.isdir(self.source):
-            return ["-e", f"{self.source}[{EXTRA}]"]
-        return [f"{LIBRARY}[{EXTRA}] @ {self.source}"]
+            return ["-e", f"{self.source}{named}"]
+        return [f"{LIBRARY}{named} @ {self.source}"]
 
 
 @functools.cache
@@ -295,8 +315,15 @@ def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | N
 def kernel(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's kernel processes run in, as the engine is handed it
     (``cad.engine.places.KERNEL``): the base's Python, its folder, its import path and whether it is this
-    installation's own; None when it is not made and ``make`` is false. ``Refused`` when it cannot be."""
-    found = ensure(make=make, told=lambda _line: None)
+    installation's own; None when it is not made and ``make`` is false. With ``make``, one not made is made
+    now, on first need, by the engine's one making (``MAKING``: its state in ``status``, every asker waiting
+    on the same making). ``Refused`` when it cannot be."""
+    found = ensure(make=False)
+    if found is None and make:
+        error = MAKING.follow(lambda _line: None)
+        if error is not None:
+            raise Refused(error)
+        found = ensure(told=lambda _line: None)  # made now: its marker read, nothing resolved
     if found is None:
         return None
     return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
@@ -304,12 +331,11 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
 
 
 class Making:
-    """The installation's base made in this process's background: the engine's, at its start when the base
-    is absent (``start``), and again for whoever needs it later (``follow``: a client's ``cad run`` over the
-    engine's door). One making at a time, under the base's own lock as every maker's (a lease that needs the
-    kernel meanwhile waits on it); its lines go to the engine's log and are kept for whoever follows it and for
-    ``status``; ``made`` is told when it is made (the engine stands its standby). Nothing remembers a
-    failure: the next start or follower makes it again."""
+    """The installation's base made in this process's background, on first need, for whoever needs it
+    (``follow``: a kernel process's start, ``kernel``; a client's ``cad run`` over the engine's door). One
+    making at a time, under the base's own lock as every maker's; its lines go to the engine's log and are
+    kept for whoever follows it and for ``status``; ``made`` is told when it is made (the engine stands its
+    standby then). Nothing remembers a failure: the next follower makes it again."""
 
     def __init__(self) -> None:
         self.changed = threading.Condition()
@@ -429,6 +455,22 @@ class Recipe:
     # Said, before uv's reason, of requirements uv finds unsatisfiable together (a model's own packages
     # beside the kernel's pins: ``cad_server._internal.extras``); None: uv's words alone.
     unsatisfiable: str | None = None
+    # uv's own options, handed to ``uv pip install`` as given (an index, find-links, resolution settings:
+    # ``cad run``'s), and to ``uv venv`` (the Python's: ``--managed-python``).
+    options: tuple[str, ...] = ()
+    venv_options: tuple[str, ...] = ()
+    # Asked once uv has installed it, before its marker: a requirement to install again and the line said of
+    # it, or None (``cad_server._internal.extras``: an integration a resolution pulled in).
+    revise: Callable[[Path], tuple[tuple[str, ...], str] | None] | None = field(default=None, compare=False)
+    # uv's settings from the run's caller (``UV_SETTINGS``, as ``NAME``/``value`` pairs; None: this process's
+    # own, the base's and a release's), and the folder uv runs
+    # in -- a project's, so its uv configuration is read, and the paths of its lock's export resolve -- (None:
+    # the environments' own folder, where no project's settings are read).
+    environment: tuple[tuple[str, str], ...] | None = None
+    folder: str | None = None
+    # Asked once the virtual environment is made, before uv installs into it: more of what it installs (a
+    # project's lock, exported: ``-r`` and the file), or ``Refused`` in one line.
+    before: Callable[[Path], tuple[str, ...]] | None = field(default=None, compare=False)
 
 
 def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
@@ -437,8 +479,11 @@ def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
     beside the index (``FIND_LINKS_ENV``)."""
     found = os.environ.get(FIND_LINKS_ENV, "").strip()
     links = ["--find-links", found] if found else []
-    return [[uv, "venv", "--no-project", "--python", recipe.python, str(env)],
-            [uv, "pip", "install", "--python", str(interpreter(env)), "--link-mode", LINK, *links, *recipe.requirement]]
+    link = [] if any(option == "--link-mode" or option.startswith("--link-mode=") for option in recipe.options) \
+        else ["--link-mode", LINK]
+    return [[uv, "venv", "--no-project", "--python", recipe.python, *recipe.venv_options, str(env)],
+            [uv, "pip", "install", "--python", str(interpreter(env)), *link, *links, *recipe.options,
+             *recipe.requirement]]
 
 
 def recipe(installation: Installation) -> Recipe:
@@ -497,19 +542,24 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
         told(f"{recipe.making}, in {env}")
         started = time.monotonic()
         venv, install = steps
-        result = _uv(venv, env.parent)
+        folder = Path(recipe.folder) if recipe.folder else env.parent
+        result = _uv(venv, folder, recipe.environment)
         if result.returncode == 0:
-            result = _uv([*install, "--offline"], env.parent)
-            if result.returncode != 0:
-                # uv's cache did not hold all of it: from the network, once.
-                told(recipe.downloading)
-                result = _uv(install, env.parent)
-                if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
-                    # uv reads an index page it cached (ten minutes, PyPI's): one from before the release
-                    # was listed says there is none. Asked again, that page alone fetched anew.
-                    steps[1] = install = [*install, "--refresh-package", LIBRARY, "--refresh-package", SERVER]
-                    result = _uv(install, env.parent)
-            step = install
+            extra: tuple[str, ...] = ()
+            if recipe.before is not None:
+                extra = recipe.before(env)
+                install = steps[1] = [*install, *extra]
+            result, install = _install(install, folder, recipe, told)
+            steps[1] = step = install
+            if result.returncode == 0 and recipe.revise is not None:
+                again = recipe.revise(env)
+                if again is not None:
+                    requirement, said = again
+                    told(said)
+                    again_recipe = dataclasses.replace(recipe, requirement=requirement, revise=None)
+                    again_install = [*commands(steps[0][0], env, again_recipe)[1], *extra]
+                    result, step = _install(again_install, folder, again_recipe, told)
+                    steps.append(step)
         else:
             step = venv
         if result.returncode != 0:
@@ -524,20 +574,49 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
     return written
 
 
-def _path(env: Path) -> list[str]:
-    """The import path the base's Python starts with: what a process of the engine's pools, started in
-    it, imports from (``cad.engine.serve``'s spawn pools take it from the marker)."""
+def _install(install: list[str], folder: Path, recipe: Recipe,
+             told: Callable[[str], None]) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """``uv pip install`` as ``install`` says it: from uv's cache first, ``--offline``, and from the network
+    only for what it does not hold, said in a line first -- unless the recipe's own options say ``--offline``.
+    Its result, and the command that gave it."""
+    environment = recipe.environment
+    if "--offline" in recipe.options:
+        return _uv(install, folder, environment), install
+    result = _uv([*install, "--offline"], folder, environment)
+    if result.returncode == 0:
+        return result, install
+    # uv's cache did not hold all of it: from the network, once.
+    told(recipe.downloading)
+    result = _uv(install, folder, environment)
+    if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
+        # uv reads an index page it cached (ten minutes, PyPI's): one from before the release was listed says
+        # there is none. Asked again, that page alone fetched anew.
+        install = [*install, "--refresh-package", LIBRARY, "--refresh-package", SERVER]
+        result = _uv(install, folder, environment)
+    return result, install
+
+
+def _probe(env: Path) -> tuple[list[str], str]:
+    """The import path the environment's Python starts with -- what a process of the engine's pools,
+    started in it, imports from (``cad.engine.serve``'s spawn pools take it from the marker) -- and that
+    Python's version (``3.14.6``)."""
+    code = "import json, platform, sys; print(json.dumps([sys.path, platform.python_version()]))"
     try:
-        done = subprocess.run([str(interpreter(env)), "-I", "-c", "import json, sys; print(json.dumps(sys.path))"],
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=120)
+        done = subprocess.run([str(interpreter(env)), "-I", "-c", code], stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=120)
         found = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else None
     except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
         raise Refused(f"{WHAT} made at {env} does not run: {error}") from None
-    if not isinstance(found, list) or not all(isinstance(item, str) for item in found):
+    if (not isinstance(found, list) or len(found) != 2 or not isinstance(found[0], list)
+            or not all(isinstance(item, str) for item in found[0]) or not isinstance(found[1], str)):
         said = (done.stderr or done.stdout).strip().splitlines()
         raise Refused(f"{WHAT} made at {env} does not run: {said[-1] if said else 'it said nothing'}")
-    return found
+    return found[0], found[1]
+
+
+def _path(env: Path) -> list[str]:
+    """The import path the environment's Python starts with (``_probe``)."""
+    return _probe(env)[0]
 
 
 def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
@@ -557,11 +636,22 @@ _RUNNING: set[subprocess.Popen] = set()
 _RUNNING_LOCK = threading.Lock()
 
 
-def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
-    """A uv command run in the environments' folder, where no project's uv settings are read."""
+def uv_environment(settings: tuple[tuple[str, str], ...] | None = ()) -> dict[str, str]:
+    """The environment a uv command runs in: this process's, but for uv's resolution settings
+    (``UV_SETTINGS``), which are ``settings`` alone -- a run's caller's."""
+    found = {name: value for name, value in os.environ.items() if name not in UV_SETTINGS}
+    found.update(dict(settings or ()))
+    return found
+
+
+def _uv(step: list[str], folder: Path, settings: tuple[tuple[str, str], ...] | None = None) -> subprocess.CompletedProcess:
+    """A uv command run in ``folder`` -- the environments' own, where no project's uv settings are read, or a
+    run's project's -- with uv's settings ``settings`` (a run's caller's: ``uv_environment``; None, this
+    process's own)."""
     try:
         process = subprocess.Popen(step, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                   env=None if settings is None else uv_environment(settings))
     except OSError as error:
         raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
     with _RUNNING_LOCK:

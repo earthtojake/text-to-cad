@@ -33,9 +33,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
-           "alive", "bytecode", "bytecode_tag", "cache_dir", "current", "detached", "door_path", "earlier_cache_dir",
-           "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
+__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
+           "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
+           "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
            "folder_refusal", "home", "installation", "kernel", "lock", "lock_path", "port_path", "registered",
            "run_with", "state_dir", "windowless"]
 
@@ -80,11 +80,61 @@ MARKER_SCHEMA = "cad env/2"
 # installations' records, its engines' records or its page token, which only 0.8 runs by, nor its
 # install channels, the locks, or the telemetry it noted and did not send. The person's telemetry no
 # stays in the earlier folder too, for the earlier release still installed (``adopt``).
-STATE = ("cad", "cad-state")
+STATE = "cad"
 EARLIER_STATE = ("cadgen", "cadgen-state")
 SETTINGS = "settings.json"
 ADOPTED = (SETTINGS, "documents", "recents", "install-receipt.json")
 CACHE, EARLIER_CACHE = "cad", "cadgen"
+# On Windows, 0.10.0 kept its folders in the local application data (``appdata_state_dir`` and the
+# others), which Windows virtualizes for every process an app package (MSIX) starts -- the Claude desktop
+# app's shell, its CAD app's server and the engine that server starts --: what such a process creates
+# there lands in the package's private ``LocalCache``, where no other app and no terminal finds it. So
+# Windows keeps them where Linux does, in the user's own folder, which no package virtualizes. What
+# 0.10.0 kept there moves once (``adopt_earlier``): ``ADOPTED`` and the page token and port the engine
+# remembers (``APPDATA_ADOPTED``), so every link shared before still works, and the documents' bytes.
+APPDATA_STATE, APPDATA_CACHE = "cad-state", "cad"
+APPDATA_ADOPTED = (*ADOPTED, "engines/token", "engines/engine.json", "install-channels.json")
+
+
+def _local_state() -> Path:
+    """The platform's place for state: ``~/Library/Application Support`` on macOS, else ``$XDG_STATE_HOME``
+    or ``~/.local/state`` -- on Windows too, ``%USERPROFILE%\\.local\\state``, beside ``.local\\bin``."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+
+
+def _appdata() -> Path:
+    return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+
+
+def state_dir() -> Path:
+    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's
+    place for state (``_local_state``)."""
+    override = os.environ.get("CAD_STATE_DIR")
+    if override:
+        return Path(override)
+    return _local_state() / STATE
+
+
+def appdata_state_dir() -> Path | None:
+    """Where 0.10.0 kept its state on Windows, ``%LOCALAPPDATA%\\cad-state``, which this release moves out of
+    (``APPDATA_STATE``); None elsewhere, or where ``CAD_STATE_DIR`` names the state folder."""
+    return _appdata() / APPDATA_STATE if WINDOWS and not os.environ.get("CAD_STATE_DIR") else None
+
+
+def appdata_cache_dir() -> Path | None:
+    """Where 0.10.0 kept its cache on Windows, ``%LOCALAPPDATA%\\cad``: its documents' bytes move with their
+    records (``adopt_earlier``), the rest is left to ``cad doctor --prune``; None elsewhere, or where
+    ``CAD_CACHE_DIR`` names the cache folder."""
+    return _appdata() / APPDATA_CACHE if WINDOWS and not os.environ.get("CAD_CACHE_DIR", "").strip() else None
+
+
+def appdata_engine_dir() -> Path | None:
+    """Where 0.10.0's clients look for the engine on Windows, ``cad-engine`` in the temporary folder: the
+    engine writes its port file there too for one release (``cad_server.engine.daemon``), so a CAD app's
+    server of 0.10.0 still running finds it; None elsewhere, or where ``CAD_ENGINE_DIR`` names the folder."""
+    return Path(tempfile.gettempdir()) / "cad-engine" if WINDOWS and not os.environ.get("CAD_ENGINE_DIR") else None
 
 
 def _platform_state(names: tuple[str, str]) -> Path:
@@ -92,17 +142,8 @@ def _platform_state(names: tuple[str, str]) -> Path:
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / posix
     if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / windows
+        return _appdata() / windows
     return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / posix
-
-
-def state_dir() -> Path:
-    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's
-    place for state (on Windows ``cad-state`` in the local application data)."""
-    override = os.environ.get("CAD_STATE_DIR")
-    if override:
-        return Path(override)
-    return _platform_state(STATE)
 
 
 def earlier_state_dir() -> Path:
@@ -119,24 +160,32 @@ def adopt_earlier() -> list[str]:
     Each thing moves once: once this release's folder has it, the earlier one's stays. The names moved."""
     if os.environ.get("CAD_STATE_DIR"):
         return []
-    return adopt(_platform_state(EARLIER_STATE), _platform_state(STATE))
+    moved: list[str] = []
+    # 0.10.0's Windows folder first: what it took of 0.8's is there, and 0.8's keeps a telemetry no that is
+    # no person's whole settings.
+    appdata, appdata_cache = appdata_state_dir(), appdata_cache_dir()
+    if appdata is not None:
+        moved += adopt(appdata, state_dir(), APPDATA_ADOPTED)
+    if appdata_cache is not None:  # the bytes of the documents whose records moved, so Recents still opens them
+        moved += adopt(appdata_cache, cache_dir(), ("documents",))
+    return moved + adopt(_platform_state(EARLIER_STATE), state_dir())
 
 
-def adopt(earlier: Path, folder: Path) -> list[str]:
-    """What this release keeps of the state folder ``earlier`` moved into ``folder`` (``ADOPTED``), each
+def adopt(earlier: Path, folder: Path, names: tuple[str, ...] = ADOPTED) -> list[str]:
+    """What this release keeps of the state folder ``earlier`` moved into ``folder`` (``names``), each
     only where ``folder`` has none. The rest stays where it was. Moved, never copied -- a record
     names one place --, but for the person's telemetry no: an earlier release still installed (an app's
     session, its own stop command) reads settings it finds missing as never told and tells its notice
     again, which it then takes for a yes, so its folder keeps the no (``_said_no``). Quiet: a move that
     fails leaves both folders as they were, and the next registration tries again. The names moved."""
     moved: list[str] = []
-    for name in ADOPTED:
+    for name in names:
         source, destination = earlier / name, folder / name
         if not source.exists() or os.path.lexists(destination):
             continue
         no = _said_no(source) if name == SETTINGS else None
         try:
-            folder.mkdir(parents=True, exist_ok=True)
+            destination.parent.mkdir(parents=True, exist_ok=True)
             os.rename(source, destination)
         except OSError:
             continue
@@ -175,18 +224,19 @@ def cache_dir() -> Path:
     cache location, which the system and the person treat as disposable -- wiping it loses no
     state, the records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made
     absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
-    ``$XDG_CACHE_HOME/cad`` on POSIX or ``%LOCALAPPDATA%\\cad`` on Windows when set, else
-    ``~/.cache/cad``. An earlier release's cache (named for cadgen) is not read: it is a cache."""
-    return _cache_dir(CACHE)
+    ``$XDG_CACHE_HOME/cad`` when set, else ``~/.cache/cad`` -- on Windows too, out of the local application
+    data an app package virtualizes (``APPDATA_STATE``). An earlier release's cache (named for cadgen, or
+    0.10.0's on Windows) is not read: it is a cache."""
+    return _cache_dir(CACHE, appdata=False)
 
 
 def earlier_cache_dir() -> Path:
     """Where the releases before 0.10 kept their cache (``EARLIER_CACHE``, by ``cache_dir``'s rule), or the folder
     ``CAD_CACHE_DIR`` names: where what they left behind is looked for (``cad doctor``)."""
-    return _cache_dir(EARLIER_CACHE)
+    return _cache_dir(EARLIER_CACHE, appdata=True)
 
 
-def _cache_dir(name: str) -> Path:
+def _cache_dir(name: str, appdata: bool) -> Path:
     override = os.environ.get("CAD_CACHE_DIR", "").strip()
     if override:
         root = Path(override).expanduser()
@@ -194,7 +244,7 @@ def _cache_dir(name: str) -> Path:
             root = (Path.cwd() / root).resolve()
             os.environ["CAD_CACHE_DIR"] = str(root)
         return root
-    if os.name == "nt":
+    if os.name == "nt" and appdata:
         local = os.environ.get("LOCALAPPDATA", "").strip()
         if local:
             return Path(local) / name
@@ -223,10 +273,12 @@ def default_engine_dir() -> str:
     the system names (``_darwin_temp``, ``/var/folders/...``), which a sandbox that sets its own
     ``TMPDIR`` does not move, so a client in it and the engine outside find one folder; ``TMPDIR``
     only where the system names none. Else ``/tmp/cad-<uid>``, which ``folder_refusal`` still
-    checks. On Windows the temporary folder is the user's own: ``cad-engine`` in it. 0.8 kept its
-    engines in ``cadgen-engine``: neither release's clients find the other's door."""
+    checks. On Windows ``cad-engine`` beside the state folder (``_local_state``): the temporary folder
+    is in the local application data an app package virtualizes, where an engine the Claude desktop
+    app started would leave a port file no other app finds (0.10.0's, ``appdata_engine_dir``). 0.8 kept
+    its engines in ``cadgen-engine``: neither release's clients find the other's door."""
     if WINDOWS:
-        return os.path.join(tempfile.gettempdir(), "cad-engine")
+        return str(_local_state() / "cad-engine")
     for parent in (os.environ.get("XDG_RUNTIME_DIR"), _darwin_temp() or os.environ.get("TMPDIR")):
         if parent and os.path.isabs(parent) and _users_own(parent):
             return os.path.join(parent, "cad-engine")
@@ -392,6 +444,14 @@ def home(prefix: str | None = None) -> dict[str, Any] | None:
     return found
 
 
+def separate(prefix: str | None = None) -> bool:
+    """Whether the environment at ``prefix`` (this process's) is one ``cad run`` made for a program beside the
+    base -- its marker naming what it holds beside the base (``with``, a list, empty or not: the server's
+    ``extras``) -- rather than the base itself, or an environment the server did not make."""
+    marker = _marker(prefix)
+    return marker is not None and isinstance(marker.get("with"), list)
+
+
 def extras(prefix: str | None = None) -> tuple[str, ...]:
     """The packages the environment at ``prefix`` (this process's) holds beside the base's, as its
     marker names them (``with``: an environment ``cad run`` made for a model's own packages, the server's
@@ -410,6 +470,10 @@ HOME: dict[str, Any] | None = home()
 # The packages this process's environment holds beside the base's, where ``cad run`` made it for a model's
 # own (``extras``): its scripts name their Python, which the engine builds them in (``contract.interpreter``).
 EXTRAS: tuple[str, ...] = extras()
+# Whether this process's environment is one ``cad run`` made for a program beside the base (``separate``): its
+# scripts name their Python, which the engine builds them in (``contract.interpreter``), whatever it holds --
+# packages of its own, other integrations of cad's, another Python.
+SEPARATE: bool = separate()
 # How ``cad run`` named the packages of the environment it runs a program in, which it hands the program as
 # JSON (``run_with``): what a document's record says builds it again (``contract.interpreter``).
 RUN_WITH = "CAD_RUN_WITH"

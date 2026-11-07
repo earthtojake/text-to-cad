@@ -12,7 +12,9 @@
 set -eu
 
 # The release this script was published with, installed when the version feed cannot be read.
-CAD_VERSION="0.10.0"
+CAD_VERSION="0.11.0"
+# The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
+CONSENT_SINCE="0.11.0"
 VERSION_FEED="https://api.texttocad.dev/v1/versions"
 RELEASES="https://github.com/earthtojake/text-to-cad/releases/download"
 
@@ -203,8 +205,13 @@ main() {
   PATH="$(dirname "$uvx"):$PATH"
   export PATH
 
+  # --uninstall is the person's own word: `cad uninstall` is told yes for them (it would ask at a terminal),
+  # but a release from before it asked, which takes no --yes. A build named outright is taken as this one.
+  if [ "$verb" = uninstall ] && { [ -n "$from" ] || ! older "$version" "$CONSENT_SINCE"; }; then
+    set -- "$@" --yes
+  fi
   say "text-to-cad: $version ($origin). The first run downloads it, which takes a minute."
-  # cad asks nothing, so it reads no terminal. $refresh is four words or none.
+  # cad asks nothing here, so it reads no terminal. $refresh is four words or none.
   say "Running: $uvx --no-config --managed-python --python 3.14 ${refresh:+$refresh }--from $requirement cad $verb${*:+ $*}"
   exec "$uvx" --no-config --managed-python --python 3.14 $refresh --from "$requirement" cad "$verb" "$@"
 }

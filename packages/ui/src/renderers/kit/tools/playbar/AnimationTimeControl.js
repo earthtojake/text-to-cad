@@ -1,6 +1,5 @@
 import { useAnimationClockValue } from "./animationClock.js";
 import { Slider } from "@cad/ui/primitives/slider";
-import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
 import { useI18n } from "@cad/ui/i18n";
 
 /**
@@ -16,7 +15,7 @@ export function playbarWords(runtime, t) {
     list: say("list"), current: name => say("current", { name }) };
 }
 
-// The file sidebar's Animation section (`AnimationSection.jsx`) is the one transport, in the tools
+// The playbar under the model (`PreviewPlaybar.jsx`) is the one transport, in the tools
 // view and Preview alike: the routine, Play/Pause, this scrubber and the Playback settings
 // (`PlaybackMenu.jsx`).
 //
@@ -36,11 +35,12 @@ export function formatSeconds(value) {
 }
 
 /**
- * The scrubber over the routine in hand. It tracks the LIVE clock while playing: the elapsed time on
+ * The scrubber over the routine in hand: a timeline, not a setting, so the one slider beside the
+ * slider control (`inspector/SliderField.jsx`) that draws the primitive itself. It tracks the LIVE clock while playing: the elapsed time on
  * the runtime snapshot only moves when playback stops, because a playing clip publishes through the
  * clock store instead of React state.
  */
-export function AnimationTimeControl({ runtime, disabled = false, className = FILE_SHEET_PRECISION_SLIDER_CLASSES }) {
+export function AnimationTimeControl({ runtime, disabled = false, className = "h-4" }) {
   const { t } = useI18n();
   const activeClip = runtime?.clips?.find(clip => clip.id === runtime?.activeClipId);
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);

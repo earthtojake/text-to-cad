@@ -132,7 +132,7 @@ def run_export_json() -> subprocess.CompletedProcess:
     built = run_script(PART)
     assert built.returncode == 0, built.stderr
     step = Path(PART).parent.parent / "STEP" / "part.step"
-    return run("export", str(step), str(step.with_suffix(".glb")), "--json")
+    return run("step", "export", str(step), str(step.with_suffix(".glb")), "--json")
 
 
 class StdoutIsTheResultTests(unittest.TestCase):

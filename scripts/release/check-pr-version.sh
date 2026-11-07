@@ -64,6 +64,27 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
+# A release that breaks nothing installs itself on every device with automatic updates on, under agent
+# threads that are running, with no click: as Semantic Versioning numbers releases, one that keeps the
+# breaking part -- a patch below 1.0, a patch or minor from 1.0 (version_installs_itself, the server's
+# auto_updates.takes). So it may carry nothing a person or an agent must change for, and a migration
+# guide is exactly that: a change that needs one bumps the breaking part -- the minor below 1.0, the
+# major from 1.0 -- and waits for the person's click.
+if version_installs_itself "$base_version" "$version"; then
+  migrations="$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- docs/migrations)"
+  if [ -n "$migrations" ]; then
+    echo "VERSION $version is a $(version_bump "$base_version" "$version") release, which installs itself on every device, but this" >&2
+    echo "pull request adds or changes a migration guide:" >&2
+    echo "$migrations" | sed 's/^/  /' >&2
+    if [ "$(breaking_part "$base_version")" = major ]; then
+      echo "A change people must migrate for is a major release from 1.0: scripts/release/bump-version.sh major." >&2
+    else
+      echo "A change people must migrate for is a minor release below 1.0: scripts/release/bump-version.sh minor." >&2
+    fi
+    exit 1
+  fi
+fi
+
 # Publish Release starts on a push that changes VERSION, and GitHub matches a push's paths
 # against its first 300 changed files only: a release that changes more might never start it.
 changed="$(git diff --name-only "$base" HEAD | wc -l | tr -d '[:space:]')"

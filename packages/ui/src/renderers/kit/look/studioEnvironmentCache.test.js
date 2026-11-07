@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as THREE from 'three';
 import { createStudioEnvironmentCache } from './studioEnvironmentCache.js';
 
 function workers(t) {
@@ -8,14 +9,22 @@ function workers(t) {
     constructor() { all.push(this); }
     postMessage() {}
     terminate() { this.closed = true; }
-    finish() { this.onmessage({ data: { data: new Uint16Array(16), width: 2, height: 2 } }); }
+    finish() { this.onmessage({ data: { data: new Uint16Array(6 * 16), size: 2, levels: 1 } }); }
   }
   const before = { Worker: globalThis.Worker, OffscreenCanvas: globalThis.OffscreenCanvas };
   Object.assign(globalThis, { Worker, OffscreenCanvas: class {} });
   t.after(() => { for (const [key, value] of Object.entries(before)) value === undefined ? delete globalThis[key] : globalThis[key] = value; });
   return all;
 }
-const studio = { environmentResourceIdentity: configuration => configuration.key };
+// The resource a worker's pixels make (`environmentResourceFromPixels`), its texture released with it.
+const studio = {
+  environmentResourceIdentity: configuration => configuration.key,
+  environmentResourceFromPixels(renderer, identity, pixels) {
+    assert.deepEqual([pixels.size, pixels.levels], [2, 1]);
+    const texture = new THREE.Texture();
+    return { identity, texture, dispose: () => texture.dispose() };
+  }
+};
 
 test('worker maps are reused, bounded and release GPU textures on eviction/dispose', async t => {
   const all = workers(t), cache = createStudioEnvironmentCache({ maxEntries: 2 });
