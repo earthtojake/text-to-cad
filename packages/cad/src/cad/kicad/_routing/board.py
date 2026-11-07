@@ -39,7 +39,8 @@ class Pad:
     """A pad: ``ref`` is ``U1.3`` (its part's reference and its number), ``at`` KiCad's anchor (its hole's centre,
     for a through-hole pad), ``copper`` its copper on each of ``layers`` (a union of shapes), ``inner`` where a
     track may end and be in its copper on every layer, ``hole`` its drill, ``clearance`` its own (or its
-    footprint's) clearance where it overrides the netclass."""
+    footprint's) clearance where it overrides the netclass, ``end`` where a route to it ends: ``at``, or the middle
+    of its shape where its copper is offset past its anchor (an SMD pad's ``offset``)."""
 
     ref: str
     part: str
@@ -51,6 +52,12 @@ class Pad:
     inner: tuple[Shape, ...]
     hole: Shape | None = None
     clearance: float | None = None
+    end: XY | None = None
+
+    @property
+    def anchor(self) -> XY:
+        """Where a route to the pad ends: in its copper, on its anchor where that is."""
+        return self.end or self.at
 
 
 @dataclass(frozen=True)
@@ -292,12 +299,14 @@ def _read_pads(footprint: list, table, copper: Sequence[str]) -> tuple[list[Pad]
             made += _shapes_of(_local(spec), spec)[0]
         offset = fields["offset"]
         number = str(node[1]) if len(node) > 1 else ""
+        inside = tuple(_placed(shape, offset, angle, center) for shape in inner)
+        middle = _placed(Shape.point(0.0, 0.0, 0.0), offset, angle, center).points[0]
         pads.append(Pad(
             ref=f"{ref}.{number}" if ref and number else "", part=ref, number=number, net=net_of(node, table),
             layers=layers, at=center,
             copper=tuple(_placed(shape, offset, angle, center) for shape in made),
-            inner=tuple(_placed(shape, offset, angle, center) for shape in inner),
-            hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own,
+            inner=inside, hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own,
+            end=center if any(shape.contains(*center) for shape in inside) else middle,
         ))
     return pads, holes
 

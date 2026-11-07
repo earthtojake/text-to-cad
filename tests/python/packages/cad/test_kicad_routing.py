@@ -254,6 +254,24 @@ def fine_pitch(ref: str, x: float, y: float, nets: list[str]) -> str:
             f'(effects (font (size 1 1) (thickness 0.15)))) {pads})')
 
 
+class Ends(unittest.TestCase):
+    def test_a_route_ends_in_its_pad_where_the_pads_anchor_lies_outside_its_copper(self) -> None:
+        """An SMD pad's copper may be offset past its anchor (KiCad's ``(at)``): the route ends in the copper, not on
+        the anchor beside it, so no end is left dangling outside the pad."""
+        pad = (f'(pad "1" smd rect (at 0 0 90) (size 0.8 0.8) (drill (offset 1.5 0)) (layers "F.Cu" "F.Mask") '
+               f'(net "A") (uuid "{_uuid()}"))')
+        part = (f'(footprint "Offset" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate 8 10) (rotate 90) '
+                f'(scale 1 1)) (property "Reference" "U1" (at 0 -2 0) (layer "F.SilkS") (uuid "{_uuid()}") '
+                f'(effects (font (size 1 1) (thickness 0.15)))) {pad})')
+        copper = read_copper(board(part, resistor("R1", 20, 12, 0, "A", "B")))
+        (box,) = [shape.box for shape in copper.pad("U1.1").copper]
+        self.assertEqual((7.6, 8.1, 8.4, 8.9), tuple(round(v, 6) for v in box), "the copper offset, turned with its pad")
+        router = Router(copper, RULES, [want("A")])
+        done = router.run()
+        self.assertTrue(done[0].routed, done[0].line())
+        independent_check(self, copper, RULES, router, [want("A")])
+
+
 class FinePitch(unittest.TestCase):
     def test_a_pin_whose_lane_is_narrower_than_the_grid_escapes_exactly(self) -> None:
         """The middle pin of a 0.5 mm-pitch row, off the grid by half its pitch, reaches a resistor 8 mm away: its

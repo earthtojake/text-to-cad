@@ -16,8 +16,9 @@ limit. A pad whose free lane is narrower than the grid (a fine-pitch pin) starts
 outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
 flood and said as such, with what walls it in (the nets nearest the rim of its room, a keep-out, the edge): an
 earlier entry of the plan is said so, for the agent to reorder. A path found is turned into copper: its runs
-on each layer, its vias; each end carried onto its anchor (a pad's position, a via's centre, the nearer end of a
-track that was on the board; on a track this plan made, the node on its centreline where that track is split);
+on each layer, its vias; each end carried onto its anchor (a pad's position, in its copper; a via's centre; the
+nearer end of a track that was on the board; on a track this plan made, the node on its centreline where that
+track is split);
 each run pulled tight (``tighten.pull``); a via pair whose two vias an elbow or a straight on the first layer can
 join is removed. Every segment and via is then checked once more, exactly, against every
 obstacle; a route that fails that check is a bug, raised (the edit then saves nothing). The new copper becomes an
@@ -304,7 +305,7 @@ class Router:
             if pad.hole is not None:
                 fields.add_hole(pad.hole, net, rules.holes, every)
                 obstacles.add("hole", pad.hole, every, net)
-            self._item(pad.net, _Item("pad", pad.layers, pad.copper, (pad.at,), pad=pad, name=pad.ref))
+            self._item(pad.net, _Item("pad", pad.layers, pad.copper, (pad.anchor,), pad=pad, name=pad.ref))
         for track in board.tracks:
             keep, net, layers = rules.clearance(track.net), self._net(track.net), self._ids([track.layer])
             fields.add_copper([track.shape], layers, net, keep)
@@ -535,7 +536,7 @@ class Router:
         for item in items:
             if item.kind != "pad" or id(item) in reached:
                 continue
-            anchor, at = _nm(item.pad.at), item.pad.at
+            anchor, at = _nm(item.pad.anchor), item.pad.anchor
             box = [shape.box for shape in item.pad.copper]
             reach = max(max(b[2] - at[0], at[0] - b[0], b[3] - at[1], at[1] - b[1]) for b in box) + ESCAPE
             c0 = max(1, math.floor((at[0] - reach) / g) - window.i0)
@@ -621,10 +622,11 @@ class Router:
         return (window.i0 + c) * self.g_nm, (window.j0 + r) * self.g_nm
 
     def _anchor(self, item: _Item, at: Point) -> Point | None:
-        """Where a route that reaches ``item`` at ``at`` ends on it: a pad's position, a via's centre, the nearer end
-        of a track that was on the board; None to end where it is (on the centreline of this plan's own track)."""
+        """Where a route that reaches ``item`` at ``at`` ends on it: a pad's anchor (in its copper), a via's centre,
+        the nearer end of a track that was on the board; None to end where it is (on the centreline of this plan's
+        own track)."""
         if item.kind == "pad":
-            return _nm(item.pad.at)
+            return _nm(item.pad.anchor)
         if item.kind == "via":
             return _nm(item.via.at)
         if item.kind == "track" and item.new is None:  # the board's track: its nearer end
