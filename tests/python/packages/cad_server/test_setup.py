@@ -42,6 +42,8 @@ from cad_server._internal.launch import LAUNCHER  # noqa: E402
 from cad_server.cli import setup, stop, telemetry, uninstall  # noqa: E402
 
 RELEASE = cad_server.__version__
+# ``setUp`` stands these in for most tests: the one that tells a new person takes the real ones.
+NOTIFY, DESCRIBE = analytics.notify, telemetry.describe
 PORT = 3245
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 INSTALL_SH = REPO_ROOT / "scripts" / "install" / "install.sh"
@@ -356,6 +358,34 @@ class TheCommand(Fixture):
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
         self.assertFalse((self.bin / "calls.jsonl").exists(), "no app's command runs for a dry run")
         setup.stop_earlier.assert_not_called()
+
+    def test_a_new_person_s_install_says_what_is_sent_once_and_sends_nothing_to_say_it(self) -> None:
+        """The telemetry notice on a fresh install: no choice made, nothing in the environment against it. The
+        notice is the run's report, once, kept as said; the next run says the setting instead. Under ``--json``,
+        which tells no person, it waits. The send is stubbed: nothing here reaches the receiver."""
+        quiet = {key: value for key, value in os.environ.items()
+                 if key not in ("DO_NOT_TRACK", "CAD_TELEMETRY", "CADGEN_TELEMETRY", "CI", analytics.NOTICE_ENV)}
+        with mock.patch.dict(os.environ, quiet, clear=True), mock.patch.object(analytics, "notify", NOTIFY), \
+                mock.patch.object(telemetry, "describe", DESCRIBE), mock.patch.object(analytics, "_here", return_value=True), \
+                mock.patch.object(analytics, "_post", side_effect=AssertionError("sent")) as post:
+            notice = analytics.notice_text()
+            code, out, _err = self.run_setup("--json")
+            self.assertEqual(code, 0, out)
+            self.assertRegex(json.loads(out)["verified"]["telemetry"], r"^off: not until a cad command says so")
+            self.assertNotIn(notice, out + _err)
+            settings = self.state / "settings.json"
+            self.assertNotIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8")).get("telemetry", {}))
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            self.assertEqual(out.count(notice), 1, out)
+            self.assertNotIn("telemetry on:", out)
+            self.assertIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8"))["telemetry"])
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            self.assertNotIn(notice, out)
+            self.assertRegex(out, r"telemetry on: by default, since text-to-cad said so on \d{4}-\d\d-\d\d; turn it off with "
+                                  r"`cad telemetry off`")
+        post.assert_not_called()
 
     def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
         """The install command runs ``cad setup`` from uvx's environment: a real run moves to its release's
