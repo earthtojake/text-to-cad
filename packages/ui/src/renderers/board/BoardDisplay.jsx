@@ -1,5 +1,4 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { Box, Square } from "lucide-react";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -12,6 +11,7 @@ import {
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
 import StateButton from "../kit/shell/StateButton.jsx";
+import { textGlyphIcon } from "../kit/shell/TextGlyph.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
 
@@ -121,6 +121,10 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
 export const BOARD_FLIP_SHORTCUT = "⇧F";
 /** The key that draws the board in 3D and flat again (KiCad's Alt+3 opens its 3D viewer). */
 export const BOARD_DIMENSION_SHORTCUT = "3";
+// 2D/3D's glyphs: the words, as KiCad, EasyEDA and the maps apps label their 3D switch (a square read as the
+// strip's Shapes tool). The same in every language.
+const FlatGlyph = textGlyphIcon("2D");
+const SolidGlyph = textGlyphIcon("3D");
 
 /**
  * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
@@ -135,9 +139,10 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
  *   the bottom the board is mirrored, its back layers on top; in 3D the camera turns over to the other side
  *   (`onSide`), and the button follows the camera, whichever side of the board's plane it is on. On a phone
  *   More's row View from bottom, ticked while it is (a menu's idiom, not the button's);
- * - **2D/3D**, the board drawn flat or as a board in 3D: the same state button, a square while it is flat
- *   and a box in 3D, its name the state ("View: 2D"), its tooltip what a press does ("Switch to 3D", and its
- *   key, 3); on a phone More's row 3D view, ticked in 3D;
+ * - **2D/3D**, the board drawn flat or as a board in 3D: the same state button, its glyph the words
+ *   (`kit/shell/TextGlyph.jsx`), **2D** while it is flat and **3D** in 3D, its name the state ("View: 2D"),
+ *   its tooltip what a press does ("Switch to 3D", and its key, 3); on a phone More's row 3D view, its glyph
+ *   **3D**, ticked in 3D;
  * - **Display**, the Display tile a 3D view's strip has for it, its menu the presets (`boardPresetMode`;
  *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
  *   there and not a button of its own.
@@ -160,15 +165,15 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
   const presets = boardPresetMode({ display, sheet, onChange, t });
   const [flat, inThreeD] = [t("board.text.view_2d"), t("board.text.view_3d")];
   // Each state's icon: the board's two layers, the side facing the viewer solid, from the top or the bottom;
-  // Lucide's square for the board flat and box for it in 3D.
+  // the words 2D for the board flat and 3D for it in 3D.
   return [
     { id: "side", label: t("board.text.view_from_bottom"), icon: <BoardBottomSideIcon />, disabled, active: below, onSelect: flip,
       tile: <StateButton icon={below ? BoardBottomSideIcon : BoardTopSideIcon} label={t("board.text.side_current", { side: t(below ? "board.text.bottom" : "board.text.top") })}
         tooltip={t(below ? "board.text.view_from_top" : "board.text.view_from_bottom")} shortcut={BOARD_FLIP_SHORTCUT}
         disabled={disabled} onPress={flip} data-board-side={below ? "bottom" : "top"} /> },
     ...(onDimensionChange ? [{
-      id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: solid, onSelect: switchDimension,
-      tile: <StateButton icon={solid ? Box : Square} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
+      id: "dimension", label: t("board.text.view_in_3d"), icon: <SolidGlyph />, disabled, active: solid, onSelect: switchDimension,
+      tile: <StateButton icon={solid ? SolidGlyph : FlatGlyph} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
         tooltip={t("board.text.dimension_switch", { mode: solid ? flat : inThreeD })} shortcut={BOARD_DIMENSION_SHORTCUT}
         disabled={disabled} onPress={switchDimension} data-board-dimension={solid ? "3d" : "2d"} />
     }] : []),

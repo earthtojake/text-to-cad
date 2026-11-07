@@ -230,8 +230,8 @@ the board is drawn: Other layers (KiCad's high-contrast modes: the layers but th
 through an active copper layer, always stay at full strength), the copper pours and the zones' and
 tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
 tabs, the picked part's or net's pads. The tool strip ends, after its rule, with **Flip** (the side
-seen: the board as two stacked layers, the side facing you solid; ⇧F), **2D/3D** (a square while the
-board is flat, a box in 3D) and **Display** (the preset: the mode); the zoom is the pill at the
+seen: the board as two stacked layers, the side facing you solid; ⇧F), **2D/3D** (reading **2D** while the
+board is flat, **3D** in 3D) and **Display** (the preset: the mode); the zoom is the pill at the
 bottom-right. Flip's and 2D/3D's icons are what is on screen and their tooltips what a press does. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
