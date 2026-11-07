@@ -15,21 +15,24 @@ Network's guides; a shop's set moves them):
   draft, so both release:
 
   ```python
-  body = bd.extrude(bd.Rectangle(60, 40), 20, taper=1)                      # 1 degree, narrowing upward
-  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=1)  # from the open face down, narrowing
+  body = bd.extrude(bd.Rectangle(60, 40), 20, taper=2)                      # 2 degrees, narrowing upward
+  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=2)  # from the open face down, narrowing
   body = body - cavity
   ```
 
-  Every wall needs 0.5 degree at least (an error under it), 1 degree recommended (a warning under it;
-  2 or more on textured faces) to eject cleanly; a face
-  square to the pull is not a wall and takes none. A hole or a boss is drafted the same way.
+  Every wall needs 0.5 degree at least (an error under it) and 2 degrees recommended (a warning under
+  it: Hubs' and Protolabs' figure; a light texture takes 3, a heavier one 5 or more, Protolabs) to
+  eject cleanly; a face square to the pull is not a wall and takes none. A hole or a boss is drafted the
+  same way.
 - **One wall.** A nominal wall in the resin's range (ABS 1.1 to 3.6 mm, PC 1.0 to 3.8, nylon 0.8 to 2.9;
   the material table has the rest) and no section thicker than 1.7 times it: core out thick spots.
   Change thickness over a length of three times the step, never a sharp step.
 - **Ribs and bosses.** A rib is 50 to 60% of the wall it stands on, at most three walls tall, at least
-  2.5 walls from the next, drafted 0.5 degree or more, with a fillet of a quarter of the wall at its
-  root. A boss is a drafted tube whose wall is 60% of the base wall at most, its hole along the pull,
-  a fillet at the root and gussets to the wall rather than a thick foot.
+  2.5 walls from the next, drafted 0.5 degree or more, with a fillet of a quarter of the rib's own
+  thickness at its root. A boss is a drafted tube whose wall is 60% of the base wall at most, its hole
+  along the pull, a fillet at the root (a sharp root is `molding.boss_root_fillet`, a warning) and
+  gussets to the wall rather than a thick foot. A snap arm is a rib with a barb: the check reads it as a
+  snap (`kind: snap`, at least half the wall thick, Hubs) and its barb as the undercut it is.
 - **Corners.** Inside radius at least half the wall, outside radius the inside plus the wall, so the
   thickness stays constant around the corner. Fillet the cavity's vertical edges and its floor edges.
 - **Undercuts.** A feature that will not pull straight -- a side hole, a snap hook, a lip under a rim --
@@ -71,21 +74,29 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 - `undercuts` items carry the `release` each needs: `side_action`, `lifter`, `collapsible_core`, or
   `none`. `molding.undercut` (a warning) is tooling cost; `molding.undercut_unreleasable` (an error)
   is a feature no action tried frees. Distinguish a need for side actions from impossibility.
-- `thickness.nominal_mm` and `thick_sections`; `transitions` (a step between two walls: `min_mm`, `max_mm`,
-  the two points in `at_xyz`, judged by `molding.wall_transition`); `ribs` and `bosses` as ratios to the
-  wall they stand on; `corners` as radius over the wall. These are sink and stress signals, not a fill
-  simulation. Walls drafted with `extrude(taper=...)` are B-splines that the check reads as the planes and
-  cylinders they are.
+- `thickness.nominal_mm` and `thick_sections` (a face's `feature` says whether it is a wall's, a rib's or
+  a boss's: the wall range judges walls alone); `transitions` (a step between two walls read on its
+  stepped side, `basis: step`: its run over its change, `min_mm`, `max_mm`, the two points in `at_xyz`,
+  judged by `molding.wall_transition`; a free-form face's from the rolling ball, `basis: ball`); `ribs`
+  (`kind` rib or snap) and `bosses` as ratios to the wall they stand on; `corners` as radius over the
+  wall. These are sink and stress signals, not a fill simulation. Walls drafted with `extrude(taper=...)`
+  are B-splines that the check reads as the planes and cylinders they are.
 - `parting.flat_parting_possible`, and `stepped_parting` where it is not.
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
   factor for the resin.
 - Several bodies (`several_bodies`) are an assembly: each body is checked on its own. Say so rather
-  than reviewing an assembly as a part.
+  than reviewing an assembly as a part. A part of several solids gets the same warning: a component
+  model whose contacts sit inside its housing reads its pins as walls and ribs and its slots as
+  undercuts, so check the housing alone (one fused solid gives no such signal: say so).
+
+When the pull looks wrong -- most of the wall reads zero draft along it, or a quarter of the surface is
+trapped -- the `zero_draft_walls` or `undercut_candidates` hint names the pull `--candidates` ranks
+first: confirm the pull before budgeting side actions or drafting walls.
 
 On a mesh: an STL has no units, so give `--units` and compare `scale.bbox_mm_if_units` with the part
-you expect. A curved face's draft reads low by up to its `spread_deg` (`coarse_curved_face`: measure a
-finer mesh before citing it); fillets are not seen, so filleted corners and rib roots merge; bosses
-are found only along the pull.
+you expect. A curved face's draft reads low by up to its `spread_deg` (`coarse_curved_face`, an info:
+measure a finer mesh before citing it); fillets are not seen, so filleted corners and rib roots merge;
+bosses are found only along the pull; a snap arm is not told from a rib.
 
 ## Review the part
 
