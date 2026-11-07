@@ -101,4 +101,50 @@ def shape_bytes(shape: Any, name: str) -> bytes:
 def document_bytes(header: dict[str, Any], data: bytes, name: str) -> bytes:
     """The document's bytes of the portable description ``header`` and ``data`` describe, named ``name``:
     the shape handed over as its own kernel could not write it."""
-    return shape_bytes(tree(header, data), name)
+    return embody(header, data, name)["xbf"]
+
+
+def embody(header: dict[str, Any], data: bytes, name: str) -> dict[str, Any]:
+    """The document made of the portable description ``header`` and ``data`` describe, named ``name``, with
+    what a build's report says of a document it made: ``xbf`` (its bytes), ``parts`` (its occurrences) and
+    ``facts`` (``delta.facts``: what the daemon says against the last build). A ``closure`` in the header --
+    a CadQuery worker's: the script's and its modules' digests and the key made of them (``closure_record``)
+    -- is written on the document's main label as a build writes its closure, so the document says what
+    made it, and ``cad model inspect`` reads it."""
+    from cad.engine import delta, document
+
+    shape = tree(header, data)
+    made = document.collect(shape, name)
+    for part in made.parts:
+        part.shape = document.direct(part.shape)
+        part.key = document.geometry_key(part.shape)
+    document.merge(made)
+    closure = header.get("closure")
+    if isinstance(closure, dict):
+        made.closure = closure_record(closure, header, name)
+    signature = (("portable", header.get("kernel"), header.get("shapes")), tuple(part.key for part in made.parts))
+    facts = delta.facts(made, f"portable::{name}", signature)
+    doc = document.to_xcaf(made, document.Kept())
+    return {"xbf": document.to_bytes(doc, [part.shape for part in made.parts]), "parts": len(made.parts), "facts": facts}
+
+
+def closure_record(closure: dict[str, Any], header: dict[str, Any], name: str) -> str:
+    """The closure a CadQuery model's document carries, as text for its main label (``previous.text``): the
+    engine's record shape -- the schema, the engine, the libraries (CadQuery's OCP build among them), the
+    platform, the source and the modules by digest -- with the worker's key, which has no bodies and no
+    inputs (a CadQuery worker runs the body under its own memo and reads no file the engine tracks)."""
+    from pathlib import Path
+
+    from cad.engine import previous
+
+    script = str(closure.get("script") or "")
+    folder = Path(script).parent if script else Path.cwd()
+    modules = closure.get("modules") if isinstance(closure.get("modules"), dict) else {}
+    record = {
+        "schema": previous.SCHEMA, "engine": previous._engine(),
+        "libs": {**previous._libraries(), "cadquery": str(header.get("kernel") or "cadquery")},
+        "platform": previous._platform(),
+        "source": {"kind": "script", "path": previous._relative(script, folder) if script else None, "function": name},
+        "modules": sorted([previous._relative(str(path), folder), str(digest)] for path, digest in modules.items()),
+        "symbols": {}, "inputs": None, "bodies": None, "key": closure.get("key")}
+    return previous.text(record)

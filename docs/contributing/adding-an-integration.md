@@ -29,13 +29,16 @@ The engine's kernel is one OCP build (the `build123d` extra's), and a Python CAD
 build of the same module -- CadQuery, on `cadquery-ocp` 7.9 where the kernel is 8.0 -- can never share a
 process with a worker, whatever its version says: two builds of `OCP` do not coexist in one environment. Such
 a tool is a `separate` integration whose extra holds the library's core and the tool, never the kernel; its
-values are handed over (`model(value, name=...)`) through a **portable producer** of the `model` type
-(`cad.registry.Producer.portable`): the producer's writer describes the value as the engine's STEP reader
-describes a file and packs the shapes with the tool's own OCP (`cad.cadquery._bridge` is the example), and
-the engine's kernel process makes the document of it (the server's `engine/portable.py`). A model body never
-returns such a value, and no file decorator takes one: a file of its document is an export. The tests that
-need the tool run in a job of their own that makes its environment as the server does (`test-cadquery.sh`),
-and the bridge and the engine's reading of it run on stand-ins in the package suites.
+values cross through a **portable producer** of the `model` type (`cad.registry.Producer.portable`): the
+producer's writer describes the value as the engine's STEP reader describes a file and packs the shapes
+with the tool's own OCP (`cad.cadquery._bridge` is the example), and the engine's kernel process makes the
+document of it (the server's `engine/portable.py`). A kernel worker never runs such a tool's code: its
+`@model` functions run in a worker of the integration's own in that environment, warm, under a memo at the
+tool's topology layer (`cad.cadquery._worker`, `_memo`; the server's `services.CADQUERY`, routed by the
+contract's kernel), or a program hands a value over (`model(value, name=...)`). No file decorator takes one:
+a file of its document is an export. The tests that need the tool run in a job of their own that makes its
+environment as the server does (`test-cadquery.sh`), and the bridge, the memo's keying and the worker's build
+run on stand-ins in the package suites.
 
 ## Is it really an integration?
 

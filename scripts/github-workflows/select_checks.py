@@ -216,6 +216,7 @@ KICAD_SUITE = "tests/python/packages/kicad"
 # in (cad run and the integrations table it reads). Each also reaches what its package reaches; the CadQuery
 # job, which makes that environment, runs on these, its own suite and runner, and a full run.
 CADQUERY_CODE = (f"{LIBRARY_SRC}/cadquery/**", f"{LIBRARY_SRC}/engine/portable.py",
+                 f"{LIBRARY_SRC}/engine/contract.py",  # the kernel a CadQuery environment's orders name
                  f"{LIBRARY_SRC}/_internal/integrations.py",
                  f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/cli/run.py")
 CADQUERY_SUITE = "tests/python/packages/cadquery"

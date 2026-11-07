@@ -461,6 +461,17 @@ def extras(prefix: str | None = None) -> tuple[str, ...]:
     return tuple(found) if isinstance(found, list) and all(isinstance(item, str) for item in found) else ()
 
 
+def integrations(prefix: str | None = None) -> tuple[str, ...]:
+    """The integrations of cad's the environment at ``prefix`` (this process's) was made with, as its marker
+    names them (``integrations``: the extras of ``cad[...]`` the server resolved it with); ``()`` for an
+    environment the server did not make. Which kernel a process here speaks is read from it: one made
+    with ``cadquery`` and not ``build123d`` runs CadQuery's OCP, and none of the engine's
+    (``contract.kernel_here``)."""
+    marker = _marker(prefix)
+    found = marker.get("integrations") if marker is not None else None
+    return tuple(found) if isinstance(found, list) and all(isinstance(item, str) for item in found) else ()
+
+
 # The installation this process belongs to when it runs in the base that installation made (``home``):
 # ``{"executable", "prefix", "root", ...}``; None in the installation's own environment. A process there --
 # a model's script ``cad run`` runs, its worker -- goes by its installation's name (``registered``) and,
@@ -474,6 +485,8 @@ EXTRAS: tuple[str, ...] = extras()
 # scripts name their Python, which the engine builds them in (``contract.interpreter``), whatever it holds --
 # packages of its own, other integrations of cad's, another Python.
 SEPARATE: bool = separate()
+# The integrations this process's environment was made with (``integrations``): which kernel it speaks.
+INTEGRATIONS: tuple[str, ...] = integrations()
 # How ``cad run`` named the packages of the environment it runs a program in, which it hands the program as
 # JSON (``run_with``): what a document's record says builds it again (``contract.interpreter``).
 RUN_WITH = "CAD_RUN_WITH"

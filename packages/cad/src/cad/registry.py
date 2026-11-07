@@ -106,9 +106,10 @@ class Producer:
 
     A ``portable`` producer takes a value of another kernel's build than the engine's (a CadQuery value,
     whose OCP is not the kernel's): its ``writer`` is the function that describes the value portably,
-    ``(value, name) -> (header, bytes)`` (``cad.engine.portable``), which ``model(value, name=...)`` hands
-    the engine, whose kernel process makes the document of it. Such a value is handed over, never returned by
-    a model's body: a worker runs the engine's kernel alone."""
+    ``(value, name) -> (header, bytes)`` (``cad.engine.portable``), which the integration's own worker (a
+    ``@model`` function's result, ``cad.cadquery._worker``) or ``model(value, name=...)`` hands the engine,
+    whose kernel process makes the document of it. Such a value is never a kernel worker's result: a kernel
+    worker runs the engine's kernel alone."""
 
     document_type: str
     integration: str

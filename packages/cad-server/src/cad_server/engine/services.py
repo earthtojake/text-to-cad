@@ -28,7 +28,7 @@ from cad.engine.worker import KERNEL_NOTICE, KERNEL_PATIENCE
 
 from cad_server.engine.supervisor import Service, Standby, Words
 
-__all__ = ["RENDER", "SERVICES", "WORKER"]
+__all__ = ["CADQUERY", "RENDER", "SERVICES", "WORKER"]
 
 WORKER = Service(
     name="worker",
@@ -58,6 +58,37 @@ WORKER = Service(
                     ready_seconds=600.0),
 )
 
+# A CadQuery script's warm worker (``cad.cadquery._worker``), one per script, in the Python the script was run
+# with -- the environment of ``cad[cadquery]`` ``cad run`` made, which ``caller`` names and whose contract names
+# its kernel ``cadquery`` -- never in the base, which has no CadQuery, and with no standby: a lease names its
+# Python every time. It runs each ``@model`` function under the CadQuery memo (``cad.cadquery._memo``) and
+# answers a portable description per model, which the daemon has its documents worker make the document of
+# (``models.Models.embody``); it holds no document of its own, so it is drained of nothing, and the pages,
+# exports and the cache read what the daemon holds whole. It counts toward the count cap and is shed as a
+# worker is.
+CADQUERY = Service(
+    name="cadquery",
+    command=("{python}", "-X", "faulthandler", "-P", "-m", "cad.cadquery._worker"),
+    environment="kernel",  # never consulted: every lease names the caller's Python (``interpreter``)
+    interpreter="lease",
+    env="lease",
+    set_env=(("CAD_ENGINE_WORKER", "1"),),
+    bytecode="daemon",
+    cwd="lease",
+    key="path",
+    binding=RESTARTS,
+    stderr="relay",
+    words=Words(unstarted="the CadQuery worker for {label} did not start",
+                exited="the worker for {name} exited ({code}) during the build",  # read by api._DIED
+                broken="{error}"),
+    counted=True,
+    rank=2,
+    watched_rank=3,
+    noted=("script", "builds"),
+    drain=False,
+    ready_seconds=300.0,
+)
+
 RENDER = Service(
     name="render",
     command=("{python}", "-P", "-m", "cad.engine.render.service"),
@@ -76,4 +107,4 @@ RENDER = Service(
     ready_seconds=120.0,
 )
 
-SERVICES = (WORKER, RENDER)
+SERVICES = (WORKER, CADQUERY, RENDER)

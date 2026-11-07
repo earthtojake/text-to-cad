@@ -126,6 +126,9 @@ class Models:
         # say it declared before (None: no record says), to give up what it declares no more.
         declared: dict[str, tuple[list[str], set[str] | None]] = {}
         for root in reports:
+            for report in [root, *(root.get("child_models") or {}).values()]:
+                # A CadQuery worker's report: its portable description made the document here, first.
+                self.embody(report, answer.get("cwd"))
             if not root.get("ok") and root.get("id") and self.held(root["id"]) is not None:
                 root["previous"] = True  # the failed run's line says its previous good build is served
             for report in [root, *(root.get("child_models") or {}).values()]:
@@ -176,6 +179,13 @@ class Models:
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
+                embodied = report.pop("_embodied", None)
+                if embodied is not None:
+                    # The document the documents worker made of the CadQuery worker's description: held whole
+                    # by the server and kept in the cache now, as a shape handed over is (the worker holds nothing).
+                    structure, shapes, xbf = embodied
+                    server.keep(ident, {**structure, "version": version}, shapes, version, xbf)
+                    self.cache.keep(ident, recorded, xbf)
                 if (report.get("cache") or {}).get("unreadable"):
                     self.cache.remove(ident)  # this build found its cache file broken: the idle save writes it again
                 self.cache.touch(ident)
@@ -187,6 +197,42 @@ class Models:
                 # What the script's records said it declared, else -- none of this run's models had a
                 # record saying it -- the claims the registry holds of it, read once.
                 released(held, script, (was if was is not None else claims(held, script)) - set(now))
+
+    def embody(self, report: dict[str, Any], cwd: Any = None) -> None:
+        """A report that carries a portable description (``portable``: a CadQuery worker's, the header and
+        the dump as base64, ``cad.engine.portable``) made its document: the documents worker makes it
+        (``worker._result`` with ``portable`` and ``whole``), and the report gets what a kernel worker's
+        says of a document it made -- its ``parts`` and ``facts`` -- and, under ``_embodied``, the structure,
+        the shape bytes and the whole document for ``register`` to hold and cache; a description the worker
+        cannot make a document of fails the report, in the worker's words. Nothing for any other report."""
+        carried = report.pop("portable", None)
+        if not isinstance(carried, dict) or not report.get("ok"):
+            return
+        ident, name = str(report.get("id")), str((report.get("source") or {}).get("name") or report.get("model"))
+        data = base64.b64decode(carried.get("bytes") or "")
+        replies: list[dict[str, Any]] = []
+        self.daemon._call({"source": {"document": ident, "held": ident}, "cwd": cwd},
+                          {"id": 1, "op": "result", "document": True, "name": name, "portable": carried.get("header"),
+                           "whole": True}, replies.append, data)
+        answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
+        if "done" not in answer:
+            report["ok"] = False
+            report["error"] = f"{name}: the engine could not make a document of what the CadQuery worker built: " \
+                              f"{answer.get('failed')}"
+            return
+        payload = base64.b64decode(answer.get("payload", ""))
+        done = answer["done"]
+        shapes, at = {}, 0
+        for key, size in done["shapes"]:
+            shapes[key] = payload[at:at + size]
+            at += size
+        xbf = payload[at:at + int(done.get("xbf") or 0)]
+        from cad.engine.export.viewer import fingerprint
+
+        structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
+                     "id": ident, "closure": done.get("closure")}
+        report["parts"], report["facts"] = done.get("parts"), done.get("facts")
+        report["_embodied"] = (structure, shapes, xbf)
 
     def reattach(self, sources: list[dict[str, Any]], pid: int | None = None) -> list[str]:
         """A worker's models with nothing to take up (``build._reattach``: each its ``source``), each
@@ -518,8 +564,8 @@ class Models:
         worker that is gone (a crash) drains nothing: its documents the server and the cache lack are
         ``unsaved``."""
         server = self.daemon.server
-        if server is None or not worker.alive():
-            return
+        if server is None or not worker.alive() or self.daemon.kernel_less(worker):
+            return  # a CadQuery worker holds no document: the daemon held and cached each as it was built
         from cad_server.engine.supervisor import Gone
 
         with self.lock:
@@ -562,6 +608,9 @@ class Models:
                 raise self.not_held(ident)
             source, version = record["source"], record["version"]
             worker = leaving or record["worker"]
+        if self.daemon.kernel_less(worker):
+            # Built by the CadQuery worker, which holds nothing of it: the cache's bytes, kept as it was built.
+            return self.from_disk(ident)
         if worker is None or not worker.alive():
             if leaving is None and self.cache.current(ident, record["revision"]):
                 return self.from_disk(ident)

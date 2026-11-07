@@ -167,6 +167,12 @@ class Document:
 
     @property
     def shape(self) -> Any:
+        if self._shape is _UNSET and self.report.get("kernel") == "cadquery":
+            # Built by the CadQuery worker, whose values never cross as objects: the program that wants the
+            # value calls its own function; the document is the engine's, by its id.
+            raise TypeError(f"{self.name} was built by the CadQuery worker: its document is the engine's (id "
+                            f"{self.id}), and no shape crosses to this process; call the function itself for "
+                            "its CadQuery value")
         if self._shape is _UNSET:
             from cad.engine.mechanism import TRANSFERRED
 

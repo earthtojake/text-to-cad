@@ -971,7 +971,8 @@ build123d `Shape` for every type with a decorator, and the engine's writers -- t
 (`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
 A **portable** producer (`Producer.portable`) takes a value of another kernel's build than the engine's --
 the cadquery integration's, of the `model` type alone: CadQuery's OCP is not the kernel's -- which is handed
-over (`model(value, name=...)`), never a body's result: its writer describes the value as the engine's STEP
+over (`model(value, name=...)`) or built by the CadQuery worker (**The engine server and its workers**),
+never a kernel worker's result: its writer describes the value as the engine's STEP
 reader describes a file (`reader.describe`'s header: products and roots) with one BinTools dump of the parts'
 shapes and the components' locations (`reader.pack`, format 4, which OCCT 8.0 reads of 7.9's writing), and the
 engine's documents worker reads it and makes the document (`cad/engine/portable.py`: `reader.unpack`,
@@ -1275,6 +1276,26 @@ budget: read again from its file when asked), with the bytes it holds. It
 also says its `version` (its release), its `installation` (the version it runs as) and what uses it -- `holders`, `watched` (the documents pages watch), `busy`
 (builds and draws running) and `active` (HTTP work underway) -- what a later release's engine asks of
 an earlier one before it takes its port (**Starting and updating**).
+
+**The CadQuery worker.** A script run in the environment of `cad[cadquery]` -- CadQuery on its own OCP
+build, no kernel of the engine's -- names that Python in its orders as any script run in its own does,
+and its contract names its kernel `cadquery` (`contract.kernel_here`, read from the environment's
+marker; `contract.KERNELS` is what the server speaks with: its own kernel and CadQuery's, under one
+protocol and format). The daemon routes such a build to the CadQuery worker service (`services.CADQUERY`,
+`Daemon.service_of`): `cad.cadquery._worker`, one per script in that Python, leased, keyed, counted,
+shed and retired as a kernel worker is, with no standby (a lease always names its Python) and no drain
+(it holds no document). It loads the script as the kernel's worker does, runs each `@model` function
+under the CadQuery memo (`cad.cadquery._memo`: the interception layer at CadQuery's topology layer, the
+same words in its run line -- `bodies 1 run; 25 misses, 0 hits`, then `0 misses, 25 hits` warm) and
+answers a kernel worker's reports with a portable description per model in place of a document. The
+daemon has its documents worker make each document (`Models.embody`: `portable.embody`, the structure,
+the shapes, the facts and the whole document), holds it whole and caches it at once, as it holds a shape
+handed over, under the model's ordinary id and a `kind: "model"` record; every read of it -- a page, an
+export, a snapshot, the cache -- goes the drained document's way (`Daemon.document`, `Models.load`), and
+nothing is asked of the worker but builds. What it does not carry: no trace (`made_by: null`), no
+`@memo` replay of bodies (every run runs the body, under the memo), no cache take-up of an unchanged
+model (it runs warm instead), no file decorators (a CadQuery model declares no file; its files are
+exports), and a child model a body calls is composed into it, not a document of its own.
 
 ## The door
 
@@ -3335,6 +3356,12 @@ The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read
 (a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
 
 ## Build closure
+
+A CadQuery model's document (**The CadQuery worker**) carries a closure of the same record shape, written
+by the documents worker from what the worker digested (`portable.closure_record`): the script and its
+own modules by digest, CadQuery's build among the libraries, and a key of them; it holds no bodies and
+no inputs, since the worker tracks no reads and replays no body, and the engine never takes such a model
+from its key -- a run always runs it, warm.
 
 A model's document is its own cache, as a FreeCAD document is: opened, it is what was last
 computed, and only what changed is computed again. It is kept in the engine's cache (**The

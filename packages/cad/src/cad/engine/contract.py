@@ -36,7 +36,8 @@ from typing import Any
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CONTRACT", "KERNEL", "PROTOCOL", "interpreter", "notice", "refusal", "release", "spelled"]
+__all__ = ["CADQUERY", "CONTRACT", "KERNEL", "KERNELS", "PROTOCOL", "interpreter", "kernel_here", "notice", "refusal",
+           "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
@@ -44,8 +45,23 @@ PROTOCOL = 1
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"
+# The kernel a CadQuery program's environment speaks (``cad[cadquery]``: CadQuery's own OCP build, and none of
+# the engine's): its worker is the cadquery integration's (``cad.cadquery._worker``), and what crosses to the
+# server is a portable description, never a shape or a document (``cad.engine.portable``).
+CADQUERY = "cadquery"
+# The kernels the server speaks with, under one protocol and format: its own, and CadQuery's.
+KERNELS = (f"OCP {KERNEL}", CADQUERY)
 # The contract, as an order carries it and the server compares it, key by key.
 CONTRACT: dict[str, Any] = {"protocol": PROTOCOL, "format": FORMAT, "kernel": f"OCP {KERNEL}"}
+
+
+def kernel_here() -> str:
+    """The kernel this process's environment speaks: CadQuery's in an environment ``cad run`` made with the
+    cadquery integration and not the kernel's (``places.INTEGRATIONS``), else the engine's own."""
+    from cad.engine import places
+
+    made_with = places.INTEGRATIONS
+    return CADQUERY if CADQUERY in made_with and "build123d" not in made_with else CONTRACT["kernel"]
 
 
 def release() -> str:
@@ -66,7 +82,8 @@ def interpreter() -> dict[str, Any] | None:
 
     if (places.HOME is not None and not (places.EXTRAS or places.SEPARATE)) or not sys.executable:
         return None
-    named = {"executable": sys.executable, "prefix": sys.prefix, "release": release(), "contract": dict(CONTRACT)}
+    named = {"executable": sys.executable, "prefix": sys.prefix, "release": release(),
+             "contract": {**CONTRACT, "kernel": kernel_here()}}
     if places.HOME is not None:
         run = places.run_with()
         named["with"] = run["with"]
@@ -93,7 +110,11 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
     server = release() if server is None else server
     named = named if isinstance(named, dict) else {}
     theirs = named.get("contract")
-    if isinstance(theirs, dict) and all(theirs.get(key) == value for key, value in ours.items()):
+    # One protocol and one format, and a kernel the server speaks with: its own, or CadQuery's (``KERNELS``),
+    # whose worker describes its shapes portably for the server's kernel to make the documents of.
+    kernels = KERNELS if ours is CONTRACT else (ours.get("kernel"),)
+    if isinstance(theirs, dict) and all(theirs.get(key) == value for key, value in ours.items() if key != "kernel") \
+            and theirs.get("kernel") in kernels:
         return None
     here = named.get("release")
     known = isinstance(here, str) and _order(here) is not None
