@@ -146,6 +146,24 @@ def _entries(connections: Any, defaults: Mapping[str, Any]) -> list[dict[str, An
     return entries
 
 
+_POLARITY = {"+": "-", "-": "+", "P": "N", "N": "P"}
+
+
+def complement(net: str) -> str | None:
+    """The net KiCad pairs ``net`` with as a differential pair, by its name, as its DRC engine reads it
+    (``DRC_ENGINE::MatchDpSuffix``): from the end, past digits and underscores, a ``+`` or ``-``, ``P`` or ``N``,
+    the complement the name with that one swapped (``D+``/``D-``, ``DP0``/``DN0``, ``D_P_1``/``D_N_1``); None when
+    the name ends otherwise."""
+    for back, char in enumerate(reversed(net)):
+        if char.isdigit() and char.isascii() or char == "_":
+            continue
+        if char in _POLARITY:
+            at = len(net) - 1 - back
+            return net[:at] + _POLARITY[char] + net[at + 1:]
+        return None
+    return None
+
+
 def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list[Any]:
     """Each entry worked out against the board and its rules, every value checked before anything is routed."""
     from ._routing.plan import Want
@@ -196,6 +214,11 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
                                  "a connection joins two pads of one net")
             net, pads, ends = first.net, [first, second], (a, b)
             where = f"{where} ({a} to {b})"
+        partner = complement(net)
+        if partner is not None and partner in pads_of:
+            raise ValueError(f"{where}: {net} and {partner} are a differential pair to KiCad (its diff_pair_gap and any "
+                             "pair rule apply), and route routes no pair: route the pair by hand (layout.md), and leave "
+                             "both out of the plan")
         layers = _layers(entry["layers"], copper, where)
         named = {layer for layer, _ in layers}
         off = [pad.ref or f"a pad of {pad.part}" for pad in pads if not named & set(pad.layers)]

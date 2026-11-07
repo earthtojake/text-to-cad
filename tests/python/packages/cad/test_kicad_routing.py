@@ -25,7 +25,7 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
-from cad.kicad._route import Routed, _entries, _rules, _wants, route  # noqa: E402
+from cad.kicad._route import Routed, _entries, _rules, _wants, complement, route  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing import plan  # noqa: E402
@@ -432,6 +432,21 @@ class Plans(unittest.TestCase):
         self.refused(["B"], "R3.1 is on no layer it may use (F.Cu, In1.Cu)", layers=["F.Cu", "In1.Cu"],
                      copper=("F.Cu", "In1.Cu", "B.Cu"))
         self.refused([{"net": "A", "layers": {"F.Cu": "x"}}], "the cost of F.Cu is a cost per mm (a number)")
+
+    def test_a_differential_pair_is_refused_by_kicads_own_naming(self) -> None:
+        """KiCad pairs nets by name (from the end, past digits and underscores, + with -, P with N): route routes no
+        pair, so a net whose complement is on the board is refused before anything is routed."""
+        pairs = {"D+": "D-", "USB_D-": "USB_D+", "DP0": "DN0", "D_P_1": "D_N_1", "TXN": "TXP", "CLK_P_": "CLK_N_", "VIN": "VIP"}
+        for net, other in pairs.items():
+            self.assertEqual(other, complement(net), net)
+        for net in ("/CLK", "GND", "D+5V", "dp", "3V3"):
+            self.assertIsNone(complement(net), net)
+        copper = read_copper(board(resistor("R1", 5, 10, 0, "D+", "D-"), resistor("R2", 25, 10, 0, "D+", "D-"),
+                                   resistor("R3", 15, 15, 0, "VIP", "C")))
+        with self.assertRaises(ValueError) as caught:
+            _wants(_entries([("R1.1", "R2.1")], {"layers": ["F.Cu"]}), copper, RULES)
+        self.assertIn("D+ and D- are a differential pair to KiCad", str(caught.exception))
+        self.assertTrue(_wants(_entries(["VIP"], {"layers": ["F.Cu"]}), copper, RULES), "VIP with no VIN is no pair")
 
     def test_the_options_and_their_defaults(self) -> None:
         (a, b, c) = self.wants(["#net:A", ("#R3.1", "R1.2"), {"net": "C", "layers": {"F.Cu": 1, "B.Cu": 3}, "vias": 0}],
