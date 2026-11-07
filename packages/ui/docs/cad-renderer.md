@@ -257,7 +257,10 @@ stage `presentable` (the frame presentation, `viewport/framePresentation.js`, ke
 until its scene says so) only once the face its camera sees is drawn, and the board view swaps the two
 canvases in one commit when that frame is up, head on (in perspective, its eye where the face is drawn
 at the flat scale for the viewport's lens, `boardFrame.js`'s `perspectiveHeadOn`); then the camera
-eases. Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
+eases to a camera on the side the 2D view showed (`boardFrame.js`'s `cameraOnSide`, the opening's
+`side`): the camera the file was left at in 3D, turned over to that side when it looks at the other, or
+Home's direction so turned, handed to the viewport's `goHome`, so the ease never crosses the board's plane.
+Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
 viewport, which then goes: its own window when nobody has moved the 3D camera since the opening (the
 count of hands on it, `camera/cameraTouch.js`'s `cameraHands`), else the camera's (`planFromCamera`).
 
@@ -1726,7 +1729,9 @@ rescales, so leaving Preview gives back the fit it opened with. A 3D view shows 
 board's, in its corner's pill (`ZoomControl.jsx`'s `viewportZoom`); the viewport's `zoomPercent()`,
 `subscribeCamera()` and `zoomBy(factor)` serve that pill, the zoom keys and a phone's Zoom submenu,
 and the `window.__cadCamera()` test seam reads it (`zoomPercent`). The corner's Home
-(`goHome()`) frames what is shown from the opening direction. The acts that frame the
+(`goHome()`) frames what is shown from the opening direction; a view seen from another side hands
+`goHome` its own direction and up (a board's 3D view entered from its bottom: Home turned over the
+board). The acts that frame the
 model are every view's context menu (Zoom to fit, Zoom to selection), a double-click on empty space, and the live
 `resetCamera`; the view cube (bottom-right, absent in Preview) turns
 the camera and keeps its zoom and pan, F frames the model, as the zoom's menu does, and opening a

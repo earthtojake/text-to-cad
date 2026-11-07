@@ -87,8 +87,10 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.
  * Entering 3D opens head on, on the window the 2D view shows (the flat canvas on screen until the board in
- * 3D has drawn that same picture), and eases to the 3D views' Home, the board framed whole from the
- * opening direction (or to the camera this file was left at in 3D). Leaving it with the camera where that
+ * 3D has drawn that same picture), and eases, on the side the 2D view showed, to the 3D views' Home tilt,
+ * the board framed whole (from the bottom, Home turned over as Flip turns it), or to the camera this file
+ * was left at in 3D, turned over to that side if it looks at the other: the ease never crosses the board's
+ * plane, so Flip's icon stays the side it was. Leaving it with the camera where that
  * left it gives the 2D view back as it was; once the camera has been moved (a Flip moves it), leaving frames
  * the 2D view on what the camera was centred on, at its scale, from its side, the side Flip's icon showed
  * (the board in 3D up until the flat canvas has painted it). Which of the two is up, and the 3D camera and
@@ -489,26 +491,28 @@ function BoardSurface({ view, data }) {
 
   // ---- 2D/3D: one view, its other canvas -------------------------------------------------
   // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
-  // this file was left at in 3D, or to Home; a file left in 3D opens on its camera. The flat canvas stays
-  // on screen until the board in 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
+  // this file was left at in 3D, or to Home's tilt, on that same side (a camera on the other side turned
+  // over to it); a file left in 3D opens on its camera. The flat canvas stays on screen until the board in
+  // 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
   const mirrorFor = useCallback(side => boardMirrorX(sheetRef.current, side), []);
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
-  // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it.
-  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, flat: false }));
+  // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it;
+  // `side`: the side the 2D view showed, which the opening's ease ends on.
+  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, side: display.side, flat: false }));
   // The side the 2D view showed as 3D was entered, and the window leaving 3D hands the 2D view (none: its own).
   const enteredRef = useRef(null);
   const leavingRef = useRef(null);
   const switchDimension = useCallback(next => {
     if (next === dimensionRef.current) return;
     if (next === "3d") {
-      const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current;
+      const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current, side = displayRef.current.side;
       const span = board ? Math.max(board.width, board.height) : 100;
-      const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side: displayRef.current.side,
-        mirrorX: mirrorFor(displayRef.current.side), thickness: thicknessRef.current, distance: 2 * span }) : null;
+      const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side,
+        mirrorX: mirrorFor(side), thickness: thicknessRef.current, distance: 2 * span }) : null;
       const left = saved.current.board3d.camera;
-      enteredRef.current = { side: displayRef.current.side };
-      setOpening({ camera: headOn, then: left, home: !left, flat: Boolean(headOn) });
+      enteredRef.current = { side };
+      setOpening({ camera: headOn, then: left, home: !left, side, flat: Boolean(headOn) });
       setClosing3d(false);
     } else {
       // Leaving a camera nobody has moved since it opened gives the 2D view back as it was, from the side

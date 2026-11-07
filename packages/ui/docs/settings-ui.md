@@ -951,8 +951,11 @@ Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
 Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
-the eye where the face is drawn at the 2D scale), and eases to the 3D views' opening view, the board
-framed whole (or to the camera the file was left at in 3D); the 2D picture stays on screen until the 3D
+the eye where the face is drawn at the 2D scale), and eases, on that same side, to the 3D views' opening
+tilt, the board framed whole — from the bottom, that view turned over the board as Flip turns it (behind,
+right and below, the world's up still up) — or to the camera the file was left at in 3D, turned over to
+that side if it looks at the other: the ease never crosses the board's plane, so Flip shows the side the
+2D view showed throughout. The 2D picture stays on screen until the 3D
 view has drawn that same picture, so the switch shows no frame of anything else. Leaving with the camera
 where that left it (nothing turned, panned or zoomed since) gives the 2D view back exactly as it was,
 from its side; once the camera has been moved (a Flip is a move), leaving frames the 2D view on what the

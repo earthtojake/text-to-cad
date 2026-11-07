@@ -150,6 +150,21 @@ export function cameraTurnedOver({ position, target, up }) {
 }
 
 /**
+ * A camera on one side of the board: as it is where it already looks at that side (`sideSeenAlong`), else
+ * turned over to it as Flip turns it (`cameraTurnedOver`). Where a 3D view entered from the 2D view eases
+ * to — Home's tilt, or the camera the file was left at in 3D — on the side the 2D view showed, so the ease
+ * stays on that side of the board's plane and Flip's icon never changes by itself: the 3D views' Home
+ * (front, right, above) from the bottom is behind, right and below, the world's up still up.
+ *
+ * @param {{ position: number[], target: number[], up: number[] }} camera
+ * @param {"top" | "bottom"} side
+ */
+export function cameraOnSide(camera, side) {
+  const seen = sideSeenAlong(camera.target.map((value, axis) => value - camera.position[axis]));
+  return seen === side ? camera : { ...camera, ...cameraTurnedOver(camera) };
+}
+
+/**
  * The world-from-sheet matrix (column order, as three.js keeps a Matrix4's elements) for a point on
  * the face of `side`: (x, y, z) on the sheet to (x, -y, faceZ + z). Measure's points are on the sheet;
  * its camera through a 3D view is this under the view's own (`viewInverse · this`).
