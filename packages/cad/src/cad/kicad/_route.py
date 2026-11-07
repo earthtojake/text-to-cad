@@ -356,6 +356,9 @@ def route(board: Any, connections: Sequence[Any], *, layers: Any = None, width: 
     from ._routing.plan import Router
 
     started = time.monotonic()
+    if not callable(getattr(board, "get_as_string", None)):
+        raise TypeError("route routes the board a kicad_pcb.edit block has open (with kicad_pcb.edit(path) as b: "
+                        f"route(b, plan)), not {type(board).__name__} {board!r:.60}")
     entries = _entries(connections, {"layers": layers, "width": width, "clearance": clearance, "vias": vias,
                                      "via_cost": via_cost})
     copper = read_copper(board.get_as_string())

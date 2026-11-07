@@ -399,6 +399,9 @@ class Plans(unittest.TestCase):
             def get_as_string(self) -> str:
                 return self.text
 
+        with self.assertRaises(TypeError) as caught:
+            route("board.kicad_pcb", ["A"], layers=["F.Cu"])
+        self.assertIn("the board a kicad_pcb.edit block has open", str(caught.exception))
         bare = board(resistor("R1", 5, 10, 0, "A", "B")).replace('(layer "Edge.Cuts")', '(layer "Dwgs.User")')
         with self.assertRaises(ValueError) as caught:
             route(Open(bare), ["A"], layers=["F.Cu"])
