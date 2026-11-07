@@ -3,8 +3,8 @@ the plan read and checked before anything is routed.
 
 The boards are written here, small, in KiCad 11's syntax (footprints placed by a ``transform``), and read the way
 ``cad.kicad.route`` reads the open board's text; the rules are given as KiCad would give them. The routes are held
-to an independent check: points sampled every 10 microns along each new track, each measured to every other
-net's copper, every keep-out and the edge. KiCad's own DRC of routed boards is the KiCad suite's
+to an independent check: points sampled every 10 microns along each new track and each new via's centre, measured
+to every other net's copper and drill, every hole (a via's drill), every keep-out, every pad (a via's) and the edge. KiCad's own DRC of routed boards is the KiCad suite's
 (``tests/python/packages/kicad/test_route.py``).
 """
 
@@ -95,18 +95,32 @@ def segment(text: str, net: str, a: tuple[float, float], b: tuple[float, float],
 
 def independent_check(case: unittest.TestCase, copper, rules: Rules, router: Router, wants: list[Want]) -> None:
     """Every new segment octolinear, and every point of it (every 10 microns) at its clearance from every other
-    net's copper and hole, at least its half width from every track keep-out, and its edge clearance inside the
-    board: measured by sampling, not by the router's own checker."""
+    net's copper (pads, tracks, vias, the new copper too), ``hole_clearance`` from every other net's drill, at
+    least its half width from every track keep-out, and its edge clearance inside the board; every new via's
+    copper likewise on every layer, its drill ``hole_clearance`` from other nets' copper and ``hole_to_hole`` from
+    every other hole, clear of the via keep-outs and of every pad: measured by sampling and by distance to each
+    shape, not by the router's own checker."""
     width = {w.net: w for w in wants}
-    obstacles = []
+    every = set(copper.copper)
+    obstacles, holes = [], []  # (net, layers, shape, clearance); (net, drill)
     for pad in copper.pads:
         for shape in pad.copper:
             obstacles.append((pad.net, set(pad.layers), shape, rules.clearance(pad.net, pad.clearance)))
+        if pad.hole is not None:
+            holes.append((pad.net, pad.hole))
+    holes += [(None, hole) for hole in copper.holes]
     for track in copper.tracks:
         obstacles.append((track.net, {track.layer}, track.shape, rules.clearance(track.net)))
+    for via in copper.vias:
+        obstacles.append((via.net, set(via.layers), Shape.point(*via.at, via.diameter / 2), rules.clearance(via.net)))
+        holes.append((via.net, Shape.point(*via.at, via.drill / 2)))
     for new in router.tracks:
         a, b = (p / 1e6 for p in new.start), (p / 1e6 for p in new.end)
         obstacles.append((new.net, {new.layer}, Shape.segment(tuple(a), tuple(b), new.width / 2), rules.clearance(new.net)))
+    news = [(via, (via.at[0] / 1e6, via.at[1] / 1e6)) for via in router.vias]
+    for via, at in news:
+        obstacles.append((via.net, every, Shape.point(*at, via.diameter / 2), rules.clearance(via.net)))
+        holes.append((via.net, Shape.point(*at, via.drill / 2)))
     keepouts = [(set(k.layers), k.shape) for k in copper.keepouts if k.tracks]
     edges = [Shape.segment(p, q, 0.0) for ring in copper.outline for p, q in zip(ring, ring[1:])]
     for new in router.tracks:
@@ -118,19 +132,42 @@ def independent_check(case: unittest.TestCase, copper, rules: Rules, router: Rou
         for net, layers, shape, keep in obstacles:
             if net != new.net and new.layer in layers:
                 case.assertGreaterEqual(float(shape.grid_distance(x, y).min()) - half, max(keep, need) - 1e-6, (new, net))
+        for net, hole in holes:
+            if net != new.net:
+                case.assertGreaterEqual(float(hole.grid_distance(x, y).min()) - half, rules.holes - 1e-6, (new, "hole"))
         for layers, shape in keepouts:
             if new.layer in layers:
                 case.assertGreaterEqual(float(shape.grid_distance(x, y).min()) - half, -1e-6, (new, "keep-out"))
         edge = min(float(e.grid_distance(x, y).min()) for e in edges)
         case.assertGreaterEqual(edge - half, rules.edge_clearance - 1e-6, new)
         case.assertTrue(np.all((x > 0) & (x < 30) & (y > 0) & (y < 20)), new)
+    for via, at in news:
+        radius, drill, need = via.diameter / 2, via.drill / 2, width[via.net].clearance
+        for net, layers, shape, keep in obstacles:
+            if net != via.net:
+                gap = shape.point_distance(*at)
+                case.assertGreaterEqual(gap - radius, max(keep, need) - 1e-6, (via, net))
+                case.assertGreaterEqual(gap - drill, rules.holes - 1e-6, (via, net, "its drill"))
+        for net, hole in holes:
+            gap = hole.point_distance(*at)
+            if gap > 0:  # every other hole, its own net's too
+                case.assertGreaterEqual(gap - drill, rules.hole_gap - 1e-6, (via, "hole to hole"))
+            if net != via.net:
+                case.assertGreaterEqual(gap - radius, rules.holes - 1e-6, (via, "hole"))
+        for keepout in copper.keepouts:
+            if keepout.vias:
+                case.assertGreaterEqual(keepout.shape.point_distance(*at) - radius, -1e-6, (via, "keep-out"))
+        for pad in copper.pads:
+            case.assertGreater(min(shape.point_distance(*at) for shape in pad.copper) - radius, 0.0, (via, pad.ref))
+        case.assertGreaterEqual(min(e.point_distance(*at) for e in edges) - radius, rules.edge_clearance - 1e-6, via)
     # No end left dangling: each end of a new track is in a pad of its net, on a via of it, or where another
-    # track of it ends (KiCad joins tracks end to end, and calls an end on another track's middle dangling).
+    # track of it ends (the router splits its own track where a branch meets it, as KiCad's router leaves a T).
     ends = {}
     for new in router.tracks:
         for end in (new.start, new.end):
             ends[(new.net, end)] = ends.get((new.net, end), 0) + 1
     vias = {(via.net, via.at) for via in router.vias}
+    vias |= {(via.net, (round(via.at[0] * 1e6), round(via.at[1] * 1e6))) for via in copper.vias}
     for (net, end), count in ends.items():
         x, y = end[0] / 1e6, end[1] / 1e6
         in_pad = any(pad.net == net and any(shape.point_distance(x, y) <= 1e-9 for shape in pad.copper)
@@ -209,6 +246,7 @@ class Routes(unittest.TestCase):
                  want("C"), want("VCC", width=0.5, clearance=0.3), want("D")]
         router, done = self.route(wants)
         self.assertEqual([True] * len(done), [c.routed for c in done], [c.line() for c in done])
+        self.assertTrue(router.vias, "a via, for the check to hold it")
         self.assertEqual({"A", "B", "C", "VCC", "D"}, {c.net for c in done})
         self.assertEqual({0.5}, {t.width for t in router.tracks if t.net == "VCC"}, "the entry's width")
         independent_check(self, self.copper, RULES, router, wants)
@@ -286,6 +324,7 @@ class ViaLimit(unittest.TestCase):
         done = router.run()
         self.assertEqual([True, False], [c.routed for c in done], [c.line() for c in done])
         self.assertEqual(2, len(router.vias))
+        independent_check(self, copper, RULES, router, [want("A")])
         self.assertIn("with at most 0 vias left of the entry's 2", done[1].reason)
 
     def test_every_entry_answers_a_line_even_with_nothing_to_route(self) -> None:
@@ -323,6 +362,7 @@ class LayerChanges(unittest.TestCase):
         done = router.run()
         self.assertTrue(done[0].routed, done[0].line())
         self.assertEqual(1, len(router.vias))
+        independent_check(self, copper, RULES, router, [want("A")])
 
 
 class FinePitch(unittest.TestCase):
