@@ -249,12 +249,54 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"})
+                # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
+                solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
+                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
                 self.assertEqual(set(chosen["skills_policy"]), {f"{POLICY}/{name}" for name in selector.HEAVY_POLICY})
                 self.assertEqual((route(path)["web_ui"], route(path)["web_viewer"]), ("false", "true"))
+
+    def test_the_solver_runs_its_own_job_with_calculix_installed(self):
+        self.assertIn("calculix-ccx", JOBS["fea"])
+        self.assertNotIn("cad[fea]", JOBS["fea"])                 # netgen comes with the kernel: no second install
+        # The accuracy tests' margins were measured with this mesher; pyproject only sets a floor.
+        self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
+        # One glob runs every FEA suite, so a new test_fea_<name>.py needs no workflow edit.
+        self.assertIn(f"{LIBRARY}/test_fea*.py", JOBS["fea"])
+        self.assertIn("timeout-minutes: 15", JOBS["fea"])
+        # Every FEA suite on disk is one the glob runs, and a change to it selects the job.
+        on_disk = sorted(path.name for path in (REPO_ROOT / LIBRARY).glob("test_fea*.py"))
+        self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"}, set(on_disk))
+        for name in on_disk:
+            with self.subTest(name=name):
+                self.assertIn("fea", jobs_for(f"{LIBRARY}/{name}"))
+        # The engine and shared modules FEA reads and writes through run its solves too; the rest of the engine doesn't.
+        for path in ("packages/cad/src/cad/engine/refs.py", "packages/cad/src/cad/engine/executables.py",
+                     "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/_internal/atomic_replace.py",
+                     "packages/cad/src/cad/_internal/kernel_run.py", "packages/cad/src/cad/_internal/programs.py",
+                     "packages/cad-server/src/cad_server/_internal/cli_from_function.py"):
+            with self.subTest(path=path):
+                self.assertIn("fea", jobs_for(path))
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/engine/api.py"))
+        for path in (
+            "packages/cad/src/cad/_internal/fea/solve.py",
+            "packages/cad/src/cad/calculix/_program.py",
+            "packages/cad/src/cad/netgen/_mesher.py",
+            "packages/cad/src/cad/fea.py",
+            "packages/cad-server/src/cad_server/cli/fea_solve.py",
+            "packages/cad-server/src/cad_server/_internal/kernel_verb.py",
+            "packages/cad/src/cad/results.py",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("fea", jobs_for(path))
+        # The skill's pages are its own suite's, which reads them against the code they document; no solve reads them.
+        self.assertEqual(jobs_for("skills/fea/SKILL.md"), {"skills"})
+        self.assertEqual(tests_for("skills/fea/references/study-file.md")["skills_tests"], [f"{SKILLS}/fea"])
+        self.assertEqual(tests_for("packages/cad/src/cad/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
+        self.assertEqual(jobs_for(f"{LIBRARY}/test_fea.py"), {"cadgen-linux", "cadgen-windows", "fea", "skills"})
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/geometry.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
@@ -372,10 +414,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-js.sh": {"core-js", "web", "mcp", "skills"},
             "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "skills"},
             "scripts/test/test-global.sh": {"skills"},
-            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
+            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "fea", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

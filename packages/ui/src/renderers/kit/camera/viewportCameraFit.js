@@ -25,14 +25,20 @@ export function fitRoom(clearTop, height) {
   return Math.max(1 - Number(clearTop) / Number(height), 0.5);
 }
 
+// A covered share past this leaves too little to frame into: the fit then ignores it.
+const MAX_INSET = 0.5;
+
 /** Fit the projected bounding box, including perspective depth, rather than
  * the rotation-invariant sphere that wastes space around long or flat models.
  * Returns a plan; never mutates the camera, controls or saved view. Without a
  * `padding` the viewport's own applies (`interactiveFitPadding`); a number is
  * both axes' padding (a library card's picture). `room`: the share of the height
- * under the view's tool strip (`fitRoom`), the bottom of the viewport: the box is
- * fitted in it and centred in it, as a flat view's fit keeps clear of the strip, so
- * the target stands above the box's centre by half of what the strip takes.
+ * under the view's tool strip (`fitRoom`), the bottom of the viewport. `insetLeft`:
+ * the share of the viewport's width that chrome covers at its left (an FEA result's
+ * Study panel); `insetBottom`, the share of its height chrome covers at its foot (a
+ * colour bar). The box is fitted in what the strip and the chrome leave, and the
+ * camera panned so it sits in the middle of that, orbiting about the point the pan
+ * leaves -- as a flat view's fit keeps clear of the strip.
  */
 export function interactiveCameraFrameForBounds(THREE, {
   camera, controls, bounds, modelOffset = null, frameAspect = camera?.aspect || 1,
@@ -40,6 +46,8 @@ export function interactiveCameraFrameForBounds(THREE, {
   nearClip = camera?.near,
   padding = null,
   room = 1,
+  insetLeft = 0,
+  insetBottom = 0,
 } = {}) {
   if (!camera || !controls || !bounds?.min?.every(Number.isFinite) || !bounds?.max?.every(Number.isFinite)) return null;
   const frame = boundsCenterAndRadius(THREE, bounds, { offset: modelOffset });
@@ -55,13 +63,19 @@ export function interactiveCameraFrameForBounds(THREE, {
   right.normalize();
   const screenUp = new THREE.Vector3().crossVectors(direction, right).normalize();
   const halfSize = new THREE.Vector3(...bounds.max).sub(new THREE.Vector3(...bounds.min)).multiplyScalar(0.5);
-  const aspect = Math.max(Number.isFinite(frameAspect) ? frameAspect : 1, 1e-3);
-  const share = Number(room) > 0 && Number(room) < 1 ? Math.max(Number(room), 0.5) : 1;
-  const roomPadding = Number.isFinite(padding)
+  const fullAspect = Math.max(Number.isFinite(frameAspect) ? frameAspect : 1, 1e-3);
+  const strip = Number(room) > 0 && Number(room) < 1 ? Math.max(Number(room), 0.5) : 1;
+  const inset = (value) => (Number.isFinite(value) && value > 0 && value < MAX_INSET ? value : 0);
+  const covered = inset(insetLeft);
+  // Chrome at the foot counts only while it leaves a quarter of the height under the strip to frame in.
+  const coveredBelow = strip - inset(insetBottom) >= 0.25 ? inset(insetBottom) : 0;
+  // The share of the height the box is fitted in (under the strip, over the chrome at the foot), and the
+  // aspect of what is left beside the chrome at the left: every extent counts against those shares.
+  const tall = strip - coveredBelow;
+  const aspect = Math.max(fullAspect * (1 - covered) / tall, 1e-3);
+  const fitPadding = Number.isFinite(padding)
     ? { x: Math.max(padding, 1), y: Math.max(padding, 1) }
-    : interactiveFitPadding(aspect / share);
-  // Every height counts against the room's share of the viewport's.
-  const fitPadding = { x: roomPadding.x, y: roomPadding.y / share };
+    : interactiveFitPadding(aspect);
   const verticalSlope = Math.tan((Number(camera.fov) || 48) * Math.PI / 360);
   const horizontalSlope = verticalSlope * aspect;
   const nearMargin = Math.max(Number(nearClip) || 0, 0) * 1.1;
@@ -70,8 +84,8 @@ export function interactiveCameraFrameForBounds(THREE, {
     for (const y of [-halfSize.y, halfSize.y]) {
       for (const z of [-halfSize.z, halfSize.z]) {
         const corner = new THREE.Vector3(x, y, z);
-        const extentX = Math.abs(corner.dot(right)) * fitPadding.x;
-        const extentY = Math.abs(corner.dot(screenUp)) * fitPadding.y;
+        const extentX = Math.abs(corner.dot(right)) * fitPadding.x / tall;
+        const extentY = Math.abs(corner.dot(screenUp)) * fitPadding.y / tall;
         const depth = corner.dot(direction);
         halfHeight = Math.max(halfHeight, extentY, extentX / aspect);
         distance = Math.max(distance, depth + Math.max(extentX / horizontalSlope, extentY / verticalSlope, minRadius, nearMargin, 1e-6));
@@ -81,11 +95,14 @@ export function interactiveCameraFrameForBounds(THREE, {
   // Orthographic distance has no effect on screen occupancy; keep enough room
   // for orbit/near planes using the old conservative sphere depth.
   if (camera.isOrthographicCamera) {
-    distance = fitDistanceForRadius(camera, frame.radius, { aspect, minRadius, padding: Math.max(roomPadding.x, roomPadding.y) });
+    distance = fitDistanceForRadius(camera, frame.radius, { aspect, minRadius, padding: Math.max(fitPadding.x, fitPadding.y) });
   }
-  // Centred in the room: the room's middle stands (1 - share) of the half height under the viewport's.
-  const lift = (1 - share) * (camera.isOrthographicCamera ? halfHeight : distance * verticalSlope);
-  const target = frame.center.clone().addScaledVector(screenUp, lift);
+  // Panned so the box's centre stands in the middle of what is left: by half the width the chrome at the left
+  // covers, and by what the strip takes less what the chrome at the foot takes, each a share of the whole view's
+  // half-height at the model (at the fitted distance, in perspective).
+  const halfTall = camera.isOrthographicCamera ? halfHeight : distance * verticalSlope;
+  const target = frame.center.clone().addScaledVector(right, -covered * halfTall * fullAspect)
+    .addScaledVector(screenUp, (1 - strip - coveredBelow) * halfTall);
   return {
     ...frame, halfHeight, distance, direction, up,
     position: target.clone().addScaledVector(direction, distance),

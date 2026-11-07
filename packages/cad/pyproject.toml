@@ -68,6 +68,17 @@ build123d = [
   # measurements with Pillow. Both run in the kernel's processes.
   "ezdxf",
   "pillow",
+  # `cad fea parts` finds the parts that touch with scipy (a KD-tree of sampled faces). build123d
+  # brings it already; it is named here because the library imports it itself.
+  "scipy",
+  # `cad fea solve` meshes with netgen (LGPL-2.1, its own OpenCascade, so it runs in a process of its
+  # own; about 8-11 MB). The kernel's rather than an extra of its own: FEA reads the document's B-rep
+  # with OCP, so it runs where the kernel is, and an extra is a second environment. netgen publishes
+  # wheels for macOS, Linux x86_64 and Windows x86_64 alone, and no sdist, so it is installed only
+  # there: anywhere else (Linux on ARM) the kernel installs without it and `cad fea solve` refuses,
+  # naming the platform (`_internal/fea/mesh.py`). CalculiX, which solves, is a program the person
+  # installs (or the one their FreeCAD carries).
+  "netgen-mesher>=6.2.2608; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
@@ -104,6 +115,8 @@ search-path = ["src"]
 # A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
 # otherwise have src excluded by the ignore files above it and check nothing.
 use-ignore-files = false
+# netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
+ignore-missing-imports = ["netgen", "netgen.*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

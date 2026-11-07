@@ -33,6 +33,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
+    # Not a format: a part goes in, a result GLB comes out.
+    "cad.fea": ("faces", "parts", "solve"),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
