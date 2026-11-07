@@ -281,7 +281,7 @@ test("the install command's channels are stored as what happened, and the -githu
     for (const batch of [{ ...CONTROLS, schema: 8, channel }, { ...BATCH, channel }]) {
       const store = memory();
       assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204, channel);
-      assert.ok(store.rows.length > 0 && store.rows.map(fieldsOf).every(row => row.channel === channel), channel);
+      assert.ok(store.rows.length > 0 && store.rows.every(row => row.channel === channel), channel);
     }
   }
   const store = memory();
