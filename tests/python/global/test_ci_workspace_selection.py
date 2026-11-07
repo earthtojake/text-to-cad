@@ -247,8 +247,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         for path in ("packages/cad/src/cad/registry.py", "packages/cad/src/cad/engine/api.py",
                      "packages/cad/src/cad/engine/serve.py",
                      "packages/cad-server/src/cad_server/engine/daemon.py",
-                     "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
-                     "packages/aliases/cadgen/pyproject.toml"):
+                     "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"})
                 chosen = tests_for(path)
@@ -298,6 +297,26 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(jobs_for(path), {"kicad", "skills"})
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
+
+    def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
+        # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
+        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
+
+    def test_the_installer_rehearsals_start_on_the_same_changes_and_no_job_runs_them(self):
+        def paths(name: str) -> set[str]:
+            text = (REPO_ROOT / f".github/workflows/{name}").read_text(encoding="utf-8")
+            return set(re.findall(r"^      - (\S+)$", text.split("  push:\n", 1)[1].split("\npermissions:", 1)[0], re.M))
+
+        windows, linux = paths("install-windows.yml"), paths("install-linux.yml")
+        self.assertEqual(windows - {".github/workflows/install-windows.yml", "scripts/install/install.ps1"},
+                         linux - {".github/workflows/install-linux.yml", "scripts/install/install.sh"})
+        self.assertLessEqual({".github/workflows/install-linux.yml", "scripts/install/install.sh"}, linux)
+        for name in ("install-windows.yml", "install-linux.yml"):
+            self.assertEqual(jobs_for(f".github/workflows/{name}") - {"skills"}, set(), name)
+        # Dispatched with nothing said, Windows's rehearses this tree's wheel; the published release only when asked.
+        windows_text = (REPO_ROOT / ".github/workflows/install-windows.yml").read_text(encoding="utf-8")
+        self.assertRegex(windows_text, r"published:\n(?:        .*\n)*?        default: false\n")
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
         self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})

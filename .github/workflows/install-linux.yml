@@ -1,0 +1,120 @@
+name: Linux installer rehearsal
+
+# install.sh on a fresh Linux, the way a person runs it, piped to sh, against the wheel this tree builds: on
+# the runner's own Ubuntu, and in the slim Python image, which has no curl until one is installed, no procps,
+# and no uv. uv comes from its own installer. The checks are the `cad` command's: `cad --version` and `cad
+# doctor`. The Windows rehearsal goes further, through models and the uninstall (install-windows.yml); the
+# release smoke runs the wheels. A rehearsal, not a release gate: dispatched by hand, or by a push to main
+# that changes the installer or what it runs, as the Windows one is. No test.yml job runs it
+# (scripts/github-workflows/select_checks.py).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "The ref to rehearse (default: the branch dispatched)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/install-linux.yml
+      - scripts/install/install.sh
+      - packages/cad-server/src/cad_server/cli/setup.py
+      - packages/cad-server/src/cad_server/cli/uninstall.py
+      - packages/cad-server/src/cad_server/cli/doctor.py
+      - packages/cad-server/src/cad_server/_internal/providers.py
+      - packages/cad-server/src/cad_server/_internal/launch.py
+      - packages/cad-server/src/cad_server/_internal/installations.py
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    name: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/core packages/ui apps/web apps/mcp
+          playwright: "false"
+
+      - name: Bundle production outputs from clean
+        run: scripts/bundle/bundle.sh --clean
+
+      - name: Build and check the wheels
+        env:
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
+        run: |
+          python -m pip install build
+          scripts/release/check-wheel-contents.sh
+
+      - name: Keep the wheels for the rehearsals
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels
+          path: ${{ runner.temp }}/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 1
+
+  linux:
+    name: install.sh (${{ matrix.where }})
+    needs: wheel
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - where: ubuntu-latest
+            image: ""
+          - where: python:3.12-slim-bookworm
+            image: python:3.12-slim-bookworm
+    env:
+      UV_NO_MODIFY_PATH: "1"
+    steps:
+      # What the one-line command itself needs: a person on this image has run `curl ... | sh`.
+      - name: curl, on the slim image
+        if: matrix.image != ''
+        run: apt-get update -qq && apt-get install -y -qq curl ca-certificates
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The workspace, not the runner's temporary folder: a container job's path to that differs from the host's.
+      - name: Take the wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: wheels
+          path: wheels
+
+      # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
+      # the release the server pins, which no index has before it is released.
+      - name: Install, piped as the docs say (curl | sh)
+        shell: sh
+        run: |
+          CAD_INSTALL_FROM=$(ls "$PWD"/wheels/cad_server-*.whl)
+          UV_FIND_LINKS=$PWD/wheels
+          export CAD_INSTALL_FROM UV_FIND_LINKS
+          sh < scripts/install/install.sh
+
+      - name: The cad command and the doctor
+        shell: sh
+        env:
+          UV_FIND_LINKS: ${{ github.workspace }}/wheels
+        run: |
+          said=$("$HOME/.local/bin/cad" --version)
+          echo "$said"
+          [ "$said" = "cad $(cat VERSION)" ]
+          "$HOME/.local/bin/cad" doctor

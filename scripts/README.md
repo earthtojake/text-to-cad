@@ -232,7 +232,8 @@ where those files ship, so these scripts are what produces them.
   (`apps/docs/scripts/install-scripts.mjs`), and `release-publish.yml` attaches them, with their
   `SHA256SUMS`, to each GitHub Release. Their structure and behaviour are tested by
   `tests/python/packages/cad_server/test_setup.py`; `.github/workflows/install-windows.yml` rehearses
-  `install.ps1` on a Windows runner.
+  `install.ps1` on a Windows runner, against this tree's wheel or, dispatched with `published`, the release
+  people install today, and `.github/workflows/install-linux.yml` `install.sh` on Linux.
 
 - `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
   checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
@@ -281,7 +282,8 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 | `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
-| `install-windows.yml` (`Windows installer rehearsal`) | manual dispatch; pushes to `main` that change `install.ps1` or what it runs | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds: a rehearsal, not a release gate. |
+| `install-linux.yml` (`Linux installer rehearsal`) | manual dispatch; pushes to `main` that change `install.sh` or what it runs | Runs `install.sh`, piped, against this tree's wheel on `ubuntu-latest` and in `python:3.12-slim-bookworm`; checks `cad --version` and `cad doctor`. No `test.yml` job runs it. |
+| `install-windows.yml` (`Windows installer rehearsal`) | manual dispatch; pushes to `main` that change `install.ps1` or what it runs | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI: a rehearsal, not a release gate. |
 
 `Prepare Release` opens a release pull request, or a pull request carries its own
 bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,
