@@ -284,7 +284,9 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import stl\nstl.read('p.stl')\n", {"build123d"}),
                 ("from cad import memo\n", {"build123d"}),
                 ("from cad.ap242 import posed\n", {"build123d"}),
-                ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # A manufacturing check: exact geometry is measured by build123d, a mesh by trimesh.
+                ("from cad import step\nstep.dfm('p.step')\n", {"build123d"}),
+                ("from cad import stl\nstl.dfm('p.stl')\n", {"trimesh"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),

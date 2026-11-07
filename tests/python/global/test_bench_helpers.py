@@ -27,6 +27,7 @@ def _load(name: str):
 
 
 corpus_bench = _load("corpus_bench")
+dfm_bench = _load("dfm_bench")
 
 
 def model(**overrides):
@@ -212,6 +213,28 @@ class TableTest(unittest.TestCase):
                                    "1.85 / 0.88 | 1.04 | 3800 | 8.6–17.2 |")
         self.assertEqual(lines[3], "| plate | failed | — | — | — | — | — | — | — | — | — | — |")
 
+
+
+class DfmTableTest(unittest.TestCase):
+    """``dfm_bench.py``'s table: per process, the parts, their seconds, what raised and the rules that fail most."""
+
+    def test_the_table_counts_each_process(self):
+        rows = [{"process": "cnc", "seconds": 1.0, "failed_rules": ["cnc.corner"], "unmeasured": []},
+                {"process": "cnc", "seconds": 3.0, "failed_rules": ["cnc.corner", "cnc.wall"], "unmeasured": ["holes"]},
+                {"process": "cnc", "seconds": 0.5, "error": "boom"},
+                {"process": "printing", "seconds": 2.0, "failed_rules": [], "unmeasured": []}]
+        table = dfm_bench.summarize(rows).splitlines()
+        self.assertEqual(len(table), 4)
+        self.assertIn("| cnc | 3 | 2.0 | 3.0 | 3.0 | 1 | 1 | cnc.corner (2), cnc.wall (1) |", table)
+        self.assertIn("| printing | 1 | 2.0 | 2.0 | 2.0 | 0 | 0 | - |", table)
+
+    def test_files_are_taken_smallest_first(self):
+        with temporary_directory(prefix="dfm-bench-") as folder:
+            root = Path(folder)
+            for name, size in (("b.step", 30), ("a.stp", 10), ("c.STEP", 20), ("d.txt", 1)):
+                (root / name).write_bytes(b"x" * size)
+            self.assertEqual([path.name for path in dfm_bench.files([root], 2, 1.0)], ["a.stp", "c.STEP"])
+            self.assertEqual([path.name for path in dfm_bench.files([root], 2, 1.0, spread=True)], ["a.stp", "b.step"])
 
 
 if __name__ == "__main__":

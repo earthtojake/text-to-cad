@@ -449,7 +449,8 @@ verbosity) key nothing. What it adds is two things:
   build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
-  build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
+  build123d; an operation the calling process runs its integration, a mesh's `dfm` trimesh, a STEP's, an xbf's,
+  a model's and a DXF's build123d; one the engine
   runs, an `export`, none; a type's edit its integration, `kicad_pcb.edit` kicad; a type alone, `from cad
   import step`, none) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
@@ -694,13 +695,24 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
-cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
-                [--zero-tol DEG] [--units U] [--candidates] [--json]
-cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG] [--samples N]
-                [--units U] [--candidates] [--json]
-                                             the manufacturing check, the trimesh integration's: SRC a
-                                             file of the type, or a model's id; its findings and every
-                                             measurement
+cad model|xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
+cad model|xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+                [--sheet-size XxY]
+cad model|xbf|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
+                [--cavities N] [--candidates]
+cad model|xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
+                [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
+cad stl|glb|threemf dfm FILE --process molding|printing [the process's options as above] [--units U]
+cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+                [--sheet-size XxY]
+      ... [--rules generic|protolabs|hubs|xometry|sendcutsend|none] [--material M] [--json]
+                                             the manufacturing check: SRC a file or a document id;
+                                             --process, given none, the parts' declared one (a model,
+                                             an xbf; a STEP keeps none) or a DXF's sheet; --units an
+                                             STL's alone; exact geometry and a DXF the build123d
+                                             integration's (findings at face refs, layers), a mesh the
+                                             trimesh integration's (at x, y, z); the rule set's
+                                             verdicts and every measurement
 cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
@@ -985,7 +997,7 @@ runners) for `export`, `snapshot` and `inspect`, each with its source said as th
 without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
-choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
+choices (`sdf.validate`'s `gz_check`, `dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
@@ -993,23 +1005,35 @@ reads (`srdf.validate`'s `urdf`): one that is not there is refused before it run
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
-**The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`: the
-registry's `dfm` operation of the `trimesh` integration) is one function the library makes for each
-(`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`): its options belong to a process,
-`molding` or `printing`, and are resolved there, the standard library alone -- an option of the other
-process, a pull beside `--candidates` and a unit for a type that declares its own are refused before
-anything is read. The measuring is `cad.trimesh._check`'s: an STL is read as it is; a 3MF or a GLB is
-written as one STL in a temporary folder by the library's mesh readers (millimetres, Z up, as the viewer
-reads it; no kernel); a STEP, an xbf or a model is exported to that STL by the engine. The report
-(`_molding`, `_printing`: injection molding's draft, undercuts and projection along a pull, or the pulls
-ranked; 3D printing's mesh, overhangs, walls and support, or the orientations ranked) is the result's
-`measurements`; a family that failed, a mesh that did not read and a figure that is no finite number are
-errors, and what the figures show (zero-draft walls, undercut candidates, overhangs, suspect units) are
-warnings, at the place they were measured. The command runs it in its own process when its environment
-holds trimesh (`cad_server._internal.integration_env.carries`: a checkout's, one installed with the
-extra); else in the environment of `cad[trimesh]` at the installation's release, made once by the engine
-as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
-(`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
+**The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
+sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library
+makes for each type (`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`), its signature the
+type's: its processes the `--process` choices (a mesh's `molding` and `printing`, a DXF's `sheet`, its
+default), and their options alone; the operation names
+the integration that measures the type: `build123d` for `model`, `step`, `xbf` and `dxf`, `trimesh` for the meshes.
+Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a module of
+`cad._internal.dfm` with its options, rule sets, findings and summary -- or to all (`rules`, `material`,
+`units`), and are resolved there, the standard library alone: an option of another process, a process the
+type cannot be measured for (CNC or sheet of a mesh), a pull beside `--candidates`, a unit for a type that
+declares its own, a value of another kind and a rule set the process lacks are refused before anything is
+read, as a STEP given no process is (it keeps none). An xbf or a model given none is checked for the one
+its parts declare, its process's options refused once the document is read. A STEP or an xbf is
+read by `document.Loaded`, the engine's own loader, in the check's process; a document id or a handle is
+exported by the engine to an xbf in a temporary folder and read the same way, so every finding's location
+is a ref `inspect` resolves. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
+the library's readers). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
+the type side judges the report against the rule set (`cad._internal.dfm.rules.evaluate`), and the result is
+a `CheckResult` whose `measurements` is the report with every rule's outcome (`measurements["rules"]`). The
+command runs it in its own process when its environment holds the type's integration
+(`cad_server._internal.integration_env.carries`: a checkout's, one installed with the extras); else in that
+integration's environment at the installation's release -- `cad[build123d]` is the base the engine's kernel
+processes already run in, `cad[trimesh]` one the engine makes once, as `cad run` makes a program's
+(`extras.ensure`) -- whose Python runs the library's runner of one operation (`cad._internal.operation`: the
+call on stdin, the result on stdout), the result printed as it would be here. A refusal there -- an option
+the declared process does not take, an id the engine does not hold -- comes back with its reason
+(`invalid_argument`, `not_found`: `integration_env.Refused`), the command line's mistake, exit 2, as it is
+here. The families, the JSON and
+every rule are the library's `src/cad/_internal/dfm/README.md`.
 
 **The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
@@ -2570,15 +2594,27 @@ by the upstream library. Shape colours keep build123d's sRGB inputs (a hex strin
 `Color`, 0–1 floats: its setter refuses 0–255 integers), and plain face paints take sRGB hex, 0–255
 integers and a build123d `Color`; documents and glTF base factors use linear RGB.
 
-XBF stores the native physical dataclass and the complete resolved PBR data, including
-embedded textures and texture transforms, on the XCAF material label. Native texture maps
+XBF stores the native physical dataclass, the complete resolved PBR data, including
+embedded textures and texture transforms, and the part's declared manufacturing process
+(`process=machined()`, `fdm(layer_height_mm=0.2)`: `bd_materials.processes.AppliedProcess`)
+on the XCAF material label. Native texture maps
 require UV mapping to render; the viewer, GLB export and OCCT snapshots refuse them
 explicitly. Use scalar PBR looks for those paths. Reading returns
-native `FinishedMaterial` objects with that resolved look; it does not recreate a finish's
-recipe. XCAF's standard attributes also carry the name, density and core PBR factors for
+native `FinishedMaterial` objects with that resolved look and an equal `process`; it does not
+recreate a finish's recipe (`finish`, `color`, `thickness_mm`, `opacity`, `roughness`, `scale` and
+`rotation` live on in the look alone, read back as their defaults). A material with no process, a
+document written before processes were kept, and every STEP read `process` as `None`. XCAF's standard attributes also carry the name, density and core PBR factors for
 other readers. STEP carries name, density and colour. The structure serves native physics
 under `material` and `PbrProperties.to_dict()` under `pbr`, with the native physical type
-named by `type`; no flattened material fields of the library's own remain.
+named by `type`, and the process, where there is one, under `process`: the `Process` enum's value
+and the dataclass's fields (`{"process": "fdm", "scale": [1, 1], "rotation": 0, "pitch_mm": 0.2,
+"skin": false, "mm_per_uv": 1}`); no flattened material fields of the library's own remain. Only
+those known dataclasses are rebuilt from it, never a type the data names.
+
+A material's content key covers its process, so a part given one writes other document bytes
+than the same part without. The closure's key does not cover the material (`FORMAT` did not move
+when processes joined the document): a document built before then is taken as current, and reads
+`process` `None`, until its model builds again.
 
 A material edit changes document content without changing geometry keys. Warm document
 patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,

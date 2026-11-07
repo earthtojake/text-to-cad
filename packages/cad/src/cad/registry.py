@@ -57,6 +57,8 @@ class Operation:
     name: str
     summary: str
     integration: str | None = None
+    #: ``manufacturing``: the manufacturing check every 3D type shares (``cad._internal.manufacturing``).
+    family: str | None = None
     engine: bool = False
 
 
@@ -196,10 +198,16 @@ _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", 
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
                                          "element or part is and what made it", _KERNEL, engine=True)
 _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL, engine=True)
-# The manufacturing check every 3D type shares (``cad._internal.manufacturing``), measured with trimesh.
-_DFM = Operation("dfm", "measure it for manufacturing: injection molding (--process molding: draft, undercuts, "
-                        "projected area) or 3D printing (--process printing: walls, overhangs, support); "
-                        "--candidates ranks the pulls or orientations", "trimesh")
+# The manufacturing check every 3D type shares (``cad._internal.manufacturing``): exact geometry measured on
+# its B-rep by the build123d integration, a mesh by the trimesh integration; a DXF checked as a cut file.
+_DFM_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
+                  "(molding) or 3D printing (printing), measured and judged against a cited rule set (--rules)")
+_DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's ref", "build123d", "manufacturing")
+_DFM_MESH = Operation("dfm", "check it can be molded (--process molding) or 3D printed (printing), measured "
+                                 "as a mesh and judged against a cited rule set (--rules)", "trimesh", "manufacturing")
+_DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "
+                                "twice, features against the kerf and the thickness, the sheet's size", "build123d",
+                       "manufacturing")
 
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
@@ -209,32 +217,32 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
-        (_EXPORT_MESH, _SNAPSHOT, _DFM), decorator=True, reader=True, reader_integration=_KERNEL),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, reader=True, reader_integration=_KERNEL),
     DocumentTypeEntry(
         "glb", "GLB", "a binary glTF scene of triangle meshes", (".glb",), "model/gltf-binary", "mesh",
         ("triangles", "assembly", "names", "colours", "materials", "animations"),
-        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _DFM), decorator=True),
+        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _DFM_MESH), decorator=True),
     DocumentTypeEntry(
         "threemf", "3MF", "a 3D Manufacturing Format package of triangle meshes", (".3mf",), "model/3mf", "mesh",
         ("triangles", "assembly", "names", "colours", "materials"),
-        (_EXPORT_MESH, _SNAPSHOT, _DFM), decorator=True, wire="3mf"),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, wire="3mf"),
     DocumentTypeEntry(
         "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
-        ("2D geometry", "layers"), (_SNAPSHOT,), decorator=True),
+        ("2D geometry", "layers"), (_SNAPSHOT, _DFM_CUT), decorator=True),
     DocumentTypeEntry(
         "urdf", "URDF", "a robot description (ROS's Unified Robot Description Format)", (".urdf",),
         "application/xml; charset=utf-8", "robot", ("links", "joints", "inertials", "mesh references"),

@@ -504,16 +504,46 @@ class RobustnessTest(unittest.TestCase):
 class CheckTest(unittest.TestCase):
     def test_the_check_measures_every_family_and_passes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            result = cad.stl.dfm(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="-z")
+            path = _stl(Box(20, 20, 15), Path(td), "box")
+            result = cad.stl.dfm(path, process="molding", pull="-z")
+            facts = cad.stl.dfm(path, process="molding", pull="-z", rules="none")
 
-        self.assertTrue(result.ok)
         report = result.measurements
         self.assertFalse(report["partial"])
-        self.assertEqual(sorted(report), ["draft", "mesh", "partial", "process", "projection", "scale", "undercuts"])
-        self.assertNotIn("wall_thickness", report, "thickness is 3D printing's measurement")
+        # pull_check: every side zero draft, so the pull is doubtful and the pulls are ranked for the hint.
+        self.assertEqual(sorted(report), ["bosses", "clamp", "corners", "draft", "envelope", "mesh", "notes", "partial",
+                                         "parting", "process", "projection", "pull_check", "ribs", "rules", "scale",
+                                         "source", "thickness", "transitions", "undercuts"])
+        # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
+        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
-        # A plain box's four sides have no draft: said, and the check still passes (facts, not verdicts).
-        self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["zero_draft_walls"])
+        # A plain box's four sides have no draft: the fact is said, and the generic rules' 0.5 deg minimum
+        # (Protolabs') fails the check at each side; facts alone (rules none) still pass.
+        self.assertIn("zero_draft_walls", [f.code for f in result.findings if f.severity == "warning"])
+        self.assertFalse(result.ok)
+        self.assertEqual(sum(f.code == "molding.draft_min" for f in result.findings), 4)
+        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"molding.draft_min"})
+        self.assertTrue(facts.ok)
+        self.assertEqual([f.code for f in facts.findings if f.severity == "warning"], ["zero_draft_walls"])
+
+    def test_an_open_mesh_of_two_bodies_is_still_measured(self) -> None:
+        # One triangle gone: the mesh is no longer watertight, and splitting its two bodies must not reach for a
+        # repair (trimesh's default repairs through networkx, which the library does not require).
+        import trimesh
+
+        with tempfile.TemporaryDirectory() as td:
+            path = _stl(Box(20, 20, 10) + Pos(40, 0, 0) * Box(10, 10, 10), Path(td), "pair")
+            mesh = trimesh.load(path)
+            mesh.update_faces(np.arange(1, len(mesh.faces)))
+            mesh.remove_unreferenced_vertices()
+            mesh.export(path)
+            result = cad.stl.dfm(path, process="molding", pull="z")
+        report = result.measurements
+        self.assertFalse(report["mesh"]["watertight"])
+        self.assertFalse(report["partial"], report.get("partial_sections"))
+        self.assertIn("several_bodies", {f.code for f in result.findings})
+        for family in ("draft", "undercuts", "thickness", "projection", "parting"):
+            self.assertNotIn("error", report[family], family)
 
     def test_a_bad_pull_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -819,6 +849,111 @@ class ZeroToleranceIsHonouredTest(unittest.TestCase):
         self.assertGreater(facts["zero_draft_wall_area_mm2"], 0.0, "1 deg is under a 2 deg tolerance")
         for face in facts["largest_zero_draft_faces"]:
             self.assertEqual(face["opens_toward"], "none")
+
+
+
+class SharedFamiliesTest(unittest.TestCase):
+    """The families a mesh shares with exact geometry (``meshops_molding``), each read off an STL of a part
+    whose answer is the construction's, at x, y, z."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        folder = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(folder.cleanup)
+        plate = extrude(Rectangle(80, 60), 2, taper=3)
+        ribbed = plate + Pos(-15, 0, 5) * Box(2.0, 50, 6) + Pos(15, 0, 5) * Box(1.0, 50, 6)
+        bossed = plate + Pos(0, 0, 2) * Cylinder(4, 8, align=(Align.CENTER, Align.CENTER, Align.MIN)) \
+            - Pos(0, 0, 2) * Cylinder(1.5, 8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        holed = Box(30, 20, 20) - Pos(10, 0, 0) * Cylinder(3, 20, rotation=(0, 90, 0))
+        cls.reports = {}
+        for name, part in (("ribbed", ribbed), ("bossed", bossed), ("holed", holed)):
+            path = Path(folder.name) / f"{name}.stl"
+            export_stl(part, str(path), tolerance=0.01, angular_tolerance=0.1)
+            cls.reports[name] = cad.stl.dfm(str(path), process="molding", material="abs").measurements
+
+    def test_thickness_ribs_and_corners(self) -> None:
+        report = self.reports["ribbed"]
+        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 2.0, places=2)
+        ribs = sorted(report["ribs"]["items"], key=lambda rib: rib["thickness_mm"])
+        self.assertEqual([round(rib["thickness_mm"], 2) for rib in ribs], [1.0, 2.0])
+        self.assertEqual([round(rib["height_mm"], 2) for rib in ribs], [6.0, 6.0])
+        self.assertEqual([round(rib["thickness_ratio"], 2) for rib in ribs], [0.5, 1.0])
+        # A rib's sides at its root are the rib's to judge; its square ends meet the plate at sharp corners.
+        self.assertEqual(report["corners"]["count"], 4)
+        self.assertEqual({round(abs(corner["xyz"][1]), 1) for corner in report["corners"]["items"]}, {25.0})
+        self.assertTrue(report["notes"])
+
+    def test_a_boss_and_its_core(self) -> None:
+        (boss,) = self.reports["bossed"]["bosses"]["items"]
+        self.assertAlmostEqual(boss["od_mm"], 8.0, delta=0.05)
+        self.assertAlmostEqual(boss["id_mm"], 3.0, delta=0.05)
+        self.assertAlmostEqual(boss["height_mm"], 8.0, delta=0.01)
+
+    def test_a_side_hole_one_slide_and_a_flat_parting(self) -> None:
+        report = self.reports["holed"]
+        (item,) = report["undercuts"]["items"]
+        self.assertEqual((item["release"], item["side_actions"]), ("side_action", ["+x"]))
+        self.assertAlmostEqual(item["stroke_mm"], 15.0, delta=0.5, msg="the blind hole's depth")
+        self.assertTrue(report["parting"]["flat_parting_possible"])
+        self.assertAlmostEqual(report["envelope"]["items"][0]["span_major_mm"], 30.0, places=2)
+        self.assertGreater(report["clamp"]["tons"], 0)
+
+
+def _ramp(run: float):
+    """A 20 mm wide plate 2 mm thick stepping to 3 over ``run`` (0: a sharp step)."""
+    from build123d import Polygon
+    profile = Polygon((-30, 0), (30, 0), (30, 3), (run / 2, 3), (-run / 2, 2), (-30, 2), align=None)
+    return extrude(Plane.XZ * profile, amount=-20)
+
+
+def _filleted_ribs():
+    """Two 1.2 mm ribs 6 tall on a 2 mm plate, 4 mm apart, their roots rounded 0.5: the walls 2.24 at most."""
+    from build123d import BuildPart, Locations, add, fillet
+    with BuildPart() as ribbed:
+        add(Box(60, 40, 2, align=(Align.CENTER, Align.CENTER, Align.MIN)))
+        for x in (-2.6, 2.6):
+            with Locations((x, 0, 2)):
+                Box(1.2, 30, 6, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        roots = [e for e in ribbed.edges().filter_by(Axis.Y) if abs(e.center().Z - 2) < 0.01
+                 and abs(abs(e.center().X) - 2.6) < 0.7]
+        fillet(roots, 0.5)
+    return ribbed.part
+
+
+class MeshTessellationTest(unittest.TestCase):
+    """What a coarse (0.5 mm) and a fine (0.05 mm) export must read alike: a figure within tolerance of the
+    construction's, never an exact float (x86 and arm64 tessellate apart)."""
+
+    @staticmethod
+    def _check(part, tolerance: float):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "part.stl"
+            export_stl(part, str(path), tolerance=tolerance, angular_tolerance=0.5 if tolerance >= 0.5 else 0.1)
+            return cad.stl.dfm(str(path), process="molding", material="abs")
+
+    def test_a_sphere_and_a_rod_part_flat(self) -> None:
+        from build123d import Rot, Sphere
+        for name, part in (("sphere", Sphere(10)), ("rod along x", Rot(0, 90, 0) * Cylinder(5, 30))):
+            for tolerance in (0.5, 0.05):
+                with self.subTest(part=name, tolerance=tolerance):
+                    parting = self._check(part, tolerance).measurements["parting"]
+                    self.assertTrue(parting["flat_parting_possible"], parting["items"][:3])
+
+    def test_a_rib_s_far_side_holds_the_ball(self) -> None:
+        for tolerance in (0.5, 0.05):
+            with self.subTest(tolerance=tolerance):
+                result = self._check(_filleted_ribs(), tolerance)
+                self.assertLess(result.measurements["thickness"]["max_mm"], 2.6)
+                self.assertNotIn("molding.thick_section", {f.code for f in result.findings})
+
+    def test_a_ramp_steeper_than_three_to_one_is_abrupt(self) -> None:
+        for run, ratio, fails in ((2.0, 2.0, True), (4.0, None, False)):
+            with self.subTest(run=run):
+                result = self._check(_ramp(run), 0.05)
+                ratios = [step["transition_ratio"] for step in result.measurements["transitions"]["items"]]
+                if ratio is not None:
+                    self.assertAlmostEqual(min(ratios), ratio, delta=0.1)
+                self.assertEqual("molding.wall_transition" in {f.code for f in result.findings}, fails)
 
 
 if __name__ == "__main__":
