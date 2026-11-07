@@ -1,7 +1,8 @@
 """The router behind ``cad.kicad.route``: the plan's connections searched for and pulled tight, by the board's rules.
 
 Nothing here imports KiPy or touches a file: ``cad.kicad._route`` hands it the open board's text and KiCad's rules,
-and writes back the copper it answers. numpy and the standard library alone.
+and writes back the copper it answers. numpy, the standard library and the library's own board reader
+(``cad.engine.formats.kicad``).
 
 - ``shapes``: exact shapes (a point, a segment, a polygon or an arc grown by a radius) and their distances;
 - ``board``: the board's copper, holes, keep-outs and outline as those shapes, read from its text;

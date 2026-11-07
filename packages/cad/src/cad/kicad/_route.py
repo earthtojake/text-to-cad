@@ -16,9 +16,11 @@ print("\\n".join(routed.human_lines()))
 The plan is the agent's: what to route, in what order, on which layers, how wide, with what clearance, and
 how many vias and at what cost. The router routes only that, each connection round everything already on the
 board (copper a person drew, copper an earlier entry routed) by the board's own rules, and moves, changes or
-deletes nothing that is there. A connection it cannot route is said by name, with why, and the rest go on; it
-raises only for a plan it cannot read (before anything is routed), so the copper that did land is saved with
-the block. The copper is written in one commit into the open board, which the edit saves at the block's end;
+deletes nothing that is there. A connection it cannot route is said by name, with why, and the rest go on, so
+the copper that did land is saved with the block. It raises before anything is routed for a plan or a board it
+cannot route by: a mistake in the plan (a differential pair in it too), an outline that does not close, a custom
+rule it cannot keep or read, a pad primitive it cannot read, a region past its memory; and after only when KiCad
+drops what it wrote or a route fails its own exact check (a bug): the edit then saves nothing. The copper is written in one commit into the open board, which the edit saves at the block's end;
 nothing else is written anywhere. The search and the pull-tight pass are ``cad.kicad._routing``'s.
 """
 
@@ -386,11 +388,13 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
       its cost per millimetre (1 where a list names it);
     - ``width``: the track's, mm (default: the net's netclass track width);
     - ``clearance``: what it keeps from other nets, mm (default, and least: what DRC holds the net to);
-    - ``vias``: the most vias each entry may place (default: no limit; 0 for none);
-    - ``via_cost``: what a via costs, in mm of track (default 2).
+    - ``vias``: the most vias each entry may place, all its connections together (default: no limit; 0 for none);
+    - ``via_cost``: what a via costs, in mm of track (default 2); the search settles for a path within 1.2 times the
+      cheapest, so it trades a via for track at about that cost, not exactly.
 
     Answers a ``Routed``: each connection's outcome; ``.ok``, ``.failed``, ``.human_lines()``. A connection that
-    cannot be routed is said on stderr too. ``ValueError`` for a plan it cannot read, before anything is routed."""
+    cannot be routed is said on stderr too. ``ValueError`` for a plan or a board it cannot route by, before anything is
+    routed (see the module's doc); ``TypeError`` for a board no edit has open."""
     from ._routing.board import read_copper
     from ._routing.plan import Router
 

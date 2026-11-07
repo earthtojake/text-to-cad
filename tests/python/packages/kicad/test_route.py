@@ -8,7 +8,7 @@ KiCad, so the keep-out lands on the back, in the footprint's frame -- and routes
 - ``KEEP``, two header pins whose straight line crosses that keep-out, on the back alone: routed round it;
 - ``VCC`` on the front: routed at its netclass's 0.5 mm;
 - ``SIG``, two resistors on either side of a track and a via of net ``OLD`` already on the board: routed round
-  them, the old copper left byte for byte (its uuids and its geometry);
+  them, the old copper left as it was (its uuids, ends and position);
 - ``WALL``, a resistor inside a closed ring of keep-out: not routed, said by name, the rest routed all the same;
 - ``TEE``, three pads: the third joins the track between the first two where it passes, a T where three tracks
   end (the router splits its own track there, as KiCad's router leaves a T), and DRC calls no end of the
