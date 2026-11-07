@@ -56,7 +56,8 @@ PRESETS = {
     "left": ((-1, 0, 0), (0, 0, 1)), "top": ((0, 0, 1), (0, 1, 0)), "bottom": ((0, 0, -1), (0, 1, 0)),
     "iso": ((1, -1, 0.8), (0, 0, 1)),
 }
-# The regular modes' numbers are the look's (``look.py``), which the viewer draws by too.
+# The regular modes' numbers are the look's (``look.py``), which the viewer draws by too, its
+# backdrop among them: every snapshot of a 3D document stands on BACKGROUND, flat.
 BACKGROUND = LOOK.backdrop
 EDGE = dict(LOOK.edge_colours)
 DEFAULT_FILL = LOOK.fill
@@ -66,9 +67,10 @@ PADDING = 0.04
 FOCAL_LENGTH = 50.0  # the view's default camera.focalLength (viewSettings.js), on three's 35 mm film gauge
 # The studio environment's horizon grey (sRGB, as its cube map holds it), which lights the model.
 HORIZON = (0.70, 0.71, 0.73)
-# Preview's studio is the viewer's, light (viewSettings.js previewDefaults, photographicStudioRig.js):
-# the backdrop white, lifted toward white behind the middle of the frame and shaded toward its
-# corners (a dark and a light colour's share) and above the horizon (studioBackdrop.js);
+# Preview's studio is the viewer's, light (viewSettings.js previewDefaults, photographicStudioRig.js),
+# drawn only in a still asked for Preview (``snapshot(preview=True)``), which ``cad <type> snapshot``
+# never asks for: the backdrop white, lifted toward white behind the middle of the frame and shaded
+# toward its corners (a dark and a light colour's share) and above the horizon (studioBackdrop.js);
 BACKDROP = "#ffffff"
 BACKDROP_LIFT, BACKDROP_SHADE, BACKDROP_WALL = 0.07, (0.38, 0.1), 0.6
 # the floor at the model's lowest point, #e7e7e5 at 60%, full to 1.6 of the model's reach and gone at 6.

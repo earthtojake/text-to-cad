@@ -1835,7 +1835,8 @@ browser viewer; snapshot has no Preview or video option. A packet requesting `pr
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
-light -- the studio backdrop, a drawing's white paper, a board's and a schematic's light colours --
+light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
+which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
