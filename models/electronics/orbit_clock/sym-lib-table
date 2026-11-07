@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "orbit")(type "KiCad")(uri "${KIPRJMOD}/orbit.kicad_sym")(options "")(descr "Orbit's parts"))
+  (lib (name "power")(type "KiCad")(uri "${KIPRJMOD}/power.kicad_sym")(options "")(descr "power symbols"))
+)

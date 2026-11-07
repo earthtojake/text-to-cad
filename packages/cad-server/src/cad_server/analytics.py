@@ -61,7 +61,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
 force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``python model.py``, a
-``cad export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
+``cad <type> export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
 them (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
 the process ``cli`` with no app named (``Recorder._spooled``): never in the CAD app's or the viewer's
 batch, whose client and presentation say who looked, not who built. With nothing taking it for a
@@ -314,20 +314,26 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 # library every couple of seconds among them) and its capture replies say nothing about use and would
 # drown what does. A view's own activity is noted from its sync (``viewed``) and as it adds the model
 # on screen to the library (``opened``).
+def _file_kinds() -> dict[str, str]:
+    from cad.registry import DOCUMENT_TYPES
+
+    return {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
+
+
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # The tool a call naming none of cadgen's tools is counted as (``cad_server.mcp.server``): the name a host sent is its
 # own string, never sent.
 UNKNOWN_TOOL = "cad_unknown"
 # A file's format, by extension: what the viewer opens (``cad_server.viewer.scanner.SOURCE_EXTENSIONS``), the
 # native document file (``.xbf``) among them; a live model has no file extension.
-FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".xbf": "xbf"}
+# Each kind is its document type as the analytics schemas spell it (``cad.registry``'s ``wire``).
+FILE_KINDS = _file_kinds()
 KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual file format
 # Who sends: the CAD app, the browser viewer, and the sender a command starts when nothing else has taken what
 # commands counted (``cad_server._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
 # Who asked for a build: a model script (``python model.py``, or a Python caller's ``Model.build()``) or a
-# ``cadgen`` command (``cad export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
+# ``cadgen`` command (``cad <type> export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
 # source text (``cadgen build``); the receiver reads it still, as it reads every schema a release sent.
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
@@ -406,6 +412,7 @@ CONTROLS = frozenset({
     "file_copy_path", "file_copy_link", "file_reveal", "file_open_app", "home",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",
     "export_step", "export_stl", "export_threemf", "export_glb", "export_dxf", "export_xbf", "export_original",
+    "export_gerbers", "export_drill", "export_pos", "export_bom", "export_odb", "export_ipc", "export_pdf",
     "home_search", "home_filter_all", "home_filter_models", "home_filter_files", "home_layout_grid", "home_layout_list",
     "home_open", "home_pick", "home_copy_path", "home_copy_link", "home_reveal", "home_pin", "home_unpin", "home_delete",
     "home_delete_cancel",
@@ -466,6 +473,11 @@ _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 # receiver drops it from the releases already out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing
 # anything at once.
 _THEIR_CYCLE = frozenset({"cad/engine/model.py"})
+# cadgen's wrappers of build123d's calls (the memo's and the history's): a frame of one that called on into
+# another library passes the model's call on, so it is no code of cadgen's deciding whose the error is -- a
+# ``TypeError`` build123d raised for what a model gave it is the model's. An error raised in one itself is
+# cadgen's, as any other of its frames.
+_PASSING = frozenset({"cad/engine/kernel/memo.py", "cad/engine/kernel/history.py"})
 # The packages whose code is ours, each frame of theirs named by the package: ``cad/<path>``, ``cad_server/<path>``.
 OUR_PACKAGES = ("cad", "cad_server")
 
@@ -713,13 +725,14 @@ def _can_keep(path: Path) -> bool:
     return True
 
 
-def status(*, path: Path | None = None, probe: bool = True) -> dict[str, Any]:
+def status(*, path: Path | None = None, probe: bool = True, keep: bool = True) -> dict[str, Any]:
     """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
 
     ``reason`` is ``environment``, ``choice``, ``default`` (the person was told and chose nothing),
     ``untold`` (nothing is sent: nobody has been told yet, or not here -- ``_here``) or
     ``unavailable`` (nothing is sent, and nothing said: no answer could be kept). Sharing makes the
-    install's id where it is missing. ``probe=False`` takes no answer that could be kept for
+    install's id where it is missing -- but with ``keep`` false (``cad doctor --check``, which writes
+    nothing), which says the id as it is, none. ``probe=False`` takes no answer that could be kept for
     ``unavailable`` without trying the state directory (``_can_keep``): a sender's question, which
     either way sends nothing.
     """
@@ -732,6 +745,8 @@ def status(*, path: Path | None = None, probe: bool = True) -> dict[str, Any]:
     sharing, reason = _decide(kept, forced, here)
     if reason is None:  # a telling that could not be kept would be said again on every command
         return {"sharing": False, "reason": "untold" if not probe or _can_keep(path) else "unavailable", "id": None}
+    if sharing and not _identified(kept) and not keep:
+        return {"sharing": sharing, "reason": reason, "id": None}
     if sharing and not _identified(kept):
         def identify(section: dict[str, Any]) -> dict[str, Any]:
             if not _decide(section, forced, here)[0] or _identified(section):  # changed meanwhile: as it is now
@@ -996,9 +1011,10 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
     its file as named (``None``: the person's), as Python has it, and its line."""
     frames: list[dict[str, Any]] = []
     decisive = None
-    for filename, function, line in raw:
+    for index, (filename, function, line) in enumerate(raw):
         file = _file_of(filename)
-        if file is None or _is_ours(file):
+        passing = file in _PASSING and _passed_on(raw[index + 1:])
+        if (file is None or _is_ours(file)) and not passing:
             decisive = (file, filename, line)
         if file is None:
             if not frames or frames[-1]["file"] != USER:
@@ -1006,6 +1022,17 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
             continue
         frames.append({"file": file, "function": function if _FUNCTION.fullmatch(function) else "<?>", "line": line})
     return frames, decisive
+
+
+def _passed_on(below: list[tuple[str, str, int]]) -> bool:
+    """Whether the frames below one of cadgen's wrappers (``_PASSING``) go on, past any more of the wrappers', into
+    another library's code: the wrapper passed the call on. One of cadgen's other frames, or of the person's own
+    code, or none, is not."""
+    for filename, _function, _line in below:
+        file = _file_of(filename)
+        if file not in _PASSING:
+            return file is not None and not _is_ours(file)
+    return False
 
 
 def _their_cycle(frames: list[dict[str, Any]]) -> bool:
@@ -1121,12 +1148,12 @@ def _named(error: BaseException, vocabulary: frozenset[str]) -> str | None:
 def _whose(error: BaseException) -> tuple[str | None, tuple[str, str, int] | None]:
     """Whose code ``error`` came from: where its innermost frame lives (``ours``, ``site``, ``stdlib``, or
     ``user``: the person's), and its innermost frame of cadgen's or the person's -- whose, its file, its line."""
-    innermost, decisive = None, None
-    for frame, line in traceback.walk_tb(error.__traceback__):
-        found = _located(frame.f_code.co_filename)
-        innermost = found[0] if found else "user"
-        if innermost in ("ours", "user"):
-            decisive = (innermost, frame.f_code.co_filename, int(line or 0))
+    raw = [(frame.f_code.co_filename, frame.f_code.co_qualname, int(line or 0))
+           for frame, line in traceback.walk_tb(error.__traceback__)]
+    found = _located(raw[-1][0]) if raw else None
+    innermost = (found[0] if found else "user") if raw else None
+    _frames, named = _named_frames(raw)  # whose: as a crash finds it, past cadgen's wrappers that passed a call on
+    decisive = None if named is None else ("user" if named[0] is None else "ours", named[1], named[2])
     return innermost, decisive
 
 

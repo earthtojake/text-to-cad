@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cad.sdf_validation import validate_sdf_xml
+from cad.sdf._validation import validate_sdf_xml
 
 
 def model(body: str, pose: str = "") -> str:

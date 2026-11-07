@@ -17,6 +17,8 @@ from cad_server.mcp.tunnel import ViewerTunnel
 
 from .test_http_layer import ServerFixture
 
+apps_open_file = apps.open_file  # the real opener, before the tests replace it with a recorder
+
 MODEL = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 UNKNOWN = "0f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 FOUND = {"vscode": "/A/Visual Studio Code.app", "cursor": "/A/Cursor.app", "freecad": "/A/FreeCAD.app",
@@ -118,6 +120,26 @@ class OpenInRoutesTest(unittest.TestCase):
                 self.opener.reset_mock()
                 self.assertEqual(self.post(payload), (204, None))
                 self.opener.assert_called_once_with(*expected)
+
+    def test_a_kicad_file_is_never_opened_in_an_app_the_default_handler_included(self) -> None:
+        # Its default handler is KiCad, which the server never launches: Open in offers no app for it
+        # and says the default is not to be offered; an open is refused, and the opener itself refuses.
+        board = Path(self.fixture.root) / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20241229))\n", encoding="utf-8")
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents?path={board}")
+        self.assertEqual(status, 200)
+        ident = json.loads(body)["documents"][0]["id"]
+        self.assertEqual(self.get(ident)[1]["targets"], [{"target": "source", "kind": "kicad_pcb", "name": "blinky.kicad_pcb",
+                                                          "present": True, "apps": [], "default": False}])
+        status, answer = self.post({"id": ident, "target": "source", "app": "default"})
+        self.assertEqual(status, 400)
+        self.assertIn("never opened in an app", answer["error"])
+        self.opener.assert_not_called()
+        spawn = mock.Mock()
+        for name in ("blinky.kicad_pcb", "blinky.kicad_pro", "BLINKY.KICAD_SCH"):
+            with self.subTest(name=name), self.assertRaises(PermissionError):
+                apps_open_file(name, None, platform="linux", spawn=spawn)
+        spawn.assert_not_called()
 
     def test_open_refuses_what_the_server_does_not_know(self) -> None:
         step = self.step_file()

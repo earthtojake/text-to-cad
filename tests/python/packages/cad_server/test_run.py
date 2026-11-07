@@ -2,7 +2,10 @@
 ``cad._internal.program``), and the engine's worker seats a model's folder so (``cad.engine.model.seat``):
 a project's ``cad.py`` beside a model never stands in for the library, while the model's own modules
 still import by their names. A model script that would be imported under the library's name is refused,
-saying so, rather than replacing the library in the worker."""
+saying so, rather than replacing the library in the worker. A model that only reads a STEP, never importing
+build123d itself, builds in either spelling of the read (the scan reads the reader's integration from the
+registry and an alias's from its table), and the 0.10 spelling says it is deprecated once a run, by the name the
+person ran."""
 
 from __future__ import annotations
 
@@ -36,6 +39,13 @@ def box():
 if __name__ == "__main__":
     box()
 """
+# A model that reads a STEP and imports nothing of build123d: 0.11's spelling, and 0.10's, an alias of it.
+READS = {
+    "new.py": "from pathlib import Path\nfrom cad import model, step\n\n\n@model\ndef holder():\n"
+              "    return step.read(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder()\n",
+    "old.py": "from pathlib import Path\nfrom cad import model, read_step\n\n\n@model\ndef holder2():\n"
+              "    return read_step(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder2()\n",
+}
 
 
 class ProjectFolderLastTest(unittest.TestCase):
@@ -76,6 +86,23 @@ class ProjectFolderLastTest(unittest.TestCase):
                 library = Path(done.stdout.split("LIBRARY ", 1)[1].strip()).resolve()
                 self.assertNotEqual(library.parent, self.project)
                 self.assertEqual(library.name, "__init__.py")
+
+    def test_a_model_that_only_reads_a_step_builds_and_an_alias_says_so_once(self) -> None:
+        reads = self.folder / "reads"
+        reads.mkdir()
+        made = engine_daemon.run([sys.executable, "-c", "import build123d as bd; bd.export_step(bd.Box(2, 3, 4), "
+                                  "'part.step')"], cwd=reads, env=self.env)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        for name, text in READS.items():
+            (reads / name).write_text(text, encoding="utf-8")
+        for name, said in (("new.py", []),
+                           ("old.py", ["old.py:2: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read"])):
+            with self.subTest(script=name):
+                done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "run", name], cwd=reads, env=self.env)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn("parts 1", done.stdout, done.stderr)
+                self.assertEqual([line for line in done.stderr.splitlines() if "CadDeprecationWarning" in line], said,
+                                 "the program's own process says it, by the name it was run by; its worker does not")
 
     def test_a_model_script_named_as_the_library_is_refused(self) -> None:
         named = self.folder / "named"

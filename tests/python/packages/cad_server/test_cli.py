@@ -8,6 +8,7 @@ getting to the help text or an error never imports the CAD stack.
 import contextlib
 import importlib
 import io
+import json
 import subprocess
 import sys
 import unittest
@@ -83,19 +84,55 @@ class Dispatch(unittest.TestCase):
         self.assertEqual((code, out.strip()), (0, "cad 0.8.0-dev.20261025032350"))
 
     def test_doctor_adopts_the_earlier_state_folder_before_its_notice_writes_this_one(self):
-        # `doctor` registers, as `setup` does (which says no notice); any other command adopts nothing.
+        # `doctor` registers, as `setup` does (which says no notice); any other command adopts nothing. Help
+        # does neither, and an answer in JSON says no notice.
         from unittest import mock
 
         from cad.engine import places
 
-        for argv, expected in ((["doctor", "--help"], ["adopt", "tell"]), (["status", "--help"], ["tell"])):
+        for argv, expected in ((["doctor"], ["adopt", "tell"]), (["status"], ["tell"]), (["doctor", "--help"], []),
+                               (["status", "-h"], []), (["help", "doctor"], []), (["xbf", "export", "--help"], []),
+                               (["xbf", "help"], []), (["status", "--json"], []), (["run", "a.py", "--help"], [])):
             with self.subTest(argv=argv):
                 calls = []
                 with mock.patch.object(places, "adopt_earlier", side_effect=lambda: calls.append("adopt") or []), \
                         mock.patch.object(cli, "_tell", side_effect=lambda: calls.append("tell")), \
-                        self.assertRaises(SystemExit):
-                    self._run(argv)
+                        mock.patch.object(cli, "_run", return_value=0):
+                    self.assertEqual(self._run(argv)[0], 0)
                 self.assertEqual(calls, expected)
+
+    def test_help_leaves_the_state_folder_as_it_was(self):
+        """Help, at any depth and by any of its three spellings, writes nothing -- no notice, no settings --
+        and says nothing but the help; an answer in JSON says no notice either. A person's run (the last) is
+        told, so the notice is live here and the state folder is where it would land."""
+        import os
+        import tempfile
+
+        from tests.python.support.paths import add_sources
+
+        with tempfile.TemporaryDirectory() as folder:
+            state = os.path.join(folder, "state")
+            env = {key: value for key, value in os.environ.items()
+                   if key not in ("CI", "DO_NOT_TRACK", "CAD_TELEMETRY", "CAD_TELEMETRY_NOTICE")}
+            env.update({"PYTHONPATH": str(add_sources()), "CAD_STATE_DIR": state,
+                        "CAD_CACHE_DIR": os.path.join(folder, "cache"), "CAD_ENGINE_DIR": os.path.join(folder, "e"),
+                        "CAD_LAUNCHER_DIR": os.path.join(folder, "bin"),
+                        "CAD_INSTALL_CHANNEL": "test"})  # a plugin's channel: a checkout's tells no one
+
+            def run(*argv):
+                return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
+                                      capture_output=True, text=True, timeout=120)
+
+            for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["xbf", "export", "--help"],
+                         ["help", "step"], ["status", "--json"]):
+                with self.subTest(argv=argv):
+                    done = run(*argv)
+                    self.assertEqual((done.returncode, done.stderr), (0, ""))
+                    self.assertFalse(os.path.exists(state), os.listdir(state) if os.path.exists(state) else None)
+            done = run("status")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertIn("text-to-cad now sends usage stats", done.stderr)
+            self.assertTrue(os.path.isfile(os.path.join(state, "settings.json")))
 
     def test_status_names_the_engine_s_installation(self):
         from cad_server.engine.cli import status_text
@@ -115,10 +152,15 @@ class Dispatch(unittest.TestCase):
         self.assertRegex(text, r"retired: part\.xbf's renderer \(RSS\) \d+s ago · tube\.py \(LRU\) \d+s ago")
 
     def test_unknown_command_exits_two_and_names_it_on_stderr(self):
-        code, _, err = self._run(["nope"])
-        self.assertEqual(code, 2)
-        self.assertIn("nope", err)
-        self.assertIn("usage: cad", err)
+        # Named, with where the commands are listed: never the whole usage.
+        code, out, err = self._run(["nope"])
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, "cad: unknown command 'nope'; 'cad --help' lists the commands\n")
+        # At most one suggestion, never run; under --json the same failure as the contract's one document.
+        code, out, err = self._run(["stats", "--json"])
+        self.assertEqual((code, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": "unknown command 'stats' (did you "
+                                           "mean 'status'?); 'cad --help' lists the commands"})
 
     def test_subcommand_argv_is_forwarded_untouched(self):
         """The dispatcher must not consume or reorder a subcommand's own flags."""

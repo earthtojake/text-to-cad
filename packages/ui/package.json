@@ -1,6 +1,6 @@
 {
   "name": "@cad/ui",
-  "version": "0.10.4",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "files": [
@@ -60,6 +60,10 @@
     "./update": {
       "types": "./dist/update/index.d.ts",
       "import": "./dist/update/index.js"
+    },
+    "./whats-new": {
+      "types": "./dist/whats-new/index.d.ts",
+      "import": "./dist/whats-new/index.js"
     },
     "./tab-store": {
       "types": "./dist/tab-store/index.d.ts",

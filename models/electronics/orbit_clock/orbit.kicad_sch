@@ -1,0 +1,831 @@
+(kicad_sch
+	(version 20261025)
+	(generator "eeschema")
+	(generator_version "10.99")
+	(uuid "16b2926e-5008-4143-8df9-3a7f60ffa8b4")
+	(paper "A4")
+	(lib_symbols
+		(symbol "orbit:MountingHole"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "H"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "M3"
+				(at 0 3.175 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "orbit:MountingHole_3.2mm_M3"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Mounting Hole without connection"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "mounting hole"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "MountingHole*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "MountingHole_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 1.27)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "MountingHole_1_1")
+			(embedded_fonts no)
+		)
+	)
+	(text "Orbit - a round LED ring clock: 60 minute LEDs, 12 hour LEDs, ESP32-C3, USB-C"
+		(exclude_from_sim no)
+		(at 30.48 30.48 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+			)
+		)
+		(uuid "27a4944d-67e4-443a-b791-5fd6b1f469b5")
+	)
+	(text "H1-H4: M3, the baffle's bosses (src/orbit.py)"
+		(exclude_from_sim no)
+		(at 30.48 139.7 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "818f6f19-fc6e-48d4-8685-35f58aed29a3")
+	)
+	(wire
+		(pts
+			(xy 68.58 66.04) (xy 109.22 66.04)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "31f99c98-05b7-4e12-9504-3c97b6291210")
+	)
+	(wire
+		(pts
+			(xy 68.58 81.28) (xy 109.22 81.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b708d58-14eb-46e1-abab-a7fcb9908ca3")
+	)
+	(wire
+		(pts
+			(xy 182.88 96.52) (xy 182.88 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5feed6de-6775-4b85-a8c3-0c6c12b90757")
+	)
+	(wire
+		(pts
+			(xy 238.76 96.52) (xy 182.88 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6000fe4b-b6a6-409a-ae32-276fcdc52e17")
+	)
+	(wire
+		(pts
+			(xy 231.14 60.96) (xy 238.76 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "624c12e5-4eb5-47a8-880e-0ec190fca745")
+	)
+	(wire
+		(pts
+			(xy 68.58 60.96) (xy 109.22 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7cdf27dd-a5c3-4d49-bc2f-9f1fa07a0158")
+	)
+	(wire
+		(pts
+			(xy 182.88 116.84) (xy 190.5 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8ffc1fc2-0403-4b1d-8e77-37716771c75a")
+	)
+	(wire
+		(pts
+			(xy 149.86 60.96) (xy 190.5 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc833e86-8544-41b2-9f1e-a929d546e150")
+	)
+	(wire
+		(pts
+			(xy 68.58 76.2) (xy 109.22 76.2)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bdbbfe04-d93f-4213-88b9-784c55d72a7f")
+	)
+	(wire
+		(pts
+			(xy 238.76 60.96) (xy 238.76 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "db3ed8d6-cf76-486a-b77e-ef013efde06c")
+	)
+	(symbol
+		(lib_id "orbit:MountingHole")
+		(at 40.64 129.54 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "44a9d07c-a3c1-4775-aaa5-c04f724b03c4")
+		(property "Reference" "H1"
+			(at 40.64 124.46 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "M3"
+			(at 40.64 126.365 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "orbit:MountingHole_3.2mm_M3"
+			(at 40.64 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 40.64 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "orbit:MountingHole")
+		(at 86.36 129.54 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "4a069e28-52e3-4eaa-abee-08608540814a")
+		(property "Reference" "H4"
+			(at 86.36 124.46 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "M3"
+			(at 86.36 126.365 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "orbit:MountingHole_3.2mm_M3"
+			(at 86.36 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 86.36 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "orbit:MountingHole")
+		(at 71.12 129.54 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6e023386-66a7-47f2-9823-9acbc0efdb66")
+		(property "Reference" "H3"
+			(at 71.12 124.46 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "M3"
+			(at 71.12 126.365 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "orbit:MountingHole_3.2mm_M3"
+			(at 71.12 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 71.12 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 71.12 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "orbit:MountingHole")
+		(at 55.88 129.54 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f7cc72bf-be54-4815-b44c-22c5d87554c6")
+		(property "Reference" "H2"
+			(at 55.88 124.46 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "M3"
+			(at 55.88 126.365 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "orbit:MountingHole_3.2mm_M3"
+			(at 55.88 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 55.88 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Mounting Hole without connection"
+			(at 55.88 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(sheet
+		(at 30.48 50.8)
+		(size 38.1 40.64)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "00000002-0000-4000-8000-000000000002")
+		(property "Sheetname" "Power"
+			(at 30.48 50.0884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 30.48 92.0246 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 68.58 60.96 0)
+			(uuid "6d0a811e-8e32-56a7-9bc6-5405f1658002")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 68.58 66.04 0)
+			(uuid "8485a500-a681-5b24-b83c-6a11c9862a39")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CC1" output
+			(at 68.58 76.2 0)
+			(uuid "fe829332-4d48-5701-96df-86a8b37331b0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CC2" output
+			(at 68.58 81.28 0)
+			(uuid "766bdf42-760c-5618-8806-db669b8cbf55")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 109.22 50.8)
+		(size 40.64 40.64)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "00000003-0000-4000-8000-000000000003")
+		(property "Sheetname" "MCU"
+			(at 109.22 50.0884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 109.22 92.0246 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 109.22 60.96 180)
+			(uuid "66f7f176-c711-5215-887a-e581d52276f4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 109.22 66.04 180)
+			(uuid "830e8a39-8ee1-585c-95d5-11b1c74a0e41")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CC1" input
+			(at 109.22 76.2 180)
+			(uuid "0179cea8-e837-5986-9a84-21ae92bce9be")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CC2" input
+			(at 109.22 81.28 180)
+			(uuid "7da4e5d2-bd74-58a2-8c6b-40b8f9a9b882")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "LED_DIN" output
+			(at 149.86 60.96 0)
+			(uuid "857ed460-92a2-53a5-bfde-b537a1280816")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 190.5 50.8)
+		(size 40.64 20.32)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "00000004-0000-4000-8000-000000000004")
+		(property "Sheetname" "Minute ring"
+			(at 190.5 50.0884 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "minutes.kicad_sch"
+			(at 190.5 71.7046 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "DIN" input
+			(at 190.5 60.96 180)
+			(uuid "511e9663-0261-5deb-9edc-f8407a86f9fe")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "DOUT" output
+			(at 231.14 60.96 0)
+			(uuid "87d9e6d2-6d65-54c4-bc2b-10da4daa356e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 190.5 106.68)
+		(size 40.64 20.32)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "00000005-0000-4000-8000-000000000005")
+		(property "Sheetname" "Hour ring"
+			(at 190.5 105.9684 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "hours.kicad_sch"
+			(at 190.5 127.5846 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "DIN" input
+			(at 190.5 116.84 180)
+			(uuid "314d756d-7a04-510e-bee3-f5b32c36155a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "orbit"
+				(path "/16b2926e-5008-4143-8df9-3a7f60ffa8b4"
+					(page "5")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

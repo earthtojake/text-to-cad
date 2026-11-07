@@ -76,13 +76,18 @@ export function useLinkSelection({ scene, requestRender, shown = true }) {
     else if (hit.componentId) select(hit.componentId, { multiSelect });
     else selectLink(hit.linkName, { multiSelect });
   }, [clear, select, selectLink]);
-  const hoverHit = useCallback(hit => setHover(hit && !hit.componentId ? hit.linkName : "", hit?.componentId || ""), [setHover]);
+  // What the pointer is on in the view, a link or an object, as React state: the frame's hover tip names it.
+  const [pointed, setPointed] = useState("");
+  const hoverHit = useCallback((hit) => {
+    setHover(hit && !hit.componentId ? hit.linkName : "", hit?.componentId || "");
+    setPointed(hit ? String(hit.componentId || hit.linkName || "") : "");
+  }, [setHover]);
 
   return {
     selectedLinkNames, selectedComponentIds, active: Boolean(selectedLinkNames.length || selectedComponentIds.length),
     select, selectLink, clear, pick,
     hover: useCallback(id => setHover("", String(id || "")), [setHover]),
     hoverLink: useCallback(linkName => setHover(String(linkName || ""), ""), [setHover]),
-    hoverHit
+    hoverHit, pointed
   };
 }

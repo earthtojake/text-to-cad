@@ -247,6 +247,33 @@ test('a drawing is its document opened once, then one plain GET of its drawing',
   client.dispose();
 });
 
+test('a plot is its board opened once, then one plain GET of its plot, and a refusal is the server’s own sentence', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    calls.push({ url, options });
+    if (options.method === 'POST') return opened('kicad_pcb');
+    if (calls.length > 2) {
+      return { ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'broken.kicad_pcb is not a KiCad board' }) };
+    }
+    return json({ schemaVersion: 3, kind: 'board', unrouted: 0, sheets: [] });
+  } });
+  const payload = await client.plotPayload('/boards/blinky.kicad_pcb');
+  assert.equal(payload.kind, 'board');
+  assert.deepEqual([new URL(calls[0].url).pathname, JSON.parse(calls[0].options.body)], ['/api/v1/documents', { path: '/boards/blinky.kicad_pcb' }]);
+  assert.equal(new URL(calls[1].url).pathname, '/api/v1/documents/kicad_pcb/d1/plot');
+  assert.equal(calls[1].options.method, 'GET');
+  assert.equal(calls[1].options.headers['x-cad-viewer'], undefined);
+  await assert.rejects(client.plotPayload('/boards/blinky.kicad_pcb'), (error) => {
+    assert.equal(error.failure.kind, 'http');
+    assert.equal(error.failure.status, 400);
+    assert.equal(error.failure.operation, 'plotting');
+    assert.equal(error.failure.detail, 'broken.kicad_pcb is not a KiCad board');
+    return true;
+  });
+  await assert.rejects(client.plotPayload(''), /Missing file/);
+  client.dispose();
+});
+
 test('a drawing still rendering is asked for again after the server\'s retryMs, until its payload comes back', async () => {
   const replies = [{ state: 'drawing', retryMs: 0 }, { state: 'drawing', retryMs: 0 }, { schemaVersion: 2, primitives: [] }];
   let asked = 0;
@@ -267,6 +294,19 @@ test('a drawing still rendering is asked for again after the server\'s retryMs, 
   await assert.rejects(waiting.drawing('/m/sheet.dxf', { signal: controller.signal }), { name: 'AbortError' });
   client.dispose();
   waiting.dispose();
+});
+
+test('a board KiCad is still refilling and plotting is asked for again after the server\'s retryMs', async () => {
+  const replies = [{ state: 'plotting', retryMs: 0 }, { schemaVersion: 4, kind: 'board', pours: { refilled: true } }];
+  let asked = 0;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (_url, options) => {
+    if (options.method === 'POST') return opened('kicad_pcb');
+    asked += 1;
+    return Response.json(replies.shift(), { status: asked < 2 ? 202 : 200 });
+  } });
+  assert.deepEqual(await client.plotPayload('/b/blinky.kicad_pcb'), { schemaVersion: 4, kind: 'board', pours: { refilled: true } });
+  assert.equal(asked, 2);
+  client.dispose();
 });
 
 test('an engine document is read through this server, with the client\'s fetch, once the engine holds it, its import heard meanwhile', async () => {
@@ -365,7 +405,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
-    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
+    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true }, updates: { automatic: true, reason: 'default' } });
     return Response.json({ path });
   } });
   t.after(() => client.dispose());
@@ -374,8 +414,13 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.deepEqual(await client.recents(), [row]);
   assert.deepEqual(await client.changeRecents({ action: 'open', path: '/models/a.step' }), [row]);
   await client.keepThumbnail(new Blob([thumbnail], { type: 'image/png' }), '/models/a.step');
-  // A picture, by its document's id, versioned by the picture's name.
+  // A picture drawn in the dark theme's colours too carries it: both are kept.
+  await client.keepThumbnail(Object.assign(new Blob([thumbnail], { type: 'image/png' }), { dark: new Blob([thumbnail], { type: 'image/png' }) }), '/models/a.kicad_pcb');
+  // A picture, by its document's id, versioned by the picture's name; in the dark theme its dark one where it has one.
   assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
+  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }, { scheme: 'dark' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
+  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png', thumbnailDark: 'b.png' }, { scheme: 'dark' }),
+    'http://one.test/api/v1/documents/d1/thumbnail?v=b.png&scheme=dark');
   assert.equal(await client.thumbnail({ id: 'd1', thumbnail: 'a.png' }), 'data:image/png;base64,iVBORw==');
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
@@ -389,6 +434,8 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   await client.language('zh-CN');
   await client.language(null);
   await client.version();
+  assert.deepEqual(await client.automaticUpdates(), { automatic: true, reason: 'default' }, 'the settings\' updates');
+  await client.automaticUpdates(false);
   await client.startUpdate();
   assert.deepEqual(await client.link(), { link: '1700000000.mac', expires: 1700000000 }, 'a fresh link for the address');
   client.reportActivity({ touched: true });
@@ -398,6 +445,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'GET', null, null],
     ['/api/v1/documents', 'PATCH', '1', { action: 'open', path: '/models/a.step' }],
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
+    ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.kicad_pcb', png: 'iVBORw==', dark: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
     ['/api/v1/local/pick', 'POST', '1', null],
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],
@@ -406,6 +454,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { language: { locale: 'zh-CN' } }], ['/api/v1/settings', 'PUT', '1', { language: { locale: null } }],
     ['/api/v1/server', 'GET', null, null],
+    ['/api/v1/settings', 'GET', null, null], ['/api/v1/settings', 'PUT', '1', { updates: { automatic: false } }],
     ['/api/v1/local/update', 'POST', '1', null],
     ['/api/v1/local/link', 'GET', null, null],
     ['/api/v1/local/activity', 'POST', '1', { touched: true }],

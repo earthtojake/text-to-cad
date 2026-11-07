@@ -129,8 +129,11 @@ const NO_MATCHES = Object.freeze({ matches: Object.freeze([]), total: 0 });
  *
  * @param {object[]} roots The presented tree's top-level nodes.
  */
-export function useTreeSearch(roots) {
-  const [query, setQuery] = useState(''), [cursor, setCursor] = useState(null);
+export function useTreeSearch(roots, external = null) {
+  // `external`: a query typed elsewhere (a flat view's panel's search box, `FlatPanel.jsx`), read, never written.
+  const [ownQuery, setOwnQuery] = useState(''), [cursor, setCursor] = useState(null);
+  const query = external ? external.query : ownQuery;
+  const setQuery = external ? () => {} : setOwnQuery;
   const searching = query.trim() !== '', deferredQuery = useDeferredValue(query);
   const index = useMemo(() => (searching ? buildModelTreeSearchIndex(roots) : null), [searching, roots]);
   const found = useMemo(() => (index ? searchModelTree(index, deferredQuery) : NO_MATCHES), [index, deferredQuery]);
@@ -143,7 +146,9 @@ export function useTreeSearch(roots) {
     setQuery(value); setCursor(null);
   };
   // Back where the tree was; a hit selected meanwhile is then scrolled to by the tree's own reveal.
-  useLayoutEffect(() => { if (!searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
+  useLayoutEffect(() => { if (!external && !searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
+  // A query typed elsewhere starts its cursor on the first match, as one typed here does.
+  useEffect(() => { if (external) setCursor(null); }, [external?.query]);
   const cursorId = found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
   useEffect(() => { if (cursorId) listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [cursorId]);
   const onKeyDown = event => {

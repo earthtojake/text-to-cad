@@ -87,10 +87,35 @@
 
 }
 
-/* The agents' logos on the home page: one copy's width, over and over (`AgentCarousel`). */
-@keyframes agents-carousel {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+/* The Features drawings, drawn in once as each tile first scrolls into view (`FeaturesReveal`,
+   `FeatureArt`): strokes trace along their length (pathLength 1; the dash starts just short of the path, so a
+   round cap shows nothing before it moves), the late ones after the part, and
+   labels, fills and dashed lines fade in. The animations hold their first frame through their delay
+   and then let go, so a drawing ends as the server drew it. Reduced motion never hides them. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-draw="pending"] :is(.feature-draw, .feature-draw-late) { stroke-dasharray: 1 2; stroke-dashoffset: 1.01; }
+  [data-draw="pending"] :is(.feature-fade, .feature-fade-late) { opacity: 0; }
+  [data-draw="run"] .feature-draw { animation: feature-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) var(--feature-delay, 0ms) backwards; }
+  [data-draw="run"] .feature-draw-late { animation: feature-draw 700ms cubic-bezier(0.65, 0, 0.35, 1) calc(var(--feature-delay, 0ms) + 600ms) backwards; }
+  [data-draw="run"] .feature-fade { animation: feature-fade 500ms ease-out calc(var(--feature-delay, 0ms) + 300ms) backwards; }
+  [data-draw="run"] .feature-fade-late { animation: feature-fade 450ms ease-out calc(var(--feature-delay, 0ms) + 1000ms) backwards; }
+}
+
+@keyframes feature-draw {
+  from { stroke-dasharray: 1 2; stroke-dashoffset: 1.01; }
+  to { stroke-dasharray: 1 2; stroke-dashoffset: 0; }
+}
+
+@keyframes feature-fade {
+  from { opacity: 0; }
+}
+
+/* The hero's backdrop, the turning gear (`HeroGear`), its centre on the backdrop's bottom-right
+   corner: faded out over its last 4rem, so the gear sinks behind the agents under it rather than
+   stopping at a line. */
+.hero-backdrop {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
 }
 
 @theme inline {

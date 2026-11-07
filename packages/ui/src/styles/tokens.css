@@ -24,6 +24,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --color-background: var(--background);
+  --color-canvas: var(--canvas);
   --color-background-1: var(--background-1);
   --color-background-2: var(--background-2);
   --color-background-3: var(--background-3);
@@ -123,6 +124,10 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* The canvas: the content area behind every view, 2D and 3D, a step under the chrome (--sidebar)
+   * so the panel and the navbar stand off it. Core's `lib/appTheme.js` writes it out for what
+   * cannot read a stylesheet; `src/styles/canvas.test.js` holds the two equal. */
+  --canvas: oklch(0.94 0 0);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -173,27 +178,24 @@
   --surface-paper: var(--background);
   --surface-paper-hover: var(--secondary);
   --surface-paper-selected: oklch(0.94 0 0);
-
-  /* The veil over the scene while a file loads — viewer-owned. */
-  --ui-loading-overlay: color-mix(in srgb, var(--background) 38%, transparent);
-  --ui-loading-overlay-strong: color-mix(in srgb, var(--background) 76%, transparent);
 }
 
 .dark {
-  /* Cool blue-grey surfaces (Preview's hue, oklch hue 264 at chroma 0.008), on the shadcn token steps */
-  --background: oklch(0.28 0.008 264);
+  /* Neutral grey surfaces (chroma 0, no hue), as Figma's and VS Code's dark themes are (a #1E1E1E canvas),
+   * on the shadcn token steps; the lightness of each step is unchanged, so contrast is too. */
+  --background: oklch(0.28 0 0);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.31 0.008 264);
+  --card: oklch(0.31 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.31 0.008 264);
+  --popover: oklch(0.31 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.922 0 0);
   --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.34 0.008 264);
+  --secondary: oklch(0.34 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.34 0.008 264);
+  --muted: oklch(0.34 0 0);
   --muted-foreground: oklch(0.75 0 0);
-  --accent: oklch(0.38 0.008 264);
+  --accent: oklch(0.38 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -205,18 +207,19 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.30 0.008 264);
+  --canvas: oklch(0.235 0 0);
+  --sidebar: oklch(0.30 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.38 0.008 264);
+  --sidebar-accent: oklch(0.38 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 
   --background-1: var(--card);
   --background-2: var(--secondary);
-  --background-3: oklch(0.38 0.008 264);
+  --background-3: oklch(0.38 0 0);
   --foreground-inverse: var(--primary-foreground);
   --foreground-muted: var(--muted-foreground);
   --foreground-passive: var(--ring);
@@ -253,7 +256,4 @@
   --surface-paper: var(--card);
   --surface-paper-hover: var(--secondary);
   --surface-paper-selected: oklch(0.38 0 0);
-
-  --ui-loading-overlay: color-mix(in srgb, var(--background) 40%, transparent);
-  --ui-loading-overlay-strong: color-mix(in srgb, var(--background) 78%, transparent);
 }

@@ -63,7 +63,7 @@ The stages keep ownership narrow:
   as the other: three sorts each object back to front and draws a two-sided one back faces first,
   OCCT draws them as they were displayed, which is most of what still differs.
 - `captureModel` draws the scene headless and returns its pictures, with no filesystem
-  writes. the engine's stills are OCCT's (`cad snapshot`); this headless scene is what the
+  writes. The engine's stills are OCCT's (`cad <type> snapshot`); this headless scene is what the
   renderer parity measurement drives beside OCCT (`scripts/bench/occt_parity.py`).
 
 ## Modules
@@ -71,7 +71,8 @@ The stages keep ownership narrow:
 ### `common/viewSettings.js` and `common/sceneSettings.js`
 
 `normalizeViewSettings(display)` is the strict public schema shared with the parity page's
-snapshot job and mirrored by `cad snapshot`'s `--display`. It preserves omitted groups and inherited appearance, defaulting
+snapshot job and mirrored by `cad <type> snapshot`'s `--display`, but for `appearance`, which a snapshot never takes (every
+snapshot is light). It preserves omitted groups and inherited appearance, defaulting
 only `mode` to `solid`. A file's modes, in order, are `solid`, `shaded`, `parts`,
 `xray`, `hidden-line`, and `wireframe` (`VIEW_MODE_VALUES`); `grid` is a boolean
 switch every mode draws, off unless said. Appearance, camera, clip and exploded are
@@ -570,7 +571,7 @@ drawn from the payload the engine resolved for it (`resolved.robot`: the articul
 visuals at their rest placements, each mesh by a URL the snapshot's asset server answers)
 and posed as it is built, at the articulation's opening (every control at rest, then an
 SRDF's `home` group state: where the viewer opens it) with the job's `resolved.controls` on
-top, the bench's control values (`cad snapshot` poses a robot by `--pose`).
+top, the bench's control values (`cad <type> snapshot` poses a robot by `--pose`).
 
 `headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings))` dresses the
 scene exactly as the viewer's viewport dresses one it adopts, with the look
@@ -584,7 +585,7 @@ The still's tight frame reads a skinned or morphed mesh where the GPU draws it.
 
 A still of a robot is posed as the viewer opens it — every control at rest, then an SRDF's
 `home` group state — with the job's `resolved.controls` on top (`scene.setControlValues`,
-`common/articulation.js`), the parity bench's control values. `cad snapshot` poses a
+`common/articulation.js`), the parity bench's control values. `cad <type> snapshot` poses a
 document's or a robot's mechanism by `--pose`: a mechanism state's name, or a JSON object of
 joint values; a Quick Edit packet carries the same as `jointValues`.
 

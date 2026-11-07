@@ -96,7 +96,7 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
 // lazy-loaded and deleted alone. Every file family is on this list; `workspace`
 // is held to the same rule.
 export const RENDERERS_ROOT = 'packages/ui/src/renderers';
-export const RENDERER_SLICES = ['dxf', 'glb', 'mesh', 'robot', 'workspace', 'xbf'];
+export const RENDERER_SLICES = ['board', 'dxf', 'glb', 'mesh', 'robot', 'schematic', 'workspace', 'xbf'];
 const SLICE_SHARED = ['kit', 'workspace'];
 
 export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {
@@ -153,6 +153,45 @@ export function checkFileViewerBoundary(repo, { shared = SLICE_SHARED } = {}) {
         if (owner && !shared.includes(owner)) {
           errors.push(`${repoRel}:${index + 1} imports the "${owner}" renderer (${specifier}); the file viewer mounts a renderer through the registry and imports only the kit and the workspace module`);
         }
+      }
+    });
+  }
+  return { errors, sourceCount: files.length };
+}
+
+// ONE FRAME. Every renderer, 2D or 3D, mounts `kit/shell/ViewFrame.jsx`, whose canvas is the one
+// thing that differs: the panel and its state, its pill, the strip's column and its reach back over
+// the panel, the top-right, the hover tip, loading and the alert card are drawn there and nowhere else, so no view
+// can place them its own way again (three assemblies once did, and the panel pushed one view's strip
+// and not the others'). A renderer that needs them hands them to the frame.
+export const VIEW_FRAME = 'packages/ui/src/renderers/kit/shell/ViewFrame.jsx';
+export const VIEW_FRAME_PARTS = [
+  ['renders FlatPanelPill', /<FlatPanelPill\b/],
+  ['renders ViewportTopRight', /<ViewportTopRight\b/],
+  ['renders ViewerAlertCard', /<ViewerAlertCard\b/],
+  ['renders ViewerLoadingOverlay', /<ViewerLoadingOverlay\b/],
+  ['renders HoverTip', /<HoverTip\b/],
+  ['draws the strip\'s column (data-cad-tool-groups)', /data-cad-tool-groups=/],
+  ['calls useStageReach', /(?<!function\s+)\buseStageReach\s*\(/],
+  ['calls useFlatPanelState', /(?<!function\s+)\buseFlatPanelState\s*\(/],
+];
+
+export function checkViewFrame(repo, { frame = VIEW_FRAME, parts = VIEW_FRAME_PARTS } = {}) {
+  const root = path.join(repo, RENDERERS_ROOT);
+  if (!fs.existsSync(path.join(repo, frame))) return { errors: [`${frame} does not exist: every view mounts the one frame`], sourceCount: 0 };
+  const errors = [];
+  const files = kitSources(root);
+  for (const file of files) {
+    const rel = path.relative(repo, file).split(path.sep).join('/');
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    if (rel === frame) {
+      // The frame itself draws every part, so a part moved out of it cannot pass unseen.
+      for (const [what, pattern] of parts) if (!lines.some(line => pattern.test(line))) errors.push(`${frame} no longer ${what}: the frame draws it`);
+      continue;
+    }
+    lines.forEach((line, index) => {
+      for (const [what, pattern] of parts) {
+        if (pattern.test(line)) errors.push(`${rel}:${index + 1} ${what}, which only ${frame} does: hand it to the frame`);
       }
     });
   }
@@ -273,7 +312,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const slices = checkRendererSlices(repo);
   const host = checkFileViewerBoundary(repo);
   const shared = checkSharedSceneBuilders(repo);
-  const errors = [...kit.errors, ...slices.errors, ...host.errors, ...shared.errors];
+  const frame = checkViewFrame(repo);
+  const errors = [...kit.errors, ...slices.errors, ...host.errors, ...shared.errors, ...frame.errors];
   if (errors.length) {
     console.error(errors.join('\n'));
     // Rule 2 reads every line, a comment's as much as code's: a comment naming a format fails it too.
@@ -283,5 +323,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     }
     process.exitCode = 1;
   }
-  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources); the file viewer imports no slice (${host.sourceCount} sources); the viewer and the parity page share ${shared.pieceCount} scene pieces.`);
+  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources); the file viewer imports no slice (${host.sourceCount} sources); the viewer and the parity page share ${shared.pieceCount} scene pieces; every view is drawn in one frame (${frame.sourceCount} renderer sources).`);
 }

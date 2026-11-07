@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
+__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
            "folder_refusal", "home", "installation", "kernel", "lock", "lock_path", "port_path", "registered",
@@ -444,6 +444,14 @@ def home(prefix: str | None = None) -> dict[str, Any] | None:
     return found
 
 
+def separate(prefix: str | None = None) -> bool:
+    """Whether the environment at ``prefix`` (this process's) is one ``cad run`` made for a program beside the
+    base -- its marker naming what it holds beside the base (``with``, a list, empty or not: the server's
+    ``extras``) -- rather than the base itself, or an environment the server did not make."""
+    marker = _marker(prefix)
+    return marker is not None and isinstance(marker.get("with"), list)
+
+
 def extras(prefix: str | None = None) -> tuple[str, ...]:
     """The packages the environment at ``prefix`` (this process's) holds beside the base's, as its
     marker names them (``with``: an environment ``cad run`` made for a model's own packages, the server's
@@ -462,6 +470,10 @@ HOME: dict[str, Any] | None = home()
 # The packages this process's environment holds beside the base's, where ``cad run`` made it for a model's
 # own (``extras``): its scripts name their Python, which the engine builds them in (``contract.interpreter``).
 EXTRAS: tuple[str, ...] = extras()
+# Whether this process's environment is one ``cad run`` made for a program beside the base (``separate``): its
+# scripts name their Python, which the engine builds them in (``contract.interpreter``), whatever it holds --
+# packages of its own, other integrations of cad's, another Python.
+SEPARATE: bool = separate()
 # How ``cad run`` named the packages of the environment it runs a program in, which it hands the program as
 # JSON (``run_with``): what a document's record says builds it again (``contract.interpreter``).
 RUN_WITH = "CAD_RUN_WITH"

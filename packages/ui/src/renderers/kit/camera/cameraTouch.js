@@ -39,6 +39,7 @@ export function touchCamera(runtime, kind) {
   if (!runtime || !TOUCHES.has(kind)) return;
   runtime.cameraTouch = kind;
   if (kind !== CAMERA_TOUCH.RESTORE) runtime.userMovedCamera = true;
+  runtime.cameraHands = cameraHands(runtime) + 1;
 }
 
 /** A fit: the camera is the viewer's again, untouched, and a progressive model is framed again whole. */
@@ -46,6 +47,16 @@ export function fitCamera(runtime) {
   if (!runtime) return;
   runtime.cameraTouch = "";
   runtime.userMovedCamera = false;
+  runtime.cameraHands = cameraHands(runtime) + 1;
+}
+
+/**
+ * How many times the camera has been taken, a touch or a fit, since the runtime began. A view that
+ * moves its camera itself (a board's 3D view easing to where it opens) reads it after its own move, and
+ * a later count that differs says somebody has moved the camera since; a resize is neither.
+ */
+export function cameraHands(runtime) {
+  return Number(runtime?.cameraHands) || 0;
 }
 
 /** Whether the camera is still the fit: nothing has touched it since the page opened or the last fit. */

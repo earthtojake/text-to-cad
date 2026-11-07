@@ -233,7 +233,7 @@ def {name}():
 HINGE = """
 import pathlib
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import model
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
@@ -255,9 +255,9 @@ def {name}():
 
 # The hinge with a configuration sequence (the document's) and an animation (the GLB's, recorded in
 # the xbf), its GLB declared: the build writes it live, the export of its hold writes it again.
-ANIMATED = HINGE.replace("from cad.engine import model", """from cad.ap242 import configuration_sequence
+ANIMATED = HINGE.replace("from cad.engine import model", """from cad.build123d import configuration_sequence
 from cad.engine import glb
-from cad.gltf import animation""").replace("@model", '@glb("live.glb")').replace("    return root", """\
+from cad.build123d import animation""").replace("@model", '@glb("live.glb")').replace("    return root", """\
     configuration_sequence(root, "lift", [(0, {{"elbow": 30}}), (1, "raised")])
     show = animation(root, "show", duration=2)
     show.pose(at={{0: {{}}, 1: "raised", 2: {{}}}})
