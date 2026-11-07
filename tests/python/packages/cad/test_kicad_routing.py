@@ -394,9 +394,9 @@ class Plans(unittest.TestCase):
     def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
         limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
                                          ("no", "CRCT_DISALLOW", 0.0), ("len", "CRCT_LENGTH", 10.0),
-                                         ("power", "CRCT_TRACK_WIDTH", 1.5)])
+                                         ("power", "CRCT_TRACK_WIDTH", 1.5), ("is", "CRCT_ASSERTION", 0.0)])
         self.assertEqual({"clearance": 0.5, "edge_clearance": 0.4}, limits)
-        self.assertEqual(["no"], refused)
+        self.assertEqual(["is", "no"], refused)
         self.assertEqual(0.5, RULES.with_custom(limits).clearance("A"))
 
 

@@ -7,8 +7,8 @@ of its own. Millimetres throughout.
 Custom rules (a ``.kicad_dru``) hold conditions only KiCad's DRC can evaluate. The router keeps them the safe
 way: every clearance a rule names (clearance, hole clearance, edge clearance, hole to hole, creepage) is kept
 everywhere, the largest of each. A rule's sizes (a least track width for a net) are left to the plan and to DRC.
-A ``disallow`` rule is refused by name (``custom_limits``): where it applies is a condition the router cannot
-evaluate, so it cannot promise to keep it.
+A ``disallow`` rule, or an ``assertion`` (an expression DRC holds every item it matches to), is refused by name
+(``custom_limits``): where it applies is a condition the router cannot evaluate, so it cannot promise to keep it.
 """
 
 from __future__ import annotations
@@ -98,11 +98,11 @@ _KEPT = {
 def custom_limits(constraints: Iterable[tuple[str, str, float]]) -> tuple[dict[str, float], list[str]]:
     """The custom rules' constraints, each (its rule's name, KiCad's constraint type, its least value in mm), as
     the router keeps them: the largest least value of each kind it keeps (``_KEPT``), and the names of the rules it
-    must refuse (a ``disallow``)."""
+    must refuse (a ``disallow``, an ``assertion``)."""
     limits: dict[str, float] = {}
     refused: list[str] = []
     for rule, kind, least in constraints:
-        if kind == "CRCT_DISALLOW":
+        if kind in ("CRCT_DISALLOW", "CRCT_ASSERTION"):
             refused.append(rule)
         elif kind in _KEPT and least > 0:
             key = _KEPT[kind]

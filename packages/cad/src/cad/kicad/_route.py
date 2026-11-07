@@ -236,7 +236,9 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
     nm = 1e-6
 
     def netclass(found: Any) -> NetClass:
-        return NetClass(found.name, found.clearance * nm, found.track_width * nm, found.via_diameter * nm,
+        # A net of several classes gets KiCad's composite ("Effective for net: ..."): named by its classes.
+        name = ", ".join(found.constituents) if found.constituents else found.name
+        return NetClass(name, found.clearance * nm, found.track_width * nm, found.via_diameter * nm,
                         found.via_drill * nm)
 
     nets = [net for net in board.get_nets() if net.name in set(names) or net.name == ""]
@@ -253,20 +255,25 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
                   min_via_diameter=constraints.min_via_size * nm, min_via_drill=constraints.min_through_drill * nm,
                   min_annulus=constraints.min_via_annular_width * nm, max_error=_max_error(board))
     try:
+        from kicode.proto.board.board_commands_pb2 import CustomRulesStatus  # pyrefly: ignore[missing-import]
         from kicode.proto.board.board_rules_pb2 import CustomRuleConstraintType  # pyrefly: ignore[missing-import]
 
+        response = board.get_custom_design_rules()
+        if CustomRulesStatus.Name(response.status) == "CRS_INVALID":
+            raise ValueError(f"route: KiCad cannot read the board's custom rules (.kicad_dru: {response.error_text}), "
+                             "so the router cannot keep them: fix them first")
         custom = [(rule.name, CustomRuleConstraintType.Name(constraint.type),
                    (constraint.numeric.min * nm) if constraint.numeric is not None else 0.0)
-                  for rule in board.get_custom_design_rules().rules for constraint in rule.constraints]
+                  for rule in response.rules for constraint in rule.constraints]
     except Exception as error:  # noqa: BLE001 - KiPy's ApiError: a KiCad without the request reads no custom rules
         if type(error).__name__ != "ApiError":
             raise
         custom = []
     limits, refused = custom_limits(custom)
     if refused:
-        raise ValueError(f"route: the board's custom rules {', '.join(map(repr, refused))} disallow items where a "
-                         "condition only KiCad's DRC evaluates holds; the router cannot promise to keep them: route by "
-                         "hand there, or take the rules out while routing")
+        raise ValueError(f"route: the board's custom rules {', '.join(map(repr, refused))} disallow items, or assert of "
+                         "them, where a condition only KiCad's DRC evaluates holds; the router cannot promise to keep "
+                         "them: route by hand there, or take the rules out while routing")
     return rules.with_custom(limits)
 
 
