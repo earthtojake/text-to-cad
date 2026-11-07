@@ -99,7 +99,7 @@ def _server(start: bool = True, answered: list | None = None) -> tuple[str, str]
     version = answer.get("installation") or answer.get("version")
     prefix = answer.get("prefix")
     return OK, (f"{'started' if started else 'running'}, pid {answer.get('pid')}"
-                + (f", text-to-cad {version}" if version else "")
+                + (f", cad-server {version}" if version else "")
                 + (f" from {_home(prefix)}" if isinstance(prefix, str) else "") + f", {workers_text(answer)} ({where})")
 
 
@@ -113,9 +113,9 @@ def _current() -> list[str]:
         record = installations.current()
         named = installations.current_version()
         if record is not None:
-            lines.append(f"current  text-to-cad {record['version']} ({_home(record['prefix'])})")
+            lines.append(f"current  cad-server {record['version']} ({_home(record['prefix'])})")
         elif named is not None:
-            lines.append(f"current  text-to-cad {named}, whose installation is gone: the next client makes itself current")
+            lines.append(f"current  cad-server {named}, whose installation is gone: the next client makes itself current")
         else:
             lines.append("current  none: the first CAD session or `cad setup` makes one current")
         found = releases.listing()
@@ -334,7 +334,7 @@ def _setup(check: bool = False) -> list[tuple[str, str]]:
         else:
             registered, proxy = None, (setup.proxy_path(), setup.proxy_status(), None)
         if registered == "current":
-            lines.append((OK, f"registry text-to-cad {current['version']} is the current installation: this one "
+            lines.append((OK, f"registry cad-server {current['version']} is the current installation: this one "
                               "registers nothing"))
         elif registered is None:
             lines.append((INFO, f"registry not registered: a source tree registers only as a version it is named "
@@ -736,7 +736,7 @@ def _kernel(check: bool) -> dict:
 
     current = installations.current()
     if current is not None and not installations.mine(current):
-        python, where = None, f"the current installation's (text-to-cad {current['version']}): its `cad doctor` checks it"
+        python, where = None, f"the current installation's (cad-server {current['version']}): its `cad doctor` checks it"
     else:
         python, where = _kernel_environment()
     if python is None:

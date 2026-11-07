@@ -266,10 +266,10 @@ class DoctorTests(unittest.TestCase):
                   "version": "0.8.0", "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", return_value=answer):
             _, out, _ = _run([])
-        self.assertRegex(out, r"server   running, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 with the standby \(.+\)\n")
+        self.assertRegex(out, r"server   running, pid 4242, cad-server 0\.8\.0-dev\.2, workers 2/10 with the standby \(.+\)\n")
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request",
                                                      return_value={**answer, "installation": None}):
-            self.assertRegex(_run([])[1], r"server   running, pid 4242, text-to-cad 0\.8\.0, workers 2/10")
+            self.assertRegex(_run([])[1], r"server   running, pid 4242, cad-server 0\.8\.0, workers 2/10")
         from cad_server.engine.cli import status_text
 
         self.assertIn(" · workers 2/10 with the standby · ", status_text({**answer, "up": 1}))
@@ -278,7 +278,7 @@ class DoctorTests(unittest.TestCase):
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", side_effect=[None, answer]) as asked:
             _, out, _ = _run([])
         self.assertEqual([call.kwargs["start"] for call in asked.call_args_list], [False, True])
-        self.assertRegex(out, r"server   started, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 \(.+\)\n")
+        self.assertRegex(out, r"server   started, pid 4242, cad-server 0\.8\.0-dev\.2, workers 2/10 \(.+\)\n")
         # --no-server: everything else, and the engine only asked about, never started.
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", return_value=None) as asked:
             code, out, _ = _run(["--no-server"])
@@ -414,14 +414,14 @@ class DoctorTests(unittest.TestCase):
         switch._record({"from": "1.0.0", "to": "1.1.0", "ok": True, "gapMs": 640, "at": "2026-10-31T09:00:00+0000"})
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
-        self.assertIn(f"  current  text-to-cad 1.1.0 ({releases.where('1.1.0')})\n", out)
+        self.assertIn(f"  current  cad-server 1.1.0 ({releases.where('1.1.0')})\n", out)
         self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
         self.assertIn("  update   2026-10-31T09:00:00+0000: switched to cad-server 1.1.0 from 1.0.0, 640 ms without an "
                       "engine\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves
         # the CAD kernel to the current one's.
-        self.assertIn("registry text-to-cad 1.1.0 is the current installation: this one registers nothing", out)
-        self.assertIn("kernel   not made — the current installation's (text-to-cad 1.1.0): its `cad doctor` checks it", out)
+        self.assertIn("registry cad-server 1.1.0 is the current installation: this one registers nothing", out)
+        self.assertIn("kernel   not made — the current installation's (cad-server 1.1.0): its `cad doctor` checks it", out)
         self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
 
     def test_the_report_names_each_app_s_plugin_and_where_it_comes_from(self) -> None:

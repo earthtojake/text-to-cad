@@ -350,7 +350,7 @@ class TheCommand(Fixture):
         self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
         self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
-        self.assertIn(["0.8", "stop", f"text-to-cad 0.8.4's server, if it runs: "
+        self.assertIn(["0.8", "stop", f"cadgen 0.8.4's server, if it runs: "
                                       f"`{providers.shown(earlier['cadgen'], self.machine)} stop`"], rows)
         self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
         self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
@@ -449,7 +449,7 @@ class TheCommand(Fixture):
         with mock.patch.object(installations, "appdata", return_value=[record]):
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"\n  0\.10 +stop +text-to-cad 0\.10\.0's server, if it runs: "
+            self.assertRegex(out, rf"\n  0\.10 +stop +cad-server 0\.10\.0's server, if it runs: "
                                   rf"`{re.escape(providers.shown(record['cad'], self.machine))} stop`\n")
             setup.stop_earlier.return_value = (True, ["C:/Temp/cad-engine/engine.port"], "")
             with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
@@ -457,7 +457,7 @@ class TheCommand(Fixture):
         self.assertEqual(code, 0, out)
         (call,) = setup.stop_earlier.call_args_list
         self.assertEqual(call.args[0]["cad"], record["cad"])
-        self.assertIn("0.10     stopped text-to-cad 0.10.0's server (its own `cad stop`)", out)
+        self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
@@ -494,10 +494,10 @@ class InstallUpdateAndUninstall(Fixture):
         (call,) = setup.stop_earlier.call_args_list
         self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
         console = re.escape(providers.shown(earlier["cadgen"], self.machine))
-        self.assertRegex(out, rf"\n  0\.8 +stop +text-to-cad 0\.8\.4's server, if it runs: `{console} stop`\n")
+        self.assertRegex(out, rf"\n  0\.8 +stop +cadgen 0\.8\.4's server, if it runs: `{console} stop`\n")
         self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if the stop above does "
                       "not free it, the engine serves on the next free port, and says so", out)
-        self.assertIn("0.8      stopped text-to-cad 0.8.4's server (its own `cadgen stop`)", out)
+        self.assertIn("0.8      stopped cadgen 0.8.4's server (its own `cadgen stop`)", out)
         config = json.loads(self.desktop.read_text(encoding="utf-8"))
         self.assertEqual(config["mcpServers"], {"other": {"command": "node"}, "cad": self.entry()})
         self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
@@ -518,7 +518,7 @@ class InstallUpdateAndUninstall(Fixture):
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        self.assertIn("0.8      text-to-cad 0.8.4's server was not running", out)
+        self.assertIn("0.8      cadgen 0.8.4's server was not running", out)
         self.assertIn(f"text-to-cad {RELEASE} is already up to date here.", out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
         self.assertNotIn("Restart", out)
@@ -553,7 +553,7 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
         self.assertEqual([call.args[0]["version"] for call in setup.stop_earlier.call_args_list], ["0.8.4"])
-        self.assertIn("0.8      text-to-cad 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
+        self.assertIn("0.8      cadgen 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
         self.assertNotIn("0.8.3", out)
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual(self.receipt()["stopped"], [])
@@ -641,7 +641,7 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
             where = providers.shown(str(releases.where(RELEASE)), self.machine)
-            self.assertRegex(out, rf"\n  release\s+make\s+text-to-cad {re.escape(RELEASE)} in {re.escape(where)}, once\n")
+            self.assertRegex(out, rf"\n  release\s+make\s+cad-server {re.escape(RELEASE)} in {re.escape(where)}, once\n")
             make.assert_not_called()
             code, out, _err = self.run_setup("--only", "claude")
         self.assertEqual(code, 0, out)

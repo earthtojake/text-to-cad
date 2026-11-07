@@ -125,6 +125,8 @@ STATE_OURS = frozenset({"installations", "engines", "documents", "recents", "rel
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
 ASIDE = "install-aside"
+# The distribution 0.8's server was: no ``cad-server`` was published before 0.10.
+EARLIER_SERVER = "cadgen"
 # How long 0.8's own ``cadgen stop`` may take.
 STOP_SECONDS = 60.0
 # How long setup waits for the device's engine to say what it serves: a wedged engine never wedges setup.
@@ -380,9 +382,9 @@ class Installer:
             from cad_server.updates import command
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
-            return self._failed(f"text-to-cad {self.release}'s release folder was not made: {refused}")
+            return self._failed(f"cad-server {self.release}'s release folder was not made: {refused}")
         run = [made["cad"], "setup", *self.argv]
-        self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
+        self.say(f"release  cad-server {self.release} in {self.providers.shown(str(home), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
         # person's, holding a uvx and a `cad` of its own. The release's run is given the person's PATH
         # (``providers.lasting``), so what it writes into the apps' configs and says of the `cad` command is theirs.
@@ -510,15 +512,16 @@ class Installer:
         from cad_server._internal import installations
 
         rows: list[dict[str, Any]] = []
-        for label, records, key in (("0.8", installations.earlier(), installations.EARLIER_CONSOLE),
-                                    ("0.10", installations.appdata(), "cad")):
+        for label, records, key, name in (("0.8", installations.earlier(), installations.EARLIER_CONSOLE, EARLIER_SERVER),
+                                          ("0.10", installations.appdata(), "cad", "cad-server")):
             for record in records:
                 console = record[key]
                 if not (os.path.isfile(record["python"]) and os.path.isfile(console)):
                     continue
                 rows.append({"app": label, "label": label, "action": "stop", "release": record["version"],
-                             "record": record, "subject": f"text-to-cad {record['version']}'s server, if it runs: "
-                                                          f"`{self.providers.shown(console, self.machine)} stop`"})
+                             "record": record, "server": name,
+                             "subject": f"{name} {record['version']}'s server, if it runs: "
+                                        f"`{self.providers.shown(console, self.machine)} stop`"})
         return rows
 
     def _engine(self, earlier: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -622,19 +625,19 @@ class Installer:
     def _stop_earlier(self, row: dict[str, Any]) -> None:
         """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what
         it did said; a stop that fails is said, and the run goes on."""
-        release, label = row["release"], row["label"].ljust(8)
+        release, label, name = row["release"], row["label"].ljust(8), row["server"]
         verb = "cadgen stop" if row["label"] == "0.8" else "cad stop"
         ok, stopped, said = stop_earlier(row["record"])
         last = f": {said.splitlines()[-1]}" if said else ""
         if not ok:
-            self.say(f"{label} text-to-cad {release}'s `{verb}` failed{last}; its server may still run")
+            self.say(f"{label} {name} {release}'s `{verb}` failed{last}; its server may still run")
         elif stopped is None:
-            self.say(f"{label} ran text-to-cad {release}'s `{verb}`{last}")
+            self.say(f"{label} ran {name} {release}'s `{verb}`{last}")
         elif not stopped:
-            self.say(f"{label} text-to-cad {release}'s server was not running")
+            self.say(f"{label} {name} {release}'s server was not running")
         else:
             self.stopped.append({"release": release, "servers": stopped, "at": self.providers.stamp()})
-            self.say(f"{label} stopped text-to-cad {release}'s server (its own `{verb}`)")
+            self.say(f"{label} stopped {name} {release}'s server (its own `{verb}`)")
 
     # --- the cad command -------------------------------------------------------------------
 
@@ -908,7 +911,7 @@ class Installer:
             kernel = self._kernel()
             home = self._home()
             release = ([{"app": "release", "label": "release", "action": "make",
-                         "subject": f"text-to-cad {self.release} in {providers.shown(str(home), self.machine)}, once"}]
+                         "subject": f"cad-server {self.release} in {providers.shown(str(home), self.machine)}, once"}]
                        if home is not None and not os.path.isdir(home) else [])
             earlier = self._earlier()
             extra = [*release, self._plugin_row(), *map(self._public, earlier), self._public(self._engine(earlier)),

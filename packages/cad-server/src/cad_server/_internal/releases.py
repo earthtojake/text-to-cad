@@ -96,9 +96,9 @@ def recipe(version: str, python: str, source: str | None) -> base.Recipe:
         else:
             requirement = (*((f"{base.LIBRARY} @ {library}",) if library and not os.path.isdir(library) else ()),
                            f"{base.SERVER} @ {source}")
-    return base.Recipe(what=f"text-to-cad {version}", python=python, requirement=requirement, release=version,
-                       source=source, making=f"installing text-to-cad {version} on Python {platform.python_version()}",
-                       downloading=f"downloading text-to-cad {version}")
+    return base.Recipe(what=f"cad-server {version}", python=python, requirement=requirement, release=version,
+                       source=source, making=f"installing cad-server {version} on Python {platform.python_version()}",
+                       downloading=f"downloading cad-server {version}")
 
 
 def make(version: str, *, python: str | None = None, source: str | None = None,

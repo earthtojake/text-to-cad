@@ -60,7 +60,7 @@ class SwitchTest(Fixture):
 
         def started(version: str, port, told) -> tuple[bool, str]:
             tried.append(version)
-            return (True, "") if version in works else (False, f"text-to-cad {version}'s engine did not start")
+            return (True, "") if version in works else (False, f"cad-server {version}'s engine did not start")
 
         return tried, mock.patch.object(switch, "_started", side_effect=started)
 
@@ -101,7 +101,7 @@ class SwitchTest(Fixture):
             done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
         self.assertFalse(done["ok"])
         self.assertTrue(done["restored"])
-        self.assertEqual(done["error"], "text-to-cad 1.2.0's engine did not start")
+        self.assertEqual(done["error"], "cad-server 1.2.0's engine did not start")
         self.assertEqual((tried, installations.current_version()), (["1.2.0", "1.1.0"], "1.1.0"))
         self.assertEqual((kept[1]["ok"], kept[1]["to"], kept[1]["error"]), (False, "1.2.0", done["error"]),
                          "the failure is kept before the release before's engine starts again")
@@ -375,7 +375,7 @@ class UpdateJobTest(Fixture):
         self.assertEqual((state["state"], state["error"]),
                          ("failed", "the CAD kernel environment needs the network once: dns error"))
         self.assertEqual(server.retired, [], "the engine stays as it was")
-        refused = releases.base.Refused("text-to-cad 1.2.0 needs the network once: dns error")
+        refused = releases.base.Refused("cad-server 1.2.0 needs the network once: dns error")
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(releases, "make", side_effect=refused):
             job.start(server)
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))
@@ -383,7 +383,7 @@ class UpdateJobTest(Fixture):
     def test_the_engine_a_failed_switch_starts_again_says_the_update_failed(self) -> None:
         # The release before's engine, started again by the switch that failed, reads that failure as it
         # starts serving: the page that followed the update through the restart reads it failed, and why.
-        error = "text-to-cad 1.2.0's engine did not start: it exited with code 3"
+        error = "cad-server 1.2.0's engine did not start: it exited with code 3"
         switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": False, "error": error})
         job = update.Update()
         job.recall()
