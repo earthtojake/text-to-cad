@@ -568,9 +568,9 @@ function BoardSurface({ view, data }) {
     const transform = plan ? plan.transform : current?.transformRef.current;
     const camera = transform && size ? planCamera(transform, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
-    // The view as it was seen: its Display and the theme it was drawn in (a snapshot's `appearance`).
+    // The view as it was seen: its Display, never its theme (a snapshot is drawn light whatever the viewer's).
     const shownDisplay = plan ? { ...displayRef.current, side: plan.side } : displayRef.current;
-    return seen ? { ...seen, display: { ...viewDisplay(shownDisplay), appearance: schemeRef.current } } : null;
+    return seen ? { ...seen, display: viewDisplay(shownDisplay) } : null;
   }, [mirrorFor]);
 
   // Measure's layer: the measurements, the one being drawn, and the snap under the pointer.

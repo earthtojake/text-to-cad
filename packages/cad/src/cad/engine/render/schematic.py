@@ -2,9 +2,9 @@
 
 No XCAF document, model worker, browser or KiCad process is involved. The page is the schematic plot's
 (:mod:`cad.engine.formats.kicad.schematic_plot`): each sheet instance one page of layers, painted with
-Pillow in KiCad's default schematic colours (its light theme; a dark one for ``appearance: dark``),
-text in the board's stroke font. The Display is ``{sheet, border, appearance}``: the sheet's path
-(``/`` the root, ``/Power/``), whether the page's edge is drawn (off unless asked), light or dark.
+Pillow in KiCad's default schematic colours (its light theme, as every snapshot is), text in the
+board's stroke font. The Display is ``{sheet, border}``: the sheet's path (``/`` the root,
+``/Power/``) and whether the page's edge is drawn (off unless asked).
 Without a camera the picture frames what the page draws (the whole page with its border on); a plan
 camera frames its window, as a board's does.
 """
@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-DISPLAY_KEYS = {"sheet", "border", "appearance"}
+DISPLAY_KEYS = {"sheet", "border"}
 #: KiCad's default schematic colours (its light theme), by layer kind and by what an item is.
 LIGHT = {
     "background": "#F5F4EF", "sheet": "#840000", "notes": "#0000C2", "sheet_box": "#840000", "sheet_name": "#006464",
@@ -24,34 +24,25 @@ LIGHT = {
     "no_connect": "#000084", "pin_number": "#A90000", "pin_name": "#006464", "reference": "#006464",
     "value": "#006464", "field": "#840084", "local": "#0F0F0F", "global": "#840000", "hierarchical": "#725600",
 }
-DARK = {
-    "background": "#1C1C1C", "sheet": "#A04040", "notes": "#6E9BE6", "sheet_box": "#C8A040", "sheet_name": "#4FCBCB",
-    "sheet_file": "#C8A040", "sheet_pin": "#4FCBCB", "sheet_field": "#C87FC8", "symbol": "#D07050",
-    "symbol_background": "#2E2E24", "pin": "#D07050", "wire": "#3CC83C", "bus": "#5B8FE6", "junction": "#3CC83C",
-    "no_connect": "#5B8FE6", "pin_number": "#E06060", "pin_name": "#4FCBCB", "reference": "#4FCBCB",
-    "value": "#4FCBCB", "field": "#C87FC8", "local": "#E8E8E8", "global": "#E06060", "hierarchical": "#C8A040",
-}
 
 
 def display_options(value: Any, grid: bool = False) -> dict:
-    """A schematic's ``--display``: ``{sheet, border, appearance}`` (JSON, a JSON file), or ``light`` / ``dark``."""
+    """A schematic's ``--display``: ``{sheet, border}`` (JSON, or a JSON file of it)."""
     from cad.engine.snapshot import SnapshotRefused, _json_or_file
 
     if isinstance(value, str):
         text = value.strip()
-        value = _json_or_file(text, "--display") if text.startswith("{") or text.endswith(".json") else {"appearance": text}
+        value = _json_or_file(text, "--display") if text else None
     if value is None:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
         raise SnapshotRefused(f"a schematic's display takes {', '.join(sorted(DISPLAY_KEYS))}: "
-                              "{\"sheet\": \"/Power/\", \"border\": true, \"appearance\": \"dark\"}")
-    display = {"sheet": "/", "border": False, "appearance": "light", **value}
+                              "{\"sheet\": \"/Power/\", \"border\": true}")
+    display = {"sheet": "/", "border": False, **value}
     if not isinstance(display["sheet"], str) or not display["sheet"]:
         raise SnapshotRefused("a schematic's display.sheet is a sheet's path: / (the root), /Power/")
     if type(display["border"]) is not bool:
         raise SnapshotRefused("a schematic's display.border is true or false")
-    if display["appearance"] not in ("light", "dark"):
-        raise SnapshotRefused("a schematic's appearance is light or dark")
     parts = [part for part in display["sheet"].split("/") if part]
     display["sheet"] = "/" + "".join(f"{part}/" for part in parts)
     return display
@@ -188,7 +179,7 @@ def draw_page(path: Path, still: Any) -> tuple[bytes, dict[str, Any]]:
     except ValueError as error:
         raise SnapshotRefused(str(error)) from None
     page = page_of(payload, display["sheet"])
-    theme = DARK if display["appearance"] == "dark" else LIGHT
+    theme = LIGHT
     layers = [layer for layer in page["layers"] if display["border"] or layer["kind"] != "sheet"]
     ss = 2
     width, height = (n * ss for n in still.drawn)

@@ -249,13 +249,12 @@ the command's environment. `cad run kicad-cli` reads KiCad's library as KiCad do
 `${KICADn_3DMODEL_DIR}` is the first of those library folders, and a `.wrl` name needs its `.wrl` file
 there (KiCad 10's library ships STEP alone), so prefer the typed export.
 
-Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
-theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
-light unless the display says `dark`, as every snapshot is:
+Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes
+are `board`, `copper`, `assembly`, and `placement`. A still is always light (the light canvas and its
+colours), whatever the viewer's theme, as every snapshot is:
 
 ```bash
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
-cad kicad_pcb snapshot board.kicad_pcb tmp/copper-dark.png --display copper,dark
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
@@ -285,8 +284,9 @@ that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, 
 app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
 drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
 menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
-a Quick Edit packet carries the sheet and theme the view showed:
+a Quick Edit packet carries the sheet the view showed. A still is always on KiCad's light paper,
+whatever the viewer's theme:
 
 ```bash
-cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","appearance":"dark"}'
+cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
 ```

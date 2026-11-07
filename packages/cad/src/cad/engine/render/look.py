@@ -66,8 +66,8 @@ half-float target and encoded once, the edges drawn over them after, as OCCT dra
 over the model; core's ``lib/viewer/sceneRig.js``). The two order the faces apart: three sorts
 each part back to front, OCCT draws them as displayed.
 
-A drawing (a DXF, ``drawing.py``) has no light: ``DRAWING`` is the viewer's DXF pane's look, its paper
-and its ink (the pen ACI 7 draws in) for the light and the dark appearance (core's ``lib/appTheme.js``),
+A drawing (a DXF, ``drawing.py``) has no light: ``DRAWING`` is the viewer's DXF pane's look in its light
+theme, as every snapshot is (core's ``lib/appTheme.js``): its paper and its ink (the pen ACI 7 draws in),
 its lines one pixel wide, the drawing fitted within the pane's margin.
 
 Edges are unlit lines in their class's colour, 1 px; Hidden line's faces are unlit in the
@@ -146,16 +146,12 @@ class Grid:
 
 @dataclass(frozen=True)
 class Drawing:
-    """The look of a drawing: paper and ink by appearance, the lines' width, the fit's margin (pixels)."""
+    """The look of a drawing: its paper and its ink, the lines' width, the fit's margin (pixels)."""
 
-    light: tuple[str, str]
-    dark: tuple[str, str]
+    paper: str
+    ink: str
     line_width: float
     margin: float
-
-    def paper(self, appearance: str) -> tuple[str, str]:
-        """``(paper, ink)`` for ``light`` or ``dark``."""
-        return self.dark if appearance == "dark" else self.light
 
 
 @dataclass(frozen=True)
@@ -233,4 +229,4 @@ LOOK = Look(
                     specular=0.08, shininess=0.35),
 )
 
-DRAWING = Drawing(light=("#ffffff", "#171717"), dark=("#292929", "#fafafa"), line_width=1.0, margin=16.0)
+DRAWING = Drawing(paper="#ffffff", ink="#171717", line_width=1.0, margin=16.0)

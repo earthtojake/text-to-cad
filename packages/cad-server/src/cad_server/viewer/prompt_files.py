@@ -96,9 +96,10 @@ class PromptFiles:
             prefix = f"{_stem(name or input_path)}-{self._count}"
         labels: set[str] = set()
         jobs = []
-        # A drawing's view, and a board's, is its plan view, framed as the pane framed it (its camera): it
-        # has no 3D framing to pin. Every view carries its label, by which a mark names the view it was drawn in.
-        drawing = str(input_path).lower().endswith((".dxf", ".kicad_pcb"))
+        # A drawing's view, a board's and a schematic's, is its plan view, framed as the pane framed it (its
+        # camera): it has no 3D framing to pin. Every view carries its label, by which a mark names the view it
+        # was drawn in.
+        drawing = str(input_path).lower().endswith((".dxf", ".kicad_pcb", ".kicad_sch"))
         for index, view in enumerate(views):
             slug = _slug(view["label"].lower(), f"view-{index + 1}")
             while slug in labels:
@@ -236,7 +237,8 @@ def _accepted(packet: dict) -> None:
             if job.get("display") is not None:
                 if not isinstance(job["display"], dict):
                     raise SnapshotRefused(f"jobs[{index}].display is the view's display object")
-                parse_display(json.dumps(job["display"]), False, board=suffix == ".kicad_pcb")
+                parse_display(json.dumps(job["display"]), False, board=suffix == ".kicad_pcb",
+                              schematic=suffix == ".kicad_sch")
         parse_annotation(packet.get("annotation"))
         packet_visibility(packet)
         if packet.get("references") is not None:

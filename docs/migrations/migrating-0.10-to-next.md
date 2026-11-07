@@ -97,6 +97,7 @@ The shape is `cad <document_type> <operation> <file>`, the type the file's (`cad
 | `cad export part.stl part.3mf` | `cad stl export part.stl part.3mf` |
 | `cad snapshot <file> out.png` | `cad <type> snapshot <file> out.png`: `cad model snapshot <id> out.png`, `cad dxf snapshot panel.dxf out.png`, `cad urdf snapshot robot.urdf out.png` |
 | `cad snapshot --job PACKET` | `cad <type> snapshot --job PACKET`, the type of the packet's input |
+| `cad snapshot --display dark` (or `light`, or `{"appearance": ...}`), and `cad_snapshot`'s `display` the same | gone: every snapshot is light, whatever the viewer's theme. The word is no display mode, the key no display key, and a drawing takes no `--display` |
 | `cad inspect <file or id> [REF]` | `cad model inspect <id> [REF]`, `cad step inspect <file>`, `cad glb inspect <file>` |
 | `cad urdf validate robot.urdf`, `cad sdf validate world.sdf`, `cad srdf validate robot.srdf` | unchanged (`--urdf robot.urdf` names an SRDF's URDF) |
 | `cad pcb drc board.kicad_pcb` (the KiCad pull request's) | `cad kicad_pcb drc board.kicad_pcb`; a schematic's ERC, `cad kicad_sch erc board.kicad_sch` |

@@ -13,10 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Sequence
 
-#: The viewer's selection colour (``BOARD_OVERLAY_THEMES[appearance].selection``) and the light fill of what it
-#: boxes, by appearance: the dark theme's light blue, and on the light canvas the same blue darkened to 4.5:1.
-SELECTIONS = {"dark": ((141, 197, 255, 255), (141, 197, 255, 48)), "light": ((68, 122, 176, 255), (68, 122, 176, 48))}
-SELECTION, FILL = SELECTIONS["dark"]
+#: The viewer's selection colour on the light canvas every snapshot draws (``BOARD_OVERLAY_THEMES.light.selection``:
+#: the dark theme's light blue darkened to 4.5:1 on white) and the light fill of what it boxes.
+SELECTION, FILL = (68, 122, 176, 255), (68, 122, 176, 48)
 #: At most this many references are lit in one still.
 MAX_REFERENCES = 256
 
@@ -24,12 +23,10 @@ XY = tuple[float, float]
 
 
 def paint_references(pen, path: Path, references: Sequence[str], origin: Sequence[float], place: Callable[[XY], XY],
-                     scale: float, ss: int, appearance: str = "dark") -> list[str]:
+                     scale: float, ss: int) -> list[str]:
     """Light ``references`` on the still ``pen`` draws: ``place`` takes a sheet point to the picture's
     pixels, ``scale`` is pixels per millimetre and ``ss`` the supersampling; ``origin`` is where
-    KiCad's (0, 0) lies on the sheet (the plot's ``board.origin``), and ``appearance`` the still's
-    (its highlight's colours). Answers the warnings."""
-    SELECTION, FILL = SELECTIONS.get(appearance, SELECTIONS["dark"])  # noqa: N806 - the theme's, as the module's
+    KiCad's (0, 0) lies on the sheet (the plot's ``board.origin``). Answers the warnings."""
     from cad.engine.formats.kicad.board_index import (
         Area, Copper, Dimension, Net, Pad, Part, Point, Shape, Text, Track, Via, Zone, read_board,
     )
