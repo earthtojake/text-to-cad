@@ -612,6 +612,8 @@ class InstallUpdateAndUninstall(Fixture):
             self.assertEqual(out.count("is the current installation"), 1, "one line says it")
             switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": None}
             self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation\n", self.run_setup()[1])
+            switch.handover.return_value = {"from": None, "to": RELEASE, "ok": True, "gapMs": None}
+            self.assertIn(f"engine   cad-server {RELEASE} is the current installation\n", self.run_setup()[1])
             self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
                             "the apps first, then the switch")
             switch.follow.assert_not_called()

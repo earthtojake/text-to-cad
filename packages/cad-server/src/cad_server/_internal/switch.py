@@ -208,7 +208,6 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
     result["gapMs"] = round((time.monotonic() - gone) * 1000)
     if ok:
         result["ok"] = True
-        told(f"switched to cad-server {target} ({result['gapMs']} ms without an engine)")
         _record(result)
         try:
             removed = releases.collect({target, *([previous] if previous else [])})
@@ -240,6 +239,14 @@ def switch(target: str, *, port: int | None = None, previous: str | None = None,
         except OSError:
             pass
     return result
+
+
+def moved(result: dict[str, Any]) -> str:
+    """A switch that held (``switch``, ``handover``), in the one line said of it: from what, to what, and how long
+    no engine answered."""
+    version = f"{result['from']} -> {result['to']}" if result.get("from") else result["to"]
+    gap = f" ({result['gapMs']} ms without an engine)" if result.get("gapMs") is not None else ""
+    return f"cad-server {version} is the current installation{gap}"
 
 
 def handover(target: str, *, told: Callable[[str], None] | None = None) -> dict[str, Any] | None:
@@ -313,6 +320,8 @@ def helper(target: str, *, port: int | None, previous: str | None) -> int:
     following the release it left current (``follow``); 0 when the switch held."""
     told = _said(None)
     told(f"waiting for the engine to drain, to switch to cad-server {target}")
-    held = switch(target, port=port, previous=previous, told=told)["ok"]
+    result = switch(target, port=port, previous=previous, told=told)
+    if result["ok"]:
+        told(moved(result))
     follow(told)
-    return 0 if held else 1
+    return 0 if result["ok"] else 1

@@ -60,7 +60,7 @@ current installation's
    the same token, or the release before's comes back should it fail, and with it its plugin folder and
    the apps' copies of it (its own ``cad plugin --refresh``); with none running, ``current`` points at
    this release and the next client starts its engine.
-9. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
+9. **Report.** Each app's copy as it is now, the Skills CLI agents' among them, the engine, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cad telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
    and changed nothing.
@@ -613,9 +613,7 @@ class Installer:
         if done is None:
             return False, None
         if done.get("ok"):
-            gap = f" ({done['gapMs']} ms without an engine)" if done.get("gapMs") is not None else ""
-            moved = f"{done['from']} -> {version}" if done.get("from") else version
-            self.say(f"engine   cad-server {moved} is the current installation{gap}")
+            self.say(f"engine   {switch.moved(done)}")
             return False, done
         self.say(f"engine   the switch to cad-server {version} failed: {done.get('error')}"
                  + ("; the release before runs again" if done.get("restored") else ""))
