@@ -874,12 +874,12 @@ place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
 previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
 `build._raised`: its type and every frame, the library's included), and the daemon decides
-from them whether the failure is a mistake in cadgen's own code (`reportable`,
+from them whether the failure is a mistake in text-to-cad's own code (`reportable`,
 `daemon._reportable`) by the rule telemetry counts a build's crash by
 (`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
-raised in cadgen's code at a line that is no `raise`, past the memo's and the history's wrappers
+raised in text-to-cad's code at a line that is no `raise`, past the memo's and the history's wrappers
 of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
-cadgen refusing what it was given are the model's to correct. The page's record of the failed
+the library refusing what it was given are the model's to correct. The page's record of the failed
 build carries `reportable`, and the card offers Report Issue only where it is not `false`; a
 worker that died under the build is reportable. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
@@ -957,7 +957,8 @@ is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spe
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
 meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
 warning once per process from the lookup, at the caller's line (`skip_file_prefixes` skips the
-library's and the import system's frames).
+library's and the import system's frames). Importing `cadgen`, or any module under it, warns the same way, from
+`cadgen`'s own import.
 
 **Producers.** A producer is `(type, matcher, writer, integration)` with what it accepts and provides
 (`cad.registry.Producer`), registered by its integration (`cad/build123d/_producers.py`) and gathered
@@ -1015,7 +1016,7 @@ as `cad run` makes a program's (`extras.ensure`), whose Python runs the library'
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
 way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
-installation's release, made once by the engine (some 100 MB of kicode from PyPI, the first time). kicad-cli
+installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A

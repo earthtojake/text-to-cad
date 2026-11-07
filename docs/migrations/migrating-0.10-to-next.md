@@ -39,6 +39,10 @@ object as its new spelling, but the two result classes (below), and says so once
 model.py:1: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read
 ```
 
+A script that still imports `cadgen` says `cadgen is deprecated; use cad` the same way, from the
+release after 0.11.0. It keeps working, and `cadgen` is still published, installing `cad` at the same
+release: import `cad`.
+
 What does break is under [What an alias cannot keep](#what-an-alias-cannot-keep), at the end of this
 section. Migrate a project on first touch. A document type is one object now -- its decorator, its
 reader and its operations -- and our helpers that take build123d's objects are `cad.build123d`'s.
