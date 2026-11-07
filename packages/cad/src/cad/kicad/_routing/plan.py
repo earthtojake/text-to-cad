@@ -280,6 +280,7 @@ class Router:
         x0, y0 = min(p[0] for p in points), min(p[1] for p in points)
         x1, y1 = max(p[0] for p in points), max(p[1] for p in points)
         grow = max(REGION_MARGIN, (x1 - x0) / 4, (y1 - y0) / 4) + self.reach
+        self.grow = grow  # how far past the plan's pads the region reaches (less where the board ends)
         x0, y0 = max(x0 - grow, min(p[0] for p in edge) - self.reach - 1.0), max(y0 - grow, min(p[1] for p in edge) - self.reach - 1.0)
         x1, y1 = min(x1 + grow, max(p[0] for p in edge) + self.reach + 1.0), min(y1 + grow, max(p[1] for p in edge) + self.reach + 1.0)
         self.i0, self.j0 = math.floor(x0 / g), math.floor(y0 / g)
@@ -545,6 +546,8 @@ class Router:
             if found is not None:
                 return self._land(want, net, found, window, allowed, sources, targets, rooms, between)
             reason = f"the search gave up after {expanded:,} steps" if out else f"no way through on {layers}{limit}"
+            if margin is None:  # the whole region searched: a wider detour lies past it
+                reason += f" within the plan's region (its pads' box and {self.grow:.0f} mm round it)"
         return Connection(want.net, between, False, reason)
 
     def _escapes(self, items: Sequence[_Item], terminals: dict[int, _Item], free: bytearray, window: _Window,
