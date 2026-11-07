@@ -279,15 +279,17 @@ def integrations(*, header_cad: tuple[str, ...] | None, given_cad: Iterable[str]
     (``scanned``: ``cad_server._internal.scan``), what its project's requirement of cad names
     (``project_cad``), and those a requirement it names is a distribution of (``requirements``: ``--with
     build123d``, a header's ``build123d``), so cad's pins decide its version. ``--with cad[...]``
-    (``given_cad``) adds to either. None found: the core alone. A resolution that pulls one in through
-    another package adds it at the making (``_pulled``)."""
-    from cad._internal.integrations import for_distribution
+    (``given_cad``) adds to either. None found: the core alone. Either way the set is closed over what each
+    needs beside it (``cad._internal.integrations.closed``: ``cad[cadjoint]`` brings build123d, whose
+    solids its helpers return). A resolution that pulls one in through another package adds it at the
+    making (``_pulled``)."""
+    from cad._internal.integrations import closed, for_distribution
 
     if header_cad is not None:
-        return tuple(sorted({*header_cad, *given_cad}))
+        return closed({*header_cad, *given_cad})
     named = {key for requirement in requirements if (name := _name(requirement)) is not None
              and (key := for_distribution(name)) is not None}
-    return tuple(sorted({*scanned(), *project_cad, *given_cad, *named}))
+    return closed({*scanned(), *project_cad, *given_cad, *named})
 
 
 # --- a project ---------------------------------------------------------------------------------------
@@ -781,10 +783,12 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
             *(word for each in spec.files for word in ("-r", each)))
 
     def revise(env: Path) -> tuple[tuple[str, ...], str] | None:
+        from cad._internal.integrations import closed
+
         pulled = _pulled(env, spec.integrations)
         if not pulled:
             return None
-        every = sorted({*spec.integrations, *pulled})
+        every = list(closed({*spec.integrations, *pulled}))
         if made is not None:
             made["integrations"] = every
         return ((*_cad(installation, every), *rest),

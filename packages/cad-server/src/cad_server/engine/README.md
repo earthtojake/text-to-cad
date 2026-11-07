@@ -455,7 +455,9 @@ verbosity) key nothing. What it adds is two things:
   import step`, none) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
   (`--with build123d`); and for a bare command, the integration that declares it (`kicad-cli`: the
-  kicad integration's, the registry's `commands`). `--with cad[...]` adds to either. None found: the
+  kicad integration's, the registry's `commands`). `--with cad[...]` adds to either. Whichever decides, the set is closed over the registry's
+  `needs` (`cad._internal.integrations.closed`): `cad[cadjoint]` brings build123d, whose solids
+  `cad.cadjoint.solid` returns. None found: the
   core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming
   the device's release (`extras.pinned`: `plate.py's header pins cad to ==0.9.0, and this device runs

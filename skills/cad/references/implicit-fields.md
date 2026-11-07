@@ -116,7 +116,8 @@ document, the viewer, `cad model snapshot`, `cad model export` (STEP, STL, 3MF, 
 `cad model inspect` (bounds, volume, mass) and `cad model dfm` take it as any part, and an
 assembly composes it with build123d parts (`node().shape`, placed and labelled). The same kind of
 solid comes from any closed triangle mesh's arrays with `cad.build123d.faceted_solid(vertices,
-faces)`, `stl.read`'s `vertices` and `triangles` among them.
+faces)`, `stl.read`'s `vertices` and `triangles` among them; a mesh with collapsed triangles (a
+sphere's poles, as build123d writes an STL) is refused until they are dropped.
 
 It is faceted, and that has consequences:
 

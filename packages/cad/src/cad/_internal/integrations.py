@@ -4,7 +4,8 @@ The registry (``cad.registry.INTEGRATIONS``) is the one place each integration's
 extra are listed, and its document types say which of their functions need which integration. This module is the
 view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
 scan, no code run), and a command's from its name (``kicad-cli`` is the kicad integration's), to add one a
-resolution pulled in through another package, and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
+resolution pulled in through another package, to add those one needs beside it (``closed``: cadjoint's
+solids are build123d's), and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
 
 The standard library alone: the server's command and a model's process both read it, and neither loads
 any integration to do so.
@@ -12,9 +13,11 @@ any integration to do so.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "for_command", "for_distribution", "for_module", "for_name", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "closed", "for_command", "for_distribution", "for_module", "for_name",
+           "missing"]
 
 
 @dataclass(frozen=True)
@@ -24,7 +27,8 @@ class Integration:
     through another package (``distributions``, as PEP 503 normalizes their names), and the
     package indexes and folders of wheels its packages come from beside the default index (``indexes``,
     ``find_links``: none today, a hook for packaged binaries), the commands its extra puts in an environment
-    (``commands``: ``kicad-cli``) and the library's module that runs one (``runner``: ``cad.kicad._command``)."""
+    (``commands``: ``kicad-cli``), the library's module that runs one (``runner``: ``cad.kicad._command``) and
+    the extras a program that uses it needs beside it (``needs``: cadjoint's, ``build123d``)."""
 
     extra: str
     modules: tuple[str, ...]
@@ -33,6 +37,7 @@ class Integration:
     find_links: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     runner: str | None = None
+    needs: tuple[str, ...] = ()
 
 
 def _normal(name: str) -> str:
@@ -51,9 +56,10 @@ def _from_registry() -> dict[str, Integration]:
         if not integration.extra:
             continue
         distributions = tuple(dict.fromkeys(_normal(item) for item in integration.identity))
+        needs = tuple(extra for needed in integration.needs if (extra := REGISTERED[needed].extra) is not None)
         found[integration.extra] = Integration(integration.extra, integration.modules, distributions, integration.indexes,
                                                integration.find_links, integration.commands,
-                                               f"cad.{name}._command" if integration.commands else None)
+                                               f"cad.{name}._command" if integration.commands else None, needs)
     return found
 
 
@@ -109,6 +115,22 @@ def for_name(name: str) -> str | None:
         operation = entry.operation(parts[2])
         needed = operation.integration if operation is not None and not operation.engine else None
     return REGISTERED[needed].extra if needed is not None else None
+
+
+def closed(keys: Iterable[str]) -> tuple[str, ...]:
+    """The extras ``keys`` and, transitively, those each needs beside it (``Integration.needs``), sorted:
+    ``closed(["cadjoint"])`` is ``("build123d", "cadjoint")``. A key of no integration is kept as it is."""
+    found: set[str] = set()
+    waiting = list(keys)
+    while waiting:
+        key = waiting.pop()
+        if key in found:
+            continue
+        found.add(key)
+        integration = INTEGRATIONS.get(key)
+        if integration is not None:
+            waiting.extend(integration.needs)
+    return tuple(sorted(found))
 
 
 def for_distribution(name: str) -> str | None:

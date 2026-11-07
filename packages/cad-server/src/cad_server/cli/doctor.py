@@ -757,14 +757,23 @@ def _integrations() -> list[tuple[str, str]]:
     """Each integration whose operations run in an environment of their own (``cad[<integration>]``, made on
     first need: ``cad_server._internal.integration_env``) -- this installation's own where it carries it, else
     that environment, made or where it will be -- read, never made: what a manufacturing check (trimesh) or a
-    KiCad command (kicad) runs in. The CAD kernel's is the kernel line's."""
+    KiCad command (kicad) runs in. The CAD kernel's is the kernel line's. An integration no command's
+    operation runs (cadjoint: a model's helpers alone) runs in the model's own environment, which ``cad run``
+    makes from the script's imports, so its line says that and names no folder."""
     try:
-        from cad.registry import INTEGRATIONS
+        from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
         from cad_server._internal import integration_env
 
+        commanded = {operation.integration for entry in DOCUMENT_TYPES.values() for operation in entry.operations}
+        commanded |= {entry.edit.integration for entry in DOCUMENT_TYPES.values() if entry.edit is not None}
         lines = []
         for name, integration in INTEGRATIONS.items():
             if name == "build123d" or not integration.extra:
+                continue
+            if name not in commanded:
+                carried = " (this installation carries it)" if integration_env.carries(name) else ""
+                lines.append((OK if carried else INFO, f"{name} cad[{integration.extra}] runs in a model's own environment, "
+                                                      f"which cad run makes from the script's imports{carried}"))
                 continue
             state, folder, release = integration_env.found(name)
             if state == "carried":

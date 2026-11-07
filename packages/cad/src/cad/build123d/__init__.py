@@ -17,7 +17,9 @@ and the helpers a model calls with build123d objects:
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``.
+  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* ``faceted_solid(vertices, faces)``: a closed polygon mesh -- an STL's, a field's -- as a solid of
+  planar faces, one per polygon.
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -42,6 +44,7 @@ _NAMES = {
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
     **{name: "cad.build123d._flatten" for name in (
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
+    "faceted_solid": "cad.build123d._faceted",
 }
 
 __all__ = sorted(_NAMES)
@@ -63,6 +66,7 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from cad.build123d._faceted import faceted_solid
     from cad.build123d._flatten import (flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces,
                                         union_faces)
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,

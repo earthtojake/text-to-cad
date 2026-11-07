@@ -94,6 +94,13 @@ class Integration:
     #: ``cad run <command>`` makes the integration's environment for one and runs it there, through the
     #: integration's ``_command`` module (``cad.<name>._command``), headless in private homes.
     commands: tuple[str, ...] = ()
+    #: The integrations a program that uses this one needs beside it, because its helpers hand back their
+    #: objects (cadjoint's ``solid`` returns a build123d shape): ``cad run`` makes its environment with them.
+    needs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.name in self.needs:
+            raise ValueError(f"the {self.name} integration needs itself")
 
 
 @dataclass(frozen=True)
@@ -286,6 +293,12 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
                        "ezdxf", "pillow"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
+    "cadjoint": Integration(
+        "cadjoint", "cadjoint, the implicit signed-distance CAD kernel on JAX: a scene of its fields -- blended "
+                    "booleans, shells, patterns, sketches extruded, revolved or lofted -- becomes a build123d solid "
+                    "of planar faces, cad.cadjoint.solid, which a model returns as any other shape",
+        extra="cadjoint", process="in-process",
+        modules=("cadjoint",), distributions=("cadjoint",), identity=("cadjoint",), needs=("build123d",)),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
                  "its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes "

@@ -54,7 +54,15 @@ class TheTableIsTheSource(unittest.TestCase):
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 self.assertTrue(integration.modules and integration.distributions)
+                # What one needs beside it is registered, is not itself, and has an extra cad run can add.
+                self.assertNotIn(integration.name, integration.needs)
+                for needed in integration.needs:
+                    self.assertIn(needed, registry.INTEGRATIONS)
+                    self.assertTrue(registry.INTEGRATIONS[needed].extra)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        self.assertEqual(("cadjoint",), registry.integrations_of(["cadjoint.construction"]))
+        # cadjoint's solids are build123d's: a program of its fields needs the kernel beside it.
+        self.assertEqual(("build123d",), registry.INTEGRATIONS["cadjoint"].needs)
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -71,6 +79,10 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
+        self.assertEqual(("build123d",), integrations.INTEGRATIONS["cadjoint"].needs)
+        self.assertEqual(("build123d", "cadjoint"), integrations.closed(["cadjoint"]))
+        self.assertEqual(("build123d", "cadjoint", "kicad"), integrations.closed(["kicad", "cadjoint", "build123d"]))
+        self.assertEqual((), integrations.closed([]))
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone

@@ -270,6 +270,19 @@ class ChoosingTest(unittest.TestCase):
         self.assertTrue(self.spec("--with", "build123d", "plain.py").integrations == ("build123d",),
                         "a requirement that is an integration's distribution is that integration")
 
+    def test_an_integration_brings_those_it_needs_beside_it(self) -> None:
+        # cadjoint's solids are build123d's (the registry's ``needs``): a program of its fields gets the kernel
+        # too, whether a scan finds cadjoint or a header names it.
+        from cad_server._internal import scan
+
+        self.assertEqual(scan.scan(code="from cad.cadjoint import solid", cwd=self.folder), {"cadjoint"})
+        self.assertEqual(scan.scan(code="from cadjoint.sdf import Shell", cwd=self.folder), {"cadjoint"})
+        self.assertEqual(extras.integrations(header_cad=None, scanned=lambda: {"cadjoint"}), ("build123d", "cadjoint"))
+        self.assertEqual(extras.integrations(header_cad=("cadjoint",)), ("build123d", "cadjoint"))
+        self.assertEqual(extras.integrations(header_cad=None, requirements=("cadjoint==0.1.1",)), ("build123d", "cadjoint"))
+        self.write("field.py", "from cad import model\nfrom cad.cadjoint import solid\n")
+        self.assertEqual(self.spec("field.py").integrations, ("build123d", "cadjoint"))
+
     def test_a_name_of_cad_s_needs_what_the_registry_and_the_alias_table_say(self) -> None:
         # A model that reads a STEP and never imports build123d itself still needs it (the reader's integration,
         # the registry's), however the read is spelled: 0.11's, a module's import of it, and 0.10's alias.

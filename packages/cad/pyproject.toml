@@ -69,6 +69,16 @@ build123d = [
   "ezdxf",
   "pillow",
 ]
+# The cadjoint integration's extra: cadjoint, the implicit signed-distance CAD kernel on JAX, whose fields
+# cad.cadjoint makes into build123d solids. Pinned exactly: cadjoint is pre-1.0, so a minor may change its
+# API, and our code reaches into its mesher's functions (extract_mesh, fit_bounds, boundary_inside,
+# remove_slivers, simplify_mesh), not only its scene classes. It brings jax (<0.9) itself, which our code
+# never imports. A bump is a pull request that ran the cadjoint suite against the new release. Its solids
+# are build123d's, so a program that uses it needs the kernel's extra beside it: `cad run` adds it (the
+# registry's `needs`), and a person who installs the library by hand installs `cad[build123d,cadjoint]`.
+cadjoint = [
+  "cadjoint==0.1.1",
+]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
 # person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
