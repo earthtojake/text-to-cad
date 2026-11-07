@@ -1,6 +1,6 @@
 // Flip's two glyphs (`BoardDisplay.jsx`): the board as two stacked layers, Lucide's `layers-2`, the side it is
 // seen from solid. From the top the upper layer is solid over the lower one's edge; from the bottom the same
-// glyph mirrored top to bottom, the solid layer under. Drawn at Lucide's line (2), as the corner's other glyphs
+// glyph mirrored top to bottom, the solid layer under. Drawn at Lucide's line (2), as the strip's other glyphs
 // are, so the two states carry the same weight as each other and as their neighbours; the solid layer is the
 // line's colour at 85%, its own edge the line itself, so it reads as solid hovered or not, light or dark.
 //

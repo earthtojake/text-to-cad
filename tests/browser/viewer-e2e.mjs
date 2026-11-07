@@ -321,10 +321,11 @@ async function formatGate() {
         sections.map((section) => section.getAttribute("aria-label")));
       for (const label of fixture.sections) if (!tabs.includes(label)) failures.push(`${fixture.format}: missing the ${label} tab (panel: ${tabs.join(", ")})`);
       if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
-      // Preview ends the tool strip on 3D views, the view's own controls in its corner; a drawing's strip has none.
+      // A 3D view's own controls end the tool strip, Projection, Display then Preview, each named by what it is
+      // ("Projection: Orthographic" is Projection); a drawing's strip has none.
       const controls = await page.locator("[data-cad-toolbar] [data-view-controls] button").evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Preview"] : [];
+        buttons.map((button) => button.getAttribute("aria-label").split(":")[0]));
+      const expected = fixture.threeD ? ["Projection", "Display mode", "Preview"] : [];
       if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
       if (await page.locator("[data-viewer-navbar] [data-view-controls] button").count()) failures.push(`${fixture.format}: editor view controls in the navbar`);
       const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();

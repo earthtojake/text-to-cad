@@ -96,9 +96,8 @@ const glbTools = async (pane) => {
   }
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Preview'], 'Preview ends the strip');
-  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'the view\'s controls are the corner\'s, over the cube');
+    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'the view\'s controls end the strip, Preview last');
+  assert.equal(await pane.locator('[data-view-home]').getAttribute('aria-label'), 'Home', 'Home is the cube\'s, in the corner');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
@@ -122,7 +121,7 @@ function projector(camera, box) {
 // The tools view's playbar under the model, for a file with routines (an animated GLB): always there,
 // never a section of a panel (a GLB has none).
 const animationSection = pane => pane.locator('[data-playbar="tools"]');
-const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
+const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
 // Preview's playbar, under the model, for a file with routines (Preview has no panel).
 const playbar = pane => pane.getByRole('toolbar', { name: 'Animation playback', exact: true });
 // Display's menu: the modes, then the Grid switch.

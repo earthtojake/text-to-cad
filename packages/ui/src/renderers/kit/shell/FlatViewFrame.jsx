@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { english, useI18n } from "@cad/ui/i18n";
 import { MousePointer2 } from "lucide-react";
 import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolVariant, drawingToolLabel } from "../../../annotation/toolbar.jsx";
@@ -9,16 +8,16 @@ import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
 import ViewFrame from "./ViewFrame.jsx";
 import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
-import { ViewPillColumn } from "./ViewCorner.jsx";
 
 /**
  * A FLAT view's frame — a picture on a canvas, head on (a board, a schematic, a drawing) — which is
- * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), its
- * update under the strip, Quick Edit (`useFlatHandover`'s `quickEdit`), its panel's tabs (`panel`),
- * and its corner: its zoom pill and the view's own controls in a column over it (`views`' `corner`s,
- * `ViewCorner.jsx`'s `ViewPillColumn`), the same corner while the picture is shown in 3D, whose zoom the
- * pill then is. On a phone those are rows of the strip's More, with the zoom. The renderer brings the
- * picture (its canvases and layers, `children`, in the box the canvas view measures: `containerRef`).
+ * every view's (`ViewFrame.jsx`) with what a flat view puts in it: its strip (`flatViewTools`), ended
+ * after its rule by the view's own controls (`views`' `tile`s: a board's Flip, 2D/3D and Display), its
+ * update under the strip, Quick Edit (`useFlatHandover`'s `quickEdit`), its panel's tabs (`panel`), and
+ * its corner: the zoom pill alone (`ZoomControl.jsx`), the same corner while the picture is shown in 3D,
+ * whose zoom the pill then is. On a phone the view's controls are rows of the strip's More, with the
+ * zoom. The renderer brings the picture (its canvases and layers, `children`, in the box the canvas
+ * view measures: `containerRef`).
  *
  * The panel, the strip at the view's centre, the measure, the loading cover and the card are the
  * frame's, the same as a 3D view's: see `ViewFrame.jsx`. ⌘\ (Ctrl+\) shows and hides the panel,
@@ -77,8 +76,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   `inspect`: what is picked and how the view describes it: the frame's Selected pane and hover tip (`ViewFrame.jsx`).
  *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands,
  *   and the zoom's keys either way; while the picture is shown in 3D, the 3D view's (`viewportZoom`).
- *   A view control's `corner` is its control in the corner's column over the pill (a button, a switch), the
- *   views in order from the top down.
+ *   `views`: the view's own controls (`FloatingToolBar.js`'s `ViewportViewControl`s), left to right at the strip's end.
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
@@ -89,18 +87,12 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   // The picture catching up: said as every view says it (`ViewFrame.jsx`'s status). A flat view's update
   // has nothing of its own to retry: one that fails is the card's, whose Retry reloads the file.
   const status = { update: updating ? updateStatus : null };
-  // The view's corner: its zoom pill, and its own controls in a column over it, the same whether the
-  // picture is drawn flat or in 3D. A phone's are More's.
-  const cornerNode = !shown || !zoom ? null : <>
-    {views?.some(view => view.corner) ? <ViewPillColumn>
-      {views.map(view => (view.corner ? <Fragment key={view.id}>{view.corner}</Fragment> : null))}
-    </ViewPillColumn> : null}
-    <ZoomPill zoom={zoom} />
-  </>;
+  // The view's corner: its zoom pill, the same whether the picture is drawn flat or in 3D. A phone's zoom is More's.
+  const cornerNode = !shown || !zoom ? null : <ZoomPill zoom={zoom} />;
   return (
     <ViewFrame surface={surface} canvasBoxRef={containerRef} busy={busy} file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden}
       selecting={!tools.length || tools.some(tool => tool.id === FLAT_TOOL.SELECT && tool.active)} inspect={inspect}
-      tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} toolRow={toolRow} status={status}
+      tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : views || []} toolRow={toolRow} status={status}
       panel={panel?.tabs.length ? panel : null} panelControl={panelControl} layout={toolStack} onLayoutChange={onToolStackChange}
       corner={cornerNode} notice={notice}
       quickEdit={quickEdit ? <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} /> : null}

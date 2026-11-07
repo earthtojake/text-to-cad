@@ -615,9 +615,10 @@ and "Could
 not open that file" and the reason otherwise, each with a Go home button where the host has a home.
 
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
-top centre, ending in the view's own controls (Projection, Display and Preview, a 3D view's), the tool in
-hand's sub-toolbar under it, the view's panel docked at the left edge, Quick Edit at the
-top-right, and the view cube at the bottom-right. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
+top centre, ending in the view's own controls (Projection, Display and Preview, a 3D view's; Flip,
+2D/3D and Display, a board's), the tool in hand's sub-toolbar under it, the view's panel docked at the
+left edge, Quick Edit at the top-right, and at the bottom-right the view cube with its Home, or a flat
+view's zoom pill. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
 size, the update button) as its notice; the web viewer has none.
@@ -653,11 +654,10 @@ covers: the model library scrolls its last rows clear of it. A host whose own co
 floats over the view's bottom-right corner sets `--cad-viewport-corner-bottom` to the room
 it takes from the bottom edge, and the view's whole corner sits that much higher. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
-`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset. All of the
-corner follows, as one group mirrored at the bottom-left: the cube, the column over it, a flat
-view's zoom pill and the column over the pill (a board's Display, 2D/3D and Flip, flush with
-the pill's left edge), their tooltips and menus opening away from the corner (`viewportLayout.js`'s
-`viewCornerLayout`).
+`--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset (2px). All of
+the corner follows, as one group mirrored at the bottom-left: the cube, its Home (at the cube's upper-right
+there) and a flat view's zoom pill (placed from the same variable, the corner's inset from the edge), their
+tooltips and menus opening away from the corner (`viewportLayout.js`'s `viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views.
 The shared viewer consumes these layout values without identifying the host.
 
