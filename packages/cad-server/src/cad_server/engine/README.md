@@ -468,7 +468,7 @@ verbosity) key nothing. What it adds is two things:
   its module search path (`cad._internal.program`). A command is the environment's own file, never
   one on PATH; one an integration declares runs through that integration's `_command` module in the
   environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
-  script; with a kicode that has none, `kicode.executable()`), headless in private homes
+  script), headless in private homes
   (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
   libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
   the person's), its arguments, stdio and exit code kicad-cli's, and never the one
