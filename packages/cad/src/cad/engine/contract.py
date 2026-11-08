@@ -132,12 +132,13 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
     known = isinstance(here, str) and _order(here) is not None
     said = (f"cad here is {here if known else 'unknown'}, worker {spelled(theirs)}; {SERVER} {server} speaks "
             f"{spelled(ours)}")
-    if same_words and isinstance(theirs, dict):
-        # One protocol and format, another kernel: no update mends it; the kernels the server speaks with, and
-        # how a CadQuery script gets its own (``cad run``, which makes the environment of the cadquery integration).
+    newer = _compared(here, server) if known else -1
+    if newer == 0 and same_words:
+        # One release, one protocol and format, another kernel: no update mends it (each release pins one kernel,
+        # so another release's is mended by updating, below); the kernels the server speaks with, and how a
+        # CadQuery script gets its own (``cad run``, which makes the environment of the cadquery integration).
         return (f"{said}: the server builds with {' or '.join(kernels)}, not {theirs.get('kernel')}; a CadQuery "
                 f"script runs with `{COMMAND} run`, in the environment of cad's cadquery integration")
-    newer = _compared(here, server) if known else -1
     if newer == 0:
         # One release of two contracts: a build of it changed what its worker says (a checkout that moved
         # the protocol and kept its version). Neither update moves either one: one build of both does.
