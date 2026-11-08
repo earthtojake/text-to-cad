@@ -59,8 +59,7 @@ def _options(options: dict | None, angle_limit: float) -> dict:
     """The options a mesh is measured with: those given, the type side's defaults for the rest."""
     from cad._internal.dfm import printing as rules
 
-    resolved = {"technology": "fdm", "build_volume": None, "angle_limit": angle_limit, "layer_height": None,
-                "rules": "generic"}
+    resolved = {"technology": "fdm", "build_volume": None, "angle_limit": angle_limit, "layer_height": None}
     resolved.update({key: value for key, value in (options or {}).items() if value is not None})
     resolved["angle_limit"] = angle_limit
     resolved["layer"] = rules.layer_height(resolved)
@@ -353,7 +352,7 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
 
 
 def _knife_zones(mesh: trimesh.Trimesh, options: dict) -> list[_Knife]:
-    """The knife edges, each with its thin depth against the rule set's unsupported-wall minimum: the sliver
+    """The knife edges, each with its thin depth against the rules' unsupported-wall minimum: the sliver
     the knife family reports, which the walls leave to it, as the exact path does
     (``_dfm_printing._knife_zones``)."""
     from cad._internal.dfm import printing as rules
@@ -911,7 +910,7 @@ def _scale_hint(mesh: trimesh.Trimesh) -> dict:
 def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: dict | None = None) -> dict:
     """Every family: the mesh, its scale, overhangs and bridges, wall thickness, gaps, clearances between
     bodies, trapped volumes, the build volume, bed contact, stair-stepping, support volume and sections.
-    ``options``: the check's (``technology``, ``layer_height``, ``build_volume``, ``rules``)."""
+    ``options``: the check's (``technology``, ``layer_height``, ``build_volume``)."""
     resolved = _options(options, angle_limit)
     kept: dict = {}
     try:  # the bodies, split once for the families that read them

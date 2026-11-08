@@ -410,8 +410,8 @@ def _layer_intents(document: Any) -> tuple[dict[str, str], Any]:
 
 def _units_suspect(code: int, extents: Any, holes: list[float], options: dict[str, Any]) -> str | None:
     """Why the declared unit makes the part implausible, read the other way, or None: in millimetres a part
-    under an inch, every hole under the given thickness or a part under the set's smallest; in inches a part
-    larger than the set's sheet. The rules still run in the declared unit."""
+    under an inch or every hole under the given thickness; in inches a part larger than the sheet (the one
+    given, else the standard sheet). The rules still run in the declared unit."""
     from cad._internal.dfm import sheet as rules_side
 
     if code not in (1, 4) or extents is None or not len(extents):
@@ -419,18 +419,15 @@ def _units_suspect(code: int, extents: Any, holes: list[float], options: dict[st
     long, short = float(max(extents)), float(min(extents))
     if long <= 0:
         return None
-    rules = str(options.get("rules") or "generic")
     thickness = options.get("thickness")
     if code == 4:
-        least = rules_side.SMALLEST_PART.get(rules)
         small_holes = bool(holes) and thickness is not None and max(holes) < float(thickness)
-        if not (long < 25.4 or small_holes or (least is not None and (long < least[0] or short < least[1]))):
+        if not (long < 25.4 or small_holes):
             return None
         hole = f" (a {min(holes):.4g} mm hole)" if holes else ""
         return (f"read as millimetres the part is {long:.4g} x {short:.4g} mm{hole}; read as inches it is "
                 f"{long * 25.4:.4g} x {short * 25.4:.4g} mm: if it was drawn in inches set $INSUNITS to 1")
-    sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.SHEETS.get(
-        rules, rules_side.SHEETS["generic"])[0]
+    sheet = rules_side.sheet_size(options.get("sheet_size")) or rules_side.DEFAULT_SHEET
     if long <= sheet[0] and short <= sheet[1]:
         return None
     return (f"read as inches the part is {long:.4g} x {short:.4g} mm, larger than the {sheet[0]:.4g} x "

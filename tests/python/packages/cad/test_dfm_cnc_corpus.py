@@ -14,7 +14,7 @@ Edge cases: fillets everywhere, a freeform (spline) surface, an assembly, an inc
 2.2 m one, a turned part, a part that needs six setups, a T-slot and a dovetail (through and blind), a closed
 void, an inclined hole and an inclined pocket on three axes and on five, a sharp-cornered window, a hole a
 slot splits, an offset cross hole on a turned part, creases either side of the ball end mill's angle, and
-engraving under Protolabs.
+engraved text.
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ def split_hole() -> Any:
 
 
 def cross_shaft() -> Any:
-    """A turned d20 shaft with a d3 hole square to its axis, 4 mm beside it: perpendicular, as Protolabs turns."""
+    """A turned d20 shaft with a d3 hole square to its axis, 4 mm beside it: perpendicular, not radial."""
     body = bd.Cylinder(10, 60, align=(A.CENTER, A.CENTER, A.MIN))
     return _labelled(body - bd.Pos(4, 0, 30) * bd.Rot(90, 0, 0) * bd.Cylinder(1.5, 30), "cross_shaft")
 
@@ -214,7 +214,10 @@ def engraved() -> Any:
 
 
 def shaft() -> Any:
-    """A turned shaft whose every feature breaks one of Protolabs' turning limits."""
+    """A turned shaft with features a lathe's own limits are read against (a flange wider than the stock, a
+    3 mm pin, a 1 mm collar and groove, an ID groove, a 1.5 mm radial hole, an off-axis hole): measured, and
+    no general rule fails them -- a lathe's limits are a shop's. Its three holes are each deeper than four
+    diameters: the general hole-depth warning."""
     body = bd.Cylinder(15, 120, align=(A.CENTER, A.CENTER, A.MIN))                    # z 0 .. 120, OD 30
     body += bd.Pos(0, 0, 120) * bd.Cylinder(1.5, 5, align=(A.CENTER, A.CENTER, A.MIN))  # a 3 mm pin
     body += bd.Pos(0, 0, -10) * bd.Cylinder(55, 10, align=(A.CENTER, A.CENTER, A.MIN))  # a 110 mm flange
@@ -298,9 +301,9 @@ def tooled() -> Any:
     return _labelled(part, "tooled")
 
 
-def xometry_cavity() -> Any:
+def deep_cavity() -> Any:
     part = bd.Box(60, 40, 40)
-    part -= _pocket(30, 6, 21, 2.5, 20)  # 21 deep, 6 wide: 3.5x, over Xometry's 3, under Hubs' 4
+    part -= _pocket(30, 6, 21, 2.5, 20)  # 21 deep, 6 wide: 3.5x, under Hubs' 4
     return _labelled(part, "cavity")
 
 
@@ -402,16 +405,16 @@ CASES = [
          expect=[("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),
     Case("inclined-5axis", inclined, {"material": "aluminum", "axes": 5},
          expect=[("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),
-    Case("shaft", shaft, {"material": "steel", "turning": True, "rules": "protolabs"},
-         expect=[("cnc.turned_diameter", None, None),
-                 ("cnc.turned_feature_diameter_small", None, box(-1.5, -1.5, 120, 1.5, 1.5, 125)),
-                 ("cnc.turned_feature_length", None, box(-17, -17, 60, 17, 17, 61)),
-                 ("cnc.groove_width", None, box(-13, -13, 30, 13, 13, 31)),
-                 ("cnc.internal_groove", None, box(-7, -7, 40, 7, 7, 43)),
-                 ("cnc.radial_hole_diameter", None, box(-15, -0.75, 99.25, 15, 0.75, 100.75)),
-                 ("cnc.off_axis_hole", None, box(6, -15, 70, 10, 15, 110))]),
-    Case("cross_shaft", cross_shaft, {"material": "steel", "turning": True, "rules": "protolabs"}),
-    Case("clean_shaft", clean_shaft, {"material": "aluminum", "turning": True, "rules": "protolabs"}),
+    Case("shaft", shaft, {"material": "steel", "turning": True},
+         expect=[("cnc.hole_depth", None, box(-5, -5, -10, 5, 5, 80)),                 # d10, 90 deep: 9 D
+                 ("cnc.hole_depth", None, box(-15, -0.75, 99.25, 15, 0.75, 100.75)),   # d1.5 across d30: 20 D
+                 ("cnc.hole_depth", None, box(6, -15, 70, 10, 15, 110))]),             # d4 at 45 deg
+    # the d3 cross hole runs 18.3 mm through the d20 shaft: 6 D
+    Case("cross_shaft", cross_shaft, {"material": "steel", "turning": True},
+         expect=[("cnc.hole_depth", None, box(2.5, -10, 28.5, 5.5, 10, 31.5))]),
+    # clean of turning faults; its d6 bore is 30 mm deep, 5 D
+    Case("clean_shaft", clean_shaft, {"material": "aluminum", "turning": True},
+         expect=[("cnc.hole_depth", None, box(-3, -3, 0, 3, 3, 30))]),
     Case("filleted", filleted, {"material": "aluminum"}),
     Case("freeform", freeform, {"material": "aluminum"}),
     Case("kit", kit, {"material": "aluminum"},
@@ -427,11 +430,10 @@ CASES = [
                  ("cnc.pocket_depth_to_width", None, box(0.98, -1, 0.8, 1.02, 1, 1)),
                  ("cnc.wall_thickness", None, box(-0.7, -1, 0.75, -0.55, 1, 1)),
                  ("cnc.wall_thickness_recommended", None, box(-0.7, -1, 0.75, -0.55, 1, 1))]),
-    Case("huge", huge, {"material": "aluminum"}, expect=[("cnc.envelope_length", None, None)]),
+    # 2.2 m: no general limit on a part's size (a machine's is a shop's)
+    Case("huge", huge, {"material": "aluminum"}),
     Case("tooled", tooled, {"material": "aluminum", "tools": "3,6"},
          expect=[("cnc.internal_corner_radius", None, box(-10, -7, 3, 10, 7, 6))]),
-    Case("cavity-xometry", xometry_cavity, {"material": "aluminum", "rules": "xometry"},
-         expect=[("cnc.pocket_depth_to_width", None, box(-15, -3, -1, 15, 3, 20))]),
     Case("windows", windows, {"material": "aluminum", "tools": "3,6,10"},
          expect=[("cnc.internal_corner_radius", None, box(-40, -10, -5, -10, 10, 5)),
                  ("cnc.corner_radius_to_depth", None, box(-40, -10, -5, -10, 10, 5))]),
@@ -460,9 +462,11 @@ CASES = [
     Case("split_hole", split_hole, {"material": "aluminum"},
          allow=[("cnc.gap_width_small", None, box(-10, -0.5, -10, 30, 0.5, 10)),
                 ("cnc.pocket_depth_to_width", None, box(-10, -0.5, -10, 30, 0.5, 10))]),
-    Case("engraved", engraved, {"material": "aluminum", "rules": "protolabs"},
-         expect=[("cnc.internal_corner_sharp", None, box(-2.5, -3, 2.5, 11, 3, 3))]),
-    Case("cavity-hubs", xometry_cavity, {"material": "aluminum", "rules": "hubs"},
+    # 0.8 mm strokes: sharp corners no tool cuts (errors), and gaps under 2.5 mm, micro-machining (warnings)
+    Case("engraved", engraved, {"material": "aluminum"},
+         expect=[("cnc.internal_corner_sharp", None, box(-2.5, -3, 2.5, 11, 3, 3)),
+                 ("cnc.gap_width_small", None, box(-2.5, -3, 2.5, 11, 3, 3))]),
+    Case("cavity", deep_cavity, {"material": "aluminum"},
          allow=[("cnc.corner_radius_to_depth", None, box(-15, -3, -1, 15, 3, 20)),
                 ("cnc.corner_reach", None, box(-15, -3, -1, 15, 3, 20))]),
 ]
@@ -594,10 +598,10 @@ class CorpusTest(unittest.TestCase):
         self.assertEqual([(h["diameter_mm"], h["through"]) for h in split["holes"]["items"]], [(8.0, True)])
         self.assertEqual(split["internal_corners"]["items"], [])
 
-    def test_protolabs_cuts_engraving_s_sharp_corners_with_its_tool(self) -> None:
+    def test_engraving_s_sharp_corners_are_errors_and_a_beside_axis_hole_is_perpendicular(self) -> None:
         _, result, _ = self.results["engraved"]
-        self.assertTrue(result.ok)
-        self.assertEqual({f.severity for f in result.findings if f.code == "cnc.internal_corner_sharp"}, {"warning"})
+        self.assertFalse(result.ok)
+        self.assertEqual({f.severity for f in result.findings if f.code == "cnc.internal_corner_sharp"}, {"error"})
         hole = self.results["cross_shaft"][1].measurements["holes"]["items"][0]
         self.assertEqual(hole["relation"], "perpendicular")
 

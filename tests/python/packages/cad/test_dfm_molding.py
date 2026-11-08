@@ -4,7 +4,7 @@
 expected figure is the construction's (a wall extruded with a 2 degree taper has 2 degrees of draft, a cone
 its half-angle, a plate cut 3 thick is 3 thick). The planted-defect corpus is ``test_dfm_molding_corpus``;
 this is the facts each verdict reads, the shared geometry (``cad._internal.meshops_molding``) and the type
-side's rule sets and clamp estimate."""
+side's rules and clamp estimate."""
 
 from __future__ import annotations
 
@@ -422,29 +422,24 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertEqual(from_file["thickness"]["nominal_mm"], live["thickness"]["nominal_mm"])
 
 
-class RuleSetsTest(unittest.TestCase):
-    def test_every_set_cites_its_numbers_and_names_its_rules_for_molding(self) -> None:
-        self.assertEqual(sorted(type_side.RULE_SETS), ["generic", "hubs", "protolabs", "xometry"])
-        for name, rule_set in type_side.RULE_SETS.items():
-            self.assertIsInstance(rule_set, RuleSet)
-            self.assertEqual(rule_set.generic, name == "generic")
-            for rule in rule_set.rules:
-                self.assertTrue(rule.id.startswith("molding."), rule.id)
-                self.assertTrue(rule_set.source(rule.source).url.startswith("https://"))
-        # Protolabs' wall table, in inches on its page, is millimetres here.
+class RulesTest(unittest.TestCase):
+    def test_the_rules_cite_their_numbers_and_name_molding(self) -> None:
+        self.assertIsInstance(type_side.RULES, RuleSet)
+        for rule in type_side.RULES.rules:
+            self.assertTrue(rule.id.startswith("molding."), rule.id)
+            self.assertTrue(type_side.RULES.source(rule.source).url.startswith("https://"))
+        # the wall table, in inches on its page, is millimetres here.
         self.assertAlmostEqual(type_side.WALL_RANGES["abs"][0], 1.143, places=3)
         self.assertAlmostEqual(type_side.WALL_RANGES["pc"][1], 3.81, places=3)
 
-    def test_protolabs_limits_and_facts_alone(self) -> None:
-        panel = bd.extrude(bd.Rectangle(800, 500), 3, taper=3)
-        found = {f.code for f in _check(panel, rules="protolabs").findings if f.severity == "error"}
-        self.assertTrue({"molding.part_length", "molding.part_width", "molding.projected_area"} <= found, found)
-        facts = _check(bd.Box(20, 20, 10), rules="none")
-        self.assertTrue(facts.ok)
-        self.assertNotIn("rules", facts.measurements)
+    def test_a_press_s_size_is_measured_never_judged(self) -> None:
+        panel = _check(bd.extrude(bd.Rectangle(800, 500), 3, taper=3))
+        judged = {o["family"] for o in panel.measurements["rules"]["outcomes"] if o["status"] in ("passed", "failed")}
+        self.assertFalse({"projection", "envelope"} & judged)
+        self.assertGreater(panel.measurements["projection"]["projected_area_mm2"], 390000)
 
-    def test_generic_recommends_two_degrees_and_a_zero_draft_pull_points_at_candidates(self) -> None:
-        (draft,) = [rule for rule in type_side.RULE_SETS["generic"].rules if rule.id == "molding.draft"]
+    def test_the_rules_recommend_two_degrees_and_a_zero_draft_pull_points_at_candidates(self) -> None:
+        (draft,) = [rule for rule in type_side.RULES.rules if rule.id == "molding.draft"]
         self.assertEqual(draft.limit, 2.0)
         self.assertIn("Most situations: 2", draft.note)
         for taper, warned in ((-1, True), (-2, False)):
@@ -457,11 +452,7 @@ class RuleSetsTest(unittest.TestCase):
         (zero,) = [f for f in drafted_box.findings if f.code == "zero_draft_walls"]
         self.assertNotIn("--candidates", zero.hint)
 
-    def test_the_sources_other_limits_and_a_metal_refused(self) -> None:
-        (rib_draft,) = [rule for rule in type_side.RULE_SETS["hubs"].rules if rule.id == "molding.rib_draft"]
-        self.assertEqual(rib_draft.limit, 0.25)
-        block = _check(bd.extrude(bd.Rectangle(110, 100), 100, taper=3), rules="protolabs")
-        self.assertIn("molding.part_volume", {f.code for f in block.findings if f.severity == "error"})
+    def test_a_metal_is_refused(self) -> None:
         from cad._internal import manufacturing
         from cad._internal.refused import ArgumentRefused
         with self.assertRaisesRegex(ArgumentRefused, "is a resin: steel is a metal"):

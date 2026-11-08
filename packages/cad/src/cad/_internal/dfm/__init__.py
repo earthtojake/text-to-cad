@@ -1,18 +1,19 @@
-"""The manufacturing check's processes, type side: their options, their rule sets and what their findings say.
+"""The manufacturing check's processes, type side: their options, their rules and what their findings say.
 
 A manufacturing check (``cad.<type>.dfm(source, process=...)``, ``cad._internal.manufacturing``) is two
 layers. The **measurement** is an integration's: exact geometry -- a STEP, an xbf, a document the engine
 holds -- is measured on its B-rep by the build123d integration (``cad.build123d._dfm_*``), a mesh -- an STL,
 a 3MF, a GLB -- by the trimesh integration (``cad.trimesh``); each answers a report of plain data, facts
 alone. The **verdicts** are here: each process's module (``cnc``, ``sheet``, ``molding``, ``printing``)
-names its options, its rule sets (``rules``: each rule cited), the findings its facts call for, and its
-summary line, the standard library alone, so the command resolves every option before it starts an
-environment that holds an integration.
+names its options, its rules (``rules``: general practice, each rule cited), the findings its facts call
+for, and its summary line, the standard library alone, so the command resolves every option before it
+starts an environment that holds an integration. The checks are general, no shop's: a shop's own limits
+are compared with the measurements every result carries.
 
 Every process module has:
 
-- ``OPTIONS``: its own options and their defaults (``None``: not given, measured or the rule set's);
-- ``RULE_SETS``: ``generic`` and the shops' sets it has, each a ``rules.RuleSet``;
+- ``OPTIONS``: its own options and their defaults (``None``: not given, measured or the rules' default);
+- ``RULES``: its one table of rules, a ``rules.RuleSet``;
 - ``MEASURED_FROM``: ``("brep", "mesh")``, the sources it measures (a mesh-only figure says so);
 - ``validate(resolved, document_type)``: ``ArgumentRefused`` naming the fix for a value out of range (its
   kind -- a count an ``int``, a flag a ``bool``, a length finite -- already held by ``manufacturing.options``:
@@ -36,8 +37,8 @@ __all__ = ["COMMON", "PROCESSES", "Unmeasured", "module"]
 #: The processes a check measures for, in the order the help lists them.
 PROCESSES = ("cnc", "sheet", "molding", "printing")
 #: The options every process takes, and their defaults. ``units`` is an STL's alone (the others declare
-#: theirs); ``rules`` is the rule set the verdicts are taken from (``none``: facts alone).
-COMMON: dict[str, Any] = {"rules": "generic", "material": None, "units": "mm"}
+#: theirs).
+COMMON: dict[str, Any] = {"material": None, "units": "mm"}
 
 
 class Unmeasured(Exception):

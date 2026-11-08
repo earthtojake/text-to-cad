@@ -75,7 +75,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
     def test_molding_answers_one_json_line_with_its_measurements(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "molding", "--pull", "-z", "--json")
         payload = json.loads(out)
-        # A plain box has no draft: the generic rules fail it (exit 1) and say where.
+        # A plain box has no draft: the rules fail it (exit 1) and say where.
         self.assertEqual(code, 1)
         self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
         self.assertFalse(payload["ok"])
@@ -125,6 +125,10 @@ class ManufacturingCheckCommand(unittest.TestCase):
         code, _out, err = _run("stl", str(self.box), "--process", "molding", "--not-a-flag")
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --not-a-flag", err)
+        # the checks are general: no flag picks a shop's rules
+        code, _out, err = _run("stl", str(self.box), "--process", "molding", "--rules", "generic")
+        self.assertEqual(code, 2)
+        self.assertIn("unrecognized arguments: --rules generic", err)
         code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "molding", "--json")
         self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
 

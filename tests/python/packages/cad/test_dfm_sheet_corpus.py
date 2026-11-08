@@ -8,8 +8,9 @@ codes) that must fire, and where (a point the failure's ``xyz`` must lie near), 
 false positive. Precision and recall are computed per code over the whole corpus and printed as a table;
 the targets are 1.0. Every failure's ref must resolve, by the engine's own resolver, to a face of the
 STEP. Edge cases: an assembly of several parts, an inch STEP, a part of about a millimetre and one of
-about two metres, rounds everywhere, a freeform shell, a filleted machined block, and the other rule sets
-(SendCutSend, Protolabs) on the parts their own rules reach.
+about two metres, rounds everywhere, a freeform shell, a filleted machined block, and parts a shop's own
+limits would reach (a narrow channel, an open hem, a small countersink, a short flange with no reliefs),
+judged by the general rules alone.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from cad import step
 from tests.python.packages.cad.test_dfm_sheet import bent, tabbed, tray
 
 #: Codes that report, never judge: not scored.
-INFO = {"rules_generic", "sheet.k_factor_assumed", "sheet.bend_radii_mixed"}
+INFO = {"rules_general", "sheet.k_factor_assumed", "sheet.bend_radii_mixed"}
 
 
 @dataclass
@@ -121,39 +122,30 @@ def corpus() -> list[Case]:
                       unit=bd.Unit.IN, near=0.2))
     cases.append(Case("huge_2m", _bracket("huge", t=3.0, r=3.0, base=2000, wall=1200, width=1000),
                       [("sheet.flat_length", None)]))
-    scs = dict(rules="sendcutsend", material="aluminum")
-    cases.append(Case("scs_channel_base", bent([("line", 30), ("bend", 90, 3.175), ("line", 40), ("bend", 90, 3.175),
-                                                ("line", 30)], 3.175, 80, "scs"), [("sheet.channel_base", None)],
-                      options=scs))
-    cases.append(Case("scs_hem", bent([("line", 40), ("bend", 180, 3.175), ("line", 20)], 3.175, 80, "scshem"),
-                      [("sheet.bend_angle", None)], options=scs))
+    # a U-channel whose base is not twice its flanges, and an open hem: a press brake's punch clearance and its
+    # largest angle are a shop's tooling, no general rule
+    cases.append(Case("narrow_channel", bent([("line", 30), ("bend", 90, 3.175), ("line", 40), ("bend", 90, 3.175),
+                                              ("line", 30)], 3.175, 80, "channel"), options=dict(material="aluminum")))
+    cases.append(Case("open_hem", bent([("line", 40), ("bend", 180, 3.175), ("line", 20)], 3.175, 80, "openhem"),
+                      options=dict(material="aluminum")))
     with bd.BuildPart() as sunk:
         bd.Box(80, 50, 3)
         with bd.Locations((0, 0, 1.5)):
             bd.CounterSinkHole(radius=0.8, counter_sink_radius=1.0)
-    cases.append(Case("protolabs_small_countersink", _labelled(sunk.part, "sunk"),
-                      [("sheet.countersink_diameter", (0, 0, 0)), ("sheet.hole_diameter", (0, 0, 0))],
-                      options=dict(rules="protolabs")))
-    # 3 mm 5052 is no SendCutSend gauge (0.125 in is 3.175 mm): the gauge rules are reported not evaluated and
-    # the gauge-free minimum judges the hole 1.5 mm from the tangent line (4.6 mm from the bend line, under
-    # half the narrowest die, 6 mm)
-    scs_hole = _labelled(_hole(_bracket("scs3", t=3.0, r=3.0), 40 - 1.5 - 1.75, 25, 3.5), "scs3")
-    cases.append(Case("scs_3mm_5052_hole_near_bend", scs_hole,
-                      [("sheet.hole_to_bend", (36.75, 25, 1.5)), ("sheet.gauge_unmatched", None)],
-                      options=dict(rules="sendcutsend", material="5052", thickness=3.0)))
-    # 2 mm mild steel is 0.074 in (14 ga): its calculator row's 1.6 mm radius, 0.320 in formed flange and
-    # 0.472 in die judge a flange 4 mm past an R1 bend run into the plate without reliefs
-    cases.append(Case("scs_2mm_steel_short_flange", tabbed(t=2.0, r=1.0, height=4.0, label="scs2"),
-                      [("sheet.bend_radius_shop", None), ("sheet.gauge_thickness", None),  # 2 mm, 0.074 in
-                       ("sheet.flange_length", (2.5, 0, 5)),
-                       ("sheet.bend_relief_depth", (0, 15, 2)), ("sheet.bend_relief_depth", (0, -15, 2)),
+    cases.append(Case("small_countersunk_hole", _labelled(sunk.part, "sunk"), [("sheet.hole_diameter", (0, 0, 0))]))
+    # a hole 1.5 mm from the tangent line of a 3 mm bracket: under the 2 t from it
+    near_bend = _labelled(_hole(_bracket("near3", t=3.0, r=3.0), 40 - 1.5 - 1.75, 25, 3.5), "near3")
+    cases.append(Case("hole_near_bend_3mm", near_bend, [("sheet.hole_to_bend", (36.75, 25, 1.5))],
+                      options=dict(material="5052", thickness=3.0)))
+    # a 2 mm flange 4 mm past an R1 bend run into the plate without reliefs
+    cases.append(Case("short_flange_no_reliefs", tabbed(t=2.0, r=1.0, height=4.0, label="tab2"),
+                      [("sheet.bend_radius", None),
                        ("sheet.bend_relief_width", (0, 15, 2)), ("sheet.bend_relief_width", (0, -15, 2))],
-                      options=dict(rules="sendcutsend", material="mild steel")))
-    good_scs = _labelled(_hole(_bracket("scsok", t=3.175, r=3.175, base=40, wall=30), 15, 25, 5), "scsok")
-    cases.append(Case("scs_clean_0125_5052", good_scs, options=dict(rules="sendcutsend", material="5052")))
-    thin = _labelled(_hole(_plate("thin", t=0.8), -50 + 2.2, 0, 2.0), "thin")  # 1.2 mm from the edge
-    cases.append(Case("protolabs_thin_edge", thin, [("sheet.hole_to_edge", (-47.8, 0, 0.4))],
-                      options=dict(rules="protolabs")))
+                      options=dict(material="mild steel")))
+    clean = _labelled(_hole(_bracket("cleanok", t=3.175, r=3.175, base=40, wall=30), 15, 25, 5), "cleanok")
+    cases.append(Case("clean_0125_bracket", clean, options=dict(material="5052")))
+    thin = _labelled(_hole(_plate("thin", t=0.8), -50 + 2.2, 0, 2.0), "thin")  # 1.2 mm from the edge: over 1 t
+    cases.append(Case("thin_edge", thin))
     # the modelling mistakes an agent makes most: a bracket of two boxes, a sharp corner and no bend radius; a
     # hole drilled across the bend's tangent line; a slot cut across a bend, the bend line in two
     sharp = (bd.Pos(20, 25, 1) * bd.Box(40, 50, 2) + bd.Pos(1, 25, 15) * bd.Box(2, 50, 30)).clean()
@@ -235,12 +227,10 @@ class CorpusTest(unittest.TestCase):
             precision = tp / (tp + fp) if tp + fp else 1.0
             recall = tp / (tp + fn) if tp + fn else 1.0
             lines.append(f"{code:32} {tp:4d} {fp:4d} {fn:4d} {precision:10.2f} {recall:7.2f}")
-        from cad._internal.dfm.sheet import NOT_JUDGED, RULE_SETS
+        from cad._internal.dfm.sheet import RULES
 
-        for name, rule_set in RULE_SETS.items():
-            ids = sorted({rule.id for rule in rule_set.rules})
-            lines.append(f"\n{name}: {len(ids)} rules: {', '.join(i.removeprefix('sheet.') for i in ids)}")
-            lines.append(f"{name} does not judge: {', '.join(sorted(NOT_JUDGED.get(name, {}))) or '-'}")
+        ids = sorted({rule.id for rule in RULES.rules})
+        lines.append(f"\n{len(ids)} rules: {', '.join(i.removeprefix('sheet.') for i in ids)}")
         print("\nsheet corpus, " + f"{len(corpus())} parts in {elapsed:.1f} s\n" + "\n".join(lines), file=sys.stderr)
         self.assertEqual(problems, [])
 

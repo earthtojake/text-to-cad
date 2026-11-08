@@ -129,8 +129,8 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
                                                          "bottom", "location", "xyz")})
                 continue
         else:
-            # radial: square to the axis and meeting it; perpendicular: square to it, beside it (Protolabs turns
-            # "holes that are either parallel or perpendicular to the axis of revolution"); off_axis: else
+            # radial: square to the axis and meeting it; perpendicular: square to it, beside it (a lathe's live
+            # tooling drills holes parallel or perpendicular to the axis of revolution); off_axis: else
             square = abs(float(np.asarray(hole_axis) @ axis)) < 1e-4
             normal = np.cross(np.asarray(hole_axis), axis)
             meets = abs(float(gap @ unit(normal))) < 1e-4 if np.linalg.norm(normal) > 1e-9 else False

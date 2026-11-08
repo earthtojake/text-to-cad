@@ -1,10 +1,11 @@
-"""Rule sets: what a manufacturing check compares its measurements against, each rule cited.
+"""The rules: what a manufacturing check compares its measurements against, each rule cited.
 
-A check's measurements are facts (``cad.build123d``'s and ``cad.trimesh``'s reports). A **rule set** turns
-them into verdicts: a named, versioned table of rules, each a limit on one measured field, taken from one
-source -- a shop's published design guide (Protolabs, Protolabs Network (Hubs), Xometry, SendCutSend) or
-text-to-cad's own ``generic`` set, a starting point that is no shop's and says so in every verdict. A rule
-never changes a measurement and a verdict never replaces one: the report carries both.
+A check's measurements are facts (``cad.build123d``'s and ``cad.trimesh``'s reports). A process's **rules**
+turn them into verdicts: one table per process (``RuleSet``), versioned, each rule a limit on one measured
+field, the general practice a published design guide states -- the guide cited as the rule's evidence, never
+as a shop's limit: text-to-cad's checks are no shop's, and a shop's own limits are read against the
+measurements, which every result carries. A rule never changes a measurement and a verdict never replaces
+one: the report carries both.
 
 A rule reads ``report[family]``: a family's ``items`` (one record per feature, each with its ``location`` --
 a ref in ``cad xbf inspect``'s grammar -- and ``xyz``), or the family itself where it has none (one figure
@@ -14,13 +15,13 @@ applies only where the context matches ``when`` (elsewhere it is recorded ``not_
 and to the items matching ``item_when`` (``not_applicable`` too where no item carries the fields it reads: a
 mesh's walls, against a rule for supported walls). A family measured with nothing to judge -- no hole, no
 wall under its threshold -- passes, ``none found``. A figure that was not measured, or a family that was
-not, is no verdict: it is counted (``not_evaluated``), never passed. A set whose rules come in variants by
+not, is no verdict: it is counted (``not_evaluated``), never passed. A table whose rules come in variants by
 one context key (``RuleSet.selector``: printing's ``technology``) has no figure for a value none of a rule
-id's variants names: that rule is ``not_evaluated`` too, and a set that evaluated nothing is said
+id's variants names: that rule is ``not_evaluated`` too, and a check that evaluated nothing is said
 (``rules_none_evaluated``, a warning) rather than read as a pass. Whatever its variants, the record holds
 one outcome per rule id (``_one_per_rule``).
 
-The standard library alone: the command resolves a rule set before it starts an environment.
+The standard library alone: the command resolves a check's options before it starts an environment.
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ class Rule:
     unit: str                   # "mm", "deg", "ratio", "mm2", "%"
     what: str                   # the figure in words, for the message: "internal corner radius"
     source: str                 # a Source's id
-    severity: str = "error"     # "error": not made as drawn; "warning": cost, risk or a shop's preference
+    severity: str = "error"     # "error": the source's feasibility limit; "warning": its recommendation
     by: str | None = None       # the context key choosing the limit from a mapping
     scale_by: str | None = None  # the context key the limit is multiplied by
     when: Mapping[str, Any] = field(default_factory=dict)       # context key: value or tuple of values
@@ -104,26 +105,24 @@ class Rule:
 
 @dataclass(frozen=True)
 class RuleSet:
-    """A named, versioned table of rules for one process, and the sources they cite."""
+    """One process's versioned table of rules, and the sources they cite."""
 
-    name: str                   # "generic", "protolabs", "hubs", "xometry", "sendcutsend"
     process: str
-    title: str                  # "text-to-cad generic", "Protolabs"
-    version: str                # the table's own version: "2026-11-03"
+    title: str                  # "text-to-cad general rules"
+    version: str                # the table's own version: "2026-11-08"
     rules: tuple[Rule, ...]
     sources: tuple[Source, ...]
-    generic: bool = False
     note: str = ""
-    #: The context key the set's rules come in variants by (printing's ``technology``: one rule id, a limit and
-    #: a severity per technology). A rule id with no variant for the context's value is ``not_evaluated``
-    #: (the set gives no limit here: unverified), never ``not_applicable`` as a rule for another context is.
+    #: The context key the rules come in variants by (printing's ``technology``: one rule id, a limit and a
+    #: severity per technology). A rule id with no variant for the context's value is ``not_evaluated`` (the
+    #: table gives no limit here: unverified), never ``not_applicable`` as a rule for another context is.
     selector: str | None = None
 
     def __post_init__(self) -> None:
         known = {source.id for source in self.sources}
         for rule in self.rules:
             if rule.source not in known:
-                raise ValueError(f"rule set {self.name}: rule {rule.id} cites {rule.source!r}, which it does not list")
+                raise ValueError(f"{self.process} rules: rule {rule.id} cites {rule.source!r}, which it does not list")
 
     def source(self, ident: str) -> Source:
         return next(source for source in self.sources if source.id == ident)
@@ -186,8 +185,8 @@ def _message(rule: Rule, rule_set: RuleSet, value: float, limit: float) -> str:
     relation = "under" if rule.op == "min" else "over"
     bound = "minimum" if rule.op == "min" else "maximum"
     source = rule_set.source(rule.source)
-    origin = (f"generic rule from {source.publisher}, no shop's limit" if rule_set.generic
-              else f"{source.publisher}, {source.title}")
+    # General practice, its guide the evidence: no verdict reads as a shop's limit.
+    origin = f"general practice; source: {source.publisher}, {source.title}"
     # Four figures, or as many more as it takes for the value and the limit to read apart: a 0.999999998 mm wall
     # is under a 1 mm minimum, and its message must not say "1 mm is under the 1 mm minimum".
     digits = 4
@@ -222,9 +221,10 @@ def _hint(rule: Rule, value: float, limit: float, context: Mapping[str, Any], it
 
 def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
              context: Mapping[str, Any]) -> tuple[list[CheckFinding], dict[str, Any]]:
-    """The verdicts of ``rule_set`` on ``report`` in ``context``: findings (one per failing place, at most
-    ``SHOWN_PER_RULE`` per rule, the rest counted in one more) and the record the report keeps of them
-    (``measurements["rules"]``: the set, every rule's outcome, every failure's value, limit and place).
+    """The verdicts of the process's rules (``rule_set``) on ``report`` in ``context``: findings (one per
+    failing place, at most ``SHOWN_PER_RULE`` per rule, the rest counted in one more) and the record the
+    report keeps of them (``measurements["rules"]``: the table, every rule's outcome, every failure's value,
+    limit and place).
 
     The record holds every failure. The findings are what a reader acts on, so they are fewer: failures of
     one rule at one ref are one finding (``and N more at this ref``), and a warning on a figure that
@@ -249,7 +249,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                                    "source": rule.source}
         if limit is None or items is None:
             outcome["status"] = "not_evaluated"
-            outcome["reason"] = ("the rule set gives no limit here" if limit is None
+            outcome["reason"] = ("the rules give no limit here" if limit is None
                                  else f"{rule.family} was not measured")
             outcomes.append(outcome)
             continue
@@ -315,8 +315,8 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                                          _hint(rule, rest["value"], limit, context, failing.get(id(rest), {}))))
     outcomes = _one_per_rule(rule_set, context, outcomes, judged)
     record = {
-        "set": rule_set.name, "title": rule_set.title, "version": rule_set.version, "generic": rule_set.generic,
-        "note": rule_set.note, "context": {key: value for key, value in context.items() if _plain(value)},
+        "title": rule_set.title, "version": rule_set.version, "note": rule_set.note,
+        "context": {key: value for key, value in context.items() if _plain(value)},
         "evaluated": sum(1 for outcome in outcomes if outcome["status"] in ("passed", "failed")),
         "none_found": [outcome["rule"] for outcome in outcomes
                        if outcome["status"] == "passed" and not outcome.get("evaluated")],
@@ -339,7 +339,7 @@ def _one_per_rule(rule_set: RuleSet, context: Mapping[str, Any], outcomes: list[
       is left out, its reason kept;
     - none judged: the one that applied and was not evaluated (no limit here, its family not measured);
     - every variant not applicable: one ``not_applicable``, the conditions joined -- but where every variant
-      is for another value of the set's ``selector`` alone, ``not_evaluated``: the set has no figure for
+      is for another value of the table's ``selector`` alone, ``not_evaluated``: the table has no figure for
       this value, which is no pass."""
     rules_by_id: dict[str, list[Rule]] = {}
     for rule in rule_set.rules:
@@ -363,7 +363,7 @@ def _one_per_rule(rule_set: RuleSet, context: Mapping[str, Any], outcomes: list[
             one.append({"rule": ident, "family": first.family, "field": first.field, "op": first.op,
                         "unit": first.unit, "severity": first.severity, "source": first.source,
                         "status": "not_evaluated",
-                        "reason": f"the rule set gives no limit for {key} {context.get(key)}"})
+                        "reason": f"the rules give no limit for {key} {context.get(key)}"})
         else:
             reasons = list(dict.fromkeys(str(outcome.get("reason") or "") for outcome in group))
             one.append({**group[0], "reason": "; or ".join(reason for reason in reasons if reason)})

@@ -1010,8 +1010,7 @@ class _Analysis:
         if given is not None:
             bend.k, bend.k_source = float(given), "given (--k-factor)"
         else:
-            bend.k, bend.k_source = rules_side.k_factor(self.options.get("material"), self.options.get("rules"),
-                                                        bend.inside_radius, t)
+            bend.k, bend.k_source = rules_side.k_factor(self.options.get("material"), bend.inside_radius, t)
         bend.allowance = span * (bend.inside_radius + bend.k * t)
         return bend
 
@@ -1907,14 +1906,14 @@ class Unfolded:
     note: str = ""
 
 
-def _unfolded(shape: Any, thickness: float | None, k_factor: float | None, material: str | None,
-              rules: str | None) -> list[Unfolded]:
+def _unfolded(shape: Any, thickness: float | None, k_factor: float | None,
+              material: str | None) -> list[Unfolded]:
     import build123d as bd
 
     from cad._internal.dfm import materials
 
     materials.resolve(material)  # refused by name where unknown; the name itself keeps its alloy (6061, 316)
-    options = {"thickness": thickness, "k_factor": k_factor, "material": material, "rules": rules}
+    options = {"thickness": thickness, "k_factor": k_factor, "material": material}
     if k_factor is not None and not 0.0 < float(k_factor) <= 0.5:
         raise ValueError(f"k_factor is the neutral axis's place in the thickness, above 0 and at most 0.5, "
                          f"not {k_factor}")
@@ -1956,22 +1955,22 @@ def _unfolded(shape: Any, thickness: float | None, k_factor: float | None, mater
 
 
 def unfold(shape: Any, *, thickness: float | None = None, k_factor: float | None = None,
-           material: str | None = None, rules: str | None = None, bend_lines: bool = False) -> Any:
+           material: str | None = None, bend_lines: bool = False) -> Any:
     """The flat pattern of a bent sheet metal part (a build123d ``Shape``): exact 2D geometry in the XY
     plane, ready to return from a ``@dxf`` model.
 
     Each flange is rotated flat about its bend and the bend replaced by a strip as wide as its bend
     allowance, ``BA = angle * (inside radius + K * thickness)``; holes and arcs stay exact. ``thickness``
     (mm) is checked against the part's measured one; ``k_factor`` is the neutral axis's place in the
-    thickness (default: Hubs's generic chart by ``material`` and each bend's radius, or SendCutSend's
-    calculator with ``rules="sendcutsend"``). One part gives its flat ``Face`` (or a ``Compound`` of the
+    thickness (the shop's, from its bend table; default Hubs's air-bending chart by ``material`` and each
+    bend's radius). One part gives its flat ``Face`` (or a ``Compound`` of the
     pieces that do not join); several parts, a ``Compound`` of each one's. With ``bend_lines`` the result
     is a ``Compound`` of the cut outline labelled ``CUT`` and the bends' centre lines labelled ``BEND``: a
     DXF writes each label as its own layer. ``ValueError`` for a shape that is not one thickness of sheet.
     """
     import build123d as bd
 
-    found = _unfolded(shape, thickness, k_factor, material, rules)
+    found = _unfolded(shape, thickness, k_factor, material)
     flats = [item.face for item in found]
     cut = flats[0] if len(flats) == 1 else bd.Compound(children=flats)
     if not bend_lines:

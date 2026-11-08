@@ -1,4 +1,4 @@
-"""Injection molding: its options, rule sets, findings and summary (``cad._internal.dfm``).
+"""Injection molding: its options, rules, findings and summary (``cad._internal.dfm``).
 
 Measured along one pull (``pull``), on exact geometry (``cad.build123d._dfm_molding``) or a mesh
 (``cad.trimesh._molding``), one schema either way:
@@ -21,6 +21,11 @@ Measured along one pull (``pull``), on exact geometry (``cad.build123d._dfm_mold
 With ``candidates`` the pulls are ranked (x, y, z and the part's principal axes) instead (``ranked``); where
 the pull looks wrong (``pull_doubtful``) the measurement ranks them too (``pull_check``) and the hint names the
 one ranked first.
+
+The rules (``RULES``) are general practice from published injection molding design guides (cited as the
+evidence, not as a shop's limit). A press's or a mold's own limits -- its projected area, its part size,
+its side actions' travel -- are no rule here: the measurements (``projection``, ``envelope``,
+``undercuts``) are compared with them.
 """
 
 from __future__ import annotations
@@ -33,13 +38,13 @@ from cad._internal.dfm._common import mm, where
 from cad._internal.dfm.rules import Rule, RuleSet, Source
 from cad.results import CheckFinding
 
-__all__ = ["CLAMP_FACTORS", "MEASURED_FROM", "OPTIONS", "RULE_SETS", "WALL_RANGES", "clamp", "context", "findings",
+__all__ = ["CLAMP_FACTORS", "MEASURED_FROM", "OPTIONS", "RULES", "WALL_RANGES", "clamp", "context", "findings",
            "pull_doubtful", "ranked", "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"pull": "z", "wall_limit": 45.0, "zero_tol": 0.05, "cavities": None}
 MEASURED_FROM = ("brep", "mesh")
 _ACCESSED = "2026-11-03"
-_VERSION = "2026-11-06"
+_VERSION = "2026-11-08"
 
 HUBS = Source("hubs-im", "Protolabs Network (Hubs)", "Injection molding design guide",
               "https://www.hubs.com/guides/injection-molding/", _ACCESSED)
@@ -49,8 +54,6 @@ PROTOLABS = Source("protolabs-im", "Protolabs", "Plastic injection molding desig
 PROTOLABS_WALLS = Source("protolabs-walls", "Protolabs", "Improving part design with uniform wall thickness",
                          "https://www.protolabs.com/resources/design-tips/improving-part-design-with-uniform-wall-thickness/",
                          _ACCESSED)
-XOMETRY = Source("xometry-im", "Xometry", "Custom plastic injection molding services (design guidelines)",
-                 "https://www.xometry.com/capabilities/injection-molding-service/", _ACCESSED)
 XOMETRY_RIBS = Source("xometry-ribs", "Xometry", "Plastic ribs for injection-molding design",
                       "https://www.xometry.com/resources/injection-molding/plastic-ribs-for-injection-molding-design/",
                       _ACCESSED)
@@ -144,7 +147,7 @@ def _uniform_rules() -> tuple[Rule, ...]:
 
 
 _RIB = {"kind": "rib"}  # a rib's height and spacing: a snap arm (``kind``: snap) is judged by the snap rule
-#: Hubs states both, the wall's and the rib's: the generic and hubs sets take the first.
+#: Hubs states both, the wall's and the rib's: the rules take the first.
 _RIB_HEIGHT_NOTE = ("Hubs: \"max. height equal to 3x the wall thickness\" and \"Define a height smaller than 3 \u00d7 "
                     "rib thickness\"")
 
@@ -202,70 +205,17 @@ _TRANSITION = Rule("molding.wall_transition", "transitions", "transition_ratio",
                    "thickness transition's length over its change", "hubs-im", severity="warning",
                    fix="taper the change in thickness over at least {limit:g} times the change (a chamfer or fillet)")
 
-_GENERIC = RuleSet(
-    "generic", "molding", "text-to-cad generic", _VERSION,
+RULES = RuleSet(
+    "molding", "text-to-cad general rules", _VERSION,
     (*_draft_rules("protolabs-im", 0.5, "error", (2.0, "hubs-im"), note=_DRAFT_NOTE), *_undercut_rules("hubs-im"),
      *_wall_rules(), *_uniform_rules(), _TRANSITION,
      *_rib_rules((0.6, "xometry-ribs"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
                  ("gap_to_wall", 2.5, "xometry-ribs"), (0.5, "xometry-ribs")),
      _SNAP, _BOSS_ROOT, _CORNER),
-    (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS), generic=True,
-    note="a starting point drawn from published guides, no shop's limits: Protolabs' 0.5 deg draft minimum and its "
-         "wall table, 2 deg recommended (Hubs and Protolabs both), Hubs' corner, transition, undercut, snap-fit and "
-         "root guidance, Xometry's and Protolabs' rib and boss proportions")
-
-_PROTOLABS = RuleSet(
-    "protolabs", "molding", "Protolabs", _VERSION,
-    (*_draft_rules("protolabs-im", 0.5, "error", (2.0, "protolabs-im")), *_undercut_rules("protolabs-im"),
-     *_wall_rules(), *_uniform_rules(),
-     Rule("molding.side_action_stroke", "undercuts", "stroke_mm", "max", 2.875 * _IN, "mm", "side-action pull",
-          "protolabs-im", item_when={"release": "side_action"},
-          fix="shorten the slide's travel (a shallower undercut) to under {limit:.4g} mm"),
-     Rule("molding.side_action_height", "undercuts", "height_mm", "max", 2.377 * _IN, "mm", "side-action height",
-          "protolabs-im", item_when={"release": "side_action"}, fix="a side action is at most {limit:.4g} mm tall"),
-     Rule("molding.side_action_width", "undercuts", "width_mm", "max", 8.419 * _IN, "mm", "side-action width",
-          "protolabs-im", item_when={"release": "side_action"}, fix="a side action is at most {limit:.4g} mm wide"),
-     Rule("molding.projected_area", "projection", "projected_area_mm2", "max", 175.0 * _IN * _IN, "mm2",
-          "projected area", "protolabs-im", fix="the press takes {limit:.6g} mm2 of projected area at most"),
-     Rule("molding.part_length", "envelope", "span_major_mm", "max", 29.6 * _IN, "mm", "part length across the pull",
-          "protolabs-im", fix="the mold takes parts {limit:.4g} mm long at most"),
-     Rule("molding.part_width", "envelope", "span_minor_mm", "max", 18.9 * _IN, "mm", "part width across the pull",
-          "protolabs-im", fix="the mold takes parts {limit:.4g} mm wide at most"),
-     Rule("molding.part_depth", "envelope", "depth_along_pull_mm", "max", 8.0 * _IN, "mm", "part depth along the pull",
-          "protolabs-im", fix="the mold takes parts {limit:.4g} mm deep at most"),
-     Rule("molding.depth_from_parting", "envelope", "depth_from_parting_mm", "max", 4.0 * _IN, "mm",
-          "depth from the parting line", "protolabs-im",
-          fix="move the parting line toward the middle: each half reaches {limit:.4g} mm from it at most"),
-     Rule("molding.part_volume", "envelope", "volume_mm3", "max", 59.0 * _IN ** 3, "mm3", "part volume",
-          "protolabs-im", note="Protolabs: \"Volume: 59 cu. in.\"",
-          fix="the press shoots parts of {limit:.6g} mm3 at most: core the part out or split it")),
-    (PROTOLABS, PROTOLABS_WALLS),
-    note="Protolabs' published limits: its draft, side-action, size and projected-area limits are its feasibility "
-         "limits (errors); its wall table and uniform-wall guidance are recommendations (warnings)")
-
-_HUBS = RuleSet(
-    "hubs", "molding", "Protolabs Network (Hubs)", _VERSION,
-    (Rule("molding.draft", "draft", "draft_deg", "min", 2.0, "deg", "wall draft", "hubs-im", severity="warning",
-          item_when={"opens": _MOLDED}, note=_DRAFT_NOTE, fix="draft this wall {limit:g} deg (Hubs' recommended minimum)"),
-     *_undercut_rules("hubs-im"), _TRANSITION,
-     *_rib_rules((0.5, "hubs-im"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
-                 ("gap_to_thickness", 4.0, "hubs-im"),
-                 (0.25, "hubs-im", "Hubs: ribs drafted \"at least 0.25\u00b0 - 0.5\u00b0\": the low end")),
-     _SNAP, _BOSS_ROOT, _CORNER),
-    (HUBS,),
-    note="Hubs' design guide: its numbers are recommendations (warnings) but for an undercut nothing releases")
-
-_XOMETRY = RuleSet(
-    "xometry", "molding", "Xometry", _VERSION,
-    (*_draft_rules("xometry-im", 0.5, "error"), *_undercut_rules("xometry-im"),
-     *_rib_rules((0.6, "xometry-ribs"), ("height_to_thickness", 3.0, "xometry-ribs"),
-                 ("base_fillet_wall_ratio", 0.5, "xometry-ribs"), ("gap_to_wall", 2.5, "xometry-ribs"),
-                 (0.5, "xometry-ribs"))),
-    (XOMETRY, XOMETRY_RIBS),
-    note="Xometry's published guidance: its 0.5 deg draft is a minimum (an error), its rib proportions "
-         "recommendations")
-
-RULE_SETS: dict[str, RuleSet] = {"generic": _GENERIC, "protolabs": _PROTOLABS, "hubs": _HUBS, "xometry": _XOMETRY}
+    (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS),
+    note="general practice from published design guides, no shop's limits: a 0.5 deg draft minimum and a wall "
+         "table per resin, 2 deg recommended, corner, transition, undercut, snap-fit and root guidance, rib and "
+         "boss proportions; a press's and a mold's own limits are compared with the measurements")
 
 
 _AXES = ("x", "y", "z")
@@ -470,11 +420,10 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                   "no wall thickness was read (an open shell?): the wall rules are not evaluated",
                                   "thickness"))
     material = materials.resolve(resolved.get("material"))
-    rules = resolved.get("rules", "generic")
-    if rules != "none" and material not in WALL_RANGES:
+    if material not in WALL_RANGES:
         found.append(CheckFinding(
             "info", "resin_unknown",
-            (f"no --material: " if material is None else f"{material} is not in Protolabs' wall table: ")
+            (f"no --material: " if material is None else f"{material} is not in the wall table by resin: ")
             + "the resin's wall range is not evaluated and the clamp force is a range", "material",
             f"give --material ({', '.join(sorted(WALL_RANGES))})"))
     if estimate is not None and estimate["items"]:

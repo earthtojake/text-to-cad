@@ -18,7 +18,7 @@ import ezdxf
 
 from cad import dxf
 
-CLEAN_CODES = {"rules_generic"}
+CLEAN_CODES = {"rules_general"}
 
 
 def _plate(msp, width=120.0, height=80.0, layer="CUT"):
@@ -185,7 +185,7 @@ class CutFileTest(unittest.TestCase):
         tight = self.check(path, thickness=2.0, kerf=0.9)
         self.assertIn("sheet.under_kerf", self.codes(tight))  # the 0.8 mm hole is narrower than the beam
 
-    def test_a_notch_a_tab_a_bend_layer_and_sendcutsends_layers(self) -> None:
+    def test_a_notch_a_tab_and_a_bend_layer(self) -> None:
         def build(msp, document):
             document.layers.add("BEND")
             msp.add_lwpolyline([(0, 0), (100, 0), (100, 40), (54, 40), (54, 25), (52, 25), (52, 40), (0, 40)],
@@ -193,17 +193,15 @@ class CutFileTest(unittest.TestCase):
             msp.add_line((0, 20), (100, 20), dxfattribs={"layer": "BEND"})
             msp.add_circle((20, 23), 1.5, dxfattribs={"layer": "CUT"})   # 1.5 mm from the bend line
             msp.add_circle((80, 10), 2, dxfattribs={"layer": "ETCH_CUT"})
-        result = self.check(self.write("notched", build), thickness=2.0, rules="generic")
+        result = self.check(self.write("notched", build), thickness=2.0)
         notch = min(result.measurements["notches"]["items"], key=lambda item: item["width_mm"])
         self.assertAlmostEqual(notch["width_mm"], 2.0, places=6)
         self.assertAlmostEqual(notch["length_mm"], 15.0, places=6)
         self.assertIn("sheet.notch_length", self.codes(result))
         (near,) = [item for item in result.measurements["hole_to_bend"]["items"] if item["xyz"][:2] == [20.0, 23.0]]
         self.assertAlmostEqual(near["distance_centerline_mm"], 1.5, places=6)
-        scs = self.check(self.write("notched2", build), thickness=0.125 * 25.4, material="aluminum",
-                         rules="sendcutsend")
-        self.assertIn("sheet.cut_layers", self.codes(scs))  # CUT and ETCH_CUT both hold cut geometry
-        self.assertIn("sheet.hole_to_bend", self.codes(scs))  # under half the 0.630 in die
+        # CUT and ETCH_CUT both hold cut geometry: a fact (a shop's own file rules read it), no general rule
+        self.assertEqual(result.measurements["cut_file"]["cut_layer_count"], 2)
 
     def test_an_unfolded_part_written_by_build123d_is_a_clean_cut_file(self) -> None:
         import build123d as bd

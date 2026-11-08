@@ -5,7 +5,7 @@ and what ``cad.build123d.cnc(shape)`` and its siblings run for a live shape.
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
 candidates)``, a report of plain data, facts alone); the type side makes the result of the report: the
-process's findings and the rule set's verdicts (``manufacturing.finish``). Given no process
+process's findings and the rules' verdicts (``manufacturing.finish``). Given no process
 (``measure_declared``), the document is read first and measured for the process its parts declare, the
 options resolved for it then (``manufacturing.declared``).
 """
@@ -97,37 +97,37 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
     return manufacturing.finish(Path(document.name or "shape"), report, process, resolved, candidates)
 
 
-def cnc(shape: Any, *, rules: str | None = None, material: str | None = None, axes: int | None = None,
+def cnc(shape: Any, *, material: str | None = None, axes: int | None = None,
         turning: bool = False, tools: str | None = None, stock: str | None = None) -> Any:
     """CNC machining's check of ``shape`` (a build123d ``Shape``; an assembly's every part): a ``CheckResult``
     whose findings are at refs (``plate/face 7``) and whose ``measurements`` is the report -- the options are
     ``cad.step.dfm``'s for ``process="cnc"``."""
-    return checked(shape, "cnc", {"rules": rules, "material": material, "axes": axes, "turning": turning,
+    return checked(shape, "cnc", {"material": material, "axes": axes, "turning": turning,
                                   "tools": tools, "stock": stock})
 
 
-def sheet_metal(shape: Any, *, rules: str | None = None, material: str | None = None,
+def sheet_metal(shape: Any, *, material: str | None = None,
                 thickness: float | None = None, k_factor: float | None = None, bend_radius: float | None = None,
                 kerf: float | None = None, sheet_size: str | None = None) -> Any:
     """Sheet metal's check of ``shape``, as ``cnc``'s (``process="sheet"``)."""
-    return checked(shape, "sheet", {"rules": rules, "material": material, "thickness": thickness,
+    return checked(shape, "sheet", {"material": material, "thickness": thickness,
                                     "k_factor": k_factor, "bend_radius": bend_radius, "kerf": kerf,
                                     "sheet_size": sheet_size})
 
 
-def molding(shape: Any, *, rules: str | None = None, material: str | None = None, pull: str | None = None,
+def molding(shape: Any, *, material: str | None = None, pull: str | None = None,
             wall_limit: float | None = None, zero_tol: float | None = None, cavities: int | None = None,
             candidates: bool = False) -> Any:
     """Injection molding's check of ``shape``, as ``cnc``'s (``process="molding"``)."""
-    return checked(shape, "molding", {"rules": rules, "material": material, "pull": pull,
+    return checked(shape, "molding", {"material": material, "pull": pull,
                                       "wall_limit": wall_limit, "zero_tol": zero_tol, "cavities": cavities},
                    candidates=candidates)
 
 
-def printing(shape: Any, *, rules: str | None = None, material: str | None = None, technology: str | None = None,
+def printing(shape: Any, *, material: str | None = None, technology: str | None = None,
              build_volume: str | None = None, angle_limit: float | None = None, layer_height: float | None = None,
              nozzle: float | None = None, candidates: bool = False) -> Any:
     """3D printing's check of ``shape``, as ``cnc``'s (``process="printing"``)."""
-    return checked(shape, "printing", {"rules": rules, "material": material, "technology": technology,
+    return checked(shape, "printing", {"material": material, "technology": technology,
                                        "build_volume": build_volume, "angle_limit": angle_limit,
                                        "layer_height": layer_height, "nozzle": nozzle}, candidates=candidates)

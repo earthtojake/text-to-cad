@@ -3,7 +3,7 @@
 ``model``, ``stl``, ``threemf``, ``glb``, ``step``, ``xbf`` and, as a sheet's cut file, ``dxf`` each answer
 ``dfm`` with the same function, made for the type here (``dfm_for``): its signature takes a path (or, for a
 model, its document id or handle) and plain values alone, so it is the type's (the signature rule). Four processes, each a
-module of ``cad._internal.dfm`` (its options, rule sets, findings and summary):
+module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 - ``cnc``, milling and turning: internal corners, pockets and slots, walls, holes, tool access per setup,
   stock, and with ``turning`` the turned features;
@@ -18,10 +18,12 @@ module of ``cad._internal.dfm`` (its options, rule sets, findings and summary):
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
 finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``); an STL, a 3MF and a GLB by the trimesh
 integration (``cad.trimesh._check``), each finding at ``x, y, z``. The report is the result's
-``measurements``, facts alone. The verdicts are the rule set's (``rules``, ``generic`` by default, ``none``
-for facts alone): every rule a limit on one measured figure with its source, a failing one a finding whose
-code is the rule's id and whose hint says what to change; the record of every rule is
-``measurements["rules"]``.
+``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
+practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
+failing one a finding whose code is the rule's id and whose hint says what to change; the record of every
+rule is ``measurements["rules"]``. A shop's own limits are no option here: they are compared with the
+measurements (a shop's skill does), and what a person knows of their own shop is a plain option (the
+tools, the bend radius, the sheet, the build volume).
 
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
@@ -50,10 +52,9 @@ from cad.results import CheckFinding, CheckResult
 __all__ = ["BREP_TYPES", "DEFAULTS", "KINDS", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for", "finish", "options",
            "processes_for"]
 
-#: The enumerations ``process``, ``rules``, ``units`` and ``technology`` take, so the command's generated parser
-#: takes their values alone (each flag's choices); each is held to the modules that define it (below).
+#: The enumerations ``process``, ``units`` and ``technology`` take, so the command's generated parser takes
+#: their values alone (each flag's choices); each is held to the modules that define it (below).
 Process = Literal["cnc", "sheet", "molding", "printing"]
-RuleSet = Literal["generic", "protolabs", "hubs", "xometry", "sendcutsend", "none"]
 Unit = Literal["mm", "cm", "m", "in", "ft"]
 Technology = Literal["fdm", "sls", "sla", "mjf", "pbf"]
 PROCESSES = dfm.PROCESSES
@@ -76,15 +77,13 @@ DEFAULTS = {**dfm.COMMON, **{name: value for given in OPTIONS.values() for name,
 #: Every option's kind, in the order the signature and the help list them: a value of another kind is refused
 #: by name (``_common.require``), never coerced -- ``axes=3.7`` is not 3 axes, ``turning="no"`` is no flag.
 KINDS: dict[str, type] = {
-    "rules": str, "material": str, "units": str, "axes": int, "turning": bool, "tools": str, "stock": str,
+    "material": str, "units": str, "axes": int, "turning": bool, "tools": str, "stock": str,
     "thickness": float, "k_factor": float, "bend_radius": float, "kerf": float, "sheet_size": str, "pull": str,
     "wall_limit": float, "zero_tol": float, "cavities": int, "technology": str, "build_volume": str,
     "angle_limit": float, "samples": int, "layer_height": float, "nozzle": float}
 # Raised, not asserted: the signature and the command's choices are these, under ``python -O`` too.
 if get_args(Process) != PROCESSES:
     raise RuntimeError(f"manufacturing.Process {get_args(Process)} is not dfm.PROCESSES {PROCESSES}")
-if set(get_args(RuleSet)) != {name for process in PROCESSES for name in dfm.module(process).RULE_SETS} | {"none"}:
-    raise RuntimeError("manufacturing.RuleSet is not the processes' rule sets and none")
 if get_args(Technology) != dfm.module("printing").TECHNOLOGIES:
     raise RuntimeError("manufacturing.Technology is not dfm.printing.TECHNOLOGIES")
 if set(KINDS) != set(DEFAULTS):
@@ -136,7 +135,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     line's mistake, exit 2) naming the fix for no process or another, an option of another process, a value
     of another kind (``KINDS``: a float for a count, a word for a flag, an infinite length), a pull beside
     ``candidates`` (which ranks every pull), ``candidates`` of a process that ranks none, a units the type does
-    not take, a rule set the process has not, or a value out of range.
+    not take, or a value out of range.
 
     With no process, a type checked for one process alone takes it (a DXF: sheet), and a B-rep type's
     (``BREP_TYPES``) check the one its parts declare, read with the document: what holds for every process
@@ -169,9 +168,6 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
         raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
     if units != "mm" and document_type in _DECLARED:
         raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
-    if resolved["rules"] != "none" and resolved["rules"] not in module.RULE_SETS:
-        raise ArgumentRefused(f"--rules for {process} is one of {', '.join((*module.RULE_SETS, 'none'))}, "
-                         f"not {resolved['rules']!r}")
     from cad._internal.dfm import materials
 
     materials.resolve(resolved.get("material"))
@@ -185,7 +181,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
 def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> None:
     """What ``options`` refuses of a B-rep type's check before its process is known: a STEP's (its parts'
     declared materials are not written to it, so it never declares a process: refused before any environment
-    is made, not after the file is read), a units, a material, a rule set no process has, a pull beside
+    is made, not after the file is read), a units, a material, a pull beside
     ``candidates``. Each option of one process is judged once the declared process is read (``declared``)."""
     if document_type == "step":
         raise ArgumentRefused(f"a STEP keeps no process: give --process {', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}")
@@ -196,10 +192,6 @@ def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> N
         if units not in UNITS_MM:
             raise ArgumentRefused(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
         raise ArgumentRefused(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
-    chosen = given.get("rules")
-    sets = sorted({name for process in PROCESSES for name in dfm.module(process).RULE_SETS})
-    if chosen is not None and chosen != "none" and chosen not in sets:
-        raise ArgumentRefused(f"--rules is one of {', '.join((*sets, 'none'))}, not {chosen!r}")
     from cad._internal.dfm import materials
 
     materials.resolve(given.get("material"))
@@ -295,8 +287,8 @@ def _failed(path: Path, message: str, code: str) -> CheckResult:
 
 def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str, Any],
            candidates: bool) -> CheckResult:
-    """The result of a measured ``report``: the measurement's findings, the process's, and the rule set's
-    verdicts, which the report records (``measurements["rules"]``)."""
+    """The result of a measured ``report``: the measurement's findings, the process's, and the verdicts of its
+    rules, which the report records (``measurements["rules"]``)."""
     from cad._internal.dfm import _common, rules
 
     module = dfm.module(process)
@@ -304,25 +296,22 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
     found: list[CheckFinding] = [*_common.partial_findings(report), *_common.scale_findings(report),
                                  *(CheckFinding(**finding) for finding in report.pop("findings", None) or ()),
                                  *module.findings(report, resolved, candidates)]
-    chosen = resolved.get("rules", "generic")
-    if not candidates and chosen != "none":
-        rule_set = module.RULE_SETS[chosen]
+    if not candidates:
+        rule_set = module.RULES
         verdicts, record = rules.evaluate(report, rule_set, module.context(report, resolved))
         report["rules"] = record
         found.extend(verdicts)
         if not record["evaluated"] and record["outcomes"]:
             found.append(CheckFinding(
                 "warning", "rules_none_evaluated",
-                f"the {rule_set.title} rule set judged nothing here: none of its rules has a limit for this "
-                f"part's context (every outcome is not_evaluated or not_applicable), so nothing is verified", "rules",
-                "give --rules generic, or a set that covers this technology or material"))
-        if rule_set.generic:
-            found.append(CheckFinding(
-                "info", "rules_generic",
-                f"the verdicts are {rule_set.title}'s rules (version {rule_set.version}), a starting point drawn "
-                f"from published guides, not a shop's limits", "rules",
-                f"give --rules {' or '.join(name for name in module.RULE_SETS if name != 'generic') or 'none'}, "
-                f"or compare measurements with the shop's own limits"))
+                "the rules judged nothing here: none has a limit for this part's context (every outcome is "
+                "not_evaluated or not_applicable), so nothing is verified", "rules",
+                "read the measurements against the process's published limits"))
+        found.append(CheckFinding(
+            "info", "rules_general",
+            f"the verdicts are {rule_set.title} (version {rule_set.version}): general practice drawn from "
+            f"published design guides, no shop's limits", "rules",
+            "for a named shop, compare the measurements with its own published limits, or use its skill"))
     try:
         # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse than one that says it failed.
         json.dumps(report, allow_nan=False)
@@ -340,7 +329,7 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         line = f"OK {display_path(label) if label.is_absolute() else label}: {process} {measured}"
         rules_record = report.get("rules") or {}
         if rules_record and not rules_record.get("evaluated") and rules_record.get("outcomes"):
-            line += f"; nothing judged: the {rules_record.get('title')} rules have no limit for this part's context"
+            line += "; nothing judged: the rules have no limit for this part's context"
         warned = sum(1 for finding in found if finding.severity == "warning")
         if warned:
             line += f" ({warned} warning(s))"
@@ -428,27 +417,29 @@ def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict
 #: Each option's help line (``name: text``, the convention the command's generated parser reads its help from):
 #: the process it is of first, so a type's help names whose each flag is.
 _HELP = {
-    "rules": "the rule set the verdicts come from: generic (default), a shop's (protolabs, hubs, xometry, "
-             "sendcutsend: those the process has), or none.",
     "material": "the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's "
                 "limits; default the material the part declares (part.material = metals.aluminum()), when every "
                 "part agrees.",
     "units": "the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.",
     "axes": "cnc: the milling machine's axes, 3, 4 or 5; default 3.",
     "turning": "cnc: the part is turned on a lathe (its axis found), not milled.",
-    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default the rule set's.",
+    "tools": "cnc: the end mill diameters available, in mm, comma separated (3,6,10); default none: a sharp "
+             "corner is held to the smallest standard end mill, 2.5 mm.",
     "stock": "cnc: the stock's size in mm (100x60x25); default the part's box.",
     "thickness": "sheet: the stock's thickness in mm; default measured.",
-    "k_factor": "sheet: the neutral axis's place in the thickness, for the flat pattern; default the rule set's.",
+    "k_factor": "sheet: the neutral axis's place in the thickness, for the flat pattern (the shop's bend "
+                "table's); default a K-factor chart's, by the material and each bend's radius.",
     "bend_radius": "sheet: the shop's inside bend radius in mm, compared with the part's.",
     "kerf": "sheet: the cutting kerf in mm, for small features.",
-    "sheet_size": "sheet: the largest sheet in mm (1219x2438); default the rule set's.",
+    "sheet_size": "sheet: the shop's largest sheet in mm (1219x2438); default a standard 5 x 10 ft sheet "
+                  "(3048x1524), assumed.",
     "pull": "molding: the pull direction, an axis (z, -y) or x,y,z components; default z.",
     "wall_limit": "molding: faces at or above this many degrees from the pull are not walls; default 45.",
     "zero_tol": "molding: draft under this many degrees is zero draft; default 0.05.",
     "cavities": "molding: cavities in the mold, for the clamp force; default 1.",
     "technology": "printing: fdm, sls, sla, mjf or pbf (metal powder bed); default fdm.",
-    "build_volume": "printing: the printer's build volume in mm (256x256x256); default the technology's.",
+    "build_volume": "printing: the printer's build volume in mm (256x256x256); default a typical machine of "
+                    "the technology's, assumed.",
     "angle_limit": "printing: down-facing faces under this many degrees from horizontal need support; default "
                    "the technology's.",
     "samples": "printing: rays cast for the wall-thickness field on a mesh; default 2000.",
@@ -456,7 +447,7 @@ _HELP = {
     "nozzle": "printing: fdm's nozzle diameter in mm; default 0.4.",
 }
 # The enumerations among the options: the command's choices.
-_ENUMS: dict[str, Any] = {"rules": RuleSet, "units": Unit, "technology": Technology}
+_ENUMS: dict[str, Any] = {"units": Unit, "technology": Technology}
 
 _SUMMARY = {
     "brep": "Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing.",
@@ -465,21 +456,23 @@ _SUMMARY = {
 }
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
-(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are a rule set's (--rules,
-generic by default: a starting point, no shop's limits), each finding coded by its rule, with the limit, the
-source and what to change. A rule broken is an error, as is a family that could not be measured; --rules none
-reports facts alone. --json carries every measurement and every rule's outcome.""",
+(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
+from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
+and what to change. A rule's feasibility limit broken is an error, as is a family that could not be measured;
+a recommendation is a warning. For a named shop, compare the measurements with its own published limits.
+--json carries every measurement and every rule's outcome.""",
     "mesh": """A mesh (STL, 3MF, GLB) is measured as triangles, each finding at x, y, z; CNC machining and sheet
 metal need the exact radii, axes and thicknesses a mesh does not hold: check the part's STEP, xbf or model
-for them. The measurements are facts; the verdicts are a rule set's (--rules, generic by default: a starting
-point, no shop's limits), each finding coded by its rule, with the limit, the source and what to change. A rule
-broken is an error, as is a family that could not be measured; --rules none reports facts alone. --json
-carries every measurement and every rule's outcome.""",
+for them. The measurements are facts; the verdicts are general rules, each from a published design guide and
+no shop's limit, each finding coded by its rule, with the limit, the source and what to change. A rule's
+feasibility limit broken is an error, as is a family that could not be measured; a recommendation is a
+warning. For a named shop, compare the measurements with its own published limits. --json carries every
+measurement and every rule's outcome.""",
     "cut": """Its units, closed contours on the cut layers, curves cut twice (overlapping, crossing, zero-area),
 annotation on a cut layer, curves drawn as short lines, and holes, slots, webs and spacing against the kerf
-and the thickness, judged against a cited rule set (--rules); each finding at a layer and an entity handle.
-A rule broken is an error; --rules none reports facts alone. --json carries every measurement and every
-rule's outcome.""",
+and the thickness, judged against general rules, each cited; each finding at a layer and an entity handle.
+A rule's feasibility limit broken is an error, a recommendation a warning; for a named shop, compare the
+measurements with its own published limits. --json carries every measurement and every rule's outcome.""",
 }
 
 

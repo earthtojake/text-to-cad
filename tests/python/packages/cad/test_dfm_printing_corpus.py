@@ -5,7 +5,7 @@ every technology through ``cad.step.dfm`` (and a mesh path through ``cad.stl.dfm
 verdicts compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
-generic rule set has a limit it breaks, its place, a radius). A failure the rules record
+rules have a limit it breaks, its place, a radius). A failure the rules record
 (``measurements["rules"]["outcomes"]``) within the radius of a planted defect of its rule is a true
 positive; any other is a false positive; a planted defect with none is a false negative. Precision and
 recall per rule id are printed to stderr and must be 1.0.
@@ -127,7 +127,7 @@ def hollows():
 
 
 def bar():
-    """400 mm long: no technology's generic machine holds it, and the powder beds warp it."""
+    """400 mm long: no technology's typical machine holds it, and the powder beds warp it."""
     planted = [("printing.build_volume", ALL, (0, 0, 3), 5.0),
                ("printing.warp_length", ("sls", "mjf"), (0, 0, 3), 5.0)]
     return _doc("bar", bd.Box(400, 20, 6, align=A)), planted, planted

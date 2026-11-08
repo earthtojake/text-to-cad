@@ -183,7 +183,6 @@ class Case:
     build: object
     expect: dict[str, list[Box3]] = field(default_factory=dict)   # rule: the regions it must fail in
     absent: tuple[str, ...] = ()                                   # rules that must fail nowhere
-    rules: str = "generic"
     unit: object = None
     mesh: str | None = None                                       # "fine" or "coarse": an STL of it too
     mesh_expect: dict[str, list[Box3]] | None = None              # where a mesh's differ, and why (comment)
@@ -269,9 +268,8 @@ CASES = [
          absent=("molding.undercut",)),
     Case("tiny_block", lambda: bd.Box(1.0, 1.0, 0.6, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)),
          expect={"molding.draft_min": [EVERYWHERE], "molding.wall_min": [EVERYWHERE]}, absent=("molding.undercut",)),
-    Case("huge_panel", lambda: plate(2000.0, 1000.0, 4.0), rules="protolabs",
-         expect={"molding.part_length": [EVERYWHERE], "molding.part_width": [EVERYWHERE],
-                 "molding.projected_area": [EVERYWHERE]},
+    # 2 x 1 m: a press's and a mold's size are a shop's, compared with the measurements: no general rule fails it
+    Case("huge_panel", lambda: plate(2000.0, 1000.0, 4.0),
          absent=("molding.draft_min", "molding.undercut", "molding.wall_min", "molding.thick_section")),
 ]
 
@@ -362,14 +360,14 @@ class MoldingCorpusTest(unittest.TestCase):
                 bd.export_step(shape.scale(1 / 25.4), str(step), unit=bd.Unit.IN)
             else:
                 bd.export_step(shape, str(step))
-            result = cad.step.dfm(str(step), process="molding", rules=case.rules, material="abs")
+            result = cad.step.dfm(str(step), process="molding", material="abs")
             cls.results[case.name] = result
             _score(case.name, result, case.expect, case.absent, _Places(step), cls.tallies)
             if case.mesh:
                 stl = root / f"{case.name}.stl"
                 tolerance, angular = (0.2, 0.6) if case.mesh == "coarse" else (0.01, 0.1)
                 bd.export_stl(shape, str(stl), tolerance=tolerance, angular_tolerance=angular)
-                meshed = cad.stl.dfm(str(stl), process="molding", rules=case.rules, material="abs")
+                meshed = cad.stl.dfm(str(stl), process="molding", material="abs")
                 cls.results[f"{case.name}.stl"] = meshed
                 _score(f"{case.name}.stl ({case.mesh})", meshed,
                        case.expect if case.mesh_expect is None else case.mesh_expect,

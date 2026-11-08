@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""The manufacturing checks' shared layers: rule sets and their verdicts (``cad._internal.dfm.rules``),
+"""The manufacturing checks' shared layers: the rules and their verdicts (``cad._internal.dfm.rules``),
 the options every process resolves (``cad._internal.manufacturing.options``), and exact geometry
 (``cad.build123d._dfm_brep``): a document's parts and their refs, surfaces, edges, rays and samples.
 
@@ -26,8 +26,8 @@ from cad.build123d import _dfm_brep as brep
 SOURCE = Source("s", "Publisher", "Guide", "https://example.invalid/guide", "2026-11-03")
 
 
-def _set(*rules: Rule, generic: bool = False) -> RuleSet:
-    return RuleSet("test", "cnc", "Test", "1", rules, (SOURCE,), generic=generic)
+def _set(*rules: Rule) -> RuleSet:
+    return RuleSet("cnc", "Test", "1", rules, (SOURCE,))
 
 
 class RulesTest(unittest.TestCase):
@@ -39,7 +39,7 @@ class RulesTest(unittest.TestCase):
                                         {"radius_mm": None, "location": "plate/face 11"}]}}
         found, record = evaluate(report, _set(rule), {})
         self.assertEqual([(f.code, f.location, f.severity) for f in found], [("cnc.corner", "plate/face 7", "error")])
-        self.assertIn("0.5 mm is under the 1 mm minimum (Publisher, Guide)", found[0].message)
+        self.assertIn("0.5 mm is under the 1 mm minimum (general practice; source: Publisher, Guide)", found[0].message)
         self.assertEqual(found[0].hint, "radius it to at least 1 mm")
         outcome = record["outcomes"][0]
         self.assertEqual((outcome["status"], outcome["evaluated"], outcome["unmeasured"]), ("failed", 2, 1))
@@ -147,13 +147,13 @@ class RulesTest(unittest.TestCase):
         from cad._internal import dfm
 
         for process in dfm.PROCESSES:
-            for name, rule_set in dfm.module(process).RULE_SETS.items():
-                ids = {rule.id for rule in rule_set.rules}
-                for context, report in _exercises(rule_set):
-                    with self.subTest(process=process, rules=name, context=context, measured=bool(report)):
-                        _, record = evaluate(report, rule_set, context)
-                        said = [outcome["rule"] for outcome in record["outcomes"]]
-                        self.assertEqual(sorted(said), sorted(ids))
+            rule_set = dfm.module(process).RULES
+            ids = {rule.id for rule in rule_set.rules}
+            for context, report in _exercises(rule_set):
+                with self.subTest(process=process, context=context, measured=bool(report)):
+                    _, record = evaluate(report, rule_set, context)
+                    said = [outcome["rule"] for outcome in record["outcomes"]]
+                    self.assertEqual(sorted(said), sorted(ids))
 
     def test_variants_that_judge_are_one_outcome_with_every_failure(self) -> None:
         low = Rule("r", "f", "v", "min", 1.0, "mm", "v", "s")
@@ -186,15 +186,14 @@ class RulesTest(unittest.TestCase):
                        *(root / "_internal").glob("meshops_*.py"),
                        *([root / "build123d" / "_dfm_dxf.py"] if process == "sheet" else [])]
             text = "".join(path.read_text(encoding="utf-8") for path in sources)
-            for rule_set in dfm.module(process).RULE_SETS.values():
-                for rule in rule_set.rules:
-                    for template in (rule.fix, rule.detail):
-                        names = {field.split(".")[0].split("[")[0]
-                                 for _, field, _, _ in string.Formatter().parse(template) if field}
-                        unknown = {name for name in names - {"value", "limit", "unit", "xyz"}
-                                   if f'"{name}"' not in text and not re.search(rf"\b{name}=", text)}
-                        with self.subTest(rule=rule.id, rules=rule_set.name, template=template):
-                            self.assertEqual(unknown, set())
+            for rule in dfm.module(process).RULES.rules:
+                for template in (rule.fix, rule.detail):
+                    names = {field.split(".")[0].split("[")[0]
+                             for _, field, _, _ in string.Formatter().parse(template) if field}
+                    unknown = {name for name in names - {"value", "limit", "unit", "xyz"}
+                               if f'"{name}"' not in text and not re.search(rf"\b{name}=", text)}
+                    with self.subTest(rule=rule.id, template=template):
+                        self.assertEqual(unknown, set())
 
 
 def _exercises(rule_set: RuleSet) -> list[tuple[dict, dict]]:
@@ -225,12 +224,13 @@ def _exercises(rule_set: RuleSet) -> list[tuple[dict, dict]]:
 class OptionsTest(unittest.TestCase):
     def test_each_option_belongs_to_its_process(self) -> None:
         resolved = manufacturing.options("step", "cnc", {"axes": 5, "tools": "6,3"})
-        self.assertEqual((resolved["axes"], resolved["rules"], resolved["turning"]), (5, "generic", False))
+        self.assertEqual((resolved["axes"], resolved["turning"]), (5, False))
+        self.assertNotIn("rules", resolved, "the rules are the process's own: no option picks them")
         for process, given, said in (
                 ("cnc", {"pull": "z"}, "--pull is not cnc's"),
                 ("molding", {"turning": True}, "--turning is not molding's"),
                 ("cnc", {"axes": 7}, "--axes is 3, 4 or 5"),
-                ("cnc", {"rules": "acme"}, "--rules for cnc is one of"),
+                ("cnc", {"rules": "generic"}, "--rules is not cnc's"),
                 ("sheet", {"k_factor": 0.9}, "--k-factor"),
                 ("printing", {"technology": "inkjet"}, "--technology is one of"),
                 ("printing", {"material": "cheese"}, "--material is one of")):
@@ -542,7 +542,7 @@ class DeclaredProcessTest(unittest.TestCase):
         for document_type in ("stl", "threemf", "glb", "step"):  # a mesh has no process to declare; a STEP keeps none
             with self.subTest(document_type=document_type), self.assertRaisesRegex(ValueError, "give --process"):
                 manufacturing.options(document_type, None, {})
-        for given, said in (({"units": "cm"}, "an xbf is in millimetres"), ({"rules": "acme"}, "--rules is one of"),
+        for given, said in (({"units": "cm"}, "an xbf is in millimetres"),
                             ({"material": "cheese"}, "--material is one of")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
                 manufacturing.options("xbf", None, given)
@@ -575,18 +575,18 @@ class SelectorTest(unittest.TestCase):
         sla = Rule("p.hole", "holes", "d", "min", 0.8, "mm", "hole", "s", when={"technology": ("sla",)})
         sls = Rule("p.hole", "holes", "d", "min", 1.5, "mm", "hole", "s", when={"technology": ("sls",)})
         other = Rule("p.turn", "turning", "d", "max", 1.0, "mm", "turned", "s", when={"turning": True})
-        rules = RuleSet("test", "printing", "Test", "1", (sla, sls, other), (SOURCE,), selector="technology")
+        rules = RuleSet("printing", "Test", "1", (sla, sls, other), (SOURCE,), selector="technology")
         report = {"holes": {"items": [{"d": 0.5, "location": "p/face 1"}]}}
         found, record = evaluate(report, rules, {"technology": "fdm", "turning": False})
         self.assertEqual(found, [])
         hole = [o for o in record["outcomes"] if o["rule"] == "p.hole"]
         self.assertEqual([(o["status"], o["reason"]) for o in hole],
-                         [("not_evaluated", "the rule set gives no limit for technology fdm")])
+                         [("not_evaluated", "the rules give no limit for technology fdm")])
         # a rule for another context stays not_applicable: it is not a missing figure
         turn = next(o for o in record["outcomes"] if o["rule"] == "p.turn")
         self.assertEqual(turn["status"], "not_applicable")
         self.assertEqual(record["evaluated"], 0)
-        # with the technology the set knows, the rule judges
+        # with a technology the rules know, the rule judges
         found, record = evaluate(report, rules, {"technology": "sla", "turning": False})
         self.assertEqual([f.code for f in found], ["p.hole"])
         self.assertEqual(record["evaluated"], 1)
@@ -612,7 +612,7 @@ class SummaryTest(unittest.TestCase):
         block = bd.Box(40, 30, 15); block.label = "block"
         self.assertTrue(cnc(block, turning=True).summary.endswith("failed: cnc.no_turning_axis x1"))
         self.assertIn("failed: sheet.not_sheet x1", sheet_metal(block).summary)
-        warned = printing(block, technology="pbf", rules="hubs")
+        warned = printing(block, technology="pbf")
         self.assertTrue(warned.ok)
         self.assertRegex(warned.human_lines()[-1], r"^OK block: printing pbf: .* \(1 warning\(s\)\)$")
 

@@ -9,7 +9,7 @@ kernel. The temporary folder is gone when the check returns: the check writes no
 
 **The report** is the measurement's (``_molding``, ``_printing``: every family, ``partial`` and
 ``partial_sections``), facts alone; the type side makes the result of it (``manufacturing.finish``: the
-process's findings and the rule set's verdicts). Every place is ``x, y, z`` in millimetres: a mesh has no
+process's findings and the rules' verdicts). Every place is ``x, y, z`` in millimetres: a mesh has no
 faces a ref names.
 """
 

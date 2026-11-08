@@ -105,7 +105,7 @@ def tray(size: float = 60.0, t: float = 1.5, r: float = 1.5, height: float = 20.
     return part
 
 
-OPTIONS = {"thickness": None, "k_factor": 0.4, "material": None, "rules": "generic"}
+OPTIONS = {"thickness": None, "k_factor": 0.4, "material": None}
 
 
 def measured(shape: bd.Shape, **options) -> dict:
@@ -333,62 +333,42 @@ class OutlineTest(unittest.TestCase):
 
 class TypeSideTest(unittest.TestCase):
     def test_k_factor_defaults(self) -> None:
-        self.assertEqual(sheet_rules.k_factor("aluminum", "generic", 0.5, 1.0)[0], 0.33)
-        self.assertEqual(sheet_rules.k_factor("stainless", "generic", 2.0, 1.0)[0], 0.45)
-        self.assertEqual(sheet_rules.k_factor(None, "generic", 4.0, 1.0)[0], 0.50)
-        k, said = sheet_rules.k_factor("aluminum", "sendcutsend", 3.175, 0.125 * 25.4)
-        self.assertEqual(k, 0.44)
-        self.assertIn("SendCutSend", said)
+        self.assertEqual(sheet_rules.k_factor("aluminum", 0.5, 1.0)[0], 0.33)
+        self.assertEqual(sheet_rules.k_factor("stainless", 2.0, 1.0)[0], 0.45)
+        k, said = sheet_rules.k_factor(None, 4.0, 1.0)
+        self.assertEqual(k, 0.50)
+        self.assertIn("no material given: medium (steel)", said)
 
-    def test_context_picks_each_sources_table(self) -> None:
+    def test_context_scales_tabs_and_takes_the_sheet_given(self) -> None:
         report = {"parts": {"items": [{"thickness_mm": 2.0}]}, "bends": {"items": [{"inside_radius_mm": 2.0}]}}
-        found = sheet_rules.context(report, {"material": "steel", "rules": "protolabs"})
-        self.assertAlmostEqual(found["protolabs_flange_t"], 2.75 * 2.0)  # CRS, .060-.090 in
-        self.assertEqual(found["protolabs_edge_band"], "thick")
-        self.assertEqual(found["tab_min_mm"], 4.0)
-        self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"]), (1193.8, 990.6))
-        found = sheet_rules.context({"parts": {"items": [{"thickness_mm": 0.125 * 25.4}]}, "bends": {"items": [{}]}},
-                                    {"material": "aluminum", "rules": "sendcutsend", "sheet_size": "500x300"})
-        self.assertAlmostEqual(found["scs_half_die_mm"], 0.630 * 25.4 / 2)
-        self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"]), (500.0, 300.0))
+        found = sheet_rules.context(report, {"material": "steel"})
+        self.assertEqual((found["tab_min_mm"], found["notch_min_mm"]), (4.0, 2.0))
+        self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"], found["sheet_given"]),
+                         (*sheet_rules.DEFAULT_SHEET, False))
+        found = sheet_rules.context(report, {"material": "aluminum", "sheet_size": "300x500"})
+        self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"], found["sheet_given"]), (500.0, 300.0, True))
 
-    def test_every_set_judges_or_names_every_rule_another_set_judges(self) -> None:
-        ids = {name: {rule.id.removeprefix("sheet.") for rule in rule_set.rules}
-               for name, rule_set in sheet_rules.RULE_SETS.items()}
-        every = set().union(*ids.values())
-        for name, rule_set in sheet_rules.RULE_SETS.items():
-            gaps = sheet_rules.NOT_JUDGED[name]
-            self.assertEqual(every - ids[name], set(gaps), name)  # no silent gap, no stale one
-            for rule in gaps:
-                self.assertIn(rule, rule_set.note, name)
+    def test_the_flat_on_a_sheet_given_is_an_error_on_the_standard_sheet_a_warning(self) -> None:
+        from cad._internal.dfm import rules
 
-    def test_sendcutsend_gauges_and_their_fallbacks(self) -> None:
-        self.assertEqual(sheet_rules.scs_row("steel", 2.0)[0], 0.074)       # within 0.005 in
-        self.assertIsNone(sheet_rules.scs_row("aluminum", 3.0))            # 0.125 in is 3.175 mm
-        report = {"parts": {"items": [{"thickness_mm": 3.0}]}, "bends": {"items": [{"inside_radius_mm": 3.0}]}}
-        resolved = {"material": "5052", "rules": "sendcutsend", "thickness": None}
-        found = sheet_rules.context(report, resolved)
-        self.assertFalse(found["scs_gauge"])
-        self.assertNotIn("scs_min_flange_mm", found)
-        codes = [(f.severity, f.code) for f in sheet_rules.findings(report, resolved, False)]
-        self.assertIn(("error", "sheet.gauge_unmatched"), codes)
-        _, record = __import__("cad._internal.dfm.rules", fromlist=["evaluate"]).evaluate(
-            {**report, "flanges": {"items": [{"length_outside_half_mm": 50.0}]}},
-            sheet_rules.RULE_SETS["sendcutsend"], found)
-        flange = [o["status"] for o in record["outcomes"] if o["rule"] == "sheet.flange_length"]
-        self.assertIn("passed", flange)  # the gauge-free minimum judged where the gauge's is not
-        self.assertNotIn("failed", flange)
+        report = {"parts": {"items": [{"thickness_mm": 2.0, "is_sheet": True, "flat_length_mm": 600.0,
+                                       "flat_width_mm": 100.0, "location": "p/face 1"}]}}
+        given, _ = rules.evaluate(report, sheet_rules.RULES, sheet_rules.context(report, {"sheet_size": "500x300"}))
+        self.assertEqual([(f.code, f.severity) for f in given], [("sheet.flat_length", "error")])
+        report["parts"]["items"][0]["flat_length_mm"] = 3100.0
+        assumed, _ = rules.evaluate(report, sheet_rules.RULES, sheet_rules.context(report, {}))
+        self.assertEqual([(f.code, f.severity) for f in assumed], [("sheet.flat_length", "warning")])
+        self.assertIn("give --sheet-size", assumed[0].hint)
 
-    def test_sendcutsends_relief_width_is_half_the_thickness(self) -> None:
+    def test_a_bend_relief_is_as_wide_as_the_thickness(self) -> None:
         from cad._internal.dfm import rules
 
         report = {"parts": {"items": [{"thickness_mm": 2.0, "is_sheet": True}]}, "bends": {"items": [{}]},
                   "reliefs": {"items": [{"kind": "bend", "width_mm": width, "location": f"p/face {n}", "detail": "d"}
-                                        for n, width in ((1, 0.9), (2, 1.1))]}}
-        resolved = {"material": "steel", "rules": "sendcutsend"}
-        _, record = rules.evaluate(report, sheet_rules.RULE_SETS["sendcutsend"], sheet_rules.context(report, resolved))
+                                        for n, width in ((1, 1.9), (2, 2.1))]}}
+        _, record = rules.evaluate(report, sheet_rules.RULES, sheet_rules.context(report, {"material": "steel"}))
         (width,) = [o for o in record["outcomes"] if o["rule"] == "sheet.bend_relief_width"]
-        self.assertEqual([(f["value"], f["location"]) for f in width["failures"]], [(0.9, "p/face 1")])
+        self.assertEqual([(f["value"], f["location"]) for f in width["failures"]], [(1.9, "p/face 1")])
 
     def test_options_and_findings(self) -> None:
         with self.assertRaisesRegex(ValueError, "--sheet-size"):
@@ -396,8 +376,8 @@ class TypeSideTest(unittest.TestCase):
         report = {"parts": {"items": [{"thickness_mm": 2.0, "is_sheet": True, "location": "p/face 1"}]},
                   "bends": {"items": [{"inside_radius_mm": 2.0, "location": "p/face 4"}]},
                   "holes": {"items": [{"size_mm": 0.2, "location": "p/face 9"}]}}
-        codes = {f.code for f in sheet_rules.findings(report, {"thickness": 1.5, "bend_radius": 1.0, "kerf": 0.3,
-                                                                "rules": "generic"}, False)}
+        codes = {f.code for f in sheet_rules.findings(report, {"thickness": 1.5, "bend_radius": 1.0, "kerf": 0.3},
+                                                      False)}
         self.assertTrue({"sheet.thickness_mismatch", "sheet.bend_radius_differs", "sheet.under_kerf"} <= codes)
 
     def test_a_check_through_the_step_reads_refs_that_resolve(self) -> None:
@@ -458,11 +438,11 @@ class ModellingMistakeTest(unittest.TestCase):
 
     def test_a_short_flat_is_an_error_where_nothing_else_says_why(self) -> None:
         part = {"thickness_mm": 2.0, "is_sheet": True, "location": "p/face 1", "flat_material_fraction": 0.8}
-        alone = {f.code for f in sheet_rules.findings({"parts": {"items": [part]}}, {"rules": "generic"}, False)}
+        alone = {f.code for f in sheet_rules.findings({"parts": {"items": [part]}}, {}, False)}
         self.assertIn("sheet.flat_incomplete", alone)
         sharp = {"parts": {"items": [part]}, "sharp_bends": {"items": [{"kind": "sharp", "location": "p/face 2",
                                                                          "thickness_mm": 2.0, "angle_deg": 90.0}]}}
-        codes = {f.code for f in sheet_rules.findings(sharp, {"rules": "generic"}, False)}
+        codes = {f.code for f in sheet_rules.findings(sharp, {}, False)}
         self.assertEqual(codes & {"sheet.flat_incomplete", "sheet.sharp_bend"}, {"sheet.sharp_bend"})
 
     def test_a_round_on_one_side_of_a_corner_says_which_radius_is_missing(self) -> None:
@@ -511,21 +491,14 @@ class ModellingMistakeTest(unittest.TestCase):
         lid = bent([("line", 8), ("bend", 180, 0.5), ("line", 25), ("bend", 90, 1.0), ("line", 60)], 1.0, 50, "lid")
         self.assertNotIn("sheet.bend_radii_mixed", {f.code for f in checked(lid, thickness=1).findings})
 
-    def test_sendcutsend_names_its_radius_and_does_not_contradict_it(self) -> None:
-        # 5052 at the 0.080 in gauge, bent at the calculator's 0.038 in: nothing about the radius
-        t, r = 0.080 * 25.4, 0.038 * 25.4
-        good = checked(bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 50, "scs"), material="5052",
-                       rules="sendcutsend")
-        self.assertEqual(failed(good, "sheet.bend_radius") + failed(good, "sheet.bend_radius_shop"), [])
-        # 2 mm steel (0.074 in) bent at r = t: it is bent at the tooling's radius, so its flanges move -- one
-        # warning for the bend, naming the radius to model in mm and inches, no second finding beside it
-        off = checked(bent([("line", 40), ("bend", 90, 2.0), ("line", 30)], 2.0, 50, "scs"), material="steel",
-                      rules="sendcutsend")
-        (shop,) = [f for f in off.findings if f.code == "sheet.bend_radius_shop"]
+    def test_the_shops_radius_is_given_and_said_once_a_bend(self) -> None:
+        # no radius is assumed for a shop: given (--bend-radius), each bend modelled otherwise is one warning
+        bracket = bent([("line", 40), ("bend", 90, 2.0), ("line", 30)], 2.0, 50, "L")
+        self.assertNotIn("sheet.bend_radius_differs", {f.code for f in checked(bracket, material="steel").findings})
+        (shop,) = [f for f in checked(bracket, material="steel", bend_radius=1.6).findings
+                   if f.code == "sheet.bend_radius_differs"]
         self.assertEqual(shop.severity, "warning")
-        self.assertIn("mild steel 0.074 in, 1.6 mm (0.063 in)", shop.hint)
-        self.assertIn("SendCutSend bends mild steel 0.074 in at 1.6 mm (0.063 in)", shop.message)
-        self.assertNotIn("sheet.bend_radius_differs", {f.code for f in off.findings})
+        self.assertIn("the shop's 1.6 mm", shop.message)
 
     def test_a_chamfered_plate_is_cut_sheet_its_flat_the_cut_outline(self) -> None:
         plate = bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
@@ -552,16 +525,6 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertEqual(formed.severity, "error")
         self.assertIn("cone", formed.message)
         self.assertNotIn("sheet.uniform_thickness", {f.code for f in result.findings})  # not six 0.005 mm departures
-
-    def test_sendcutsend_bends_5052_alone_among_aluminums(self) -> None:
-        t, r = 0.080 * 25.4, 0.038 * 25.4
-        bracket = bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 50, "scs")
-        alloy = checked(bracket, material="6061", rules="sendcutsend")
-        (refused,) = [f for f in alloy.findings if f.code == "sheet.material_not_bent"]
-        self.assertEqual(refused.severity, "error")
-        self.assertIn("6061", refused.message)
-        self.assertNotIn("sheet.material_not_bent", {f.code for f in checked(bracket, material="5052",
-                                                                            rules="sendcutsend").findings})
 
     def test_thickness_departures_say_how_thick_against_the_sheet(self) -> None:
         plate = bd.Pos(0, 0, 1) * bd.Box(80, 50, 2) + bd.Pos(0, 0, 2.5) * bd.Box(20, 20, 1)  # a 3 mm patch

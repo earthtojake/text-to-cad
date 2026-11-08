@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """3D printing's check of exact geometry (``cad.build123d._dfm_printing``), its numpy measures
-(``cad._internal.meshops_printing``) and its rule sets (``cad._internal.dfm.printing``).
+(``cad._internal.meshops_printing``) and its rules (``cad._internal.dfm.printing``).
 
 Every part is built here with build123d, so each figure is the construction's: a tunnel 8 mm wide is a
 bridge of 8 mm because it was cut that way, a 30 deg underside is 30 deg because it was drawn so, a void
@@ -367,15 +367,15 @@ class PlateTest(unittest.TestCase):
         result = check(bar, "bar")
         fit = result.measurements["build_volume"]
         self.assertEqual((fit["fill_ratio"], fit["fits"], fit["volume_mm"]), (1.25, False, [200.0, 200.0, 200.0]))
-        # against the set's assumed machine, a warning that names it; against the machine given, an error
+        # against a typical machine assumed, a warning that names it; against the machine given, an error
         assumed = next(f for f in result.findings if f.code == "printing.build_volume")
         self.assertEqual(assumed.severity, "warning")
-        self.assertIn("generic set's assumed 200 x 200 x 200 mm machine: give --build-volume", assumed.message)
+        self.assertIn("an assumed typical fdm machine, 200 x 200 x 200 mm: give --build-volume", assumed.message)
         given = check(bar, "bar", build_volume="200x200x200")
         self.assertEqual([f.severity for f in given.findings if f.code == "printing.build_volume"], ["error"])
         self.assertFalse(given.ok)
         self.assertTrue(check(bar, "bar", build_volume="100x100x300").measurements["build_volume"]["fits"])
-        self.assertTrue(check(bar, "bar", rules="hubs").ok, "Hubs's industrial FDM, 900 x 600 x 900")
+        self.assertTrue(check(bar, "bar", build_volume="900x600x900").ok, "an industrial FDM machine")
 
     def test_bed_contact_and_warping(self) -> None:
         result = check(bd.Box(150, 40, 3, align=A), "flat", material="abs")
@@ -434,21 +434,25 @@ class StepTest(unittest.TestCase):
         self.assertRegex(bridge["location"], r"^tunnel/face \d+$")
 
 
-class RuleSetTest(unittest.TestCase):
-    def test_every_set_cites_every_rule_and_keys_its_limits_by_technology(self) -> None:
-        self.assertEqual(set(rules.RULE_SETS), {"generic", "hubs", "protolabs", "xometry"})
-        for rule_set in rules.RULE_SETS.values():
-            cited = {source.id for source in rule_set.sources}
-            for rule in rule_set.rules:
-                self.assertIn(rule.source, cited)
-                self.assertTrue(rule.id.startswith("printing."))
-                self.assertEqual(rule.by, "technology")
-                self.assertTrue(set(rule.limit) <= set(rules.TECHNOLOGIES), rule.id)
-        self.assertTrue(rules.RULE_SETS["generic"].generic)
+class RulesTest(unittest.TestCase):
+    def test_the_rules_cite_every_rule_and_key_their_limits_by_technology(self) -> None:
+        cited = {source.id for source in rules.RULES.sources}
+        for rule in rules.RULES.rules:
+            self.assertIn(rule.source, cited)
+            self.assertTrue(rule.id.startswith("printing."))
+            self.assertEqual(rule.by, "technology")
+            self.assertTrue(set(rule.limit) <= set(rules.TECHNOLOGIES), rule.id)
 
-    def test_a_set_with_no_figure_for_the_technology_judges_nothing_and_says_so(self) -> None:
+    def test_rules_with_no_figure_for_the_technology_judge_nothing_and_say_so(self) -> None:
+        import dataclasses
+        from unittest import mock
+
+        # rules for every technology but FDM: an FDM part is judged by none of them
+        others = dataclasses.replace(rules.RULES, rules=tuple(rule for rule in rules.RULES.rules
+                                                              if "fdm" not in rule.limit))
         plate = bd.Pos(0, 0, 2.5) * (bd.Box(20, 20, 5) - bd.Cylinder(0.4, 5))
-        result = check(plate, "plate", rules="protolabs", technology="fdm")
+        with mock.patch.object(rules, "RULES", others):
+            result = check(plate, "plate", technology="fdm")
         self.assertEqual([o["status"] for o in outcome(result, "printing.hole_diameter")], ["not_evaluated"])
         self.assertEqual(result.measurements["rules"]["evaluated"], 0)
         self.assertNotIn("passed", {o["status"] for o in result.measurements["rules"]["outcomes"]})
@@ -470,8 +474,9 @@ class RuleSetTest(unittest.TestCase):
                             ({"layer_height": 0}, "--layer-height is a length")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
                 manufacturing.options("step", "printing", given)
-        self.assertEqual(rules.machine_volume({"technology": "pbf", "rules": "protolabs"})["volume_mm"],
-                         [245.0, 245.0, 330.0])
+        assumed = rules.machine_volume({"technology": "pbf"})
+        self.assertEqual(assumed["volume_mm"], [250.0, 150.0, 150.0])
+        self.assertTrue(assumed["origin"].startswith("assumed"))
 
 
 class SeamTest(unittest.TestCase):

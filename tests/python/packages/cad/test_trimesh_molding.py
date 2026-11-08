@@ -506,7 +506,6 @@ class CheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = _stl(Box(20, 20, 15), Path(td), "box")
             result = cad.stl.dfm(path, process="molding", pull="-z")
-            facts = cad.stl.dfm(path, process="molding", pull="-z", rules="none")
 
         report = result.measurements
         self.assertFalse(report["partial"])
@@ -517,14 +516,12 @@ class CheckTest(unittest.TestCase):
         # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
         self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
-        # A plain box's four sides have no draft: the fact is said, and the generic rules' 0.5 deg minimum
-        # (Protolabs') fails the check at each side; facts alone (rules none) still pass.
+        # A plain box's four sides have no draft: the fact is said, and the rules' 0.5 deg minimum fails the
+        # check at each side.
         self.assertIn("zero_draft_walls", [f.code for f in result.findings if f.severity == "warning"])
         self.assertFalse(result.ok)
         self.assertEqual(sum(f.code == "molding.draft_min" for f in result.findings), 4)
         self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"molding.draft_min"})
-        self.assertTrue(facts.ok)
-        self.assertEqual([f.code for f in facts.findings if f.severity == "warning"], ["zero_draft_walls"])
 
     def test_an_open_mesh_of_two_bodies_is_still_measured(self) -> None:
         # One triangle gone: the mesh is no longer watertight, and splitting its two bodies must not reach for a

@@ -370,7 +370,7 @@ class TurningTest(unittest.TestCase):
         body -= bd.Pos(0, 0, -1) * bd.Cylinder(4, 41, align=(A.CENTER, A.CENTER, A.MIN))
         body -= bd.Pos(0, 0, 30) * bd.Cylinder(6, 3, align=(A.CENTER, A.CENTER, A.MIN))
         body -= bd.Pos(0, 0, 50) * bd.Rot(0, 90, 0) * bd.Cylinder(2.5, 40)
-        cls.result = _check(_part(body, "shaft"), turning=True, material="aluminum", rules="protolabs")
+        cls.result = _check(_part(body, "shaft"), turning=True, material="aluminum")
         cls.report = cls.result.measurements
 
     def test_the_axis_and_the_envelope(self) -> None:
@@ -386,8 +386,9 @@ class TurningTest(unittest.TestCase):
         relations = sorted(h.get("relation") for h in self.report["holes"]["items"])
         self.assertEqual(relations, ["axial", "radial"])
         self.assertEqual({item["kind"] for item in self.report["live_tooling"]["items"]}, {"cross_hole"})
-        self.assertIn("cnc.internal_groove", _codes(self.result))  # Protolabs offers no ID groove
-        self.assertNotIn("cnc.groove_width", _codes(self.result))  # 2 mm: wide enough
+        # grooves are facts: a lathe's groove limits are a shop's, compared with the measurements, never a rule
+        judged = {o["family"] for o in self.report["rules"]["outcomes"] if o["status"] in ("passed", "failed")}
+        self.assertNotIn("grooves", judged)
 
     def test_a_square_plate_with_a_bore_is_mostly_not_turned(self) -> None:
         result = _check(_part(bd.Box(100, 100, 10) - bd.Cylinder(10, 30)), turning=True)
@@ -404,7 +405,7 @@ class ThreadsTest(unittest.TestCase):
         profile = bd.Plane.XZ.shift_origin((2.5, 0, 0)) * bd.Polygon((-0.05, -0.4), (0.5, 0), (-0.05, 0.4), align=None)
         thread = bd.sweep(profile, path=bd.Pos(0, 0, 3) * bd.Helix(1.0, 4.0, 2.5), is_frenet=True)
         part = bd.Box(16, 16, 10, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Cylinder(2.5, 30) - thread
-        result = _check(_part(part), rules="protolabs")
+        result = _check(_part(part))
         found = result.measurements["threads"]["items"]
         self.assertEqual(len(found), 1)
         self.assertEqual((found[0]["internal"], found[0]["major_diameter_mm"], found[0]["minor_diameter_mm"]),
@@ -412,7 +413,6 @@ class ThreadsTest(unittest.TestCase):
         self.assertAlmostEqual(found[0]["pitch_mm"], 1.0, places=3)
         self.assertEqual(result.measurements["access"]["items"], [])
         self.assertEqual(result.measurements["sharp_edges"]["items"], [])
-        self.assertIn("cnc.modelled_thread", _codes(result))
 
 
     def test_a_revolved_round_is_no_thread(self) -> None:
@@ -429,31 +429,18 @@ class ThreadsTest(unittest.TestCase):
         self.assertEqual(result.measurements["threads"]["items"], [])
 
 
-class RuleSetsTest(unittest.TestCase):
-    def test_every_set_cites_what_it_uses_and_the_options_resolve(self) -> None:
-        self.assertEqual(set(rules_side.RULE_SETS), {"generic", "hubs", "protolabs", "xometry"})
-        for rule_set in rules_side.RULE_SETS.values():
-            for rule in rule_set.rules:
-                self.assertTrue(rule.id.startswith("cnc."), rule.id)
-                self.assertTrue(rule_set.source(rule.source).url.startswith("https://"))
-        self.assertTrue(rules_side.RULE_SETS["generic"].generic)
-        resolved = manufacturing.options("step", "cnc", {"tools": "6,3", "rules": "xometry", "material": "6061"})
+class RulesTest(unittest.TestCase):
+    def test_the_rules_cite_what_they_use_and_the_options_resolve(self) -> None:
+        for rule in rules_side.RULES.rules:
+            self.assertTrue(rule.id.startswith("cnc."), rule.id)
+            self.assertTrue(rules_side.RULES.source(rule.source).url.startswith("https://"))
+        resolved = manufacturing.options("step", "cnc", {"tools": "6,3", "material": "6061"})
         context = rules_side.context({}, resolved)
-        self.assertEqual((context["min_tool_mm"], context["envelope"], context["hardness"]),
-                         (3.0, "aluminum/3", "soft"))
+        self.assertEqual((context["min_tool_mm"], context["wall_class"]), (3.0, "metal"))
         with self.assertRaisesRegex(ValueError, "--tools"):
             manufacturing.options("step", "cnc", {"tools": "3,x"})
-
-    def test_protolabs_says_what_its_tables_do_not_list(self) -> None:
-        three_sides = bd.Box(40, 30, 20) - _pocket(10, 10, 4, 2, 10) - bd.Rot(180, 0, 0) * _pocket(10, 10, 4, 2, 10) \
-            - bd.Rot(0, 90, 0) * _pocket(10, 10, 4, 2, 20)
-        steel = _check(_part(three_sides), rules="protolabs", material="steel")
-        self.assertEqual({f.severity for f in steel.findings if f.code in ("cnc.envelope_unlisted", "cnc.two_sided")},
-                         {"warning"})
-        self.assertEqual({f.code for f in steel.findings} & {"cnc.envelope_unlisted", "cnc.two_sided"},
-                         {"cnc.envelope_unlisted", "cnc.two_sided"})
-        tiny = _check(_part(bd.Box(5, 8, 3)), rules="protolabs", material="aluminum")
-        self.assertIn("cnc.part_size_min", {f.code for f in tiny.findings if f.severity == "error"})
+        with self.assertRaisesRegex(ValueError, "--rules is not cnc's"):
+            manufacturing.options("step", "cnc", {"rules": "generic"})
 
     def test_a_live_shape_is_checked_as_its_step_is(self) -> None:
         part = _part(bd.Box(40, 30, 12) - _pocket(10, 10, 4, 0.0, 6), "block")
