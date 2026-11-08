@@ -228,6 +228,7 @@ class Context:
 
     def _group_rounds(self, part: int) -> None:
         for info in self.faces[part]:
+            checkpoint()
             s = info.surface
             if s.kind != "cylinder" or s.concave is None or s.radius is None:
                 continue
@@ -374,6 +375,7 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
         enter, leave = lo.max(axis=2), hi.min(axis=2)
         mask = across & (enter <= leave) & (leave >= start) & (enter <= end)
         for r in range(mask.shape[0]):
+            checkpoint()
             index = np.flatnonzero(mask[r])
             if not len(index):
                 found.append(None)
@@ -727,6 +729,7 @@ def _inside(ctx: Context, part: int, points: list[np.ndarray]) -> list[bool]:
                        for solid in (ctx.parts[part].solids() or [ctx.parts[part].shape])]
     found = []
     for point in points:
+        checkpoint()
         state = False
         for classifier in cache[part]:
             classifier.Perform(gp_Pnt(*map(float, point)), 1e-6)
@@ -747,6 +750,7 @@ def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
 def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
     items = []
     for index, group in ctx.rounds_of(concave):
+        checkpoint()
         part = group.part
         largest = max(group.faces, key=lambda ordinal: ctx.info(part, ordinal).area)
         center = group.origin + group.axis * (0.5 * (group.lo + group.hi))

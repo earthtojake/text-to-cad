@@ -353,6 +353,7 @@ def surface(face: Any) -> Surface:
     """The surface of a face (see ``Surface``). A B-spline or Bezier face that IS a plane, cylinder, cone,
     sphere or torus within a tight tolerance (``_canonical``) is read as that surface: ``extrude(taper=)``,
     a loft, a fillet between such faces and many STEP exporters write analytic geometry as splines."""
+    checkpoint()
     from OCP.BRepAdaptor import BRepAdaptor_Surface
 
     adaptor = BRepAdaptor_Surface(face.wrapped, True)
@@ -555,6 +556,7 @@ def edges(part: Part) -> list[Edge]:
     found: list[Edge] = []
     walked: dict[int, list[tuple[Any, Any]]] = {}  # each face's edges walked once, not once an edge
     for index in range(1, ancestry.Extent() + 1):
+        checkpoint()
         listed = ancestry.FindFromIndex(index)  # iterating an OCCT list from Python costs milliseconds an item
         owners = ([] if listed.Size() == 0 else [listed.First()] if listed.Size() == 1
                   else [listed.First(), listed.Last()] if listed.Size() == 2 else list(listed))
@@ -818,6 +820,7 @@ def triangles(shape: Any, deflection: float, angular: float = 0.5) -> tuple[np.n
     owners: list[np.ndarray] = []
     offset = 0
     for ordinal in range(1, faces.Extent() + 1):
+        checkpoint()
         face = TopoDS.Face(faces.FindKey(ordinal))
         location = TopLoc_Location()
         triangulation = BRep_Tool.Triangulation_s(face, location)

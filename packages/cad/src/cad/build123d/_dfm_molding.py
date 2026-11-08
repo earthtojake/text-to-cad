@@ -77,6 +77,10 @@ def _xyz(point: Any) -> list[float]:
     return [round(float(value), 4) + 0.0 for value in point]
 
 
+# How many (ray, face) pairs ``_mesh_crosses`` screens between two checkpoints.
+_CROSSES_AT_ONCE = 1 << 16
+
+
 def _safe(fn: Any, *args: Any) -> Any:
     checkpoint()  # between families
     try:
@@ -94,6 +98,7 @@ def _samples(face: Any, count: int) -> list[tuple[np.ndarray, np.ndarray, float]
     area it stands for: the face's triangulation, each triangle cut into n x n by its LONGEST edge against the
     spacing ``count`` asks for (so a long thin triangle down a bore is sampled along its length, not once at
     its middle), each sub-triangle's centre mapped back to the surface through the triangle's UV."""
+    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.TopLoc import TopLoc_Location
@@ -256,6 +261,12 @@ class _Geometry:
             a, b, c = (vertices[triangles[order, k]] for k in range(3))
             self._by_face = (starts, counts, a, b - a, c - a)
         starts, counts, a, e1, e2 = self._by_face
+        if len(ray) > _CROSSES_AT_ONCE:
+            # A batch at a time, each a checkpoint apart: a large part has millions of pairs to screen.
+            return np.concatenate([self._mesh_crosses(ray[at:at + _CROSSES_AT_ONCE], face[at:at + _CROSSES_AT_ONCE],
+                                                      origins, directions)
+                                   for at in range(0, len(ray), _CROSSES_AT_ONCE)])
+        checkpoint()
         per = counts[face]
         # Only a face of few triangles is screened (a large face is one exact test, cheaper than its
         # triangles); a face with none is left to the exact test.
@@ -484,6 +495,7 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
     drafts: list[_FaceDraft] = []
     along_all = geo.normals @ pull
     for ordinal, (surface, area) in enumerate(zip(geo.surfaces, geo.areas), start=1):
+        checkpoint()
         mine = geo.owner == ordinal
         along = along_all[mine]
         weights = geo.weights[mine]
@@ -683,6 +695,7 @@ def _face_groups(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
     """Trapped faces (at least two trapped points, or a fiftieth of the face), grouped where they touch."""
     faces = []
     for ordinal in range(1, len(geo.faces) + 1):
+        checkpoint()
         mine = geo.owner == ordinal
         count = int((trapped.trapped & mine).sum())
         share = float(geo.weights[trapped.trapped & mine].sum()) / max(float(geo.weights[mine].sum()), 1e-12)
@@ -846,6 +859,7 @@ def _thickness_subset(geo: _Geometry) -> np.ndarray:
     by_face = np.argsort(geo.owner, kind="stable")
     bounds = np.searchsorted(geo.owner[by_face], np.arange(1, faces + 2))
     for ordinal, area in enumerate(geo.areas, start=1):
+        checkpoint()
         own = by_face[bounds[ordinal - 1]:bounds[ordinal]]
         want = int(min(len(own), max(least, round(_THICK_POINTS * area / total))))
         if not want:
@@ -862,6 +876,7 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     vertices, triangles, owners = geo.mesh
     cap = np.full(len(geo.points), np.inf)
     for ordinal, surface in enumerate(geo.surfaces, start=1):
+        checkpoint()
         if surface.concave is False and surface.kind in ("cylinder", "sphere", "torus"):
             bend = surface.minor_radius if surface.kind == "torus" else surface.radius
             cap[geo.owner == ordinal] = float(bend or np.inf)
@@ -875,6 +890,7 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
     bound = bound_all
     convex: dict[int, set[int]] = {}
     for edge in geo.edges:
+        checkpoint()
         a, b = edge.faces
         # A convex edge, or a tangent join onto a convex curved face (whose chords crease like an edge).
         if (not edge.concave and not edge.smooth) or (edge.smooth and (geo.surfaces[a - 1].concave is False
@@ -891,6 +907,7 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         nominal = ops.weighted_median(values, geo.weights)
     per_face: dict[int, dict[str, Any]] = {}
     for ordinal in range(1, len(geo.faces) + 1):
+        checkpoint()
         mine = (geo.owner == ordinal) & finite
         if not mine.any():
             continue
@@ -1322,6 +1339,7 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
              if _round(surface) and surface.concave and surface.axis is not None]
     taken: set[int] = set()
     for ordinal, surface in enumerate(geo.surfaces, start=1):
+        checkpoint()
         if not _round(surface) or surface.concave is not False or surface.axis is None or ordinal in taken:
             continue
         axis = np.asarray(surface.axis)
@@ -1375,6 +1393,7 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
         return min(values) if values else nominal
 
     for edge in geo.edges:
+        checkpoint()
         a, b = edge.faces
         if not edge.concave or edge.smooth or a in used or b in used:
             continue
@@ -1385,6 +1404,7 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
                       "angle_deg": _r(edge.angle_deg, 2), "length_mm": _r(edge.length, 3),
                       "wall_mm": _r(reference, 3), "ratio_to_wall": 0.0, "xyz": _xyz(edge.midpoint)})
     for ordinal, surface in enumerate(geo.surfaces, start=1):
+        checkpoint()
         if ordinal in used or surface.kind not in ("cylinder", "torus", *_FREEFORM):
             continue
         # A fillet: joined tangentially to at least two faces (its ends may meet caps at sharp edges).
@@ -1493,6 +1513,7 @@ def _parting_part(geo: _Geometry, drafts: list[_FaceDraft], projection: dict[str
     elements: list[dict[str, Any]] = []
     opening = {face.ordinal: face.opens for face in drafts}
     for edge in geo.edges:
+        checkpoint()
         a, b = edge.faces
         if {opening.get(a), opening.get(b)} != {"+pull", "-pull"} or a in trapped or b in trapped:
             continue

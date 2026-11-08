@@ -284,6 +284,7 @@ def _samples(face: Any, count: int) -> list[brep.Sample]:
     of the face's area: the face's triangulation's triangles taken at evenly spaced fractions of its
     cumulative area, each sample the surface at its triangle's middle (``_dfm_brep.samples`` evaluates every
     sub-triangle's; this evaluates only those taken, the surface's properties made once)."""
+    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.BRepGProp import BRepGProp_Face
     from OCP.gp import gp_Pnt, gp_Vec
@@ -1358,6 +1359,7 @@ class _Analysis:
 
     def locate(self, point: Any) -> tuple[str, list[float]]:
         """The ref of the part's face nearest a point of the flat pattern, and the point on the part."""
+        checkpoint()
         import build123d as bd
 
         p = np.asarray(point, dtype=float).reshape(1, 2)
@@ -1842,6 +1844,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     for name in ("notches", "tabs", "webs", "gaps"):
         families[name] = (lambda name=name: outline(name))
     for name, run in families.items():
+        checkpoint()  # between families
         try:
             out[name] = run()
         except Exception as error:  # noqa: BLE001 - one family's failure is reported, the rest measured

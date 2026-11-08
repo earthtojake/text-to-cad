@@ -12,6 +12,7 @@ engine's own resolver says so.
 from __future__ import annotations
 
 import math
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -615,6 +616,56 @@ class SummaryTest(unittest.TestCase):
         warned = printing(block, technology="pbf")
         self.assertTrue(warned.ok)
         self.assertRegex(warned.human_lines()[-1], r"^OK block: printing pbf: .* \(1 warning\(s\)\)$")
+
+
+class CheckpointTest(unittest.TestCase):
+    """A check asked to stop stops between its faces, in every process: its measurement reaches a checkpoint
+    (``cad._internal.dfm.checkpoint``) at least once a face, in each module that does the work, and the stop
+    goes through every family's ``except Exception``. Counted, never timed."""
+
+    # A thin drilled plate, a sheet: every process measures it whole.
+    SITES = {"cnc": {"_dfm_cnc.py:run", "_dfm_cnc_model.py:_cast", "_dfm_cnc_model.py:_sample"},
+             "sheet": {"_dfm_sheet.py:_part", "_dfm_sheet.py:_samples", "meshops_sheet.py:inside",
+                       "_dfm_brep.py:_crossings"},
+             "molding": {"_dfm_molding.py:_safe", "_dfm_molding.py:cast_faces", "meshops_molding.py:ball_thickness"},
+             "printing": {"_dfm_printing.py:_safe", "_dfm_printing.py:_first_hits", "_dfm_brep.py:samples"}}
+
+    class Recorder:
+        """Stands for the flag ``checkpoint`` reads: each read recorded, and set from the ``stop_at``-th on."""
+
+        def __init__(self, stop_at: int | None = None) -> None:
+            self.count, self.stop_at, self.sites = 0, stop_at, set()
+
+        def is_set(self) -> bool:
+            frame = sys._getframe(2)
+            self.count += 1
+            self.sites.add(f"{Path(frame.f_code.co_filename).name}:{frame.f_code.co_name}")
+            return self.stop_at is not None and self.count >= self.stop_at
+
+    def test_every_process_reaches_a_checkpoint_at_every_face_and_stops_there(self) -> None:
+        from unittest import mock
+
+        from cad._internal import dfm
+        from cad.build123d import _dfm_check
+
+        holes = bd.Compound(children=[bd.Pos(i * 8 - 16, j * 8 - 16, 0) * bd.Cylinder(1.5, 4)
+                                      for i in range(5) for j in range(5)])
+        part = bd.Box(60, 60, 2) - holes
+        faces = len(part.faces())
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "plate.step"
+            bd.export_step(part, str(path))
+            for process, sites in self.SITES.items():
+                with self.subTest(process=process):
+                    resolved = manufacturing.options("step", process, {})
+                    recorder = self.Recorder()
+                    with mock.patch.object(dfm, "_STOPPING", recorder):
+                        _dfm_check.measure("step", path, process, resolved, False)
+                    self.assertGreaterEqual(recorder.count, faces, sorted(recorder.sites))
+                    self.assertLessEqual(sites, recorder.sites, sorted(recorder.sites))
+                    with mock.patch.object(dfm, "_STOPPING", self.Recorder(stop_at=recorder.count // 2)), \
+                            self.assertRaises(dfm.Cancelled):
+                        _dfm_check.measure("step", path, process, resolved, False)
 
 
 if __name__ == "__main__":

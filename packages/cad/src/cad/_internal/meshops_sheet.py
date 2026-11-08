@@ -23,6 +23,8 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
+from cad._internal.dfm import checkpoint
+
 __all__ = ["CHORD_MM", "Loop", "Pocket", "Tab", "Width", "arc_points", "area", "cast", "crossings",
            "distance", "feret", "hull", "inside", "min_rectangle", "nest", "pockets", "self_crossings",
            "tabs", "widths"]
@@ -115,6 +117,7 @@ def _segments(loops: Iterable[Loop]) -> tuple[np.ndarray, np.ndarray, np.ndarray
 def inside(points: np.ndarray, loops: Sequence[Loop]) -> np.ndarray:
     """Whether each point lies inside an odd number of the loops (even-odd): inside a region's material
     when ``loops`` are its outer loop and its holes."""
+    checkpoint()
     points = np.asarray(points, dtype=float).reshape(-1, 2)
     result = np.zeros(len(points), dtype=bool)
     a, b, _, _ = _segments(loops)

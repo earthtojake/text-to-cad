@@ -176,6 +176,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
     state: dict[str, Any] = {"axes": axes, "tools": tools, "stock": stock, "turning": turning}
 
     def run(name: str, step: Callable[[], Any]) -> Any:
+        checkpoint()  # between families
         if name in failed:
             return None
         try:
@@ -683,6 +684,7 @@ def _refine(model: Model, item: dict[str, Any], outward: bool) -> None:
     there as across a wall (``OPPOSED``), and an exact ray along it from the face
     meets the face across first, at that distance: sampled rays land a few points per face and miss the
     thinnest line between two holes."""
+    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape
     from OCP.Extrema import Extrema_ExtFlag_MIN
