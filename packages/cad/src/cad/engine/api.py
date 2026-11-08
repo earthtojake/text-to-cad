@@ -6,6 +6,7 @@
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
+    check(source, check) -> dict (a manufacturing check, measured where the document is held)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -42,8 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Written", "export", "hand_over",
-           "observers", "serve", "snapshot", "status", "stop", "inspect"]
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Unreached", "Written", "check", "export",
+           "hand_over", "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
     """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
@@ -292,10 +293,14 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
 
 
 def _ask(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] | None = None,
-         on_progress: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
-    from cad.engine.client import environment, request
+         on_progress: Callable[[dict[str, Any]], None] | None = None, connection: Any = None) -> dict[str, Any]:
+    from cad.engine.client import _exchange, environment, request
 
-    answer = request({**message, "env": environment()}, on_log or (lambda _message: None), on_progress=on_progress)
+    if connection is not None:  # reached already (``check``)
+        answer = _exchange(connection, {**message, "env": environment()}, on_log or (lambda _message: None),
+                           on_progress)
+    else:
+        answer = request({**message, "env": environment()}, on_log or (lambda _message: None), on_progress=on_progress)
     if answer is None:
         raise EngineError("no engine daemon")
     _heard("worker", answer.get("worker"))
@@ -618,6 +623,46 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
     if failed:
         raise EngineError(failed[0].get("error") or f"the build of {failed[0].get('model')} failed")
     return done
+
+
+class Unreached(ConnectionError):
+    """No engine could be reached or started for a check (``check``): its words, the client's
+    (``client.connect``: none registered, a sandbox that cannot start one, the system's refusal)."""
+
+
+def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
+    """A manufacturing check of a document, measured where the engine holds it (``worker._check``): a
+    document's handle or id in the worker that holds it -- a model's in its script's warm worker, nothing
+    exported or read again -- a STEP's or an xbf's path in the documents worker, read once and held while
+    the file stays as it was. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its
+    options resolved by the caller (``manufacturing.options``). The same check of an unchanged document is
+    answered from the results the engine keeps (``reused``: true), measuring nothing.
+
+    Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
+    "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. ``Unreached`` when no
+    engine can be reached; a refusal as its type (``serve.NotHeld`` for an id the engine does not hold); an
+    ``EngineError`` for a check that failed there -- its worker gone, or cancelled by a build of its script."""
+    from cad.engine import client
+    from cad.engine.export import MESHES, ExportRefused
+
+    source = _called(source, True)
+    spec = _source(source)
+    if "path" in spec and Path(spec["path"]).suffix.lower() in MESHES:
+        raise ExportRefused(f"{Path(spec['path']).name} is a mesh: its check is measured from its triangles")
+    cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
+    try:
+        connection = client.connect()
+    except ConnectionError as error:
+        raise Unreached(str(error)) from None
+    order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd,
+             "check": {**check, "token": os.urandom(8).hex()}}
+    done = _ask(order, connection=connection)["done"]
+    checked = done.get("checked") if isinstance(done, dict) else None
+    if not isinstance(checked, dict):
+        # A server of a release before the check in memory exports nothing and says no check.
+        raise EngineError("the CAD server running checks nothing in memory: it is older than this library. "
+                          "Update it (cad update) and check again")
+    return {**checked, **({"reused": True} if done.get("reused") else {})}
 
 
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,

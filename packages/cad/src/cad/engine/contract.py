@@ -40,7 +40,9 @@ __all__ = ["CONTRACT", "KERNEL", "PROTOCOL", "interpreter", "notice", "refusal",
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
-PROTOCOL = 1
+# 2: an export may carry a manufacturing check (``check``), answered ``checked``, and a worker answers
+# ``cancel``; a worker of 1 would answer such an export with no files and no check.
+PROTOCOL = 2
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"

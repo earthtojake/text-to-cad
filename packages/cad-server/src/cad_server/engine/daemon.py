@@ -629,6 +629,12 @@ class Daemon:
         from cad_server.engine.models import Models
 
         self.models = Models(self)
+        from cad_server.engine.checks import Checks
+
+        # The manufacturing checks' results, by document version (``checks``), and the token of the check
+        # each worker runs now, which a build of its script cancels (``_cancel_check``).
+        self.checks = Checks()
+        self.checking: dict[Process, str] = {}
 
     def touch(self) -> None:
         self.last = time.monotonic()
@@ -1063,6 +1069,8 @@ class Daemon:
                                  {"failed": "The viewed model is no longer held. Reopen it before exporting."})
                             return
                     worker = self.lease(key, environment, cwd, python=python, python_key=python_key)
+                    if isinstance(order.get("check"), dict):
+                        self.checking[worker] = str(order["check"].get("token") or "")
                     expected = request.get("expected") or {}
                     if "modelRevision" in expected and "document" not in request["source"]:
                         # The lease excludes a rebuild: validate the generation here. A run that
@@ -1092,6 +1100,8 @@ class Daemon:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
                     if attempt == 2 or error.during or error.unready:
                         failed = {"failed": self._where(error, worker), **_unstarted(error)}
+                        if isinstance(order.get("check"), dict) and error.during:
+                            failed["failed"] = _check_lost(failed["failed"])
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
@@ -1104,12 +1114,89 @@ class Daemon:
                     return
                 finally:
                     if worker is not None:
+                        self.checking.pop(worker, None)
                         self.release(worker)
         finally:
             with self.busy_lock:
                 self.busy -= 1
                 self.worked = time.monotonic()
             self.touch()
+
+    def check(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """A manufacturing check (an ``export`` with ``check``, ``api.check``) of the document the request
+        names -- by its id, a model's in the worker that holds it (or its bytes, read by the documents
+        worker); by its path, a STEP's or an xbf's file in the documents worker -- measured there, in memory
+        (``worker._check``), and kept by the version it measured (``checks``): the same check of the same
+        version is answered from what was kept (``reused``), with no worker asked. A version is a model's
+        generation or a file's bytes' digest, read before the check and after it: one that changed meanwhile
+        is answered and not kept."""
+        from cad_server.engine.checks import Checks, digest
+
+        spec = request.get("source") or {}
+        payload = b""
+        ident = ""
+        if "id" in spec:
+            ident = str(spec["id"])
+            try:
+                source, payload = self.document(ident)
+            except ValueError as error:
+                send(refused(error))
+                return
+        elif "path" in spec:
+            source = {"path": str(spec["path"])}
+        else:
+            send({"failed": "a check reads a document the engine holds, or a STEP's or an xbf's file"})
+            return
+        if "path" in source:
+            path = Path(source["path"])
+            document = f"file:{os.path.normcase(os.path.realpath(path))}"
+
+            def now() -> str | None:
+                return digest(path)
+        else:
+            document = f"model:{ident}"
+
+            def now() -> str | None:
+                with self.models.lock:
+                    record = self.models.records.get(ident)
+                return None if record is None else str(record["version"])
+
+        # Which library measures it: the server's own, or the release of the caller's Python a model's
+        # worker runs (its ``python_key`` names it).
+        key = Checks.key(request["check"], str(source.get("python_key") or version()))
+        before = now()
+        if before is not None:
+            kept = self.checks.get(document, before, key)
+            if kept is not None:
+                send({"done": {"reports": [], "files": [], "checked": kept, "reused": True}})
+                return
+        order = {"id": 1, "op": "export", "source": source, "destinations": [], "cwd": request.get("cwd"),
+                 "check": request["check"]}
+
+        def answered(message: dict[str, Any]) -> None:
+            done = message.get("done")
+            if isinstance(done, dict) and isinstance(done.get("checked"), dict):
+                self.checks.counted()
+                if before is not None and now() == before:
+                    self.checks.keep(document, before, key, done["checked"])
+            send(message)
+
+        self._call({**request, "source": source}, order, answered, payload)
+
+    def _cancel_check(self, key: str, python_key: str | None, send: Callable[[dict[str, Any]], None]) -> None:
+        """A build of a script whose worker is running a manufacturing check: the check cancelled
+        (``worker._interrupt``), so the build waits for no measurement of the document it replaces, and its
+        caller told so. Nothing when the worker checks nothing."""
+        worker = self.supervisor.live("worker", key, python_key)
+        token = self.checking.get(worker) if worker is not None else None
+        if not token:
+            return
+        try:
+            worker.tell({"op": "cancel", "token": token})
+        except (OSError, ValueError):
+            return
+        send({"log": f"cancelled the manufacturing check running in the worker of {Path(worker.label).name}: "
+                     "this build replaces the document it was measuring", "stream": "waiting"})
 
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """One request, answered through ``send``. One that serves -- binding the HTTP server, a
@@ -1149,6 +1236,8 @@ class Daemon:
         if op == "delete":
             # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
             deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
+            for ident in request.get("ids") or []:
+                self.checks.forget(f"model:{ident}")
             send({"ok": True, "deleted": [found for found in deleted if found is not None]})
             return
         if op == "model_info":
@@ -1192,6 +1281,8 @@ class Daemon:
             send({"ok": True, "state": state, **held,
                   **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
             return
+        if op == "export" and isinstance(request.get("check"), dict):
+            return self.check(request, send)
         payload = b""
         if op == "export" and "id" in (request.get("source") or {}):
             ident = str(request["source"]["id"])
@@ -1285,6 +1376,8 @@ class Daemon:
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
                 for attempt in (1, 2):
                     worker = None
+                    if attempt == 1:
+                        self._cancel_check(key, python_key, send)
                     ahead = self.behind(key, send, python_key) if attempt == 1 else None
                     waited = time.monotonic()
                     try:
@@ -1501,6 +1594,7 @@ class Daemon:
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
                 "cache": self.models.cache.status(),
+                "checks": self.checks.status(),
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
@@ -1590,6 +1684,15 @@ class Daemon:
 def _same_place(one: str, other: str) -> bool:
     """Whether two paths name one folder, as the system resolves them."""
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
+
+
+def _check_lost(said: str) -> str:
+    """A worker that exited while it ran a manufacturing check, said as such: what it held went with it."""
+    head, tail, detail = said.partition(WORKER_STDERR)
+    head = head.replace("during the build", "during a manufacturing check")
+    return (f"{head}: the check is not run again, and the worker's warm memo is gone with it -- `cad status` "
+            "lists it as exited and says where each of its documents is held; the next build of its script, or "
+            f"the next check, starts a fresh worker (an unchanged model is taken from the engine's cache){tail}{detail}")
 
 
 def _unstarted(error: Gone) -> dict[str, str]:
