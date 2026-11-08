@@ -107,6 +107,13 @@ export const features = [
     file: "housing.step",
   },
   {
+    id: "stress",
+    name: "Stress checks",
+    path: "skills/fea/SKILL.md",
+    summary: "Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.",
+    file: "bracket.step",
+  },
+  {
     id: "drawings",
     name: "Engineering drawings",
     path: "skills/engineering-drawing/SKILL.md",
