@@ -1,8 +1,8 @@
 # Sheet metal
 
-The evidence, the rules, the review and how to check a redesign are SKILL.md's
-[Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
-to cutting and bending sheet.
+The evidence and the rules are SKILL.md's [Can it be made?](../SKILL.md#can-it-be-made), and the result
+in full, the review and how to check a redesign are [the review reference](manufacturing-review.md),
+the same for every process; this is what is particular to cutting and bending sheet.
 
 The check is general, no shop's. An order from SendCutSend, checked against its catalog and specs, is
 the sendcutsend skill's ($sendcutsend): it runs this check and reads the measurements against them.
