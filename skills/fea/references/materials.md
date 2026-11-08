@@ -28,14 +28,11 @@ model's material does not describe. Give them as an object, in `material` for ev
 
 `E_MPa`, `nu` and `yield_MPa` are required, `name` and `density_t_per_mm3` optional (the result
 says `"source": "study"`). A name alone is refused: nothing reads an alloy's numbers off its name.
-A part with neither a model material nor study numbers is refused, saying how to give it one: set
-its material in the model (ask the user what it is made of), or ask for the numbers. Never pick a
-material to make a study run.
+A part with neither a model material nor study numbers is refused, naming it: set its material in
+the model (ask the user what it is made of), or ask for the numbers. Never pick a material to make
+a study run.
 
-For printed polymers the model's assumptions are loose: layer adhesion,
-infill and orientation change stiffness and strength by a factor of two or
-more. Say so, and use a larger safety factor than for a machined metal part.
-
-A material must be the same in every direction. For a directional material (printed layers,
-wood, a fibre block), give the modulus along the direction that carries the load, say that you did,
-and treat the answer as rough.
+The material is isotropic. For a directional one (printed layers, wood, a fibre block) give the
+modulus along the direction that carries the load, say that you did, and treat the answer as
+rough; a printed polymer's strength varies by a factor of two or more with layer adhesion, infill
+and orientation, so say so and keep a larger margin than for a machined metal.

@@ -109,21 +109,22 @@ on a `roller` face (which a roller holds along its normal), is refused before th
 load and the fixture, however each names the face. A study that no load reaches anywhere (its peak
 stress zero) is refused too, rather than passed.
 
-Remote loads, bearing loads, bolt preloads and moments are not in this version; approximate a
-moment with a pair of opposite forces on two faces.
+Remote loads, bearing loads, bolt preloads and moments are not in this version: a moment is two
+opposite forces on two faces a known distance apart, and a force on a hole's cylindrical face
+approximates a pin or bolt load.
 
 ## Faces
 
-Face references are the engine's refs, the ones the Viewer copies and `cad inspect` reads:
-`bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
-face the document names is named by its name (`bracket/f:plate.relief.3`). A reference the user
-selected arrives after its document's path (`/work/bracket.step#bracket/face 17`); both forms are
-accepted, and the path must name the document being solved. `cad step solve part.step` (no study: the setup) prints every face
-with its area, centre, surface type and a hint. In a one-part study every face must belong to the
-same part occurrence (an assembly's may be on any part).
+Face references are the engine's refs, the ones the CAD Viewer copies and `cad <type> inspect`
+resolves: `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part
+document), and a face the document names is named by its name (`bracket/f:plate.relief.3`). A
+reference the user selected arrives after its document's path (`/work/bracket.step#bracket/face
+17`); both forms are accepted, and the path must name the document being solved. In a one-part
+study every face must belong to the same part occurrence (an assembly's may be on any part).
 
-A face number is a position in the saved document: when the model is edited and the STEP re-written, a
-face's number can change (a face the document names keeps its name while its feature is unchanged), so list the faces again before re-running a study on a new revision.
+A face number is a position in the saved document: when the model is edited and the file written
+again, a face's number can change (a face the document names keeps its name while its feature is
+unchanged), so list the faces again before re-running a study on a new revision.
 
 ## Assemblies
 
@@ -173,13 +174,9 @@ parts touching, a sharp notch):
 Each ball is meshed at its `size_mm` within `radius_mm` of `center_mm`, graded to `size_mm` outside
 it. Keep a ball small: a large one at a fine size is refused, as too many local sizes to place.
 
-When the safety factor comes out under 3, the run meshes again finer and solves again by itself:
-half the element size (and half at fillets and holes, where the curvature sets the size), less where
-that would pass 150 000 degrees of freedom, and up to 250 000 only when 150 000 leaves no
-meaningfully finer mesh: CalculiX's direct solver needs several GB of memory there. A model already
-too big for a finer solve keeps its first answer, with a warning that its convergence is unchecked.
-A first solve is never refused for its size; past 150 000 degrees of freedom it warns that it will
-be slow. The finer solve is the one written; the result's `refined` records both sizes and peaks.
+When the safety factor comes out under 3 the run meshes again finer and solves again by itself,
+within a budget of degrees of freedom; the finer solve is the one written, and the result's
+`refined` records both sizes and peaks ([Mesh](linear-static.md#mesh)).
 
 ## `output`
 
@@ -192,29 +189,27 @@ shows the true deformed shape). The result's summary records the scale used.
 The safety factor against yield the part should keep, and the one the stress check holds it to (said
 here alone: the check takes none of its own). Omitted, 2. Below 1 is refused (a part that
 yields has no margin). A result under it, but above 1, is a `low_margin` warning; below 1 is a
-`yields` error. Raise it for polymers, fatigue or a part whose failure hurts someone; lower it only
-when the user says the load is known exactly.
+`yields` error.
 
 ## `checks`
 
-What the result is judged by; pick them from what the user asked. Optional; left out, the stress
-check alone. text-to-cad evaluates every check on the written solve and writes each result (`kind`,
-`label`, `value`, `limit`, `unit`, `ratio` = value over limit, `close_at`, `status` of `fails`,
-`close` or `passes`, and `where`, the face and point of the worst value) into the summary
-(`summary.checks`), `result.json` and the CLI lines. Stress and displacement are linear in the load, so
-a check's `ratio` also says how far the load could go: a ratio of 0.5 holds at twice the load.
+What the result is judged by. Optional; left out, the stress check alone. Every check is judged on
+the written solve and its result (`kind`, `label`, `value`, `limit`, `unit`, `ratio` = value over
+limit, `close_at`, `status` of `fails`, `close` or `passes`, and `where`, the face and point of the
+worst value) is written into the summary's `checks` and the CLI lines. Stress and displacement are
+linear in the load, so a check's `ratio` also says how far the load could go: a ratio of 0.5 holds
+at twice the load.
 
 | `kind` | judges | keys |
 | --- | --- | --- |
 | `stress` | peak von Mises against each part's yield (an assembly's weakest part): fails under a safety factor of 1, close under the study's [`margin`](#margin) | `label` |
 | `displacement` | the largest displacement over the whole model, or over `faces` (they may span parts), against `limit_mm`: fails past it, close within a tenth of it (the model's own accuracy) | `limit_mm` (required, > 0), `faces` (face refs, resolved like the fixtures'), `label` (the user's words, "Tip sag") |
 
-"Will it break", "is it strong enough": `stress`. "How much does it sag or deflect", or a
-stiffness spec: a `displacement` check with their limit on the faces they mean, labelled in their
-words; keep `stress` too unless they only care about stiffness. At most one `stress` check; an
-empty list is refused (leave `checks` out for the stress check alone), and so is an unknown `kind`
-or key. A failing displacement check is an error finding ("'Tip sag' moves 2.1 mm, more than the
-0.5 mm allowed"); the stress check's findings are the yields and margin findings already made.
+Label a `displacement` check in the user's words ("Tip sag") and put it on the faces they mean.
+At most one `stress` check; an empty list is refused (leave `checks` out for the stress check
+alone), and so is an unknown `kind` or key. A failing displacement check is a
+`displacement_over_limit` error finding ("'Tip sag' moves 2.1 mm, more than the 0.5 mm allowed");
+the stress check's findings are the `yields` and `low_margin` findings already made.
 
 ## What comes out
 
@@ -237,30 +232,23 @@ nothing else in it is touched):
 The result (`--json`) is a check's: `ok`, the document (`path`), `findings` (each with its
 `severity`, `code`, `message`, `location` and `hint`), `written` (the files in the folder) and
 `measurements`, the numbers: the study as given (`study`), the material, the resolved faces
-(`named_faces`), the summary's figures at its top level (max von Mises nodal and at the integration points, safety factor, max displacement and its
-location, applied and reaction forces; for an assembly also `parts`, one entry per part with its
-material, peak stress, safety factor and displacement, and the weakest part's name and peak; and
-`checks`, each check judged), per-fixture reactions, mesh statistics (naming the mesher and the
-solver, `"solver": "calculix 2.23 (C3D10)"`, and `straightened`, the elements made straight so
-CalculiX could solve them: [Mesh](linear-static.md#mesh)), timings, and `refined`:
-the first and the finer solve's element size and peak when the run solved twice, else `null`. For
-an assembly it also records `connections` (each joint: parts, type, area, gap, `interference_mm`
-when the parts overlapped by no more than the tolerance and were bonded, interface faces) and
-`overlaps`.
+(`named_faces`), the summary's figures at its top level (max von Mises nodal and at the integration
+points, safety factor, max displacement and its location, applied and reaction forces; for an
+assembly also `parts`, one entry per part with its material, peak stress, safety factor and
+displacement, and the weakest part's name and peak; and `checks`, each check judged), per-fixture
+reactions, `mesh` (elements, nodes, degrees of freedom, size, the mesher, `"solver": "calculix 2.23
+(C3D10)"`, and `straightened`, the elements made straight so CalculiX could solve them:
+[Mesh](linear-static.md#mesh)), `timings`, and `refined`: the first and the finer solve's element
+size and peak when the run solved twice, else `null`. For an assembly it also records
+`connections` (each joint: parts, type, area, gap, `interference_mm` when the parts overlapped by
+no more than the tolerance and were bonded, interface faces) and `overlaps`.
 
 Each file is written into a staging folder inside `DIR` and moved into place only once every one is
 written: a run that fails writes nothing, and the previous results stay as they were. A file of an
 earlier solve this one does not write (its pictures, its deck) is removed, so the folder never mixes
-two solves. A solve whose reactions do
-not balance the applied load is such a failure: it is refused, never written with a warning.
-
-`ok` (and the exit code) follow the validators' rule: an error blocks. A result with an error
-finding (it yields, a check fails) is `ok: false` and the command exits 1, with the result written all
-the same: the solve is right, and the part is unfit to use. A study stopped before the solve (a
-part nothing holds) is `ok: false` with nothing written (`written: []`). Warnings never block.
-
-A note about the run itself (a finer solve that failed, a slow solve, pictures not drawn) is a
-`solver_note` warning.
+two solves. A result with an error finding (it yields, a check fails) is `ok: false` and the command
+exits 1, with the result written all the same; a study stopped before the solve (a part nothing
+holds) is `ok: false` with nothing written (`written: []`). Warnings never block.
 
 For an assembly the summary mixes two scopes. `yield_MPa` and `safety_factor` are the weakest
 part's (the part named by `weakest_part`, whose own peak is `weakest_part_peak_MPa` at
