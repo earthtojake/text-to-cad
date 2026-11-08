@@ -23,10 +23,11 @@ and the caller's release), which decides who measures it before anything is meas
 the report, which the caller finishes into its result (`manufacturing.finish`).
 
 - A model's warm worker measures it, in memory, when the worker's library is the caller's release.
-- The engine's checks process measures it when the server's library is the caller's release: a STEP's or an xbf's
-  file, read once while its bytes stay as they were (by their digest, four files at most); a document no warm
-  worker holds; and a model built at another release, from the document's bytes. It is a warm kernel of its own,
-  so a long check or its crash costs no other document anything.
+- One of the engine's checks processes measures it when the server's library is the caller's release: a STEP's or
+  an xbf's file, read once while its bytes stay as they were (by their digest, four files at most); a document no
+  warm worker holds, read once per version; and a model built at another release, from the document's bytes. They
+  are a small pool of warm kernels of their own, so checks of different documents run at once, and a long check or
+  its crash costs no other document anything.
 - Otherwise it is another release's check, answered at once with no report. A file is then measured in the calling
   process, a model's document exported by the engine and read back there, as before the engine measured checks; a
   command whose environment holds no kernel sends either to the base's environment.
@@ -36,8 +37,9 @@ checks process. Each part is measured on a copy that shares nothing with the hel
 (`_dfm_brep.of_source`: a check's meshing never touches it), its result equal to the same document's read from
 its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
 digest -- with the check's type, process, options and the measuring library's release (128 results and 64 MB at
-most, in the engine's memory), so the same check of an unchanged document measures nothing; a document holds one
-version's results. A document that did not read, a refused check or a family not measured is not kept.
+most in the engine's memory, and written beside its cache, under a model's revision, so a restarted engine finds
+them), so the same check of an unchanged document measures nothing; a document holds one version's results. A
+document that did not read, a refused check or a family not measured is not kept.
 
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
 result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and

@@ -112,8 +112,9 @@ the manufacturing check: CNC machining, sheet metal, injection molding or 3D pri
 STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
 `trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
 and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in a
-kernel process that holds the document -- a model's warm worker, the engine's checks process for a file, read
-once -- and kept by the document's version, so the same check of an unchanged document measures nothing. Where the
+kernel process that holds the document -- a model's warm worker, one of the engine's checks processes for a file,
+read once -- and kept by the document's version, beside the engine's cache, so the same check of an unchanged
+document measures nothing, after a restart too. Where the
 engine measures nothing (none to reach, another release's), and for a mesh and a DXF, it runs in this process where
 its environment holds the type's integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`). `cad serve`,
