@@ -150,7 +150,8 @@ small uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no secti
 each with its name beneath, drifting sideways (resting under a mouse, a finger or the focus, and
 off screen) and moved by a trackpad's sideways swipe, Shift with the wheel, a drag, a swipe or the
 arrow keys, while a vertical wheel over it scrolls the page (`AgentCarousel`), skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
-Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
+Icons (MIT) in the same tile, each tile a luminance mask over the text colour, so its black square
+vanishes into the page (no blend mode: iOS Safari never blends a scroller's contents with the page). The logos are not
 links, and nothing follows them in the hero: under their names as much room as the label has over
 their glyphs, so the strip closes the first screen evenly. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked

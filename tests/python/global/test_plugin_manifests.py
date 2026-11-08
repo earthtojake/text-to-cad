@@ -353,6 +353,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         add_sources()
         from cad_server._internal.channel import is_channel
+        from cad_server._internal.plugin import CHANNELS as FOLDER_CHANNELS
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
                 for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
@@ -369,7 +370,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # Every channel any package names is one the analytics receiver takes.
         receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
         named = {env["CAD_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
-                                                                           "openai-directory", "dev"}
+                                                                           "openai-directory", "dev"} \
+            | set(FOLDER_CHANNELS.values())
         for channel in sorted(named):
             with self.subTest(channel=channel):
                 self.assertTrue(is_channel(channel))

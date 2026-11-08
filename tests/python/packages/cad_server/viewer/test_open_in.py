@@ -9,6 +9,7 @@ import http.client
 import json
 import os
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -23,6 +24,8 @@ MODEL = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 UNKNOWN = "0f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 FOUND = {"vscode": "/A/Visual Studio Code.app", "cursor": "/A/Cursor.app", "freecad": "/A/FreeCAD.app",
          "bambu": "/A/BambuStudio.app", "blender": "/A/Blender.app"}
+STABLE = apps.KiCad("9.0.6", date(2025, 11, 1), "/K/pcbnew.app", "/K/eeschema.app", False)
+NIGHTLY = apps.KiCad("10.99.0-5334-ge37c27a8ce", date(2026, 11, 6), "/N/pcbnew.app", "/N/eeschema.app", True)
 WRITE = {"x-cad-viewer": "1", "Content-Type": "application/json"}
 
 
@@ -46,8 +49,9 @@ class OpenInRoutesTest(unittest.TestCase):
         self.model = {"source": {"name": "bracket", "script": str(self.script)}, "version": "v1", "builtAt": 1.0,
                       "state": "held", "files": [str(self.xbf), str(self.step), str(self.stl), str(root / "b.stp")]}
         self.opener = mock.Mock()
+        self.found = dict(FOUND)
         for patch in (mock.patch("cad_server.viewer.model_catalog.request", side_effect=self.engine),
-                      mock.patch.object(apps.DETECTED, "found", return_value=dict(FOUND)),
+                      mock.patch.object(apps.DETECTED, "found", side_effect=lambda: dict(self.found)),
                       mock.patch.object(apps, "open_file", self.opener)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -121,25 +125,83 @@ class OpenInRoutesTest(unittest.TestCase):
                 self.assertEqual(self.post(payload), (204, None))
                 self.opener.assert_called_once_with(*expected)
 
-    def test_a_kicad_file_is_never_opened_in_an_app_the_default_handler_included(self) -> None:
-        # Its default handler is KiCad, which the server never launches: Open in offers no app for it
-        # and says the default is not to be offered; an open is refused, and the opener itself refuses.
-        board = Path(self.fixture.root) / "blinky.kicad_pcb"
-        board.write_text("(kicad_pcb (version 20241229))\n", encoding="utf-8")
-        status, _, body = self.fixture.request("GET", f"/api/v1/documents?path={board}")
+    def kicad_file(self, name: str, stamp: int) -> str:
+        """A KiCad file of the format ``stamp``, as a document: its id."""
+        path = Path(self.fixture.root) / name
+        path.write_text(f"({path.suffix[1:]} (version {stamp}))\n", encoding="utf-8")
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents?path={path}")
         self.assertEqual(status, 200)
-        ident = json.loads(body)["documents"][0]["id"]
-        self.assertEqual(self.get(ident)[1]["targets"], [{"target": "source", "kind": "kicad_pcb", "name": "blinky.kicad_pcb",
-                                                          "present": True, "apps": [], "default": False}])
+        return json.loads(body)["documents"][0]["id"]
+
+    def listed(self, ident: str) -> dict:
+        [target] = self.get(ident)[1]["targets"]
+        return target
+
+    def test_a_board_a_stable_can_read_offers_both_kicads_and_withholds_the_default(self) -> None:
+        self.found.update(kicad=STABLE, **{"kicad-nightly": NIGHTLY})
+        self.assertEqual(self.listed(self.kicad_file("stable.kicad_pcb", 20241229)), {
+            "target": "source", "kind": "kicad_pcb", "name": "stable.kicad_pcb", "present": True, "default": False,
+            "apps": [{"id": "kicad", "name": "KiCad 9.0.6"}, {"id": "kicad-nightly", "name": "KiCad 10.99 nightly"}]})
+
+    def test_a_nightlys_board_shows_the_stable_refusing_it_and_only_the_nightly_opens_it(self) -> None:
+        self.found.update(kicad=STABLE, **{"kicad-nightly": NIGHTLY})
+        ident = self.kicad_file("nightly.kicad_pcb", 20261031)
+        self.assertEqual(self.listed(ident)["apps"], [{"id": "kicad", "name": "KiCad 9.0.6", "refuses": "newer"},
+                                                      {"id": "kicad-nightly", "name": "KiCad 10.99 nightly"}])
+        status, answer = self.post({"id": ident, "target": "source", "app": "kicad"})
+        self.assertEqual(status, 400)
+        self.assertIn("KiCad 9.0.6 cannot open nightly.kicad_pcb", answer["error"])
+        self.assertIn("newer KiCad", answer["error"])
+        self.assertIn("KiCad", answer["hint"])
+        self.opener.assert_not_called()
+        self.assertEqual(self.post({"id": ident, "target": "source", "app": "kicad-nightly"}), (204, None))
+        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(ident)), NIGHTLY)
+        # A refused KiCad is not among what an app not offered is told to name instead, nor is the default.
+        status, answer = self.post({"id": ident, "target": "source", "app": "vscode"})
+        self.assertEqual(status, 400)
+        self.assertEqual(answer["hint"], "name one of kicad-nightly")
+
+    def test_a_schematic_is_read_against_the_schematic_formats(self) -> None:
+        self.found.update(kicad=STABLE, **{"kicad-nightly": NIGHTLY})
+        # 20250114 is a 9.0 schematic, and past a 9.0 board's format.
+        current = self.kicad_file("current.kicad_sch", 20250114)
+        self.assertEqual(self.listed(current)["apps"], [{"id": "kicad", "name": "KiCad 9.0.6"},
+                                                        {"id": "kicad-nightly", "name": "KiCad 10.99 nightly"}])
+        self.assertEqual(self.post({"id": current, "target": "source", "app": "kicad"}), (204, None))
+        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(current)), STABLE)
+        self.opener.reset_mock()
+        newer = self.kicad_file("newer.kicad_sch", 20261108)  # past both, the nightly built two days before it
+        self.assertEqual(self.listed(newer)["apps"], [{"id": "kicad", "name": "KiCad 9.0.6", "refuses": "newer"},
+                                                      {"id": "kicad-nightly", "name": "KiCad 10.99 nightly", "refuses": "newer"}])
+        self.assertEqual(self.post({"id": newer, "target": "source", "app": "kicad-nightly"})[0], 400)
+        self.opener.assert_not_called()
+
+    def test_a_kicad_files_default_handler_stays_withheld_and_refused(self) -> None:
+        # Nothing shows that its handler is a KiCad that can open it: with no KiCad here, no app at all, and the
+        # default is said not to be offered; an open is refused, and the opener itself refuses it and any plain app.
+        ident = self.kicad_file("blinky.kicad_pcb", 20241229)
+        self.assertEqual(self.listed(ident), {"target": "source", "kind": "kicad_pcb", "name": "blinky.kicad_pcb",
+                                              "present": True, "apps": [], "default": False})
         status, answer = self.post({"id": ident, "target": "source", "app": "default"})
         self.assertEqual(status, 400)
-        self.assertIn("never opened in an app", answer["error"])
+        self.assertIn("never opened in its default app", answer["error"])
+        status, answer = self.post({"id": ident, "target": "source", "app": "kicad"})
+        self.assertEqual(status, 400)
+        self.assertEqual(answer["hint"], "reveal it in the file manager and open it there")
         self.opener.assert_not_called()
         spawn = mock.Mock()
         for name in ("blinky.kicad_pcb", "blinky.kicad_pro", "BLINKY.KICAD_SCH"):
-            with self.subTest(name=name), self.assertRaises(PermissionError):
-                apps_open_file(name, None, platform="linux", spawn=spawn)
+            for app in (None, "/usr/bin/pcbnew"):
+                with self.subTest(name=name, app=app), self.assertRaises(PermissionError):
+                    apps_open_file(name, app, platform="linux", spawn=spawn)
         spawn.assert_not_called()
+
+    def test_a_kicad_file_gone_is_a_404_not_a_refusal(self) -> None:
+        self.found.update(kicad=STABLE)
+        ident = self.kicad_file("gone.kicad_pcb", 20261031)
+        Path(self.fixture.app.file_of(ident)).unlink()
+        self.assertEqual(self.post({"id": ident, "target": "source", "app": "kicad"})[0], 404)
+        self.opener.assert_not_called()
 
     def test_open_refuses_what_the_server_does_not_know(self) -> None:
         step = self.step_file()
@@ -188,7 +250,8 @@ class OpenInCredentialsTest(unittest.TestCase):
         from cad_server._internal.engine_host import http_factory
 
         cls.server = Server(isolated=True, mesh_mode="inline", http_factory=http_factory)
-        cls.server.start()
+        with mock.patch.object(apps.DETECTED, "warm"):  # nothing here looks for this computer's apps
+            cls.server.start()
         cls.link = cls.server.http.app.link()
 
     @classmethod
@@ -208,7 +271,7 @@ class OpenInCredentialsTest(unittest.TestCase):
 
     def test_refused_without_credentials(self) -> None:
         body = json.dumps({"id": UNKNOWN, "target": "source", "app": "default"}).encode()
-        with mock.patch.object(apps, "open_file") as opener:
+        with mock.patch.object(apps, "open_file") as opener, mock.patch.object(apps.DETECTED, "found", return_value={}):
             for headers, statuses in (({}, (403, 403)), ({"Authorization": f"Bearer {self.link}"}, (404, 404))):
                 with self.subTest(credential=bool(headers)):
                     self.assertEqual((self.ask("GET", f"/api/v1/local/open-in?id={UNKNOWN}", headers),

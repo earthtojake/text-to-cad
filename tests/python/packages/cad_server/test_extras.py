@@ -157,6 +157,28 @@ class NamingTest(unittest.TestCase):
         self.assertEqual(sent, [{"failed": "--index-url=https://x is no requirement: name a package, a pin, extras, "
                                            "or a local path or wheel", "base": True}])
 
+    def test_an_environment_says_in_plain_words_what_it_holds(self) -> None:
+        """An integration's environment holds the integration, not "the model's packages", and says about how
+        big it is; one with a program's packages names them."""
+        here = base.Installation.here()
+        release = here.release
+        kicad = extras.recipe(here, extras.Spec(integrations=("kicad",)))
+        self.assertEqual(kicad.making, f"making the kicad integration's environment, once: cad[kicad] {release} "
+                                       "(KiCad's kicad-cli, about 100 MB to download)")
+        self.assertEqual(kicad.downloading, f"downloading cad[kicad] {release} (KiCad's kicad-cli, about 100 MB), once")
+        self.assertEqual(kicad.what, "the kicad integration's environment")
+        both = extras.recipe(here, extras.Spec(integrations=("kicad", "trimesh")))
+        self.assertEqual(both.making, "making the environment of the kicad and trimesh integrations, once: "
+                                      f"cad[kicad,trimesh] {release} (KiCad's kicad-cli, trimesh, about 140 MB to download)")
+        bare = extras.recipe(here, extras.Spec(integrations=()))
+        self.assertEqual(bare.making, f"making the environment of cad {release}, once: cad {release}")
+        packages = extras.recipe(here, extras.Spec(requirements=("pandas",), integrations=("kicad",)))
+        self.assertEqual(packages.making, f"making the environment of the model's packages, once: pandas beside "
+                                          f"cad[kicad] {release}")
+        self.assertEqual(packages.downloading, "downloading what pandas needs, once")
+        for recipe in (kicad, both, bare, packages):
+            self.assertNotIn("nothing more", recipe.making + recipe.downloading + (recipe.unsatisfiable or ""))
+
     def test_uv_s_refusals_are_one_line_with_its_reason_or_the_package_its_cache_lacks(self) -> None:
         recipe = extras.recipe(base.Installation.here(), ["build123d<0.1"])
         conflict = ("error: No solution found when resolving dependencies\n"
@@ -295,6 +317,13 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import memo\n", {"build123d"}),
                 ("from cad.ap242 import posed\n", {"build123d"}),
                 ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # A stress study is calculix's operation, and needs what its operations do beside it: the kernel
+                # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
+                # calculix's, as is its command.
+                ("import cad\ncad.step.solve('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
+                ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
+                ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
+                ("from cad.calculix import _program\n", {"calculix"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
@@ -310,6 +339,7 @@ class ChoosingTest(unittest.TestCase):
 
         self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
         self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("ccx", "-i", "job").integrations, ("calculix",), "ccx alone: no mesher, no kernel")
         self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
                          "an explicit --with still works")
         self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))

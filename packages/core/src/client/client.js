@@ -124,6 +124,29 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     for (const listener of listeners) listener();
   }
 
+  // One read of the person's settings, shared by all that read them (the language, the consent, What's new,
+  // automatic updates): kept until one of them changes or the person comes back to the page, when each reader
+  // reads again -- this forgets it first, having listened first -- and they share the next. A read that fails
+  // is not kept.
+  let settingsRead = null;
+  const forgetSettings = () => { settingsRead = null; };
+  const page = typeof window !== 'undefined' ? window : null;
+  page?.addEventListener?.('focus', forgetSettings);
+
+  function readSettings() {
+    if (settingsRead) return settingsRead;
+    const read = request(`${API}/settings`, { operation: 'settings' });
+    settingsRead = read;
+    read.catch(() => { if (settingsRead === read) settingsRead = null; });
+    return read;
+  }
+
+  /** A change of the person's settings: what any read sent before it said is over. */
+  function changeSettings(body, operation) {
+    forgetSettings();
+    return request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body, operation }).finally(forgetSettings);
+  }
+
   async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
     if (disposed || signal?.aborted) throw abortError();
     const controller = new AbortController();
@@ -370,27 +393,23 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     },
     // The person's settings (`/api/v1/settings`): whether usage stats are shared, and the language.
     consent(share) {
-      return (share === undefined ? request(`${API}/settings`, { operation: 'consent' })
-        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { telemetry: { share } }, operation: 'consent' }))
+      return (share === undefined ? readSettings() : changeSettings({ telemetry: { share } }, 'consent'))
         .then((settings) => settings.telemetry);
     },
     language(locale) {
-      return (locale === undefined ? request(`${API}/settings`, { operation: 'language' })
-        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { language: { locale } }, operation: 'language' }))
+      return (locale === undefined ? readSettings() : changeSettings({ language: { locale } }, 'language'))
         .then((settings) => settings.language);
     },
     // What's new: the releases whose notes the person has seen and the one the engine runs; with
     // `seen`, the releases to add (the server adds, never takes away). A server before it answers none.
     whatsNew(seen) {
-      return (seen === undefined ? request(`${API}/settings`, { operation: 'whats-new' })
-        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { whats_new: { seen } }, operation: 'whats-new' }))
+      return (seen === undefined ? readSettings() : changeSettings({ whats_new: { seen } }, 'whats-new'))
         .then((settings) => settings.whats_new ?? null);
     },
     // Whether the engine updates by itself (`/api/v1/settings`' `updates`); with `automatic`, the
     // person's answer (the app menu's Automatic updates).
     automaticUpdates(automatic) {
-      return (automatic === undefined ? request(`${API}/settings`, { operation: 'updates' })
-        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { updates: { automatic } }, operation: 'updates' }))
+      return (automatic === undefined ? readSettings() : changeSettings({ updates: { automatic } }, 'updates'))
         .then((settings) => settings.updates);
     },
     // Who the engine is, this start of it (`instance`), whether a newer text-to-cad is out and where
@@ -525,6 +544,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       stopPolling();
       for (const request of requests) request.abort();
       requests.clear();
+      page?.removeEventListener?.('focus', forgetSettings);
       for (const session of [...sessions]) session.dispose();
       pendingRefreshes.clear();
       listeners.clear();

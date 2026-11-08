@@ -60,11 +60,14 @@ scripts/bundle/bundle.sh
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
-snapshot is painted with Pillow and needs no display. On Linux with no
-screen (a server, a container, CI) that context is an X server's: install Xvfb,
-Mesa's software GL and the font the stills set their text in, and run the package
-suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
-snapshot fails, saying so.
+snapshot is painted with Pillow and needs no display. On Linux that context is an X
+server's: the OCP wheels we pin draw through GLX alone (no EGL, no OSMesa), so there is no
+off-screen context without one. A snapshot draws on the request's `DISPLAY`, else on the
+engine's: the daemon's own, else an Xvfb the daemon starts itself where `Xvfb` is on PATH
+(`cad_server/engine/display.py`). With no screen (a server, a container, CI) install Xvfb,
+Mesa's software GL and the font the stills set their text in; the package suites draw in the
+test process too, so run them under `xvfb-run`, as CI's Linux job does. With neither a
+display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
@@ -380,7 +383,8 @@ diff content: a comment in a module selects what the module's code would.
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 | KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
-| CadQuery | the cadquery integration's code (the library's `cadquery/`, `engine/portable.py`, `engine/contract.py`, `_internal/integrations.py`; the server's `_internal/integration_env.py`, `cli/run.py`), `tests/python/packages/cadquery`, `test-cadquery.sh` | `test-cadquery.sh`: CadQuery in the environment of `cad[cadquery]`, made as the server makes it (CadQuery on its own OCP, some 300 MB from PyPI): `@model` functions built in the CadQuery worker, warm on the second run, their documents served and exported by the engine; the CadQuery memo's hits, misses and replay equality; a Workplane and an Assembly handed over; and `cad run` choosing the integration from the import (the bridge, the memo's keying, the worker's build and the engine's reading of a description run on stand-ins in the package suites, with no CadQuery) |
+| CadQuery | the cadquery integration's code (the library's `cadquery/`, `engine/portable.py`, `engine/contract.py`, `_internal/integrations.py`; the server's `_internal/integration_env.py`, `cli/run.py`), the library's `pyproject.toml` (CadQuery's pin), `tests/python/packages/cadquery`, `test-cadquery.sh` | `test-cadquery.sh`: CadQuery in the environment of `cad[cadquery]`, made as the server makes it (CadQuery on its own OCP, some 300 MB from PyPI): `@model` functions built in the CadQuery worker, warm on the second run, their documents served and exported by the engine; the CadQuery memo's hits, misses and replay equality; a Workplane and an Assembly handed over; and `cad run` choosing the integration from the import (the bridge, the memo's keying, the worker's build and the engine's reading of a description run on stand-ins in the package suites, with no CadQuery) |
+| fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
@@ -537,7 +541,8 @@ Canonical source directories are:
   the server talks to: a Vercel project of its own, with no dependencies.
 - `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
   Python distributions (the library, the server with its bundled runtime assets, and the shim), and
-  `packages/aliases/` for the `cadgen` alias distribution.
+  `packages/aliases/` for `cadgen`, the library's deprecated alias, which every release still
+  publishes and which installs `cad` at the same release.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
@@ -933,7 +938,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    `v<VERSION>-dev.<commit>` (`@cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's four projects on
    PyPI into one folder (the library `cad`, the server `cad-server`, the
-   shim `cad-mcp`, and the alias `cadgen`, a wheel and an
+   shim `cad-mcp`, and the deprecated alias `cadgen`, a wheel and an
    sdist each, and nothing else at any other version), and an `unzip -l` assertion
    that the server's wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
@@ -1069,7 +1074,7 @@ hold each one:
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
-| the plugin folder's configs, which the install command points every app at | each as `latest`'s: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `agent-plugins` | yes | `cad_server/_internal/plugin.py` |
+| the plugin folder's configs, which the install command points every app at | `claude-install`, `codex-install`, `cursor-install`, `gemini-install`, `agent-plugins` (through 0.11, as `latest`'s `-github`) | yes | `cad_server/_internal/plugin.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
@@ -1238,7 +1243,7 @@ requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
 `release`, whose deployment branches are `main` alone, and the trusted publisher of each
-of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`) names this repository, `release-publish.yml` and that environment, so no
+of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, and the deprecated alias `cadgen`) names this repository, `release-publish.yml` and that environment, so no
 run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
 project PyPI does not have yet takes a pending publisher, the same three names, before
 its first release. No other

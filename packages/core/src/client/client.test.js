@@ -394,6 +394,45 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
   ]);
 });
 
+test('the person\'s settings are read once by all that read them, until one changes or the person comes back to the page', async (t) => {
+  const page = new EventTarget();
+  const before = globalThis.window;
+  globalThis.window = page;
+  t.after(() => { if (before === undefined) delete globalThis.window; else globalThis.window = before; });
+  const reads = [];
+  let fails = false;
+  let telemetry = { share: true };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    if (fails) return Response.json({ error: 'no' }, { status: 500 });
+    reads.push(options.method || 'GET');
+    if (options.body) telemetry = JSON.parse(options.body).telemetry;
+    return Response.json({ language: { locale: 'fr' }, telemetry, whats_new: { seen: [], release: '0.11' }, updates: { automatic: true } });
+  } });
+  t.after(() => client.dispose());
+  const everyReader = () => Promise.all([client.language(), client.consent(), client.whatsNew(), client.automaticUpdates()]);
+  // A page's load: every reader at once, and one that reads after the answer (the page's first paint read the language).
+  assert.deepEqual((await everyReader()).map((answer) => Object.keys(answer)[0]), ['locale', 'share', 'seen', 'automatic']);
+  await client.language();
+  assert.deepEqual(reads, ['GET']);
+  // The person comes back: the readers read again, and share the one read.
+  page.dispatchEvent(new Event('focus'));
+  await everyReader();
+  assert.deepEqual(reads, ['GET', 'GET']);
+  // A change: what comes after reads what it wrote.
+  await client.consent(false);
+  assert.deepEqual(await client.consent(), { share: false });
+  assert.deepEqual(reads, ['GET', 'GET', 'PUT', 'GET']);
+  // A read that failed is not kept.
+  page.dispatchEvent(new Event('focus'));
+  fails = true;
+  await assert.rejects(client.language());
+  fails = false;
+  assert.deepEqual(await client.language(), { locale: 'fr' });
+  assert.deepEqual(reads, ['GET', 'GET', 'PUT', 'GET', 'GET']);
+  client.dispose();
+  page.dispatchEvent(new Event('focus'));
+});
+
 test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
   const calls = [];
   const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);

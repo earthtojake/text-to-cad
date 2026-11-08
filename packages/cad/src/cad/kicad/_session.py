@@ -131,7 +131,7 @@ def _stopped_on_signals(server: subprocess.Popen) -> Iterator[None]:
             signal.signal(getattr(signal, name), handler)
 
 
-def _format_of(path: Path) -> str | None:
+def format_of(path: Path) -> str | None:
     """A board's or a schematic's file format, its ``(version YYYYMMDD)``; None for a file not there."""
     try:
         with path.open("rb") as file:
@@ -471,7 +471,7 @@ def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> It
         raise IsADirectoryError(f"{document_type}.edit: {path} is not a file")
     create = not path.exists()
     kicad = _kipy()
-    before, project = _format_of(path), path.with_suffix(".kicad_pro").exists()
+    before, project = format_of(path), path.with_suffix(".kicad_pro").exists()
     with ExitStack() as stack:
         server = _SERVERS.get(_project(path))
         if server is None:
@@ -489,7 +489,7 @@ def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> It
         made = None if project or path.with_suffix(".kicad_pro") in server.said else path.with_suffix(".kicad_pro")
         server.said.add(path.with_suffix(".kicad_pro"))
         print(f"made {path}, a new {kind.noun}" + (f", and its project {made.name}" if made else ""), file=sys.stderr)
-    after = _format_of(path)
+    after = format_of(path)
     if saved and before and after and before != after:
         print(f"warning: {path.name} is saved in the {kind.noun} format of the KiCad that ran it ({after}, was "
               f"{before}): a KiCad older than that can no longer open it", file=sys.stderr)

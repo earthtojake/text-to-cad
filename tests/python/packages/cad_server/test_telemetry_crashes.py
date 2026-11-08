@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -164,7 +165,9 @@ class SignatureTest(unittest.TestCase):
 
         for missing in ("cadgen._gone_under_this_test", "cad._internal._gone_under_this_test"):
             with self.subTest(missing=missing):
-                gone = _caught(lambda: importlib.import_module(missing))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
+                    gone = _caught(lambda: importlib.import_module(missing))
                 self.assertIsInstance(gone, ModuleNotFoundError)
                 with mock.patch.object(cad_server, "__file__", str(Path(tempfile.gettempdir()) / "removed" / "__init__.py")):
                     self.assertIsNone(analytics.signature(gone, "command", handled=False))

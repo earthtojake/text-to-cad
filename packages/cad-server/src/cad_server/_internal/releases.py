@@ -96,9 +96,9 @@ def recipe(version: str, python: str, source: str | None) -> base.Recipe:
         else:
             requirement = (*((f"{base.LIBRARY} @ {library}",) if library and not os.path.isdir(library) else ()),
                            f"{base.SERVER} @ {source}")
-    return base.Recipe(what=f"text-to-cad {version}", python=python, requirement=requirement, release=version,
-                       source=source, making=f"installing text-to-cad {version} on Python {platform.python_version()}",
-                       downloading=f"downloading text-to-cad {version}")
+    return base.Recipe(what=f"cad-server {version}", python=python, requirement=requirement, release=version,
+                       source=source, making=f"installing cad-server {version} on Python {platform.python_version()}",
+                       downloading=f"downloading cad-server {version}")
 
 
 def make(version: str, *, python: str | None = None, source: str | None = None,
@@ -118,6 +118,20 @@ def make(version: str, *, python: str | None = None, source: str | None = None,
 
     return base.make(env, recipe(version, python or sys.executable, source), told or base._say, finish=finish,
                      marker=MARKER, done=complete)
+
+
+def python_version(env: Path) -> str | None:
+    """The version of the Python the environment at ``env`` runs, asked of it, nothing written (``-B``), or None
+    when it has none that answers: its ``pyvenv.cfg`` says at most the minor version uv's folder of that Python
+    goes by, whose patch release moves under it."""
+    try:
+        done = subprocess.run([str(base.interpreter(env)), "-B", "-I", "-S", "-c",
+                               "import platform; print(platform.python_version())"], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    said = done.stdout.strip()
+    return said if done.returncode == 0 and said else None
 
 
 def listing() -> list[dict[str, Any]]:

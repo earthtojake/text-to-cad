@@ -106,7 +106,7 @@ class BaseTest(unittest.TestCase):
         with self.made(fake):
             base.ensure(self.installation, told=self.said.append)
         self.assertEqual(fake.asked(), ["venv", "pip --offline", "pip"])
-        self.assertEqual(self.said[1], "downloading the CAD kernel (about 220 MB) and what it needs, once")
+        self.assertEqual(self.said[1], "downloading the CAD kernel (about 240 MB) and what it needs, once")
 
     def test_a_base_that_cannot_be_made_is_refused_in_one_line(self) -> None:
         offline = "error: Failed to fetch: `https://pypi.org/simple/build123d/`\n  Caused by: dns error: failed to lookup address"

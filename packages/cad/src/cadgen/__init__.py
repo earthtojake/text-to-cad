@@ -1,10 +1,11 @@
-"""``cadgen``: the library's earlier name, kept so a model written for it runs as it is.
+"""``cadgen``: the library's deprecated alias, kept so a model written for it runs as it is.
 
 Every name of ``cadgen`` is the library's own (``cad``), and every module ``cadgen.<x>`` is the module
 ``cad.<x>`` itself -- the same object, never a second copy -- so ``from cadgen import model``, ``from
 cadgen.geometry import overlap_volume`` and ``from cadgen.gltf import animation`` resolve to what the
-``cad`` spellings do, and ``cadgen.ap242 is cad.ap242``. Nothing is said of it. Only the library has
-this name: the server and the stdio transport have none. A name 0.7 had and 0.8 took out (``build123d``,
+``cad`` spellings do, and ``cadgen.ap242 is cad.ap242``. Importing it, or any module under it, says once
+per process that it is deprecated (``cad._internal.aliases.warn``), at the line that imported it: a
+module under it imports this one first. Only the library has this name: the server and the stdio transport have none. A name 0.7 had and 0.8 took out (``build123d``,
 ``read_scene``, ...) fails as any missing name does; a program ``cad run`` runs then says the guide from 0.7
 to 0.8 too (``cad._internal.program``).
 """
@@ -18,6 +19,9 @@ import sys
 from typing import Any
 
 import cad as _cad
+from cad._internal.aliases import warn as _warn
+
+_warn("cadgen", "cad")
 
 
 class _Alias(importlib.abc.MetaPathFinder, importlib.abc.Loader):

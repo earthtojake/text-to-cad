@@ -53,7 +53,12 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertIn(integration.process, registry.PROCESS_KINDS)
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
-                self.assertTrue(integration.modules and integration.distributions)
+                if integration.extra is None:
+                    # A program the person installs, which ships no package: found by its probe alone.
+                    self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
+                    self.assertFalse(integration.modules or integration.distributions)
+                else:
+                    self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # CadQuery runs on an OCP build of its own: a separate process, whose values are handed over.
         self.assertEqual(("cadquery",), registry.integrations_of(["cadquery.cq", "json"]))
@@ -73,6 +78,16 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        # A stress study is the calculix integration's, ccx from its extra (the cad-ccx package), which cad run runs as
+        # a command of its own; its environment holds the kernel, which reads the B-rep, and netgen, which meshes it.
+        self.assertEqual("calculix", integrations.for_name("cad.step.solve"))
+        self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
+                                           if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
+        self.assertEqual("calculix", integrations.for_command("ccx"))
+        self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
+        self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
+        for integration in registry.INTEGRATIONS.values():
+            self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual("cadquery", integrations.for_module("cadquery"))
         self.assertEqual("cadquery", integrations.for_name("cad.cadquery.is_cadquery"))
         # An OCP build is the kernel's and CadQuery's both; the first answers for one alone.

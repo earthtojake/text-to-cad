@@ -100,11 +100,14 @@ class ReaderLanesTest(unittest.TestCase):
         for lane in ("reader", "helpers", "helpers", "helpers", "reader", "reader"):
             server._read_done(lane)
         self.assertEqual(server.reading, {"reader": 0, "all": 0})
-        server.helpers_idle.join()
+        idle = server.helpers_idle  # None if its HELPERS_LINGER has run out already
+        if idle is not None:
+            idle.join()
         self.assertIsNone(server.helpers)
         self.assertTrue(helpers.shut, "the helpers went once no read was under way")
 
     def test_a_read_that_comes_before_the_helpers_go_keeps_them(self):
+        serve.HELPERS_LINGER = 60.0  # the next read comes first, however slow the machine is to it
         server = self.server
         server.reading["reader"] = server.reading["all"] = 1
         self.assertEqual(server._reading(40_000), "helpers")
@@ -113,7 +116,7 @@ class ReaderLanesTest(unittest.TestCase):
         server._read_done("reader")
         waiting = server.helpers_idle
         self.assertEqual(server._reading(40_000), "reader")
-        waiting.join()
+        waiting.join()  # cancelled by that read: at once
         self.assertIs(server.helpers, helpers)
         self.assertFalse(helpers.shut)
 

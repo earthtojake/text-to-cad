@@ -83,7 +83,7 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
  * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
  * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
- * camera's projection; there is no cube and no Home (Zoom to fit frames the board). A press
+ * camera's projection; there is no cube (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
  * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
  * whichever side of the board it is on, turned by hand too.

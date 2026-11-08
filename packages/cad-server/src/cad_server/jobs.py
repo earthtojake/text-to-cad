@@ -15,9 +15,14 @@ MAX_JOBS = 16
 
 
 class JobError(ValueError):
-    def __init__(self, message, status=400):
+    """A request refused before any work: its words, its HTTP status, and why, as the CAD app's telemetry
+    counts a tool's failure (``analytics.FAILURES``: ``bad_request``, or ``relative_path`` for a path
+    that is not absolute)."""
+
+    def __init__(self, message, status=400, reason="bad_request"):
         super().__init__(message)
         self.status = status
+        self.reason = reason
 
 
 class Jobs:
