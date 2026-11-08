@@ -113,6 +113,23 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("releases nothing", result.stdout)
 
+    def test_a_release_may_not_leave_the_checks_release_past_itself(self) -> None:
+        """``contract.CHECKS_SINCE`` names, ahead of it, the release that ships workers' checks: a release
+        before it is refused, and one at it passes."""
+        contract = self.root / "packages/cad/src/cad/engine/contract.py"
+        self.git("switch", "feature")
+        contract.parent.mkdir(parents=True)
+        contract.write_text('PROTOCOL = 1\nCHECKS_SINCE = "0.6.0"\n', encoding="utf-8")
+        self.commit("Checks in workers")
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('CHECKS_SINCE = "0.6.0", past 0.5.1', result.stderr)
+        self.git("switch", "feature")
+        self.bump_feature("0.6.0")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_a_release_must_pass_the_latest_tag(self) -> None:
         self.git("tag", "v0.6.0")
         self.bump_feature("0.5.1")
