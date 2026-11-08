@@ -28,6 +28,9 @@ import { resolveMaterialFillBaseColor, shapeSourceColor } from "./surfaceMateria
 //                           every colour is raised to `colorPower` (a scene's own look that
 //                           draws none: X-ray's, `lib/xbf/xbfLook.js`)
 //
+// A surface drawn see-through (it writes no depth) steps a hair forward in the depth test, and one that
+// writes depth keeps its family's step (`surfaceOffset`), whatever the look.
+//
 // A material marked `userData.cadAuthoredFinish` (a finish its file authored, which the
 // scene asks to keep) keeps it in the shaded looks too -- opaque, its source colour shown --
 // reflecting the scene's environment; in every other look (a fill, X-ray, Flat) it wears the
@@ -44,6 +47,24 @@ const clamp01 = (value, fallback = 0) => {
   return Number.isFinite(number) ? Math.min(Math.max(number, 0), 1) : fallback;
 };
 
+// Where a surface stands in the depth test. One that writes depth keeps the step its family gives it (an engine
+// document's step back a hair, so the edges on them win: `xbfScene.js`); one that writes none, a see-through
+// surface, steps a hair forward instead. Lying on an opaque surface (a diffuser on its baffle, a pane on its
+// frame), it is then in front of it at every pixel, where at one depth the two would be decided pixel by pixel by
+// how each one's triangles round their depth, in shards. It writes no depth, so it hides nothing by the step, the
+// edges on it included. OCCT's stills draw by the same rule (`render/occt.py`'s `SEE_THROUGH_OFFSET`).
+export const SEE_THROUGH_OFFSET = Object.freeze({ polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: -4 });
+
+/**
+ * The polygon offset a surface is drawn at: `own` (its family's: `polygonOffset`, `polygonOffsetFactor` and
+ * `polygonOffsetUnits`) where it writes depth, `SEE_THROUGH_OFFSET` where it writes none.
+ */
+export function surfaceOffset(depthWrite, own = null) {
+  if (!depthWrite) return SEE_THROUGH_OFFSET;
+  return { polygonOffset: Boolean(own?.polygonOffset), polygonOffsetFactor: Number(own?.polygonOffsetFactor) || 0,
+    polygonOffsetUnits: Number(own?.polygonOffsetUnits) || 0 };
+}
+
 function litMaterial(material) {
   return Boolean(material?.isMeshStandardMaterial);
 }
@@ -54,6 +75,9 @@ function readAuthored(material) {
     opacity: material.opacity,
     transparent: material.transparent,
     depthWrite: material.depthWrite,
+    // The step it was made with, which it keeps while it writes depth (`surfaceOffset`).
+    offset: { polygonOffset: material.polygonOffset, polygonOffsetFactor: material.polygonOffsetFactor,
+      polygonOffsetUnits: material.polygonOffsetUnits },
     side: material.side,
     vertexColors: material.vertexColors,
     map: material.map || null,
@@ -153,13 +177,15 @@ export function createSurfaceLook(THREE, root) {
         color = new THREE.Color(color.r ** power, color.g ** power, color.b ** power);
       }
       const opacity = clamp01(authored.opacity * opacityScale, 1);
+      const depthWrite = authored.transparent ? authored.depthWrite : opacity >= 0.999;
       const next = {
         map: forceFill ? null : authored.map,
         vertexColors: forceFill ? false : authored.vertexColors,
         side: authoredLook ? authored.side : THREE.DoubleSide,
         transparent: authored.transparent || opacity < 0.999,
         opacity,
-        depthWrite: authored.transparent ? authored.depthWrite : opacity >= 0.999
+        depthWrite,
+        ...surfaceOffset(depthWrite, authored.offset)
       };
       let target = lit;
       if (flat) {

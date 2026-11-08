@@ -874,12 +874,12 @@ place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
 previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
 `build._raised`: its type and every frame, the library's included), and the daemon decides
-from them whether the failure is a mistake in cadgen's own code (`reportable`,
+from them whether the failure is a mistake in text-to-cad's own code (`reportable`,
 `daemon._reportable`) by the rule telemetry counts a build's crash by
 (`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
-raised in cadgen's code at a line that is no `raise`, past the memo's and the history's wrappers
+raised in text-to-cad's code at a line that is no `raise`, past the memo's and the history's wrappers
 of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
-cadgen refusing what it was given are the model's to correct. The page's record of the failed
+the library refusing what it was given are the model's to correct. The page's record of the failed
 build carries `reportable`, and the card offers Report Issue only where it is not `false`; a
 worker that died under the build is reportable. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
@@ -957,7 +957,8 @@ is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spe
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
 meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
 warning once per process from the lookup, at the caller's line (`skip_file_prefixes` skips the
-library's and the import system's frames).
+library's and the import system's frames). Importing `cadgen`, or any module under it, warns the same way, from
+`cadgen`'s own import.
 
 **Producers.** A producer is `(type, matcher, writer, integration)` with what it accepts and provides
 (`cad.registry.Producer`), registered by its integration (`cad/build123d/_producers.py`) and gathered
@@ -1015,7 +1016,7 @@ as `cad run` makes a program's (`extras.ensure`), whose Python runs the library'
 `cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
 way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
-installation's release, made once by the engine (some 100 MB of kicode from PyPI, the first time). kicad-cli
+installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
@@ -1823,11 +1824,15 @@ approximates (`render/finish.py`): a clear coat eases the base's roughness towar
 OCCT drops anisotropy, and transmission is opacity over the colour tinted
 by the transmission colour.
 Edges are unlit in their class's ink, 1 px; X-ray's faces are lit at 0.22 opacity, Hidden line's
-are the backdrop's colour. The engine serves the record as `GET /api/v1/look` and its image as
-`GET /api/v1/look/environment`; the page reads both once per engine, beside the document, and the
-document's scene brings them as its own lighting and surface rule (the bundled
-`@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
-up in place of the theme's. Preview is drawn as any file's is.
+are the backdrop's colour. A face that writes depth steps back a hair in the depth test, so the
+edges on it win; a see-through one (a translucent part's, X-ray's), which writes none, steps a
+hair forward (`render/occt.py`'s `SEE_THROUGH_OFFSET`), so lying on an opaque face it is in front
+of it at every pixel, never in shards along the two faces' triangles: the viewer's rule (the
+bundled `@cad/core`'s `lib/viewer/surfaceLook.js`). The engine serves the record as
+`GET /api/v1/look` and its image as `GET /api/v1/look/environment`; the page reads both once per
+engine, beside the document, and the document's scene brings them as its own lighting and surface
+rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
+page put up in place of the theme's. Preview is drawn as any file's is.
 
 `cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
 browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
@@ -1835,7 +1840,8 @@ browser viewer; snapshot has no Preview or video option. A packet requesting `pr
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
-light -- the studio backdrop, a drawing's white paper, a board's and a schematic's light colours --
+light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
+which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
@@ -2860,8 +2866,8 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |
 | `/api/v1/local/...` | a local engine's: `update` (GET, POST: the button), `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
 | `GET /api/v1/local/link` | `{"link", "expires"}`: a fresh link (`<expires>.<mac>`, `expires` in Unix seconds) the page keeps in its address, so a copied address opens it in another browser on this machine; it also answers the CAD app, through a card's tunnel, for its Copy link |
-| `GET /api/v1/local/open-in?id=<id>` | Open in: `{"targets": [{"target", "kind", "name", "present", "apps": [{"id", "name"}]}], "fileManager"}` -- a model's `source` (its script, kind `script`) then one `export:<kind>` for each kind of file its last build wrote, a file's `source` alone; each with whether it is there now and the apps found on this computer that take its kind (`_internal/apps.py`: looked for in the background, never on a request); `fileManager` `finder`, `explorer` or `files`; 404 for an unknown id |
-| `POST /api/v1/local/open` | `{"id", "target", "app"}`: one of those targets in one of its apps, or `"default"` (the system's own handler), started detached and never through a shell: 204; 400 for a target the document lacks or an app not found for its kind, 404 for a document or a file not there. Only the server's own paths and apps are opened |
+| `GET /api/v1/local/open-in?id=<id>` | Open in: `{"targets": [{"target", "kind", "name", "present", "apps": [{"id", "name", "refuses"}], "default"}], "fileManager"}` -- a model's `source` (its script, kind `script`) then one `export:<kind>` for each kind of file its last build wrote, a file's `source` alone; each with whether it is there now and the apps found on this computer that take its kind (`_internal/apps.py`: looked for in the background, never on a request). A KiCad's `name` says its version (`KiCad 9.0.6`, `KiCad 10.99 nightly`), and `refuses: "newer"` marks one that cannot read this file's format, listed rather than hidden; `default: false` on a `.kicad_*` file, whose operating-system handler is never started; `fileManager` `finder`, `explorer` or `files`; 404 for an unknown id |
+| `POST /api/v1/local/open` | `{"id", "target", "app"}`: one of those targets in one of its apps, or `"default"` (the system's own handler), started detached and never through a shell (a KiCad by its board or schematic editor, as the file's extension says): 204; 400 for a target the document lacks, an app not found for its kind, a KiCad that `refuses` the file or `"default"` on a `.kicad_*` file, 404 for a document or a file not there. Only the server's own paths and apps are opened |
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,

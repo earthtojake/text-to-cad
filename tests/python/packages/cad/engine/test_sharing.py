@@ -179,6 +179,48 @@ class CopyOnWriteTest(MemoCase):
         self.assertEqual(self._flags(second), {True}, "the hazard the copy guards against is real")
 
 
+class OwnJointsTest(MemoCase):
+    def assertOwn(self, result) -> None:
+        self.assertTrue(all(joint.parent is result for joint in result.joints.values()))
+        self.assertIs(getattr(result.joints, "owner", result), result)  # build123d 0.14's JointDict
+
+    def test_a_joint_added_to_a_result_is_on_that_result_alone(self) -> None:
+        import build123d as bd
+
+        def build(add: bool) -> list:
+            with memo.run(None):
+                box = bd.Box(1, 1, 1)
+                bd.RigidJoint("a", box, bd.Location())
+                # The second placement is the first's hit in the same run, then a deep copy.
+                results = [box.moved(bd.Location((1, 0, 0))), box.moved(bd.Location((1, 0, 0))), copy.deepcopy(box)]
+                if add:
+                    for result in results:
+                        bd.RigidJoint("x", result, bd.Location())
+                return results
+
+        for result in build(True):
+            self.assertEqual(sorted(result.joints), ["a", "x"])
+            self.assertOwn(result)
+        for result in build(False):  # served from the memo: the joints the operation made, as made
+            self.assertEqual(sorted(result.joints), ["a"])
+            self.assertOwn(result)
+
+    def test_a_joint_added_to_a_shared_read_is_on_that_read(self) -> None:
+        import build123d as bd
+
+        path = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, path)
+        bd.export_step(bd.Box(1, 1, 1), str(path / "box.step"))
+        before = memo.stats()["shared_reads"]
+        with memo.run(None):
+            reads = [bd.import_step(str(path / "box.step")) for _ in range(2)]
+            for read in reads:
+                bd.RigidJoint("x", read, bd.Location())
+        self.assertEqual(memo.stats()["shared_reads"] - before, 1)
+        for read in reads:
+            self.assertOwn(read)
+
+
 class OnePlaceTest(MemoCase):
     """OCCT's unify chains the edges it merges by their vertices' TShapes, whatever place each stands
     at, and a prism's two caps are one face's edges and vertices placed twice: a unify that fails on
