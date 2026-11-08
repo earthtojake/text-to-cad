@@ -122,7 +122,7 @@ class Refuses(unittest.TestCase):
         # It listed max_rpm and stickout_mm among the optional keys, and a tool's number and flutes not at all.
         import cad.step
 
-        words = " ".join(cad.step.cam.__doc__.split())
+        words = " ".join(cad.step.plan.__doc__.split())
         self.assertIn('"machine": {"post": grbl, linuxcnc, mach3, fanuc, centroid, uccnc or smoothie, and "max_rpm" '
                       '(both required), and optionally "travel_mm", "min_rpm", "max_feed_mm_min",', words)
         self.assertIn('"number" (the T number), "diameter_mm", "flute_length_mm", "stickout_mm"; a flat, ball or '

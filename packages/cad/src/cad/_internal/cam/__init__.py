@@ -1,4 +1,4 @@
-"""The CAM job behind ``cad.<type>.cam`` (``cad <type> cam``), the operation every B-rep type shares (:mod:`.operation`,
+"""The CAM job behind ``cad.<type>.plan`` (``cad <type> plan``), the operation every B-rep type shares (:mod:`.operation`,
 which the type's package binds): a job in; toolpaths and G-code from FreeCAD, checked against the part, out.
 
 * :mod:`.job` parses and validates the job (closed vocabulary, teaching errors) into frozen dataclasses;

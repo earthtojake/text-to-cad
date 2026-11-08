@@ -1,4 +1,4 @@
-"""The result GLB (``<stem>.cam.glb``): the part, the stock, the toolpaths, and the plan in its extras.
+"""``result.glb``, the plan's picture in 3D: the part, the stock and the toolpaths, which any glTF viewer opens.
 
 Written by hand (glTF 2.0 is a JSON chunk and one binary chunk), so CAM adds no dependency.
 Coordinates are glTF's: metres, Y up (CAD ``(x, y, z)`` mm -> ``(x, z, -y) / 1000``), so the part shows upright at
@@ -10,15 +10,13 @@ The scene has one root node ``cam`` whose children are:
 * the stock box (TRIANGLES, translucent; ``{"kind": "stock"}``);
 * per setup a ``feed`` node and a ``rapid`` node, each one LINES primitive (mode 1) of segment pairs in part
   coordinates, with float attributes ``_CAM_T`` (program time in seconds, cumulative across setups, the same clock
-  as the operations' ``t0``/``t1`` and ``duration_s``) and ``_CAM_OP`` (the global operation index, the one the
-  extras' ``operations[].index`` and every finding's ``items[].operation`` use); node extras
-  ``{"generator": "cad cam", "setup": id, "kind": "feed" | "rapid"}``. Feed lines hold feed, plunge and arc
+  as ``result.json``'s operations' ``t0``/``t1`` and ``duration_s``) and ``_CAM_OP`` (the operation's ``index`` in
+  ``result.json``); node extras ``{"setup": id, "kind": "feed" | "rapid"}``. Feed lines hold feed, plunge and arc
   moves (arcs sampled within :data:`toolpath.CHORD_MM`). Every vertex's tool axis is its setup's (the third row of
-  ``matrix`` in the extras: WCS +Z in part coordinates).
+  its ``matrix`` in ``result.json``: WCS +Z in part coordinates).
 
-``generator: "cad cam"`` and the whole plan (``cam``, schema 1, see :func:`write_glb`'s ``cam`` argument) are on
-both ``scenes[0].extras`` and the root node's extras. glTF loaders may lowercase custom attribute names
-(``_cam_t``); the names written are ``_CAM_T`` and ``_CAM_OP``.
+The numbers are ``result.json``'s alone: the GLB carries no plan of its own. glTF loaders may lowercase custom attribute
+names (``_cam_t``); the names written are ``_CAM_T`` and ``_CAM_OP``.
 """
 
 from __future__ import annotations
@@ -33,7 +31,8 @@ if TYPE_CHECKING:
 
 __all__ = ["GENERATOR", "gltf_space", "line_segments", "write_glb"]
 
-GENERATOR = "cad cam"
+#: The glTF asset's generator: the command that wrote it.
+GENERATOR = "cad plan"
 
 
 def gltf_space(points_mm: "np.ndarray") -> "np.ndarray":
@@ -62,13 +61,12 @@ def _vertex_normals(positions, triangles):
     return (normals / length).astype(np.float32)
 
 
-def write_glb(path: Path, *, part_mesh, stock_mesh, lines: list[dict], cam: dict, name: str) -> None:
-    """Write the result GLB.
+def write_glb(path: Path, *, part_mesh, stock_mesh, lines: list[dict], name: str) -> None:
+    """Write ``result.glb``.
 
     ``part_mesh`` and ``stock_mesh`` are ``(vertices (V, 3) part mm, triangles (T, 3))``. ``lines`` has one dict per
     toolpath node: ``{"setup", "kind": "feed" | "rapid", "points": (2S, 3) part mm (segment pairs), "t": (2S,),
-    "op": (2S,)}``. ``cam`` is the plan
-    the viewer reads (``extras.cam``)."""
+    "op": (2S,)}``."""
     import numpy as np
 
     blobs: list[bytes] = []
@@ -91,7 +89,7 @@ def write_glb(path: Path, *, part_mesh, stock_mesh, lines: list[dict], cam: dict
     ARRAY, ELEMENT = 34962, 34963
     FLOAT, UINT = 5126, 5125
     meshes: list[dict] = []
-    nodes: list[dict] = [{"name": "cam", "children": [], "extras": {"generator": GENERATOR, "cam": cam}}]
+    nodes: list[dict] = [{"name": "cam", "children": []}]
     materials = [
         {"name": "part", "doubleSided": True,
          "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.74, 0.78, 1.0], "metallicFactor": 0.1,
@@ -137,13 +135,13 @@ def write_glb(path: Path, *, part_mesh, stock_mesh, lines: list[dict], cam: dict
         meshes.append({"name": label, "primitives": [{"attributes": attributes, "mode": 1,
                                                       "material": 2 if entry["kind"] == "feed" else 3}]})
         nodes.append({"name": label, "mesh": len(meshes) - 1,
-                      "extras": {"generator": GENERATOR, "setup": entry["setup"], "kind": entry["kind"]}})
+                      "extras": {"setup": entry["setup"], "kind": entry["kind"]}})
         nodes[0]["children"].append(len(nodes) - 1)
 
     gltf = {
         "asset": {"version": "2.0", "generator": GENERATOR},
         "scene": 0,
-        "scenes": [{"name": name, "nodes": [0], "extras": {"generator": GENERATOR, "cam": cam}}],
+        "scenes": [{"name": name, "nodes": [0]}],
         "nodes": nodes,
         "meshes": meshes,
         "materials": materials,

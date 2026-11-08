@@ -312,11 +312,11 @@ def _operation(raw: object, where: str, tools: dict[str, Tool], coolant: str, in
                           f"{tools[tool_id].type}")
     faces = raw.get("faces", [])
     if not isinstance(faces, list) or not all(isinstance(f, str) and f.strip() for f in faces):
-        raise CamJobError(f"{where}.faces must be a list of face references as cad <type> cam lists them, like "
+        raise CamJobError(f"{where}.faces must be a list of face references as cad <type> plan lists them, like "
                           "[\"part/face 9\"]")
     if spec["faces"] and not faces:
         raise CamJobError(f"{where}: {kind} needs \"faces\": " + (
-            "the hole walls to drill" if kind == "drill" else "the floors to clear down to") + " (cad <type> cam "
+            "the hole walls to drill" if kind == "drill" else "the floors to clear down to") + " (cad <type> plan "
                           "lists them)")
     tool = tools[tool_id]
     params: dict = {

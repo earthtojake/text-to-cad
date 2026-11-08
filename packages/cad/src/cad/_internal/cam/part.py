@@ -121,7 +121,7 @@ class Part:
         try:
             hit = self._document.resolve(ref)
         except ValueError as exc:
-            raise CamJobError(f"{where}: {ref} is not a face of this part ({exc}); cad <type> cam lists them"
+            raise CamJobError(f"{where}: {ref} is not a face of this part ({exc}); cad <type> plan lists them"
                               ) from None
         if hit.kind != "face":
             raise CamJobError(f"{where}: {ref} is {'a part' if hit.kind is None else f'a {hit.kind}'} reference; "
@@ -130,7 +130,7 @@ class Part:
             raise CamJobError(f"{where}: {ref} is on {hit.path}, but the job machines {self.occurrence}")
         if not 1 <= hit.ordinal <= len(self.faces):
             raise CamJobError(f"{where}: {ref} is not a face of this part (it has {len(self.faces)}); cad <type> "
-                              "cam lists them")
+                              "plan lists them")
         return self.faces[hit.ordinal]
 
     def ordinal(self, ref: str) -> int:

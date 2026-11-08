@@ -1,4 +1,4 @@
-"""The machining reading of a part: what ``cad <type> cam`` lists with no job and what operations look up.
+"""The machining reading of a part: what ``cad <type> plan`` lists with no job and what operations look up.
 
 :func:`read_features` returns ``{"faces", "holes", "floors"}`` (lists of dicts, the shapes
 :class:`~cad.results.CamResult` documents):

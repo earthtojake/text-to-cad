@@ -5,9 +5,9 @@
 its operations (``step.export(source, *destinations)``, ...) are the ``cad step <operation>`` commands'.
 ``step.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
 the trimesh integration (``cad._internal.manufacturing``).
-``step.cam(source, job=..., out="result.cam.glb")`` plans a CAM job on its part, FreeCAD's toolpaths and G-code checked
-against it (with no job, lists the faces, holes and floors a job names), read with the kernel and planned by the
-freecad integration (``cad._internal.cam.operation``).
+``step.plan(source, job=..., out="cam/")`` plans a CAM job on its part, FreeCAD's toolpaths and G-code checked
+against it, writing its results into that folder (with no job, it lists the faces, holes and floors a job names),
+read with the kernel and planned by the freecad integration (``cad._internal.cam.operation``).
 Everything loads on first use: ``import cad.step`` imports no CAD kernel (``cad._internal.document_type``).
 """
 

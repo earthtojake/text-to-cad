@@ -9,7 +9,7 @@ step`` is one object that is
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
-  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.cam``, the
+  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.plan``, the
   CAM job, ``cad._internal.cam.operation``; a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
@@ -72,11 +72,11 @@ class DocumentType(types.ModuleType):
             value = _operation(self, name)
             self.__dict__[name] = value
             return value
-        if name == "cam" and entry.operation("cam") is not None:
+        if name == "plan" and entry.operation("plan") is not None:
             # The CAM job every B-rep type shares (``cad._internal.cam.operation``).
-            from cad._internal.cam.operation import cam_for
+            from cad._internal.cam.operation import plan_for
 
-            value = cam_for(entry.id)
+            value = plan_for(entry.id)
             self.__dict__[name] = value
             return value
         if name == "dfm" and (entry.operation("dfm") or _NONE).integration == "trimesh":

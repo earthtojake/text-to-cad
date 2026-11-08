@@ -242,7 +242,7 @@ jobs:
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
 
-  # `cad <type> cam --job` needs FreeCAD, which no other job installs: without it every plan in the
+  # `cad <type> plan --job` needs FreeCAD, which no other job installs: without it every plan in the
   # cam suite skips. Linux only: FreeCAD plans the same paths everywhere.
   cam:
     name: cam

@@ -1,7 +1,7 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
 A 3D type's ``dfm`` is the trimesh integration's (``cad.registry``): the library measures the mesh
-with trimesh; a B-rep type's ``cam`` reads the part with the kernel, the build123d integration's, whose environment is
+with trimesh; a B-rep type's ``plan`` reads the part with the kernel, the build123d integration's, whose environment is
 the installation's base; a KiCad board's ``drc``, a schematic's ``erc`` and their ``export`` are the kicad integration's, run by
 kicode's kicad-cli. The command's own environment -- the server's installation -- holds the library without
 it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at

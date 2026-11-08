@@ -1,4 +1,4 @@
-"""``cad step cam`` and ``cad xbf cam`` are the library's operation, run where the kernel is: in the command's own
+"""``cad step plan``, ``cad xbf plan`` and ``cad model plan`` are the library's operation, run where the kernel is: in the command's own
 process when its environment holds it, else by the library's runner of one operation (``cad._internal.operation``)
 in the installation's base. Here this Python stands in for the base, so the runner's real subprocess reads the part,
 and what comes back is the result the operation returned, as its own type; a job's options are refused before any
@@ -53,7 +53,7 @@ class CamElsewhereTest(unittest.TestCase):
     def test_what_a_job_can_name_comes_back_through_the_runner_as_its_type(self):
         made: list = []
         with elsewhere(made):
-            code, out, _ = run(["cam", str(self.step), "--json"])
+            code, out, _ = run(["plan", str(self.step), "--json"])
         self.assertEqual(code, 0, out)
         self.assertEqual(made, ["build123d"])       # the kernel's environment, the installation's base
         result = CamResult.from_data(json.loads(out.strip().splitlines()[-1]))
@@ -66,7 +66,7 @@ class CamElsewhereTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, elsewhere([]):
             broken = Path(tmp) / "broken.step"
             broken.write_text("not a step file", encoding="utf-8")
-            code, out, _ = run(["cam", str(broken), "--json"])
+            code, out, _ = run(["plan", str(broken), "--json"])
         self.assertEqual(code, 1)
         payload = json.loads(out.strip().splitlines()[-1])
         self.assertFalse(payload["ok"])
@@ -76,11 +76,11 @@ class CamElsewhereTest(unittest.TestCase):
 
     def test_a_plans_options_are_refused_before_any_environment_is_made(self):
         made: list = []
-        for argv, said in ((["--out", "r.glb"], "--out is a plan's"),
-                           (["--job", "{}"], "give --out RESULT.cam.glb"),
-                           (["--job", "{}", "--out", "r.stl"], "must end in .glb")):
+        for argv, said in ((["--out", "r"], "--out is a plan's"),
+                           (["--job", "{}"], "give --out DIR"),
+                           (["--job", "{}", "--out", str(self.step)], "is a file")):
             with self.subTest(argv=argv), elsewhere(made):
-                code, _, err = run(["cam", str(self.step), *argv])
+                code, _, err = run(["plan", str(self.step), *argv])
                 self.assertEqual(code, 2)
                 self.assertIn(said, err)
         self.assertEqual(made, [])
@@ -88,24 +88,26 @@ class CamElsewhereTest(unittest.TestCase):
     @needs_freecad
     def test_a_plan_comes_back_through_the_runner_with_the_files_it_wrote(self):
         with tempfile.TemporaryDirectory() as tmp, elsewhere([]):
-            out_glb = Path(tmp) / "CAM" / "block.cam.glb"
+            folder = Path(tmp) / "CAM"
             job = json.dumps(mill_job([{"op": "face", "tool": "T1"}]))
-            code, out, _ = run(["cam", str(self.step), "--job", job, "--out", str(out_glb), "--json"])
+            code, out, _ = run(["plan", str(self.step), "--job", job, "--out", str(folder), "--json"])
             self.assertEqual(code, 0, out)
-            result = CamResult.from_data(json.loads(out.strip().splitlines()[-1]))
-            self.assertEqual(out_glb.resolve(), result.glb)
+            payload = json.loads(out.strip().splitlines()[-1])
+            result = CamResult.from_data(payload)
+            self.assertEqual(folder.resolve(), result.folder)
+            self.assertEqual(["result.json", "result.glb", "block.top.ngc"], [path.name for path in result.written])
             self.assertTrue(all(path.is_file() for path in result.written), result.written)
-            self.assertEqual(out_glb.parent.resolve(), result.written[1].parent)
+            self.assertEqual(payload, json.loads((folder / "result.json").read_text(encoding="utf-8")))
             self.assertEqual("ready", result.measurements["verdict"]["status"])
 
-    def test_where_the_kernel_is_here_out_names_a_file_that_is_not_there_yet(self):
-        written = self.step.with_name("new.cam.glb")
+    def test_a_job_that_cannot_run_leaves_no_folder_behind(self):
+        folder = self.step.with_name("new")
         with mock.patch.object(integration_env, "carries", return_value=True):
-            code, out, err = run(["cam", str(self.step), "--job", '{"nope": 1}', "--out", str(written)])
-        self.assertEqual(code, 1, err)               # the job's refusal, not a missing file's
+            code, out, err = run(["plan", str(self.step), "--job", '{"nope": 1}', "--out", str(folder)])
+        self.assertEqual(code, 1, err)               # the job's refusal, not a missing folder's
         self.assertNotIn("not_found", out + err)
         self.assertIn("not planned", out + err)
-        self.assertFalse(written.exists())
+        self.assertFalse(folder.exists())
 
 
 class TheEnvironment(unittest.TestCase):
@@ -123,7 +125,7 @@ class TheEnvironment(unittest.TestCase):
             part = Path(tmp) / "part.step"
             part.write_text("", encoding="utf-8")
             with self.assertRaisesRegex(ModuleNotFoundError, r"cad\[build123d\]"):
-                cad.step.cam(part)
+                cad.step.plan(part)
 
 
 if __name__ == "__main__":

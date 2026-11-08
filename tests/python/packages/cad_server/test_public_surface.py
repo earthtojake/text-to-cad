@@ -48,7 +48,7 @@ MIRRORS: dict[str, tuple[str, str]] = {
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
     # A B-rep type's CAM job: read with the kernel, planned by FreeCAD, one signature for every B-rep type.
-    **{f"{document_type} cam": (f"cad.{document_type}", "cam") for document_type in ("xbf", "step")},
+    **{f"{document_type} plan": (f"cad.{document_type}", "plan") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A CAM job (cad <type> cam) with its program installed: FreeCAD, the freecad integration's, plans and posts --
+# A CAM job (cad <type> plan) with its program installed: FreeCAD, the freecad integration's, plans and posts --
 # installed as a person installs it (the cam job: the release's AppImage; locally CAD_FREECAD, freecadcmd on PATH or
 # the place its installer puts it). The suite's own folder, tests/python/packages/cam, is this job's alone: the
 # package jobs install no FreeCAD. The job's parse, the feature reading and the checks run in seconds; the plans

@@ -215,17 +215,19 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               # change to the file runs the job.
               "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
-# A CAM job (cad <type> cam): its operation and orchestration, the freecad integration, its result type, the two
+# A CAM job (cad <type> plan): its operation and orchestration, the freecad integration, its result type, the two
 # types that answer it, and the server's command and the environment it runs a job in. Each also reaches what its
 # package reaches; the cam job, which installs FreeCAD, runs on these, its own suite and runner, and a full run.
 CAM_CODE = (f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**", f"{LIBRARY_SRC}/results.py",
-            f"{LIBRARY_SRC}/step/**", f"{LIBRARY_SRC}/xbf/**", f"{LIBRARY_SRC}/_internal/document_type.py",
+            f"{LIBRARY_SRC}/model/**", f"{LIBRARY_SRC}/step/**", f"{LIBRARY_SRC}/xbf/**",
+            f"{LIBRARY_SRC}/_internal/document_type.py",
             f"{LIBRARY_SRC}/_internal/operation.py", f"{LIBRARY_SRC}/_internal/programs.py",
             f"{LIBRARY_SRC}/_internal/integrations.py", f"{LIBRARY_SRC}/_internal/refused.py", f"{LIBRARY_SRC}/registry.py",
             f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/_internal/integration_env.py",
             f"{SERVER_SRC}/_internal/base.py")
 # What a job reads a part, finds FreeCAD and writes its result through, of the engine's and shared modules.
 CAM_SHARED = (f"{LIBRARY_SRC}/engine/model.py", f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/reader.py",
+              f"{LIBRARY_SRC}/engine/api.py",
               f"{LIBRARY_SRC}/engine/refs.py", f"{LIBRARY_SRC}/engine/kernel/imported.py",
               f"{LIBRARY_SRC}/engine/kernel/memo.py", f"{LIBRARY_SRC}/engine/executables.py",
               f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/_internal/atomic_replace.py",

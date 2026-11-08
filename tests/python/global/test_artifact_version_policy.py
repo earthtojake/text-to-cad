@@ -35,7 +35,7 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
         # the one GLB the server writes outside the engine (a robot primitive's mesh) is framed in
         # cad_server._internal.primitive_mesh. cad.engine is the one exception: it is standalone
         # by law (it imports nothing of the packages outside itself) and writes its own GLB, so it
-        # declares the container once more, in its GLB writer, which the library's other GLB (a CAM
+        # declares the container once more, in its GLB writer, which the library's other GLB (a CAM plan's
         # result) is framed by.
         sources = [ROOT / "packages" / project / "src" for project in ("cad", "cad-server", "cad-mcp")]
         magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)

@@ -24,9 +24,9 @@ import cad_server.cli as cli  # noqa: E402
 from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
-    "model": ("export", "snapshot", "inspect", "dfm"),
-    "xbf": ("export", "snapshot", "inspect", "dfm", "cam"),
-    "step": ("export", "snapshot", "inspect", "dfm", "cam"),
+    "model": ("export", "snapshot", "inspect", "dfm", "plan"),
+    "xbf": ("export", "snapshot", "inspect", "dfm", "plan"),
+    "step": ("export", "snapshot", "inspect", "dfm", "plan"),
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
@@ -66,7 +66,7 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("document types (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
-        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm +model: a document id, held in memory\n")
+        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, plan +model: a document id, held in memory\n")
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)
@@ -187,7 +187,7 @@ class TheCommandTable(unittest.TestCase):
         code, out, err = _run(["step", "exprt", "--json"])
         self.assertEqual((code, err), (2, ""))
         self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
-            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, cam; "
+            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, plan; "
             "'cad step --help' says what each does")})
         self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
         code, out, err = _run(["stl"])

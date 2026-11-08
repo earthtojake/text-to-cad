@@ -180,7 +180,7 @@ def posted(setup_id: str, name: str, text: str, specs, work_offset: str) -> list
 def as_check_finding(found: dict):
     """One finding as every check's result says it (``cad.results.CheckFinding``): its severity, its type as the code,
     its summary as the message, the refs, else the places, else the operations its items name as the location, and
-    its description as the hint. The result GLB keeps the finding as it is, the shape the viewer reads."""
+    its description as the hint."""
     from cad.results import CheckFinding
 
     def where(item: dict) -> str:
@@ -277,7 +277,7 @@ def reach(op, faces, holes, mesh, face_of_triangle, tool, stock_top: float, dept
             if hole is None:
                 found.append(finding("reach", "error", "not_facing", f"{op.where}: {info.ref} is not a face of a hole",
                                      "drill names a face of a hole (its wall, its counterbore's, its floor), as "
-                                     "cad <type> cam lists them", [where]))
+                                     "cad <type> plan lists them", [where]))
                 continue
             if hole["faces"][0] in drilled:
                 continue
@@ -314,7 +314,7 @@ def reach(op, faces, holes, mesh, face_of_triangle, tool, stock_top: float, dept
                 "reach", "error", "not_facing",
                 f"{op.where}: an inside profile runs along walls, and {info.ref} is a flat face"
                 + (f"; the walls round it: {', '.join(named)}" if named else ""),
-                "name the walls of the hole, bore, slot or pocket to cut, as cad <type> cam lists them (one "
+                "name the walls of the hole, bore, slot or pocket to cut, as cad <type> plan lists them (one "
                 "pocket's floor, walled all round with nothing opening in it, stands for its walls): inside any other "
                 "flat face FreeCAD traces its outline and cuts nothing of the part", [where]))
             continue
@@ -731,7 +731,7 @@ def check_moves(setup_id: str, moves, operations, tools, mesh, stock_low, stock_
             found.append(finding("empty_operation", "error", "empty_operation",
                                  f"{op.where}: FreeCAD planned no cut for this {op.op}",
                                  "the faces it names give it nothing to cut with this tool: check the faces "
-                                 "(cad <type> cam) and that the tool fits them", [{"operation": op.index}]))
+                                 "(cad <type> plan) and that the tool fits them", [{"operation": op.index}]))
     for op in operations:
         what = "drilled nothing down" if op.op == "drill" else "cut nothing at the operation's depth over"
         for ref, share, ridge in _uncut(moves, op, tools[op.tool], (targets or {}).get(op.index, ())):

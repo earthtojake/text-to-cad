@@ -1,6 +1,6 @@
 ---
 name: cam
-description: Turn a saved STEP or xbf part into 3-axis CNC toolpaths and G-code, planned and posted by the user's own FreeCAD (1.1 or newer, headless), then checked against the part for reach, gouges and rapids into the stock. Facing, profiling, pocketing, adaptive clearing and drilling on a CNC mill or router, posted for GRBL, LinuxCNC, Mach3/Mach4, Fanuc, Centroid, UCCNC or Smoothieware. Use when the user asks to mill, drill or rout a part, for CAM, toolpaths, feeds and speeds, or G-code for a CNC mill or router. Never sends G-code to a machine.
+description: Turn a part (a STEP or xbf file, or a model the engine holds) into 3-axis CNC toolpaths and G-code, planned and posted by the user's own FreeCAD (1.1 or newer, headless), then checked against the part for reach, gouges and rapids into the stock. Facing, profiling, pocketing, adaptive clearing and drilling on a CNC mill or router, posted for GRBL, LinuxCNC, Mach3/Mach4, Fanuc, Centroid, UCCNC or Smoothieware. Use when the user asks to mill, drill or rout a part, for CAM, toolpaths, feeds and speeds, or G-code for a CNC mill or router. Never sends G-code to a machine.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -9,12 +9,12 @@ metadata:
 # CAM: toolpaths and G-code from a saved part
 
 You write a small job file (machine, material, stock, tools, setups and their operations). `cad
-step cam part.step --job part.cam.json --out part.cam.glb` has the user's FreeCAD plan each setup's
-toolpaths and post them for the named controller, checks every move against the part, and writes the
-result GLB (the part, the stock and the toolpaths, with the verdict) and, when nothing is an error,
-the G-code beside it.
+step plan part.step --job part.cam.json --out CAM` has the user's FreeCAD plan each setup's
+toolpaths and post them for the named controller, checks every move against the part, and writes its
+results into the folder `CAM`: every number as JSON, a GLB of the part, the stock and the toolpaths
+that any viewer opens, and, when nothing is an error, the G-code.
 
-This skill reads a saved `.step`, `.stp` or `.xbf`: build or fix the model first. It plans how a
+This skill reads a `.step`, `.stp` or `.xbf`, or a model the engine holds: build or fix the model first. It plans how a
 part is cut, not whether the design machines well, and it does not slice for a 3D printer.
 
 ## What it does not do
@@ -39,8 +39,11 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
-A job is an operation of the part's type: `cad step cam` for a `.step` or `.stp`, `cad xbf cam` for
-an `.xbf`. It reads its part from the file itself, never through the engine.
+A job is an operation of the part's type, `plan`: `cad step plan` for a `.step` or `.stp`, `cad xbf
+plan` for an `.xbf`, `cad model plan` for a model the engine holds. With no `--job` it lists what a
+job can name; with one it plans and writes its results into the folder `--out` names. A plan of a
+file reads it in its own process, so it needs no model built; a model's is written to an `.xbf` the
+plan reads.
 
 ### Install FreeCAD
 
@@ -48,15 +51,15 @@ A plan (`--job`) needs FreeCAD 1.1 or newer, which is the person's to install; r
 job) does not. `cad` downloads no FreeCAD and plans with nothing else. Get it from
 https://www.freecad.org/downloads.php:
 
-- macOS: drag the `.dmg`'s FreeCAD into Applications (or `~/Applications`). `cad <type> cam` finds
+- macOS: drag the `.dmg`'s FreeCAD into Applications (or `~/Applications`). `cad <type> plan` finds
   `FreeCAD.app/Contents/Resources/bin/freecadcmd` there.
-- Windows: run the installer. `cad <type> cam` finds `bin\freecadcmd.exe` in the newest `FreeCAD *` folder
+- Windows: run the installer. `cad <type> plan` finds `bin\freecadcmd.exe` in the newest `FreeCAD *` folder
   under Program Files, or under `%LOCALAPPDATA%\Programs` for a one-user install.
 - Linux: a distribution's package (`/usr/bin/freecadcmd`, `/usr/local/bin/freecadcmd`), or the AppImage unpacked with `--appimage-extract` and
   `CAD_FREECAD` set to its `squashfs-root/usr/bin/freecadcmd`.
 
 Anywhere else, set `CAD_FREECAD` to the `freecadcmd` program
-(`CAD_FREECAD=/opt/freecad/bin/freecadcmd`). `cad <type> cam` tries `CAD_FREECAD`, then `freecadcmd`
+(`CAD_FREECAD=/opt/freecad/bin/freecadcmd`). `cad <type> plan` tries `CAD_FREECAD`, then `freecadcmd`
 or `FreeCADCmd` on PATH, then the places above. A missing or older FreeCAD stops the plan with an
 error that says how to install it, and nothing is written: ask the user to install it, or install
 it yourself with their permission, then plan again. Every result names the FreeCAD version that
@@ -72,7 +75,7 @@ mm/min).
 1. **Read the part.** Every job names faces by their refs.
 
    ```bash
-   cad step cam part.step
+   cad step plan part.step
    ```
 
    It prints the part's size, one line per face and one per hole:
@@ -85,8 +88,8 @@ mm/min).
 
    For an assembly pass the part, `--occurrence kit/arm` (`pin.2` for the second `pin`), here and with `--job`. A job takes a ref
    as `block/face 15`, as `face 15` on a one-part document, or as the Viewer copies it
-   (`/work/part.step#block/face 15`). A model's part is its `@xbf` or `@step` output, or the file
-   `cad model export <id> part.step` writes.
+   (`/work/part.step#block/face 15`). A model the engine holds is read by its document id:
+   `cad model plan <id>`, here and with `--job`.
 
 2. **Ask what you cannot see.** Once, in one message, for what the user has not said:
    - **The controller.** `machine.post` is required and has no default: a dialect read by the
@@ -145,26 +148,40 @@ mm/min).
 4. **Plan.**
 
    ```bash
-   cad step cam part.step --job part.cam.json --out part.cam.glb
+   cad step plan part.step --job part.cam.json --out CAM
    ```
+
+   `--out` is a folder, any you like (a temporary one is fine; put it in the project when the user
+   should keep the files), made when missing. One folder per job: a plan replaces its own files
+   there and touches nothing else. It holds:
+
+   | File | What it is for |
+   | --- | --- |
+   | `result.json` | the answer: what `--json` prints. Read this first. |
+   | `result.glb` | the part, the stock and every setup's feeds and rapids, for any glTF viewer or `cad viewer` |
+   | `part.top.nc`, ... | the G-code, one file a setup ([The posts and the files](#the-posts-and-the-files)), only when nothing is an error |
 
    It prints the headline (`Ready to cut · 42 min · 3 tools` or `2 to fix · ...`), one line per
    operation (tool, rpm, feed, time), the files written, one `assumed:` line per value the job
-   left out, then the findings, errors first. `--json` gives the same as one JSON object;
-   `--verbose` times each stage. `--out` is required with `--job` and must end in `.glb`: the
-   G-code lands beside it. A job that cannot run at all (an unknown key, a missing face, no
+   left out, then the findings, errors first. `--json` gives the same as one JSON object: the
+   `measurements` hold every number, with each setup's work zero and each operation's times;
+   `--verbose` times each stage. A job that cannot run at all (an unknown key, a missing face, no
    FreeCAD) is `not planned:` with one error that says what to change, exits 1 and writes nothing.
-   A plan with errors exits 1 too (`"ok": false`), its GLB written: read the verdict.
+   A plan with errors exits 1 too (`"ok": false`), its `result.json` and `result.glb` written: read
+   the verdict. The folder's files are replaced only once every one is written: a run that fails
+   leaves the previous results as they were.
 
 5. **Read the verdict and fix the job.** "Ready to cut" means no check found an error. "N to fix"
-   writes the GLB, to show where, and no G-code (`G-code not written: fix N errors first`); any
-   G-code an earlier plan of the part posted is removed, so no stale program stands beside it.
+   writes `result.json` and `result.glb`, to show where, and no G-code (`G-code not written: fix N
+   errors first`); any G-code an earlier plan wrote into the folder is removed, so no stale program
+   stands beside it.
    Fix each error in the job ([The checks](#the-checks)), never by changing the part unless the
    user asks, and plan again until it is ready. Then read the warnings.
 
-6. **Show it.** The result GLB shows the part, the stock and every setup's feeds and rapids. If
-   your tools include `cad_show`, call it with the GLB's absolute path; otherwise run
-   `cad viewer --json part.cam.glb` and give the user the `url` it prints for the file, once.
+6. **Show it.** `result.glb` shows the part, the stock and every setup's feeds (blue) and rapids
+   (red), in part coordinates. If your tools include `cad_show`, call it with the GLB's absolute
+   path; otherwise run `cad viewer --json CAM/result.glb` and give the user the `url` it prints for
+   the file, once.
 
 7. **Hand over the G-code** ([Report](#report)).
 
@@ -176,7 +193,7 @@ mm/min).
 | `profile` | Around the part's outline, or along the faces named: with `side: "inside"` and a through bore's or a slot's walls named, it cuts them out. Down to the lowest face named (a blind feature's floor), or `through_mm` past the part's bottom where the faces reach it (always, for the outline) | Optional: the walls to run along; `outside` also takes a flat face, for its outline. `inside` takes a pocket's walls or its floor (walled all round, nothing opening in it), which stands for those walls and the plan names them; any other flat face is refused (`not_facing`), naming its walls | `flat`, `ball`, `bull` | `side` (`outside`, `inside`), `through_mm` (0), `stepdown_mm`, `leave_mm` (0) |
 | `pocket` | A flat-floored pocket, around its islands | Required: floors at one height, facing the tool | `flat`, `ball`, `bull` | `stepdown_mm`, `stepover` (0.4), `leave_mm` (0) |
 | `adaptive` | The same area as `pocket`, at a constant tool load: for roughing | Required: floors at one height | `flat`, `ball`, `bull` | `stepdown_mm`, `stepover` (0.15), `leave_mm` (0) |
-| `drill` | Holes, to their depth (a through hole `through_mm` past its exit plus the drill's point) | Required: any face of each hole (its wall, its counterbore's wall or shoulder, its floor), as `cam features` lists them | `drill` only | `peck_mm` (none: one plunge), `through_mm` (1) |
+| `drill` | Holes, to their depth (a through hole `through_mm` past its exit plus the drill's point) | Required: any face of each hole (its wall, its counterbore's wall or shoulder, its floor), as `cad <type> plan` lists them | `drill` only | `peck_mm` (none: one plunge), `through_mm` (1) |
 
 Every operation also takes `tool` (required), `feed`, `speed`, `plunge_mm_min`, `coolant` and
 `name` ([job-file.md](references/job-file.md#operations)). `leave_mm` is the wall stock a rough
@@ -198,7 +215,7 @@ of the tool's diameter; `stepdown_mm` defaults to a fraction of the diameter set
   and flutes longer than the part, the top margin and `through_mm` together. There are no tabs:
   say how the part stays put (double-sided tape, screws through waste, a vacuum table).
 - **Holes** are drilled from the side they open toward in the setup, with a drill the hole's Ø
-  from the `cad <type> cam` line (`drill_size` below). A counterbore is part of its hole there; the
+  from the `cad <type> plan` line (`drill_size` below). A counterbore is part of its hole there; the
   drill does not cut it, and nothing cuts a countersink. A blind hole is drilled to its drawn
   bottom, so a drill whose point is longer than the drawn one (a flat floor's is none) leaves the
   bottom a cone (`drill_point` below).
@@ -209,13 +226,13 @@ of the tool's diameter; `stepdown_mm` defaults to a fraction of the diameter set
 
 ## The checks
 
-FreeCAD plans what it is asked to and checks nothing against the part, so `cad <type> cam` checks every
+FreeCAD plans what it is asked to and checks nothing against the part, so `cad <type> plan` checks every
 plan, before FreeCAD runs and after. An operation with a reach error is not given to FreeCAD.
 
 | Finding | Severity | Means | Fix it in the job |
 | --- | --- | --- | --- |
 | `unreachable` | error | A named face lies under part of the part, seen from the tool's side, or a hole does not open toward the tool in this setup | Machine it from a setup that sees it (`orientation: "-Z"`), or name only faces the tool can reach |
-| `not_facing` | error | A `face`, `pocket` or `adaptive` face is not flat and facing the tool, a `drill` face is not a face of a hole, or an inside `profile` names a flat face that is not one pocket's floor (the part's top, a floor with holes or islands in it) | Name the floor itself, or a face of the hole, as `cam features` lists them; for an inside profile, the walls the finding lists, or one pocket's floor |
+| `not_facing` | error | A `face`, `pocket` or `adaptive` face is not flat and facing the tool, a `drill` face is not a face of a hole, or an inside `profile` names a flat face that is not one pocket's floor (the part's top, a floor with holes or islands in it) | Name the floor itself, or a face of the hole, as `cad <type> plan` lists them; for an inside profile, the walls the finding lists, or one pocket's floor |
 | `drill_size` | error or warning | A drill is larger than its hole (an error: it cuts into the part) or smaller (a warning: it leaves the hole under size) | A drill the hole's size; for a smaller one, open the hole out after (a `pocket`, or a drill its size) |
 | `drill_point` | warning | A blind hole's drill has a longer point than the drawn one (a flat floor's is none): its bottom is left a cone, short of the diameter | Say so to the user; mill the floor after with an end mill that fits, or drill with the drawn point angle |
 | `too_deep` | error | The cut goes further below the stock top than the tool's flutes | A tool with longer flutes (state its `flute_length_mm`), or cut less deep from this side |
@@ -224,12 +241,12 @@ plan, before FreeCAD runs and after. An operation with a reach error is not give
 | `empty_operation` | error | FreeCAD planned no cut for an operation | Check its faces, that the tool fits them, and for `face` that the stock has a top margin |
 | `uncut` | error | No cutting move reaches a face or hole the operation names at its depth, a floor's moves cover only part of what the tool fits on it (its sharp inside corners are the tool's to leave; a ball's ridges between passes, its scallop, are not), or a `face` leaves part of the face: FreeCAD left it out | Cut it in its own operation with a tool that fits it, or leave it out; for a ridge, a smaller `stepover` or a flat end mill |
 | `travel` | error | The setup's moves span more than `machine.travel_mm` | The part does not fit this machine in this setup |
-| `overridden` | error | FreeCAD, recomputed, holds a spindle speed, feed, step down, peck or final depth other than the one `cad <type> cam` set, so its paths and G-code follow FreeCAD's | A bug in the CAD server with this FreeCAD: report it, with the job; nothing is posted |
-| `posted` | error | The posted program says a spindle speed (S), feed (F) or peck (Q) `cad <type> cam` set for none of its operations, or moves in a work offset other than the job's: every program is read back | A bug in the CAD server with this FreeCAD and post: report it, with the job; nothing is posted |
+| `overridden` | error | FreeCAD, recomputed, holds a spindle speed, feed, step down, peck or final depth other than the one `cad <type> plan` set, so its paths and G-code follow FreeCAD's | A bug in the CAD server with this FreeCAD: report it, with the job; nothing is posted |
+| `posted` | error | The posted program says a spindle speed (S), feed (F) or peck (Q) `cad <type> plan` set for none of its operations, or moves in a work offset other than the job's: every program is read back | A bug in the CAD server with this FreeCAD and post: report it, with the job; nothing is posted |
 | `clamped` | warning | A tool's spindle speed or feed was held to `max_rpm`, raised to `min_rpm`, or held to `max_feed_mm_min`: one warning a tool | Fine as a starting point; say so. A drill the machine would turn far too fast is refused: pocket the hole with an end mill, or give the operation's `speed` |
 
 `job`, `freecad` and `internal_error` are the one finding of a plan that did not run: the job was
-refused, FreeCAD is missing or failed, or `cad <type> cam` hit a bug (report it with the part).
+refused, FreeCAD is missing or failed, or `cad <type> plan` hit a bug (report it with the part).
 
 The gouge check sees the part from above, so it is exact for a part cut from one side and
 conservative under an overhang. It knows the part, the stock box and the tools, nothing else: a
@@ -249,13 +266,14 @@ vise, clamps or a tool longer than the job says can still be hit.
 | `uccnc` | UCCNC | `part.top.nc` |
 | `smoothie` | Smoothieware | `part.top.gcode`, or one per tool |
 
-The file is `<part>.<setup id><ext>`, one per setup. GRBL and Smoothieware do not change tools, so
+The file is `<part>.<setup id><ext>`, one per setup, in the folder `--out` names (`<part>` a
+model's document id for a model). GRBL and Smoothieware do not change tools, so
 a setup with several tools posts one file per run of one tool, `part.top.1-T1.nc`,
 `part.top.2-T2.nc` ...: the operator runs them in order, changing the tool and setting Z zero
 before each. Each tool posts as its T number (its `number`), and two tools with one T number are
 refused; the
 work offset is `machine.work_offset` (`G54`). Every posted file opens with two comment lines
-`cad <type> cam` adds: what it is (the part, the setup, the FreeCAD version and the post) and that it is not
+`cad <type> plan` adds: what it is (the part, the setup, the FreeCAD version and the post) and that it is not
 proven on a machine and must be air-cut or run single block first.
 
 ## Report
@@ -276,7 +294,7 @@ Hand the program over in this order, in the user's words:
 - **Always:** the G-code has not been run on a machine. Say this line word for word: "Prove this
   program on the machine: single block, feed override low, in air first." Then the steps: check
   the post matches the controller; set the work offset and every tool's length (on GRBL and
-  Smoothieware, zero Z with each tool's file); play the toolpaths in the Viewer and look at every rapid near the part
+  Smoothieware, zero Z with each tool's file); look over the toolpaths in `result.glb` in the Viewer, every rapid near the part
   and the clamps; dry-run 25-50 mm above the part; cut the first part single block with the
   overrides at 25 % and a hand on feed hold; measure it before running more. The same warning
   opens every posted file.

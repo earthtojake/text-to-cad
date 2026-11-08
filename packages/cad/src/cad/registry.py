@@ -11,7 +11,7 @@ objects, producers and operations), and a process kind. A **producer** is code t
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
-``dfm`` a 3D type's manufacturing check, ``cam`` a B-rep type's toolpaths and G-code, ``drc`` a board's design rule
+``dfm`` a 3D type's manufacturing check, ``plan`` a B-rep type's toolpaths and G-code, ``drc`` a board's design rule
 check, ``erc`` a schematic's electrical rules check, ``validate`` a robot description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
@@ -40,7 +40,7 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIE
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "cam", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "plan", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -208,10 +208,11 @@ _DFM = Operation("dfm", "measure it for manufacturing: injection molding (--proc
                         "--candidates ranks the pulls or orientations", "trimesh")
 
 # The CAM job a B-rep type shares (``cad._internal.cam``): the kernel reads the part's exact faces, FreeCAD plans and
-# posts. A mesh has no faces a job can name, and a job reads a file, so ``model`` has none.
-_CAM = Operation("cam", "toolpaths and G-code for a part: with no --job, the faces, holes and floors a job names; with "
-                        "--job and --out, FreeCAD plans and posts each setup, every path checked against the part, its "
-                        "result GLB and G-code written, and a plan with an error failing it, with no G-code", _KERNEL)
+# posts. A mesh has no faces a job can name, so it has none.
+_PLAN = Operation("plan", "toolpaths and G-code for a part: with --job and --out DIR, FreeCAD plans and posts each "
+                          "setup, every path checked against the part, its results written into DIR (result.json, "
+                          "result.glb and, when nothing fails, the G-code) and a plan with an error failing it; with "
+                          "no --job, the faces, holes and floors a job names", _KERNEL)
 
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
@@ -221,17 +222,17 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _PLAN), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _CAM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _PLAN), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _CAM), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _PLAN), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
@@ -322,7 +323,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
     "freecad": Integration(
-        "freecad", "FreeCAD's CAM workbench, run by freecadcmd, a program the person installs: a CAM job (cam) writes "
+        "freecad", "FreeCAD's CAM workbench, run by freecadcmd, a program the person installs: a CAM plan (plan) writes "
                    "its input, runs it headless in a private folder, and reads back its paths and its posted G-code",
         extra=None, process="separate",
         # No extra: FreeCAD ships no package cad can install, so the person installs it and the probe finds it --

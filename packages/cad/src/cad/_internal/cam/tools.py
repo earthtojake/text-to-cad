@@ -88,7 +88,7 @@ class Tool:
         return self.radius / math.tan(math.radians(self.point_angle / 2.0))
 
     def as_dict(self) -> dict:
-        """The tool as the GLB's extras and the Results carry it, with ``plain``."""
+        """The tool as FreeCAD's job reads it, with ``plain``."""
         out = asdict(self)
         out["plain"] = self.plain
         return out

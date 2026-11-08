@@ -76,8 +76,8 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
         # A CAM job needs the kernel in the caller's process; FreeCAD, a program, has no extra and no namespace of
         # cad run's.
-        self.assertEqual("build123d", integrations.for_name("cad.step.cam"))
-        self.assertEqual("build123d", registry.DOCUMENT_TYPES["xbf"].operation("cam").integration)
+        self.assertEqual("build123d", integrations.for_name("cad.step.plan"))
+        self.assertEqual("build123d", registry.DOCUMENT_TYPES["xbf"].operation("plan").integration)
         self.assertNotIn("freecad", integrations.INTEGRATIONS)
         self.assertEqual("CAD_FREECAD", registry.INTEGRATIONS["freecad"].probe.override)
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)

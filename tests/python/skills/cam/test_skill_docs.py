@@ -1,5 +1,6 @@
-"""The cam skill says what a CAM job reads: every operation, post and finding in its tables, each operation's own keys
-as the job parser takes them, and an example job that parses."""
+"""The cam skill says what a CAM job reads and writes: every operation, post and finding in its tables, each
+operation's own keys as the job parser takes them, the files a plan writes into its folder, and an example job that
+parses."""
 
 from __future__ import annotations
 
@@ -60,16 +61,24 @@ class Skill(unittest.TestCase):
         self.assertIn(f"FreeCAD {probe.minimum} or newer", setup)
         self.assertIn("the person's to install", setup)
 
-    def test_every_command_is_a_types_cam_operation(self):
+    def test_every_command_is_a_types_plan_operation(self):
         from cad.registry import DOCUMENT_TYPES
 
-        planned = {entry.id for entry in DOCUMENT_TYPES.values() if "cam" in entry.operation_names}
+        planned = {entry.id for entry in DOCUMENT_TYPES.values() if "plan" in entry.operation_names}
+        self.assertEqual({"model", "xbf", "step"}, planned)
         for path in (SKILL / "SKILL.md", SKILL / "references" / "job-file.md"):
             text = path.read_text(encoding="utf-8")
             with self.subTest(page=path.name):
-                self.assertNotRegex(text, r"`cad cam\b", "a job is an operation of its document's type")
-                for document_type in re.findall(r"`cad (\w+) cam\b", text):
+                self.assertNotRegex(text, r"`cad (cam|\w+ cam)\b", "a job is its document type's plan")
+                for document_type in re.findall(r"`cad (\w+) plan\b", text):
                     self.assertIn(document_type, planned)
+
+    def test_the_files_it_names_are_the_ones_a_plan_writes(self):
+        from cad._internal.cam.run import RESULT_GLB, RESULT_JSON
+
+        rows = re.findall(r"^   \| `([^`]+)`", self.text.split("4. **Plan.**", 1)[1].split("\n5. ", 1)[0], re.M)
+        self.assertEqual([RESULT_JSON, RESULT_GLB, "part.top.nc"], rows)
+        self.assertNotRegex(self.text, r"\.cam\.glb", "a plan writes result.glb into its folder")
 
     def test_the_example_job_parses(self):
         blocks = re.findall(r"```json\n(.*?)```", self.text, re.S)

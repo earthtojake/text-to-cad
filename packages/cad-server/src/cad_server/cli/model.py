@@ -1,4 +1,4 @@
-"""``cad model <operation>``: the model document type's commands (export, snapshot, inspect, dfm), each of a
+"""``cad model <operation>``: the model document type's commands (export, snapshot, inspect, dfm, plan), each of a
 model's document id.
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry

@@ -202,10 +202,10 @@ def mill_job(operations: list[dict], *, tools: list[dict] | None = None, stock: 
 
 
 def features_of(path: Path):
-    """What a job can name on a part: ``step.cam`` with no job."""
+    """What a job can name on a part: ``step.plan`` with no job."""
     from cad import step
 
-    return step.cam(path)
+    return step.plan(path)
 
 
 def floor_ref(features, z: float) -> str:
@@ -230,6 +230,6 @@ def read_glb(path: Path) -> tuple[dict, bytes]:
     return document, blob
 
 
-def glb_cam(path: Path) -> dict:
-    """The plan a result GLB carries (``scenes[0].extras.cam``)."""
-    return read_glb(path)[0]["scenes"][0]["extras"]["cam"]
+def result_json(result) -> dict:
+    """What a plan wrote into its folder's ``result.json``."""
+    return json.loads((result.folder / "result.json").read_text(encoding="utf-8"))

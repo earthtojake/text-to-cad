@@ -1,19 +1,22 @@
 """A CAM job's plan end to end, through the FreeCAD installed here: the block planned, posted and drawn; a face
 under a bridge refused with no G-code; a setup turned over; GRBL's program split by tool; a bore and a slot cut by an
 inside profile of their walls; a floor the tool cannot enter, and a hole named by any of its faces; a failure that
-leaves the earlier files as they were."""
+leaves the earlier files as they were; a model planned from an xbf of it."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from tests.python.support.cam_fixtures import (BLOCK, HOLE_BLOCK, PLATE, block_step, bridge_step, class_directory,
-                                               features_of, floor_ref, glb_cam, hole_block_step, mill_job, needs_freecad,
-                                               plate_step, quiet, read_glb)
+                                               features_of, floor_ref, hole_block_step, mill_job, needs_freecad,
+                                               plate_step, quiet, read_glb, result_json)
 
 
 #: Tools long enough to profile the block's 26 mm, stock top to bottom.
@@ -24,11 +27,11 @@ LONG_FLUTES = [{"id": "T1", "type": "flat", "number": 1, "diameter_mm": 6, "flut
 
 
 def plan(step: Path, job: dict, **options):
-    """``step.cam`` with a job, its result GLB beside the part."""
+    """``step.plan`` with a job, its results in a folder beside the part."""
     import cad
 
     with quiet():
-        return cad.step.cam(step, job=job, out=step.with_suffix(".cam.glb"), **options)
+        return cad.step.plan(step, job=job, out=step.parent / "CAM", **options)
 
 
 def plan_moves(step: Path, job: dict, **options):
@@ -72,7 +75,6 @@ class Block(unittest.TestCase):
             {"op": "drill", "tool": "T2", "faces": holes},
         ])
         cls.result = plan(cls.step, cls.job)
-        cls.cam = glb_cam(cls.result.glb) if cls.result.glb else None
 
     def test_it_is_ready_to_cut_and_posts_one_program(self):
         self.assertTrue(self.result.ok, self.result.findings)
@@ -80,7 +82,15 @@ class Block(unittest.TestCase):
         (post,) = self.result.measurements["posts"]
         self.assertEqual(("top", "linuxcnc", None), (post["setup"], post["post"], post["tool"]))
         self.assertEqual("block.top.ngc", Path(post["file"]).name)
-        self.assertTrue(self.cam["planner"].startswith("freecad 1."))
+        self.assertTrue(self.result.measurements["planner"].startswith("freecad 1."))
+
+    def test_the_folder_holds_the_answer_the_glb_and_the_program(self):
+        folder = self.step.parent / "CAM"
+        self.assertEqual(["block.top.ngc", "result.glb", "result.json"], sorted(p.name for p in folder.iterdir()))
+        self.assertEqual(self.result.as_data(), result_json(self.result))      # exactly what --json prints
+        self.assertEqual((folder / "result.glb", (folder / "block.top.ngc",)), (self.result.glb, self.result.gcode))
+        document, _ = read_glb(self.result.glb)
+        self.assertNotIn("extras", document["scenes"][0])                      # no plan of its own: result.json's
 
     def test_the_program_is_in_work_coordinates_and_cuts_at_real_feeds(self):
         text = Path(self.result.measurements["posts"][0]["file"]).read_text(encoding="utf-8")
@@ -96,7 +106,7 @@ class Block(unittest.TestCase):
         self.assertIn("T2", text)                                             # the tool change to the drill
 
     def test_each_operation_is_drawn_and_timed_in_order(self):
-        ops = self.cam["setups"][0]["operations"]
+        ops = [op for op in self.result.measurements["operations"] if op["setup"] == "top"]
         self.assertEqual(["face", "pocket", "adaptive", "profile", "drill"], [op["op"] for op in ops])
         times = [(op["t0"], op["t1"]) for op in ops]
         self.assertTrue(all(t0 < t1 for t0, t1 in times), times)
@@ -138,9 +148,10 @@ class Bridge(unittest.TestCase):
         self.assertFalse(program.exists())                 # no "ready" program beside a plan that is not
         (error,) = [f for f in second.findings if f.severity == "error"]
         self.assertEqual("unreachable", error.code)
-        cam = glb_cam(second.glb)
-        self.assertEqual("fix", cam["verdict"]["status"])
-        self.assertIn("G-code not written", cam["verdict"]["gcode"])
+        written = result_json(second)
+        self.assertEqual(["result.json", "result.glb"], [Path(path).name for path in written["written"]])
+        self.assertEqual("fix", written["measurements"]["verdict"]["status"])
+        self.assertIn("G-code not written", written["measurements"]["verdict"]["gcode"])
 
     def test_the_bottom_turned_over_is_faced_from_its_own_side(self):
         result = plan(self.step, mill_job([], setups=[
@@ -148,7 +159,7 @@ class Bridge(unittest.TestCase):
         self.assertEqual("ready", result.measurements["verdict"]["status"], result.findings)
         (op,) = result.measurements["operations"]
         self.assertEqual([self.floors["bottom"]], op["faces"])
-        setup = glb_cam(result.glb)["setups"][0]
+        (setup,) = result.measurements["setups"]
         self.assertEqual([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]], setup["matrix"])
         self.assertEqual(0.0, setup["origin_part_mm"][2])  # the work zero is the stock's face toward the tool
 
@@ -168,7 +179,7 @@ class Grbl(unittest.TestCase):
         first, second = (Path(p["file"]).read_text(encoding="utf-8") for p in result.measurements["posts"])
         self.assertNotIn("G81", re.sub(r"\(.*?\)", "", second))   # GRBL has no drilling cycle: written out as moves
 
-    def test_every_other_post_posts_what_cad_cam_set_in_the_setups_work_offset(self):
+    def test_every_other_post_posts_what_cad_plan_set_in_the_setups_work_offset(self):
         # Each program read back (S, F, Q, and the work offset of every move) and found clean; Fanuc's once failed on
         # the work offset's object, and once cut in G54 after its tool change whatever the job's offset. The part's
         # name, as a download names a copy, once nested a comment in the header CAM writes; the job's name heads it.
@@ -383,41 +394,69 @@ class FailedWrite(unittest.TestCase):
         job = mill_job([{"op": "face", "tool": "T1"}], tools=LONG_FLUTES)
         first = plan(step, job)
         self.assertEqual("ready", first.measurements["verdict"]["status"], first.findings)
-        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        folder = first.folder
+        before = {path.name: path.read_bytes() for path in folder.iterdir()}
         job["setups"][0]["operations"].append({"op": "profile", "tool": "T1"})
         real = __import__("cad._internal.cam.run", fromlist=["replace_atomic"]).replace_atomic
         calls = []
 
-        def second_fails(tmp, final):
+        def third_fails(tmp, final):
             calls.append(final)
-            if len(calls) == 2:
+            if len(calls) == 3:
                 raise OSError(28, "No space left on device")
             real(tmp, final)
 
-        with mock.patch("cad._internal.cam.run.replace_atomic", second_fails):
+        with mock.patch("cad._internal.cam.run.replace_atomic", third_fails):
             result = plan(step, job)
         self.assertFalse(result.ok)
         self.assertIn("No space left on device", result.findings[0].message)
-        # The GLB went into place, the program failed, and the earlier GLB was put back.
-        self.assertEqual([".glb", ".ngc", ".glb"], [path.suffix for path in calls])
-        after = {path.name: path.read_bytes() for path in directory.iterdir()}
-        self.assertEqual(before, after)                    # every earlier file back, no temporary left
+        # result.json and result.glb went into place, the program failed, and the earlier two were put back.
+        self.assertEqual([".json", ".glb", ".ngc", ".json", ".glb"], [path.suffix for path in calls])
+        after = {path.name: path.read_bytes() for path in folder.iterdir()}
+        self.assertEqual(before, after)                    # every earlier file back, no staging folder left
 
 
-if __name__ == "__main__":
-    unittest.main()
+@needs_freecad
+class Model(unittest.TestCase):
+    def test_a_model_is_planned_from_an_xbf_of_it_and_named_by_its_document_id(self):
+        import cad
+        from cad.engine import api
+
+        directory = class_directory(type(self))
+        step = block_step(directory)
+        model = "0f0e0d0c-0b0a-4908-8706-050403020100"
+        xbf = directory / "part.xbf"
+        api.export(step, xbf, daemon=False, progress=False)
+        written = []
+
+        def held(source, target, **_options):  # the engine's model, as its document is written
+            written.append((source, target))
+            shutil.copyfile(xbf, target)
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(api, "export", held), quiet():
+            listing = cad.model.plan(model)
+            result = cad.model.plan(model, job=mill_job([{"op": "face", "tool": "T1"}]), out=Path(tmp) / "model")
+            self.assertEqual([source for source, _ in written], [model, model])
+            self.assertFalse(any(target.exists() for _, target in written))  # its temporary folder is gone
+            self.assertEqual((listing.path, len(listing.holes)), (Path(model), 4))
+            self.assertEqual((result.path, result.ok), (Path(model), True), result.findings)
+            self.assertEqual(json.loads((result.folder / "result.json").read_text(encoding="utf-8"))["path"], model)
+            self.assertEqual([f"{model}.top.ngc"], [path.name for path in result.gcode])
 
 
 class EarlierPosts(unittest.TestCase):
     def test_only_a_program_named_as_a_plan_names_one_is_taken_for_an_earlier_post(self):
-        # An earlier GLB's list of posts is a file the person can open and edit: a name in it that is not a
-        # program's is never deleted beside the part.
+        # An earlier result.json is a file the person can open and edit: a name in it that is not a program's is
+        # never deleted from the folder.
         from cad._internal.cam import run
 
-        glb = class_directory(type(self)) / "bracket.cam.glb"
-        glb.write_bytes(b"")
-        listed = {"posts": [{"file": name} for name in ("bracket.top.ngc", "bracket.top.1-T1.nc", "bracket.step",
-                                                        "bracket.cam.json", "../bracket.top.nc", "other.top.nc")]}
-        with mock.patch.object(run, "_glb_cam", return_value=listed):
-            found = [path.name for path in run._previous_posts(glb, "bracket")]
-        self.assertEqual(["bracket.top.ngc", "bracket.top.1-T1.nc"], found)
+        folder = class_directory(type(self))
+        listed = [str(folder / name) for name in ("result.json", "result.glb", "bracket.top.ngc", "bracket.top.1-T1.nc",
+                                                  "bracket.step", "bracket.cam.json", "other.top.nc")]
+        (folder / "result.json").write_text(json.dumps({"written": [*listed, "../bracket.top.nc"]}), encoding="utf-8")
+        found = [path.name for path in run._previous_posts(folder, "bracket")]
+        self.assertEqual(["bracket.top.ngc", "bracket.top.1-T1.nc", "bracket.top.nc"], found)
+
+
+if __name__ == "__main__":
+    unittest.main()

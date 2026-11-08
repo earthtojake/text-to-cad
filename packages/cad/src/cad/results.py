@@ -103,8 +103,9 @@ def _assumed_value(value: object) -> str:
 
 @dataclass(frozen=True)
 class CamResult(CheckResult):
-    """The outcome of a CAM job (``cad.<type>.cam``, ``cad <type> cam``): a check, so ``ok``, the document (``path``),
-    its findings and ``measurements`` are every check's, and ``--json`` is this whole result.
+    """The outcome of a CAM job (``cad.<type>.plan``, ``cad <type> plan``; ``result.json`` in the folder a plan writes
+    holds it): a check, so ``ok``, the document (``path``), its findings and ``measurements`` are every check's, and
+    ``--json`` is this whole result.
 
     With no job it is what a job can name on the part, which writes nothing, each with the ref a job names it by:
     ``faces`` one dict per face (``ref``, ``surface``, ``reading``, ``area_mm2``, ``center_mm``, and for a flat face
@@ -115,30 +116,64 @@ class CamResult(CheckResult):
     point's length), ``floors`` the flat faces facing an axis (``ref``, ``z_mm``, ``normal``, ``kind``: top, floor or
     bottom), and ``measurements["bbox_mm"]`` the part's box (``min``, ``max``, ``size``, part coordinates).
 
-    With a job it is the plan: ``written`` the result GLB, then each G-code file, and ``measurements`` the numbers:
-    the ``verdict`` (``status`` ready or fix, ``headline`` "Ready to cut · 42 min · 3 tools", ``errors``, ``warnings``,
-    and where no G-code was written, ``gcode`` saying so), the totals (``duration_s``, ``tools``, ``tool_changes`` with
-    its ``count`` and ``order``, ``setups``, ``post``, ``material``, ``planner``), ``operations`` one row per operation
-    in program order (``setup``, ``index``, ``op``, ``plain``, ``tool``, ``tool_plain``, ``rpm``, ``feed_mm_min``,
-    ``time_s``, ``summary``), ``posts`` one ``{setup, file, post, tool}`` per posted file (``tool`` its id where the
-    post splits a setup by tool, else None), ``assumed`` every value the plan took that the job does not state
-    (``key``, ``value``, ``why``), and ``timings``. ``ok`` is the validators' rule: false when any finding is an error
-    -- a check refused the plan, whose GLB is written all the same since it shows what is wrong and where, and no
-    G-code is -- or the job could not run, which wrote nothing. The GLB keeps each finding in the shape the viewer reads.
+    With a job it is the plan: ``written`` the files it wrote into its folder (``result.json``, ``result.glb``, then
+    each G-code file), and ``measurements`` the numbers: the ``verdict`` (``status`` ready or fix, ``headline`` "Ready to
+    cut · 42 min · 3 tools", ``errors``, ``warnings``, and where no G-code was written, ``gcode`` saying so), the totals
+    (``duration_s``, ``tools``, ``tool_changes`` with its ``count`` and ``order``, ``post``, ``machine``,
+    ``material``, ``planner``), ``stock_mm`` the stock's box (``min``, ``max``, part coordinates), ``setups`` one row
+    per setup (``id``, ``orientation``, ``origin``, ``origin_part_mm`` its work zero, ``matrix`` part to work
+    coordinates, ``time_s``, ``t0``, ``t1``), ``operations`` one row per operation in program order (``setup``,
+    ``index``, ``op``, ``plain``, ``tool``, ``tool_plain``, ``rpm``, ``feed_mm_min``, ``time_s``, ``t0``, ``t1``,
+    ``summary``), ``posts`` one ``{setup, file, post, tool}`` per posted file (``tool`` its id where the post splits a
+    setup by tool, else None), ``assumed`` every value the plan took that the job does not state (``key``, ``value``,
+    ``why``), the ``safety`` sentence each program starts with, and ``timings``. ``ok`` is the validators' rule: false
+    when any finding is an error -- a check refused the plan, whose ``result.json`` and ``result.glb`` are written all
+    the same since they show what is wrong and where, and no G-code is -- or the job could not run, which wrote nothing.
     """
 
     #: The part read, by its occurrence's path.
     occurrence: str = ""
-    #: The files the plan wrote: the result GLB first, then each posted file; none with no job, or a job that stopped.
+    #: The files the plan wrote into its folder: ``result.json``, ``result.glb``, then each posted file; none with no
+    #: job, or a job that stopped.
     written: tuple[Path, ...] = field(default_factory=tuple)
     faces: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     holes: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     floors: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
+    def _written(self, name: str) -> Path | None:
+        return next((Path(path) for path in self.written if Path(path).name == name), None)
+
+    @property
+    def folder(self) -> Path | None:
+        """The folder the plan wrote its results into, or None (no job, or a job that stopped)."""
+        found = self._written("result.json")
+        return None if found is None else found.parent
+
     @property
     def glb(self) -> Path | None:
-        """The result GLB the plan wrote, or None (no job, or a job that stopped)."""
-        return next((path for path in self.written if Path(path).suffix.lower() == ".glb"), None)
+        """``result.glb``: the part, the stock and the toolpaths, which any viewer opens."""
+        return self._written("result.glb")
+
+    @property
+    def gcode(self) -> tuple[Path, ...]:
+        """The G-code the plan posted, one file a setup (or a setup's tool); none when a finding is an error."""
+        return tuple(Path(path) for path in self.written if Path(path).name not in ("result.json", "result.glb"))
+
+    def as_data(self) -> dict[str, Any]:
+        """The result as plain data, as ``--json`` prints it and ``result.json`` holds it: paths as text, tuples as
+        lists. :meth:`from_data` reads it back."""
+        import dataclasses
+
+        def plain(value: Any) -> Any:
+            if isinstance(value, Path):
+                return str(value)
+            if isinstance(value, dict):
+                return {str(key): plain(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [plain(item) for item in value]
+            return value
+
+        return plain(dataclasses.asdict(self))
 
     @classmethod
     def from_data(cls, data: dict[str, Any]) -> "CamResult":
@@ -153,7 +188,7 @@ class CamResult(CheckResult):
                    floors=tuple(data.get("floors") or ()))
 
     def human_lines(self) -> list[str]:
-        planned = self.glb is not None
+        planned = self.folder is not None
         lines = self._plan_lines() if planned else self._part_lines()
         lines += [finding.human_line() for finding in self.findings]
         if not self.ok:
@@ -186,7 +221,7 @@ class CamResult(CheckResult):
         if changes.get("count"):
             count = changes["count"]
             lines.append(f"{count} tool change{'s' if count != 1 else ''}: {' then '.join(changes['order'])}")
-        lines.append(f"wrote GLB: {_display(self.glb)}")
+        lines.append(f"wrote {', '.join(Path(path).name for path in self.written)} into {_display(self.folder)}")
         lines += [f"posted {post['setup']}: {_display(Path(post['file']))} ({post['post']})"
                   for post in numbers.get("posts") or ()]
         lines += [f"assumed: {entry['key']} {_assumed_value(entry['value'])} ({entry['why']})"

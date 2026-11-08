@@ -91,12 +91,12 @@ library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf 
 the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
 `snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
 file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
-`dfm`, `cam`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
+`dfm`, `plan`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
 `--json`); `cad <type>
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A B-rep type's
-`cam` (`cad xbf|step cam SRC`, what a job can name: the part's faces, holes and floors; `--job JOB --out
-RESULT.glb`, the plan) is a CAM job, read by the kernel and planned by the person's FreeCAD (the `freecad`
+`plan` (`cad model|xbf|step plan SRC`, what a job can name: the part's faces, holes and floors; `--job JOB
+--out DIR`, the plan, its results written into DIR) is a CAM job, read by the kernel and planned by the person's FreeCAD (the `freecad`
 integration, found by its probe), run in this process where its environment holds the kernel, else in the
 installation's base. A KiCad board's
 `drc` and `export` are the `kicad` integration's: `cad kicad_pcb drc` is KiCad's design rule check

@@ -1,4 +1,4 @@
-"""``cad <type> cam``: the block's holes, floors and pocket, read off the exact part."""
+"""``cad <type> plan``: the block's holes, floors and pocket, read off the exact part."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ class BlockFeatures(unittest.TestCase):
         part = read_part(self.step)
         with self.assertRaises(CamJobError) as caught:
             part.face("face 999")
-        self.assertIn("cad <type> cam lists them", str(caught.exception))
+        self.assertIn("cad <type> plan lists them", str(caught.exception))
 
 
 class HoleBlockFeatures(unittest.TestCase):

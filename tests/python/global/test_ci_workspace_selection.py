@@ -260,8 +260,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                # The registry holds the cam operation and FreeCAD's probe: the plans run too.
-                plans = {"cam"} if path == "packages/cad/src/cad/registry.py" else set()
+                # The registry holds the plan operation and FreeCAD's probe, and a model is planned from the xbf
+                # the engine's API writes of it: the plans run too.
+                plans = {"cam"} if path in ("packages/cad/src/cad/registry.py", "packages/cad/src/cad/engine/api.py") \
+                    else set()
                 self.assertEqual(jobs_for(path), GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "kicad"} | plans)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
@@ -320,7 +322,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad/src/cad/_internal/atomic_replace.py"):
             with self.subTest(path=path):
                 self.assertEqual(tests_for(path)["cadgen_tests"], [CADGEN])
-        self.assertNotIn("cam", jobs_for("packages/cad/src/cad/engine/api.py"))
+        self.assertNotIn("cam", jobs_for("packages/cad/src/cad/engine/snapshot.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")

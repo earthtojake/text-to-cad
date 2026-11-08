@@ -5,16 +5,17 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``cam``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
+wrote; ``dfm``, ``plan``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
 <id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
 environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A B-rep
-type's ``cam`` (``xbf``, ``step``) is the CAM job: ``cad step cam part.step`` lists the faces, holes and floors a
-job names, and ``cad step cam part.step --job job.json --out result.cam.glb`` plans it; it runs here when this
-environment holds the kernel, else in the installation's base, and FreeCAD, the person's, is found by its probe. A KiCad
+type's ``plan`` (``model``, ``xbf``, ``step``) is the CAM job: ``cad step plan part.step`` lists the faces, holes and
+floors a job names, and ``cad step plan part.step --job job.json --out DIR`` plans it, writing its results into DIR;
+it runs here when this environment holds the kernel, else in the installation's base, and FreeCAD, the person's, is
+found by its probe. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
 environment of ``cad[kicad]``.
@@ -192,8 +193,8 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
 # --- a B-rep type's CAM job: read with the kernel, planned by the person's FreeCAD ------------------------
 
 
-def _cam(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> cam SOURCE [--job JOB --out RESULT.glb]``: the library's CAM job (``cad.<type>.cam``), run here
+def _plan(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> plan SOURCE [--job JOB --out DIR]``: the library's CAM job (``cad.<type>.plan``), run here
     when this environment holds the kernel, else in the installation's base
     (``cad_server._internal.integration_env``), its options refused here first, before one is made. FreeCAD is the
     person's program, found by its probe wherever the job runs."""
@@ -203,17 +204,16 @@ def _cam(document_type: str) -> Callable[[list[str], str], int]:
         from cad_server._internal import integration_env
         from cad_server._internal.cli_from_function import _verb, generated_parser, run_cli
 
-        target = (f"cad.{document_type}", "cam")
+        target = (f"cad.{document_type}", "plan")
         if integration_env.carries(INTEGRATION):
-            # Not `_checked`: `--out` is a file it writes, which need not be there yet.
-            parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+            parser = _typed(generated_parser(target, prog=prog), document_type, "plan", "source")
             return run_cli(_verb(target), argv, prog=prog, parser=parser)
-        return _cam_elsewhere(document_type, target, INTEGRATION, argv, prog)
+        return _plan_elsewhere(document_type, target, INTEGRATION, argv, prog)
 
     return run
 
 
-def _cam_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str], prog: str) -> int:
+def _plan_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str], prog: str) -> int:
     from cad._internal.cam.operation import options
     from cad.results import CamResult
     from cad_server._internal import integration_env
@@ -230,11 +230,13 @@ def _cam_elsewhere(document_type: str, target: tuple[str, str], integration: str
     def planned() -> CamResult:
         options(job=keywords.get("job"), out=keywords.get("out"))
         python = integration_env.environment(integration, said)
-        # Paths as absolute text: the runner's process reads them as the command would, in this folder.
+        # Paths as absolute text: the runner's process reads them as the command would, in this folder; a model's
+        # document id as it is.
         plain = {name: str(Path(value).expanduser().resolve()) if isinstance(value, Path) else value
                  for name, value in keywords.items()}
-        found = integration_env.call(python, document_type, target[1],
-                                     [str(Path(value).expanduser().resolve()) for value in positional], plain)
+        sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
+                   for value in positional]
+        found = integration_env.call(python, document_type, target[1], sources, plain)
         return CamResult.from_data(found)
 
     return emit(planned, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
@@ -557,8 +559,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
-        elif _name == "cam":
-            OPERATIONS[(_entry.id, _name)] = _cam(_entry.id)
+        elif _name == "plan":
+            OPERATIONS[(_entry.id, _name)] = _plan(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:
