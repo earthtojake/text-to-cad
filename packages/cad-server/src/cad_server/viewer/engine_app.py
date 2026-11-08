@@ -115,7 +115,7 @@ def bounce_page(location):
     target = html.escape(location, quote=True)
     return ('<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
             f'<meta http-equiv="refresh" content="0;url={target}"><title>CAD</title></head>'
-            f'<body><a href="{target}">Open the CAD Viewer</a></body></html>\n').encode('utf-8')
+            f'<body><a href="{target}">Open CAD</a></body></html>\n').encode('utf-8')
 
 
 class DocumentResponse:
@@ -199,7 +199,7 @@ class ViewerApp(CadApp):
     def handle(self, request, response):
         self.server.touch()
         if not host_is_allowed(request.header('host'), self.host):
-            return response.send_json(403, {'error': 'Host is not a local name', 'hint': 'open the CAD Viewer at 127.0.0.1 or localhost'})
+            return response.send_json(403, {'error': 'Host is not a local name', 'hint': 'open this page at 127.0.0.1 or localhost'})
         return super().handle(request, response)
 
 

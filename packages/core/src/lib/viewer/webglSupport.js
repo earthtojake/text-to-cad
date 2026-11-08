@@ -43,7 +43,7 @@ export function buildRuntimeInitializationAlert(error) {
       blocking: true,
       summary: "WebGL unavailable",
       title: "WebGL is unavailable",
-      message: "CAD Viewer needs WebGL to draw 3D models, but the browser or app it runs in could not create a WebGL context.",
+      message: "The viewer needs WebGL to draw 3D models, but the browser or app it runs in could not create a WebGL context.",
       // A Chromium browser or app whose GPU process crashed can keep WebGL off until it restarts.
       recovery: "Quit and reopen the browser or app this view runs in: after a graphics crash, it can keep WebGL off until it restarts. If WebGL stays unavailable, turn on hardware acceleration or update the graphics drivers. In Chrome, chrome://gpu shows WebGL's status.",
       details: runtimeDetails(message)
@@ -53,10 +53,10 @@ export function buildRuntimeInitializationAlert(error) {
   return {
     severity: "error",
     blocking: true,
-    summary: "CAD Viewer startup failed",
-    title: "CAD Viewer could not start",
-    message: message || "The 3D renderer failed before CAD Viewer finished starting.",
-    recovery: "Reload or reopen CAD Viewer. If it fails again, report it with the details below.",
+    summary: "Viewer startup failed",
+    title: "The viewer could not start",
+    message: message || "The 3D renderer failed before the viewer finished starting.",
+    recovery: "Reload or reopen the viewer. If it fails again, report it with the details below.",
     details: runtimeDetails(message)
   };
 }

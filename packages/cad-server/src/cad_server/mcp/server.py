@@ -133,7 +133,7 @@ FOLLOWS = ("The page follows the model: rebuilds for a document, saves for a fil
            "not after every rebuild.")
 
 TEXT_INSTRUCTIONS = (
-    f"CAD opens models and local CAD files ({FORMATS}) in the CAD Viewer in the user's browser: "
+    f"CAD opens models and local CAD files ({FORMATS}) in the user's browser: "
     "this app cannot show CAD views itself. Call cad_show with source set to a model's document id (running its "
     "script prints it) or a file's absolute path: it opens the page in the user's browser, or says it is open "
     "already, and answers with its URL; give the user that URL. " + FOLLOWS
@@ -200,6 +200,9 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
+# Where an operation's answer carries why it failed (``analytics.FAILURES``) to ``_call``, which takes it
+# out before the host sees the answer.
+_FAILED_FOR = "_failedFor"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
@@ -228,6 +231,20 @@ def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = 
     if error:
         result["isError"] = True
     return result
+
+
+def _unreached(page: str | None) -> str:
+    """What ``cad_view`` and ``cad_screenshot`` say of an inline view that never reached this server: the chat
+    has not drawn it yet, or drew it and carries none of its calls back (the Claude app's Code tab draws cards
+    and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
+    What the person can open instead, and the picture the agent can draw itself."""
+    instead = (f"give them the model's page to open in their browser instead: {page}" if page
+               else "open the model in their browser instead (`cad viewer` prints its page)")
+    return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
+            "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
+            "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
+            f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
+            "use cad_snapshot.")
 
 
 def _unavailable(error: BaseException) -> str:
@@ -283,7 +300,9 @@ class Server:
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         from .operations import Operations
-        self.operations = Operations()
+        # A mistake in cadgen's code an operation failed for is a crash of the tool's, counted as ``_call``
+        # counts one a handler raised.
+        self.operations = Operations(crashed=lambda error, tool: self.analytics.crashed(error, "tool", tool=tool))
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
         # Whether this host shows CAD cards (``host.presentation``): True, False, or None while nothing
@@ -314,7 +333,7 @@ class Server:
         self._update_told = False
         # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab,
         # and a model cad_show sent it before it opened, shown once it does.
-        self._mounting: dict[str, None] = {}
+        self._mounting: dict[str, str | None] = {}  # the inline views launched and not yet seen, each its page
         self._opened: float | None = None
         self._pending: str | None = None
 
@@ -530,7 +549,7 @@ class Server:
         """No page to open or read: cad_show hands over a link to the model in the CAD Viewer."""
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY,
-             "description": ("Open a model in the CAD Viewer in the user's browser, unless its page is open there "
+             "description": ("Open a model's page in the user's browser, unless its page is open there "
                              "already; this app cannot show CAD views itself. source is a model's document id (running "
                              f"its script prints it) or a local CAD file's absolute path ({FORMATS}). Answers with the "
                              "page's URL: give it to the user. " + FOLLOWS),
@@ -587,11 +606,14 @@ class Server:
             if name in _AGENT_TOOLS:
                 self._arguments(name, arguments)
             result = handler(arguments, context)
+            # An operation's answer that says it failed says why too (``_operation``), never to the host.
+            failed_for = result.pop(_FAILED_FOR, None) if isinstance(result, dict) else None
             if not self.text and isinstance(result.get("structuredContent", {}).get("launch"), dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
                 self._reach(result["structuredContent"]["launch"])
             ok = not (isinstance(result, dict) and result.get("isError"))
+            reason = failed_for or reason
             return result
         except ToolFailed as failure:
             reason = failure.reason
@@ -648,8 +670,14 @@ class Server:
         raise ToolFailed(said, "bad_request")
 
     def _operation(self, name, arguments):
-        result = self.operations.call(name, arguments)
-        return _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        """An operation's start, status or cancel (``operations.Operations``): its answer, and -- where it
+        says the operation failed or the start was refused -- why, for the call's telemetry (``_call``):
+        the engine refusing what the call asked is the caller's, never cadgen's bug."""
+        result, reason = self.operations.answered(name, arguments)
+        answer = _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        if reason is not None:
+            answer[_FAILED_FOR] = reason
+        return answer
 
     # launches -----------------------------------------------------------------
 
@@ -708,6 +736,8 @@ class Server:
             LOG.info("the launch carries no page: %s", failure)
             return
         launch["browser"] = link
+        if launch.get("view") in self._mounting:
+            self._mounting[launch["view"]] = link  # the page a view that never reaches this server is told to offer
         if not self.tabs:
             parts = urlparse(link)
             launch["engine"] = f"{parts.scheme}://{parts.netloc}"
@@ -945,7 +975,7 @@ class Server:
         try:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
-            raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
+            raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
                              f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         self.warm()  # the browser page's first document meshes on a pool already starting
@@ -999,8 +1029,7 @@ class Server:
         if view is None and view_id in self._mounting:
             view = self.views.wait(found, timeout=OPENING_SECONDS)
             if view is None:
-                raise ToolFailed("That viewer has not opened yet: the chat has not drawn it (it may be waiting for the person "
-                                 "to allow it, or be collapsed or scrolled away). Ask the person to look at it, then try again.", "no_view")
+                raise ToolFailed(_unreached(self._mounting.get(view_id)), "no_view")
         if view is None:
             raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again "
                              "with cad_show.", "no_view")

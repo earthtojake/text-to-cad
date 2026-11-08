@@ -43,14 +43,21 @@ test("every document the engine draws is named in its grammar: an .xbf, a STEP, 
 });
 
 test("any other file names a pick by a label, its token a comma list that stops at a blank", () => {
-  for (const selector of ["upper_arm", "h2F", "glb:3", "_base", "cast_rim:5spoke_2", "m1"]) assert.ok(isLabelSelector(selector), selector);
-  for (const selector of ["", " upper_arm", "5spoke", "eye#shank", "not a label", "a/b", "a,b", "arm-link", null]) assert.ok(!isLabelSelector(selector), String(selector));
+  // A place in a file's tree is dotted (a 3MF's second build item's first component, a GLB node's path): a
+  // selected one once threw in Quick Edit's chip ("Invalid prompt context: invalid CAD selector").
+  for (const selector of ["upper_arm", "h2F", "glb:3", "_base", "cast_rim:5spoke_2", "m1", "o3", "o2.1", "o1.1.2"]) {
+    assert.ok(isLabelSelector(selector), selector);
+  }
+  for (const selector of ["", " upper_arm", "5spoke", "eye#shank", "not a label", "a/b", "a,b", "arm-link", "o2.", "o2..1", ".o2", null]) {
+    assert.ok(!isLabelSelector(selector), String(selector));
+  }
   const cases = [
     ["/robots/arm.urdf#upper_arm", "/robots/arm.urdf", ["upper_arm"]],
     ["/robots/arm.urdf#base_link,upper_arm,base_link note", "/robots/arm.urdf", ["base_link", "upper_arm"]],
     ["   bracket.dxf#h2F", "bracket.dxf", ["h2F"]],
     ["plate.stl#", "plate.stl", []],
     ["#glb:3", "", ["glb:3"]],
+    ["/out/plate.3mf#o2.1,o3", "/out/plate.3mf", ["o2.1", "o3"]],
     ["\"/robots/my arm (2).urdf\"#base_link", "/robots/my arm (2).urdf", ["base_link"]]
   ];
   for (const [text, cadPath, selectors] of cases) {

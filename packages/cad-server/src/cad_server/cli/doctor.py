@@ -191,7 +191,9 @@ def _apps() -> list[str]:
                      + (f" ({str(gone['at']).replace('T', ' ').rstrip('Z')[:16]})" if gone.get("at") else ""))
     for agent, got in (skills or {}).items() if isinstance(skills, dict) else ():
         if agent in providers.SKILLS_AGENTS and isinstance(got, dict):
-            lines.append(f"app      {providers.label(agent)}: {providers.skills_words(got, machine)}")
+            lost = providers.skills_lost(agent, got, machine)
+            lines.append(f"app      {providers.label(agent)}: {providers.skills_words(agent, got, machine)}"
+                         + (f"; {', '.join(lost)} not there now: run the install command again" if lost else ""))
     return lines
 
 
