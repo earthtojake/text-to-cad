@@ -50,9 +50,8 @@ only just added, its server may still be starting: try again for up to a minute 
 The study is the `solve` operation of the document's type: `cad step solve`, `cad xbf solve`,
 `cad model solve`. With no `--study` it lists the study's setup and writes nothing; with `--study`
 and `--out DIR` it solves and writes its results into `DIR`. Its two tools are integrations the
-`cad` command installs the first time a study needs them, nothing for you to install. A script of
-your own that calls `cad.step.solve` under `cad run` names them in its header beside the kernel
-that reads the part: `cad[build123d,calculix,netgen]`.
+`cad` command installs the first time a study needs them, nothing for you to install; `cad run`
+gives a script that calls `cad.step.solve` both, with the kernel that reads the part.
 
 - **netgen**, the mesher: the `netgen` integration (`cad[netgen]`, about 11 MB). netgen publishes
   it for macOS, Linux x86_64 and Windows x86_64 alone; elsewhere (Linux on ARM among them) a solve

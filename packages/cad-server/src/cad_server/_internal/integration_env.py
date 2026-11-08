@@ -36,11 +36,12 @@ Integrations = Union[str, tuple[str, ...]]
 
 def _names(integration: Integrations) -> tuple[str, ...]:
     """The integrations an environment for ``integration`` holds, sorted: each one named and those its operations
-    need beside it (the registry's ``alongside``: netgen's, the kernel's)."""
-    from cad.registry import INTEGRATIONS
+    need beside it, transitively (the registry's ``alongside``: calculix's, the kernel and netgen), as ``cad run``
+    reads them too (``cad._internal.integrations.alongside``)."""
+    from cad._internal.integrations import alongside
 
     named = (integration,) if isinstance(integration, str) else tuple(integration)
-    return tuple(sorted({*named, *(other for name in named for other in INTEGRATIONS[name].alongside)}))
+    return tuple(sorted({*named, *(other for name in named for other in alongside(name))}))
 
 
 class Failed(RuntimeError):
