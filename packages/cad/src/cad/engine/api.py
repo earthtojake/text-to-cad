@@ -43,7 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Unanswered", "Unreached", "Written", "check",
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Stopped", "Unanswered", "Unreached", "Written",
+           "check",
            "export",
            "hand_over", "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
@@ -637,6 +638,15 @@ class Unanswered(EngineError):
     its answer carried no ``checked``."""
 
 
+class Stopped(EngineError):
+    """The engine stopped while it measured a check (``check``): an update moving the device to another
+    release, or ``cad stop``. Nothing is measured here instead: the check is the engine's to run again."""
+
+
+STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
+           "run the check again")
+
+
 def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     """A manufacturing check of a document, measured where the engine holds it (``worker._check``): a
     document's handle or id in the worker that holds it -- a model's in its script's warm worker, nothing
@@ -653,7 +663,8 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
     "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. ``Unreached`` when no
     engine can be reached; a refusal as its type (``serve.NotHeld`` for an id the engine does not hold); an
-    ``EngineError`` for a check that failed there -- its worker gone, or cancelled by a build of its script."""
+    ``EngineError`` for a check that failed there -- its worker gone, or cancelled by a build of its script --
+    and ``Stopped`` for an engine that stopped before it answered (an update), never measured here instead."""
     from cad.engine import client
     from cad.engine.export import MESHES, ExportRefused
 
@@ -675,7 +686,10 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
         if message.get("stream") == "waiting":  # what it waits for: the same check running, or a busy process
             print(message["log"], file=sys.stderr, flush=True)
 
-    done = _ask(order, relay, connection=connection)["done"]
+    try:
+        done = _ask(order, relay, connection=connection)["done"]
+    except OSError:  # the connection closed, or was reset, before the answer: the engine stopped
+        raise Stopped(STOPPED) from None
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):
         # Another release's server, or one before the check in memory, answers with no check, having measured nothing.

@@ -10,7 +10,8 @@ makes of it (``document.to_bytes``: the document, its closure record and its com
 tracks). It is the engine's own file, always: a model's declared ``@xbf`` or an exported xbf is the
 user's artefact, never used as the cache and never pointed at by it. A file's document keeps no bytes
 here, but the views derived from its bytes live under its folder, keyed by them (a KiCad board's,
-``documents/<id>/kicad/<key>/``: ``cad.engine.formats.kicad.poured.folder``); this module neither indexes
+``documents/<id>/kicad/<key>/``: ``cad.engine.formats.kicad.poured.folder``), as a manufacturing check's kept
+results do, a model's and a file's (``documents/<id>/checks/``: ``checks.Disk``); this module neither indexes
 nor writes them, and a document's deletion (``registry.Registry.delete``) removes them with it.
 
 When it is written, never on the run path:

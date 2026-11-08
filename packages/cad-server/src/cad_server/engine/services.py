@@ -19,14 +19,15 @@ with the daemon's environment and the engine's X display, and no bytecode writte
 kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
 memory before any worker, and its retirements are listed in ``status`` by its document.
 
-``CHECKS``: the checks process, one warm kernel process for the manufacturing checks of files and of documents
-no warm worker holds (``Daemon.check``): the worker's program, in the base, with the daemon's environment, so it
-always runs the server's own library. It does not count toward the count cap, so a file's check never retires
-a person's idle warm worker for its slot; it holds nothing of anyone's, so nothing is drained, and it is
-retired for memory with the render processes.
+``CHECKS``: the checks processes, warm kernel processes for the manufacturing checks of files and of documents
+no warm worker holds (``Daemon.check``), one per slot of the daemon's pool (``checks.Pool``: ``checks``,
+``checks-2``, ...), each measuring one check at a time: the worker's program, in the base, with the daemon's
+environment, so it always runs the server's own library. They do not count toward the count cap, so a file's
+check never retires a person's idle warm worker for its slot; they hold nothing of anyone's, so nothing is
+drained, and they are retired for memory with the render processes.
 
 Their ranks give the order memory is shed in, today's: the standby (0), then render processes and the checks
-process (1), then the workers no page watches (2), and a watched worker (3) only when no other is left.
+processes (1), then the workers no page watches (2), and a watched worker (3) only when no other is left.
 """
 
 from __future__ import annotations

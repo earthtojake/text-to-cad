@@ -23,6 +23,7 @@ import textwrap
 import threading
 import time
 import unittest
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -100,6 +101,11 @@ def _counts() -> dict[str, int]:
     from cad.engine import api
 
     return api.status()["checks"]
+
+
+def _busy() -> list[int]:
+    """The pids of the checks processes measuring now."""
+    return [row["pid"] for row in _counts()["pool"]["processes"] if row["busy"]]
 
 
 def _until(case: unittest.TestCase, condition: Any, what: str) -> None:
@@ -219,9 +225,16 @@ class SameResultTest(unittest.TestCase):
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
         self.assertEqual(_plain(cad.xbf.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
-        api.stop()  # its worker gone: the next check reads the document the engine's cache holds
+        api.stop()  # its worker gone: the restarted engine answers from the result it kept on disk
         self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
-        self.assertEqual(_counts()["measured"], 1, "measured again by the restarted engine, in its checks process")
+        self.assertEqual((_counts()["measured"], _counts()["restored"]), (0, 1))
+        # Other checks: measured by the restarted engine in a checks process, from the bytes its cache holds,
+        # read there once for both.
+        for process in ("cnc", "sheet"):
+            with self.subTest(process=process):
+                self.assertEqual(_plain(cad.model.dfm(block, process=process, material="steel")),
+                                 _plain(_today("model", exported, Path(block), process, material="steel")))
+        self.assertEqual((_counts()["measured"], _counts()["read"]), (2, 1))
 
 
 class KeptResultTest(unittest.TestCase):
@@ -293,6 +306,79 @@ class KeptResultTest(unittest.TestCase):
                        {"measured": {"report": {"partial": True}}},
                        {"measured": {"report": {"partial_sections": ["holes"]}}}):
             self.assertFalse(_clean(unkept), unkept)
+
+    def test_a_model_is_read_once_per_version_for_every_process(self) -> None:
+        """A warm worker reads a build's parts back once per version (``_dfm_brep.of_source``'s ``keep``): a
+        second process checked reads nothing, and an edit reads its parts anew."""
+        import cad
+
+        fixture = Fixture(self, MODELS)
+        plate = fixture.ids[0]
+        read = _counts()["read"]
+        for process in ("cnc", "sheet"):
+            cad.model.dfm(plate, process=process)
+        self.assertEqual(_counts()["read"], read + 1)
+        fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(42, 30, 10)"))
+        edited = cad.model.dfm(plate, process="cnc")
+        self.assertEqual(_counts()["read"], read + 2)
+        self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 42.0, delta=1e-6)
+
+    def test_a_kept_result_outlives_the_engine(self) -> None:
+        """Kept on disk beside the engine's cache: after a restart the same check of the same file or model
+        measures nothing; another file's bytes, an edited model or an entry that does not read measure again."""
+        import build123d as bd
+
+        import cad
+        from cad.engine import api
+
+        fixture = Fixture(self, MODELS)
+        plate = fixture.ids[0]
+        step = fixture.folder / "kept.step"
+        bd.export_step(bd.Box(30, 20, 6), str(step))
+        first = cad.step.dfm(step, process="printing")
+        model = cad.model.dfm(plate, process="cnc", tools="11")
+        api.stop()
+        self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first))
+        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        self.assertEqual((_counts()["measured"], _counts()["restored"]), (0, 2), "the restarted engine measured none")
+
+        kept = list((Path(os.environ["CAD_CACHE_DIR"]) / "documents" / plate / "checks").glob("*.json"))
+        self.assertEqual(len(kept), 1)
+        kept[0].write_bytes(b"{not json")
+        api.stop()
+        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        self.assertEqual(_counts()["measured"], 1, "an entry that does not read is measured again")
+        self.assertEqual(json.loads(kept[0].read_text(encoding="utf-8"))["result"]["measured"]["process"], "cnc")
+
+        bd.export_step(bd.Box(30, 20, 9), str(step))
+        fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(46, 30, 10)"))
+        api.stop()
+        cad.step.dfm(step, process="printing")
+        cad.model.dfm(plate, process="cnc", tools="11")
+        self.assertEqual((_counts()["measured"], _counts()["restored"]), (2, 0), "other bytes, another build")
+
+    def test_the_disk_store_holds_one_version_and_its_bounds_and_drops_what_does_not_read(self) -> None:
+        from cad_server.engine.checks import Disk
+        from cad_server.engine.registry import Folder
+
+        folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-disk-"))
+        self.addCleanup(shutil.rmtree, folder.root, True)
+        a, b, c = (str(uuid.uuid4()) for _ in range(3))  # ids, as the cache folder's are named
+        store = Disk(lambda: folder, limit=2)
+        store.keep(a, "r1", "cnc", {"x": 1})
+        store.keep(a, "r1", "sheet", {"x": 2})
+        self.assertEqual((store.get(a, "r1", "cnc"), store.get(a, "r2", "cnc")), ({"x": 1}, None))
+        store.keep(a, "r2", "cnc", {"x": 3})
+        self.assertEqual(len(folder.names(f"documents/{a}/checks")), 1, "another version's results went")
+        store.keep(b, "r", "cnc", {"x": 4})
+        store.keep(c, "r", "cnc", {"x": 5})
+        self.assertEqual((store.status()["held"], store.get(a, "r2", "cnc")), (2, None), "the least recently used went")
+        (place,) = folder.names(f"documents/{c}/checks")
+        folder.write(f"documents/{c}/checks/{place}", json.dumps({"format": 1, "version": "other", "check": "cnc",
+                                                                   "result": {}}).encode())
+        self.assertIsNone(store.get(c, "r", "cnc"))
+        self.assertEqual(folder.names(f"documents/{c}/checks"), [], "never served, and removed")
+        self.assertIsNone(Disk(lambda: None).get(a, "r", "cnc"), "no cache folder: nothing on disk")
 
     def test_the_store_is_bounded_and_holds_one_version_of_a_document(self) -> None:
         from cad_server.engine.checks import Checks
@@ -380,12 +466,65 @@ class ReleaseTest(unittest.TestCase):
                                checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(), document=document,
                                _call=call)
         fake._version = lambda ident: Daemon._version(fake, ident)
+        fake._durable = lambda ident, at: Daemon._durable(fake, ident, at)
         said: list[dict[str, Any]] = []
         Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version()},
                      said.append)
         self.assertIn("checked", said[-1]["done"])
         self.assertEqual((fake.checks.status()["measured"], fake.checks.status()["held"]), (1, 0))
         self.assertEqual((fake.asked, fake.running), ({}, {}))
+
+    def test_a_worker_retired_as_its_check_was_leased_is_checked_from_the_bytes_held(self) -> None:
+        """Its worker gone between the document read and the lease (refused as not held): the document is read
+        once more -- the server or the cache holds it now -- and checked in a checks process, never said not found."""
+        from cad.engine.previous import version
+        from cad.engine.serve import NotHeld
+        from cad_server.engine.checks import Checks
+        from cad_server.engine.daemon import Daemon, refused
+
+        records = {"id": {"version": "v1", "revision": "k1"}}
+        held = iter([({"script": "/m/parts.py", "function": "plate", "held": "id", "via": "/m/parts.py"}, b""),
+                     ({"document": "id", "name": "plate"}, b"bytes")])
+        asked: list[tuple[dict[str, Any], bytes]] = []
+
+        def call(routed: Any, _order: Any, answered: Any, payload: bytes) -> None:
+            asked.append((routed["source"], payload))
+            if "script" in routed["source"]:
+                answered(refused(NotHeld("plate (id) is not held", "unsaved", "python parts.py")))
+            else:
+                answered({"done": {"checked": {"measured": {"report": {}}, "release": version(), "read": True}}})
+
+        fake = SimpleNamespace(models=SimpleNamespace(adopt=lambda _ident: None, lock=threading.Lock(), records=records),
+                               checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(),
+                               document=lambda _ident: next(held), _call=call)
+        for name in ("_version", "_durable", "_routed"):
+            setattr(fake, name, getattr(Daemon, name).__get__(fake))
+        said: list[dict[str, Any]] = []
+        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version()},
+                     said.append)
+        self.assertEqual([source for source, _payload in asked][1], {"document": "id", "name": "plate", "version": "v1"})
+        self.assertEqual(asked[1][1], b"bytes")
+        self.assertEqual([message for message in said if "failed" in message], [], "no refusal said")
+        self.assertIn("checked", said[-1]["done"])
+        self.assertEqual(fake.checks.status()["held"], 1)
+
+    def test_an_engine_that_stops_mid_check_says_to_check_again_and_measures_nothing_here(self) -> None:
+        import build123d as bd
+
+        import cad
+        from cad.build123d import _dfm_check
+        from cad.engine import api, client
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-stop-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        step = folder / "box.step"
+        bd.export_step(bd.Box(20, 20, 15), str(step))
+        with mock.patch.object(client, "connect", return_value=object()), \
+                mock.patch.object(api, "_ask", side_effect=ConnectionError("the engine server closed the connection")), \
+                mock.patch.object(_dfm_check, "measure", side_effect=AssertionError("measured here")):
+            with self.assertRaises(api.Stopped) as stopped:
+                cad.step.dfm(step, process="printing")
+        self.assertIn("run the check again", str(stopped.exception))
 
     def test_a_build_says_it_is_asking_before_the_worker_answers(self) -> None:
         from cad_server.engine.daemon import Daemon, _Asked
@@ -426,11 +565,51 @@ class ReleaseTest(unittest.TestCase):
                                  held_bytes=lambda _ident, _version: None, not_held=lambda ident: ValueError(ident))
         released: list[Any] = []
         fake = SimpleNamespace(models=models, supervisor=SimpleNamespace(live=lambda *_args: SimpleNamespace(
-            environment={}, python="/old/python")), lease=lambda *_args, **_kwargs: worker, release=released.append)
-        source, data = Daemon._whole(fake, "id", {"script": "/m/parts.py", "function": "plate", "via": "/m/parts.py",
-                                                  "python_key": "/old\0" + "0.10.0"})
-        self.assertEqual((source, data, released), ({"document": "id", "name": "plate"}, b"XBF!", [worker]))
+            environment={}, python="/old/python")), lease=lambda *_args, **_kwargs: worker, release=released.append,
+            wholes={}, wholes_lock=threading.Lock())
+        spec = {"script": "/m/parts.py", "function": "plate", "via": "/m/parts.py", "python_key": "/old\0" + "0.10.0"}
+        for _ in range(2):
+            source, data = Daemon._whole(fake, "id", spec)
+            self.assertEqual((source, data), ({"document": "id", "name": "plate"}, b"XBF!"))
+        self.assertEqual((len(asked), released), (1, [worker]), "asked once for its version")
         self.assertEqual((asked[0]["op"], asked[0]["whole"]), ("result", True), "protocol 1's request, nothing new")
+        models.records["id"]["version"] = "w"
+        Daemon._whole(fake, "id", spec)
+        self.assertEqual(len(asked), 2, "another version is asked for")
+
+    def test_the_pool_runs_a_check_per_slot_and_one_past_it_waits_saying_so(self) -> None:
+        from cad_server.engine.checks import Pool
+        from cad_server.engine.supervisor import Withdrawn
+
+        live: list[Any] = []
+        room = {"cap": None}
+        supervisor = SimpleNamespace(processes=lambda _service: list(live), pressed=lambda: False,
+                                     memory=lambda: room["cap"], resident=lambda: 900.0)
+        pool = Pool(supervisor, 2)
+        self.assertEqual((pool.take("file:a"), pool.take("file:b")), ("checks", "checks-2"))
+        said: list[str] = []
+        third = Checking(lambda: pool.take("file:c", waiting=said.append))
+        third.start()
+        _until(self, lambda: said, "the third says it waits")
+        self.assertIn("waiting for another manufacturing check", said[0])
+        self.assertIn("the 2 checks processes are all busy", said[0])
+        self.assertTrue(third.is_alive())
+        pool.give("checks")
+        self.assertEqual(third.result(self), "checks")
+        self.assertEqual(len(said), 1, "said once")
+        pool.give("checks")
+        pool.give("checks-2")
+        live.extend(SimpleNamespace(key=key, pid=1, rss=400.0, retired=False, alive=lambda: True)
+                    for key in ("checks", "checks-2"))
+        self.assertEqual(pool.take("file:b"), "checks-2", "the slot that last read it")
+        pool.give("checks-2")
+        del live[1]
+        room["cap"] = 1000.0  # no room for another of 400 MB beside 900
+        self.assertEqual(pool.take("file:a"), "checks")
+        before = len(said)
+        with self.assertRaises(Withdrawn):  # given up once it has said what it waits for
+            pool.take("file:b", gave_up=lambda: len(said) > before, waiting=said.append)
+        self.assertIn("the engine's memory has no room for another checks process", said[-1])
 
     def test_an_engine_without_checks_or_of_another_release_is_measured_here(self) -> None:
         import build123d as bd
@@ -460,14 +639,14 @@ class ReleaseTest(unittest.TestCase):
 class WorkerTest(unittest.TestCase):
     """What a check's worker does beside it: a build of its script cancels a check running there or waiting
     for it, a cancel landing as a check ends hangs nothing, and a worker killed in one says so. A check waits
-    at its seam (``CAD_ENGINE_CHECK_WAIT``, read as its worker starts: the build's environment) until the
-    test lets it go."""
+    at its seam (``CAD_ENGINE_CHECK_WAIT``, read at each check from the environment it runs in: a worker's,
+    the build's it adopted; a checks process's, the daemon's) until the test lets it go."""
 
-    def waiting(self) -> tuple[Fixture, Path]:
+    def waiting(self, env: dict[str, str] | None = None) -> tuple[Fixture, Path]:
         hold = Path(tempfile.mkdtemp(prefix="engine-dfm-hold-")) / "go"
         self.addCleanup(shutil.rmtree, hold.parent, True)
         self.addCleanup(lambda: hold.write_text("", encoding="utf-8"))  # whatever happens, no check waits on
-        return Fixture(self, MODELS, {"CAD_ENGINE_CHECK_WAIT": str(hold)}), hold
+        return Fixture(self, MODELS, {"CAD_ENGINE_CHECK_WAIT": str(hold), **(env or {})}), hold
 
     def started(self, ident: str, hold: Path, tools: str = "3") -> tuple[Checking, int]:
         """A check of ``ident`` running in a thread, once its worker says it is measuring: the thread and the
@@ -526,7 +705,8 @@ class WorkerTest(unittest.TestCase):
 
     def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
         """Its caller killed (a shell's time limit), a model's check and a file's run to their end and keep their
-        results: the same call again measures nothing. A file's check waiting behind another says so."""
+        results: the same call again measures nothing. A file's check waiting behind another says so (a pool of
+        one checks process)."""
         import build123d as bd
 
         import cad
@@ -534,7 +714,7 @@ class WorkerTest(unittest.TestCase):
 
         api.stop()  # no checks process stands: the next starts with the seam of the engine this file's builds start
         self.addCleanup(api.stop)  # the seam goes with its engine's processes
-        fixture, hold = self.waiting()
+        fixture, hold = self.waiting({"CAD_ENGINE_CHECKS": "1"})
         reached = Path(f"{hold}.reached")
         process, worker = self.caller(f"cad.model.dfm({fixture.ids[0]!r}, process='cnc')", fixture.env, reached)
         process.kill()
@@ -553,7 +733,7 @@ class WorkerTest(unittest.TestCase):
         step = fixture.folder / "part.step"
         bd.export_step(bd.Box(30, 20, 6), str(step))
         process, checks = self.caller(f"cad.step.dfm({str(step)!r}, process='printing')", fixture.env, reached)
-        self.assertEqual(_counts()["process"]["pid"], checks)
+        self.assertEqual(_busy(), [checks])
         behind = subprocess.Popen([sys.executable, "-c", f"import cad; cad.step.dfm({str(step)!r}, process='sheet')"],
                                   env=fixture.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         self.addCleanup(behind.stderr.close)  # last: once it is gone, its reader is done
@@ -572,9 +752,46 @@ class WorkerTest(unittest.TestCase):
         reader.join(JOIN_SECONDS)
         _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone ends")
         self.assertEqual(_counts()["measured"], before["measured"] + 2)
-        self.assertEqual(_counts()["process"]["pid"], checks, "no one stopped the checks process")
+        self.assertEqual([row["pid"] for row in _counts()["pool"]["processes"]], [checks],
+                         "no one stopped the checks process")
         cad.step.dfm(step, process="printing")
         self.assertEqual(_counts()["measured"], before["measured"] + 2, "the next call reuses its result")
+
+    def test_different_checks_run_at_once_in_the_pool_and_one_past_it_waits_saying_so(self) -> None:
+        """Two files' checks measured at once, in two checks processes; a third, the pool full, says it waits
+        and runs once one is done."""
+        import build123d as bd
+
+        from cad.engine import api
+
+        api.stop()  # an engine with a pool of two and the seam
+        self.addCleanup(api.stop)
+        fixture, hold = self.waiting({"CAD_ENGINE_CHECKS": "2"})
+        steps = []
+        for height in (6, 7, 8):
+            steps.append(fixture.folder / f"part{height}.step")
+            bd.export_step(bd.Box(30, 20, height), str(steps[-1]))
+        before = _counts()["measured"]
+        callers = []
+        for step in steps:
+            callers.append(subprocess.Popen([sys.executable, "-c", f"import cad; cad.step.dfm({str(step)!r}, process='printing')"],
+                                            env=fixture.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True))
+            self.addCleanup(callers[-1].stderr.close)
+            self.addCleanup(callers[-1].wait)
+            self.addCleanup(callers[-1].kill)
+            if len(callers) == 2:
+                _until(self, lambda: len(_busy()) == 2, "two checks measure at once")
+        self.assertEqual(len(set(_busy())), 2, "in two processes")
+        said: list[str] = []
+        reader = threading.Thread(target=lambda: said.extend(callers[2].stderr), daemon=True)
+        reader.start()
+        _until(self, lambda: any("the 2 checks processes are all busy" in line for line in said), "the third waits")
+        self.assertIn("waiting for another manufacturing check", "".join(said))
+        hold.write_text("", encoding="utf-8")
+        for caller in callers[:2]:
+            self.assertEqual(caller.wait(JOIN_SECONDS), 0, caller.stderr.read())
+        self.assertEqual(callers[2].wait(JOIN_SECONDS), 0, said)
+        self.assertEqual(_counts()["measured"], before + 3)
 
     def test_the_same_check_asked_while_it_runs_waits_for_it_and_measures_once(self) -> None:
         fixture, hold = self.waiting()

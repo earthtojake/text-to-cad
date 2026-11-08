@@ -52,6 +52,11 @@ DECLARED = POCKETED.replace("    part.label = \"plate\"\n", """    from bd_mater
 """)
 
 
+def setUpModule() -> None:
+    # An engine, a state and a cache folder of this file's own, run directly too: never the device's.
+    engine_daemon.isolate(unittest.addModuleCleanup)
+
+
 def _run(document_type: str, *argv: str) -> tuple[int, str, str]:
     """The command run: its exit status (a source its parser refuses exits, as argparse's errors do), stdout
     and stderr."""

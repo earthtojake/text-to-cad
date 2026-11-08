@@ -629,11 +629,16 @@ class Daemon:
         from cad_server.engine.models import Models
 
         self.models = Models(self)
-        from cad_server.engine.checks import Checks
+        from cad_server.engine.checks import Checks, Pool, pool_size
 
-        # The manufacturing checks' results, by document version (``checks``), and the token of the check
-        # each worker runs now, which a build of its script cancels (``_cancel_check``).
-        self.checks = Checks()
+        # The manufacturing checks' results, by document version, in memory and in the cache folder
+        # (``checks``), and the checks processes that measure the checks no warm worker does (``Pool``).
+        self.checks = Checks(folder=self._checks_folder)
+        self.pool = Pool(self.supervisor, pool_size())
+        # The whole documents a worker of an older release gave for a check (``_whole``), by id: each at its
+        # version, the most recent last.
+        self.wholes: dict[str, tuple[str, bytes]] = {}
+        self.wholes_lock = threading.Lock()
         # The checks asked of a process and not yet answered, by their token (``_Asked``), what a build of their
         # script cancels; and by what they check (document, version, check), what the same check attaches to.
         self.asked: dict[str, _Asked] = {}
@@ -1062,6 +1067,7 @@ class Daemon:
                 python = owner.python
             for attempt in (1, 2):
                 worker = None
+                slot = None
                 try:
                     environment = request.get("env") or {}
                     # An export runs in its caller's environment (``worker.adopt``), as a build does; the checks
@@ -1084,11 +1090,17 @@ class Daemon:
                     if isinstance(order.get("check"), dict):
                         with self.asked_lock:
                             asked = self.asked.get(str(order["check"].get("token")))
-                        if attempt == 1:
+                        if attempt == 1 and key != CHECKS:
                             self._behind_check(key, python_key, send)
-                    worker = self.lease(key, environment, cwd, python=python, python_key=python_key,
-                                        service="checks" if key == CHECKS else "worker",
-                                        gave_up=asked.stopped.is_set if asked is not None else None)
+                    gave_up = asked.stopped.is_set if asked is not None else None
+                    if key == CHECKS:
+                        # A slot of the checks processes' pool, waiting for one, said once, when all are busy.
+                        slot = self.pool.take(_checked_document(request.get("source") or {}), gave_up,
+                                              lambda said: send({"log": said, "stream": "waiting"}))
+                        worker = self.lease(slot, environment, cwd, service="checks", gave_up=gave_up)
+                    else:
+                        worker = self.lease(key, environment, cwd, python=python, python_key=python_key,
+                                            gave_up=gave_up)
                     if asked is not None:
                         with self.asked_lock:
                             asked.worker = worker
@@ -1142,6 +1154,9 @@ class Daemon:
                 finally:
                     if worker is not None:
                         self.release(worker)
+                    if slot is not None:
+                        self.pool.give(slot)
+                        slot = None
         finally:
             with self.busy_lock:
                 self.busy -= 1
@@ -1155,17 +1170,23 @@ class Daemon:
         the report is one that library can finish and nothing is measured to be thrown away:
 
         - a model's, in the warm worker that holds it, when that worker's library is the caller's;
-        - in the checks process (``CHECKS``), when the server's library is the caller's: a file's (a STEP's, an
-          xbf's), read once while its bytes stay as they were, a document's no warm worker holds, and a model's
-          built at another release, from the bytes it gives (``_whole``);
+        - in a checks process (``CHECKS``, a slot of ``pool``), when the server's library is the caller's: a
+          file's (a STEP's, an xbf's), read once while its bytes stay as they were, a document's no warm worker
+          holds, read once per version, and a model's built at another release, from the bytes it gives
+          (``_whole``);
         - otherwise no one: answered at once with no ``checked``.
 
-        The same check of the same version is answered from what was kept (``reused``), with no process
-        asked; one asked while it runs waits for it and answers with its result, saying so, so it is measured
-        once. A version is a model's generation, read before its bytes and again after the check, or the digest
-        of the bytes a file's check measured: a result is kept under the version it was measured at, or not at
-        all. A check runs to its end whoever asked it, as a build does: its caller going leaves it running and
-        its result kept. Only a build of its model's script cancels it (``_cancel_check``)."""
+        The same check of the same version is answered from what was kept (``reused``) -- in memory, else on
+        disk, where a restarted engine finds it -- with no process asked; one asked while it runs waits for it
+        and answers with its result, saying so, so it is measured once. A version is a model's generation, read
+        before its bytes and again after the check, or the digest of the bytes a file's check measured: a result
+        is kept under the version it was measured at, or not at all. A check runs to its end whoever asked it, as
+        a build does: its caller going leaves it running and its result kept. Only a build of its model's script
+        cancels it (``_cancel_check``). A model's worker retired between the document read and its lease (which
+        refuses it as no longer held) is no refusal: the document is read once more, from the server or the
+        cache that now holds it, and checked in a checks process."""
+        from cad.engine.ids import file_id
+
         from cad_server.engine.checks import Checks, digest
 
         def told(message: dict[str, Any]) -> None:
@@ -1193,21 +1214,25 @@ class Daemon:
         else:
             told({"failed": "a check reads a document the engine holds, or a STEP's or an xbf's file"})
             return
+        caller = request.get("caller")
         # Who measures it, decided before anything is measured.
         measurer = _measurer(source.get("python_key") if "script" in source else None, "script" in source,
-                             request.get("caller"), version())
+                             caller, version())
         if measurer is None:
             # Another release of the library asks: its report would be of a library it cannot finish. Answered
             # at once, with no check, and it measures the document its own way (``manufacturing._held``).
             told({"done": {"reports": [], "files": [], "release": version()}})
             return
         if "path" in source:
-            document = f"file:{os.path.normcase(os.path.realpath(source['path']))}"
+            real = os.path.normcase(os.path.realpath(source["path"]))
+            document = f"file:{real}"
             before = digest(Path(source["path"]))
+            durable = (file_id(real), before) if before is not None else None
         else:
             document, before = f"model:{ident}", version_was
+            durable = self._durable(ident, before)
         # Which library measures it, in the key: the caller's, the same as the worker's or the server's.
-        key = Checks.key(request["check"], str(request.get("caller")))
+        key = Checks.key(request["check"], str(caller))
         token = str(request["check"].get("token") or secrets.token_hex(8))
         worker_key, _cwd, python_key = (self._routed({**request, "source": source}) if measurer != CHECKS
                                         else (CHECKS, None, None))
@@ -1215,15 +1240,24 @@ class Daemon:
         with self.asked_lock:
             # Under one lock with what a check that ends does (it keeps its result, then leaves ``running``): a
             # check of this version is kept, or running, or this one is the one to run.
-            kept = self.checks.get(document, before, key) if before is not None else None
-            running = self.running.get(same) if kept is None and before is not None else None
-            if kept is None and running is None:
+            running = self.running.get(same) if before is not None else None
+            asked = None
+            if running is None:
                 asked = _Asked(token, worker_key, python_key)
                 self.asked[token] = asked
                 if before is not None:
                     self.running[same] = asked
+        kept = None
+        if running is None and before is not None:
+            # Read outside the lock (the disk's), as this check's own: one asked meanwhile waits for it.
+            kept = self.checks.get(document, before, key, durable)
         if kept is not None:
-            told({"done": {"reports": [], "files": [], "checked": kept, "reused": True}})
+            with self.asked_lock:
+                self.asked.pop(token, None)
+                self.running.pop(same, None)
+                asked.answer = {"done": {"reports": [], "files": [], "checked": kept, "reused": True}}
+            asked.finished.set()
+            told(asked.answer)
             return
         if running is not None:
             self.checks.attached()
@@ -1232,8 +1266,13 @@ class Daemon:
             running.finished.wait()  # no timer: it ends with its process, as the build a rerun waits for does
             told(_attached(running.answer))
             return
+        assert asked is not None
+        lost: list[dict[str, Any]] = []
 
         def answered(message: dict[str, Any]) -> None:
+            if "script" in source and not lost and _not_held(message):
+                lost.append(message)  # its worker retired as it was leased: read once more (below)
+                return
             done = message.get("done")
             if "done" in message or "failed" in message:
                 asked.answer = message
@@ -1245,20 +1284,42 @@ class Daemon:
                 current = measured.get("digest") == before if "path" in source else self._version(ident) == before
                 if before is not None and current and _clean(measured):
                     self.checks.keep(document, before, key, {name: value for name, value in measured.items()
-                                                             if name not in ("retired", "read")})
+                                                             if name not in ("retired", "read")}, durable)
             told(message)
 
         try:
-            if measurer == CHECKS and "script" in source:
-                try:
-                    source, payload = self._whole(ident, source)
-                except ValueError as error:
-                    answered(refused(error))
-                    return
-            check = {**request["check"], "token": token}
-            order = {"id": 1, "op": "export", "source": source, "destinations": [],
-                     "cwd": None if worker_key == CHECKS else request.get("cwd"), "check": check}
-            self._call({**request, "source": source, "check": check}, order, answered, payload)
+            for attempt in (1, 2):
+                if attempt == 2:
+                    if not lost:
+                        return
+                    # The worker that held it retired between the read and the lease: the server or the cache
+                    # holds the document now, which the server's library checks from its bytes, if it is the
+                    # caller's; else that release measures it itself.
+                    try:
+                        source, payload = self.document(ident)
+                    except ValueError as error:
+                        answered(refused(error))
+                        return
+                    if "script" in source:
+                        answered(lost[0])  # held by a worker again: a build since, which keeps nothing of this
+                        return
+                    if _measurer(None, False, caller, version()) is None:
+                        answered({"done": {"reports": [], "files": [], "release": version()}})
+                        return
+                    worker_key = asked.key = CHECKS
+                    asked.python_key = None
+                if worker_key == CHECKS and "script" in source:
+                    try:
+                        source, payload = self._whole(ident, source)
+                    except ValueError as error:
+                        answered(refused(error))
+                        return
+                if "document" in source and before is not None and self._version(ident) == before:
+                    source = {**source, "version": before}  # its bytes are this version's: read once there
+                check = {**request["check"], "token": token}
+                order = {"id": 1, "op": "export", "source": source, "destinations": [],
+                         "cwd": None if worker_key == CHECKS else request.get("cwd"), "check": check}
+                self._call({**request, "source": source, "check": check}, order, answered, payload)
         finally:
             with self.asked_lock:
                 self.asked.pop(token, None)
@@ -1266,21 +1327,35 @@ class Daemon:
             asked.finished.set()
 
     def _behind_check(self, key: str, python_key: str | None, send: Callable[[dict[str, Any]], None]) -> None:
-        """A check about to wait for a process that is busy, as a build behind a build is (``behind``): its
-        caller told at once what it waits for and since when. Nothing is cancelled."""
-        busy = self.supervisor.live("checks" if key == CHECKS else "worker", key, python_key)
+        """A check about to wait for a model's worker that is busy, as a build behind a build is (``behind``): its
+        caller told at once what it waits for and since when. Nothing is cancelled. (A check waiting for a checks
+        process is told by the pool: ``Pool.take``.)"""
+        busy = self.supervisor.live("worker", key, python_key)
         op, began = (busy.op, busy.began) if busy is not None and busy.leased else (None, None)
         if began is None:
             return
         ago = max(0.0, time.time() - began)
-        if key == CHECKS:
-            said = (f"waiting for another manufacturing check, started {ago:.0f} s ago: the checks process runs one "
-                    "at a time")
-        elif op == "build":
+        if op == "build":
             said = f"waiting for the build of {Path(key).name} started {ago:.0f} s ago"
         else:
             said = f"waiting for the worker of {Path(key).name}, busy for {ago:.0f} s"
         send({"log": said, "stream": "waiting"})
+
+    def _checks_folder(self) -> Any:
+        """The engine's cache folder, where the kept checks' results are written (``checks.Disk``), or None."""
+        held = self.models.cache.registry()
+        return None if held is None else held.cache
+
+    def _durable(self, ident: str, version: str | None) -> tuple[str, str] | None:
+        """Model document ``ident``'s version that outlives the engine, while its generation is ``version``: its
+        revision, its build closure's key (``models.revision``), with its id; None for a build with no key (a
+        token of its own), or another generation."""
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        if record is None or version is None or str(record["version"]) != version:
+            return None
+        revision = record.get("revision")
+        return (ident, revision) if isinstance(revision, str) and revision and not revision.startswith("t") else None
 
     def _version(self, ident: str) -> str | None:
         """Model document ``ident``'s generation, as its record has it; None for no record."""
@@ -1289,12 +1364,20 @@ class Daemon:
         return None if record is None else str(record["version"])
 
     def _whole(self, ident: str, source: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
-        """A model document a worker of an older release holds, as the bytes the checks process reads: the
+        """A model document a worker of an older release holds, as the bytes a checks process reads: the
         whole document the server or the cache holds at its version, else the xbf bytes that worker's
-        ``result`` gives (its protocol 1, which every release answers). ``ValueError`` when neither can."""
+        ``result`` gives (its protocol 1, which every release answers), asked once per version (``wholes``).
+        ``ValueError`` when neither can."""
         with self.models.lock:
             record = self.models.records.get(ident)
-        data = self.models.held_bytes(ident, record["version"]) if record is not None else None
+        at = None if record is None else str(record["version"])
+        data = self.models.held_bytes(ident, at) if at is not None else None
+        if data is None and at is not None:
+            with self.wholes_lock:
+                held = self.wholes.pop(ident, None)
+                if held is not None and held[0] == at:
+                    self.wholes[ident] = held  # the most recent last
+                    data = held[1]
         if data is None:
             python_key = source.get("python_key")
             key = canonical(source.get("via") or source["script"])
@@ -1312,8 +1395,13 @@ class Daemon:
             if "failed" in answer:
                 raise ValueError(str(answer["failed"]))
             done, returned = answer["done"], answer.get("payload", b"")
-            at = sum(int(size) for _key, size in done["shapes"])
-            data = returned[at:at + int(done.get("xbf") or 0)]
+            start = sum(int(size) for _key, size in done["shapes"])
+            data = returned[start:start + int(done.get("xbf") or 0)]
+            if at is not None and len(data) <= WHOLES_BYTES:
+                with self.wholes_lock:
+                    self.wholes[ident] = (at, data)
+                    while len(self.wholes) > WHOLES_KEPT or sum(len(kept) for _at, kept in self.wholes.values()) > WHOLES_BYTES:
+                        self.wholes.pop(next(iter(self.wholes)))
         return {"document": ident, "name": source["function"]}, data
 
     def _cancel_check(self, key: str, python_key: str | None, send: Callable[[dict[str, Any]], None]) -> None:
@@ -1746,10 +1834,7 @@ class Daemon:
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
                 "cache": self.models.cache.status(),
-                "checks": {**self.checks.status(), "asked": len(self.asked),
-                           "process": next(({"pid": row.pid, "alive": row.alive() and not row.retired,
-                                             "rssMb": None if row.rss is None else round(row.rss)}
-                                            for row in supervisor.processes("checks")), None)},
+                "checks": {**self.checks.status(), "asked": len(self.asked), "pool": self.pool.status()},
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
@@ -1856,6 +1941,18 @@ def _check_lost(said: str, key: str) -> str:
     return f"{head}: {words}{tail}{detail}"
 
 
+def _checked_document(source: dict[str, Any]) -> str:
+    """What a checks process is asked to check, as its pool's slots remember it (``checks.Pool.take``)."""
+    if "path" in source:
+        return f"file:{os.path.normcase(os.path.realpath(str(source['path'])))}"
+    return f"model:{source.get('document')}"
+
+
+def _not_held(message: dict[str, Any]) -> bool:
+    """Whether an answer is the refusal of a document the engine no longer holds (``refused`` of a ``NotHeld``)."""
+    return "failed" in message and "state" in message and "rebuild" in message
+
+
 def _attached(answer: dict[str, Any] | None) -> dict[str, Any]:
     """What a caller that waited for the same check is answered: that check's answer, its result as reused (its
     memory's retirement was said to whoever asked it first); its failure as it was."""
@@ -1899,8 +1996,12 @@ def _answers_checks(python_key: Any) -> bool:
     return release == version() or answers_checks(release)
 
 
-# The checks process's key: one warm kernel process for the checks of files and of documents no worker holds.
+# The checks processes' route (``_routed``): the pool's (``checks.Pool``), warm kernel processes for the checks of
+# files and of documents no worker holds.
 CHECKS = "checks"
+# The whole documents of older workers kept for their next check (``Daemon._whole``): this many, and bytes.
+WHOLES_KEPT = 4
+WHOLES_BYTES = 256 * 2**20
 # How long a build waits for a check it cancelled to answer before it goes on to wait for the worker, which
 # it would wait for all the same: a check stops at its next checkpoint, after at most one kernel call.
 CANCEL_PATIENCE = 600.0

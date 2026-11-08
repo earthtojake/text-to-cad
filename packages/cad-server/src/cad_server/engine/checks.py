@@ -1,5 +1,6 @@
 """The manufacturing checks' results the daemon keeps, so the same check of an unchanged document
-measures nothing (``Daemon.check``).
+measures nothing (``Daemon.check``), and the checks processes that measure the checks no warm worker does
+(``Pool``).
 
 A result is kept under its document and the version of it that was measured: a model document by its
 id and its generation (``models.Models``' ``version``: a token of its build's own, kept by a run that
@@ -9,27 +10,47 @@ candidates flag and, with no process, the options given, and the release of the 
 it, the caller's (``Daemon.check`` measures nothing in another's). Only a clean result is kept: never a
 document that did not read, a refusal, or a family not measured. A document holds the
 results of one version alone: a result of another version is dropped the moment one of the new version
-is kept or asked for, so none outlives the document it describes. Nothing is persisted: the store is
-process memory, bounded by ``LIMIT`` results and ``BYTES`` of them (their JSON), the least recently used
-going first. A part of an assembly left untouched by an edit is measured again with the rest: a check
-measures the document whole (its findings, build volume and rules are the document's), so per-part reuse
-would be a second, finer key, not this one.
+is kept or asked for, so none outlives the document it describes. In memory the store is bounded by
+``LIMIT`` results and ``BYTES`` of them (their JSON), the least recently used going first. A part of an
+assembly left untouched by an edit is measured again with the rest: a check measures the document whole (its
+findings, build volume and rules are the document's), so per-part reuse would be a second, finer key, not
+this one.
+
+**On disk** (``Disk``): each kept result is written beside the engine's model cache, under its document's
+folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a model's id, a
+file's document id, ``ids.file_id``), so deleting the document removes them with it
+(``registry.Registry.delete``), and a restarted engine answers the same check of the same document from it.
+Its version there is one that outlives the engine: a model's revision (its build closure's key, the same code
+and inputs the same revision in any process: the key its cache file is kept by; a build with no key has none,
+and keeps nothing on disk), a file's bytes' digest. A file's name is the digest of that version and of the
+check; it holds both, and the result. Each is written whole (``registry.Folder.write``), a document keeps one
+version's (a result of another version is removed as one of the new is written), and the whole store is held
+to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk, set again by each
+read) going first. One that does not read -- not JSON, not the shape written, another version's or check's under
+its name -- is removed, never served. A cache folder that cannot be written keeps nothing on disk.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-__all__ = ["BYTES", "LIMIT", "Checks", "digest"]
+__all__ = ["BYTES", "DISK_BYTES", "DISK_LIMIT", "LIMIT", "POOL", "Checks", "Disk", "Pool", "digest", "pool_size"]
 
-# At most this many results kept, and this many bytes of them (their JSON).
+# At most this many results kept in memory, and this many bytes of them (their JSON).
 LIMIT = 128
 BYTES = 64 * 2**20
+# At most this many results kept on disk, and this many bytes of them.
+DISK_LIMIT = 1024
+DISK_BYTES = 256 * 2**20
+# The format of a result's file on disk: another is a file that does not read.
+FORMAT = 1
 
 
 def digest(path: Path) -> str | None:
@@ -44,8 +65,133 @@ def digest(path: Path) -> str | None:
     return found.hexdigest()
 
 
+class Disk:
+    """The kept results on disk (the module's **On disk**), in ``folder()``'s ``documents/`` (the engine's cache
+    folder, ``registry.Folder``; None: nothing is kept on disk)."""
+
+    def __init__(self, folder: Callable[[], Any], limit: int = DISK_LIMIT, budget: int = DISK_BYTES) -> None:
+        self.folder, self.limit, self.budget = folder, limit, budget
+        self.lock = threading.Lock()
+        # Each result's file, by its place in the cache folder: its size and its time, indexed at the first use.
+        self.index: dict[str, tuple[int, float]] | None = None
+        self.bytes = 0
+
+    @staticmethod
+    def _name(version: str, check: str) -> tuple[str, str]:
+        found = [hashlib.blake2b(text.encode("utf-8"), digest_size=10).hexdigest() for text in (version, check)]
+        return found[0], f"{found[0]}-{found[1]}.json"
+
+    @staticmethod
+    def _inside(ident: str, name: str = "") -> str:
+        from cad.engine.ids import is_id
+        from cad_server.engine.registry import DOCUMENTS
+
+        if not is_id(ident):
+            raise ValueError(f"{ident!r} is not a document id")
+        return f"{DOCUMENTS}/{ident}/checks" + (f"/{name}" if name else "")
+
+    def _indexed(self, held: Any) -> dict[str, tuple[int, float]]:
+        """The index (call with the lock held): every result's file, listed and stated once, nothing read."""
+        if self.index is None:
+            from cad.engine.ids import is_id
+            from cad_server.engine.registry import DOCUMENTS
+
+            self.index, self.bytes = {}, 0
+            for ident in held.names(DOCUMENTS):
+                if not is_id(ident):
+                    continue
+                for name in held.names(self._inside(ident)):
+                    if not name.endswith(".json"):
+                        continue
+                    inside = self._inside(ident, name)
+                    try:
+                        stat = held.path(inside).stat()
+                    except OSError:
+                        continue
+                    self.index[inside] = (stat.st_size, stat.st_mtime)
+                    self.bytes += stat.st_size
+        return self.index
+
+    def _remove(self, held: Any, inside: str) -> None:
+        try:
+            held.remove(inside)
+        except OSError:
+            pass
+        found = (self.index or {}).pop(inside, None)
+        if found is not None:
+            self.bytes -= found[0]
+
+    def get(self, ident: str, version: str, check: str) -> dict[str, Any] | None:
+        """The result kept on disk of ``check`` of document ``ident`` at ``version``, or None; a file that does
+        not read as one is removed."""
+        held = self.folder()
+        if held is None:
+            return None
+        _prefix, name = self._name(version, check)
+        inside = self._inside(ident, name)
+        with self.lock:
+            data = held.read(inside)
+            if data is None:
+                return None
+            try:
+                found = json.loads(data.decode("utf-8"))
+                good = (isinstance(found, dict) and found.get("format") == FORMAT and found.get("version") == version
+                        and found.get("check") == check and isinstance(found.get("result"), dict))
+            except (UnicodeDecodeError, ValueError):
+                good = False
+            if not good:
+                self._indexed(held)
+                self._remove(held, inside)  # never served: the next check measures and writes it again
+                return None
+            now = time.time()
+            try:
+                os.utime(held.path(inside), (now, now))  # read: the most recently used
+            except OSError:
+                pass
+            index = self._indexed(held)
+            if inside in index:
+                index[inside] = (index[inside][0], now)
+            return found["result"]
+
+    def keep(self, ident: str, version: str, check: str, result: dict[str, Any]) -> None:
+        """``result`` written as ``check``'s of document ``ident`` at ``version``, whole; the document's results
+        of any other version removed, the store held to its bounds. A folder that cannot be written keeps nothing."""
+        held = self.folder()
+        if held is None:
+            return
+        prefix, name = self._name(version, check)
+        data = json.dumps({"format": FORMAT, "version": version, "check": check, "result": result},
+                          separators=(",", ":")).encode("utf-8")
+        if len(data) > self.budget:
+            return
+        inside = self._inside(ident, name)
+        with self.lock:
+            index = self._indexed(held)
+            for other in held.names(self._inside(ident)):
+                if other.endswith(".json") and not other.startswith(f"{prefix}-"):
+                    self._remove(held, self._inside(ident, other))
+            try:
+                held.write(inside, data)
+            except OSError:
+                return
+            self._remove_entry(inside)
+            index[inside] = (len(data), time.time())
+            self.bytes += len(data)
+            while index and (len(index) > self.limit or self.bytes > self.budget):
+                self._remove(held, min(index, key=lambda place: index[place][1]))
+
+    def _remove_entry(self, inside: str) -> None:
+        found = (self.index or {}).pop(inside, None)
+        if found is not None:
+            self.bytes -= found[0]
+
+    def status(self) -> dict[str, Any]:
+        with self.lock:
+            return {"held": None if self.index is None else len(self.index), "bytes": self.bytes}
+
+
 class Checks:
-    def __init__(self, limit: int = LIMIT, budget: int = BYTES) -> None:
+    def __init__(self, limit: int = LIMIT, budget: int = BYTES, folder: Callable[[], Any] | None = None) -> None:
         self.limit, self.budget = limit, budget
         self.lock = threading.Lock()
         # (document, check) -> (version, the result's JSON), least recently used first.
@@ -53,8 +199,11 @@ class Checks:
         self.bytes = 0
         self.measured = 0
         self.reused = 0
+        self.restored = 0
         self.read = 0
         self.waited = 0
+        # The results on disk, in the engine's cache folder (``folder()``), or none.
+        self.disk = Disk(folder) if folder is not None else None
 
     @staticmethod
     def key(check: dict[str, Any], release: str) -> str:
@@ -67,20 +216,38 @@ class Checks:
                      if held[0] == document and (version is None or kept != version)]:
             self.bytes -= len(self.kept.pop(held)[1])
 
-    def get(self, document: str, version: str, check: str) -> dict[str, Any] | None:
+    def get(self, document: str, version: str, check: str,
+            durable: tuple[str, str] | None = None) -> dict[str, Any] | None:
         """The result kept of ``check`` of ``document`` at ``version``, or None; results of any other
-        version of it dropped."""
+        version of it dropped. ``durable``: the document's id and the version of it that outlives the engine
+        (the module's **On disk**), where a result is looked for when memory holds none, and taken into it."""
         with self.lock:
             self._drop(document, version)
             found = self.kept.get((document, check))
-            if found is None:
-                return None
-            self.kept.move_to_end((document, check))
+            if found is not None:
+                self.kept.move_to_end((document, check))
+                self.reused += 1
+                return json.loads(found[1])
+        if durable is None or self.disk is None:
+            return None
+        result = self.disk.get(durable[0], durable[1], check)
+        if result is None:
+            return None
+        self._memory(document, version, check, result)
+        with self.lock:
             self.reused += 1
-            return json.loads(found[1])
+            self.restored += 1
+        return result
 
-    def keep(self, document: str, version: str, check: str, result: dict[str, Any]) -> None:
-        """``result`` kept as ``check``'s of ``document`` at ``version``, the store held to its bounds."""
+    def keep(self, document: str, version: str, check: str, result: dict[str, Any],
+             durable: tuple[str, str] | None = None) -> None:
+        """``result`` kept as ``check``'s of ``document`` at ``version``, the store held to its bounds; on disk
+        too under ``durable`` (``get``'s), where one is given."""
+        self._memory(document, version, check, result)
+        if durable is not None and self.disk is not None:
+            self.disk.keep(durable[0], durable[1], check, result)
+
+    def _memory(self, document: str, version: str, check: str, result: dict[str, Any]) -> None:
         text = json.dumps(result, separators=(",", ":"))
         with self.lock:
             if len(text) > self.budget:
@@ -95,7 +262,7 @@ class Checks:
                 self.bytes -= len(self.kept.popitem(last=False)[1][1])
 
     def counted(self, read: bool = False) -> None:
-        """One check measured in a process, kept or not; ``read``: it read its file, none held."""
+        """One check measured in a process, kept or not; ``read``: it read its document, none held."""
         with self.lock:
             self.measured += 1
             self.read += int(read)
@@ -106,11 +273,126 @@ class Checks:
             self.waited += 1
 
     def forget(self, document: str) -> None:
-        """Every result of ``document`` dropped (it was deleted)."""
+        """Every result of ``document`` dropped from memory (it was deleted: its folder, and the results on
+        disk in it, went with it)."""
         with self.lock:
             self._drop(document)
 
     def status(self) -> dict[str, Any]:
         with self.lock:
-            return {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,
-                    "read": self.read, "waited": self.waited}
+            found = {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,
+                     "restored": self.restored, "read": self.read, "waited": self.waited}
+        found["disk"] = None if self.disk is None else self.disk.status()
+        return found
+
+
+# --- the checks processes ---------------------------------------------------------------------------
+
+
+# The most checks processes a pool holds by default (``pool_size``).
+POOL = 4
+
+
+def pool_size() -> int:
+    """How many checks processes measure at once: ``CAD_ENGINE_CHECKS``, else half the machine's cores, two at
+    least and ``POOL`` at most -- a small pool, as each is a kernel process of its own."""
+    try:
+        given = int(os.environ.get("CAD_ENGINE_CHECKS", "").strip() or 0)
+    except ValueError:
+        given = 0
+    return given if given > 0 else min(POOL, max(2, (os.cpu_count() or 1) // 2))
+
+
+# The key of the checks process of a pool's first slot; the others' are it and their number (``checks-2``).
+SLOT = "checks"
+
+
+class Pool:
+    """The checks processes (``services.CHECKS``): ``size`` slots, each a process of its own key, leased one
+    check at a time (``take``, ``give``), so as many checks run at once as there are slots. A check takes a free
+    slot whose process last measured its document (what it read is still held there: ``worker._file``,
+    ``_document``), else a free slot whose process is alive, else a free slot whose process is to start -- where
+    the engine's memory has room for one more of the size the live ones are, and the system is not under memory
+    pressure; with no room, it waits for a busy one, as it does when every slot is busy, saying so once. A process
+    is started, held to the memory caps and shed by the supervisor as every service's is: an idle one is retired
+    for memory with the render processes, and none on a timer."""
+
+    def __init__(self, supervisor: Any, size: int) -> None:
+        self.supervisor, self.size = supervisor, max(1, size)
+        self.lock = threading.Condition()
+        self.busy: dict[str, float] = {}  # each slot measuring, since when (``time.time``)
+        self.last: dict[str, str] = {}  # each slot's last document
+
+    def slots(self) -> list[str]:
+        return [SLOT if number == 1 else f"{SLOT}-{number}" for number in range(1, self.size + 1)]
+
+    def _free(self, document: str) -> str | None:
+        """The slot a check of ``document`` takes now, or None (call with the lock held)."""
+        free = [slot for slot in self.slots() if slot not in self.busy]
+        if not free:
+            return None
+        live = {process.key: process for process in self.supervisor.processes("checks")
+                if process.alive() and not process.retired}
+        for slot in free:
+            if slot in live and self.last.get(slot) == document:
+                return slot
+        for slot in free:
+            if slot in live:
+                return slot
+        if self.busy and not self._room(live):
+            return None
+        return free[0]
+
+    def _room(self, live: dict[str, Any]) -> bool:
+        """Whether the engine's memory has room for another checks process, of the size the live ones are."""
+        if self.supervisor.pressed():
+            return False
+        cap = self.supervisor.memory()
+        if cap is None:
+            return True
+        size = max((float(process.rss or 0.0) for process in live.values()), default=0.0)
+        return self.supervisor.resident() + size <= cap
+
+    def take(self, document: str, gave_up: Callable[[], bool] | None = None,
+             waiting: Callable[[str], None] | None = None) -> str:
+        """A slot for a check of ``document``, waiting for one as long as it takes; ``waiting`` told once, at
+        once, what it waits for. ``gave_up``, asked while it waits: true, it waits no more (``Withdrawn``)."""
+        from cad_server.engine.supervisor import GAVE_UP_SECONDS, Withdrawn
+
+        told = False
+        while True:
+            with self.lock:
+                slot = self._free(document)
+                if slot is not None:
+                    self.busy[slot] = time.time()
+                    self.last[slot] = document
+                    return slot
+                if gave_up is not None and gave_up():
+                    raise Withdrawn
+                said = None
+                if not told and waiting is not None:
+                    ago = max(0.0, time.time() - min(self.busy.values(), default=time.time()))
+                    full = len(self.busy) >= self.size
+                    said = (f"waiting for another manufacturing check, started {ago:.0f} s ago: "
+                            + (f"the {self.size} checks processes are all busy" if full else
+                               "the engine's memory has no room for another checks process"))
+                if said is None:
+                    self.lock.wait(GAVE_UP_SECONDS)
+                    continue
+            told = True
+            assert waiting is not None
+            waiting(said)
+
+    def give(self, slot: str) -> None:
+        """A slot free again."""
+        with self.lock:
+            self.busy.pop(slot, None)
+            self.lock.notify_all()
+
+    def status(self) -> dict[str, Any]:
+        with self.lock:
+            busy = dict(self.busy)
+        processes = [{"slot": process.key, "pid": process.pid, "alive": process.alive() and not process.retired,
+                      "rssMb": None if process.rss is None else round(process.rss), "busy": process.key in busy}
+                     for process in self.supervisor.processes("checks")]
+        return {"size": self.size, "busy": len(busy), "processes": processes}
