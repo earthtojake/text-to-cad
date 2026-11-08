@@ -395,9 +395,9 @@ they supply overrides every rule.
   still reported; never read it as "no findings"). **Exit 0** is not an approval: warnings remain, and
   a rule `not_evaluated` is never a pass. **Exit 2**: the command itself was refused; fix the command,
   not the part.
-- **Count by rule, never by findings**: several failures at one ref are one finding, and a rule shows at
-  most eight refs. The counts are the last line's digest (`FAILED <id>: ... failed: molding.draft_min x10,
-  ...`: errors only) and, for each rule in `measurements.rules.failed`, its outcome's `failures`.
+- **Two counts**: the last line's `(N warning(s))` or `N blocking finding(s)` counts findings, one per
+  ref (a rule's refs past eight as one more); a rule's `failures` and `failed: <rule> xN` (errors) count
+  every failure, so can be higher. Quote the line's total and, per rule, its failures, named as such.
 - Resolve a finding's ref with `cad model inspect "$ID" '<ref>'` or `cad step inspect part.step '<ref>'`.
 - `--candidates` ranks pulls or orientations and judges nothing: check again with the one chosen.
 - **A redesign** gets the same check with the same flags on the new revision: compare
