@@ -842,8 +842,12 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     path = _document(source, "inspect", named)
     if not isinstance(path, Path) and ref is None and query in ("closure", "summary", "structure"):
         # An implicit document (``cad.engine.implicit_document``) is the engine's file of a mesh: what it holds is read
-        # from that file, as a mesh file's is, and its closure from the file's own words.
-        found = _ask({"op": "document", "id": path})["document"]
+        # from that file, as a mesh file's is, and its closure from the file's own words. An id the engine does not
+        # hold is answered below, as every model's is (its ``serve`` names its state and starts the page server).
+        try:
+            found = _ask({"op": "document", "id": path})["document"]
+        except (ValueError, EngineError):
+            found = {}
         if "path" in found and Path(found["path"]).suffix.lower() == ".glb":
             return _mesh(Path(found["path"]), named, query, ident=path)
     if query == "build":

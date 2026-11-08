@@ -120,8 +120,10 @@ class ImplicitDocumentTest(unittest.TestCase):
         base, _, token = url.partition(f"/{ident}?token=")
         jar = http.cookiejar.CookieJar()
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-        opener.open(url, timeout=30).read()  # the link admits the session
-        envelope = json.loads(opener.open(f"{base}/api/v1/documents/{ident}", timeout=30).read())
+        # The link admits the session. Presented to the API, not the page: the page is the built client's, which
+        # CI's cadjoint job does not build (its /<id> is a 404 there), and the session is what the rest reads by.
+        envelope = json.loads(opener.open(f"{base}/api/v1/documents/{ident}?token={token}", timeout=30).read())
+        self.assertTrue(list(jar), "the link's answer gives the session's cookie")
         self.assertEqual((envelope["kind"], envelope["api"], envelope["exports"]),
                          ("implicit", f"/api/v1/documents/implicit/{ident}", ["stl", "threemf", "glb"]))
         with opener.open(f"{base}/api/v1/documents/implicit/{ident}/source", timeout=30) as answer:

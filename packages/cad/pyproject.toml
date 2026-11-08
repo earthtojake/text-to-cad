@@ -141,7 +141,9 @@ use-ignore-files = false
 # netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
 # cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
 # package jobs that check types do not install it.
-ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx"]
+# cadjoint: the cadjoint extra's, imported where a field is lowered, sampled or simplified (`cad/cadjoint/`), and
+# the package jobs that check types do not install it either.
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "cadjoint", "cadjoint.*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
