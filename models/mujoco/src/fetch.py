@@ -40,18 +40,22 @@ def _git(*args: str, cwd: Path | None = None) -> str:
 
 
 def checkout(source: GitSource, folder: Path) -> None:
-    """``source``'s paths at its commit in ``folder``: cloned blob-filtered, sparse, no other file fetched."""
+    """``source``'s paths at its commit in ``folder``: cloned blob-filtered, sparse, no other file fetched.
+
+    An existing checkout keeps the paths it has and gains ``source``'s (``sparse-checkout add``): one
+    checkout serves several robots (Menagerie's), and fetching one must not take another's away.
+    """
     if (folder / ".git").is_dir():
+        _git("sparse-checkout", "add", *_patterns(source.paths), cwd=folder)
         if _git("rev-parse", "HEAD", cwd=folder) == source.commit:
-            _git("sparse-checkout", "set", "--no-cone", *_patterns(source.paths), cwd=folder)
             print(f"  {folder.relative_to(MENAGERIE.parent)}: at {source.commit[:12]}")
             return
     else:
         folder.mkdir(parents=True, exist_ok=True)
         _git("init", "-q", cwd=folder)
         _git("remote", "add", "origin", source.url, cwd=folder)
-    _git("config", "core.sparseCheckout", "true", cwd=folder)
-    _git("sparse-checkout", "set", "--no-cone", *_patterns(source.paths), cwd=folder)
+        _git("config", "core.sparseCheckout", "true", cwd=folder)
+        _git("sparse-checkout", "set", "--no-cone", *_patterns(source.paths), cwd=folder)
     print(f"  {folder.relative_to(MENAGERIE.parent)}: fetching {source.url} at {source.commit[:12]}")
     _git("fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", source.commit, cwd=folder)
     _git("checkout", "-q", "--force", source.commit, cwd=folder)
@@ -124,8 +128,8 @@ def main(argv: list[str]) -> int:
     if unknown:
         raise SystemExit(f"no robot {', '.join(unknown)}: the robots are {', '.join(ROBOTS)}")
     print("MuJoCo Menagerie:")
-    # Every robot's model, whichever are fetched: a sparse checkout's paths replace the last set's.
-    paths = tuple(dict.fromkeys(robot.menagerie for robot in ROBOTS.values()))
+    # The fetched robots' models, added to whichever an earlier fetch checked out.
+    paths = tuple(dict.fromkeys(ROBOTS[name].menagerie for name in names))
     checkout(GitSource(MENAGERIE_REPO.url, MENAGERIE_REPO.commit, paths, MENAGERIE_REPO.license), MENAGERIE)
     for name in names:
         fetch(name)
