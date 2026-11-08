@@ -78,6 +78,7 @@ class EngineDisplayTest(unittest.TestCase):
     def test_a_daemon_with_a_display_gives_its_own(self) -> None:
         self.xvfb(FAKE)
         with mock.patch.dict(os.environ, {"DISPLAY": ":3"}):
+            os.environ.pop("XAUTHORITY", None)  # the runner's own (xvfb-run sets one): this case is a display that needs none
             self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":3"})
             with mock.patch.dict(os.environ, {"XAUTHORITY": "/run/user/1000/gdm/Xauthority"}):  # and what admits it
                 self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":3",
