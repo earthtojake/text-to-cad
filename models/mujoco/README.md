@@ -5,7 +5,7 @@ model, its parts grouped into links, its joints found from the geometry, materia
 declared, the mechanism exported as MJCF, URDF and SDF -- and compares the result with the
 description Google built by hand in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
 and with the maker's own URDF. The comparison is what refines the method: every difference is
-either a fact the CAD cannot carry (actuators, damping, contact tuning), a decision the model
+either a fact the CAD cannot carry (actuators, gains, contact tuning), a decision the model
 script made and should make better, or a gap in text-to-cad.
 
 A robot is here only if its maker publishes the raw CAD. Of the four robots
@@ -110,8 +110,11 @@ are not Trossen's pinned STLs.
 Fixed: a vendor STEP's densities read 1000 times too light (OCCT drops the "kilo" of kg/m^3; our own
 STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to-simulation user:
 
-1. **Mass from a STEP that does not carry it.** No way to give a link a measured mass (scale its
-   parts' densities to a target) or a mass budget for parts the CAD omits (motors in a dummy link).
+1. **Fixed: mass from a STEP that does not carry it.** There was no way to give a link a measured mass
+   (scale its parts' densities to a target) or a mass budget for parts the CAD omits (motors in a dummy
+   link). `mass(part_or_assembly, grams)` now scales a node's solids alike to a measured total (an inner
+   one fixing its own subtree), and `point_mass(part, grams, at)` puts a motor where it sits, counted in
+   every total above it.
 2. **Fixed: a fixed part cannot stay its own body.** Every rigidly joined part merged into its link,
    so a camera mount or a fingertip could not be addressed as Menagerie's can; `body(part, name)` now
    keeps it a body fixed to its link.
@@ -133,5 +136,9 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
 9. **Reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf deep-copies
    the whole tree (7 s and 400 MB a call); and `cad mjcf snapshot` fails when the daemon started without
    a display.
-10. **Actuators, armature, damping, contact parameters** are the consumer's own and never come from CAD;
-   a documented scene layer (native `MjSpec`) is the place, and the skill shows it.
+10. **Fixed in part: the joint's and the surface's dynamics.** A servo's reflected inertia, damping and
+   dry friction are the hardware's, so `limits(assembly, joint, armature=, damping=, friction=)` declares
+   them in the model (MJCF `armature`, `damping`, `frictionloss`; URDF `<dynamics>`), and
+   `friction(part, coefficient)` a surface's contact friction (MJCF geom `friction`). Actuators, gains,
+   `condim` and contact softness are the experiment's: the consumer's own, in the documented scene
+   layer (native `MjSpec`), which the skill shows.

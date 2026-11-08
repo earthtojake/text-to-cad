@@ -24,9 +24,10 @@ written twice:
 | Determined by geometry (generated) | Decided in the scene (native `MjSpec`) | The consumer's own |
 | --- | --- | --- |
 | Links and their frames, joint axes, joint limits around the as-built zero | Where each piece stands, and what it is attached to (a frame, a site) | Actuators: kind, gains, control ranges |
-| Masses, centres of mass, inertia tensors (materials' densities) | A free body (`add_freejoint`) for a part that moves loose | Sensors |
+| Masses, centres of mass, inertia tensors (materials' densities, `mass()` totals, `point_mass()` lumps) | A free body (`add_freejoint`) for a part that moves loose | Sensors |
 | Visual meshes (STL, metres) and their colours | The floor, lights, cameras | Solver settings: timestep, cone, `impratio`, `solref` |
-| Collision shapes (`collision()`), named frames as sites (`frame()`) | Robots from elsewhere (Menagerie), and the prefixes that keep their names apart | Joint armature and damping, friction, `condim` |
+| Collision shapes (`collision()`) and their contact friction (`friction()`), named frames as sites (`frame()`) | Robots from elsewhere (Menagerie), and the prefixes that keep their names apart | `condim`, contact softness (`solref`, `solimp` on the geoms) |
+| Joint armature, damping and frictionloss, the drive's force bound (`limits()`) | | |
 | Couplings as `<equality><joint>`, mechanism states as keys | The scene's own `home` key over every joint | Controllers, policies, the simulation loop |
 
 The first column is regenerated from the model on every change, never edited. The second and third
@@ -95,9 +96,15 @@ if __name__ == "__main__":
   a range of 0 to 40 is a hinge of range -30 to 10 degrees, in radians. Build open, straight or
   homed, and the MuJoCo values are the CAD's.
 - **Declare on finished parts**, after the last operation, as a material is set: `collision()`,
-  `frame()`, `body()` and `exclude()` travel with the part as build123d moves it, and a copy keeps
-  them; `limits()` after the joint it bounds is made. `collision()` on an
-  assembly is every part's below it that declares none. A frame is a part's, never an assembly's.
+  `frame()`, `body()`, `exclude()`, `mass()`, `point_mass()` and `friction()` travel with the part as
+  build123d moves it, and a copy keeps them; `limits()` after the joint it bounds is made.
+  `collision()` and `friction()` on an assembly are every part's below it that declares none; `mass()`
+  on an assembly is all of it. A frame and a point mass are a part's, never an assembly's.
+- **What the hardware is, the model says; what the experiment is, the scene says.** A measured weight
+  (`mass()`), a motor the CAD leaves out (`point_mass()`), the servo's reflected inertia, damping and
+  dry friction (`limits(armature=, damping=, friction=)`) and a pad's rubber (`friction()`) are the
+  robot's, so they live in the CAD model and every export carries them. Gains, control ranges,
+  `condim`, solver settings and contact softness are the scene's.
 - **Collision kinds.** `box`, `sphere`, `cylinder` and `capsule` are fitted by the kernel to the
   part's oriented bounding box (a cylinder's and a capsule's axis its longest side): fast and stable,
   and as wrong as the box is for a part far from its shape. `mesh` (the default) is the part's own

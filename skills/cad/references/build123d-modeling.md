@@ -75,7 +75,9 @@ A project's material is a native `FinishedMaterial`, with physics in `.material`
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
-There is no text-to-cad material class, catalogue or adapter.
+There is no text-to-cad material class, catalogue or adapter. A simulator's contact friction is
+declared beside the material, `friction(part, coefficient)` from `cad.build123d`, and a measured weight
+with `mass(part, grams)` ([kinematics](kinematics.md#declaring-for-a-simulator)).
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,

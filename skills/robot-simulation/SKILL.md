@@ -27,7 +27,7 @@ other simulators, and an MJCF for MuJoCo. There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A robot description from a CAD model** (MJCF, URDF or SDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()` and `limits()`, then `cad model export <id> robot.xml` (or `.urdf`, `.sdf`). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-three-writers) |
+| **A robot description from a CAD model** (MJCF, URDF or SDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` and `friction()`, then `cad model export <id> robot.xml` (or `.urdf`, `.sdf`). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-three-writers) |
 | **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each CAD piece, composed with MuJoCo's own `MjSpec` in a script, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
 | **Describe a robot's links and joints by hand** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
@@ -36,7 +36,7 @@ other simulators, and an MJCF for MuJoCo. There are two routes to one:
 | **MuJoCo model by hand** | The MJCF (`robot.xml`, and a `scene.xml` that includes it), then `cad mjcf validate --compile required`. | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | **SDF for a robot that has a hand-written URDF** | Derive it from the URDF; never re-author it. | [Interoperability](references/interoperability.md#sdf-from-a-urdf) |
 | **Link meshes from a CAD model for a hand-written file** | One mesh per link in the link's frame: `cad model export <id> link.stl`. | [Meshes](references/meshes.md) |
-| **Mass, center of mass, inertia** | Materials on the CAD parts (generated, exact); else a formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
+| **Mass, center of mass, inertia** | Materials on the CAD parts (generated, exact), `mass()` where the hardware's weight is measured and `point_mass()` for what the CAD leaves out; else a formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
 | **Close a nonlinear four-bar in the CAD Viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
 | **See the robot, a pose or a named state** | `cad urdf snapshot`, `cad srdf snapshot`, `cad sdf snapshot` or `cad mjcf snapshot`; MuJoCo Studio for the person. | [Snapshots](references/snapshots.md) |
 | **Check a change** | The format's `validate` command, then its review. | [Check each change](#check-each-change) |
@@ -80,6 +80,14 @@ mechanism):
 - **Materials** (`bd_materials`, `part.material = metals.aluminum()`) give each part a density, so
   each link's mass, centre of mass and inertia tensor are the kernel's, exact. A part with no material
   weighs nothing, and a link of such parts has no inertial ([Inertials](references/inertials.md)).
+- **`mass(part_or_assembly, grams)`** is what the hardware weighs (a scale's reading, a datasheet's):
+  the solids below it keep their densities' ratios (one density where none has a material) and are
+  scaled alike to make up `grams`, so the centre of mass and the inertia's shape stay the geometry's.
+  An inner `mass()` fixes its own subtree; an outer one scales only the solids no inner one holds.
+- **`point_mass(part, grams, at, name=, inertia=)`** is a lump the CAD leaves out (a motor inside a
+  filled housing), at `at` in the part's own frame, no inertia of its own unless `inertia=(ixx, iyy,
+  izz)` (kg*m^2) gives it. A `mass()` above it counts it: the lumps are fixed and the solids make up
+  the rest, and a total the lumps reach or pass is refused.
 - **`collision(part, kind)`** says what a simulator collides a part as: `mesh` (the default, which
   MuJoCo hulls), a `box`, `sphere`, `cylinder` or `capsule` the kernel fits to the part, or `none`.
   On an assembly it applies to every part below it that declares none.
@@ -89,18 +97,30 @@ mechanism):
   camera mount, a fingertip the simulator addresses), with its own mass and geoms.
 - **`exclude(a, b)`** says two parts (or an assembly, or a label) never collide. The MJCF excludes every
   jointed pair whose collisions touch at rest by itself, the first joint's on a world-welded base too.
-- **`limits(assembly, joint, effort=, velocity=)`**: a joint's drive limits, N*m or N and rad/s or m/s,
-  the URDF's and SDF's `<limit>` and MJCF's `actuatorfrcrange`. Without one a URDF says `effort="0"
-  velocity="0"`, which a ROS controller reads literally.
+- **`limits(assembly, joint, effort=, velocity=, armature=, damping=, friction=)`**: a joint's drive
+  limits, N*m or N and rad/s or m/s, the URDF's and SDF's `<limit>` and MJCF's `actuatorfrcrange`, and
+  its dynamics: the rotor's reflected inertia (kg*m^2, kg), viscous damping (N*m*s/rad, N*s/m) and dry
+  friction (N*m, N), MJCF's `armature`, `damping` and `frictionloss` and URDF's `<dynamics damping
+  friction>` (URDF has no armature: the export's log says it is left out). Without a drive limit a URDF
+  says `effort="0" velocity="0"`, which a ROS controller reads literally. Actuators, gains and contact
+  tuning are the scene's.
+- **`friction(part_or_assembly, coefficient)`** is the contact friction of a part's surface, set where
+  its material is and inherited as one is: a sliding coefficient (MuJoCo keeps its torsional and
+  rolling defaults) or the three. MJCF writes it on the part's collision geoms; URDF has none (said in
+  the export's log). Where none is declared, nothing is written and the simulator's default holds:
+  never invent a coefficient for a material.
 
 ```python
-from cad.build123d import body, collision, exclude, frame, limits
+from cad.build123d import body, collision, exclude, frame, friction, limits, mass, point_mass
 
 collision(palm, "box")
 frame(palm, "tcp", bd.Pos(0, 0, 65))   # mm, in the palm's own frame
 body(camera, "camera")                 # fixed to the palm, a body of its own
 exclude(left, right)                   # the fingers touch when closed
-limits(root, "left", effort=2, velocity=1.5)   # N*m, rad/s
+limits(root, "left", effort=2, velocity=1.5, armature=0.002, damping=0.1)   # N*m, rad/s, kg*m^2, N*m*s/rad
+point_mass(palm, 120, bd.Pos(0, 0, 20), name="motor")   # g, mm in the palm's own frame
+mass(palm, 410)                        # g: the palm as weighed, its motor included
+friction(pads, 1.1)                    # the pads' rubber, sliding
 ```
 
 Then run the model and write the file from the document the run left in the server (`$ID` is the
@@ -314,7 +334,7 @@ so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()` or `limits()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
+| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` or `friction()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
 | A scene script | Run it, then `cad mjcf validate` on the scene it wrote with `--compile required`: every model-health warning cleared or explained; `--pose home` in a snapshot. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |

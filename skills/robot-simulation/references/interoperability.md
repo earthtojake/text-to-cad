@@ -45,6 +45,9 @@ format cannot say:
 | Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of | `<limit><effort><velocity>` where declared |
 | A part kept a body (`body()`) | a child body with no joint | a link on a fixed joint | as the URDF |
 | Contact exclusions (`exclude()`) | `<contact><exclude>`, and every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) | a comment on the model |
+| Joint dynamics (`limits(armature=, damping=, friction=)`) | `armature`, `damping`, `frictionloss` on the joint | `<dynamics damping friction>`; no armature (the export's log says so) | not written |
+| Declared masses and point masses (`mass()`, `point_mass()`) | in each body's `<inertial>` | in each link's `<inertial>` | in each link's `<inertial>` |
+| Contact friction (`friction()`) | `friction` on the part's collision geoms (one value, or three) | not written: URDF has none (the export's log says so) | not written |
 
 The URDF's root is the first part hung from the ground (a ROS `base_link`); the SDF fixes that root
 to `world` by one joint, which a scene drops to free the model. Never edit a generated file, and

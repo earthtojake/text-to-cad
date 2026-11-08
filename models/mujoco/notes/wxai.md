@@ -164,6 +164,10 @@ Menagerie's link_6 is shown with camera_mount_d405 (0.600 kg), and its carriage 
   information is where the motors are, which a dummy STEP does not carry. The next refinement would
   put each actuator's datasheet mass at its joint and spread the rest over the shell area. Trossen
   does not publish its actuators' masses.
+- **Fixed:** the calibration no longer needs an effective density worked out in the script.
+  `mass(link, grams)` scales a link's solids alike to a measured or budgeted total (an inner `mass()`
+  fixing, say, the plain parts' own), and `point_mass(part, grams, at)` puts a motor at its joint,
+  counted in every total above it. `src/wxai.py` still computes its density (unchanged, not re-run).
 - **Centres of mass** (world, qpos0, D vs reference) are within 2.7 to 6.2 mm for every link but
   link_3, which is 16 mm off: its mass sits at the elbow motor, and the dummy has it spread along the
   bar.

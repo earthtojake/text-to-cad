@@ -252,14 +252,18 @@ mechanism and each link's mass from its parts' materials. Declarations from `cad
 the rest, on finished parts, after the last operation, as a material is set:
 
 ```python
-from cad.build123d import body, collision, exclude, frame, limits
+from cad.build123d import body, collision, exclude, frame, friction, limits, mass, point_mass
 
 collision(arm, "capsule")                   # what a simulator collides it as
 collision(cover, "none")                    # shown, never collides
 frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
 body(camera, "camera_mount")                # its own body, fixed to the link it is fastened to
 exclude(camera, "wrist")                    # never collides with the wrist (a part, assembly or label)
-limits(root, "elbow", effort=27, velocity=6.28)  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
+limits(root, "elbow", effort=27, velocity=6.28,  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
+       armature=0.01, damping=0.4, friction=0.15)  # kg*m^2, N*m*s/rad, N*m (kg, N*s/m, N on a slide)
+point_mass(housing, 85, bd.Pos(0, 0, 12), name="servo")  # g, at a point in the housing's own frame (mm)
+mass(forearm, 310)                          # g: the forearm assembly as weighed, the servo included
+friction(pads, 1.1)                         # the pads' contact friction (sliding), or three values
 ```
 
 - **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
@@ -281,6 +285,25 @@ limits(root, "elbow", effort=27, velocity=6.28)  # the elbow's drive: N*m and ra
   label on the assembly or below it, in SI: URDF's and SDF's `<limit>`, MJCF's `actuatorfrcrange`
   (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written
   `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS controller reads literally.
+  `armature=` (the rotor's inertia through its gearbox), `damping=` and `friction=` (dry friction) are
+  the joint's dynamics: MJCF's `armature`, `damping` and `frictionloss`, URDF's `<dynamics damping
+  friction>` (URDF has no armature; the export's log says it is left out). Each is a fact of the
+  hardware; an actuator's gains and control range are the simulation's.
+- **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
+  materials' densities give (one density for all where none has a material) and are scaled alike to
+  make up `grams`, so the centre of mass and the shape of the inertia stay the geometry's. An inner
+  `mass()` fixes its own subtree; an outer one scales only the solids no inner one holds, to make up
+  its total less what the inner ones and its point masses weigh. A total its point masses and inner
+  masses reach or pass, or one its parts have no volume to carry, is refused when exported.
+- **`point_mass(part, grams, at, name=, inertia=)`** adds a lump the CAD leaves out (a motor inside a
+  filled housing) at `at`, a `Location` in the part's own frame as a frame's is, with no inertia of
+  its own unless `inertia=(ixx, iyy, izz)` (kg*m^2, in `at`'s axes) gives it. Several per part, each
+  by name. Every `mass()` above it counts it.
+- **`friction(part_or_assembly, coefficient)`** is a surface's contact friction, set where the
+  material is and inherited as one is (a part's own wins): a sliding coefficient, or MuJoCo's three
+  (sliding, torsional, rolling). MJCF writes it on the part's collision geoms; URDF has none. With
+  none declared, nothing is written and the simulator's default holds; `bd_materials` carries no
+  friction, so never invent one for a material.
 
 They travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
 cost nothing until a robot description is exported. A part that declares other ones is a

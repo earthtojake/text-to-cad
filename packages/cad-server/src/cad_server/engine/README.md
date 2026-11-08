@@ -633,7 +633,7 @@ failure: the next asker makes it again.
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
-| `description.py`, `describe.py`, `declarations.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), and what a model declares for it (`collision`, `frame`, `body`, `exclude`, `limits`) |
+| `description.py`, `describe.py`, `declarations.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), and what a model declares for it (`collision`, `frame`, `body`, `exclude`, `limits`, `mass`, `point_mass`, `friction`) |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF, a URDF and an SDF with their meshes beside them from the robot description (`mjcf`, `urdf`, `sdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
@@ -2623,22 +2623,35 @@ paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 
 **What a model declares for a simulator.** Beside its material, a part may say what a robot
 description needs that geometry does not decide (`cad.build123d`'s `collision`, `frame`, `body`,
-`exclude`, `limits`): `collision(part, "box")` (one of `mesh`, the default -- a simulator hulls it --,
+`exclude`, `limits`, `mass`, `point_mass`, `friction`): `collision(part, "box")` (one of `mesh`, the default -- a simulator hulls it --,
 `box`, `sphere`, `cylinder`, `capsule`, fitted by the kernel to the part's oriented bounding box, or
 `none`; on an assembly, for every part below it that declares none); `frame(part, "tool",
 bd.Pos(160, 0, 25))` (in the part's own frame, before its placement); `body(part, name=None)`, a body
 of its own fixed to the link it would merge into; `exclude(a, b)`, a pair that never collides (`b` a
 part, an assembly or a label; on an assembly, for every part below it); and `limits(assembly,
-"elbow", effort=27, velocity=6.28)` (N*m or N, rad/s or m/s), kept on the part that holds each
-revolute or linear joint of that label. ISO 10303-105 bounds no drive, so none of them is the
+"elbow", effort=27, velocity=6.28, armature=0.01, damping=0.4, friction=0.15)` (N*m or N, rad/s or
+m/s; the joint's dynamics in kg*m^2 or kg, N*m*s/rad or N*s/m, N*m or N), kept on the part that holds
+each revolute or linear joint of that label; `mass(shape, grams)`, what a part or an assembly weighs
+in all, its solids keeping their densities' ratios (one density where none has one) and scaled
+alike to make it up, an inner declaration fixing its own subtree and an outer one scaling only the
+solids no inner one holds (`describe.py`'s **Mass**, which refuses a total its point masses and inner
+masses reach, or one its solids have no volume to carry); `point_mass(part, grams, at, name=,
+inertia=)`, a lump at a point in the part's own frame that every `mass` above it counts; and
+`friction(shape, coefficient)`, a surface's contact friction (sliding, or sliding, torsional and
+rolling), inherited as a material is -- `bd_materials` carries no friction, so it is declared beside
+the material and never assumed. ISO 10303-105 bounds no drive, so none of them is the
 mechanism's (law 13). All travel with the prototype, in the structure (`collision`, `frames`, and
-`body`, `exclude`, `drives` where declared) and the xbf (a JSON string under `DECLARATIONS_GUID`
+`body`, `exclude`, `drives`, `mass` -- each declaration at or above the part, as levels above it and
+grams --, `pointMasses`, `friction` where declared) and the xbf (a JSON string under `DECLARATIONS_GUID`
 on the part's label, written only where a part declares something), and two parts that differ only
 in them are two prototypes. The robot description reads them (`describe.py`: a body a link on a
-fixed joint, an exclusion a link pair, a drive a joint's `effort` and `velocity`); an MJCF export
-writes collision geoms, sites, child bodies, `<contact><exclude>` (the declared pairs, and every
-pair that touches at rest across a moving joint, `export/contact.py`) and `actuatorfrcrange`; a URDF
-and an SDF a fixed joint and a link, and `<limit>`'s effort and velocity. Each writer keeps links and
+fixed joint, an exclusion a link pair, a drive a joint's `effort`, `velocity`, `armature`, `damping`
+and `friction`, the masses and point masses each link's inertial, a friction its collisions'); an MJCF
+export writes collision geoms (with `friction` where declared), sites, child bodies, `<contact><exclude>`
+(the declared pairs, and every pair that touches at rest across a moving joint, `export/contact.py`),
+`actuatorfrcrange`, and the joint's `armature`, `damping` and `frictionloss`; a URDF and an SDF a fixed
+joint and a link, and `<limit>`'s effort and velocity, and a URDF `<dynamics damping friction>` (URDF has
+no armature and no contact friction: a declared one is said in the export's log, not written). Each writer keeps links and
 joints apart as its format does -- MJCF and URDF one namespace each, SDFormat's frame graph one for
 both -- and says a rename in its kind (`export.note`, the export's log).
 
