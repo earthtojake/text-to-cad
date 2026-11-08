@@ -146,7 +146,9 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    minimum version, runs it headless with a private home (`kicode.environment(root)` for kicode's), and
    says one line when it is missing. Every rule that keeps a desktop app out holds and is tested: only
    `kicad-cli` (`kicad-cli.exe`) is ever run, an override of any other name is refused, no
-   `DISPLAY` or `WAYLAND_DISPLAY` reaches it, and Open in refuses a `.kicad_*` file. An edit
+   `DISPLAY` or `WAYLAND_DISPLAY` reaches it, and the server never starts KiCad by itself: Open in hands
+   a `.kicad_*` file to a person's own KiCad at their click, by its editor, its default handler withheld
+   (on Linux, a person's `kicad-cli` is run for its version alone, headless). An edit
    runs `kicad-cli api-server --socket <path> <board>` the same way (`--socket` takes a plain path;
    KiPy connects to its `ipc://` form; kicode's always has one, and an override's `kicad-cli api-server
    --help` must list it, else it is refused before any server starts), waits until KiPy's ping

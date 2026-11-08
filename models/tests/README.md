@@ -23,7 +23,7 @@ From each case's folder, with the engine's environment (the library on the path)
 
 ```bash
 # Keep manual runs on a daemon of their own.
-export CAD_ENGINE_DIR="$(mktemp -d /tmp/cadgen-manual-engine.XXXXXX)"
+export CAD_ENGINE_DIR="$(mktemp -d /tmp/cad-manual-engine.XXXXXX)"
 python source.py                     # render_floor/, viewer_concurrency/
 python annotation_fixture.py         # unified_annotations/
 cad model snapshot "$ID" /tmp/open.png --pose open     # ID: the id: line the run printed

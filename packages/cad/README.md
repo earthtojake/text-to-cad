@@ -1,7 +1,6 @@
 # cad
 
-The library: CAD models written as Python, imported as `cad` (and as `cadgen`, its earlier name, an
-alias of it), built by the engine (`cad.engine`) into live XCAF documents and the files those models
+The library: CAD models written as Python, imported as `cad`, built by the engine (`cad.engine`) into live XCAF documents and the files those models
 declare (XBF, STEP, GLB, STL, 3MF, DXF). It is one of three distributions released together, at one
 version: the library; the server, `cad-server` (imported as `cad_server`), the computer's one
 daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD app's MCP endpoint
@@ -108,7 +107,8 @@ third-party technology and the application layer over it are an integration, nam
 technology, and its extra carries the same name.
 
 **DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
-the server every skill that runs `cad`; the alias `cadgen`, which installs it.
+the server every skill that runs `cad`; the deprecated alias `cadgen`, which installs it at the same
+release.
 The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
@@ -327,10 +327,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     meets 0.8 by stopping it, never by answering it: 0.8's engines keep their own folder, no process
     of 0.10's speaks to one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`.
 
-    **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
-    the `cadgen` import is the library itself, every name and every module of it `cad`'s own
-    object (one copy, and nothing said of it), and the `cadgen` distribution
-    installs the library at its own release. Nothing else of 0.8's names is kept: the `cadgen`
+    **The earlier name.** `cadgen` is the library's deprecated alias, still published at every
+    release for backwards compatibility. The `cadgen` distribution installs `cad` at the same
+    release. The `cadgen` import is the library itself, every name and every module of it `cad`'s
+    own object (one copy), and it says so as tier 2's aliases do: once per process, with
+    `CadDeprecationWarning`, at the line that imported it ("cadgen is deprecated; use cad"). New text
+    and examples name `cad`. Nothing else of 0.8's names is kept: the `cadgen`
     command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
 
 
@@ -648,7 +650,7 @@ src/cad/
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
                          #   the checks' door, the version
-src/cadgen/              # the earlier import name: every name and every module of it is cad's
+src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
 

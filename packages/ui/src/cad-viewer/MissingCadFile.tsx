@@ -6,7 +6,7 @@ import { useI18n } from '../i18n/index.js';
 
 /** A file that is not there (yet). When the catalog has it -- a build wrote it, or it was put back --
  * the view opens it, once for each version of it: `reload` is the host's. Nothing else is watched:
- * a document the cadgen engine builds is written whole, and the engine says nothing of a build
+ * a document the engine builds is written whole, and the engine says nothing of a build
  * before it is. `title` is the host's translation of "File does not exist", else the surrounding
  * language's. */
 export function MissingCadFile({ file, entry, reload, action, title, description }: {

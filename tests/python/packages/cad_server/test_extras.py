@@ -157,6 +157,28 @@ class NamingTest(unittest.TestCase):
         self.assertEqual(sent, [{"failed": "--index-url=https://x is no requirement: name a package, a pin, extras, "
                                            "or a local path or wheel", "base": True}])
 
+    def test_an_environment_says_in_plain_words_what_it_holds(self) -> None:
+        """An integration's environment holds the integration, not "the model's packages", and says about how
+        big it is; one with a program's packages names them."""
+        here = base.Installation.here()
+        release = here.release
+        kicad = extras.recipe(here, extras.Spec(integrations=("kicad",)))
+        self.assertEqual(kicad.making, f"making the kicad integration's environment, once: cad[kicad] {release} "
+                                       "(KiCad's kicad-cli, about 100 MB to download)")
+        self.assertEqual(kicad.downloading, f"downloading cad[kicad] {release} (KiCad's kicad-cli, about 100 MB), once")
+        self.assertEqual(kicad.what, "the kicad integration's environment")
+        both = extras.recipe(here, extras.Spec(integrations=("kicad", "trimesh")))
+        self.assertEqual(both.making, "making the environment of the kicad and trimesh integrations, once: "
+                                      f"cad[kicad,trimesh] {release} (KiCad's kicad-cli, trimesh, about 140 MB to download)")
+        bare = extras.recipe(here, extras.Spec(integrations=()))
+        self.assertEqual(bare.making, f"making the environment of cad {release}, once: cad {release}")
+        packages = extras.recipe(here, extras.Spec(requirements=("pandas",), integrations=("kicad",)))
+        self.assertEqual(packages.making, f"making the environment of the model's packages, once: pandas beside "
+                                          f"cad[kicad] {release}")
+        self.assertEqual(packages.downloading, "downloading what pandas needs, once")
+        for recipe in (kicad, both, bare, packages):
+            self.assertNotIn("nothing more", recipe.making + recipe.downloading + (recipe.unsatisfiable or ""))
+
     def test_uv_s_refusals_are_one_line_with_its_reason_or_the_package_its_cache_lacks(self) -> None:
         recipe = extras.recipe(base.Installation.here(), ["build123d<0.1"])
         conflict = ("error: No solution found when resolving dependencies\n"

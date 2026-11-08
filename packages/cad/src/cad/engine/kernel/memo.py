@@ -1531,6 +1531,7 @@ def _sharing(function: Any) -> Any:
             else:
                 setattr(result, key, copy.deepcopy(value, memo))
             if key == "joints":
+                setattr(result, key, own_joints(result.joints, result))
                 for joint in result.joints.values():
                     joint.parent = result
         return result
@@ -4340,7 +4341,7 @@ class _Entry:
                 made.origin = copied[made.position]
 
 
-def _owned(attrs: dict) -> dict:
+def _owned(attrs: dict, owner: Any) -> dict:
     """``attrs`` with every dict and list it holds copied: what the object holds of
     its own -- its joints, a decoded child's face colours and finish -- is the
     object's, and the model may change it in place without changing the snapshot."""
@@ -4349,8 +4350,20 @@ def _owned(attrs: dict) -> dict:
     # Native FinishedMaterial and its PBR properties are mutable. Own their values
     # both when capturing and when restoring, including finishes painted on faces.
     return {name: copy.deepcopy(value) if name in ("_material", FACE_MATERIALS) else
+            own_joints(value, owner) if name == "joints" and isinstance(value, dict) else
             dict(value) if type(value) is dict else list(value) if type(value) is list else value
             for name, value in attrs.items()}
+
+
+def own_joints(joints: dict, owner: Any) -> dict:
+    """A copy of a part's joints that is ``owner``'s: a dict on build123d 0.13; on 0.14 a
+    ``JointDict`` bound to ``owner``, filled as a dict is -- its assignment would move each
+    joint across from the part that holds it, and set it where it stands in the world."""
+    if type(joints) is dict:
+        return dict(joints)
+    own = type(joints)(owner)
+    dict.update(own, joints)
+    return own
 
 
 class _ShapeState:
@@ -4373,10 +4386,10 @@ class _ShapeState:
                 raise _Unkeyable("a child that is not a shape")
             self.children = [_ShapeState(child) for child in children]
             attrs["_NodeMixin__children"] = None
-        self.attrs = _owned(attrs)
+        self.attrs = _owned(attrs, obj)
 
     def restore(self) -> Any:
-        attrs = _owned(self.attrs)
+        attrs = _owned(self.attrs, self.obj)
         if self.children is not None:
             attrs["_NodeMixin__children"] = [state.obj for state in self.children]
         obj = self.obj
@@ -4405,6 +4418,8 @@ class _ShapeState:
                 obj.__dict__[name] = value if name in ("topo_path", "_history") else copy.deepcopy(value, memo)
         if self.children is not None:
             obj.__dict__["_NodeMixin__children"] = [state.fresh(memo) for state in self.children]
+        if isinstance(obj.__dict__.get("joints"), dict):
+            obj.__dict__["joints"] = own_joints(obj.__dict__["joints"], obj)
         for joint in (obj.__dict__.get("joints") or {}).values():
             joint.parent = obj
         return obj
