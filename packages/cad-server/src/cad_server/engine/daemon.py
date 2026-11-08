@@ -96,8 +96,10 @@ from cad.engine.contract import refusal as contract_refusal
 from cad.engine.previous import version
 from cad.engine import places as _places
 from cad.engine.door import DOOR_PROTOCOL
+from cad.engine.frames import failed_type
 from cad.engine.ids import canonical, file_id, is_id
 from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache)
+from cad_server.engine import display
 from cad_server.engine.services import SERVICES
 from cad_server.engine.supervisor import Gone, Process, Supervisor
 
@@ -1089,7 +1091,7 @@ class Daemon:
                 except Gone as error:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
                     if attempt == 2 or error.during or error.unready:
-                        failed = {"failed": self._where(error, worker)}
+                        failed = {"failed": self._where(error, worker), **_unstarted(error)}
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
@@ -1097,7 +1099,8 @@ class Daemon:
                 except RuntimeError as error:
                     if not _no_kernel(error):
                         raise
-                    send({"failed": str(error)})  # no kernel environment to start the worker in: its line
+                    # No kernel environment to start the worker in: its line, and its type.
+                    send({"failed": str(error), **failed_type(error)})
                     return
                 finally:
                     if worker is not None:
@@ -1224,11 +1227,15 @@ class Daemon:
             send(refused(ValueError("an export reads a document: call the model, then export its handle or id")))
             return
         if op == "export":
+            # A model's picture is drawn in its worker: told the engine's X display with it (``display.py``), started
+            # now where it is an Xvfb of the engine's own, never for a build that draws nothing.
+            shown = display.environment() if request.get("draw") or request.get("draw_still") else {}
             order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
                      "cwd": request.get("cwd"),
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
                      "expected": request.get("expected"), "original": request.get("original"),
-                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {})}
+                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
@@ -1330,7 +1337,7 @@ class Daemon:
                         # A build is never run twice, nor waited for twice on a worker that never said
                         # it was ready: refused in that one line.
                         if attempt == 2 or error.during or error.unready:
-                            failed = {"failed": self._where(error, worker)}
+                            failed = {"failed": self._where(error, worker), **_unstarted(error)}
                             if worker is not None:
                                 self._built(worker, failed)
                             send(failed)
@@ -1338,7 +1345,8 @@ class Daemon:
                     except RuntimeError as error:
                         if not _no_kernel(error):
                             raise
-                        send({"failed": str(error)})  # no kernel environment to start the worker in: its line
+                        # No kernel environment to start the worker in: its line, and its type.
+                        send({"failed": str(error), **failed_type(error)})
                         return
                     finally:
                         if worker is not None:
@@ -1437,10 +1445,13 @@ class Daemon:
             try:
                 data, report = self.renders.draw(Path(request["path"]), request["still"], said)
             except Refused as error:
-                send({"refused": str(error)})
+                send({"refused": str(error), **({"part": error.part} if error.part else {})})
                 return
             except Exception as error:  # noqa: BLE001 - a picture that could not be drawn is the answer
-                send({"failed": f"{type(error).__name__}: {error}"})
+                # A render process's failure by the type it failed with (``renders._failed``), any other by its own.
+                raised = getattr(error, "raised", None)
+                send({"failed": f"{type(error).__name__}: {error}",
+                      **({"type": raised} if isinstance(raised, str) else failed_type(error))})
                 return
             send({"ok": True, "report": report, "png": answer_png(data)})
         finally:
@@ -1571,6 +1582,7 @@ class Daemon:
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
+        display.stop()  # the Xvfb it started for their stills, if it did
         if self.server is not None:
             self.server.stop()
 
@@ -1578,6 +1590,14 @@ class Daemon:
 def _same_place(one: str, other: str) -> bool:
     """Whether two paths name one folder, as the system resolves them."""
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
+
+
+def _unstarted(error: Gone) -> dict[str, str]:
+    """A worker that never started -- it exited, or was given up, before it said it was ready -- answered by its
+    type, as the kernel environment that could not be made is: the engine could not start the process the work runs
+    in, which its caller counts as that (``no_kernel``), never as a refusal. One gone during the work (it died under
+    it) is said in its words alone, which say its exit status."""
+    return {} if error.during else failed_type(error)
 
 
 def _no_kernel(error: BaseException) -> bool:
@@ -1646,8 +1666,10 @@ def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOC
         return
     try:
         daemon.handle(request, send)
-    except (OSError, ValueError) as error:
+    except ValueError as error:  # a request refused, in its words
         send({"failed": str(error)})
+    except OSError as error:  # a failure: its words, and its type
+        send({"failed": str(error), **failed_type(error)})
     finally:
         if daemon.refusal is not None:
             daemon.stopping.set()  # its answer sent: the engine whose port is another's stops

@@ -66,6 +66,7 @@ ALLOWED_CADGEN = {
     "cad.registry",  # the document types and integrations: stdlib only
     "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
     "cad.engine.ids",  # what a document id is: re and os alone
+    "cad.engine.addresses",  # a FILE#REF's file and ref, and a document's key: os, pathlib and cad.engine.ids alone
     # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
     # is imported in the function that measures.
     "cad._internal.manufacturing",

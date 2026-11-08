@@ -8,8 +8,9 @@
 // blank. The prefix sits LEFT of the '#' so it can never collide with the selectors on the right.
 // JSON-quote paths containing whitespace or delimiters: `"my robot.urdf"#base_link`.
 const CAD_TOKEN_RE = /^\s*("(?:[^"\\\r\n]|\\.)*"|[^#"\s]*)#([^\s]*)/;
-// A label: what a robot, mesh or drawing renderer names a pick by.
-const LABEL_SELECTOR_RE = /^[A-Za-z_][A-Za-z0-9_:]*$/;
+// A label: what a robot, mesh or drawing renderer names a pick by -- dot-separated where it is a place in
+// a file's tree (a 3MF's `o2.1`, a GLB node's `o1.1.2`: `render/meshScene.js`, `render/glbScene.js`).
+const LABEL_SELECTOR_RE = /^[A-Za-z_][A-Za-z0-9_:]*(?:\.[A-Za-z0-9_:]+)*$/;
 
 // An element's name, in the engine's grammar: its kind (`f:`, `e:`, `v:`) and its derivation from
 // the features that made it -- an atom (the n-th element of its kind a feature made,
@@ -44,7 +45,7 @@ export function isOccurrenceToken(value) {
 
 /**
  * Whether `selector` is a selector of a file the engine does not draw: a label (`upper_arm`, `h2F`,
- * `glb:3`), as its renderer names a pick.
+ * `glb:3`, a 3MF's `o2.1`), as its renderer names a pick.
  */
 export function isLabelSelector(selector) {
   return typeof selector === "string" && LABEL_SELECTOR_RE.test(selector);

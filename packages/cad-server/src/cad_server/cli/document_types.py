@@ -568,6 +568,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
     of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
     and a file of the type's that is not there (``not_found``), whichever the type."""
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
 
@@ -575,7 +576,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
             f"; cad {other} takes {', '.join(operations_of(other))}"
 
-    given = source.partition("#")[0]
+    given = parts(source)[0]  # a FILE#REF's file, a path that holds a '#' itself (project#1/part.step) whole
     entry = DOCUMENT_TYPES[document_type]
     if is_id(given):
         if entry.has_file:

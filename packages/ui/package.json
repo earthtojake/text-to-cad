@@ -1,6 +1,6 @@
 {
   "name": "@cad/ui",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "private": true,
   "type": "module",
   "files": [
@@ -52,6 +52,10 @@
     "./i18n": {
       "types": "./dist/i18n/index.d.ts",
       "import": "./dist/i18n/index.js"
+    },
+    "./i18n/locale": {
+      "types": "./dist/i18n/locale.d.ts",
+      "import": "./dist/i18n/locale.js"
     },
     "./consent": {
       "types": "./dist/consent/index.d.ts",

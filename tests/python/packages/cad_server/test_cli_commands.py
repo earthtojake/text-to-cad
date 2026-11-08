@@ -106,6 +106,22 @@ class TheCommandTable(unittest.TestCase):
         code, _, err = _run(["urdf", "validate", "robot.xml"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
 
+    def test_a_file_whose_path_holds_a_hash_is_its_type_s(self) -> None:
+        """A folder or a file named with a '#' (project#1) is the file whole, as ``cad.engine.addresses.parts``
+        reads a ``FILE#REF``: every operation takes it, where each once refused it as no file of its type."""
+        import tempfile
+        from pathlib import Path
+
+        from cad_server.cli.document_types import _refuse_other_type
+
+        with tempfile.TemporaryDirectory() as folder:
+            part = Path(folder) / "project#1" / "bracket#2.step"
+            part.parent.mkdir()
+            part.write_text("ISO-10303-21;", encoding="utf-8")
+            for operation in ("snapshot", "export", "inspect"):
+                _refuse_other_type("step", operation, str(part))
+                _refuse_other_type("step", operation, f"{part}#arm")
+
     def test_a_script_where_a_document_is_wanted_says_cad_run_builds_it(self) -> None:
         """A model's script is never a source: the refusal says the command that builds it and prints its id,
         the skills' own form, and the help says the same -- never ``python SCRIPT.py``."""
