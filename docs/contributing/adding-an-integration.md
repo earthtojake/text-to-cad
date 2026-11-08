@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`), never for a capability. It is three
+(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`, `cadquery`), never for a capability. It is three
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -77,7 +77,8 @@ an integration.
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
       command makes for it holds too.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
-      tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
+      tool's objects; producers in `_producers.py`, named in `cad.registry._PRODUCER_MODULES` and loaded on
+      the first value of the tool's modules a model returns), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
