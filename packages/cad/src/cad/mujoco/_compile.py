@@ -7,6 +7,28 @@ assets and the defaults resolved by the compiler itself, the mesh files read fro
 warnings it issues meanwhile (``mju_user_warning``, the hook MuJoCo prints its warnings through, set for
 the duration of the call and restored). ``compile_findings`` turns that into findings. No renderer and
 no window: a headless core (``mujoco-core``) is all this imports.
+
+The codes, one line each:
+
+- ``compiled`` (info): MuJoCo compiled the model; its version and counts.
+- ``compile_failed`` (error): MuJoCo refused the model, in its words (the element and the line).
+- ``compile_warning`` (warning): a warning MuJoCo issued while compiling, in its words.
+- ``compile_skipped`` (info): not compiled, mujoco is not installed here and the mode is ``auto``.
+- ``compile_unavailable`` (error): not compiled, mujoco is not installed here and the mode is ``required``.
+
+Then the model-health checks of MuJoCo's modelling guide ("Model tuning"), on the compiled model at
+``qpos0`` and at the key named ``home`` (``cad.mujoco._health``, which keeps the thresholds):
+
+- ``contacts_at_rest`` (warning): geoms of two bodies intersect at rest, deeper than 0.1 mm (1 mm for a
+  free-floating tree resting on a static geom); the deepest pairs by name and depth.
+- ``visual_geoms_collide`` (warning): a geom in groups 0-2 collides on a body that has group-3 collision geoms.
+- ``inertia_from_visuals`` (warning): a body with no ``<inertial>`` takes mass from visual and collision geoms both.
+- ``scale_suspect`` (warning): the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units.
+- ``joint_limits_at_rest`` (warning): a limited hinge or slide lies outside its range at qpos0 or at home.
+- ``defaults_not_recommended`` (info): Euler, a pyramidal cone, the default solref, or a long timestep with contacts.
+- ``home_key`` (info): no key named home, the Menagerie convention.
+- ``mass_summary`` (info): moving mass, moving bodies, nv, nu and the extents, one line.
+- ``check_unavailable`` (info): a check failed inside and was skipped; it names the check.
 """
 
 from __future__ import annotations
@@ -77,6 +99,13 @@ def compile_findings(path: Path, *, mode: str = "auto") -> FindingsReport:
         findings.add("warning", "compile_warning", f"MuJoCo warns: {_one_line(message)}", path=where)
     findings.add("info", "compiled", f"compiled by MuJoCo {_version()}: {model.nbody - 1} bodies, {model.njnt} joints, "
                                      f"{model.ngeom} geoms, {model.nmesh} meshes, {model.nkey} keyframes", path=where)
+    try:
+        from cad.mujoco._health import health_findings
+
+        findings.extend(health_findings(model, path, where))
+    except Exception as error:  # noqa: BLE001 - the health checks never stop a validation
+        findings.add("info", "check_unavailable", f"the model-health checks could not run: "
+                                                  f"{type(error).__name__}: {error}", path=where)
     return findings
 
 

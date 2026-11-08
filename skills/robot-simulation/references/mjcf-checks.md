@@ -59,6 +59,22 @@ Each finding has a code; the codes are stable.
 
 Each warning MuJoCo issues while compiling is a `compile_warning` warning, in MuJoCo's words. `cad[mujoco]` is MuJoCo's headless core (`mujoco-core`, about 10 MB, no renderer), fetched once the first time `required` needs it and reused after.
 
+Once compiled, the model is checked for what MuJoCo's modelling guide ("Model tuning") says to rule out before tuning anything, at `qpos0` and at the key named `home` where there is one (the message says which). The thresholds are heuristics, chosen to be sure rather than complete:
+
+| Code | Severity | What it means |
+|---|---|---|
+| `contacts_at_rest` | warning | geoms of two bodies intersect at rest, deeper than 0.1 mm (1 mm for a free-floating object resting on a static geom); the deepest pairs by name and depth in mm |
+| `visual_geoms_collide` | warning | a geom in groups 0-2 collides on a body that has group-3 collision geoms: give visuals `contype="0" conaffinity="0"` |
+| `inertia_from_visuals` | warning | a body with no `<inertial>` takes mass from visual and collision geoms both, so its mass counts twice: give visuals `density="0"` |
+| `scale_suspect` | warning | the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units after its `scale`: millimetres read as metres |
+| `joint_limits_at_rest` | warning | a limited hinge or slide sits outside its range at `qpos0` or at `home` |
+| `defaults_not_recommended` | info | Euler, a pyramidal cone, the default `solref 0.02 1`, `solref[0]` under 2 x timestep, or a timestep over 5 ms with contacts; the guide recommends `implicitfast`, `elliptic` with `impratio` 10, 0.5-2 ms for manipulation |
+| `home_key` | info | no key named `home`, the Menagerie convention |
+| `mass_summary` | info | moving mass, moving bodies, `nv`, `nu` and the extents, one line |
+| `check_unavailable` | info | a check failed inside and was skipped; it names the check |
+
+The warnings block under `--strict`.
+
 Under `auto` a missing MuJoCo is a note and never blocks, even under `--strict`. Use `required` for handoff:
 
 ```bash
