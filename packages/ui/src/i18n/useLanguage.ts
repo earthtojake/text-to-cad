@@ -21,7 +21,7 @@ export interface LanguageSetting {
  * `preferred`, best first: the browser's languages, or the host's locale before them — as the
  * first one this viewer speaks, else English. A language chosen in the app menu overrides that,
  * and Automatic clears the override; the choice is kept by the host's server (`language()`
- * reads, `language(locale | null)` answers: `settings.json` in cadgen's state directory, one
+ * reads, `language(locale | null)` answers: `settings.json` in text-to-cad's state directory, one
  * choice for every CAD view of the person's). It is read once, read again whenever the person
  * comes back to the page (another view may have changed it meanwhile), and only the latest
  * read's reply is kept, so a read sent just before a change can never undo it; an answer that did

@@ -288,6 +288,39 @@ test("a document's materials: a physical material per look, kept in the shaded l
   plain.release();
 });
 
+test("a translucent part on an opaque one is drawn whole: back faces then front, writing no depth, a hair in front of what it lies on", async () => {
+  // The pegs stand on the plate's top face: made translucent, as the orbit clock's diffuser is on its baffle,
+  // their faces there lie at the plate's depth. Stepped back as the plate is, the two were decided pixel by
+  // pixel, in shards along each one's triangles; a see-through surface steps a hair forward instead.
+  const structure = structuredClone(STRUCTURE);
+  structure.prototypes[1].color = [0.96, 0.95, 0.93, 0.8];
+  structure.prototypes[1].material = { pbr: { values: { transmission: 0.6, roughness: 0.55, ior: 1.5 }, textures: {} } };
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
+  const scene = createXbfScene(THREE, document);
+  const [plate, peg] = scene.object3D.children.map(carrier => carrier.children[0].children.find(child => child.isMesh));
+  // A part's own material: the plate's first, before its painted face's.
+  const drawn = (mesh) => {
+    const { transparent, depthWrite, side, forceSinglePass, polygonOffset, polygonOffsetFactor, polygonOffsetUnits } = [mesh.material].flat()[0];
+    return { transparent, depthWrite, side, forceSinglePass, step: [polygonOffset, polygonOffsetFactor, polygonOffsetUnits] };
+  };
+  const opaque = { transparent: false, depthWrite: true, side: THREE.DoubleSide, forceSinglePass: false, step: [true, 1, 1] };
+  // Two-sided and blended, so three draws its back faces, then its front faces (`forceSinglePass` false).
+  const seeThrough = { transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: false, step: [true, 0, -4] };
+  assert.deepEqual([drawn(plate), drawn(peg)], [opaque, seeThrough], "as made");
+  assert.equal(peg.material.transmission, 0.6, "the material's look is kept");
+  scene.setSurfaceLook(LOOK);
+  assert.deepEqual([drawn(plate), drawn(peg)], [opaque, seeThrough], "in Solid");
+  // Its surfaces draw before its edges, which are drawn over them.
+  assert.deepEqual([peg.renderOrder, peg.parent.children.find(child => child.isLineSegments).renderOrder], [0, 1]);
+  // An isolation's dimmed neighbours are see-through too, and step forward while they are.
+  scene.setFocusedParts(["i1"]);
+  assert.deepEqual([drawn(plate).depthWrite, drawn(plate).step], [false, [true, 0, -4]]);
+  scene.setFocusedParts([]);
+  assert.deepEqual([drawn(plate), drawn(peg)], [opaque, seeThrough], "and back");
+  scene.dispose();
+  document.release();
+});
+
 test("material-only faces keep distinct finishes and inherit each instance's colour", async () => {
   const structure = structuredClone(STRUCTURE);
   const faces = readXbmPart(partBytes(PEG.key)).faces;

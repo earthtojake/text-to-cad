@@ -684,6 +684,37 @@ class CapTest(unittest.TestCase):
         self.assertEqual(self.scene.caps, [], "nor in Wireframe, which draws no faces")
 
 
+class SeeThroughTest(unittest.TestCase):
+    """A translucent part lying on an opaque one -- a pane resting on a dark box, as the orbit clock's diffuser rests
+    on its baffle -- drawn whole: where its faces lie at the box's depth, it is in front of the box at every pixel
+    (``occt.SEE_THROUGH_OFFSET``), never decided pixel by pixel in shards along each one's triangles."""
+
+    def test_a_pane_resting_on_a_box_is_one_colour_through_its_top(self) -> None:
+        gl()
+        import build123d as bd
+
+        from cad.engine.mesh import mesh_shape
+        from cad.engine.render.occt import Scene
+
+        base, pane = mesh_shape(bd.Box(30, 30, 10).wrapped), mesh_shape(bd.Box(20, 20, 4).wrapped)
+        identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+        resting = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 7, 1]  # column-major: its bottom on the box's top, z 5
+        structure = {"prototypes": [{"key": "base", "color": [0.011, 0.012, 0.014, 1]},
+                                    {"key": "pane", "color": [0.9, 0.9, 0.85, 0.5]}],
+                     "instances": [{"prototype": 0, "matrix": identity}, {"prototype": 1, "matrix": resting}]}
+        scene = Scene(Path("pane.xbf"), {"base": base.to_bytes(), "pane": pane.to_bytes()}, size=SIZE, structure=structure)
+        self.addCleanup(scene.canvas.close)
+        scene.show({"mode": "solid"})
+        scene.frame("iso")
+        # Points of the pane's top (z 9) whose ray from the iso camera, (-1, 1, -0.8), leaves through its bottom
+        # face (at x - 5, y + 5), clear of its edges: through each, the pane's two faces over the box's top.
+        xs, ys = np.meshgrid(np.linspace(-3, 8, 12), np.linspace(-8, 3, 12))
+        at = np.rint(scene.project(np.stack([xs.ravel(), ys.ravel(), np.full(xs.size, 9.0)], -1))).astype(int)
+        seen = pixels(scene.canvas.png())[at[:, 1], at[:, 0]]
+        spread = int(np.abs(seen - np.median(seen, 0)).max())
+        self.assertLessEqual(spread, 4, f"the pane over the box varies by {spread} levels: shards where it lies on it")
+
+
 PAIR = """
 import build123d as bd
 from cad.engine import xbf

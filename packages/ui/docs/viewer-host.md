@@ -48,7 +48,9 @@ origin, the CAD app the engine's origin from its launch (never its tunnel's), it
 through the tunnel. A host that cannot make a link offers no Copy link. A host that can open the document's files in this
 computer's apps adds `apps(entry, { signal })` — the files (`source`, a model's `export:<format>`s),
 whether each is on disk and the apps that take it (`OpenInFiles`, `GET /api/v1/local/open-in`'s
-answer; asked as the menu opens, null or a failure and the menu is as without) — and
+answer; asked as the menu opens, null or a failure and the menu is as without; an app with `refuses`,
+a KiCad older than the file's format, is drawn disabled with the reason, and a target's `default: false`
+leaves out Default app) — and
 `openApp(entry, target, app)`, which opens one in an app or in `"default"`, the OS's own: both or
 neither, the entry named as the document is (its path, a model's id). `createCadFileActions({ openIn: client })`
 makes both from a CAD client (`openInApps`, `openIn`, a file's id from `entryOf`); the web viewer
@@ -619,7 +621,7 @@ not open that file" and the reason otherwise, each with a Go home button where t
 The viewport's edges and corners are the shell's, never the host's: the tool strip at the
 top centre, ending in the view's own controls (Projection, Display and Preview, a 3D view's; Flip,
 2D/3D and Display, a board's), the tool in hand's sub-toolbar under it, the view's panel docked at the
-left edge, Quick Edit at the top-right, and at the bottom-right the view cube with its Home, or a flat
+left edge, Quick Edit at the top-right, and at the bottom-right the view cube, or a flat
 view's zoom pill. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it while it stands; the home never shows it. The CAD app's file handler hands its corner (Full
@@ -657,9 +659,9 @@ floats over the view's bottom-right corner sets `--cad-viewport-corner-bottom` t
 it takes from the bottom edge, and the view's whole corner sits that much higher. To choose the
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
 `--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset (2px). All of
-the corner follows, as one group mirrored at the bottom-left: the cube, its Home (at the cube's upper-right
-there) and a flat view's zoom pill (placed from the same variable, the corner's inset from the edge), their
-tooltips and menus opening away from the corner (`viewportLayout.js`'s `viewCornerLayout`).
+the corner follows, as one group mirrored at the bottom-left: the cube and a flat view's zoom pill (placed
+from the same variable, the corner's inset from the edge), its tooltips and menu opening away from the corner
+(`viewportLayout.js`'s `viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views.
 The shared viewer consumes these layout values without identifying the host.
 

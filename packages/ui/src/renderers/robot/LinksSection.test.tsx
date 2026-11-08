@@ -14,7 +14,7 @@ import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 Object.assign(globalThis, { React });
 afterEach(cleanup);
 
-// A payload as cadgen resolves one (`cad_server.robot_payload`): links with their facts as written and the
+// A payload as the server resolves one (`cad_server.robot_payload`): links with their facts as written and the
 // host path of each mesh file it could resolve, joints with `parent`/`child`, an SRDF's groups by link.
 const joint = (name: string, type: string, parent: string, child: string, extra = {}) =>
   ({ name, type, parent, child, axis: type === 'fixed' ? null : [0, 0, 1], origin: null, limit: null, mimic: null, ...extra });
@@ -28,7 +28,7 @@ const robot = {
       collisions: [
         { name: '', type: 'mesh', filename: 'meshes/base_collision.stl', path: 'robots/arm/meshes/base_collision.stl', origin: origin([0, 0, 0]) },
         { name: '', type: 'box', filename: '', size: [0.1, 0.2, 0.3], origin: origin([0, 0, 0.5]) },
-        // A reference cadgen could not resolve to a file (a package:// URI) has no path.
+        // A reference the server could not resolve to a file (a package:// URI) has no path.
         { name: '', type: 'mesh', filename: 'package://arm/meshes/far.stl', origin: origin([0, 0, 0]) },
       ],
       visuals: [{ name: '', type: 'mesh', filename: 'meshes/base.3mf', path: 'robots/arm/meshes/base.3mf', scale: [0.001, 0.001, 0.001], origin: origin([0, 0, 0]), color: '#336699', materialName: 'blue' }] },

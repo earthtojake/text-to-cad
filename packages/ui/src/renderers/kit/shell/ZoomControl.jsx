@@ -27,7 +27,7 @@ const PERCENT_CLASS = cn(STRIP_BUTTON_CLASS, "w-12 px-0 text-tiny font-medium ta
  * of its own (the strip's shape and surface, 34px tall), and the percentage pressed opens the zoom's menu — Zoom in,
  * Zoom out, Zoom to 100%, then Zoom to fit and Zoom to selection (off with nothing picked), each with its key
  * (`zoomShortcuts`; the view's keys, `pressZoomKey`).
- * A 3D view shows no percentage: its corner is the cube's, with Home. A flat view that draws its
+ * A 3D view shows no percentage: its corner is the cube's alone. A flat view that draws its
  * picture in 3D keeps its pill, which zooms the 3D camera (`viewportZoom`).
  *
  * 100% is the picture as authored, framed whole (a flat view's fit; in 3D the 3D views' own ruler, the

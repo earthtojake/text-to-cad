@@ -24,10 +24,12 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
-the look the viewer's viewport resolves for the same display settings. Every picture is light: the
-studio backdrop, the drawing's white paper, KiCad's light colours, whatever theme the person's viewer
-is in: a snapshot is a tool for an agent, and dark is the harder to read, so no request, flag or
-packet names a theme. The answer is PNG bytes, which this writes to OUT.
+the look the viewer's viewport resolves for the same display settings. Every picture is light: a 3D
+document on the look's flat backdrop (Preview's studio sweep only for a still asked for Preview,
+which ``cad <type> snapshot`` never asks for), the drawing's white paper, KiCad's light colours,
+whatever theme the person's viewer is in: a snapshot is a tool for an agent, and dark is the harder
+to read, so no request, flag or packet names a theme. The answer is PNG bytes, which this writes to
+OUT.
 
 The request is the snapshot contract's where it applies (``--display`` mode or JSON, ``--grid``,
 ``--camera``, ``clip`` -- its ``at`` in the file's unit, as the viewer reads it: a

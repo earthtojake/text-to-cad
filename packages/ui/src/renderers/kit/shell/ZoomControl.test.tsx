@@ -59,28 +59,23 @@ it('the pill is the strip\'s own shape on the strip\'s surface, the corner\'s in
   expect([pill.style.right, pill.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 10px)', 'calc(12px + var(--cad-viewport-corner-bottom, 0px))']);
 });
 
-// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves the corner there, as
-// one group: Home at the cube's upper-right, the pill the corner's inset from the left edge.
+// A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves the corner there: the pill
+// the corner's inset from the left edge.
 it('the corner follows the side the host anchors the cube at', async () => {
-  const { ViewCornerSideProvider, ViewHome, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
+  const { ViewCornerSideProvider, viewCornerSide } = await import('../../../../dist/renderers/kit/shell/ViewCorner.js');
   const zoom = { read: () => 100, subscribe: () => () => {}, zoomBy: vi.fn(), fit: vi.fn() };
   const corner = (side: string) => {
     const view = render(<ViewCornerSideProvider value={side}>
-      <ViewHome onHome={() => {}} />
       <ZoomControl zoom={zoom} />
     </ViewCornerSideProvider>);
-    const placed = (selector: string) => { const element = view.container.querySelector(selector) as HTMLElement; return [element.style.left, element.style.right, element.style.bottom]; };
-    const result = { home: placed('[data-view-home]'), pill: placed('[data-zoom-pill]') };
+    const pill = view.container.querySelector('[data-zoom-pill]') as HTMLElement;
+    const placed = [pill.style.left, pill.style.right, pill.style.bottom];
     view.unmount();
-    return result;
+    return placed;
   };
-  // Home's tile overlaps the cube's box (6rem, 8px off the bottom) by 16px across and 10px down from its far top corner.
-  const homeBottom = 'calc(calc(8px + var(--cad-viewport-corner-bottom, 0px)) + 6rem - 10px)';
   const pillBottom = 'calc(12px + var(--cad-viewport-corner-bottom, 0px))';
-  expect(corner('right')).toEqual({ home: ['', 'calc(var(--cad-viewport-corner-right, 2px) + 6rem - 16px)', homeBottom],
-    pill: ['', 'calc(var(--cad-viewport-corner-right, 2px) + 10px)', pillBottom] });
-  expect(corner('left')).toEqual({ home: ['calc(var(--cad-viewport-corner-left, 0px) + 6rem - 16px)', 'auto', homeBottom],
-    pill: ['calc(var(--cad-viewport-corner-left, 0px) + 10px)', 'auto', pillBottom] });
+  expect(corner('right')).toEqual(['', 'calc(var(--cad-viewport-corner-right, 2px) + 10px)', pillBottom]);
+  expect(corner('left')).toEqual(['calc(var(--cad-viewport-corner-left, 0px) + 10px)', 'auto', pillBottom]);
   const host = document.body.appendChild(document.createElement('div'));
   expect(viewCornerSide(host)).toBe('right');
   host.style.setProperty('--cad-viewport-corner-left', '2px');

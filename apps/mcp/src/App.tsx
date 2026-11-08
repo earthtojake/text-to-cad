@@ -279,7 +279,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, sync, superseded, direct]);
 
-  // The usage stats cadgen sends (its telemetry), the same as the browser viewer's: nothing asks here (a
+  // The usage stats text-to-cad sends (its telemetry), the same as the browser viewer's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it.
   // The person's language: inferred from the host's locale (its context's `locale`), else the frame's
   // browser languages, until they choose one in the app menu, which their settings keep for every CAD
