@@ -259,7 +259,7 @@ that file's own terms (none is a ref `cad <type> inspect` resolves):
 
 | File | Reference | Means |
 | --- | --- | --- |
-| URDF, SRDF, SDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
+| URDF, SRDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
 | GLB | `/work/out/model.glb#n12` | the glTF node `nodes[12]` (0-based, the file's own index) |
 | 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
 | STL | the file alone, on `File:` | one mesh: nothing in it is picked |

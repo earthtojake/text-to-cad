@@ -1,6 +1,6 @@
 # Snapshots
 
-`cad urdf snapshot`, `cad srdf snapshot`, `cad sdf snapshot` and `cad mjcf snapshot` draw the robot to a
+`cad urdf snapshot`, `cad srdf snapshot` and `cad mjcf snapshot` draw the robot to a
 PNG still, as the CAD Viewer shows it, rendered by OCCT:
 
 ```bash
@@ -9,8 +9,6 @@ cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "
 cad srdf snapshot path/to/robot.srdf review.png
 cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad srdf snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
-cad sdf snapshot path/to/robot.sdf review.png
-cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 cad mjcf snapshot path/to/scene.xml review.png --pose home
 cad mjcf snapshot path/to/scene.xml review.png --pose '{"joint1": 30, "finger_joint2": 0.02}'
 ```
@@ -31,10 +29,6 @@ viewer's own forward kinematics and drawn in one colour of the Parts palette.
   found. The robot opens at every joint zero, then this SRDF's `home` group state if it declares
   one. `--pose` names a group state (`group/name`, or a name only one group has) or gives joint
   values over that opening pose.
-- **SDF**: the server resolves the description first: the frame graph (`relative_to`,
-  `attached_to`) into every link's rest placement, a model nested in the model included, its links
-  and joints named by scope (`arm::elbow`, the name `--pose` takes). A `revolute` joint with no
-  `<limit>` has no limits.
 - **MJCF**: the model opens at qpos0 (every control at zero, each joint's `ref`), as MuJoCo opens
   it; `--pose` names a `<keyframe>` key (`home`) or gives joint values over that -- a hinge's in
   degrees, a slide's in metres, around `ref`. A hinge with no `range` has no limits; a `ball` or
@@ -54,23 +48,6 @@ A mesh in another format (`.dae`, `.obj`), a remote URI, a package no folder abo
 is, or a missing file is refused by name, and a link mesh that cannot be loaded fails the snapshot
 rather than leaving the link out.
 
-### SDF
-
-What the viewer and `cad sdf snapshot` draw is narrower than what the
-validator accepts: the server resolves the frame graph into every link's rest placement — the
-model's and every model nested in it, whose links, frames and joints it names by scope
-(`arm::elbow`, the name `--pose` takes; a nested model is posed in the model it is nested in and
-attached to its `canonical_link`, else its first link) — meshes `box`, `cylinder`, `sphere` and
-`capsule` itself, and draws a mesh `<uri>` only when it is a local STL, 3MF or GLB file beside the
-description or in its ROS package (`package://NAME/...`: the nearest folder above the description
-named NAME, or holding a `package.xml` that names it). A `plane`, `heightmap`, `polyline` or
-`ellipsoid`, a `model://` or remote URI, a package no folder above the description is, a `.dae`,
-`.obj` or `.ply` mesh, a missing file, a scoped name that names nothing, a pose in a rotation
-format other than `euler_rpy`, and a joint the stills cannot pose (a `ball` or `universal` joint)
-are refused by name; the viewer refuses a model placed by `placement_frame`, and the validator's own
-errors refuse the file before anything renders. A link mesh that cannot be loaded fails the
-snapshot rather than leaving the link out. No plugin runs: pose joints with `--pose`.
-
 ### MJCF
 
 What the viewer and `cad mjcf snapshot` draw is what [mjcf-authoring.md](mjcf-authoring.md) lists:
@@ -79,7 +56,7 @@ them) -- `sphere`, `capsule`, `cylinder` and `box` meshed by the server, a `plan
 thin slab, a `mesh` whose asset is an STL or an OBJ under `meshdir` (the mesh `scale` applied) -- in
 the geom's `rgba`, else its material's (a textured material draws MuJoCo's plain grey; no texture
 is drawn). Not drawn, each said by `cad mjcf validate`: an unbounded plane (the viewer's grid stands
-in for a floor), a heightfield, an SDF geom, an ellipsoid, an inline or MSH mesh, and whatever
+in for a floor), a heightfield, a signed-distance geom, an ellipsoid, an inline or MSH mesh, and whatever
 `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand to. A `.xml` whose
 root is not `<mujoco>`, an include that is not there, a mesh file that is not there and the
 validator's own errors refuse the file before anything renders.
@@ -102,4 +79,4 @@ Link meshes are resolved relative to the description, so they must be present: a
 LFS pointer is not a mesh and fails the snapshot. Run `git lfs checkout <mesh dir>` first.
 
 OUT is written exactly as given and must be a `.png`; check the exit status before reading it. Use
-`cad urdf snapshot --help` (or `srdf`, `sdf`, `mjcf`) for the complete current interface.
+`cad urdf snapshot --help` (or `srdf`, `mjcf`) for the complete current interface.

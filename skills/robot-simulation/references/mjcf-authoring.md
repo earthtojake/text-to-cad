@@ -138,7 +138,7 @@ The viewer opens the model as MuJoCo does, at `qpos0` (each joint at its `ref`),
 The CAD Viewer (`cad viewer model.xml`) shows an MJCF in its robot view, a slider per hinge and slide joint, and `cad mjcf snapshot` draws the same still. It reads the model with its own reader, not MuJoCo, so it draws less than MuJoCo compiles:
 
 - drawn: `sphere`, `capsule`, `cylinder`, `box`, a `plane` with a size, and STL and OBJ meshes, in groups 0 to 2, each in its `rgba` or material colour;
-- not drawn, each said as a finding: `hfield`, `sdf` and `ellipsoid` geoms, a plane with no size (the viewer's grid stands in for the floor), an MSH or inline mesh, and what `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand into (MuJoCo's compiler makes those bodies; the reader sees nothing);
+- not drawn, each said as a finding: `hfield`, `sdf` (signed distance field) and `ellipsoid` geoms, a plane with no size (the viewer's grid stands in for the floor), an MSH or inline mesh, and what `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand into (MuJoCo's compiler makes those bodies; the reader sees nothing);
 - not posable: a `ball` or `free` joint's body, drawn where it is authored;
 - not read: textures, sites, cameras, lights, tendons, sensors and actuators (the model keeps them; the viewer does not draw them).
 

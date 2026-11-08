@@ -246,7 +246,7 @@ screw_pair(assembly, "feed", lead_screw=2.0)                        # its value:
 
 ## Declaring for a simulator
 
-A mechanism exported as a robot description (an MJCF, a URDF or an SDF:
+A mechanism exported as a robot description (an MJCF or a URDF:
 [exports](exports.md#robot-descriptions)) takes its links, joints, couplings and states from the
 mechanism and each link's mass from its parts' materials. Declarations from `cad.build123d` say
 the rest, on finished parts, after the last operation, as a material is set:
@@ -277,12 +277,11 @@ friction(pads, 1.1)                         # the pads' contact friction (slidin
   geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the
   frame moves with the part however a joint or a placement moves it. A frame is a part's, never an
   assembly's; a second frame of one name on a part replaces the first.
-- **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF and SDF a link
+- **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF a link
   on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
-- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>`; URDF has no word for it,
-  SDF a comment). The MJCF excludes each jointed pair touching at rest on its own; declare the rest.
+- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>`; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest.
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
-  label on the assembly or below it, in SI: URDF's and SDF's `<limit>`, MJCF's `actuatorfrcrange`
+  label on the assembly or below it, in SI: URDF's `<limit>`, MJCF's `actuatorfrcrange`
   (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written
   `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS controller reads literally.
   `armature=` (the rotor's inertia through its gearbox), `damping=` and `friction=` (dry friction) are
@@ -368,12 +367,13 @@ where to review one.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. Measure a pose by posing the model in the check, using `find_part` and
-`world_parts` copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
+mid-motion. Measure a pose by posing the model in the check, taking its parts placed with
+`leaves(tree)` (`cad.build123d`) through `find_part`, copied from
+[Opening geometry](inspection-and-validation.md#opening-geometry). Where a joint's stops are
+the parts meeting, `cad model ranges` finds them ([Joint stops](../SKILL.md#joint-stops)):
 
 ```python
-from cad.build123d import posed
-from cad.build123d import overlap_volume
+from cad.build123d import leaves, overlap_volume, posed
 
 from hinge import hinge
 

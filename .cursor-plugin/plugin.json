@@ -20,7 +20,7 @@
     "skills",
     "step",
     "urdf",
-    "sdf",
+    "mujoco",
     "gcode"
   ],
   "logo": ".claude-plugin/icon.png",

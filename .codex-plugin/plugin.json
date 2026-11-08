@@ -16,7 +16,7 @@
     "skills",
     "step",
     "urdf",
-    "sdf",
+    "mujoco",
     "gcode"
   ],
   "skills": "./skills/",

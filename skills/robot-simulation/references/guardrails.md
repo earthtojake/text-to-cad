@@ -1,10 +1,10 @@
 # LLM guardrails
 
-This skill assumes agents are useful at structuring URDF, SRDF and SDFormat documents and weak at silently deriving precise spatial, physical, and simulator-specific values. The workflow should route those weaknesses into explicit ledgers, constants, helpers, validators, and smoke tests.
+This skill assumes agents are useful at structuring URDF, SRDF and MJCF documents and weak at silently deriving precise spatial, physical, and simulator-specific values. The workflow should route those weaknesses into explicit ledgers, constants, helpers, validators, and smoke tests.
 
 ## What agents can usually do well
 
-- organize a robot or world into links, joints, frames, visuals, collisions, sensors, plugins, and includes;
+- organize a robot or scene into links or bodies, joints, frames, visuals, collisions, sensors, actuators, and includes;
 - translate user intent into a plausible document structure;
 - maintain naming consistency when names are explicit;
 - write small throwaway Python scripts for derived numbers and transformations;
@@ -17,9 +17,9 @@ This skill assumes agents are useful at structuring URDF, SRDF and SDFormat docu
 - positive joint-axis directions from visual theme;
 - mesh units, mesh scale, or coordinate-system conventions;
 - center of mass or inertia tensors from rendered shape alone;
-- plugin filenames, parameters, topics, namespaces, or sensor schemas;
-- whether a plugin is a simulator runtime plugin or a CAD Viewer visualization-only extension;
-- target simulator support for a given SDFormat version or extension;
+- plugin names, parameters, topics, namespaces, or sensor schemas;
+- actuator gains, solver settings, or contact parameters;
+- target simulator support for a given format version or extension;
 - whether collision geometry is stable for physics;
 - whether external URIs resolve in the deployment environment.
 
@@ -65,8 +65,7 @@ Examples of acceptable placeholders:
 
 Examples of unacceptable placeholders:
 
-- invented plugin filenames;
-- adding CAD Viewer-only motion plugins to SDF files;
+- invented plugin names or actuator gains;
 - arbitrary inertia values on a dynamic robot without a warning;
 - guessed mesh scale that makes the visual look plausible;
 - silently flipping a joint axis to match an expected screenshot.
@@ -77,30 +76,30 @@ Before generating or modifying a description, answer these questions in the ledg
 
 | Question | Required evidence |
 |---|---|
-| What frame is each pose expressed in? | `relative_to`, source file, or documented default |
-| What frame is each joint axis expressed in? | `expressed_in` or documented default |
+| What frame is each pose expressed in? | the parent link or body, source file, or documented default |
+| What frame is each joint axis expressed in? | the joint frame (URDF), the body frame (MJCF), or documented default |
 | What is positive motion for each non-fixed joint? | command/test expectation or upstream source |
 | Are mesh units and scales known? | manifest, CAD export config, or explicit assumption |
 | Are visual and collision poses intentionally different? | simulation reason or source geometry |
 | Are inertials measured, calculated, approximated, or omitted? | method and confidence |
-| Are plugin and sensor parameters copied from target docs? | target simulator/version and source |
+| Are actuator, sensor and plugin parameters copied from target docs? | target simulator/version and source |
 
 ## Authoring style
 
 Prefer this pattern:
 
 ```xml
-<!-- Source: project CAD frame export 2026-05-12. RPY radians. -->
-<pose relative_to="base_link">0.18 0 0.12 0 -0.2 0</pose>
+<!-- Source: project CAD frame export 2026-05-12. Parent: base_link. RPY radians. -->
+<origin xyz="0.18 0 0.12" rpy="0 -0.2 0"/>
 ```
 
 Avoid this pattern:
 
 ```xml
-<pose>0.18 0 .12 0 -11.5 0</pose>
+<origin xyz="0.18 0 .12" rpy="0 -11.5 0"/>
 ```
 
-The second version omits the frame, uses degrees without saying so, and makes the source of the transform impossible to audit.
+The second version names no source or parent frame, uses degrees where URDF reads radians, and makes the source of the transform impossible to audit.
 
 ## Validation expectations
 
@@ -112,7 +111,7 @@ Report skipped checks explicitly. A skipped check is not automatically a failure
 
 When finishing a task, state:
 
-- the `.urdf`, `.srdf` or `.sdf` path(s) created or modified, the target consumer and version;
+- the `.urdf`, `.srdf` or MJCF path(s) created or modified, the target consumer and version;
 - checks run and their result;
 - checks skipped and why;
 - assumptions and placeholders;
@@ -123,21 +122,18 @@ Do not simply say that the file is valid. Say which validator or smoke test pass
 A compact report:
 
 ```text
-Validated: path/to/model.sdf
-Target consumer: Gazebo Harmonic, SDF 1.12
+Validated: path/to/scene.xml
+Target consumer: MuJoCo 3.3
 Checks run:
-- bundled SDF validation: passed with 2 warnings
-- gz sdf --check: skipped, gz not installed
-- simulator load: passed in Gazebo Harmonic
-- joint motion: shoulder_pan positive motion verified; gripper joints skipped
-- plugin startup: camera plugin unresolved, requires target simulator package
+- cad mjcf validate --compile required: passed with 2 warnings (inertia_from_visuals on two finger links)
+- joint motion: shoulder_pan positive motion verified in snapshots; gripper joints skipped
+- home key: drawn with --pose home
 - viewer review: live link returned, or explicit launch failure
 Assumptions:
 - Assumed mesh units are meters.
-- Assumed lidar frame is coincident with lidar_link.
-- Assumed camera optical frame follows simulator plugin documentation.
+- Assumed camera site is coincident with the wrist camera's optical centre.
 Risks:
-- Camera plugin filename was not verified in the target simulator environment.
+- Actuator gains were not tuned against the hardware.
 ```
 
 A URDF or SRDF report has the same shape: `cad urdf validate` or `cad srdf validate`, `check_urdf`, the viewer sweep, MoveIt smoke tests, each run or skipped, and the assumptions (inferred TCP links, manual collision pairs, unverified planner behavior).

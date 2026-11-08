@@ -17,7 +17,7 @@
     "skills",
     "step",
     "urdf",
-    "sdf",
+    "mujoco",
     "gcode"
   ]
 }

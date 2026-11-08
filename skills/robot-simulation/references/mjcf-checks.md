@@ -36,7 +36,7 @@ Each finding has a code; the codes are stable.
 - an `<inertial>` has a mass (`inertial_without_mass`);
 - a geom's type is MuJoCo's (`unknown_geom_type`), its `size` has the values its type needs and they are positive (`geom_size`), `fromto` is on a capsule, cylinder, box or ellipsoid (`fromto_on_shape`) and its points differ (`fromto_degenerate`);
 - a mesh geom names a mesh (`mesh_geom_without_mesh`) the assets declare (`mesh_asset_unknown`);
-- a geom the viewer draws in groups 0 to 2 that it cannot draw -- `hfield`, `sdf`, `ellipsoid` -- warns `geom_not_drawn`; an unbounded plane (size 0) is an info of the same code, the viewer's grid standing in for the floor;
+- a geom the viewer draws in groups 0 to 2 that it cannot draw -- `hfield`, `sdf` (a signed distance field), `ellipsoid` -- warns `geom_not_drawn`; an unbounded plane (size 0) is an info of the same code, the viewer's grid standing in for the floor;
 - `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` warn `compile_only_element`: MuJoCo's compiler expands them, and the reader sees nothing of what they make.
 
 ### Joints, equalities and keyframes

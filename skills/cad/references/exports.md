@@ -1,7 +1,7 @@
 # Exports
 
 Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a robot
-description (MJCF, URDF, SDF), a model in another pose, a part on its own, a project's standing deliverables, or a vendor STEP
+description (MJCF, URDF), a model in another pose, a part on its own, a project's standing deliverables, or a vendor STEP
 converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-profiles-and-dxf.md).
 
 ## Contents
@@ -213,22 +213,22 @@ names faces left without triangles, try a slightly different tolerance or repair
 A mechanism exports as a robot description for a simulator or ROS, by the destination's suffix:
 
 ```bash
-cad model export "$ID" sim/arm.xml description/arm.urdf description/arm.sdf
+cad model export "$ID" sim/arm.xml description/arm.urdf
 ```
 
-`.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF, `.sdf` an SDFormat 1.9 model. Each is
+`.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF. Each is
 one description of the model in SI units at its as-built state, and writes its meshes as binary STL
-in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF and the SDF). What the model
+in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF). What the model
 contributes:
 
 - **the mechanism** ([kinematics](kinematics.md)): each link a body, each joint with its axis and
   its limits around the as-built value, which is every joint's zero in the file; couplings as the
-  follower on its leader; mechanism states as MuJoCo keys (URDF and SDF have no named poses);
+  follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
 - **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
   densities; a part with no material weighs nothing;
 - **`collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` and
   `friction()`** ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): what each
-  part collides as, the named frames (an MJCF site, a URDF frame link, an SDF frame), the parts kept
+  part collides as, the named frames (an MJCF site, a URDF frame link), the parts kept
   bodies of their own, the pairs that never collide, each joint's drive limits and dynamics, what a
   part or an assembly weighs and the lumps its CAD leaves out, and each surface's contact friction.
 
@@ -236,11 +236,11 @@ A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim
 top-level part is a body fixed to the world. A mechanism with a closed loop, and a ball joint in a
 URDF, are refused by name. Never edit the written file: change the model and export again. Composing
 a MuJoCo scene around it in code (`from cad.mujoco import spec`), checking it, tuning it and
-writing the descriptions no model can (an SRDF, a Gazebo world) are the `robot-simulation` skill's.
+writing the descriptions no model can (an SRDF, a hand-written MJCF) are the `robot-simulation` skill's.
 
 ## Other tools
 
-STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or SDF scales an
+STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or MJCF scales an
 STL or 3MF link mesh by `0.001` and takes a GLB as it is (a generated one writes its own meshes in
 metres: [robot descriptions](#robot-descriptions)). A check of an export as a mesh is
 a snapshot of that file
