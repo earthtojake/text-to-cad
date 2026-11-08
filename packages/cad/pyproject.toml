@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.11.1"
+version = "0.11.3"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
 license = "MIT"
@@ -68,6 +68,10 @@ build123d = [
   # measurements with Pillow. Both run in the kernel's processes.
   "ezdxf",
   "pillow",
+  # A stress study (`cad <type> solve`) finds the parts of an assembly that touch with scipy (a KD-tree
+  # of sampled faces) in the kernel's process, beside the B-rep it reads. build123d brings it already;
+  # it is named here because the library imports it itself.
+  "scipy>=1.14,<2",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
 # (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
@@ -75,6 +79,26 @@ build123d = [
 # 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [
   "kicode==10.99.0.dev20261106",
+]
+# The netgen integration's extra: a stress study (`cad <type> solve`, cad._internal.fea) meshes a part's own
+# faces with netgen (LGPL-2.1, a wheel installed beside the library and imported only by the mesher's own
+# process, cad.netgen._mesher, since its OpenCascade and OCP's cannot share one; about 8-11 MB). A study
+# reads the document's B-rep with OCP too, so the `cad` command runs it in the environment of
+# cad[build123d,netgen,calculix]. Bounded above because the mesher reaches past netgen's entry points into its
+# geometry and meshing parameters (OCCGeometry, SecondOrder, curvaturesafety, grading), which a minor
+# release is free to change; the accuracy margins were measured at 6.2.2608, the floor. netgen publishes
+# wheels for macOS, Linux x86_64 and Windows x86_64 alone, and no sdist, so the extra installs it only
+# there: anywhere else (Linux on ARM) it installs nothing and a solve refuses, naming the platform
+# (cad._internal.fea.mesh). CalculiX, which solves, is the calculix integration's, below.
+netgen = [
+  "netgen-mesher>=6.2.2608,<6.3; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+# The calculix integration's extra: a stress study (`cad <type> solve`) is solved by CalculiX's ccx, which the
+# cad-ccx package carries (CalculiX's own program, unmodified, from conda-forge's build, with the libraries it loads:
+# 8-13 MB a platform, GPL-2.0 like CalculiX, run as a separate program and never linked). Pinned exactly: the
+# release a study's numbers were measured against. A person's own ccx is never run unless CAD_CCX names it.
+calculix = [
+  "cad-ccx==2.23.0",
 ]
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and
@@ -104,6 +128,10 @@ search-path = ["src"]
 # A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
 # otherwise have src excluded by the ignore files above it and check nothing.
 use-ignore-files = false
+# netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
+# cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
+# package jobs that check types do not install it.
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

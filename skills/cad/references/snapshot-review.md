@@ -22,7 +22,8 @@ screenshot the card to confirm your own work ([Check each change](../SKILL.md#ch
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (`.dxf`). A
-script is never a source. Nothing is written but OUT.
+script is never a source, and SRC is a whole document, never a ref into one (`$ID#bracket`):
+`--display '{"isolated": ["bracket"]}'` draws one part alone. Nothing is written but OUT.
 
 ```bash
 cad model snapshot "$ID" tmp/review.png
@@ -81,8 +82,9 @@ document of one part. Unknown keys and out-of-range values are refused.
 Snapshot draws technical OCCT images. Photographic Preview is available in the browser viewer.
 
 `--camera` is a preset (`iso`, `front`, `back`, `left`, `right`, `top`, `bottom`),
-an `azimuth:elevation` pair in degrees, a camera object (`position`, `target`, `up`,
-`direction`, `zoom`, `orthographicHalfHeight`), or `authored` (below). A camera
+an `azimuth:elevation` pair in degrees (`--camera 45:30`; `0:90` looks straight down), a camera
+object (`preset`, `position`, `target`, `up`, `direction`, `zoom`, `orthographicHalfHeight`), or
+`authored` (below). A camera
 object's lengths are in the viewer's scene coordinates, as a Quick Edit packet carries
 them: a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit.
 Projection and focal length belong in `display.camera`. The presets are the world's axes, Z up,
@@ -118,10 +120,10 @@ is the failure's class with `--json` and without: 2 for a request refused before
 ## Clipped views
 
 Clip reveals internal geometry: a shell, a bore, a cavity, a blind hole, a wall's
-relation to a floor. `display.clip` takes `enabled`, `axis` (`x`, `y` or `z`), `at`
+relation to a floor. `display.clip` takes `enabled`, `axis` (`x`, `y` or `z`, lower case), `at`
 (the plane's coordinate on that axis, in the file's own unit: a document's
-millimetres, a robot's or a GLB's metres, a 3MF's declared unit) and `invert`; the
-cut is capped. Look straight at the cut:
+millimetres, a robot's or a GLB's metres, a 3MF's declared unit; the middle of the
+model when left out) and `invert`; the cut is capped. Look straight at the cut:
 
 ```bash
 cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'

@@ -56,7 +56,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `netgen`, `calculix`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -70,7 +70,7 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -83,7 +83,8 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); and engineering drawings (`@eng_drawing`).
+trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
+and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -411,7 +412,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -491,12 +492,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -600,7 +601,8 @@ src/cad/
   model/                 # the model, the type with no file: @model and a model's operations, by
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
-  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
+  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
+                         #   B-rep type's solve: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -630,7 +632,12 @@ src/cad/
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
-  results.py             # the operations' shared result types: what a check (dfm, drc, erc,
+  netgen/                # the netgen integration: the mesher, always in a process of its own
+                         #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
+  calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
+                         #   headless (_program, on _internal/programs; `cad run ccx`, _command),
+                         #   its input and printed output (_files)
+  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
                          #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheet, View, part_sheet and assembly_sheets, one PDF
                          #   projected from a part or an assembly (open: a future pdf document
@@ -655,7 +662,9 @@ src/cad/
                          #   at interpreter start), the font guard (font_scan; check_fonts, the
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
-                         #   the checks' door, the version
+                         #   the checks' door, the version, and the stress study a B-rep type
+                         #   runs (fea: its signature and options in operation, stdlib only; the
+                         #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
@@ -741,3 +750,62 @@ measure a mesh a program already holds, answering the same report as data:
 or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
 `cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
 (`cad[trimesh]`), and a check without it says so in one line.
+
+## Stress studies
+
+A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
+parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
+`cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
+have none). It is a check (law 28): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+findings carry a severity, a code and a location, with two uses of one signature:
+
+```python
+from cad import step
+
+setup = step.solve("bracket.step")                          # writes nothing
+setup.parts, setup.pairs, setup.faces                       # what a study names, by ref
+result = step.solve("bracket.step", study="study.json", out="/tmp/bracket")
+result.ok, result.findings, result.measurements["safety_factor"], result.written
+```
+
+With no study it is the study's setup: the document's parts, the pairs that touch within the contact
+tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
+ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
+study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
+which writes its results there, each a standard file that stands on its own, and touches nothing else in
+the folder:
+
+| File | What it holds |
+| --- | --- |
+| `result.json` | the `FeaResult`, as `--json` prints it |
+| `result.glb` | the deformed surface coloured by stress (a ramp texture, so every glTF viewer and the engine's stills draw it), the raw fields as attributes |
+| `result.vtu` | the volume's tetrahedra with displacement and von Mises at their corner nodes, for meshio, PyVista or ParaView |
+| `stress.png`, `displacement.png` | the engine's stills of each field with a colour bar under each, where it can draw (else a `solver_note`) |
+| `ccx.inp` | with `deck`, the input CalculiX solved |
+
+There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
+opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+other use is refused by name before anything is read. The study reads a file in its own process, as the
+engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
+document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a
+temporary folder first, by the engine that holds it, and its result names it by its document id. The
+folder's files are each replaced only once all are written, so a failed run leaves the previous results
+as they were. Its `ok` is every check's rule, an error blocks: a part that yields or misses a check is a
+correct result of a part unfit to use, so its results are written and the command exits 1, as is a study
+stopped before the solve (a part nothing holds), with none. A study whose answer would be wrong is refused
+instead, writing nothing: a zero load, a load on a held face, a study no load reaches, reactions that
+do not balance. `_internal/fea/` solves one kind of study: linear elastic stress and displacement.
+
+Three integrations run it. The kernel reads the B-rep. The mesher is `netgen` (`cad[netgen]`), installed
+only where netgen publishes wheels (macOS, Linux x86_64 and Windows x86_64; elsewhere a solve refuses,
+naming the platform) and always run in a process of its own, since its OpenCascade and OCP's cannot
+share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `cad-ccx` package
+carries for each platform (conda-forge's build, unmodified, pinned exactly), found by the integration's
+probe: `CAD_CCX` names another (2.20 or newer), and a `ccx` on PATH is never run. It runs headless, on
+one thread, in a private folder with homes of its own, so it reads and writes nothing of the person's,
+and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
+a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the
+kernel and netgen `alongside`, so the `cad` command runs a study where all three are: its own process
+when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
+script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
+without one says so in one line.

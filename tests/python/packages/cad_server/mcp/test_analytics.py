@@ -291,7 +291,7 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (8, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (9, "app", "claude-directory", "tabs", "codex-mcp-client"))
         # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
         self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
         self.assertIsInstance(payload["at"], int)
@@ -327,7 +327,7 @@ class ServerCountsTest(_Tmp):
         # The agent cannot speak for the person's hands.
         self.assertTrue(self.agent(server, "POST", "/api/v1/local/activity", report)["isError"])
         self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[-1]["schema"], 8)
+        self.assertEqual(sent[-1]["schema"], 9)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
             {"name": "control", "control": "display_xray", "count": 1, "seconds": 0},
             {"name": "control", "control": "pencil", "count": 2, "seconds": 395},
@@ -450,13 +450,20 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(self.call(server, "cad_screenshot", {"view": "cad-1-gone"})["isError"])  # no viewer in this thread
         with mock.patch.object(Server, "_tool_cad_view", side_effect=KeyError("secret")), self.assertRaises(KeyError):
             self.call(server, "cad_view", {})  # cadgen's own bug: a crash, and a reason
+        # An operation the engine refused is the caller's, its start refused too: never cadgen's bug.
+        snapshot = {"source": str(self.tmp / "secret.step"), "output": str(self.tmp / "secret.png"), "waitMs": 10000}
+        for number, arguments in enumerate(({"camera": "isometric"}, {"output": "secret.png"})):
+            answer = self.call(server, "cad_snapshot", {**snapshot, **arguments, "requestId": f"secret-request-{number:04d}"})
+            self.assertTrue(answer["isError"])
+            self.assertNotIn("_failedFor", answer)
         self.assertTrue(server.analytics.flush())
         [payload] = sent
         failures = {(event["tool"], event["reason"]): event["count"] for event in payload["events"] if event["name"] == "tool_failure"}
         self.assertEqual(failures, {("cad_open", "no_path"): 1, ("cad_open", "relative_path"): 1, ("cad_open", "no_file"): 1,
-                                    ("cad_open", "not_cad"): 1, ("cad_screenshot", "no_view"): 1, ("cad_view", "bug"): 1})
+                                    ("cad_open", "not_cad"): 1, ("cad_screenshot", "no_view"): 1, ("cad_view", "bug"): 1,
+                                    ("cad_snapshot", "bad_request"): 1, ("cad_snapshot", "relative_path"): 1})
         tools = {event["tool"]: event["errors"] for event in payload["events"] if event["name"] == "tool"}
-        self.assertEqual(tools, {"cad_open": 4, "cad_screenshot": 1, "cad_view": 1})
+        self.assertEqual(tools, {"cad_open": 4, "cad_screenshot": 1, "cad_view": 1, "cad_snapshot": 2})
         self.assertEqual([event["type"] for event in payload["events"] if event["name"] == "exception"], ["KeyError"])
         self.assertNotIn("secret", json.dumps(payload))
         # A reason outside the vocabulary is no reason: counted as ``other``, never sent as given.

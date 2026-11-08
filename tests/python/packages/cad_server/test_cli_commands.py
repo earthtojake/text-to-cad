@@ -24,9 +24,9 @@ import cad_server.cli as cli  # noqa: E402
 from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
-    "model": ("export", "snapshot", "inspect", "dfm"),
-    "xbf": ("export", "snapshot", "inspect", "dfm"),
-    "step": ("export", "snapshot", "inspect", "dfm"),
+    "model": ("export", "snapshot", "inspect", "dfm", "solve"),
+    "xbf": ("export", "snapshot", "inspect", "dfm", "solve"),
+    "step": ("export", "snapshot", "inspect", "dfm", "solve"),
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
@@ -66,7 +66,7 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("document types (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
-        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm +model: a document id, held in memory\n")
+        self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, solve +model: a document id, held in memory\n")
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)
@@ -105,6 +105,22 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual(json.loads(out), {"ok": False, "error": f"no such file: {missing}", "reason": "not_found"})
         code, _, err = _run(["urdf", "validate", "robot.xml"])
         self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
+
+    def test_a_file_whose_path_holds_a_hash_is_its_type_s(self) -> None:
+        """A folder or a file named with a '#' (project#1) is the file whole, as ``cad.engine.addresses.parts``
+        reads a ``FILE#REF``: every operation takes it, where each once refused it as no file of its type."""
+        import tempfile
+        from pathlib import Path
+
+        from cad_server.cli.document_types import _refuse_other_type
+
+        with tempfile.TemporaryDirectory() as folder:
+            part = Path(folder) / "project#1" / "bracket#2.step"
+            part.parent.mkdir()
+            part.write_text("ISO-10303-21;", encoding="utf-8")
+            for operation in ("snapshot", "export", "inspect"):
+                _refuse_other_type("step", operation, str(part))
+                _refuse_other_type("step", operation, f"{part}#arm")
 
     def test_a_script_where_a_document_is_wanted_says_cad_run_builds_it(self) -> None:
         """A model's script is never a source: the refusal says the command that builds it and prints its id,
@@ -187,7 +203,7 @@ class TheCommandTable(unittest.TestCase):
         code, out, err = _run(["step", "exprt", "--json"])
         self.assertEqual((code, err), (2, ""))
         self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
-            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm; "
+            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, solve; "
             "'cad step --help' says what each does")})
         self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
         code, out, err = _run(["stl"])

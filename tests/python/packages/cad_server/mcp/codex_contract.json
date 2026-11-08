@@ -865,36 +865,39 @@
         "type": "string"
        },
        "annotation": {
+        "description": "The viewer's annotation (its object, or the absolute path of its file or of a Quick Edit packet's .snapshot.json): its ink drawn over the model.",
         "type": [
          "object",
-         "array",
          "string"
         ]
        },
        "camera": {
+        "description": "A preset: iso, back, bottom, front, left, right, top (iso unless given; the world's axes, Z up: front looks from -Y, top from +Z); an azimuth:elevation pair in degrees (45:30); or a camera object {preset, position, target, up, direction, zoom, orthographicHalfHeight}, its lengths in the viewer's scene units (a document's millimetres, a robot's metres).",
         "type": [
-         "object",
-         "array",
-         "string"
+         "string",
+         "object"
         ]
        },
        "display": {
+        "description": "A mode: solid, shaded, parts, xray, hidden-line, wireframe (solid unless given; parts colours each part of an assembly its own); or exploded=0.6, an assembly's parts moved apart (0 to 1), alone or after a mode (hidden-line,exploded=0.6); or the display object: {mode, grid, camera: {projection: orthographic or perspective, focalLength}, clip: {axis: x, y or z, at, invert}, exploded: {amount}, hidden: [part refs], isolated: [part refs]}.",
         "type": [
-         "object",
-         "array",
-         "string"
+         "string",
+         "object"
         ]
        },
        "grid": {
+        "description": "Draw the measuring grid under the model.",
         "type": "boolean"
        },
        "height": {
-        "minimum": 1,
+        "description": "The picture's height in pixels (with width).",
+        "maximum": 8192,
+        "minimum": 16,
         "type": "integer"
        },
        "measurements": {
+        "description": "Measure's dimensions, [{start, end, label, color}] in the document's units, or the absolute path of a JSON file of them: drawn over the model.",
         "type": [
-         "object",
          "array",
          "string"
         ]
@@ -913,6 +916,7 @@
         ]
        },
        "pose": {
+        "description": "A mechanism state's name, or joint and coupling values ({\"elbow\": 45}: a turn in degrees, a slide in the file's unit, a document's millimetres): the mechanism drawn posed. A mesh has none.",
         "type": [
          "object",
          "string"
@@ -924,7 +928,18 @@
         "type": "string"
        },
        "size_profile": {
-        "minLength": 1,
+        "description": "A named size, in place of width and height (1600x1200 unless given).",
+        "enum": [
+         "simple",
+         "simple-square",
+         "diagnostic",
+         "labeled",
+         "assembly",
+         "assembly-large",
+         "presentation",
+         "presentation-large",
+         "contact-sheet"
+        ],
         "type": "string"
        },
        "source": {
@@ -938,7 +953,9 @@
         "type": "integer"
        },
        "width": {
-        "minimum": 1,
+        "description": "The picture's width in pixels (with height).",
+        "maximum": 8192,
+        "minimum": 16,
         "type": "integer"
        }
       },
@@ -1000,24 +1017,24 @@
       "type": "integer"
      },
      "annotation": {
+      "description": "The viewer's annotation (its object, or the absolute path of its file or of a Quick Edit packet's .snapshot.json): its ink drawn over the model.",
       "type": [
        "object",
-       "array",
        "string"
       ]
      },
      "camera": {
+      "description": "A preset: iso, back, bottom, front, left, right, top (iso unless given; the world's axes, Z up: front looks from -Y, top from +Z); an azimuth:elevation pair in degrees (45:30); or a camera object {preset, position, target, up, direction, zoom, orthographicHalfHeight}, its lengths in the viewer's scene units (a document's millimetres, a robot's metres).",
       "type": [
-       "object",
-       "array",
-       "string"
+       "string",
+       "object"
       ]
      },
      "display": {
+      "description": "A mode: solid, shaded, parts, xray, hidden-line, wireframe (solid unless given; parts colours each part of an assembly its own); or exploded=0.6, an assembly's parts moved apart (0 to 1), alone or after a mode (hidden-line,exploded=0.6); or the display object: {mode, grid, camera: {projection: orthographic or perspective, focalLength}, clip: {axis: x, y or z, at, invert}, exploded: {amount}, hidden: [part refs], isolated: [part refs]}.",
       "type": [
-       "object",
-       "array",
-       "string"
+       "string",
+       "object"
       ]
      },
      "epoch": {
@@ -1026,15 +1043,18 @@
       "type": "string"
      },
      "grid": {
+      "description": "Draw the measuring grid under the model.",
       "type": "boolean"
      },
      "height": {
-      "minimum": 1,
+      "description": "The picture's height in pixels (with width).",
+      "maximum": 8192,
+      "minimum": 16,
       "type": "integer"
      },
      "measurements": {
+      "description": "Measure's dimensions, [{start, end, label, color}] in the document's units, or the absolute path of a JSON file of them: drawn over the model.",
       "type": [
-       "object",
        "array",
        "string"
       ]
@@ -1057,6 +1077,7 @@
       ]
      },
      "pose": {
+      "description": "A mechanism state's name, or joint and coupling values ({\"elbow\": 45}: a turn in degrees, a slide in the file's unit, a document's millimetres): the mechanism drawn posed. A mesh has none.",
       "type": [
        "object",
        "string"
@@ -1068,7 +1089,18 @@
       "type": "string"
      },
      "size_profile": {
-      "minLength": 1,
+      "description": "A named size, in place of width and height (1600x1200 unless given).",
+      "enum": [
+       "simple",
+       "simple-square",
+       "diagnostic",
+       "labeled",
+       "assembly",
+       "assembly-large",
+       "presentation",
+       "presentation-large",
+       "contact-sheet"
+      ],
       "type": "string"
      },
      "source": {
@@ -1082,7 +1114,9 @@
       "type": "integer"
      },
      "width": {
-      "minimum": 1,
+      "description": "The picture's width in pixels (with height).",
+      "maximum": 8192,
+      "minimum": 16,
       "type": "integer"
      }
     },

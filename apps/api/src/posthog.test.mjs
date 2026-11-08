@@ -90,6 +90,12 @@ test("why builds and snapshots failed are PostHog's build_failed and snapshot_fa
   assert.deepEqual([snapshot.event, snapshot.properties.kind, snapshot.properties.reason, snapshot.properties.count],
     ['snapshot_failed', 'step', 'browser', 1]);
   assert.ok(!('id' in build.properties) && !('at' in build.properties) && !('batch' in build.properties));
+  assert.ok(!('part' in snapshot.properties), 'a schema before 9 names no part');
+  // Schema 9's refusal names the part of the request, to break down by.
+  const [refused] = await at({ ...NAMED, schema: 9, process: 'cli', events: [
+    { name: 'snapshot_failure', kind: 'model', reason: 'bad_request', part: 'display.mode', count: 3 }] });
+  assert.deepEqual([refused.event, refused.properties.kind, refused.properties.reason, refused.properties.part,
+    refused.properties.count], ['snapshot_failed', 'model', 'bad_request', 'display.mode', 3]);
 });
 
 test("a viewer's controls are PostHog's control_used: uses and seconds on, by control and process, to add up", async () => {

@@ -90,7 +90,7 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     from OCP.Graphic3d import Graphic3d_Camera
     from OCP.gp import gp_Dir, gp_Pnt
 
-    from cad.engine.render.occt import PRESETS, camera_in_millimetres, occt_fov, occt_scale, vertical_fov
+    from cad.engine.render.occt import camera_in_millimetres, direction_of, occt_fov, occt_scale, vertical_fov
 
     spec = camera_in_millimetres(spec, scene.millimetres_per_scene_unit)
 
@@ -98,7 +98,8 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
         value = spec.get(name)
         return None if value is None else np.array(value, float)
 
-    preset = PRESETS.get(str(spec.get("preset") or "iso").lower(), PRESETS["iso"])
+    # A preset or an azimuth:elevation pair, as camera.js reads one (``snapshot.parse_camera`` refused any other).
+    preset = direction_of(str(spec.get("preset") or "iso").strip().lower())
     position, target = vector("position"), vector("target")
     points = scene.placed_points() if tight else scene.box_corners()
     low, high = points.min(0), points.max(0)
@@ -119,6 +120,11 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     aspect = width / height
     forward = -d
     right = np.cross(forward, up)
+    if not np.linalg.norm(right) > 1e-12 and spec.get("up") is None:
+        # Straight down or up with Z up implied (a 0:90 preset, a direction of [0, 0, 1]): +Y up the
+        # picture, as the top and bottom presets have it.
+        up = np.array(direction_of("top")[1], float)
+        right = np.cross(forward, up)
     if not np.linalg.norm(right) > 1e-12:
         raise ValueError("camera.up must not lie along the direction the camera looks")
     right /= np.linalg.norm(right)
@@ -239,8 +245,11 @@ def picture(canvas: Any, paint: Callable[[np.ndarray], None] | None, still: Any,
 class Held:
     """One document as a renderer holds it (see the module docstring)."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, name: str | None = None) -> None:
         self.path = Path(path)
+        # What a picture's refusals call the document: its file's name, or the model's own for a build's
+        # document that no file holds, drawn under a stand-in path (``snapshot._occt``).
+        self.name = name or self.path.name
         self.structure: dict[str, Any] | None = None
         self.version: str | None = None
         self.buffers: dict[str, bytes] = {}
@@ -343,14 +352,14 @@ class Held:
         shown, posed = self.structure, None
         if still.pose is not None:
             if self.kind is not None and self.poser is None:
-                raise SnapshotRefused(f"--pose poses a mechanism; {self.path.name} is a mesh and has none")
+                raise SnapshotRefused(f"--pose poses a mechanism; {self.name} is a mesh and has none", part="pose")
             try:
                 shown = (self.poser or posed_structure)(self.structure, still.pose)
             except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
-                raise SnapshotRefused(f"--pose: {error}") from None
+                raise SnapshotRefused(f"--pose: {error}", part="pose") from None
             posed = shown["kinematics"]["pose"]
-        refusals(still, shown, self.path.name)
-        hidden = hidden_instances(shown, still.display, self.path.name)
+        refusals(still, shown, self.name)
+        hidden = hidden_instances(shown, still.display, self.name)
         clock = time.perf_counter()
         scene, fresh = self._scene(still.preview, still.drawn)
         if fresh:
@@ -494,7 +503,8 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
         buffers = {p["key"]: server.cache.get(p["key"]) for p in structure["prototypes"]}
     finally:
         server.stop()
-    held = Held(document)
+    stand_in = source is not None and getattr(source, "path", None) is None  # a build's document, no file of it
+    held = Held(document, name=structure.get("name") if stand_in else None)
     try:
         timings = {"serveMs": round((served - started) * 1000), "meshMs": round((time.perf_counter() - served) * 1000)}
         held.hold(structure, buffers)
@@ -577,10 +587,11 @@ def main() -> int:
             if retire:
                 return 0
         except (SnapshotRefused, FormatError) as error:
-            frames.write(protocol, {"id": ident, "refused": str(error)})
+            part = getattr(error, "part", None) if isinstance(error, SnapshotRefused) else "source"
+            frames.write(protocol, {"id": ident, "refused": str(error), **({"part": part} if part else {})})
         except Exception as error:  # noqa: BLE001 - the renderer answers every request
             frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
-                              "trace": traceback.format_exc()})
+                                    **frames.failed_type(error), "trace": traceback.format_exc()})
     return 0
 
 
