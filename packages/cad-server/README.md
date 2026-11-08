@@ -111,11 +111,11 @@ dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process s
 the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
 STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
 `trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
-and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in the
-kernel process that holds the document -- a model's warm worker, the documents worker for a file, read once --
-and kept by the document's version, so the same check of an unchanged document measures nothing; a mesh's and a
-DXF's run in this process where its environment holds the type's integration, else in
-that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in a
+kernel process that holds the document -- a model's warm worker, the engine's checks process for a file, read
+once -- and kept by the document's version, so the same check of an unchanged document measures nothing; with no
+engine to reach, and for a mesh and a DXF, it runs in this process where its environment holds the type's
+integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the

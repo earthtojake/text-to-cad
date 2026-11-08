@@ -48,13 +48,10 @@ What to change:
 only as its kind: a count is an `int`, so `samples=2000.0`, which 0.11 read as 2000, is refused, and a
 pull is text (`"z"`, `"0,0,1"`). `cad.trimesh.molding`, `pulls`, `printing` and `orientations` keep
 their parameters and every key of their reports, which gain families; `orientations` ranks its rows,
-best first.
-
-### A script in its own Python
-
-A script run in its own Python (not `cad run`'s) whose cad is 0.11 is refused by the next server in one
-line naming the update, as any change of the worker contract is (it is 2 now: a worker measures the
-manufacturing checks): update the cad package in that environment to the server's release.
+best first. `cad.model.dfm`, `cad.step.dfm` and `cad.xbf.dfm` keep their signatures and now go through the
+engine, from any Python. Against no engine, an older one (0.11) or another release's, a file is measured in the
+calling process as in 0.11 (it needs `cad[build123d]` there), and a model's document is exported by the engine
+and read back there.
 
 ### Fixes, nothing to change
 
@@ -63,12 +60,13 @@ manufacturing checks): update the cad package in that environment to the server'
   upper bound, so the figure is lower now for the same part.
 - `cad model dfm <id>` with an id the engine does not hold exits 2, `not_found`, as every command does;
   0.11 exited 1 when the check ran in the integration's environment.
-- A model's, a STEP's and an xbf's check is measured by the engine where it holds the document (the
-  model's warm worker; a file read once), and the same check of an unchanged document answers the result
-  it kept, so a check run again is immediate. A `cad run` of a model's script cancels a check of it still
-  running, which says so: run the check again.
 
 ### New, nothing to change
+
+A model's, a STEP's and an xbf's check is measured by the engine where it holds the document (the model's
+warm worker; a file read once, in a process of the engine's), and the same check of an unchanged document
+answers the result it kept, so a check run again is immediate. A `cad run` of a model's script cancels a
+check of it still running, which says so: run the check again.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for

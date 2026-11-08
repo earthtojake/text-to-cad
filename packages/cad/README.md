@@ -740,8 +740,8 @@ cnc(shape, turning=True)                                       # a live build123
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
 `build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
 (`plate/face 7`) -- in the engine, where the document is held: a model's in its warm worker, a file's read
-once by the documents worker, the same check of an unchanged document answered from the result the engine
-kept; a mesh by the `trimesh` integration (`cad[trimesh]`), in the calling process, each at `x, y, z` in
+once by the engine's checks process, the same check of an unchanged document answered from the result the
+engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), in the calling process, each at `x, y, z` in
 millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules, general practice from published design guides, each rule citing its guide as the

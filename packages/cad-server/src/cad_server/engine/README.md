@@ -581,8 +581,7 @@ command**).
 
 What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
 and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that
-changes what a worker and the server say to each other; 2 since an export may carry a manufacturing check
-and a worker answers `cancel`), the document format the worker writes
+changes what a worker and the server say to each other), the document format the worker writes
 (`previous.FORMAT`) and the CAD kernel it builds with, OCP's major.minor as the library pins it
 (`KERNEL`). An order whose contract is not the server's is refused before any worker starts, in one
 line naming which package to update and to what release (`contract.refusal`): `cad here is 0.10.0,
@@ -1025,21 +1024,31 @@ its parts declare, its process's options refused once the document is read.
 
 **A B-rep's check is measured where the document is held.** The caller (the command, or `cad.<type>.dfm`
 in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
-`check` and no destinations, routed as an export of the same source is (`Daemon.check`, `_call`) -- a
-document id or a handle to the worker that holds it (the model's script's warm worker; a document whose
-worker is gone, its bytes to the documents worker), a STEP's or an xbf's path to the documents worker, which
-reads it with `document.load`, once, and holds it while the file stays as it was. The worker measures it in
-memory (`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported, written or read again, no
-process started and no kernel imported -- each part on a copy that shares nothing with the held document,
-and answers the report (`checked`), which the caller finishes into its result; every finding's location is a
-ref `inspect` resolves, and the result equals the one the same document gets read from its file. A model's
-check runs in its worker as a snapshot of it does, one request at a time; a build of its script cancels a
-check running there (`Daemon._cancel_check`, the worker's `cancel`, raised in the check's thread), whose
-caller is told it was cancelled, so a `cad run` never waits behind the measurement of the document it
-replaces. A check is held to the workers' memory cap as a build is: a worker over it after a check is retired
-(drained first). A worker that exits in a check is not asked again: the check fails saying so, and the next
-build or check starts a fresh worker. A file's check is measured in the calling process only where no
-engine can be reached, as it always could be.
+`check` and no destinations (`Daemon.check`). A document id or a handle goes to the warm worker that holds it,
+the model's script's. A STEP's or an xbf's path, and a document no warm worker holds (its bytes), go to the
+checks process (key `checks`, a worker of its own, `Daemon._routed`), which reads a file once while its bytes
+stay as they were (by their digest, four at most, `worker._file`), so a long check, its cancel or its crash
+costs the documents worker and every other document nothing. A worker of an older release in a caller's Python
+is never sent a check (`contract.answers_checks`): its document is checked in the checks process, from the
+bytes the server holds or its protocol-1 `result` gives (`Daemon._whole`). The worker measures it in memory
+(`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported, written or read again; a first call may
+still start the engine or its process -- each part on a copy that shares nothing with the held document, and
+answers the report (`checked`, with the release that measured it), which the caller finishes into its result;
+every finding's location is a ref `inspect` resolves, and the result equals the one the same document gets read
+from its file.
+
+A model's check runs in its worker as a snapshot of it does, one request at a time. A build of its script
+cancels a check of it (`Daemon._cancel_check`): one waiting for the worker never starts, one running is asked
+(the worker's `cancel`, answered at once by the thread that reads its requests) and stops at its next
+checkpoint (`cad._internal.dfm.checkpoint`: between parts, families, faces and rays), so the build waits at most
+one kernel call or one batch of rays, then the check's answer that it was cancelled; the build's caller is told
+only of a check that was. A check's caller going cancels it the same way (`Daemon.abandon`), and stops the
+checks process outright, which holds nothing of anyone's. A worker over the workers' memory cap after a check is
+retired (drained first) and the check's caller told so, on stderr. A process that exits in a check is not asked
+again: the check fails saying so, in words of the process it was. A file's check is measured in the calling
+process where no engine can be reached, where the engine measures no check (a release before it) or another
+release's library measured it; the command, which holds no kernel, then runs it in the base's environment. A
+model's is then exported and read back in the calling process, as before.
 
 **The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
 token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
@@ -1048,7 +1057,7 @@ measuring library's release). The same check of the same version is answered fro
 asked (`reused`); a version read again after the check that differs keeps nothing. A document holds one
 version's results, so none outlives the document it describes; the store is the daemon's memory, 128 results
 and 64 MB at most, least recently used first, and `cad status --json` counts it (`checks`: held, bytes,
-measured, reused). A part an edit left untouched is measured again with its document: a check is the
+measured, reused, and asked: those waiting or running). A part an edit left untouched is measured again with its document: a check is the
 document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
