@@ -25,10 +25,11 @@ Every process module has:
 
 **Stopping a check.** A check the engine runs can be asked to stop (its worker's ``cancel``): the request
 only sets a flag (``stop``), and the measurement stops at its next ``checkpoint`` -- between parts, families,
-faces and ray batches, each in the integration's own Python loops -- raising ``Cancelled`` from its own
-frame, so nothing is interrupted halfway through a kernel call or while it holds a lock. A stop asked
-during one kernel call (an exact intersection, a face's mesh) takes effect when that call returns. A check
-in a process no one stops (the caller's own) never stops.
+faces and rays, each in the integration's own Python loops -- raising ``Cancelled`` from its own frame, so
+nothing is interrupted halfway through a kernel call or while it holds a lock. A stop asked during a kernel
+call takes effect when that call returns: the longest is the whole part's one mesh, about 10 to 20 s on a part
+of 1606 faces, where every other stretch between two checkpoints was a few seconds at most (a large face's
+own mesh, the file's read). A check in a process no one stops (the caller's own) never stops.
 """
 
 from __future__ import annotations

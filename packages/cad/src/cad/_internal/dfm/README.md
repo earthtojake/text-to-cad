@@ -18,30 +18,36 @@ Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`):
 required dependency, so neither integration imports the other's.
 
 **Where exact geometry is measured.** In the engine, where the document is held: the caller resolves the
-options (`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a
-`check`), which measures it in a kernel process (`cad.engine.worker._check`, `_dfm_check.held`) and answers the
-report, which the caller finishes into its result (`manufacturing.finish`). A model's document is measured in
-its script's warm worker. A STEP's or an xbf's file, and a document no warm worker holds, are measured in the
-engine's checks process, a warm kernel of its own, which reads a file once while its bytes stay as they were
-(by their digest, a few at most), so a long check or its crash costs no other document anything. Nothing is
-exported, written or read again; a first call may still start the engine or its process. Each part is
-measured on a copy that shares nothing with the held document (`_dfm_brep.of_source`: a check's meshing never
-touches it), its result equal to the same document's read from its file. The engine keeps each result by the
-version it measured -- a model's generation, a file's bytes' digest -- with the check's type, process, options
-and library release (`cad_server/engine/checks.py`, 128 results and 64 MB at most, in the daemon's memory), so
-the same check of an unchanged document measures nothing; a document holds one version's results.
+options (`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a `check`
+and the caller's release), which decides who measures it before anything is measured (`Daemon.check`) and answers
+the report, which the caller finishes into its result (`manufacturing.finish`).
 
-A build of a model's script cancels a check of it, and so does its caller going: a check waiting for its
-process never starts, and a running one stops at its next checkpoint (`cad._internal.dfm.checkpoint`, between
-parts, families, faces and rays), so after at most one kernel call, and answers that it was cancelled; the
-checks process is stopped outright when a check's caller goes. A process killed in a check says so, and is not
-asked again.
+- A model's warm worker measures it, in memory, when the worker's library is the caller's release.
+- The engine's checks process measures it when the server's library is the caller's release: a STEP's or an xbf's
+  file, read once while its bytes stay as they were (by their digest, four files at most); a document no warm
+  worker holds; and a model built at another release, from the document's bytes. It is a warm kernel of its own,
+  so a long check or its crash costs no other document anything.
+- Otherwise it is another release's check, answered at once with no report. A file is then measured in the calling
+  process, a model's document exported by the engine and read back there, as before the engine measured checks; a
+  command whose environment holds no kernel sends either to the base's environment.
 
-A file is measured in the calling process where no engine can be reached (none installed, a sandbox that
-cannot start one), where the engine is of a release that measures no check, or where another release's library
-measured it; the command, whose environment holds no kernel, then runs it in the base's. A model's document is
-then exported by the engine and read back in the calling process, as before. A mesh and a DXF are measured
-in the calling process (or the integration's environment) always.
+Nothing is exported, written or read again but for that last case; a first call may still start the engine or the
+checks process. Each part is measured on a copy that shares nothing with the held document
+(`_dfm_brep.of_source`: a check's meshing never touches it), its result equal to the same document's read from
+its file. The engine keeps each clean result by the version it measured -- a model's generation, a file's bytes'
+digest -- with the check's type, process, options and the measuring library's release (128 results and 64 MB at
+most, in the engine's memory), so the same check of an unchanged document measures nothing; a document holds one
+version's results. A document that did not read, a refused check or a family not measured is not kept.
+
+A build of a model's script cancels a check of it, and so does its caller going: a check waiting for its process
+leaves the queue at once, and a running one stops at its next checkpoint (`checkpoint`, between parts, families,
+faces and rays) and answers that it was cancelled; the checks process is stopped outright when a check's caller
+goes. A stop takes effect when the kernel call in progress returns. On a part of 1606 faces the longest stretch
+between two checkpoints was the whole part's one mesh, 7 to 21 s across the processes with four running at once;
+every other was at most a few seconds (a large face's own mesh, the file's read). A process killed in a check says
+so, and is not asked again.
+
+A mesh and a DXF are measured in the calling process (or the integration's environment) always.
 
 **Verdicts.** The type side (this folder, the standard library alone, so the command resolves every option
 before it starts an environment) holds each process's options, its rules, the findings its facts call for

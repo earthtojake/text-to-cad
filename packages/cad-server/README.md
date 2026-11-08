@@ -113,9 +113,9 @@ STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) 
 `trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
 and every rule's outcome under `--json`. A B-rep's (a model, a STEP, an xbf) is the engine's: measured in a
 kernel process that holds the document -- a model's warm worker, the engine's checks process for a file, read
-once -- and kept by the document's version, so the same check of an unchanged document measures nothing; with no
-engine to reach, and for a mesh and a DXF, it runs in this process where its environment holds the type's
-integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+once -- and kept by the document's version, so the same check of an unchanged document measures nothing. Where the
+engine measures nothing (none to reach, another release's), and for a mesh and a DXF, it runs in this process where
+its environment holds the type's integration, else in that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the

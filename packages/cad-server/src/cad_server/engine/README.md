@@ -1024,40 +1024,51 @@ its parts declare, its process's options refused once the document is read.
 
 **A B-rep's check is measured where the document is held.** The caller (the command, or `cad.<type>.dfm`
 in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
-`check` and no destinations (`Daemon.check`). A document id or a handle goes to the warm worker that holds it,
-the model's script's. A STEP's or an xbf's path, and a document no warm worker holds (its bytes), go to the
-checks process (key `checks`, a worker of its own, `Daemon._routed`), which reads a file once while its bytes
-stay as they were (by their digest, four at most, `worker._file`), so a long check, its cancel or its crash
-costs the documents worker and every other document nothing. A worker of an older release in a caller's Python
-is never sent a check (`contract.answers_checks`): its document is checked in the checks process, from the
-bytes the server holds or its protocol-1 `result` gives (`Daemon._whole`). The worker measures it in memory
-(`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported, written or read again; a first call may
-still start the engine or its process -- each part on a copy that shares nothing with the held document, and
-answers the report (`checked`, with the release that measured it), which the caller finishes into its result;
-every finding's location is a ref `inspect` resolves, and the result equals the one the same document gets read
-from its file.
+`check`, its own release (`caller`) and no destinations. The daemon decides who measures it before anything is
+measured (`Daemon.check`, `_measurer`):
+
+- the warm worker that holds a model's document, when the worker's library is the caller's;
+- the checks process (`services.CHECKS`), when the server's library is the caller's: a STEP's or an xbf's path,
+  read once while its bytes stay as they were (by their digest, four files at most, `worker._file`); a document no
+  warm worker holds, from its bytes; and a model built at another release, from the bytes the server holds or that
+  worker's protocol-1 `result` gives (`Daemon._whole`), so a worker of a release before `contract.CHECKS_SINCE` is
+  never sent a request it does not know. It is a kernel process of its own, with the daemon's environment, outside
+  the count cap: a long check, its cancel or its crash costs the documents worker and every other document nothing,
+  and a file's check never retires a person's idle worker for its slot;
+- otherwise no one: another release's check, answered at once with no `checked`, nothing measured. The caller
+  measures a file in its own process and has a model's document exported and read back there, as before the
+  engine measured checks; a `cad` command with no kernel sends either to the base's environment
+  (`manufacturing.through_engine`, `integration_env`). So does a file's check where no engine can be reached.
+
+The process measures it in memory (`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported, written or
+read again; a first call may still start the engine or the checks process -- each part on a copy that shares
+nothing with the held document, and answers the report (`checked`, with the release that measured it), which the
+caller finishes into its result; every finding's location is a ref `inspect` resolves, and the result equals the
+one the same document gets read from its file.
 
 A model's check runs in its worker as a snapshot of it does, one request at a time. A build of its script
-cancels a check of it (`Daemon._cancel_check`): one waiting for the worker never starts, one running is asked
-(the worker's `cancel`, answered at once by the thread that reads its requests) and stops at its next
-checkpoint (`cad._internal.dfm.checkpoint`: between parts, families, faces and rays), so the build waits at most
-one kernel call or one batch of rays, then the check's answer that it was cancelled; the build's caller is told
-only of a check that was. A check's caller going cancels it the same way (`Daemon.abandon`), and stops the
-checks process outright, which holds nothing of anyone's. A worker over the workers' memory cap after a check is
-retired (drained first) and the check's caller told so, on stderr. A process that exits in a check is not asked
-again: the check fails saying so, in words of the process it was. A file's check is measured in the calling
-process where no engine can be reached, where the engine measures no check (a release before it) or another
-release's library measured it; the command, which holds no kernel, then runs it in the base's environment. A
-model's is then exported and read back in the calling process, as before.
+cancels a check of it (`Daemon._cancel_check`): one waiting for the worker leaves the lease's queue at once
+(`Supervisor.lease`'s `gave_up`) and answers cancelled, one running is asked (the worker's `cancel`, answered at once
+by the thread that reads its requests) and stops at its next checkpoint (`cad._internal.dfm.checkpoint`: between
+parts, families, faces and rays). The build says it is asking, at once, waits for that check's answer and says it
+was cancelled only if it was. A stop takes effect when the kernel call in progress returns: on a part of 1606
+faces the longest stretch between two checkpoints was the whole part's one mesh, 7 to 21 s across the processes
+with four running at once, every other a few seconds at most, so that is how long a build can wait on a check of a
+part that size. A check's caller going cancels it the same way (`Daemon.abandon`), and stops the checks process
+outright, which holds nothing of anyone's. A process over the workers' memory cap after a check is retired (a
+worker drained first) and the check's caller told so, on stderr. A process that exits in a check is not asked
+again: the check fails saying so, in words of the process it was.
 
 **The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
 token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
 digest -- and the check (type, process, resolved options, candidates, the options given with no process, the
-measuring library's release). The same check of the same version is answered from the store, with no worker
-asked (`reused`); a version read again after the check that differs keeps nothing. A document holds one
-version's results, so none outlives the document it describes; the store is the daemon's memory, 128 results
-and 64 MB at most, least recently used first, and `cad status --json` counts it (`checks`: held, bytes,
-measured, reused, and asked: those waiting or running). A part an edit left untouched is measured again with its document: a check is the
+measuring library's release, which is the caller's). The same check of the same version is answered from the
+store, with no process asked and no bytes asked of a worker (`reused`); a version that differs after the check
+keeps nothing, and only a clean result is kept: never a document that did not read, a refused check or a family not
+measured. A document holds one version's results, so none outlives the document it describes; the store is the
+daemon's memory, 128 results and 64 MB at most, least recently used first, and `cad status --json` counts it
+(`checks`: held, bytes, measured, reused, read: the files the checks process read; asked: those waiting or running;
+process: the checks process). A part an edit left untouched is measured again with its document: a check is the
 document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
@@ -1190,8 +1201,9 @@ tessellations, is under one memory budget: **Document lifetime**.)
 
 **Services.** Every process the daemon starts and supervises is a service it declares, in one place
 ([services.py](services.py)), and one supervisor runs them all ([supervisor.py](supervisor.py), whose
-docstring is the mechanism): a model script's worker (the documents worker among them) and a served
-document's render process (whose pictures [renders.py](renders.py) asks for). A declaration says what
+docstring is the mechanism): a model script's worker (the documents worker among them), a served
+document's render process (whose pictures [renders.py](renders.py) asks for) and the checks process (a
+manufacturing check of a file: **Document types and integrations**). A declaration says what
 the process runs and in which environment, whether a lease may name the Python it runs instead, its
 caller's (`interpreter`: the worker's), what one process serves (its key: a script's path, a
 document's id; with a Python a lease named, that Python too), what binds a process to its caller's

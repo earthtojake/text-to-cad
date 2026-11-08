@@ -51,7 +51,7 @@ their parameters and every key of their reports, which gain families; `orientati
 best first. `cad.model.dfm`, `cad.step.dfm` and `cad.xbf.dfm` keep their signatures and now go through the
 engine, from any Python. Against no engine, an older one (0.11) or another release's, a file is measured in the
 calling process as in 0.11 (it needs `cad[build123d]` there), and a model's document is exported by the engine
-and read back there.
+and read back there. The `cad` command, which holds no kernel, runs that in the CAD kernel's environment.
 
 ### Fixes, nothing to change
 
