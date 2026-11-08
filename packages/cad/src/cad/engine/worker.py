@@ -556,26 +556,31 @@ def _cancel(token: Any, queued: Callable[[str], bool]) -> bool:
 
 
 def _seam() -> tuple[Path, float] | None:
-    """A test's seam, read once as the worker starts: ``CAD_ENGINE_CHECK_WAIT`` naming a file makes each check
-    say it is measuring (``<file>.reached``, holding this worker's pid) and wait, at most
-    ``CHECK_WAIT_SECONDS``, until that file is there -- stopping at a checkpoint while it waits -- so a test
-    can build, cancel or kill the worker while a check runs. Unset, nothing."""
+    """A test's seam, read at each check from the environment that check runs in (the one its worker adopted
+    for the request, a standby taken for a later caller's included; the checks process's own, the daemon's):
+    ``CAD_ENGINE_CHECK_WAIT`` naming a file makes the check say it is measuring (``<file>.reached``, holding
+    this process's pid) and wait, at most ``CHECK_WAIT_SECONDS``, until that file is there -- stopping at a
+    checkpoint while it waits -- so a test can build, cancel or kill the process while a check runs. Unset,
+    nothing."""
     named = os.environ.get("CAD_ENGINE_CHECK_WAIT")
     return (Path(named), CHECK_WAIT_SECONDS) if named else None
 
 
 CHECK_WAIT_SECONDS = 120.0
-_SEAM: tuple[Path, float] | None = None
 
 
 def _waited() -> None:
-    if _SEAM is None:
+    seam = _seam()
+    if seam is None:
         return
     from cad.registry import manufacturing_check
 
     checkpoint = manufacturing_check().checkpoint
-    named, seconds = _SEAM
-    Path(f"{named}.reached").write_text(str(os.getpid()), encoding="utf-8")
+    named, seconds = seam
+    try:
+        Path(f"{named}.reached").write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        return  # a seam that cannot be written (an earlier test's, gone) never fails a real check
     deadline = time.monotonic() + seconds
     while not named.exists() and time.monotonic() < deadline:
         checkpoint()
@@ -618,16 +623,43 @@ def _file(path: Path) -> tuple[Any, str | None, bool]:
     return source, before, True
 
 
+# The held documents' bytes a checks process holds, by their id: each the version it was sent at (the
+# daemon's generation of it) and its source, the most recent last. A version read once: a new one replaces it.
+_DOCUMENTS: "dict[str, tuple[str, Any]]" = {}
+_DOCUMENTS_KEPT = 4
+
+
+def _document(spec: dict[str, Any], payload: bytes) -> tuple[Any, bool]:
+    """A held document's bytes as a source (``build.held_source``), read once per version (``_DOCUMENTS``)
+    where the request says its version, and whether they were read now."""
+    from cad.engine import build as engine_build
+
+    ident, version = str(spec["document"]), spec.get("version")
+    held = _DOCUMENTS.pop(ident, None)
+    if held is not None and version is not None and held[0] == version:
+        _DOCUMENTS[ident] = held
+        return held[1], False
+    reads = engine_build.held_reads
+    source = engine_build.held_source(payload, str(spec.get("name") or "document"), origin=spec.get("origin"))
+    if version is not None:
+        _DOCUMENTS[ident] = (str(version), source)
+        while len(_DOCUMENTS) > _DOCUMENTS_KEPT:
+            _DOCUMENTS.pop(next(iter(_DOCUMENTS)))
+    return source, engine_build.held_reads != reads
+
+
 def _check(request: dict[str, Any]) -> dict[str, Any]:
     """An ``export`` request with ``check``: the document it names -- a model this worker built (by ``script``
     and ``function``), a document's bytes (``document``: one no warm worker holds, or one an older worker
-    saved), or a STEP's or an xbf's file (``_file``) -- checked in memory (its integration's ``held``), stopping at a
-    checkpoint when cancelled (``_cancel``). Answers ``{"reports": [], "files": [], "checked"}``, the
-    ``checked`` saying the release that measured it and, for a file, the digest of the bytes it measured;
-    the integration's ``Cancelled`` when stopped."""
+    saved, read once per version: ``_document``), or a STEP's or an xbf's file (``_file``) -- checked in memory
+    (its integration's ``held``, a build's parts read back once per version), stopping at a checkpoint when
+    cancelled (``_cancel``). Answers ``{"reports": [], "files": [], "checked"}``, the ``checked`` saying the
+    release that measured it, whether it read the document, or a build's parts, anew (``read``) and, for a file,
+    the digest of the bytes it measured; the integration's ``Cancelled`` when stopped."""
     from cad.engine import build as engine_build
     from cad.engine import export
     from cad.engine.contract import release
+    from cad.engine.ids import canonical
     from cad.registry import manufacturing_check
 
     measuring = manufacturing_check()
@@ -637,7 +669,7 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     check = request["check"]
     token = check.get("token")
     read = Path(spec["path"]).name if "path" in spec else None  # how a reading failure names it
-    digest, fresh = None, False
+    digest, fresh, keep = None, False, None
     with _RUNNING_LOCK:
         stop(False)
         _RUNNING["token"] = token
@@ -646,10 +678,11 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
             raise Cancelled  # cancelled before it started
         try:
             if "document" in spec:
-                source = engine_build.held_source(request.get("payload") or b"", str(spec.get("name") or "document"),
-                                                  origin=spec.get("origin"))
+                source, fresh = _document(spec, request.get("payload") or b"")
             elif spec.get("held") and "script" in spec:
+                reads, keep = engine_build.held_reads, f"{canonical(spec['script'])}::{spec.get('function')}"
                 source = engine_build.held(Path(spec["script"]), spec.get("function"))
+                fresh = engine_build.held_reads != reads  # a model taken from the cache: its bytes read now
                 if source is None:
                     raise export.ExportRefused(f"{spec.get('function')} is no longer held: run the program that "
                                                "builds it again")
@@ -664,13 +697,14 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
                                       "message": f"failed to read {read or 'the document'}: {error}"}}
         else:
             _waited()
-            checked = measuring.held(source, check, read)
+            checked = measuring.held(source, check, read, keep)
+            fresh = bool(checked.pop("read", False)) or fresh  # a build's parts read back now
     finally:
         with _RUNNING_LOCK:
             _RUNNING["token"] = None
             stop(False)
-    return {"reports": [], "files": [], "checked": {**checked, "release": release(),
-                                                    **({"digest": digest, "read": fresh} if "path" in spec else {})}}
+    return {"reports": [], "files": [], "checked": {**checked, "release": release(), "read": fresh,
+                                                    **({"digest": digest} if "path" in spec else {})}}
 
 
 def refusal(error: BaseException) -> dict[str, str]:
@@ -765,8 +799,6 @@ def main() -> int:
         except OSError:
             pass
 
-    global _SEAM
-    _SEAM = _seam()
     if "--standby" in sys.argv[1:]:
         load_kernel()
     resident = resident_mb()

@@ -953,6 +953,8 @@ def taken(script: Path, name: str) -> bytes | None:
 # and an inspection of one document after another read its bytes once, as a file's read is held.
 _HELD_KEPT = 4
 _HELD: "dict[tuple[str, str, str], Any]" = {}
+# The held documents' bytes read so far (``held_source``, none kept): what a manufacturing check counts as read.
+held_reads = 0
 
 
 def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None) -> Any:
@@ -969,6 +971,8 @@ def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None)
            json.dumps(origin, sort_keys=True, separators=(",", ":")))
     found = _HELD.pop(key, None)
     if found is None:
+        global held_reads
+        held_reads += 1
         try:
             found = _read_held(payload, name)
             found.origin = origin

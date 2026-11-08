@@ -75,14 +75,16 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
     return _declared(_dfm_brep.read(document_type, source), document_type, given, candidates, document_type)
 
 
-def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
+def held(source: Any, check: dict[str, Any], read: Any = None, keep: str | None = None) -> dict[str, Any]:
     """The check an engine's kernel process runs of a document it holds (``source``, an ``export.Source``:
     a model's in its worker, a file's or a held document's in the checks process), as ``check`` asks it
     (``{"type", "process", "resolved", "candidates", "given"}``, its options resolved by the caller,
     ``manufacturing.options``), measured in memory (``_dfm_brep.of_source``). Plain data, which the caller
     finishes (``manufacturing.finish``): ``{"measured": {"process", "resolved", "report"}}``; ``{"unmeasured":
     {"code", "message"}}``; ``{"refused": words}`` for what ``manufacturing.declared`` refuses (the command
-    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``.
+    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``. ``keep``: what the
+    document is, a build's parts read back kept for its next check (``_dfm_brep.of_source``); the answer's
+    ``read`` says whether this check read any part anew.
 
     Its measurements equal ``measure``'s and ``measure_declared``'s of the same document read from a file."""
     from cad._internal.dfm import Unmeasured
@@ -90,9 +92,10 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
 
     document_type, process = check["type"], check.get("process")
     candidates = bool(check.get("candidates"))
+    made = _dfm_brep.made
     try:
         try:
-            document = _dfm_brep.of_source(source)
+            document = _dfm_brep.of_source(source, keep)
         except Unmeasured:
             raise
         except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
@@ -104,10 +107,10 @@ def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]
             resolved = dict(check["resolved"])
             report = _measured(document, document_type, process, resolved, candidates)
     except Unmeasured as failure:
-        return {"unmeasured": {"code": failure.code, "message": failure.message}}
+        return {"unmeasured": {"code": failure.code, "message": failure.message}, "read": _dfm_brep.made != made}
     except ArgumentRefused as refused:
-        return {"refused": str(refused)}
-    return {"measured": {"process": process, "resolved": resolved, "report": report}}
+        return {"refused": str(refused), "read": _dfm_brep.made != made}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}, "read": _dfm_brep.made != made}
 
 
 def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,

@@ -17,6 +17,8 @@ mesh (a finer one is kept, not made again) and measure otherwise than a fresh re
 measured on a copy that shares nothing with the held document: a read document's part copied with its
 geometry and whatever mesh it was read with (``BRepBuilderAPI_Copy``), a build's part written and read
 once (``mesh.read_shape``), which is bit for bit the part its saved xbf reads back as (``mesh.shape_bytes``).
+A build's parts read back are kept for its next check, by its geometry keys (``_PRISTINE``), and never
+measured: every check measures a copy of them, so a second process checked reads nothing again.
 
 **The measures.** A face's surface (``surface``: a plane's normal, a cylinder's or a cone's axis and
 radius, which way the material lies); an edge between two faces (``edges``: concave or convex, the angle
@@ -212,12 +214,45 @@ def read(document_type: str, source: Any) -> Document:
         raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
 
 
-def of_source(source: Any) -> Document:
+# A build's parts as its saved xbf reads them back (``of_source``), kept by the document they were made for
+# (``keep``), the most recent last: each its geometry key's part, written and read once, never measured --
+# each check measures a copy (``_copied``). A document's next version keeps the parts it shares with this one
+# (their keys: a digest of their geometry) and drops the rest, so a document holds one version's parts.
+_PRISTINE: "dict[str, dict[str, Any]]" = {}
+_PRISTINE_KEPT = 4
+# The parts written and read back for ``_PRISTINE`` so far: a test's count of what a check made anew.
+made = 0
+
+
+def _pristine(source: Any, keep: str | None) -> dict[str, Any]:
+    """The build's parts, by their geometry key, as its saved xbf reads them back: those ``keep`` holds already
+    taken from it, the rest written and read once (``mesh.read_shape``, counted in ``made``), never measured."""
+    global made
+
+    from cad.engine.mesh import _write, read_shape
+
+    held = _PRISTINE.pop(keep, {}) if keep is not None else {}
+    wanted = {proto["key"] for proto in source.structure["prototypes"]}
+    parts = {key: shape for key, shape in held.items() if key in wanted}
+    for key in sorted(wanted - set(parts)):
+        checkpoint()
+        parts[key] = read_shape(_write(source.shapes[key]))
+        made += 1
+    if keep is not None:
+        _PRISTINE[keep] = parts  # the most recent last
+        while len(_PRISTINE) > _PRISTINE_KEPT:
+            _PRISTINE.pop(next(iter(_PRISTINE)))
+    return parts
+
+
+def of_source(source: Any, keep: str | None = None) -> Document:
     """The parts of a document the engine holds in this process (an ``export.Source``): one its reader read
     -- a STEP's or an xbf's file, a held document's bytes -- as that reader read it (``source.loaded``),
     which is what ``read`` reads; a build's own, from the build's structure and shapes, each part written
     and read once, as its saved xbf reads back. Never the held shapes themselves (the module's docstring).
-    ``Unmeasured`` for a mesh, which holds no B-rep."""
+    ``keep``: what the document is (a model's script and name), whose build's parts read back are kept for
+    its next check (``_PRISTINE``), each check measuring a copy of them. ``Unmeasured`` for a mesh, which
+    holds no B-rep."""
     if source.loaded is not None:
         return _loaded(source.loaded, copy=True)
     if source.mesh is not None or not source.shapes:
@@ -226,9 +261,9 @@ def of_source(source: Any) -> Document:
 
     from cad.engine import refs
     from cad.engine.document import material_from_json
-    from cad.engine.mesh import _write, read_shape
 
     structure = source.structure
+    pristine = _pristine(source, keep)
     root = refs.structure_tree(structure)
     first: dict[int, Part] = {}
     order: list[Part] = []
@@ -243,7 +278,8 @@ def of_source(source: Any) -> Document:
             continue
         proto = structure["prototypes"][prototype]
         instance = structure["instances"][int(payload["instance"])]
-        shape = read_shape(_write(source.shapes[proto["key"]]))
+        # A copy of the part read back, which this check may mesh: the kept one is never measured.
+        shape = _copied(pristine[proto["key"]])
         placed = bd.Shape.cast(shape.Moved(_trsf(instance["matrix"])))
         part = Part(name=proto["name"], owner=refs.owner_text(root, node), shape=placed, paths=(path,),
                     face_names={int(key): text for key, text in (proto.get("faceNames") or {}).items()},
