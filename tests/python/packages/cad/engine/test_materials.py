@@ -104,6 +104,39 @@ class MaterialsTest(unittest.TestCase):
         self.assertIsInstance(restored.material, FinishedMaterial)
         self.assertAlmostEqual(restored.mass(), shape.mass())
 
+    def test_a_step_declaring_kilograms_per_cubic_metre_reads_its_densities_as_it_says_them(self):
+        """OCCT's STEP reader converts a density's length unit and drops its mass unit's prefix: a file
+        in kg/m^3, what most CAD tools write, arrived 1000 times too light. A STEP the engine writes says
+        grams and reads back as it was; one rewritten to say kg/m^3 reads the same density, by both the
+        document loader and the reader process's parse."""
+        import re
+
+        shape = bd.Box(10, 10, 10)
+        shape.material = metals.aluminum()  # 2700 kg/m^3
+        self.roundtrip(shape)
+        written = self.folder / "grams.step"
+        export.translate(export.Source.read(self.folder / "test.xbf"), "step", written)
+        density = lambda path: [prototype["material"]["material"]["density"]  # noqa: E731
+                                for prototype in export.Source.read(path).structure["prototypes"]]
+        self.assertEqual(density(written), [2700.0])
+        text = written.read_text(encoding="latin-1")
+        item = re.search(r"MEASURE_REPRESENTATION_ITEM\('density',[^,]*,#\d+\)", text)
+        self.assertIsNotNone(item, "the engine's STEP names a density")
+        # As Fusion 360 writes it: the value in kg/m^3, a derived unit of kilogram over metre cubed.
+        kilograms = (item.group(0).replace("'density',", "'density measure',POSITIVE_RATIO_MEASURE(")
+                     .split(",POSITIVE_RATIO_MEASURE(")[0]
+                     + ",POSITIVE_RATIO_MEASURE(2700.),#9001)")
+        units = ("#9001=DERIVED_UNIT((#9002,#9003));\n#9002=DERIVED_UNIT_ELEMENT(#9004,1.);\n"
+                 "#9003=DERIVED_UNIT_ELEMENT(#9005,-3.);\n#9004=(MASS_UNIT()NAMED_UNIT(*)SI_UNIT(.KILO.,.GRAM.));\n"
+                 "#9005=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT($,.METRE.));\n")
+        rewritten = self.folder / "kilograms.step"
+        rewritten.write_text(re.sub(r"ENDSEC;\s*END-ISO", lambda end: units + end.group(0),
+                                    text.replace(item.group(0), kilograms), count=1), encoding="latin-1")
+        self.assertEqual(density(rewritten), [2700.0])
+        header, _packed = reader._parse(str(rewritten))
+        self.assertEqual([product["material"]["material"]["density"] for product in header["products"]
+                          if product.get("material")], [2700.0])
+
     def test_inherited_material_and_equal_placements_share_a_prototype(self):
         left = bd.Box(2, 3, 4)
         right = left.moved(bd.Location((10, 0, 0)))

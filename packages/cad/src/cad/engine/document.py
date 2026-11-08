@@ -1710,12 +1710,88 @@ def _read(path: Path) -> Any:
             refuse_external_files(reader, path)
             if not reader.Transfer(doc):
                 raise ValueError(f"cannot read {path}")
+            correct_step_densities(doc, path)
             from cad.engine.step_style import read_visual_styles
 
             read_visual_styles(reader, doc)
         else:
             raise ValueError(f"not a document the engine reads: {path.name}")
     return doc
+
+
+def correct_step_densities(doc: Any, path: Any) -> int:
+    """A read STEP's material densities as the file says them, where OCCT's reader dropped the mass
+    unit's prefix: returns how many it corrected.
+
+    The XCAF document holds a density in g/cm^3 (``_Materials`` writes it so, and ``_label_material``
+    reads it so). OCCT's STEP reader converts a density's length unit but not the prefix of its mass
+    unit: a file declaring kg/m^3 (``SI_UNIT(.KILO.,.GRAM.)`` over ``SI_UNIT($,.METRE.)``, what Fusion
+    360 and most CAD tools write) arrives 1000 times too small -- steel's 7850 kg/m^3 as 0.00785 g/cm^3
+    -- while a STEP the engine wrote (grams over centimetres) reads back right. So each density the
+    file declares is read here with its unit, what OCCT should have made of it and what it does make
+    of it are worked out, and a material whose density is the second and not the first is set to the
+    first. A file whose densities OCCT read right (a later OCCT, a file in grams) is left as it is.
+    The file's text is scanned once, for its density measures and the units they name alone."""
+    import re
+
+    from OCP.TCollection import TCollection_HAsciiString
+    from OCP.TDF import TDF_ChildIterator
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_Material
+
+    text = Path(path).read_bytes().decode("latin-1")
+    measures = re.findall(r"MEASURE_REPRESENTATION_ITEM\s*\(\s*'density[^']*'\s*,\s*(?:[A-Z_]+\s*\(\s*)?"
+                          r"([-+0-9.Ee]+)\s*\)?\s*,\s*#(\d+)\s*\)", text, re.IGNORECASE)
+    if not measures:
+        return 0
+    entities: dict[str, str] = {}
+
+    def entity(number: str) -> str:
+        if number not in entities:
+            found = re.search(rf"#{number}\s*=\s*([^;]*);", text)
+            entities[number] = found.group(1) if found else ""
+        return entities[number]
+
+    prefixes = {"EXA": 1e18, "PETA": 1e15, "TERA": 1e12, "GIGA": 1e9, "MEGA": 1e6, "KILO": 1e3, "HECTO": 1e2,
+                "DECA": 1e1, "DECI": 1e-1, "CENTI": 1e-2, "MILLI": 1e-3, "MICRO": 1e-6, "NANO": 1e-9}
+    expected: list[tuple[float, float]] = []  # (what OCCT should give, what it gives dropping the mass prefix)
+    for raw, unit in measures:
+        mass = length = None
+        for element in re.findall(r"#(\d+)", entity(unit)):  # DERIVED_UNIT((#element, ...))
+            part = re.match(r"\s*DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*([-+0-9.Ee]+)\s*\)", entity(element))
+            si = re.search(r"SI_UNIT\s*\(\s*(?:\.([A-Z]+)\.|\$)\s*,\s*\.([A-Z]+)\.\s*\)", entity(part.group(1))) \
+                if part else None
+            if not si:
+                continue
+            factor, exponent = prefixes.get(si.group(1) or "", 1.0), float(part.group(2))
+            if si.group(2) == "GRAM" and exponent == 1:
+                mass = factor  # grams per the file's unit of mass
+            elif si.group(2) == "METRE" and exponent == -3:
+                length = factor * 100.0  # centimetres per the file's unit of length
+        if mass is None or length is None or mass == 1.0:
+            continue
+        right = float(raw) * mass / length ** 3
+        expected.append((right, right / mass))
+    if not expected:
+        return 0
+    corrected = 0
+    tool = XCAFDoc_DocumentTool.MaterialTool_s(doc.Main())
+    children = TDF_ChildIterator(tool.Label())
+    while children.More():
+        material = XCAFDoc_Material()
+        if children.Value().FindAttribute(XCAFDoc_Material.GetID_s(), material):
+            density = material.GetDensity()
+            close = lambda a, b: abs(a - b) <= 1e-9 * max(abs(a), abs(b), 1e-300)  # noqa: E731
+            if density > 0 and not any(close(density, right) for right, _ in expected):
+                fixed = next((right for right, dropped in expected if close(density, dropped)), None)
+                if fixed is not None:
+                    # On the label: ``FindAttribute`` fills a copy, and setting the copy changes nothing.
+                    XCAFDoc_Material.Set_s(children.Value(), material.GetName() or TCollection_HAsciiString(""),
+                                           material.GetDescription() or TCollection_HAsciiString(""), fixed,
+                                           material.GetDensName() or TCollection_HAsciiString(""),
+                                           material.GetDensValType() or TCollection_HAsciiString(""))
+                    corrected += 1
+        children.Next()
+    return corrected
 
 
 def refuse_external_files(reader: Any, path: Any) -> None:
