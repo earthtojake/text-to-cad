@@ -86,18 +86,18 @@ cad run src/node.py
 
 ```text
 built src/node.py::node cold in ...: bodies 1 run; 0 misses, 0 hits; body ..., sample ...
-  triangles 70,628 · bounds 67.65 × 76.06 × 66.2 mm
+  triangles 70,628 · wall 4 cells (3.96 mm) · bounds 67.65 × 76.06 × 66.2 mm
   id: ...
   view: ...
 ```
 
 The engine samples the field and holds the mesh as the model's document, addressed by its id; no
 file is written, and a file is an export ([below](#what-comes-back)). Under the run line are the
-sample's triangles and bounds, to compare with the request; a rebuild that changed them says what
-they were, `(was 70,628)`. A rebuild whose field is unchanged (an edit elsewhere in the script, a
-comment) samples nothing, in a fraction of a second; a changed cell or parameter samples again.
-`@implicit(name="node_fine")` names the model, as `@model(name=...)` does; stacking `@implicit` with
-`@model` or a file decorator is refused.
+sample's triangles, its thinnest wall ([the cell](#choosing-the-cell)) and its bounds, to compare
+with the request; a rebuild that changed them says what they were, `(was 70,628)`. A rebuild whose
+field is unchanged (an edit elsewhere in the script, a comment) samples nothing, in a fraction of a
+second; a changed cell or parameter samples again. `@implicit(name="node_fine")` names the model, as
+`@model(name=...)` does; stacking `@implicit` with `@model` or a file decorator is refused.
 
 The script imports `cadjoint`, so `cad run` gives it the cadjoint integration (`cad[cadjoint]`) and
 the build123d integration with it: no header, nothing to install. The library pins cadjoint (0.1.1);
@@ -162,8 +162,8 @@ kept), slivers welded, one closed body, nothing simplified, in the engine's memo
   of it only what a clip or the grid draws: judge its shape shaded. A pick names the mesh, never a
   face. Its Export menu offers STL, 3MF and GLB.
 - **The commands** take its id: `cad implicit export`, `snapshot` (a mesh file's options: camera,
-  display, grid, clip), `inspect` (triangles, bounds, volume, cell; no ref: a mesh has no face to
-  name) and `dfm`. `cad model snapshot|export|inspect` take it too, as Quick Edit's prompt does.
+  display, grid, clip), `inspect` (triangles, bounds, volume, cell, wall; no ref: a mesh has no face
+  to name) and `dfm`. `cad model snapshot|export|inspect` take it too, as Quick Edit's prompt does.
 - **From Python**, on the handle a call returns: `implicit.export(node(), "STL/node.stl")`,
   `implicit.snapshot`, `implicit.inspect`, `implicit.dfm` (`from cad import implicit`). `cad.model`
   refuses the handle, naming `cad.implicit`, as `cad.implicit` refuses a model's.
@@ -177,7 +177,10 @@ kept), slivers welded, one closed body, nothing simplified, in the engine's memo
 `cell` is the sampling cell's edge, in millimetres. The thinnest wall needs about four cells across:
 `cell = wall / 4`. A wall or bridge thinner than about two cells falls apart; between two and four
 it meshes closed, but its thickness is good only to about a cell. The smallest feature the mesh
-resolves is about two cells.
+resolves is about two cells. The sampling measures the thinnest wall on the field, a ray from each
+vertex straight through the material to the face opposite (not the taper of a sharp edge), and the
+line under the run says it in cells: `wall 4 cells (3.96 mm)`. Under two cells the build is refused,
+naming the cell that gives it four.
 
 - **Cost.** The field is compiled by JAX on its first evaluation, then sampled and meshed; `solid()`
   then simplifies the mesh and builds it face by face. Measured on CPU:
@@ -218,6 +221,7 @@ request. `field` and `solid` refuse alike, but for the last two rows.
 | The bounds hold no surface | the box lies wholly inside or wholly outside the part | Move or widen `bounds=`, or drop it |
 | Not watertight | a concave corner sharper than the cell resolves | Round the corner (a blend, `RoundBox`, `rounded_rect`), or a finer cell |
 | Several bodies | a wall or bridge thinner than about two cells, or pieces that do not touch | A finer cell; a thicker wall; or each piece its own model |
+| `the thinnest wall is 1.6 cells (1.32 mm at a 0.825 mm cell) ...` | it meshes closed, but its thickness is the grid's | The cell the line names (the wall / 4), or a thicker wall |
 | `an implicit document is made of cad.cadjoint.field(scene, cell=...), not ...` | an `@implicit` function returned something else: a bare scene, a `solid(...)`, a build123d shape | Return `field(scene, cell=...)` |
 | `a model document is made of a build123d Shape ... (the cadjoint integration has no producer of model from Field)` | a `@model` returned `field(...)` | Declare it `@implicit`, or return `solid(scene, cell=...)` where a B-rep is needed |
 
@@ -262,7 +266,7 @@ it can be checked:
 
 | The change | Check it with |
 | --- | --- |
-| An overall size, a volume | `cad implicit inspect "$ID"`: the mesh's bounds, volume, triangles and cell |
+| An overall size, a volume | `cad implicit inspect "$ID"`: the mesh's bounds, volume, triangles, cell and thinnest wall |
 | A dimension inside the part: a wall, a bore, a blend's reach | A check script that measures the field itself: `section` and the field at points ([above](#look-inside-the-field)) |
 | A new feature, a blend, a pattern, the appearance | `cad implicit snapshot "$ID" tmp/review.png`, from the angle that shows the change |
 | Whether it can be printed or molded | `cad implicit dfm "$ID" --process printing`: measured as a mesh, so a curved surface's draft and overhang are read from its triangles, at the cell's resolution |

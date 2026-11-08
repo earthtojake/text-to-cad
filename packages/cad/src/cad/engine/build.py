@@ -867,7 +867,9 @@ def _finish_implicit(model: Any, result: Any, run: Any, report: dict[str, Any], 
         cached = Path(context.cache) / model.id / FILES["glb"]
         if cached.is_file():
             data = cached.read_bytes()
-            if (implicit.read_extras(data) or {}).get("digest") == digest:
+            extras = implicit.read_extras(data) or {}
+            # Sampled under the wall rule (its facts say the wall, measured or not), else sampled again.
+            if extras.get("digest") == digest and "wall_mm" in (extras.get("facts") or {}):
                 held_data = data
     if held_data is not None:
         # The same field as was sampled last, here or before a restart: its bytes, under this build's closure.

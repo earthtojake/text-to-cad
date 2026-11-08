@@ -27,9 +27,9 @@ def sampled(declared: Any) -> Sampled:
 
 def document(declared: Any, name: str, *, closure: str | None = None) -> tuple[bytes, dict[str, Any]]:
     """The implicit document of the field a model returned: its GLB bytes, and its facts (the run line's
-    delta: ``triangles``, ``bounds``, ``volume``)."""
+    delta: ``triangles``, ``bounds``, ``volume``, the thinnest wall)."""
     from cad.engine import implicit_document as implicit
 
     found = sampled(declared)
     return implicit.document_bytes(name, found.positions, found.normals, found.triangles, closure=closure,
-                                   digest=declared.digest, cell=found.cell)
+                                   digest=declared.digest, cell=found.cell, wall=found.wall_mm)

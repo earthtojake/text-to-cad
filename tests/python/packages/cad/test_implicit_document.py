@@ -136,6 +136,47 @@ class FoldTest(unittest.TestCase):
         self.assertEqual(len(implicit.split_folds(positions, normals, triangles, crease=95.0)[0]), 8)
 
 
+class WallTest(unittest.TestCase):
+    """The sample's thinnest wall in its facts and on the line under the run (``said._delta``)."""
+
+    @staticmethod
+    def _line(now: dict, before: dict | None = None) -> str:
+        import contextlib
+        import io
+
+        from cad.engine import delta, said
+
+        with contextlib.redirect_stdout(io.StringIO()):  # an encoding that writes × and ·
+            return said._delta(delta.delta(now, before))
+
+    def test_the_facts_carry_the_wall_in_millimetres_and_cells_or_none(self) -> None:
+        facts = implicit.facts_of(POSITIONS, TRIANGLES, wall=2.0, cell=0.48)
+        self.assertEqual((facts["wall_mm"], facts["wall_cells"]), (2.0, 4.17))
+        unmeasured = implicit.facts_of(POSITIONS, TRIANGLES)
+        self.assertEqual((unmeasured["wall_mm"], unmeasured["wall_cells"]), (None, None))
+        data, written = implicit.document_bytes("tet", POSITIONS, NORMALS, TRIANGLES, closure=None, digest="d" * 32,
+                                                cell=0.5, wall=2.1)
+        self.assertEqual((written["wall_mm"], written["wall_cells"]), (2.1, 4.2))
+        self.assertEqual(implicit.read_extras(data)["facts"]["wall_mm"], 2.1)
+
+    def test_the_line_says_the_wall_between_the_triangles_and_the_bounds(self) -> None:
+        facts = implicit.facts_of(POSITIONS, TRIANGLES, wall=2.0, cell=0.48)
+        self.assertEqual(self._line(facts), "\n  triangles 4 · wall 4.2 cells (2 mm) · bounds 1 × 1 × 1 mm")
+        finer = implicit.facts_of(POSITIONS, TRIANGLES, wall=1.9937, cell=0.5)
+        self.assertEqual(self._line(finer, facts),
+                         "\n  triangles 4 · wall 4 cells (1.99 mm) (was 4.2 cells (2 mm)) · bounds 1 × 1 × 1 mm")
+        self.assertEqual(self._line(facts, dict(facts)), "\n  triangles 4 · wall 4.2 cells (2 mm) · bounds 1 × 1 × 1 mm")
+        thick = implicit.facts_of(POSITIONS, TRIANGLES, wall=128.4, cell=2.0)
+        self.assertIn("wall 64 cells (128 mm)", self._line(thick))
+        # No wall measured, or a document sampled before walls were: the line says none, and nothing it was.
+        self.assertEqual(self._line(implicit.facts_of(POSITIONS, TRIANGLES)), "\n  triangles 4 · bounds 1 × 1 × 1 mm")
+        older = {key: value for key, value in facts.items() if not key.startswith("wall")}
+        self.assertEqual(self._line(facts, older), "\n  triangles 4 · wall 4.2 cells (2 mm) · bounds 1 × 1 × 1 mm")
+        # A model's delta says nothing of a sample's facts.
+        model = {"parts": 1, "bounds": [1.0, 1.0, 1.0], "joints": 0, "sequences": 0, "warnings": 0}
+        self.assertEqual(self._line(model), "\n  parts 1 · bounds 1 × 1 × 1 mm · joints 0 · sequences 0")
+
+
 class DeclarationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="implicit-decl-"))

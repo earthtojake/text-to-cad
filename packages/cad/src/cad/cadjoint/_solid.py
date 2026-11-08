@@ -38,7 +38,8 @@ def solid(scene: Any, *, cell: float, bounds: Sequence[Sequence[float]] | None =
     Refused with a ``ValueError`` naming the fix: a field with no closed part in reach; a grid of more
     than 512 cells along an axis; a part that reaches the bounds (clipped); bounds that hold no surface;
     a mesh that is not watertight (a concave corner sharper than the cell resolves) or that is several
-    bodies (a wall thinner than about two cells). A ``TypeError`` for a ``scene`` that is no cadjoint field.
+    bodies (a wall thinner than about two cells); a thinnest wall, measured on the field, under two cells
+    (naming the cell that gives it four). A ``TypeError`` for a ``scene`` that is no cadjoint field.
     """
     import numpy as np
     from cadjoint.meshing import simplify_mesh

@@ -3535,29 +3535,31 @@ becomes a document and stacks with neither `@model` nor a file decorator (refuse
 one). Its id is made as a model's, its handle is the same kind (`handle.id`, `handle.url`), its page
 is `/<id>`, and it is kept, held, retired and rebuilt as a model is (**Document lifetime**), with a
 `glb` document (**Two formats**). The run line's stages are `body` and `sample`, and the line under it
-says the sample, not a tree: `triangles 5,232 (was 7,568) · bounds 40 × 20 × 6 mm`. A body that runs
-again to the same field -- `Field.digest`, blake2b of the lowered scene, its cell and bounds -- samples
-nothing: the bytes stand under the new closure (`report["document"]["sampled"]` false, the page's
-version unchanged, so no viewer fetches them again), from the worker's memo or from the cache file a
-fresh worker reads. The programs JAX compiles to sample a field are kept in JAX's persistent compilation cache
-under the engine's cache folder (`cache_dir()/jax`, `cad.cadjoint._field`), so a fresh worker pays the
-compile once per machine, not per worker (the clevis fixture at a 1 mm cell: 13.6 s cold against 7.6 s
-with the cache warm). The report's `type` is `implicit`; `cad implicit export|snapshot|inspect|dfm <id>`
-take the id, as `cad model snapshot|export|inspect <id>` do: an id is opaque to every verb and routes to
-its document whatever the format (Quick Edit's prompt names `cad model snapshot <id>` for any
-document), only a *handle* is refused by its type (`cad.model.export(implicit_handle, ...)` says to use
-`cad.implicit`). Its GLB is drawn with no edges, on the page and in a still alike: the fold rule a mesh
-file's edges come by would draw stubs along every crease, where the sample's points settle either side
-of it from cell to cell, so Solid looks as Shaded and the line modes show of it only what a clip or the
-grid draws (the still keys on the marker in the cache file's `asset.extras.cad`, which an exported GLB,
-written afresh by the GLB writer, does not carry). Exports are the mesh file's, `stl`, `threemf` and `glb`; `inspect`'s summary says
-`type`, `triangles`, `bounds`, `volume`, `cell` and `digest`. An implicit model is a leaf: a `@model`'s
-body calling one is refused (`BuildContext.child`), since a field has no shape to place; an assembly
-takes `cad.cadjoint.solid(scene, cell=...)` instead. In the CAD Viewer its envelope's kind is `implicit`,
-its api `/api/v1/documents/implicit/<id>`, whose `source` streams the GLB (`model/gltf-binary`, the
-page's `?v=<version>` ignored), and its exports a job through `POST /api/v1/documents/<id>/exports`
-with the row's hash as the source revision ([viewer/http_app.py](../viewer/http_app.py),
-[viewer/exports.py](../viewer/exports.py)).
+says the sample, not a tree: `triangles 5,232 (was 7,568) · wall 6 cells (6 mm) · bounds 40 × 20 × 6 mm`,
+its `wall` the thinnest the sampling measured on the field (`cad.cadjoint._field._wall`, refused under two
+cells). A body that runs again to the same field -- `Field.digest`, blake2b of the lowered scene, its cell
+and bounds -- samples nothing: the bytes stand under the new closure (`report["document"]["sampled"]`
+false, the page's version unchanged, so no viewer fetches them again), from the worker's memo or from the
+cache file a fresh worker reads. The programs JAX compiles to sample a field are kept in JAX's persistent
+compilation cache under the engine's cache folder (`cache_dir()/jax`, `cad.cadjoint._field`), so a fresh
+worker pays the compile once per machine, not per worker (the clevis fixture at a 1 mm cell: 13.6 s cold
+against 7.6 s with the cache warm). The report's `type` is `implicit`;
+`cad implicit export|snapshot|inspect|dfm <id>` take the id, as `cad model snapshot|export|inspect <id>`
+do: an id is opaque to every verb and routes to its document whatever the format (Quick Edit's prompt
+names `cad model snapshot <id>` for any document), only a *handle* is refused by its type
+(`cad.model.export(implicit_handle, ...)` says to use `cad.implicit`). Its GLB is drawn with no edges, on
+the page and in a still alike: the fold rule a mesh file's edges come by would draw stubs along every
+crease, where the sample's points settle either side of it from cell to cell, so Solid looks as Shaded and
+the line modes show of it only what a clip or the grid draws (the still keys on the marker in the cache
+file's `asset.extras.cad`, which an exported GLB, written afresh by the GLB writer, does not carry).
+Exports are the mesh file's, `stl`, `threemf` and `glb`; `inspect`'s summary says `type`, `triangles`,
+`bounds`, `volume`, `cell`, `wall_mm`, `wall_cells` and `digest`. An implicit model is a leaf: a
+`@model`'s body calling one is refused (`BuildContext.child`), since a field has no shape to place; an
+assembly takes `cad.cadjoint.solid(scene, cell=...)` instead. In the CAD Viewer its envelope's kind is
+`implicit`, its api `/api/v1/documents/implicit/<id>`, whose `source` streams the GLB
+(`model/gltf-binary`, the page's `?v=<version>` ignored), and its exports a job through
+`POST /api/v1/documents/<id>/exports` with the row's hash as the source revision
+([viewer/http_app.py](../viewer/http_app.py), [viewer/exports.py](../viewer/exports.py)).
 
 Ids live in the library's `cad.engine.ids`, document names (a CAD file's path or an id) in
 `cad.engine.addresses`; the daemon's transient book of live models, by id, lives in [models.py](models.py).

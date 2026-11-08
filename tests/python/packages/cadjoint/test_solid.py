@@ -32,13 +32,14 @@ def _size(shape) -> tuple[float, float, float]:
 
 
 class ExamplesTest(unittest.TestCase):
-    """The two documented parts at a 1 mm cell, each made once for the class."""
+    """The two documented parts, each made once for the class: the clevis bracket at a 1 mm cell, the node at
+    0.8 mm, so its 2 mm wall spans more than the two cells a sample takes."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.clevis_scene = _scene("clevis_bracket")
         cls.clevis = solid(cls.clevis_scene, cell=1.0)
-        cls.node = solid(_scene("space_frame_node"), cell=1.0)
+        cls.node = solid(_scene("space_frame_node"), cell=0.8)
 
     def test_the_clevis_bracket_is_one_valid_solid_holding_its_drawn_envelope(self) -> None:
         import build123d as bd

@@ -892,8 +892,8 @@ def _mesh(path: Path, named: str, query: str, ident: str | None = None) -> Facts
     from its JSON alone (``{"mesh": ...}``, without a ref); an STL's or a 3MF's, and any ref or
     closure of a mesh, refused in words. A mesh has no B-rep, so no ref names a face of it, and no
     build closure: only an .xbf carries one -- and an implicit document (``ident``: its id; the GLB the
-    engine's cache holds of it, ``cad.engine.implicit_document``), whose summary says its triangles, bounds and
-    volume and whose closure is in its own words."""
+    engine's cache holds of it, ``cad.engine.implicit_document``), whose summary says its triangles, bounds,
+    volume, cell and thinnest wall and whose closure is in its own words."""
     if not path.is_file():
         raise ValueError(f"no document {named}")
     if ident is not None:
@@ -910,7 +910,8 @@ def _mesh(path: Path, named: str, query: str, ident: str | None = None) -> Facts
         state = {key: info.get(key) for key in ("state", "held", "cached", "builtAt")}
         return {"summary": {"id": ident, "name": str((info.get("source") or {}).get("name") or named), "type": "implicit",
                             "state": state, "triangles": facts.get("triangles"), "bounds": facts.get("bounds"),
-                            "volume": facts.get("volume"), "cell": extras.get("cell"), "digest": extras.get("digest")},
+                            "volume": facts.get("volume"), "cell": extras.get("cell"), "wall_mm": facts.get("wall_mm"),
+                            "wall_cells": facts.get("wall_cells"), "digest": extras.get("digest")},
                 "closure": json.loads(extras["closure"]) if extras.get("closure") else None}
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
         from cad.engine.said import COMMAND

@@ -45,10 +45,10 @@ from cad.engine.kernel.bounds import box_limits, optimal_box
 # Per part geometry key, what is known of its box in its own frame (``_Box``), or None for no geometry.
 _BOXES: "OrderedDict[str, _Box | None]" = OrderedDict()
 _BOXES_HELD = 1 << 16
-# ``triangles`` and ``volume`` are an implicit document's (``cad.engine.implicit_document.facts_of``): a model's facts
-# hold neither, and the line under its run says neither.
-FACTS = ("parts", "bounds", "joints", "sequences", "warnings", "triangles", "volume")
-_IMPLICIT = ("triangles", "volume")
+# ``triangles``, ``volume`` and the thinnest wall (``wall_mm``, ``wall_cells``) are an implicit document's
+# (``cad.engine.implicit_document.facts_of``): a model's facts hold none of them, and the line under its run says none.
+FACTS = ("parts", "bounds", "joints", "sequences", "warnings", "triangles", "volume", "wall_mm", "wall_cells")
+_IMPLICIT = ("triangles", "volume", "wall_mm", "wall_cells")
 _KEY = 12  # the hex digits of a part's geometry key the facts keep: enough to tell two builds' parts apart
 # A placement's rotation term smaller than this decides nothing: the part side it multiplies is
 # not measured for it.

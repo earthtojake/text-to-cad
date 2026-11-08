@@ -5,8 +5,10 @@ cadjoint SDF -- the cell it is sampled at, in millimetres, and the bounds, where
 place of cadjoint's own fit. ``sample`` is the one sampling: the grid over the bounds, cadjoint's dual
 contouring (``extract_mesh``, sharp creases kept), its coincident slivers welded (``remove_slivers``), and
 the checks that make the mesh a part's -- clipped, empty, open or in pieces refused by name (law 17) --
-answering the triangles with the field's own normals. ``solid`` samples the same way before it simplifies
-and builds B-rep; an ``implicit`` document holds the sample as it is.
+answering the triangles with the field's own normals and the thinnest wall, measured on the field
+(``_wall``) and refused under two cells, where the mesh still closes but its thickness is the grid's.
+``solid`` samples the same way before it simplifies and builds B-rep; an ``implicit`` document holds the
+sample as it is.
 
 ``Field.digest`` names the field: its lowered node table and parameter values (``cadjoint.zeroset.lower``),
 the cell and the bounds, so a build whose body ran to the same field samples nothing again.
@@ -22,10 +24,21 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["MAX_CELLS", "Field", "Sampled", "field", "sample"]
+__all__ = ["MAX_CELLS", "MIN_WALL_CELLS", "Field", "Sampled", "field", "sample"]
 
 # The most cells along any one axis: a grid of 512 on every side samples 134 million points.
 MAX_CELLS = 512
+# The thinnest wall a sample takes, in cells: under two its thickness is the grid's -- closed, its faces
+# scalloped, or fallen apart. A wall needs about four (``cell = wall / 4``).
+MIN_WALL_CELLS = 2.0
+# A wall's ray (``_wall``): at most this many steps of sphere tracing, then its crossing halved this many times.
+_WALL_STEPS = 48
+_WALL_HALVINGS = 8
+# A ray is a wall's where it leaves through a face turned back at it: the field's gradient at its exit within
+# 30 degrees of the opposite of its start's normal. One that leaves through a neighbouring face (a ray from just
+# beside a convex edge sharper than a right angle: a shell's rim cut at a slant, a tube's end, a gusset's tip)
+# measures how near the edge it started, not a wall.
+_OPPOSITE = math.cos(math.radians(30.0))
 # The half-width of the largest cube cadjoint's fit_bounds scans (``SCAN_HALF_WIDTHS[-1]``).
 _SCAN_HALF_WIDTH = 4096
 
@@ -168,9 +181,9 @@ def field(scene: Any, *, cell: float, bounds: Sequence[Sequence[float]] | None =
     wall needs about four cells across, and a wall or bridge thinner than about two falls apart), and
     ``bounds=((x0, y0, z0), (x1, y1, z1))``, a box of the caller's in place of cadjoint's ``fit_bounds`` -- one
     the caller knows holds the whole part; it never clips. What a function declared ``@implicit`` returns:
-    the engine samples it (``sample``) and holds the mesh as the model's document. Refused with a
-    ``TypeError`` for a ``scene`` that is no cadjoint field, a ``ValueError`` for a cell that is no positive
-    number or bounds that are no box."""
+    the engine samples it (``sample``) and holds the mesh as the model's document, refusing a wall under two
+    cells. Refused with a ``TypeError`` for a ``scene`` that is no cadjoint field, a ``ValueError`` for a cell
+    that is no positive number or bounds that are no box."""
     return Field(_scene(scene, "cad.cadjoint.field"), _cell(cell), None if bounds is None else _box_corners(bounds))
 
 
@@ -182,13 +195,80 @@ def _box_corners(bounds: Any) -> tuple[tuple[float, float, float], tuple[float, 
 @dataclass(frozen=True)
 class Sampled:
     """A field sampled: its vertices in millimetres (``positions``, (V, 3)), the field's unit normals at them
-    (``normals``, (V, 3)), its triangles (``triangles``, (T, 3), counterclockwise seen from outside), and the
-    cell it was sampled at."""
+    (``normals``, (V, 3)), its triangles (``triangles``, (T, 3), counterclockwise seen from outside), the
+    cell it was sampled at, and its thinnest wall in millimetres (``wall_mm``, ``_wall``; None where no ray
+    could measure one), ``cells`` of the cell across."""
 
     positions: Any
     normals: Any
     triangles: Any
     cell: float
+    wall_mm: float | None = None
+
+    @property
+    def cells(self) -> float | None:
+        """The thinnest wall in cells, or None with no wall measured."""
+        return None if self.wall_mm is None else self.wall_mm / self.cell
+
+
+def _wall(scene: Any, positions: Any, normals: Any, cell: float) -> float | None:
+    """The sample's thinnest wall in millimetres, measured on the field; None where no vertex could be.
+
+    From each vertex a ray runs into the material along the opposite of its normal (cadjoint's averaged
+    normal: on a crease the bisector, so the ray enters the material rather than grazing the other face) until
+    the field is positive again. It starts an eighth of a cell in -- a start already outside leaves the vertex
+    unmeasured, never a wall of zero -- and sphere-traces: each step the field's magnitude there, a lower bound
+    on the distance to the nearest surface, so no crossing is stepped over, and at least an eighth of a cell,
+    at most ``_WALL_STEPS`` of them and never past the sample's diagonal. Its last inside and outside points
+    are then halved ``_WALL_HALVINGS`` times. A ray counts where it leaves through a face turned back at it
+    (``_OPPOSITE``, the field's gradient at its outside point by forward differences): on a flat or curved wall
+    the faces are opposite, and a crease's bisector only lengthens its chord, so the least of them is the
+    thinnest wall. Every ray at once: the field is called on all the vertices, float32, once a step -- one
+    shape, so JAX compiles each of its operations once -- at most 60 calls in all."""
+    import numpy as np
+
+    points = np.asarray(positions, dtype=np.float64)
+    inward = -np.asarray(normals, dtype=np.float64)
+    if not len(points):
+        return None
+
+    def at(where: Any) -> Any:
+        return np.asarray(scene(np.asarray(where, dtype=np.float32)), dtype=np.float64).reshape(-1)
+
+    least = cell / 8.0
+    reach = max(float(np.linalg.norm(points.max(axis=0) - points.min(axis=0))), least)
+    depth = np.full(len(points), least)
+    value = at(points + inward * depth[:, None])
+    low = depth.copy()  # the deepest depth known inside
+    high = np.full(len(points), np.nan)  # the shallowest known outside
+    beyond = np.zeros(len(points))  # the field there
+    tracing = value < 0
+    for _step in range(_WALL_STEPS):
+        if not tracing.any():
+            break
+        ahead = np.where(tracing, np.minimum(depth + np.maximum(np.abs(value), least), reach), depth)
+        found = at(points + inward * ahead[:, None])
+        left = tracing & (found >= 0)
+        low = np.where(tracing & ~left, ahead, low)
+        high, beyond = np.where(left, ahead, high), np.where(left, found, beyond)
+        depth, value = np.where(tracing, ahead, depth), np.where(tracing, found, value)
+        tracing &= ~left & (ahead < reach)
+    crossed = ~np.isnan(high)
+    if not crossed.any():
+        return None
+    high = np.where(crossed, high, low)
+    for _halving in range(_WALL_HALVINGS):
+        middle = (low + high) / 2.0
+        found = at(points + inward * middle[:, None])
+        within = found < 0
+        low, high = np.where(within, middle, low), np.where(within, high, middle)
+        beyond = np.where(within, beyond, found)
+    exits = points + inward * high[:, None]
+    gradient = np.stack([at(exits + cell / 16.0 * axis) - beyond for axis in np.eye(3)], axis=1)
+    length = np.linalg.norm(gradient, axis=1)
+    facing = np.einsum("ij,ij->i", gradient, inward) >= _OPPOSITE * np.where(length > 0, length, np.inf)
+    walls = ((low + high) / 2.0)[crossed & facing]
+    return float(walls.min()) if len(walls) else None
 
 
 _COMPILED: list[bool] = []
@@ -216,9 +296,10 @@ def _compilation_cache() -> None:
 
 def sample(declared: Field, *, where: str = "cad.cadjoint.solid") -> Sampled:
     """The field sampled on a grid of its cell over its bounds (fitted, or the caller's), meshed by cadjoint's
-    dual contouring and welded (``remove_slivers``); refused by name where the mesh is no part's: more than
-    ``MAX_CELLS`` cells along an axis, bounds that cut the part (clipped) or hold no surface, a mesh that is
-    not watertight, or one of several bodies."""
+    dual contouring and welded (``remove_slivers``), its thinnest wall measured (``_wall``); refused by name
+    where the mesh is no part's: more than ``MAX_CELLS`` cells along an axis, bounds that cut the part
+    (clipped) or hold no surface, a mesh that is not watertight, one of several bodies, or a wall thinner
+    than ``MIN_WALL_CELLS`` cells."""
     import warnings
 
     import numpy as np
@@ -274,4 +355,9 @@ def sample(declared: Field, *, where: str = "cad.cadjoint.solid") -> Sampled:
         normals = normals[used]
         length = np.linalg.norm(normals, axis=1, keepdims=True)
         normals = np.where(length > 1e-12, normals / np.where(length > 1e-12, length, 1.0), (0.0, 0.0, 1.0))
-    return Sampled(positions, normals, faces.reshape(-1, 3), size)
+    wall = None if normals is None else _wall(scene, positions, normals, size)
+    if wall is not None and wall / size < MIN_WALL_CELLS:
+        # Its cells to the tenth below, so a wall refused never reads as two.
+        raise ValueError(f"the thinnest wall is {math.floor(wall / size * 10) / 10:g} cells ({wall:.3g} mm at a {size:g} mm "
+                         f"cell), and a wall needs about four: use a cell of {wall / 4:.3g} mm or less, or thicken it")
+    return Sampled(positions, normals, faces.reshape(-1, 3), size, wall)

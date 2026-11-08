@@ -783,7 +783,7 @@ if __name__ == "__main__":
 cad run node.py                                # samples the field; the line says triangles and bounds
 cad implicit export <id> node.stl node.3mf     # the mesh kinds alone: no STEP, no --tolerance
 cad implicit snapshot <id> node.png            # the mesh view, as the viewer draws it
-cad implicit inspect <id>                      # triangles, bounds, volume, cell
+cad implicit inspect <id>                      # triangles, bounds, volume, cell, wall
 cad implicit dfm <id> --process printing       # measured as a mesh
 ```
 
@@ -805,12 +805,13 @@ checks are any solid's, and a STEP of it is faceted too; it costs a B-rep build 
 Nothing plausible-wrong comes back (law 17). `field` and `solid` refuse alike, naming the fix, and no
 document or solid is made: a scene that is no field, a cell that is no positive number, more than 512
 cells on an axis, a field with no closed part in reach, bounds that cut the part or hold no surface, a
-mesh that is not watertight and a mesh of several bodies. Each document type refuses what its producers
-do not take (law 27): an `@implicit` function that returns anything but a `field(...)` (`an implicit
-document is made of cad.cadjoint.field(scene, cell=...), not ...`), and a `@model` that returns one
-(no producer of `model` from a `Field`). The fields are cadjoint's and the solids build123d's, so the
-integration needs the build123d integration (the registry's `needs`): a script run with `cad run` that
-imports `cadjoint` or `cad.cadjoint` gets both, and one whose header names `cad[cadjoint]` gets
-build123d with it. `cad.cadjoint.section(scene, out, axis="z", at=0.0)` draws one plane of the field as
-a PNG -- inside and outside by colour, contours of distance, the surface as a line -- and answers what it
-shows (`Section`: its plane, its extent, the field's range on it), without meshing.
+mesh that is not watertight, a mesh of several bodies, and a wall thinner than two cells (the sampling
+measures the thinnest on the field, and the run line says it: `wall 4 cells (3.96 mm)`). Each document
+type refuses what its producers do not take (law 27): an `@implicit` function that returns anything but a
+`field(...)` (`an implicit document is made of cad.cadjoint.field(scene, cell=...), not ...`), and a
+`@model` that returns one (no producer of `model` from a `Field`). The fields are cadjoint's and the
+solids build123d's, so the integration needs the build123d integration (the registry's `needs`): a script
+run with `cad run` that imports `cadjoint` or `cad.cadjoint` gets both, and one whose header names
+`cad[cadjoint]` gets build123d with it. `cad.cadjoint.section(scene, out, axis="z", at=0.0)` draws one
+plane of the field as a PNG -- inside and outside by colour, contours of distance, the surface as a
+line -- and answers what it shows (`Section`: its plane, its extent, the field's range on it), without meshing.

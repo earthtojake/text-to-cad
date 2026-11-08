@@ -1,11 +1,11 @@
 """An ``@implicit`` model through an engine of the test's own: the document the engine holds of a field.
 
 The field is a plate with a hole, 40 x 20 x 6 mm at a 1 mm cell, so every fact is the construction's. The
-run's report says the sample (its triangles and bounds), the engine's cache holds the GLB from the moment
+run's report says the sample (its triangles, its thinnest wall -- the plate's 6 mm -- and its bounds), the engine's cache holds the GLB from the moment
 the build registers, the verbs of ``cad.implicit`` read it as a mesh file (an STL's extents, the summary's
 triangles, a manufacturing check), the page's API names its kind and streams its source, a body that runs
-to the same field samples nothing again, a changed cell samples anew under a new version, and a restarted
-engine answers it ``held`` from its file. The engine runs in folders of the test's own
+to the same field samples nothing again, a changed cell samples anew under a new version, a cell too coarse
+for the wall is refused by name, and a restarted engine answers it ``held`` from its file. The engine runs in folders of the test's own
 (``engine_daemon.isolate``); the snapshot runs only under a display (CI's cadjoint job has none).
 """
 
@@ -59,19 +59,21 @@ class ImplicitDocumentTest(unittest.TestCase):
         self.script.write_text(textwrap.dedent(MODEL.format(cell=cell, line=line)), encoding="utf-8")
         os.utime(self.script, ns=(time.time_ns(), time.time_ns()))
 
-    def _build(self) -> dict:
+    def _build(self, ok: bool = True) -> dict:
         from cad.engine import api
 
         report = api.build_script(self.script, ["block"]).models[0]
-        self.assertTrue(report["ok"], report.get("error"))
+        if ok:
+            self.assertTrue(report["ok"], report.get("error"))
         return report
 
     def test_the_document_its_verbs_its_page_and_its_life(self) -> None:
         import numpy as np
 
         import cad
-        from cad.engine import api
+        from cad.engine import api, said
         from cad.engine.formats.stl import read_stl
+        from cad_server.engine.cli import summary_text
 
         self._write()
         report = self._build()
@@ -82,6 +84,10 @@ class ImplicitDocumentTest(unittest.TestCase):
         delta = report["delta"]
         self.assertGreater(delta["triangles"]["now"], 100)
         np.testing.assert_allclose(delta["bounds"]["now"], (40.0, 20.0, 6.0), atol=0.05)
+        self.assertAlmostEqual(delta["wall_mm"]["now"], 6.0, delta=0.05)
+        self.assertAlmostEqual(delta["wall_cells"]["now"], 6.0, delta=0.05)
+        line = said._delta(delta)
+        self.assertRegex(line, r"^\n  triangles [\d,]+ . wall 6 cells \(6 mm\) . bounds 40 . 20 . 6 mm$")
         # The engine's file of it, from the moment it is built.
         cached = Path(os.environ["CAD_CACHE_DIR"]) / "documents" / ident / "document.glb"
         self.assertTrue(cached.is_file())
@@ -98,6 +104,8 @@ class ImplicitDocumentTest(unittest.TestCase):
         self.assertEqual((summary["type"], summary["name"], summary["triangles"]), ("implicit", "block", delta["triangles"]["now"]))
         np.testing.assert_allclose(summary["bounds"], (40.0, 20.0, 6.0), atol=0.05)
         self.assertAlmostEqual(summary["volume"], 40 * 20 * 6 - 3.1416 * 9 * 6, delta=60)
+        self.assertEqual((summary["wall_mm"], summary["wall_cells"]), (delta["wall_mm"]["now"], delta["wall_cells"]["now"]))
+        self.assertIn("wall        6 cells (6 mm)", summary_text(summary).splitlines())
         self.assertEqual(cad.implicit.inspect(ident)["key"], report["closure"]["key"])
         checked = cad.implicit.dfm(ident, process="printing")
         self.assertTrue(checked.ok, checked.findings)
@@ -167,7 +175,17 @@ class ImplicitDocumentTest(unittest.TestCase):
         self.assertNotEqual(finer["document"]["digest"], report["document"]["digest"])
         self.assertGreater(finer["delta"]["triangles"]["now"], delta["triangles"]["now"])
         self.assertEqual(finer["delta"]["triangles"]["was"], delta["triangles"]["now"])
+        self.assertIn(" wall 7.5 cells (", said._delta(finer["delta"]))
         self.assertNotEqual(json.loads(opener.open(f"{base}/api/v1/documents/{ident}", timeout=30).read())["version"], version)
+
+        # A cell too coarse for the wall: the build fails by name, and the document stays the last one.
+        self._write(cell=4.0)
+        refused = self._build(ok=False)
+        self.assertFalse(refused["ok"])
+        self.assertIn("the thinnest wall is 1.4 cells (6 mm at a 4 mm cell), and a wall needs about four: use a cell "
+                      "of 1.5 mm or less, or thicken it", refused.get("error", ""))
+        self._write(cell=0.8, line='print("ran")')
+        self.assertFalse(self._build()["document"]["sampled"])
 
         # A snapshot, where a display is there to draw on: by its own type, and by ``cad model snapshot`` as Quick
         # Edit's prompt names it.

@@ -47,9 +47,11 @@ def is_glb(data: bytes) -> bool:
     return len(data) >= 12 and struct.unpack_from("<I", data)[0] == _container()[0]
 
 
-def facts_of(positions: Any, triangles: Any) -> dict[str, Any]:
+def facts_of(positions: Any, triangles: Any, *, wall: float | None = None, cell: float | None = None) -> dict[str, Any]:
     """What the run line's delta says of a sampled mesh (``delta.FACTS``): one part, its bounds in millimetres,
-    no joints or sequences, its triangles, and its volume (the signed volume of a closed mesh, mm³)."""
+    no joints or sequences, its triangles, its volume (the signed volume of a closed mesh, mm³), and its
+    thinnest wall (the sampling's, ``cad.cadjoint._field._wall``) in millimetres and in cells of ``cell``:
+    ``wall_mm`` and ``wall_cells``, None where none was measured."""
     import numpy as np
 
     points = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
@@ -61,8 +63,11 @@ def facts_of(positions: Any, triangles: Any) -> dict[str, Any]:
         volume = float(abs(np.einsum("ij,ij->i", a, np.cross(b, c)).sum()) / 6.0)
     else:
         bounds, volume = None, 0.0
+    measured = wall is not None and cell is not None and cell > 0
     return {"parts": 1, "bounds": bounds, "joints": 0, "sequences": 0, "warnings": [],
-            "triangles": int(len(faces)), "volume": round(volume, 3)}
+            "triangles": int(len(faces)), "volume": round(volume, 3),
+            "wall_mm": round(float(wall), 4) if measured else None,
+            "wall_cells": round(float(wall) / float(cell), 2) if measured else None}
 
 
 def _roots(parent: Any, start: Any, end: Any) -> Any:
@@ -176,12 +181,12 @@ def _source(name: str, positions: Any, normals: Any, triangles: Any) -> Any:
 
 
 def document_bytes(name: str, positions: Any, normals: Any, triangles: Any, *, closure: str | None,
-                   digest: str, cell: float) -> tuple[bytes, dict[str, Any]]:
+                   digest: str, cell: float, wall: float | None = None) -> tuple[bytes, dict[str, Any]]:
     """The implicit document of a sample: its GLB bytes, the engine's words in ``asset.extras``
-    (``read_extras``), and its facts (``facts_of``)."""
+    (``read_extras``), and its facts (``facts_of``, its thinnest wall ``wall`` in millimetres among them)."""
     from cad.engine.export import translate
 
-    facts = facts_of(positions, triangles)
+    facts = facts_of(positions, triangles, wall=wall, cell=cell)
     source = _source(name, *split_folds(positions, normals, triangles))
     with tempfile.TemporaryDirectory(prefix="cad-implicit-") as folder:
         path = Path(folder) / "document.glb"

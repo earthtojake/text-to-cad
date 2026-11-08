@@ -536,6 +536,8 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
         if summary.get("cell") is not None:
             lines.append(f"cell        {_said.number(summary['cell'])} mm")
+        if summary.get("wall_mm") is not None and summary.get("wall_cells") is not None:
+            lines.append(f"wall        {_said.wall(summary['wall_mm'], summary['wall_cells'])}")
         return "\n".join(lines)
     parts = summary["parts"]
     lines.append(f"parts       {parts['occurrences']} in {parts['root']}"
