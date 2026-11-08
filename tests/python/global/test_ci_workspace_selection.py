@@ -260,7 +260,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "kicad"})
+                # The registry holds the cam operation and FreeCAD's probe: the plans run too.
+                plans = {"cam"} if path == "packages/cad/src/cad/registry.py" else set()
+                self.assertEqual(jobs_for(path), GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "kicad"} | plans)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -364,7 +366,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
-        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"cam", "core-js", "web", "mcp", "api", "docs"})
         self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
 
     def test_the_installer_rehearsals_start_on_the_same_changes_and_no_job_runs_them(self):
