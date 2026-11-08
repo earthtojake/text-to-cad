@@ -157,7 +157,10 @@ An `@implicit` model's document is the sample: cadjoint's dual contouring (sharp
 kept), slivers welded, one closed body, nothing simplified, in the engine's memory and cache.
 
 - **The viewer** shows it in the mesh view, smoothly shaded from the field's own normals, with no
-  B-rep edges; a pick names the mesh, never a face. Its Export menu offers STL, 3MF and GLB.
+  edges at all: no B-rep edge, and no fold guessed from the triangles, whose points settle either
+  side of a crease from cell to cell. So Solid looks as Shaded, and a `hidden-line` snapshot shows
+  of it only what a clip or the grid draws: judge its shape shaded. A pick names the mesh, never a
+  face. Its Export menu offers STL, 3MF and GLB.
 - **The commands** take its id: `cad implicit export`, `snapshot` (a mesh file's options: camera,
   display, grid, clip), `inspect` (triangles, bounds, volume, cell; no ref: a mesh has no face to
   name) and `dfm`. `cad model snapshot|export|inspect` take it too, as Quick Edit's prompt does.

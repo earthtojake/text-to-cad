@@ -36,7 +36,9 @@ is `loading` whatever its format. A new format adds its `RENDER_FORMAT` value, a
 renderer slice; no shared component learns its name. A mesh with no file of its own (`implicit`, held
 by its id) has no format of its own either: it is the format its bytes are served in, by the
 registry's MIME type (`filelessDocumentFormat` in `fileFormats.js`: an implicit's is a GLB), and takes
-that format's icon, asset key and renderer.
+that format's icon, asset key and renderer. That renderer draws no edges of it, as of any GLB, and keeps
+the file's normals: no fold is guessed of a sampled field, whose creases are the field's to state (the
+server's stills, which do draw a mesh file's folds, key the same on the GLB's `asset.extras.cad`).
 
 ## Enforcement
 

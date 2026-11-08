@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-__all__ = ["EXTRAS", "FORMAT", "document_bytes", "facts_of", "is_glb", "read_extras", "source_of"]
+__all__ = ["EXTRAS", "FORMAT", "document_bytes", "extras_of", "facts_of", "is_glb", "read_extras", "source_of"]
 
 #: The document's format, as the daemon's records, the cache and the worker's frames name it.
 FORMAT = "glb"
@@ -132,8 +132,15 @@ def read_extras(data: bytes) -> dict[str, Any] | None:
         document, _rest = _split(data)
     except (ValueError, UnicodeDecodeError):
         return None
-    extras = (document.get("asset") or {}).get("extras") or {}
-    found = extras.get(EXTRAS)
+    return extras_of(document)
+
+
+def extras_of(document: Any) -> dict[str, Any] | None:
+    """``read_extras`` of a GLB's JSON already parsed (its first chunk): the marker a reader keys on, as the
+    stills' GLB reader does to draw an implicit document with no feature edges (``formats/glb.py``)."""
+    asset = document.get("asset") if isinstance(document, dict) else None
+    extras = asset.get("extras") if isinstance(asset, dict) else None
+    found = extras.get(EXTRAS) if isinstance(extras, dict) else None
     return found if isinstance(found, dict) and found.get("format") == FORMAT else None
 
 

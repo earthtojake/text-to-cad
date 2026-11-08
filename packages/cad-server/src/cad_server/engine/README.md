@@ -1983,7 +1983,9 @@ per file (read again when a file it read changes) or with `daemon=False` in this
   so the modes, the camera fit, the grid, clip, Explode and the annotation are a
   document's. Each mesh carries the viewer's normals (creased at 30 degrees up to 10,000
   triangles, else flat) and its feature edges (three's `EdgesGeometry` at 16 degrees: the folds,
-  the open rims), which Solid and the line modes draw. An STL is one part in the look's fill, its
+  the open rims), which Solid and the line modes draw -- but for an implicit document's GLB, marked
+  in its `asset.extras.cad` (`implicit_document.extras_of`), which draws none, its creases being
+  its field's to state (`formats/buffer.py`'s `edges=False`). An STL is one part in the look's fill, its
   numbers millimetres; a 3MF is its objects placed by its build in its unit, each triangle in its
   colour group's or base material's colour (a slicer's generated default is none), a base
   material's `pbmetallic` its finish; a GLB is read by OCCT's glTF reader into an XCAF document --
@@ -3544,7 +3546,11 @@ with the cache warm). The report's `type` is `implicit`; `cad implicit export|sn
 take the id, as `cad model snapshot|export|inspect <id>` do: an id is opaque to every verb and routes to
 its document whatever the format (Quick Edit's prompt names `cad model snapshot <id>` for any
 document), only a *handle* is refused by its type (`cad.model.export(implicit_handle, ...)` says to use
-`cad.implicit`). Exports are the mesh file's, `stl`, `threemf` and `glb`; `inspect`'s summary says
+`cad.implicit`). Its GLB is drawn with no edges, on the page and in a still alike: the fold rule a mesh
+file's edges come by would draw stubs along every crease, where the sample's points settle either side
+of it from cell to cell, so Solid looks as Shaded and the line modes show of it only what a clip or the
+grid draws (the still keys on the marker in the cache file's `asset.extras.cad`, which an exported GLB,
+written afresh by the GLB writer, does not carry). Exports are the mesh file's, `stl`, `threemf` and `glb`; `inspect`'s summary says
 `type`, `triangles`, `bounds`, `volume`, `cell` and `digest`. An implicit model is a leaf: a `@model`'s
 body calling one is refused (`BuildContext.child`), since a field has no shape to place; an assembly
 takes `cad.cadjoint.solid(scene, cell=...)` instead. In the CAD Viewer its envelope's kind is `implicit`,
