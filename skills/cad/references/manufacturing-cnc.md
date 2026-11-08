@@ -7,7 +7,7 @@ to milling and turning.
 ## Design it
 
 What a part built for milling has from its first line, so its first check passes or nearly (the
-`generic` set's numbers, from Protolabs Network's guide; a shop's set or `--tools` moves them):
+rules' numbers, general practice from Protolabs Network's guide; `--tools` moves them):
 
 - **Stock and setups.** Start from the blank (`--stock`, else the part's box) and put the features on
   as few sides as can be: each side a tool must face is a setup, five at most (Hubs: a part rotated
@@ -29,8 +29,8 @@ What a part built for milling has from its first line, so its first check passes
   T-slot or dovetail, through or blind, only where the person planned the cutter (`cnc.special_cutter`,
   a warning); no closed void.
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
-  at least 1.2 mm wide (Protolabs' turning rule), cross holes square to the axis (through it or beside
-  it); a flat, a keyway or an off-axis hole is live tooling.
+  as wide as the shop's grooving tool, cross holes square to the axis (through it or beside it); a
+  flat, a keyway or an off-axis hole is live tooling.
 - The material and the process on the part: `part.material = metals.aluminum(process=machined())`
   (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
 
@@ -38,23 +38,25 @@ What a part built for milling has from its first line, so its first check passes
 
 ```bash
 cad model dfm "$ID" --process cnc --material aluminum
-cad step dfm plate.step --process cnc --material aluminum --axes 5 --tools 3,6,10 --rules protolabs
+cad step dfm plate.step --process cnc --material aluminum --axes 5 --tools 3,6,10
 cad step dfm shaft.step --process cnc --turning --material stainless
 ```
 
 The options that change the verdicts:
 
-- `--material`: metal or plastic wall limits, hardness, a shop's envelope. Without it walls are
-  judged as metal (`cnc.material_assumed`).
-- `--axes 3|4|5` (3 by default): the directions that reach a face, the setups it takes, a shop's
-  envelope.
+- `--material`: metal or plastic wall limits. Without it walls are judged as metal
+  (`cnc.material_assumed`).
+- `--axes 3|4|5` (3 by default): the directions that reach a face, the setups it takes.
 - `--turning`: the part is turned on a lathe. Its axis, diameters, bores, grooves and the off-axis
   features that need live tooling are measured instead of pockets and corners.
 - `--tools 3,6,10`: the shop's end mill diameters. Corner radius and gap limits then follow the
   smallest; a corner no tool fits leaves its reach unmeasured.
 - `--stock 100x60x25`: the blank, else the part's box.
 
-Rule sets: `generic`, `hubs`, `protolabs`, `xometry`. A mesh is refused: check the STEP or the model.
+The rules are general, no shop's: a shop's machine sizes, lathe capacity and feature limits (its
+narrowest engraved line, its turned diameters and grooves) are compared with the measurements
+(`stock`, `turning`, `turned_diameters`, `grooves`, `holes`). A mesh is refused: check the STEP or the
+model.
 
 ## Read it
 
@@ -68,9 +70,8 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
 - `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
   machine lacks would make it, a warning) and the hint follows it. The fix is a radius or a relief
-  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. Under
-  `--rules protolabs` a sharp corner is a warning naming the radius it is cut with. A crease a ball end
-  mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
+  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
+  crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
   `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot or dovetail
   cutter makes.

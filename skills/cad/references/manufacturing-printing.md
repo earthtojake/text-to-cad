@@ -8,8 +8,8 @@ Slicing and sending a print to a printer is the print3d skill's ($print3d).
 
 ## Design it
 
-What a printed part has from its first line (the `generic` set's FDM numbers unless another technology
-is named; the reference's table and a machine datasheet move them):
+What a printed part has from its first line (the rules' FDM numbers, general practice, unless another
+technology is named; a machine datasheet moves them):
 
 - **Model it as it prints.** Z up, the face it stands on at the bottom: the check measures the part as
   it stands, so build the model in its print orientation, or turn it in the model and check again
@@ -29,10 +29,10 @@ is named; the reference's table and a machine datasheet move them):
   material the wall rule fails: blend them, or cut the feather back.
 - **Hollow parts.** SLS, MJF and PBF need an escape hole of 3.5 mm or more per cavity for the powder;
   SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
-- **Fits.** Mating parts 0.3 mm apart for FDM in practice (the generic rule warns under 0.76), SLS 0.3,
+- **Fits.** Mating parts 0.3 mm apart for FDM in practice (the general rule warns under 0.76), SLS 0.3,
   SLA 0.5; walls are judged per part, clearances per pair.
 - Within the printer: `--build-volume 256x256x256` for the person's machine (without it the fit is
-  judged against the rule set's assumed machine, a warning naming it, never an error). The material and the
+  judged against a typical machine of the technology's, assumed: a warning naming it, never an error). The material and the
   process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
   `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad model dfm "$ID"` then needs no
   `--process`, `--technology` or `--layer-height`.
@@ -49,15 +49,16 @@ The check measures the part as it stands on the plate: its lowest point, Z up. T
 the verdicts:
 
 - `--technology fdm|sls|sla|mjf|pbf` (`fdm` by default; `pbf` is metal powder bed fusion): every limit
-  and the self-supporting angle are the technology's. A technology the set has no figure for leaves
+  and the self-supporting angle are the technology's. A technology the rules have no figure for leaves
   that rule not evaluated. With the process unknown, check each candidate and report per technology.
 - `--material`: FDM's warping risk for the materials that warp (`warping_risk`).
-- `--build-volume XxYxZ`: the person's printer, else the rule set's machine for the technology.
+- `--build-volume XxYxZ`: the person's printer, else a typical machine of the technology's, assumed.
 - `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail.
 - `--angle-limit`: overrides the technology's self-supporting angle, from the person's datasheet.
 - `--units` (an STL's: millimetres by default) and `--samples` (rays on a mesh).
 
-Rule sets: `generic`, `hubs`, `protolabs`, `xometry`. `--candidates` ranks the six axis orientations,
+The rules are general, no printer's or shop's: a machine's own limits come in as options or from its
+datasheet. `--candidates` ranks the six axis orientations,
 plus the largest flat faces laid down, by support, height and finish, and judges nothing: to check
 another orientation, turn the part in its model and check again.
 
@@ -95,7 +96,7 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
 ## Review the part
 
 Collect the technology, material, layer height, and any machine or material datasheet; a datasheet
-overrides the rule set: cite whichever is used. Check the exact file that will be sliced, or the
+overrides the rules: cite whichever is used. Check the exact file that will be sliced, or the
 model's document. Then check by hand what the check does not measure:
 
 - Tree supports, support density and the designer's cosmetic faces (the check calls a face cosmetic

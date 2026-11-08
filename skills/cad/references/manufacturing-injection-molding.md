@@ -6,8 +6,8 @@ to injection molding.
 
 ## Design it
 
-What a molded part has from its first line (the `generic` set's numbers, from Protolabs' and Protolabs
-Network's guides; a shop's set moves them):
+What a molded part has from its first line (the rules' numbers, general practice from Protolabs' and
+Protolabs Network's guides; a molder's own figures move them):
 
 - **The pull first.** Decide which way the mold opens (`--pull z`: the open side of a box faces +Z) and
   model every feature along it. Build the outside by extruding the outline up from the parting face
@@ -45,7 +45,7 @@ Network's guides; a shop's set moves them):
 
 ```bash
 cad step dfm cover.step --process molding --pull z --material abs
-cad model dfm "$ID" --process molding --pull y --material pc --cavities 4 --rules protolabs
+cad model dfm "$ID" --process molding --pull y --material pc --cavities 4
 cad step dfm cover.step --process molding --candidates
 cad stl dfm cover.stl --process molding --pull z --units mm
 ```
@@ -61,8 +61,10 @@ The options that change the verdicts:
 - `--wall-limit` (45 degrees: a face steeper from the pull is no wall) and `--zero-tol` (0.05
   degrees: under it is zero draft).
 
-Rule sets: `generic`, `protolabs`, `hubs`, `xometry`. A STEP, an xbf or a model is measured exactly
-and each item names a face ref; prefer it to a mesh.
+The rules are general, no shop's: a press's and a mold's own limits -- projected area, part size,
+depth from the parting line, shot volume, a side action's travel -- are compared with the measurements
+(`projection`, `envelope`, `undercuts`) and the clamp estimate. A STEP, an xbf or a model is measured
+exactly and each item names a face ref; prefer it to a mesh.
 
 ## Read it
 

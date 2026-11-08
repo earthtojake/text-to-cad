@@ -4,13 +4,13 @@ The evidence, the rules, the review and how to check a redesign are SKILL.md's
 [Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
 to cutting and bending sheet.
 
-An order from SendCutSend, checked against its catalog and specs, is the sendcutsend skill's
-($sendcutsend).
+The check is general, no shop's. An order from SendCutSend, checked against its catalog and specs, is
+the sendcutsend skill's ($sendcutsend): it runs this check and reads the measurements against them.
 
 ## Design it
 
-What a cut-and-bent part has from its first line (the `generic` set's numbers, in multiples of the
-thickness `t`; a shop's set or bend table moves them):
+What a cut-and-bent part has from its first line (the rules' numbers, general practice in multiples of
+the thickness `t`; a shop's tooling and bend table move them):
 
 - **One thickness.** The whole part is one sheet: every face is its top, its bottom or a cut edge.
   No boss, pocket, countersink, second thickness or solid block. A chamfered or rounded cut edge is
@@ -42,8 +42,8 @@ thickness `t`; a shop's set or bend table moves them):
   wide and reaching past the bend radius, so the bend does not tear.
 - **Cut features.** Slots, notches and tabs at least `t` wide (and wider than the kerf), no longer than
   five times their width; webs between cut-outs at least `t`.
-- **Hems and channels.** A hem's inside diameter at least `t` and its return `6t`; a channel's base at
-  least twice its flange height, so a punch fits.
+- **Hems and channels.** A hem's inside diameter at least `t` and its return `6t`; a channel's base
+  wide enough for the brake's punch between its flanges (the shop's tooling: a check by hand).
 - Stock 0.5 to 6 mm bent (10 mm cut flat); the material on the part (`part.material =
   metals.mild_steel()` or the alloy's factory: the check reads it); `--thickness` when the person named
   the gauge. `bd_materials` has no sheet process, so the check always takes `--process sheet`.
@@ -52,8 +52,8 @@ thickness `t`; a shop's set or bend table moves them):
 
 ```bash
 cad step dfm tab.step --process sheet --material steel --thickness 2
-cad model dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42 --rules protolabs
-cad step dfm bracket.step --process sheet --rules sendcutsend --material 5052
+cad model dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42
+cad dxf dfm bracket.dxf --thickness 2 --kerf 0.2 --sheet-size 1219x2438
 ```
 
 The check unfolds the part and measures every feature on the flat pattern, each mapped back to its
@@ -65,14 +65,14 @@ face. The options that change the verdicts:
 - `--k-factor`: from the shop's bend table. Without it K is read from a chart
   (`sheet.k_factor_assumed`), and the flat pattern is not a production blank.
 - `--bend-radius`: the shop's inside radius; a bend modelled otherwise is `sheet.bend_radius_differs`.
-- `--kerf` (features narrower are `sheet.under_kerf`) and `--sheet-size`.
+- `--kerf` (features narrower are `sheet.under_kerf`) and `--sheet-size`: the shop's largest sheet, an
+  error to pass it; without it a standard 5 x 10 ft sheet is assumed, a warning.
 
-Rule sets: `generic`, `hubs`, `protolabs`, `sendcutsend`. With `sendcutsend` give `--material`: the
-thickness must be one of its gauges, and one that is not is `sheet.gauge_unmatched`, its gauge rules
-not evaluated; one off its gauge by over 1% is `sheet.gauge_thickness`. It bends 5052 H32 alone among
-aluminums (`sheet.material_not_bent` for 6061 or 7075 with bends), at its own radius per gauge
-whatever is modelled (`sheet.bend_radius_shop`, a warning: the flanges come out at other lengths).
-A mesh is refused: check the STEP or the model.
+The rules are general, no shop's: a shop's gauges, its tooled radius per gauge, its die widths, its
+brake's angles and bend lengths and its smallest and largest parts are compared with the measurements
+(`parts.thickness_mm`, `bends.inside_radius_mm` and `angle_deg`, `flanges`, `hole_to_bend`, `reliefs`,
+the flat's size), or given as options where they are one. A mesh is refused: check the STEP or the
+model.
 
 ## Read it
 
@@ -150,6 +150,6 @@ material and service limits still apply.
 The following numbers are illustrative inputs, not default process limits.
 
 `sheet.hole_to_bend at tab/face 12: hole-to-bend distance from the bend's tangent line 2.5 mm is
-under the 4 mm minimum` (generic, 2 mm steel). Report a 1.5 mm shortfall and propose moving the hole
+under the 4 mm minimum` (the general rule, 2 mm steel). Report a 1.5 mm shortfall and propose moving the hole
 or a supplier-approved relief. If the shop's drawing measures from the bend centerline, compare its
 number with `distance_centerline_mm` instead.
