@@ -473,7 +473,7 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
         print("closure     none: a mesh carries none, only an .xbf does")
     elif query in ("summary", "structure") and not args.json:
         print(summary_text(found["summary"]))
-        path = Path(str(found["summary"]["state"].get("path") or ""))
+        path = Path(str((found["summary"].get("state") or {}).get("path") or ""))
         if found["closure"] is None and path.suffix.lower() in (".step", ".stp"):
             print("closure     none: a STEP file carries none, only an .xbf does (a model's document, inspected by its "
                   "id, has one)")
@@ -526,6 +526,17 @@ def summary_text(summary: dict[str, Any]) -> str:
         if state.get("builtAt"):
             said += f", built {_span(time.time() - state['builtAt'])} ago"
     lines.append(f"state       {said}")
+    if summary.get("type") == "implicit":
+        # An implicit document (``cad.engine.implicit_document``): the mesh sampled from its field, its facts.
+        lines.append("type        implicit: the mesh sampled from a field, no B-rep")
+        lines.append(f"triangles   {summary.get('triangles') or 0:,}")
+        bounds = summary.get("bounds")
+        lines.append(f"bounds      {' x '.join(_said.number(value) for value in bounds)} mm" if bounds else "bounds      none")
+        if summary.get("volume") is not None:
+            lines.append(f"volume      {_said.number(summary['volume'])} mm^3")
+        if summary.get("cell") is not None:
+            lines.append(f"cell        {_said.number(summary['cell'])} mm")
+        return "\n".join(lines)
     parts = summary["parts"]
     lines.append(f"parts       {parts['occurrences']} in {parts['root']}"
                  + (f" ({parts['distinct']} distinct)" if parts["distinct"] != parts["occurrences"] else ""))

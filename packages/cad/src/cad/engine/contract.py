@@ -39,8 +39,11 @@ from cad.engine.said import COMMAND, SERVER
 __all__ = ["CONTRACT", "KERNEL", "PROTOCOL", "interpreter", "notice", "refusal", "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
-# changes a request a worker answers, a frame it answers in, or the reports a build answers with.
-PROTOCOL = 1
+# changes a request a worker answers, a frame it answers in, or the reports a build answers with. 2: a
+# document carries its format -- an implicit document's bytes are a GLB, not an xbf -- in a build's
+# report (``document``), a ``result``'s and a ``save``'s header (``format``); a server of protocol 1 would
+# read them as an xbf.
+PROTOCOL = 2
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"

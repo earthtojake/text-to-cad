@@ -49,7 +49,7 @@ from typing import Any, Callable
 
 from cad.engine.ids import canonical, file_id
 
-__all__ = ["BuildError", "build", "load_script"]
+__all__ = ["BuildError", "build", "document_bytes", "load_script"]
 
 # What the library's aliases say of an earlier spelling (``cad.read_step is deprecated; use cad.step.read``).
 _DEPRECATED = r"cad(gen)?\.[\w.]+ is deprecated; use "
@@ -549,6 +549,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
         loaded = time.perf_counter()
         context.base = script.parent
         context.script = script
+        context.cache = cache  # the engine's cache folder, which an implicit document's bytes may be reused from
         models = models_in(vars(module), script)
         # The explicit names the script declares now, what its run tells the engine (``identity.released``).
         own, declared = set(models), sorted({model.explicit_name for model in models if model.explicit_name is not None})
@@ -664,6 +665,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     load_seconds = loaded - started
     for report, (model, result, body, children) in zip(reports, results):
         report["id"] = model.id
+        report["type"] = model.kind  # its document's type: a model's XCAF document, or an implicit document
         report["source"] = model.source
         if result is not None:
             report["timings"] = {"load": round(load_seconds, 4), "body": round(body, 4)}
@@ -725,6 +727,8 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
             plan: list | None = None, context: Any = None) -> None:
     from cad.engine import document
 
+    if model.kind == "implicit":
+        return _finish_implicit(model, result, run, report, log, context)
     timings = report["timings"]
     plan = plan if plan is not None else model.plan()
     targets = [(target.kind, target.path) for target in plan]
@@ -820,6 +824,76 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
     _BUILT[model.id] = built
     _write(model, plan, tree, signature, report, log)
     timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+
+
+def _closure(model: Any, run: Any, context: Any, report: dict[str, Any], folder: Path) -> str | None:
+    """The build closure a document carries (``previous.manifest``), as text, its location said in the
+    report (``closure``); None with no build context."""
+    if context is None:
+        return None
+    from cad.engine import previous
+
+    modules, unkeyable = context.modules(model)
+    made = previous.manifest(run.keys, f"{model.script}::{model.name}", folder, model, modules, unkeyable,
+                             context.named(model))
+    report["closure"] = previous.located(made, folder)
+    return previous.text(made)
+
+
+def _finish_implicit(model: Any, result: Any, run: Any, report: dict[str, Any], log: Callable[[str], None],
+                     context: Any) -> None:
+    """An implicit model's document (``cad.engine.implicit_document``): the field its body returned, sampled by its
+    producer's writer into the GLB the engine holds, or -- the body ran to a field of the digest the last
+    build here sampled -- the last build's bytes, their closure rewritten. The report says its facts
+    (``triangles``, ``bounds``: the run line's delta) and its document (``document``: the format, the bytes'
+    size and the field's digest); the bytes themselves wait for the worker (``document_bytes``)."""
+    import importlib
+
+    from cad.engine import implicit_document as implicit
+    from cad.registry import producer_for
+
+    timings = report["timings"]
+    _say("stage", "sample")
+    key = f"{model.script}::{model.name}"
+    text = _closure(model, run, context, report, model.script.parent)
+    digest = result.digest
+    remembered = _WRITTEN.get(key)
+    clock = time.perf_counter()
+    held_data = remembered.data if remembered is not None and remembered.signature == ("implicit", digest) else None
+    if held_data is None and getattr(context, "cache", None):
+        # A fresh worker: the engine's cache file of it, where its digest is this field's.
+        from cad.engine.records import FILES
+
+        cached = Path(context.cache) / model.id / FILES["glb"]
+        if cached.is_file():
+            data = cached.read_bytes()
+            if (implicit.read_extras(data) or {}).get("digest") == digest:
+                held_data = data
+    if held_data is not None:
+        # The same field as was sampled last, here or before a restart: its bytes, under this build's closure.
+        extras = implicit.read_extras(held_data) or {}
+        data = implicit.with_extras(held_data, {**extras, "closure": text})
+        facts, sampled = dict(extras.get("facts") or implicit.facts_of([], [])), False
+    else:
+        module, _sep, function = producer_for("implicit", result, where=f"implicit {model.identity}").writer.partition(":")
+        data, facts = getattr(importlib.import_module(module), function)(result, model.name, closure=text)
+        sampled = True
+    timings["sample"] = round(time.perf_counter() - clock, 4)
+    report["facts"] = facts
+    report["parts"], report["named"] = 1, 0
+    report["document"] = {"format": implicit.FORMAT, "bytes": len(data), "digest": digest, "sampled": sampled}
+    report["files"] = {}
+    _WRITTEN[key] = _Written(("implicit", digest), None, None, text, data=data)
+    report["id"] = model.id
+    report["source"] = model.source
+    timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+
+
+def document_bytes(script: Path, name: str) -> bytes | None:
+    """The bytes of the implicit document of model ``name`` of ``script`` this process last built or took
+    (``_finish_implicit``, ``_previous``), else None: what the worker sends the daemon after a build's reports."""
+    written = _WRITTEN.get(f"{canonical(script)}::{name}")
+    return written.data if written is not None and written.data is not None else None
 
 
 def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str, Any],
@@ -968,8 +1042,11 @@ def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None)
            json.dumps(origin, sort_keys=True, separators=(",", ":")))
     found = _HELD.pop(key, None)
     if found is None:
+        from cad.engine import implicit_document as implicit
+
         try:
-            found = _read_held(payload, name)
+            # An implicit document's bytes are a GLB (``cad.engine.implicit_document``): read as a mesh file is.
+            found = implicit.source_of(payload, name) if implicit.is_glb(payload) else _read_held(payload, name)
             found.origin = origin
         except DocumentCompatibilityError:
             # Unsupported or failed conversions leave the saved snapshot recoverable. Only
@@ -1074,14 +1151,23 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         where = "cache"
         if cache is None:
             return {"used": False, "reason": "the engine keeps no cache to take it from"}, None
-        from cad.engine.records import FILE
+        from cad.engine.records import FILES
 
-        cached = Path(cache) / model.id / FILE
+        cached = Path(cache) / model.id / FILES["glb" if model.kind == "implicit" else "xbf"]
         if not cached.is_file():
             return {"used": False, "reason": "the engine's cache holds none of it"}, None
-        writer, text = previous.scan(cached)
-        if document.written_format(writer) != previous.FORMAT:
-            return {"used": False, "reason": f"its cache was written by {writer or 'another program'}"}, None
+        if model.kind == "implicit":
+            # An implicit document's closure is in its GLB's extras (``cad.engine.implicit_document``), its writer with it.
+            from cad.engine import implicit_document as implicit
+
+            extras = implicit.read_extras(cached.read_bytes()) or {}
+            writer, text = extras.get("writer"), extras.get("closure")
+            if not str(writer or "").startswith(f"cad.engine {implicit.FORMAT} "):
+                return {"used": False, "reason": f"its cache was written by {writer or 'another program'}"}, None
+        else:
+            writer, text = previous.scan(cached)
+            if document.written_format(writer) != previous.FORMAT:
+                return {"used": False, "reason": f"its cache was written by {writer or 'another program'}"}, None
         if text is None:
             return {"used": False, "reason": "its cache holds no key"}, None
         moved = _relocation(model)
@@ -1107,7 +1193,17 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         shown_changes = changes[:3] + ([f"{len(changes) - 3} more"] if len(changes) > 3 else [])
         return {"used": False, "reason": ", ".join(shown_changes), "changed": changes}, None
     timings = {"key": round(keyed - clock, 4)}
-    if cached is not None:
+    taken_document: dict[str, Any] | None = None
+    if cached is not None and model.kind == "implicit":
+        # An implicit document taken whole: its GLB bytes, answered as they are (``held``, ``document_bytes``).
+        from cad.engine import implicit_document as implicit
+
+        data = cached.read_bytes()
+        extras = implicit.read_extras(data) or {}
+        timings["read"] = round(time.perf_counter() - keyed, 4)
+        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved)
+        taken_document = {"format": implicit.FORMAT, "bytes": len(data), "digest": extras.get("digest"), "sampled": False}
+    elif cached is not None:
         # Taken read whole, and kept as its bytes: a document read is never written again (the
         # class's note), so what is asked of it is answered from them (``held``).
         try:
@@ -1138,6 +1234,15 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
               "children": {}, "bodies": {model.identity: "loaded"}, "cache": {"used": True, "from": where},
               "timings": timings, "files": {}}
     report["closure"] = previous.located(compared, folder)
+    if model.kind == "implicit":
+        # Its document, from the bytes this worker holds of it (``document_bytes``): the daemon's cache file,
+        # or the last build here, taken from memory.
+        from cad.engine import implicit_document as implicit
+
+        held_data = remembered.data if remembered is not None else None
+        extras = implicit.read_extras(held_data) if held_data is not None and taken_document is None else None
+        report["document"] = taken_document or {"format": implicit.FORMAT, "bytes": len(held_data or b""),
+                                                "digest": (extras or {}).get("digest"), "sampled": False}
     return report["cache"], report
 
 

@@ -43,7 +43,7 @@ KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib",
 MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engine.model", "cad.engine.build",
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
                       "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
-                      "cad.step", "cad.xbf",
+                      "cad.step", "cad.xbf", "cad.implicit", "cad.engine.implicit_document",
                       "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
                       "cad.srdf")
 

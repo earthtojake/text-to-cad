@@ -153,6 +153,7 @@ class Models:
                     root["ok"] = False
                     root.setdefault("error", report["error"])
                     continue
+                document = report.get("document") if isinstance(report.get("document"), dict) else None
                 with self.lock:
                     old = self.records.get(ident)
                     # This build's generation. A document is what its last run made: a run of the same
@@ -162,18 +163,32 @@ class Models:
                     # Anything else is a new generation.
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
                             and not recorded.startswith("t"))
+                    # An implicit document a rebuild sampled nothing of (the body ran to the same field: the same
+                    # bytes, under a new closure) is the same generation too: no page fetches it again.
+                    if (document and document.get("format") == "glb" and document.get("sampled") is False
+                            and old is not None and old.get("format") == "glb" and old.get("worker") is worker):
+                        same = True
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],
                                            "kind": "model", "python": python, "with": mine,
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
-                                           "facts": facts}
+                                           "facts": facts,
+                                           "format": str(document.get("format") or "xbf") if document else "xbf"}
                 if facts is not None:
                     from cad.engine.delta import delta
 
                     report["delta"] = delta(facts, before)
                 self.daemon.builders[ident] = worker
+                if document and document.get("format") == "glb" and isinstance(document.get("offset"), int):
+                    # An implicit document is the engine's file from the moment it is built: its bytes came after
+                    # the build's reports (``worker._documents``), and go to the cache now, so its page reads
+                    # them at once and no verb waits for an idle save.
+                    at, size = int(document["offset"]), int(document.get("bytes") or 0)
+                    data = (answer.get("payload") or b"")[at:at + size]
+                    if len(data) == size and size:
+                        self.cache.write_now(ident, recorded, data)
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
                 if (report.get("cache") or {}).get("unreadable"):
@@ -291,6 +306,9 @@ class Models:
             found["declares"] = source["declares"]  # the explicit names its script declared at this run
         if facts is not None:
             found["facts"] = facts
+        document = report.get("document") if isinstance(report.get("document"), dict) else None
+        if document and document.get("format") and document["format"] != "xbf":
+            found["format"] = str(document["format"])  # an implicit document's: its file is a GLB (``cache``)
         for key in ("opened", "pinned", "preview", "cache", "relocated"):  # the home's and the cache's, kept across builds
             if key in old:
                 found[key] = old[key]
@@ -517,6 +535,18 @@ class Models:
             if server.has(ident, version, whole=True):
                 self.cache.keep(ident, recorded, self.held_bytes(ident, version) or b"")
                 continue
+            if self.format(ident) == "glb":
+                # An implicit document: its file was written as its build registered; one that was not
+                # (the cache could not be written) is asked of the worker whole, and kept.
+                if not self.cache.current(ident, recorded):
+                    try:
+                        _structure, _shapes, whole = self.load(ident, worker, whole=True)
+                    except Gone:
+                        return
+                    except (OSError, ValueError, KeyError):
+                        continue
+                    self.cache.keep(ident, recorded, whole)
+                continue
             try:
                 structure, shapes, whole = self.load(ident, worker, whole=True)
             except Gone:
@@ -550,6 +580,10 @@ class Models:
                 raise self.not_held(ident)
             source, version = record["source"], record["version"]
             worker = leaving or record["worker"]
+        if record.get("format") == "glb" and not whole:
+            # An implicit document has no parts to serve: its page reads its file (``file_of``). The server
+            # holds a structure with none, so its version is read and waited on as a model's is.
+            return self._implicit_structure(ident, source["name"], version), {}
         if worker is None or not worker.alive():
             if leaving is None and self.cache.current(ident, record["revision"]):
                 return self.from_disk(ident)
@@ -577,13 +611,30 @@ class Models:
         for key, size in done["shapes"]:
             shapes[key] = payload[at:at + size]
             at += size
-        from cad.engine.export.viewer import fingerprint
-
-        structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
-                     "id": ident, "closure": done.get("closure"), "version": version}
+        structure = self._structure(ident, done, version)
         if whole:
             return structure, shapes, payload[at:at + int(done.get("xbf") or 0)]
         return structure, shapes
+
+    @staticmethod
+    def _structure(ident: str, done: dict[str, Any], version: Any) -> dict[str, Any]:
+        """The served structure of a worker's ``result`` answer: a model's, or an implicit document's (no
+        structure in the answer: the parts-less one the server holds for it)."""
+        if done.get("format") == "glb" or not done.get("structure"):
+            name = str((done.get("closure") or {}).get("name") or "")
+            return Models._implicit_structure(ident, name, version, done.get("closure"))
+        from cad.engine.export.viewer import fingerprint
+
+        return {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
+                "id": ident, "closure": done.get("closure"), "version": version}
+
+    @staticmethod
+    def _implicit_structure(ident: str, name: str, version: Any, closure: Any = None) -> dict[str, Any]:
+        """What the server holds of an implicit document: a structure with no parts (its mesh is its file,
+        read by ``file_of``), at the record's version, so ``/api/doc/<id>/version`` waits on it as on a model's."""
+        return {"name": name, "units": "mm", "prototypes": [], "instances": [], "tree": [], "kinematics": None,
+                "kind": "implicit", "format": "glb", "exportRevision": f"implicit:{version}", "path": ident,
+                "id": ident, "closure": closure, "version": version}
 
     def prune(self) -> None:
         """Each record whose worker is gone keeps its document, with no worker (``drain`` took it
@@ -609,7 +660,7 @@ class Models:
                 ident = row["id"]
                 entry = {"id": ident, "script": row["source"]["script"],
                          "name": row["source"]["name"], "builtAt": row["builtAt"], "version": row["version"],
-                         "kind": row["kind"], "state": self.state(ident)}
+                         "kind": row["kind"], "type": self.type_of(ident), "state": self.state(ident)}
                 if entry["state"] == "held":
                     entry["held"] = self.where(ident)
                 lost = self.rebuild(ident) if entry["state"] in ("unsaved", "detached") else None
@@ -645,6 +696,24 @@ class Models:
         return "unsaved" if Path(record["source"]["script"]).is_file() else "detached"
 
     # --- the cache (``cache``) ----------------------------------------------------------------
+
+    def format(self, ident: str) -> str:
+        """The format of document ``ident``'s bytes: ``xbf``, or ``glb`` for an implicit document's."""
+        with self.lock:
+            record = self.records.get(ident)
+        return str((record or {}).get("format") or "xbf")
+
+    def type_of(self, ident: str) -> str:
+        """The document type of document ``ident`` (``cad.registry``): ``implicit`` for one whose bytes are a GLB,
+        the mesh sampled from a field; ``model`` for every other model's and a shape's."""
+        return "implicit" if self.format(ident) == "glb" else "model"
+
+    def file_of(self, ident: str) -> Path | None:
+        """An implicit document's file: the GLB the engine's cache holds of it, at the revision the book names
+        (``cache.file``); None for any other document, or one whose file is not there."""
+        if self.format(ident) != "glb":
+            return None
+        return self.cache.file(ident)
 
     def row(self, ident: str) -> dict[str, Any] | None:
         """This process's book's row of document ``ident`` (a copy of it), else None."""
@@ -717,7 +786,8 @@ class Models:
         row = {"id": ident, "source": {"script": str(registering.home(held, record)), "name": record["entry"]},
                "worker": None, "program": str(program) if program else None, "kind": record["kind"],
                "builtAt": record.get("built"), "version": secrets.token_hex(8),
-               "files": [], "revision": meta["revision"]}
+               "files": [], "revision": meta["revision"],
+               "format": str(meta.get("format") or record.get("format") or "xbf")}
         with self.lock:
             if ident in self.records:
                 return
@@ -792,8 +862,5 @@ class Models:
         for key, size in done["shapes"]:
             shapes[key] = payload[at:at + size]
             at += size
-        from cad.engine.export.viewer import fingerprint
-
-        structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
-                     "id": ident, "closure": done.get("closure"), "version": record["version"]}
+        structure = self._structure(ident, done, record["version"])
         return structure, shapes, data

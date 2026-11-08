@@ -380,7 +380,9 @@ def producer_for(document_type: str, value: Any, *, where: str = "a model") -> P
         raise RuntimeError(f"{document_type}: {len(found)} producers take {type(value).__name__} "
                            f"({', '.join(producer.integration for producer in found)}): exactly one may")
     accepted = sorted({producer.accepts for producer in producers_for(document_type)})
-    origin = str(type(value).__module__).split(".")[0]
+    parts = str(type(value).__module__).split(".")
+    # A value of one of the library's own integration namespaces (``cad.cadjoint``'s Field) is that integration's.
+    origin = parts[1] if parts[0] in ("cad", "cadgen") and len(parts) > 1 and parts[1] in INTEGRATIONS else parts[0]
     if origin in INTEGRATIONS:
         more = f"the {origin} integration has no producer of {document_type} from {type(value).__name__}"
     elif origin in ("builtins", "", "__main__", "cad"):

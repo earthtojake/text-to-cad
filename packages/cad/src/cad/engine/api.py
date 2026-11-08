@@ -167,6 +167,10 @@ class Document:
 
     @property
     def shape(self) -> Any:
+        if self._shape is _UNSET and self.report.get("type") == "implicit":
+            raise TypeError(f"{self.name} is an implicit document: the mesh sampled from its field, with no B-rep "
+                            "shape to transfer; export it (export(handle, 'part.stl')), or return "
+                            "cad.cadjoint.solid(scene, cell=...) from a @model where a shape is needed")
         if self._shape is _UNSET:
             from cad.engine.mechanism import TRANSFERRED
 
@@ -805,6 +809,12 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     if isinstance(mesh, Path) and mesh.suffix.lower() in (".glb", ".stl", ".3mf"):
         return _mesh(mesh, named, query)
     path = _document(source, "inspect", named)
+    if not isinstance(path, Path) and ref is None and query in ("closure", "summary", "structure"):
+        # An implicit document (``cad.engine.implicit_document``) is the engine's file of a mesh: what it holds is read
+        # from that file, as a mesh file's is, and its closure from the file's own words.
+        found = _ask({"op": "document", "id": path})["document"]
+        if "path" in found and Path(found["path"]).suffix.lower() == ".glb":
+            return _mesh(Path(found["path"]), named, query, ident=path)
     if query == "build":
         if not isinstance(path, Path):
             found = _ask({"op": "document", "id": path})["document"]  # a model's: its live record
@@ -877,13 +887,31 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     return found[0] if len(found) == 1 else found
 
 
-def _mesh(path: Path, named: str, query: str) -> Facts:
+def _mesh(path: Path, named: str, query: str, ident: str | None = None) -> Facts:
     """``inspect`` of a mesh file: a GLB's nodes, meshes and animations, each with its duration, read
     from its JSON alone (``{"mesh": ...}``, without a ref); an STL's or a 3MF's, and any ref or
     closure of a mesh, refused in words. A mesh has no B-rep, so no ref names a face of it, and no
-    build closure: only an .xbf carries one."""
+    build closure: only an .xbf carries one -- and an implicit document (``ident``: its id; the GLB the
+    engine's cache holds of it, ``cad.engine.implicit_document``), whose summary says its triangles, bounds and
+    volume and whose closure is in its own words."""
     if not path.is_file():
         raise ValueError(f"no document {named}")
+    if ident is not None:
+        from cad.engine import implicit_document as implicit
+
+        extras = implicit.read_extras(path.read_bytes()) or {}
+        if query == "closure":
+            closure = extras.get("closure")
+            if not closure:
+                raise EngineError(f"{named} holds no build closure")
+            return json.loads(closure)
+        facts = dict(extras.get("facts") or {})
+        info = _ask({"op": "model_info", "id": ident})["model"]
+        state = {key: info.get(key) for key in ("state", "held", "cached", "builtAt")}
+        return {"summary": {"id": ident, "name": str((info.get("source") or {}).get("name") or named), "type": "implicit",
+                            "state": state, "triangles": facts.get("triangles"), "bounds": facts.get("bounds"),
+                            "volume": facts.get("volume"), "cell": extras.get("cell"), "digest": extras.get("digest")},
+                "closure": json.loads(extras["closure"]) if extras.get("closure") else None}
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
         from cad.engine.said import COMMAND
 

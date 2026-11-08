@@ -41,7 +41,7 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entr
 from .documents import EngineDocuments
 from cad.registry import DOCUMENT_TYPES
 
-from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, MESH_KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
     "ApiError",
@@ -227,8 +227,8 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
                 "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, models, drc, source"}
-# A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+# A model's document has no file, so no source; an implicit document's source is the engine's file of it.
+_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file or entry.view == "mesh" else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
@@ -758,7 +758,7 @@ class CadApp:
         if model is not None:
             source = model.get("source") or {}
             state = str(model.get("state") or "held")
-            kind = "model"
+            kind = "implicit" if model.get("type") == "implicit" else "model"
             found = {"name": str(source.get("name") or row.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
@@ -874,7 +874,7 @@ class CadApp:
         kind = self._kinds.get(base)
         if kind is None:
             path = self._file_of(base)
-            kind = file_kind(path) if path is not None else "model" if self._holds_model(base) else None
+            kind = file_kind(path) if path is not None else self._model_kind(base)
             if kind is not None:
                 self._kinds[base] = kind
         return kind
@@ -885,6 +885,23 @@ class CadApp:
 
         return held(ident)[0] is not None
 
+    def _model_kind(self, ident) -> str | None:
+        """The kind of the model document the engine holds of id ``ident``: ``implicit`` for one built from a
+        field, ``model`` for any other; None for none (``model_catalog.held``)."""
+        from .model_catalog import held
+
+        model = held(ident)[0]
+        if model is None:
+            return "model" if self._holds_model(ident) else None
+        return "implicit" if model.get("type") == "implicit" else "model"
+
+    def _implicit_file(self, ident) -> str | None:
+        """An implicit document's file, the GLB the engine's cache holds of it (``model_info``'s ``file``)."""
+        from .model_catalog import held
+
+        model = held(ident)[0]
+        return str(model["file"]) if model is not None and model.get("file") else None
+
     def _kind_route(self, request, response, kind, ident, rest) -> None:
         actual = self.kind_of(ident)
         if actual is None:
@@ -892,8 +909,12 @@ class CadApp:
             raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
         if actual != kind:
             raise ApiError(404, f"{ident} is a {actual}", f"read it at {document_api(actual, ident)}")
-        # A pose's id (``<id>~<digest>``) reads its document's file.
-        path = None if kind == "model" else self._file_of(ident.split("~", 1)[0])
+        # A pose's id (``<id>~<digest>``) reads its document's file; an implicit document's is the engine's.
+        base = ident.split("~", 1)[0]
+        path = None if kind == "model" else self._implicit_file(base) if kind == "implicit" else self._file_of(base)
+        if kind == "implicit" and path is None:
+            self.envelope(base)  # its 404, the engine's reason
+            raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
         if rest == ["source"] and path is not None:
             return self._methods(request, {"GET": lambda: self._stream(response, path)})
         if kind in ENGINE_KINDS:

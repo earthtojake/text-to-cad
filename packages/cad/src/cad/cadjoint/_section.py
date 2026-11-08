@@ -128,7 +128,7 @@ def section(scene: Any, out: str | os.PathLike, *, axis: str = "z", at: float = 
     """
     import numpy as np
 
-    from cad.cadjoint._solid import _fitted, _scene
+    from cad.cadjoint._field import _fitted, _scene
 
     field = _scene(scene, "cad.cadjoint.section")
     if axis not in AXES:

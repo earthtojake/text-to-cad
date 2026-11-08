@@ -956,6 +956,14 @@ class Daemon:
         self.models.prune()
         record = self.models.held(ident)
         server = self.server
+        if record is not None and record.get("format") == "glb":
+            # An implicit document (``cad.engine.implicit_document``) is the GLB the engine's cache holds of it: every verb
+            # reads that file, as it reads a GLB the person names.
+            self.models.cache.touch(ident)
+            path = self.models.file_of(ident)
+            if path is None:
+                raise self.models.not_held(ident)
+            return {"path": str(path), "implicit": ident}, b""
         if record is not None:
             self.models.cache.touch(ident)  # a read: its idle timer starts again
             worker = record["worker"]
@@ -1162,6 +1170,10 @@ class Daemon:
             else:
                 model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
                                                           "kind", "python", "with")}
+                model["type"] = self.models.type_of(ident)  # its document type: ``model``, or ``implicit``
+                if model["type"] == "implicit":
+                    file = self.models.file_of(ident)
+                    model["file"] = None if file is None else str(file)  # the GLB its page and its verbs read
                 model["state"] = self.models.state(ident)
                 # On disk in the engine's cache, at its revision: a restart reopens it as last built.
                 model["cached"] = (self.models.where(ident) or "").endswith("disk")
@@ -1195,12 +1207,22 @@ class Daemon:
             try:
                 cached = self.models.cache.registry()
                 if cached is not None:
-                    original = cached.cache.path(self.models.cache.inside(ident)).resolve()
-                    if any(Path(path).resolve() == original for path in request["destinations"]):
+                    originals = {cached.cache.path(self.models.cache.inside(ident, format)).resolve()
+                                 for format in ("xbf", "glb")}
+                    if any(Path(path).resolve() in originals for path in request["destinations"]):
                         from cad.engine.export import ExportRefused
 
                         raise ExportRefused("export to a different path; the engine's cached document is preserved")
                 source, payload = self.document(ident)
+                if source.get("implicit") and "modelRevision" in (request.get("expected") or {}):
+                    # The viewer's export of an implicit document, at the revision the page shows: checked here
+                    # against the book, as a held document's is; the file is then exported as a mesh file is.
+                    with self.models.lock:
+                        record = self.models.records.get(ident)
+                    if record is None or record["version"] != request["expected"]["modelRevision"]:
+                        send({"failed": "The source changed. Open Export again to use the displayed revision."})
+                        return
+                    request = {**request, "expected": None}
             except ValueError as error:
                 send(refused(error))
                 return
@@ -1246,6 +1268,10 @@ class Daemon:
             elif "script" in source:
                 order = {"id": 1, "op": "result", "script": source["script"], "name": source["function"],
                          "cwd": request.get("cwd")}
+            elif source.get("implicit"):
+                send({"failed": f"{ident} is an implicit document, the mesh sampled from a field: it has no B-rep "
+                                "shape; export it, or return cad.cadjoint.solid(scene, cell=...) from a @model"})
+                return
             else:
                 send({"failed": f"{ident} is a file's document: xbf.read or step.read reads its shape"})
                 return
@@ -1323,7 +1349,8 @@ class Daemon:
                                                         "seconds": round(time.monotonic() - waited, 1)}
                         # The program that asked: what a document it built names to build it again.
                         answer["program"] = request.get("program")
-                        self._built(worker, answer)
+                        self._built(worker, answer)  # an implicit document's bytes among it (``Models.register``)
+                        answer.pop("payload", None)  # kept by the cache, never sent on: the answer is JSON
                         send(answer)
                         return
                     except Gone as error:
@@ -1430,6 +1457,14 @@ class Daemon:
         said = Progress(lambda frame: send({"progress": frame}), kind="snapshot", job=Path(request["path"]).name,
                         outputs=[request["out"]] if request.get("out") else [])
         try:
+            named = str(request.get("path") or "")
+            if is_id(named) and self.models.held(named) is not None and self.models.format(named) == "glb":
+                # An implicit document is drawn from its file, as a mesh the person names is (``renders._file``).
+                found = self.models.file_of(named)
+                if found is None:
+                    send(refused(self.models.not_held(named)))
+                    return
+                request = {**request, "path": str(found)}
             server = self.serve(request)
             with self.serving:
                 if self.renders is None:

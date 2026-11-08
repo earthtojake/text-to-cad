@@ -11,6 +11,10 @@ so a program that uses it needs the build123d integration beside it, and gets it
   as any other shape -- so its document, view, snapshot, exports and checks are every solid's. The
   surface is meshed by cadjoint's own dual contouring at ``cell`` millimetres, refused where it is not one
   closed body, and simplified by cadjoint's feature-preserving collapse to within ``cell / 20``;
+- ``field(scene, cell=)``: the field with its sampling, which a function declared ``@implicit`` returns
+  (``Field``): the engine samples it once -- the same sampling and the same refusals as ``solid``'s, with
+  nothing simplified and no B-rep -- and holds the mesh as the model's document (the ``implicit`` document
+  type), its producer this integration's (``_producers``, ``_document``);
 - ``section(scene, out, axis=, at=)``: a plane through the field drawn as a PNG -- inside blue, outside
   orange, iso-distance contours and the surface itself in black -- and what it shows (``Section``): how
   far everything is from the surface, read without meshing (a wall's thickness, a blend's reach).
@@ -25,6 +29,8 @@ from typing import TYPE_CHECKING, Any
 # Each name and the module that defines it.
 _NAMES = {
     "solid": "cad.cadjoint._solid",
+    "field": "cad.cadjoint._field",
+    "Field": "cad.cadjoint._field",
     "section": "cad.cadjoint._section",
     "Section": "cad.cadjoint._section",
 }
@@ -48,5 +54,6 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from cad.cadjoint._field import Field, field
     from cad.cadjoint._section import Section, section
     from cad.cadjoint._solid import solid

@@ -79,6 +79,7 @@ ALLOWED_CADGEN = {
     "cad_server.engine.cli",
     # The producers the registry gathers: matchers that read type names, stdlib only.
     "cad.build123d._producers",
+    "cad.cadjoint._producers",
     "cad.kicad._producers",
     "cad_server.cli.document_types",  # every type's commands, from the registry
     "cad._internal.validation_door",  # findings -> ValidationResult, stdlib only

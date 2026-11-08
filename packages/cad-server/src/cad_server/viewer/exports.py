@@ -152,6 +152,9 @@ class ExportJobs(Jobs):
 
         if Path(spec["doc"]).suffix.lower() in MESHES or kicad_kinds(spec) is not None:
             return self._mesh_source(spec)
+        implicit = self._implicit_source(spec)
+        if implicit is not None:
+            return implicit
         with self.server.load_lock:
             doc = self.server.served.get(spec["doc"])
             if doc is None or doc.version != spec["revision"]:
@@ -168,6 +171,29 @@ class ExportJobs(Jobs):
             source, expected = {"id": path}, {"digest": digest, "id": path, "modelRevision": spec["revision"]}
             return source, expected, label or "export"
         return {"path": path}, {"version": spec["revision"]}, Path(path).stem
+
+    @staticmethod
+    def _implicit_source(spec):
+        """An implicit document the page shows (``doc`` its id, ``revision`` the catalog's hash of the build it
+        shows, ``model:<version>``), exported from the engine's file of it as a mesh file is; None for any other
+        document, refused when the engine holds another build of it now."""
+        from cad.engine.ids import is_id
+
+        from .model_catalog import held
+
+        if not is_id(str(spec["doc"])):
+            return None
+        model = held(str(spec["doc"]))[0]
+        if model is None or model.get("type") != "implicit":
+            return None
+        version = model.get("version") or model.get("builtAt")
+        if not model.get("file") or spec["revision"] not in (version, f"model:{version}"):
+            raise ExportError("The source changed. Open Export again to use the displayed revision.", 409)
+        path = Path(model["file"])
+        stat = path.stat() if path.is_file() else None
+        if stat is None:
+            raise ExportError("Reopen this model before exporting.", 409)
+        return {"path": str(path)}, {"version": f"{stat.st_mtime_ns}-{stat.st_size}"}, str(model["source"]["name"])
 
     @staticmethod
     def _mesh_source(spec):

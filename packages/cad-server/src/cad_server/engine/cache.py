@@ -58,6 +58,7 @@ the engine does everything it did, and saves nothing.
 from __future__ import annotations
 
 import collections
+from pathlib import Path
 import os
 import sys
 import threading
@@ -129,14 +130,43 @@ class Cache:
         return None if held is None else str(held.cache.path(DOCUMENTS))
 
     @staticmethod
-    def inside(ident: str) -> str:
-        """Where document ``ident``'s bytes are in the cache folder: under ``documents/`` alone."""
+    def inside(ident: str, format: str = "xbf") -> str:
+        """Where document ``ident``'s bytes are in the cache folder: under ``documents/`` alone, the file named
+        for its format (``records.FILES``: an xbf's ``document.xbf``, an implicit document's ``document.glb``)."""
         from cad.engine.ids import is_id
+        from cad.engine.records import FILES
         from cad_server.engine.registry import DOCUMENTS
 
         if not is_id(ident):
             raise ValueError(f"{ident!r} is not a document id")
-        return f"{DOCUMENTS}/{ident}/{FILE}"
+        return f"{DOCUMENTS}/{ident}/{FILES.get(format or 'xbf', FILE)}"
+
+    @staticmethod
+    def format_of(data: bytes) -> str:
+        """The format of a document's bytes: ``glb`` for an implicit document's (``cad.engine.implicit_document``), else
+        ``xbf``."""
+        from cad.engine import implicit_document as implicit
+
+        return implicit.FORMAT if implicit.is_glb(data) else "xbf"
+
+    def format(self, ident: str) -> str:
+        """The format of document ``ident``'s cache file: its record's, else its index entry's, else ``xbf``."""
+        with self.lock:
+            entry = self.index.get(ident)
+        if entry is not None and entry.get("format"):
+            return str(entry["format"])
+        held = self.registry()
+        record = held.get(ident) if held is not None else None
+        meta = (record or {}).get("cache")
+        return str((meta or {}).get("format") or (record or {}).get("format") or "xbf")
+
+    def file(self, ident: str) -> Path | None:
+        """The path of document ``ident``'s cache file when it is there and at the record's revision
+        (``found``), else None."""
+        if self.found(ident) is None:
+            return None
+        held = self.registry()
+        return None if held is None else held.cache.path(self.inside(ident, self.format(ident)))
 
     def ensure_index(self) -> None:
         """Index the cache files once (the module): a listing and a stat each, nothing read."""
@@ -150,15 +180,19 @@ class Cache:
         from cad.engine.ids import is_id
         from cad_server.engine.registry import DOCUMENTS
 
+        from cad.engine.records import FILES
+
         found = {}
         for ident in held.cache.names(DOCUMENTS):  # only ``documents/``: the rest of the folder is not ours
             if not is_id(ident):
                 continue
-            try:
-                stat = held.cache.path(self.inside(ident)).stat()
-            except OSError:
-                continue
-            found[ident] = {"bytes": stat.st_size, "revision": None}
+            for format in FILES:  # a document's file is one of them: an xbf's, or an implicit document's GLB
+                try:
+                    stat = held.cache.path(self.inside(ident, format)).stat()
+                except OSError:
+                    continue
+                found[ident] = {"bytes": stat.st_size, "revision": None, "format": format}
+                break
         with self.lock:
             for ident, entry in found.items():
                 self.index.setdefault(ident, entry)
@@ -182,8 +216,9 @@ class Cache:
         if record is None or record.get("kind") not in ("model", "shape") or not isinstance(meta, dict) \
                 or not meta.get("revision"):
             return None
+        format = str(meta.get("format") or record.get("format") or "xbf")
         try:
-            size = held.cache.path(self.inside(ident)).stat().st_size
+            size = held.cache.path(self.inside(ident, format)).stat().st_size
         except OSError:
             size = None
         if size != meta.get("bytes"):
@@ -193,7 +228,7 @@ class Cache:
         with self.lock:
             entry = self.index.get(ident)
             if entry is not None:
-                entry["revision"] = meta["revision"]
+                entry["revision"], entry["format"] = meta["revision"], format
         return record, meta
 
     def current(self, ident: str, revision: str | None) -> bool:
@@ -214,11 +249,18 @@ class Cache:
     def read(self, ident: str) -> bytes | None:
         """The bytes of document ``ident``'s cache file; None when it is gone."""
         held = self.registry()
-        data = held.cache.read(self.inside(ident)) if held is not None else None
+        data = held.cache.read(self.inside(ident, self.format(ident))) if held is not None else None
         if data is None:
             with self.lock:
                 self.index.pop(ident, None)
         return data
+
+    def write_now(self, ident: str, revision: str, data: bytes) -> None:
+        """Document ``ident``'s bytes at ``revision`` written on this thread, at once (a build's implicit
+        document, which the daemon holds as its file from the moment the build registers: ``models``):
+        ``_write``, when the cache is not at that revision already."""
+        if data and not self.current(ident, revision):
+            self._write(ident, revision, data)
 
 
     # --- when ----------------------------------------------------------------------------
@@ -323,12 +365,15 @@ class Cache:
         record = held.get(ident)
         if record is None or record.get("revision") != revision:
             return  # a build since recorded a newer revision: its own save follows
-        meta = {"revision": revision, "bytes": len(data)}
-        held.cache.write(self.inside(ident), data)
+        format = self.format_of(data)
+        meta = {"revision": revision, "bytes": len(data), "format": format}
+        held.cache.write(self.inside(ident, format), data)
+        other = self.inside(ident, "xbf" if format != "xbf" else "glb")  # one file per document: the other format's goes
+        held.cache.remove(other)
         held.update(ident, lambda found: {**found, "cache": meta}
                     if found is not None and found.get("revision") == revision else None)
         with self.lock:
-            self.index[ident] = {"bytes": len(data), "revision": revision}
+            self.index[ident] = {"bytes": len(data), "revision": revision, "format": format}
             self.written += 1
 
     def remove(self, ident: str) -> None:

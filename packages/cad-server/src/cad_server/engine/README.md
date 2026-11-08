@@ -624,7 +624,7 @@ failure: the next asker makes it again.
 
 | Module | What it is |
 | --- | --- |
-| `model.py` | the decorators (`out`, `name=`), `@model` or file decorators and never both; `Model` (the function, `.id`, `.build` the debug seam); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
+| `model.py` | the decorators (`out`, `name=`), `@model`, `@implicit` (`Model.kind`) or file decorators and never two; `Model` (the function, `.id`, `.build` the debug seam); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
 | `api.py` | the verbs as functions, through the daemon: `export`, `snapshot`, `inspect` (the root's `cad.export`, ...), and `serve`, `status`, `stop`, which only the CLI calls (process control is the CLI's alone; deleting a document is `cli.delete`), and `build_script`, a script's models built by `Model.build()`; `Document`, the handle a model call returns (`.shape` transferred by id on first access: `result`); `hand_over`, a shape made a document in the caller and handed to the daemon; `observers`, told after each build, export and snapshot what it did, as plain facts (kinds, counts, times, the worker's part, an error's type and frames): the engine counts nothing, and the server's telemetry is an observer the server appends |
 | `colors.py` | a colour as the author gives it (sRGB hex, 0-255 integers, a build123d `Color`) held linear, and the way back (**Materials**) |
 | `mechanism.py` | kinematics: build123d's joints harvested into AP242's links and pairs, couplings (`gear_pair`, `rack_and_pinion_pair`, `screw_pair`), mechanism states (`mechanism_state`), the document's subtree, the structure's `kinematics`, poses (forward kinematics from the ground; `posed`, an assembly copied at a state), and configuration sequences (`configuration_sequence`, a function's samples, `Timeline`: a sequence's pair values over time) |
@@ -650,7 +650,8 @@ failure: the next asker makes it again.
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model** |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
-| `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
+| `implicit_document.py` | an `@implicit` model's document: the GLB the engine writes from a sampled field (`document_bytes`), its closure, digest, cell and facts in `asset.extras.cad` (`with_extras`, `read_extras`), the facts of a sample (`facts_of`), and the export source a verb reads it by (`source_of`, through `export.mesh_file`) |
+| `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name by format (`FILES`: `document.xbf`, `document.glb`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
@@ -972,6 +973,14 @@ must take the value (`registry.producer_for`), else the build fails, naming what
 and the integration that would take the value. Today the build123d integration's producers take a
 build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
 (`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
+The cadjoint integration's producer takes a `cad.cadjoint.Field` (`field(scene, cell=...)`, a frozen
+declaration of a signed-distance scene, its cell and bounds) for the `implicit` type alone
+(`cad/cadjoint/_producers.py`): its writer, `cad.cadjoint._document.document`, samples the field in the
+worker (the grid, the extraction, the sliver removal and the watertightness checks `solid()` makes, with the
+same refusals) and hands the engine positions, normals and triangles, from which the engine's own GLB
+writer makes the document (`cad.engine.implicit_document.document_bytes`), the closure record, the field's
+digest and the facts in the GLB's `asset.extras.cad`. The `model` type has no producer from a `Field`:
+a `@model` that returns one fails, naming `cad.cadjoint.solid(scene, cell=...)` as what makes a shape of it.
 
 **Edits.** A KiCad board or schematic is no producer's: it is changed in place by its type's edit
 (`cad.registry.Edit`), `with kicad_pcb.edit(path) as board:` and `with kicad_sch.edit(path) as
@@ -1398,6 +1407,20 @@ take no store (`store=` is an unexpected keyword argument, as any other). A func
 file (a notebook cell, a REPL, `python -c`) is refused, with the words that hand its shape over
 instead (`model(shape, name=...)`).
 
+**Two formats.** A document is one of two formats, which the record, the cache's meta and every
+answer about it carry as `format`: `xbf` -- an XCAF document with its closure and animations
+(`document.to_bytes`), what every `@model`, file-decorated function and handed-over shape makes --
+or `glb` -- a mesh, the GLB the engine writes from an `@implicit` model's sampled field, its closure and
+digest in the GLB's `asset.extras.cad` (`cad.engine.implicit_document`; **In-memory models**). The worker
+answers a `glb` document with `format: glb`, no structure, no shapes and no placements, and its bytes
+as the frame's payload; the daemon writes them to the cache the moment the build registers
+(`Models.register`, `cache.write_now`), never waiting the idle window, since the file is the only
+copy the verbs read. A `glb` document has no B-rep: `result` by its id is refused (its words name
+`cad.cadjoint.solid`), `Document.shape` on its handle raises, and `draw`, `document` and every verb
+that reads a document by id route the id to the cache file and read it as a mesh file
+(`export.mesh_file`; `Daemon.document` answers `{"path": <the cache file>, "implicit": <id>}`), the
+same path an STL or a GLB file on disk takes. `contract.PROTOCOL` is 2 since the format travels.
+
 **Shapes handed over.** `model(shape, name="plate")` (`api.hand_over`) makes a document of any
 build123d shape a program holds, from a script or a REPL. In the caller, the shape is made a
 document as a build makes one (`document.collect`, `to_xcaf`) and serialised (`document.to_bytes`),
@@ -1495,7 +1518,9 @@ first, then by last activity, the later of a row's `opened` (a page opened it) a
 file's time on disk, a model's run), each row carrying both; a model's script is never read for it.
 
 **The cache.** For every model and shape document -- never a file's, which is its own
-file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
+file -- the engine keeps `documents/<id>/document.xbf` (`document.glb` for a `glb` document,
+`records.FILES` by format, the one file replacing the other when a function changes its decorator;
+**Two formats**) in the cache folder its host names
 ([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
 `$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
@@ -3500,6 +3525,30 @@ the explorer was last in, else the person's home folder, never the script's.
 
 A shape with no function -- a REPL's, a notebook cell's -- is handed over instead: `model(shape,
 name="bracket")` returns the same kind of handle (**Shapes handed over**).
+
+**Implicit models.** `@implicit` (`cad.implicit`, `cad.engine.implicit`) declares a model whose document
+is a mesh sampled from a field, not a B-rep: the function returns `cad.cadjoint.field(scene, cell=...)`
+and the cadjoint producer samples it in the worker (**Producers**). It is the third way a function
+becomes a document and stacks with neither `@model` nor a file decorator (refused, saying to drop
+one). Its id is made as a model's, its handle is the same kind (`handle.id`, `handle.url`), its page
+is `/<id>`, and it is kept, held, retired and rebuilt as a model is (**Document lifetime**), with a
+`glb` document (**Two formats**). The run line's stages are `body` and `sample`, and the line under it
+says the sample, not a tree: `triangles 5,232 (was 7,568) · bounds 40 × 20 × 6 mm`. A body that runs
+again to the same field -- `Field.digest`, blake2b of the lowered scene, its cell and bounds -- samples
+nothing: the bytes stand under the new closure (`report["document"]["sampled"]` false, the page's
+version unchanged, so no viewer fetches them again), from the worker's memo or from the cache file a
+fresh worker reads. The report's `type` is `implicit`; `cad implicit export|snapshot|inspect|dfm <id>`
+take the id, as `cad model snapshot|export|inspect <id>` do: an id is opaque to every verb and routes to
+its document whatever the format (Quick Edit's prompt names `cad model snapshot <id>` for any
+document), only a *handle* is refused by its type (`cad.model.export(implicit_handle, ...)` says to use
+`cad.implicit`). Exports are the mesh file's, `stl`, `threemf` and `glb`; `inspect`'s summary says
+`type`, `triangles`, `bounds`, `volume`, `cell` and `digest`. An implicit model is a leaf: a `@model`'s
+body calling one is refused (`BuildContext.child`), since a field has no shape to place; an assembly
+takes `cad.cadjoint.solid(scene, cell=...)` instead. In the CAD Viewer its envelope's kind is `implicit`,
+its api `/api/v1/documents/implicit/<id>`, whose `source` streams the GLB (`model/gltf-binary`, the
+page's `?v=<version>` ignored), and its exports a job through `POST /api/v1/documents/<id>/exports`
+with the row's hash as the source revision ([viewer/http_app.py](../viewer/http_app.py),
+[viewer/exports.py](../viewer/exports.py)).
 
 Ids live in the library's `cad.engine.ids`, document names (a CAD file's path or an id) in
 `cad.engine.addresses`; the daemon's transient book of live models, by id, lives in [models.py](models.py).

@@ -2,9 +2,10 @@
 declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
-(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
-``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
-``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
+(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file),
+``implicit`` (a model built from a signed-distance field, held as the mesh sampled from it, with no file),
+``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
+``kicad_sch``. A type is its decorator where it has one (``@model``, ``@implicit``, ``@step("arm.step")``), its edit where
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
 has one (``step.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,

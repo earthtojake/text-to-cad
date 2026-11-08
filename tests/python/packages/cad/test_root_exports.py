@@ -18,10 +18,10 @@ import cad.engine.model
 HEAVY = ("OCP", "build123d")
 
 # The engine's own surface (``cad.engine``), which the library's namespaces are made of.
-ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
+ENGINE = ("model", "implicit", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
 # The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
-TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+TYPES = ("model", "implicit", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
@@ -30,7 +30,7 @@ NAMESPACES = {
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
                       "boundary_edges", "self_intersections", "mass_properties", "flat_pattern", "planar_faces",
                       "flatten_face", "flatten_faces", "union_faces", "offset_profile", "faceted_solid"),
-    "cad.cadjoint": ("solid", "section", "Section"),
+    "cad.cadjoint": ("solid", "field", "Field", "section", "Section"),
 }
 
 
@@ -102,7 +102,7 @@ class RootExports(unittest.TestCase):
         import importlib
 
         from cad.build123d import _faceted, _flatten, _geometry
-        from cad.cadjoint import _section, _solid
+        from cad.cadjoint import _field, _section, _solid
         from cad.engine import mechanism, model
         from cad.engine.formats.kicad import board_index, geometry, summary
 
@@ -111,7 +111,8 @@ class RootExports(unittest.TestCase):
                    "screw_pair": mechanism, "posed": mechanism,
                    **{name: _geometry for name in _geometry.__all__},
                    **{name: _flatten for name in NAMESPACES["cad.build123d"] if hasattr(_flatten, name)},
-                   "faceted_solid": _faceted, "solid": _solid, "section": _section, "Section": _section}
+                   "faceted_solid": _faceted, "solid": _solid, "field": _field, "Field": _field, "section": _section,
+                   "Section": _section}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
             self.assertEqual(sorted(names), sorted(module.__all__))

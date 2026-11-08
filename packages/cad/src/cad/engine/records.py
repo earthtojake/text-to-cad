@@ -20,14 +20,17 @@ from typing import Any
 
 from cad.engine.ids import is_id
 
-__all__ = ["DOCUMENTS", "FILE", "RECORD", "SCHEMA", "Records", "command", "current", "detached", "home", "parse",
+__all__ = ["DOCUMENTS", "FILE", "FILES", "RECORD", "SCHEMA", "Records", "command", "current", "detached", "home", "parse",
            "program", "relative", "rerun"]
 
 SCHEMA = 1
 DOCUMENTS = "documents"
 RECORD = "document.json"
-# A model document's bytes in the engine's cache folder (``cache``): ``documents/<id>/document.xbf``.
+# A model document's bytes in the engine's cache folder (``cache``): ``documents/<id>/document.xbf`` -- an
+# implicit document's, the mesh sampled from its field (``cad.engine.implicit_document``), ``document.glb`` (``FILES``,
+# by the format the record names: ``xbf`` where it names none).
 FILE = "document.xbf"
+FILES = {"xbf": FILE, "glb": "document.glb"}
 WINDOWS = os.name == "nt"
 # What cmd.exe reads as an operator in a word outside double quotes: ``pandas>=2`` bare is a redirection.
 _OPERATORS = frozenset("<>|&^")

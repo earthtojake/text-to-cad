@@ -163,6 +163,9 @@ class Model:
         # The name within the script folder; None keeps the script/function id.
         self.explicit_name: str | None = None
         self._bare = False  # declared by ``@model``
+        # Its document's type (``cad.registry``): ``model``, an XCAF document of the shape its body returns, or
+        # ``implicit``, the mesh sampled from the field its body returns (``@implicit``; ``cad.engine.implicit_document``).
+        self.kind = "model"
         self.__xbf_model__ = True
         _MODELS[f"{self.script}::{self.name}"] = self
 
@@ -191,8 +194,20 @@ class Model:
                 "fingerprint": self.fingerprint, "module": self.function.__module__}
 
     def declared(self, by: str) -> "Model":
-        """One declaration more on this function: ``model`` (bare ``@model``) or a file kind. A
-        function becomes a document through ``@model`` or through its file decorators, never both."""
+        """One declaration more on this function: ``model`` (bare ``@model``), ``implicit`` (bare
+        ``@implicit``) or a file kind. A function becomes a document through ``@model``, through
+        ``@implicit`` or through its file decorators, never two of them."""
+        others = [output.kind for output in self.outputs] + (["model"] if self._bare else []) \
+            + (["implicit"] if self.kind == "implicit" else [])
+        if by == "implicit" or "implicit" in others:
+            clash = [kind for kind in others if kind != by]
+            if clash:
+                raise TypeError(f"model {self.name!r} is declared by @{clash[0]} and @{by}: a function becomes a "
+                                "document through @implicit (the mesh sampled from the field it returns, no file), "
+                                "through @model or through its file decorators (an XCAF document of the shape it "
+                                "returns), never two of them; drop one")
+            self.kind = "implicit"
+            return self
         kinds = [output.kind for output in self.outputs] if by == "model" else [by] if self._bare else []
         if kinds:
             raise TypeError(f"model {self.name!r} is declared by @model and @{kinds[0]}: a function becomes a "
@@ -230,7 +245,7 @@ class Model:
         return f"{self.script.name}::{self.name}"
 
     def __repr__(self) -> str:
-        return f"<model {self.identity}>"
+        return f"<{self.kind} {self.identity}>"
 
     def __call__(self) -> Any:
         build = getattr(_CONTEXT, "build", None)
@@ -416,6 +431,24 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
                                          or caller.f_globals.get("__name__") == "cad._internal.document_type"):
         caller = caller.f_back
     return api.hand_over(target, name, animations=animations, frame=caller)
+
+
+def implicit(target: Any = None, /, *, name: str | None = None) -> Any:
+    """``@implicit`` (or ``@implicit(name=...)``): declare a model whose document is the mesh sampled from the
+    implicit field its function returns -- ``cad.cadjoint.field(scene, cell=...)`` -- held in the engine's
+    memory with no file behind it (the ``implicit`` document type, ``cad.engine.implicit_document``). Its id, its page
+    and its verbs are a model's (``cad implicit export <id> part.stl``); a call builds it and returns its
+    document's handle. Never stacked with ``@model`` or a file decorator: an implicit document is no XCAF
+    document, and declares no file."""
+    if target is None:
+        if name is not None:
+            check_name(name)
+        return lambda function: implicit(function, name=name)
+    if not (isinstance(target, Model) or inspect.isfunction(target)):
+        raise TypeError("@implicit declares a function returning cad.cadjoint.field(scene, cell=...); it hands no "
+                        "shape over")
+    found = target if isinstance(target, Model) else Model(target)
+    return found.declared("implicit").named(name)
 
 
 def _decorator(kind: str) -> Callable[..., Any]:
@@ -777,6 +810,7 @@ class BuildContext:
     and placed again, and how long each took."""
 
     def __init__(self) -> None:
+        self.cache: str | None = None  # the engine's cache folder a build was handed (``build._build``)
         self.results: dict[str, tuple[Any, Any]] = {}
         self.timings: dict[str, float] = {}
         self.stack: list[str] = []
@@ -889,6 +923,10 @@ class BuildContext:
         return result
 
     def child(self, model: Model) -> Any:
+        if model.kind == "implicit":
+            raise TypeError(f"{model.name} is an implicit model, a leaf: its document is the mesh sampled from its "
+                            "field, with no shape to compose; to place a field in an assembly, return "
+                            "cad.cadjoint.solid(scene, cell=...) from a @model and call that")
         key = str(model.script) + "::" + model.name
         self.called.setdefault(key, model)
         found = self.results.get(key)
@@ -1005,12 +1043,13 @@ def _placement(value: Any) -> Any:
 
 def check_result(model: Model, result: Any) -> None:
     """A body's result, refused unless one producer (``cad.registry``) makes its document and every file
-    the model declares of it: today a model returns a build123d shape, the build123d integration's."""
+    the model declares of it: a model returns a build123d shape, the build123d integration's; an implicit
+    model a field with its sampling, the cadjoint integration's."""
     from cad.registry import producer_for
 
-    for kind in dict.fromkeys(("model", *(output.kind for output in model.outputs))):
-        producer_for(kind, result, where=f"model {model.identity}")
-    if result.__dict__.get("_wrapped") is None:
+    for kind in dict.fromkeys((model.kind, *(output.kind for output in model.outputs))):
+        producer_for(kind, result, where=f"{model.kind} {model.identity}")
+    if model.kind == "model" and getattr(result, "__dict__", {}).get("_wrapped") is None:
         raise ValueError(f"model {model.identity} returned an empty shape")
 
 

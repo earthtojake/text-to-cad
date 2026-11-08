@@ -3,8 +3,11 @@
 
 ``@implicit`` on a function returning ``cad.cadjoint.field(scene, cell=...)`` -- a cadjoint SDF with the
 cell it is sampled at and, where the caller gives one, its bounds -- makes a document the engine holds as
-the mesh sampled from the field, with no file behind it (``cad.registry``). The matcher reads the returned
-value's class name and module alone, so asking which producer takes a value imports no cadjoint.
+the mesh sampled from the field, with no file behind it (``cad.registry``). The writer is this module's
+neighbour, ``_document.document``, named ``module:function`` as the engine resolves a producer's writer
+(``cad.engine.build``): the engine imports it where the model builds, and nothing of cadjoint by name. The
+matcher reads the returned value's class name and module alone, so asking which producer takes a value
+imports no cadjoint.
 """
 
 from __future__ import annotations
@@ -25,5 +28,5 @@ def is_field(value: Any) -> bool:
 
 PRODUCERS: tuple[Producer, ...] = (
     Producer("implicit", "cadjoint", "a cad.cadjoint.field(scene, cell=...) a model returns", is_field,
-             "cad.cadjoint._document", ("triangles",)),
+             "cad.cadjoint._document:document", ("triangles",)),
 )

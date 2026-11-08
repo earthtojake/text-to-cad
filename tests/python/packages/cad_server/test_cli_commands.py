@@ -25,6 +25,7 @@ from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
     "model": ("export", "snapshot", "inspect", "dfm"),
+    "implicit": ("export", "snapshot", "inspect", "dfm"),
     "xbf": ("export", "snapshot", "inspect", "dfm"),
     "step": ("export", "snapshot", "inspect", "dfm"),
     "stl": ("export", "snapshot", "dfm"),
@@ -67,6 +68,7 @@ class TheCommandTable(unittest.TestCase):
         self.assertIn("document types (cad <type> <operation> FILE):", said)
         self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm +model: a document id, held in memory\n")
+        self.assertRegex(said, r"\n  implicit +export, snapshot, inspect, dfm +implicit: a document id, held in memory\n")
         code, said, _ = _run(["step", "--help"])
         self.assertEqual(0, code)
         self.assertIn("operations:\n  export ", said)

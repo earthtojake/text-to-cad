@@ -28,7 +28,7 @@ import types
 from pkgutil import resolve_name as _resolve
 from typing import Any
 
-__all__ = ["DocumentType", "ModelType", "bind", "refuse_other"]
+__all__ = ["DocumentType", "ImplicitType", "ModelType", "bind", "refuse_other"]
 
 # An operation a type does not implement, read as one that needs no integration.
 _NONE = types.SimpleNamespace(integration=None)
@@ -125,11 +125,16 @@ def refuse_other(document_type: str, source: Any) -> None:
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:
-            raise ValueError(f"cad.model takes a model's handle or its document id (cad run SCRIPT.py prints it), "
+            raise ValueError(f"cad.{entry.id} takes a model's handle or its document id (cad run SCRIPT.py prints it), "
                              f"not {text!r}")
         return
     if entry.has_file:
         raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.model")
+    # A handle of the other in-memory type: a model's document is no implicit one's, and the reverse.
+    kind = (getattr(source, "report", None) or {}).get("type") if not isinstance(source, (str, os.PathLike)) else None
+    if isinstance(kind, str) and kind != entry.id:
+        raise ValueError(f"{_what(source)} is {'an' if kind == 'implicit' else 'a'} {kind} document, not "
+                         f"{'an' if entry.id == 'implicit' else 'a'} {entry.id}: use cad.{kind}")
 
 
 def _what(source: Any) -> str:
@@ -147,6 +152,17 @@ class ModelType(DocumentType):
         from cad.engine import model
 
         return model.model(target, name=name, animations=animations)
+
+
+class ImplicitType(DocumentType):
+    """``cad.implicit``: the other type with no file, whose decorator is ``@implicit`` (``cad.engine.model``)."""
+
+    def __call__(self, target: Any = None, /, *, name: str | None = None) -> Any:  # type: ignore[override]
+        """``@implicit`` or ``@implicit(name=...)``: declare a model whose document is the mesh sampled from the
+        field it returns (``cad.cadjoint.field(scene, cell=...)``)."""
+        from cad.engine import model
+
+        return model.implicit(target, name=name)
 
 
 def _operation(owner: DocumentType, name: str) -> Any:
@@ -176,4 +192,5 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
 def bind(module_name: str) -> None:
     """Make the module ``module_name`` (a type's package) a ``DocumentType`` (``cad.model`` a ``ModelType``)."""
-    sys.modules[module_name].__class__ = ModelType if module_name.rpartition(".")[2] == "model" else DocumentType
+    sys.modules[module_name].__class__ = {"model": ModelType, "implicit": ImplicitType}.get(
+        module_name.rpartition(".")[2], DocumentType)

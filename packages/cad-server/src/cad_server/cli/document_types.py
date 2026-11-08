@@ -582,7 +582,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     if found is not None and found.id != document_type:
         raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
     if not entry.has_file:
-        raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
+        raise Failure(f"cad {document_type} takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
     if found is None:
         raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "

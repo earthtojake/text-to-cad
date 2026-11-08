@@ -443,9 +443,19 @@ def _stat(path: Path) -> tuple[int, int, int] | None:
 
 def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     """A ``result`` request: the document of a model this worker built, as its structure and each
-    part's shape bytes (``[key, size]`` in ``shapes``, the bytes after the line in order)."""
+    part's shape bytes (``[key, size]`` in ``shapes``, the bytes after the line in order). An implicit
+    document (``cad.engine.implicit_document``) has no shapes: its answer says its ``format`` (``glb``) and its bytes
+    follow the line whole (``glb``, their size), with the closure its extras hold."""
     from cad.engine import build as engine_build
+    from cad.engine import implicit_document as implicit
 
+    given = request.get("payload") or b"" if request.get("document") else \
+        engine_build.document_bytes(Path(request["script"]), request["name"])
+    if given and implicit.is_glb(given):
+        extras = implicit.read_extras(given) or {}
+        closure = extras.get("closure")
+        return {"format": implicit.FORMAT, "structure": None, "shapes": [], "placements": [],
+                "closure": json.loads(closure) if closure else None, "glb": len(given), "xbf": len(given)}, given
     if request.get("document"):
         # The engine's cache file of a document no worker holds: read as a held document's bytes are.
         source = engine_build.held_source(request.get("payload") or b"", str(request.get("name") or "document"))
@@ -482,11 +492,40 @@ def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     header = {"ident": request.get("ident"), "generation": request.get("generation")}
     taken = engine_build.taken(Path(request["script"]), request["name"])
     if taken is not None:
+        from cad.engine import implicit_document as implicit
+
+        if implicit.is_glb(taken):
+            header["format"] = implicit.FORMAT  # an implicit document's bytes: the cache's ``document.glb``
         return header, taken  # taken from the cache: those bytes, never the read document written again
     source = engine_build.held(Path(request["script"]), request["name"])
     if source is None:
         return {**header, "error": f"no model named {request['name']!r} is built in this worker"}, b""
     return header, document.to_bytes(source.xcaf, source.shapes.values())
+
+
+def _documents(reports: list[dict[str, Any]]) -> bytes:
+    """The implicit documents a build's reports name (``document``: a format and a size), as the bytes after
+    the build's answer, each report's ``document.offset`` where its own begin (``build.document_bytes``). An
+    xbf document stays the worker's, asked for by ``result``: only a document the daemon holds as a file
+    travels with its build."""
+    from cad.engine import build as engine_build
+
+    chunks: list[bytes] = []
+    at = 0
+    for root in reports:
+        for report in [root, *(root.get("child_models") or {}).values()]:
+            document = report.get("document")
+            source = report.get("source") or {}
+            if not isinstance(document, dict) or not source.get("script") or not source.get("name"):
+                continue
+            data = engine_build.document_bytes(Path(source["script"]), source["name"])
+            if data is None:
+                document.pop("bytes", None)  # held by no one: the daemon's cache file stands, or it is unsaved
+                continue
+            document["offset"], document["bytes"] = at, len(data)
+            chunks.append(data)
+            at += len(data)
+    return b"".join(chunks)
 
 
 def refusal(error: BaseException) -> dict[str, str]:
@@ -666,7 +705,7 @@ def main() -> int:
             retire = retirement(reports, resident, cap)
             # Its memory now, which the daemon's status shows (``rssMb``).
             send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
-                  **({"retire": True} if retire else {})})
+                  **({"retire": True} if retire else {})}, _documents(reports))
         except BuildError as error:
             send({"id": ident, "failed": str(error)})
         except BaseException as error:  # noqa: BLE001 - the worker answers every request
