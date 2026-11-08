@@ -414,7 +414,7 @@ class PmiPaintTest(unittest.TestCase):
 # note words are illustrative.
 PLATE = """
 import build123d as bd
-from cad.ap242 import (annotate, datum, dimensional_location, flatness_tolerance, general_profile, limits, note,
+from cad.build123d import (annotate, datum, dimensional_location, flatness_tolerance, general_profile, limits, note,
                           place, section, surface_profile_tolerance, view)
 from cad.engine import xbf
 
@@ -502,7 +502,7 @@ class PmiAskedTest(unittest.TestCase):
         for camera in ("front", "authored"):
             with self.assertRaisesRegex(SnapshotRefused, "--view A-A is seen down its own camera; remove --camera"):
                 snapshot.snapshot(document, folder / "out.png", camera=camera, view="A-A", daemon=False)
-        from cad_server.engine.cli import run  # the command: ``cad snapshot``
+        from cad_server.engine.cli import run  # the command: ``cad <type> snapshot``
 
         said = io.StringIO()
         with contextlib.redirect_stderr(said):
@@ -540,6 +540,15 @@ class PmiAskedTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "view A-A's section is not on the axes of plate's placement"):
             held.draw(Still(view="A-A"))
         self.assertFalse(held.scenes, "nothing was drawn")
+
+    def test_a_flat_document_has_no_view_to_be_drawn_as(self) -> None:
+        """A view is a part's: a board's and a schematic's stills refuse it by name, as a drawing's does."""
+        from cad.engine.render import board, drawing, schematic
+        for refusals, name, said in ((board.refusals, "main.kicad_pcb", "flat board: --view"),
+                                     (schematic.refusals, "main.kicad_sch", "flat schematic: --view"),
+                                     (drawing.refusals, "plate.dxf", "--view does not apply")):
+            with self.subTest(name=name), self.assertRaisesRegex(SnapshotRefused, said):
+                refusals(Still(view="A-A"), name)
 
     def test_a_sectioned_view_is_refused_on_an_exploded_picture_whatever_its_pmi(self) -> None:
         """A section is placed on the parts as made, and Explode then moves them: it would cut them in

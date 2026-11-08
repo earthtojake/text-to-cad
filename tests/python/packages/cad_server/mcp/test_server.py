@@ -142,6 +142,9 @@ class _Session(unittest.TestCase):
         reply = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cad-app": self.server._app_token, **(headers or {})},
                                        "body": base64.b64encode(body).decode("ascii")})["structuredContent"]
         data = base64.b64decode(reply.get("body") or "")
+        if reply.get("encoding") == "gzip":  # a large JSON body crosses the channel gzipped
+            import gzip
+            data = gzip.decompress(data)
         return reply["status"], json.loads(data) if reply["headers"].get("content-type", "").startswith("application/json") else data
 
     def poll_as(self, view: str, surface: str, answers: int, model: str | None = None, png: str = "iVBORw0KGgo=") -> threading.Thread:
@@ -330,6 +333,34 @@ class TabServerTest(_Session):
         for tool in ("cad_open", "cad_show"):
             self.assertIn("is not one", self.call(tool, {"source": str(script)})["content"][0]["text"], tool)
             self.assertIn("No file at", self.call(tool, {"source": f"{script}::cube"})["content"][0]["text"], tool)
+
+    def test_native_board_is_shown_and_reread_through_the_file_service(self) -> None:
+        from tests.python.support.kicad_board import BOARD, write_board
+
+        board = write_board(self.workspace)
+        self.call("cad_sync", {"view": "v1", "surface": "tab"})
+        shown = self.call("cad_show", {"source": str(board)})
+        self.assertEqual(shown["structuredContent"], {"delivered": 1, "view": "v1"})
+        event, = self.call("cad_sync", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
+        self.assertEqual(event["launch"]["model"], str(board))
+        status, opened = self.http("POST", "/api/v1/documents", {"path": str(board)})
+        self.assertEqual((status, opened["kind"]), (201, "kicad_pcb"))
+        def plotted():
+            # Made off the request: a 202 while it is, asked again as the page does.
+            for _ask in range(200):
+                status, body = self.http("GET", f"{opened['api']}/plot")
+                if status != 202:
+                    return status, body
+            return status, body
+
+        status, first = plotted()
+        self.assertEqual(status, 200)
+        board.write_text(BOARD.replace('(width 1) (layer "F.Cu") (net "VBUS")',
+                                       '(width 0.5) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
+        status, changed = plotted()
+        self.assertEqual(status, 200)
+        self.assertNotEqual(first, changed)
+        self.assertEqual(self.opened, [])
 
     def test_cad_show_reaches_the_polling_view_without_opening_one(self) -> None:
         self.assertEqual(self.call("cad_show", {"source": self.bracket})["structuredContent"], {"delivered": 0})
@@ -788,8 +819,8 @@ class InlineServerTest(_Session):
     def test_a_step_and_an_engine_document_are_shown_and_the_agent_is_told_so(self) -> None:
         # The page draws both from what the cadgen engine serves of them (``cad_server.viewer.xbf``).
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF)", tools["cad_show"]["description"])
-        self.assertIn("(STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF)", self.initialized["instructions"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
         for name in ("arm.xbf", "arm.step", "ARM.STP"):
             model = self.workspace / "parts" / name
             model.write_bytes(b"\0")
@@ -1295,7 +1326,7 @@ class ToolArgumentsTest(unittest.TestCase):
         server = self.served("text")
         step = self.tmp / "box.step"
         step.write_text("ISO-10303-21;\n", encoding="utf-8")
-        # What `cad inspect --json box.step` answered for a 10 x 20 x 30 mm box (``api._summary``).
+        # What `cad step inspect --json box.step` answered for a 10 x 20 x 30 mm box (``api._summary``).
         summary = {"name": "COMPOUND", "id": DOCUMENT_ID, "state": {"state": "file", "path": str(step)},
                    "parts": {"occurrences": 1, "distinct": 1, "root": "COMPOUND"},
                    "bounds": {"min": [-5.0, -10.0, -15.0], "max": [5.0, 10.0, 15.0], "size": [10.0, 20.0, 30.0]},
@@ -1320,7 +1351,7 @@ class ToolArgumentsTest(unittest.TestCase):
         self.assertIn("volume      6,000 mm^3", inspection["text"])
         self.assertEqual(part["result"]["inspection"], {"volume": 6000.0})
         cad_inspect = next(tool for tool in server.handle("tools/list", {}, None)["tools"] if tool["name"] == "cad_inspect")
-        self.assertIn("Without a ref it answers what `cad inspect SOURCE` prints", cad_inspect["description"])
+        self.assertIn("Without a ref it answers what `cad <type> inspect SOURCE` prints", cad_inspect["description"])
         self.assertIn("summary", cad_inspect["inputSchema"]["properties"]["query"]["enum"])
 
     def test_a_snapshot_with_no_output_is_refused_at_its_start(self) -> None:

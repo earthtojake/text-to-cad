@@ -12,7 +12,7 @@ A model is a parameterless function returning a build123d shape::
 An explicit ``arm()`` call builds it, and the child models its body calls, in a warm worker whose
 kernel memo makes an edit cost what it changed; the document is written to
 ``XBF/arm.xbf`` beside the script, and the derived files it declares after it, each a
-translation of that document (``cad export``). ``cad serve XBF/arm.xbf``
+translation of that document (``cad <type> export``). ``cad serve XBF/arm.xbf``
 shows it. Nothing but those files is written: every cache lives in a process's memory.
 The verbs as functions are ``cad.engine.api`` (``cadgen.export``, ``cadgen.snapshot``, ...).
 
@@ -20,7 +20,7 @@ A function worth replaying on a later build -- an assembly's part, a derivation'
 is marked ``@memo``: it writes no file, and a build whose edit does not reach it replays it
 instead of running it. A part's material is a value set on the shape: ``part.material = bd_materials.metals.aluminum()``. An assembly's mechanism is build123d's joints, placed with
 ``connect_to``, as built where the joints place the parts. The functions that say more are
-``cad.ap242``'s and ``cad.gltf``'s, defined here (``model``, ``mechanism``, ``animations``,
+``cad.build123d``'s, defined here (``model``, ``mechanism``, ``animations``,
 ``pmi``) and exported there: ``mechanism_state(assembly, name, **values)`` names a state of it, ``gear_pair``, ``rack_and_pinion_pair`` and ``screw_pair(assembly,
 name, **joints)`` a constraint moving joints by ratio (their only way to move, its range their
 limits'), and ``configuration_sequence(assembly, name, ...)`` a sequence of states over time, which a

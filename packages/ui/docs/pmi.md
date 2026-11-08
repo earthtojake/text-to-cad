@@ -7,7 +7,7 @@ drawn on the model, picked, hidden, walked view by view, and asked for. It is th
 not the person's: ink (Pencil and Shapes, [annotation](annotation.md)) is a note on a view and goes
 with a prompt; PMI is what the part is made to, and goes with the part.
 
-The document is made from code. A model declares its PMI with `cad.ap242`'s calls, each that
+The document is made from code. A model declares its PMI with `cad.build123d`'s calls, each that
 writes an AP242 entity named after it (`annotate(body, datum("A", ...), dimensional_location(...),
 flatness_tolerance(...), ...)`; `note` and `view`, the xbf's alone, write none), the engine writes
 its requirements into the document's XCAF GD&T attributes, which its AP242 export reads, and the
@@ -46,7 +46,7 @@ requirements that cannot both hold (`coverage`). An entry is one of:
 - Anything else the document holds (a STEP's cylindricity, an angle) is an entry the viewer
   does not draw: listed, saying why (`unsupported`: the engine's `reason` where it gives one, else
   the viewer's own, with its XCAF type), never dropped. Whether it is drawn is the viewer's to say;
-  `cad snapshot` reads it by the same rule.
+  `cad <type> snapshot` reads it by the same rule.
 
 An id is the author's and unique on its part (a datum's is its letter), so an annotation is known
 by its part (`part`, the structure's prototype) and its id together (`key`, `pmiKey`: `0:thickness`),
@@ -116,12 +116,12 @@ screen where two would cover one another (`separateLabels.js`). A leader or exte
 start the model hides from the camera (a datum on the bottom, seen from above) is drawn faint,
 its marker hollow (`pmiHidden.js`: a ray through the point, its first surface nearer by more than
 a thousandth of the model); the labels themselves are always on top, to be read. They are drawn on the model as
-built: while Explode or a pose moves the parts they are not drawn, and the section says so.
+built: while Explode or a pose moves the parts they are not drawn, and the tab says so.
 
 ## The MBD panel
 
-The PMI section (`xbf/pmi/PmiSection.jsx`) is read as a machinist reads a drawing: under its head
-(New, the eye of them all), four groups, each under a static heading with a rule above all but the
+The PMI tab (`xbf/pmi/PmiSection.jsx`) is read as a machinist reads a drawing: under a line of New
+and the eye of them all, four groups, each under a static heading with a rule above all but the
 first, none folding ([settings UI](settings-ui.md)), each there only where it has something (a
 document with no annotation, note or view at all says "No PMI yet" instead):
 
@@ -156,18 +156,18 @@ document with no annotation, note or view at all says "No PMI yet" instead):
 ## Picking, hiding, and asking
 
 Under Select a label is a control. A click picks its annotation, and its features are lit as a
-pick of them is (the renderer's element highlight); its row in the section opens its values. A
+pick of them is (the renderer's element highlight); its row in the tab opens its values. A
 double-click looks at its feature (`lookAt`). Escape lets it go, and a press on the model does.
 Under any other tool the labels take no pointer.
 
-The section's eyes hide one annotation, or all of them; what is hidden is the file's view
+The tab's eyes hide one annotation, or all of them; what is hidden is the file's view
 (`xbfViewSlices.js`'s `pmi` slice, by each annotation's key, kept across a rebuild of the same
 parts), never the document. Turned off, PMI is off in a prompt's views too (`display.pmi` false).
 
 Where the document is made from code (a model's, by its id, or an `.xbf`), what the person
 changes is asked for, never written (`xbf/pmi/useXbfPmi.jsx`), each a chip in Quick Edit (its `requests`) that carries one
 paragraph of what to do to its part's `annotate(...)` call, the annotation by its author's id,
-the part by its name and the names it and the call take from `cad.ap242` (`from cad.ap242
+the part by its name and the names it and the call take from `cad.build123d` (`from cad.build123d
 import annotate, ...`), and the call itself (`pmiChangeRequest`), what it does not change as the
 document says it (a label, a position's zone, round or not):
 
@@ -175,14 +175,14 @@ document says it (a label, a position's zone, round or not):
   stands where it was let go, ringed, until the change goes; the request sets only `presentation`.
   **Pin placement** writes an annotation the code never placed where it is drawn now.
 - **Edit**: a dimension's tolerance (`±0.1`, `+0.1/-0.05`, its limits `9.8–10.2`, or nothing
-  for none), a geometric tolerance's value and a position's datums, committed as the section's
+  for none), a geometric tolerance's value and a position's datums, committed as the tab's
   fields are. Limits are two unsigned sizes, the least first, between an en dash (the field's own
   text for them, so a limits dimension's field reads back as its limits), a hyphen or "to"
   (`10.00-10.05`, `10.00 to 10.05`: `limits(10, 10.05)`); a signed or slashed pair stays
   deviations (`+0.1/-0.05`, `0.1 -0.05`). The label keeps saying what the document says until the
   code does.
 - **New**: from a face's menu ("Add datum", "Add flatness"... whatever it and the faces picked with
-  it can carry, which picks them and opens the PMI section on the form), or the section's New, of
+  it can carry, which picks them and opens the PMI tab on the form), or the tab's New, of
   the faces Select has picked: one of the supported subset — a datum on one flat or round face, a
   flatness on one flat face, a distance between two parallel ones, a basic dimension between two
   of flat faces and holes, all parallel, a diameter or a position on a round one, a **surface
@@ -215,7 +215,7 @@ from code here: its PMI, where the engine serves any, is read alone.
 
 ## Reviewing requirements and the export
 
-The PMI section follows the selected annotation's faces, or the selected geometry when
+The PMI tab follows the selected annotation's faces, or the selected geometry when
 no annotation is picked. It lists every attached requirement, including hidden callouts.
 **Show all PMI** restores the whole list; **For selection** returns to the filter. A selection
 with no attached PMI says so without implying that it needs no requirements. A dimension
@@ -244,7 +244,7 @@ pose or of one part to refuse: those are models of their own.
 Once the STEP is written, before it is handed over, the worker reads that same file back on its
 own and compares its supported annotations with the document's, one to one, each part against its
 own product's records: values, units, datum order, tolerance-zone form and the faces each is on,
-by name and geometry -- as `cad export` does. The result and the file's SHA-256 go with the
+by name and geometry -- as `cad <type> export` does. The result and the file's SHA-256 go with the
 export job, and stay with it when another model opens. An export has no success toast of its own
 (the browser's downloads say the file came); a STEP's check is its toast once the file is handed
 over, the check's headline as its title (every annotation verified, which goes on its own): the
@@ -269,7 +269,7 @@ dimension is. What interoperability is tested with is the exported STEP itself.
 
 - No leader routing: labels the code placed can cover each other, and a leader can cross the
   model.
-- Not drawn under Explode or a pose, or in Preview. `cad snapshot` draws it as this does, on the
+- Not drawn under Explode or a pose, or in Preview. `cad <type> snapshot` draws it as this does, on the
   parts as made (the engine README's snapshot section); a label moved here and not yet in the code
   is drawn where the document places it.
 - Only the supported subset is drawn: distance (basic or not, its tolerance or its limits),
@@ -281,4 +281,4 @@ dimension is. What interoperability is tested with is the exported STEP itself.
   only along a world axis.
 - A moved label returns to the document's placement if its change is dropped or sent before the
   code has it.
-- The section's strings are English, as the engine document's other sections are.
+- The tab's strings are English, as the engine document's other sections are.

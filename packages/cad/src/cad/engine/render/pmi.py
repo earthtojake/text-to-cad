@@ -874,8 +874,7 @@ def view_shows(view: dict[str, Any], entry: dict[str, Any]) -> bool:
 # --- drawn over the picture (PmiOverlay.jsx, PmiLabel.jsx) -----------------------------------
 
 # Ink on paper, the light theme's: the foreground on the background, as a label reads over any
-# part. A document's picture is drawn on the light look's backdrop whatever its appearance (which
-# only a drawing's paper takes), so its callouts are the light theme's too.
+# part. Every picture is drawn on the light look's backdrop, so a callout is the light theme's too.
 INK = (10, 10, 10)
 PAPER = (255, 255, 255)
 PAPER_ALPHA, BORDER_ALPHA, RULE_ALPHA, LEADER_ALPHA, BEHIND_ALPHA = 0.95, 0.6, 0.4, 0.85, 0.3

@@ -25,10 +25,14 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
+// The value of the slider control (`SliderField.jsx`): no border, outline or ring in any state; plain
+// right-aligned text at rest, a soft wash (the foreground at 9%) under the pointer and the keyboard.
+const FILE_SHEET_QUIET_INPUT_CLASSES = [
+  "m-0 box-border min-w-0 shrink-0 rounded-sm border-0 bg-transparent px-1 text-right text-tiny leading-4 tabular-nums text-foreground",
+  "shadow-none outline-none ring-0 theme-none transition-colors hover:bg-foreground/[0.09] focus:bg-foreground/[0.09] focus-visible:ring-0",
+  "disabled:opacity-50 disabled:hover:bg-transparent"
+].join(" ");
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
-// A joint's slider: in its row's 16px band, with no fill — a joint's zero is mostly mid-range, so a
-// bar from the left end up to the thumb would mean nothing.
-export const FILE_SHEET_PRECISION_SLIDER_CLASSES = "h-4 [&_[data-slot=slider-range]]:hidden";
 
 /** A section heading: 24px, regular 11px, never a disclosure (`docs/settings-ui.md`). */
 export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex h-6 min-w-0 items-center gap-2 px-2 text-tiny font-normal leading-4 text-foreground";
@@ -185,7 +189,10 @@ export function FileSheetValueInput({
   disabled = false,
   ariaLabel,
   inputMode = "decimal",
-  className
+  quiet = false,
+  className,
+  style,
+  ...props
 }) {
   const inputRef = useRef(null);
   const displayValue = String(value ?? "");
@@ -228,6 +235,7 @@ export function FileSheetValueInput({
 
   return (
     <input
+      {...props}
       ref={inputRef}
       type="text"
       inputMode={inputMode}
@@ -291,39 +299,13 @@ export function FileSheetValueInput({
         }
       }}
       className={cn(
-        FILE_SHEET_VALUE_BADGE_INPUT_CLASSES,
+        quiet ? FILE_SHEET_QUIET_INPUT_CLASSES : FILE_SHEET_VALUE_BADGE_INPUT_CLASSES,
         className
       )}
-      style={{ borderColor: editing ? "var(--ring)" : undefined }}
+      style={quiet ? style : { borderColor: editing ? "var(--ring)" : undefined, ...style }}
       aria-label={ariaLabel}
     />
   );
-}
-
-// The value box's width: as narrow as a joint's figure allows — an angle ("-102°", "0.00°") fits
-// five characters, a length with its unit ("0.00 mm") seven — so a unit is never cut off.
-const valueInputWidth = value => {
-  const length = String(value ?? "").length;
-  return length <= 5 ? "w-[calc(5ch+0.75rem)]" : length <= 7 ? "w-[calc(7ch+0.75rem)]" : "w-[calc(9ch+0.75rem)]";
-};
-
-/**
- * A slider row (a joint of Position), compact: its label tight above its slider in the flexible
- * left column, and a small committed value input (24px tall, as wide as its figure and unit need,
- * its figures tabular) in the right column (`docs/settings-ui.md`).
- */
-export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, children }) {
-  return <FileSheetControlRow>
-    <div className="grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5" data-position-control="">
-      <div className="min-w-0">
-        {label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span data-file-sheet-field-label="" className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "leading-3")}>{label}</span></TooltipHint> : null}
-        {/* Under its label, its thumb clear of the label's foot. */}
-        <div className="mt-1 min-w-0">{children}</div>
-      </div>
-      {onValueCommit ? <FileSheetValueInput value={value} onValueCommit={onValueCommit} {...valueInputProps}
-        className={cn("h-6 px-1.5", valueInputWidth(value), valueInputProps?.className)} /> : null}
-    </div>
-  </FileSheetControlRow>;
 }
 
 // An empty or info line. The one style for every in-sheet message.

@@ -1,6 +1,6 @@
 """Semantic PMI (``cad.engine.pmi``): a plate's datums, dimensions and geometric tolerances
 written into its xbf as XCAF's GD&T objects and read back the same from the file as from the
-build; its AP242 STEP read by OCCT and by a reader of no OCCT (``export/ap242.py``),
+build; its AP242 STEP read by OCCT and by a reader of no OCCT (``cad/step/_ap242.py``),
 which agree on values, units, datum frames and the faces each annotation is on; a dimension
 given limits, written as AP242's lower and upper limit and its nominal still measured; a surface
 profile on several faces of any kind, written as one AP242 surface profile tolerance; a general
@@ -34,12 +34,12 @@ import time
 import unittest
 from pathlib import Path
 
-from cad.ap242 import (annotate, camera, datum, dimensional_location, dimensional_size, flatness_tolerance,
+from cad.build123d import (annotate, camera, datum, dimensional_location, dimensional_size, flatness_tolerance,
                           general_profile, general_tolerance, limits, note, place, plus_minus_tolerance,
                           position_tolerance, section, surface_profile_tolerance, view)
 from cad.engine import build as engine_build
 from cad.engine import document, export
-from cad.engine.export import ap242
+from cad.step import _ap242 as ap242
 from cad.engine.pmi import (PMI, PMIError, PMIUnsupported, _bores, _faces, _ref, _resolved_part, _surface, coverage,
                                dropped, otherwise_controlled, read, records_of_document, refuse_dropped, suggestions)
 
@@ -52,7 +52,7 @@ WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 # views). Tolerance values ILLUSTRATIVE.
 PLATE = '''
 import build123d as bd
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, place,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, place,
                           plus_minus_tolerance, position_tolerance)
 from bd_materials import metals
 from cad.engine import step, xbf
@@ -349,7 +349,7 @@ def pmi_plate():
 # A plate whose hole is named by its element name, as a viewer's Quick Edit writes it.
 NAMED = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_size, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_size, plus_minus_tolerance
 from cad.engine import step, xbf
 
 
@@ -412,7 +412,7 @@ class BasicTest(_Folder):
     def test_between_two_hole_axes_and_refused_where_the_axis_crosses_the_plane(self) -> None:
         source = '''
 import build123d as bd
-from cad.ap242 import annotate, dimensional_location
+from cad.build123d import annotate, dimensional_location
 from cad.engine import step, xbf
 
 
@@ -449,7 +449,7 @@ def pmi_plate():
 # A plate whose hole and thickness are given limits: values ILLUSTRATIVE.
 LIMITS = '''
 import build123d as bd
-from cad.ap242 import annotate, dimensional_location, dimensional_size, limits
+from cad.build123d import annotate, dimensional_location, dimensional_size, limits
 from cad.engine import step, xbf
 
 
@@ -569,7 +569,7 @@ class LimitsTest(_Folder):
 # magnitude in a bare metre (``UnitsTest``).
 PROFILE = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, surface_profile_tolerance
+from cad.build123d import annotate, datum, surface_profile_tolerance
 from cad.engine import step, xbf
 
 
@@ -693,7 +693,7 @@ class ProfileTest(_Folder):
 # Values ILLUSTRATIVE.
 GENERAL = '''
 import build123d as bd
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
                           plus_minus_tolerance, position_tolerance)
 from cad.engine import step, xbf
 
@@ -724,7 +724,7 @@ def pmi_plate():
 # A block each face of which has a size of its own, and a general profile: values ILLUSTRATIVE.
 CONTROLLED = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_location, general_profile, limits, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_location, general_profile, limits, plus_minus_tolerance
 from bd_materials import metals
 from cad.engine import step, xbf
 
@@ -749,7 +749,7 @@ def pmi_plate():
 # rest left to a general profile ({general}): values ILLUSTRATIVE.
 GENERAL_CUT = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_location, general_profile, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_location, general_profile, plus_minus_tolerance
 from cad.engine import step, xbf
 
 
@@ -872,7 +872,7 @@ class GeneralProfileTest(_Folder):
 # Tolerance values and note texts ILLUSTRATIVE.
 NOTES = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_size, general_profile, note, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_size, general_profile, note, plus_minus_tolerance
 from cad.engine import step, xbf
 
 @xbf(out="XBF/pmi_plate.xbf")
@@ -1045,7 +1045,7 @@ class NoteTest(_Folder):
     def test_a_note_keeps_any_text(self) -> None:
         model = '''
 import build123d as bd
-from cad.ap242 import annotate, note
+from cad.build123d import annotate, note
 from cad.engine import xbf
 
 
@@ -1089,7 +1089,7 @@ def pmi_plate():
 # ``{more}``.
 VIEWS = '''
 import build123d as bd
-from cad.ap242 import (annotate, camera, datum, dimensional_size, note, place, plus_minus_tolerance,
+from cad.build123d import (annotate, camera, datum, dimensional_size, note, place, plus_minus_tolerance,
                           position_tolerance, section, view)
 from cad.engine import step, xbf
 
@@ -1117,7 +1117,7 @@ def pmi_plate():
 # A part given views alone.
 VIEWS_ALONE = '''
 import build123d as bd
-from cad.ap242 import annotate, view
+from cad.build123d import annotate, view
 from cad.engine import step, xbf
 
 
@@ -1319,7 +1319,7 @@ class ViewTest(_Folder):
 # ``{more}``: values ILLUSTRATIVE.
 REQUIREMENTS = '''
 import build123d as bd
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
                           general_tolerance, limits, plus_minus_tolerance, position_tolerance,
                           surface_profile_tolerance)
 from bd_materials import metals
@@ -1360,7 +1360,7 @@ EACH_CONFLICT = '''dimensional_size("hole-under", hole, tolerance=plus_minus_tol
 SUGGESTED = '''
 import build123d as bd
 from bd_materials import metals
-from cad.ap242 import annotate, flatness_tolerance
+from cad.build123d import annotate, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -1624,7 +1624,7 @@ class CoverageTest(_Folder):
         # An assembly of an annotated base and a pin given no PMI: the base's coverage alone.
         report = self.build('''
 import build123d as bd
-from cad.ap242 import annotate, datum, flatness_tolerance
+from cad.build123d import annotate, datum, flatness_tolerance
 from cad.engine import xbf
 
 
@@ -1663,7 +1663,7 @@ def pmi_plate():
 # gets from it passes to a flat side of the square, parallel to the left face (the viewer's v3).
 CUT = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_location
+from cad.build123d import annotate, datum, dimensional_location
 from cad.engine import step, xbf
 
 
@@ -1732,7 +1732,7 @@ class AssemblyTest(_Folder):
     def test_each_part_of_an_assembly_carries_its_own_pmi_once_however_often_it_is_placed(self) -> None:
         self.build('''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_size, flatness_tolerance, plus_minus_tolerance
+from cad.build123d import annotate, datum, dimensional_size, flatness_tolerance, plus_minus_tolerance
 from cad.engine import step, xbf
 
 
@@ -1784,7 +1784,7 @@ def pmi_plate():
         """Its presentation is in its part's frame: a broken callout of a placed pin is the pin's."""
         self.build('''
 import build123d as bd
-from cad.ap242 import annotate, datum, dimensional_size, place
+from cad.build123d import annotate, datum, dimensional_size, place
 from cad.engine import xbf
 
 
@@ -1812,7 +1812,7 @@ def pmi_plate():
 # each plate's datum letter). Tolerance values ILLUSTRATIVE.
 TWO_PLATES = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, flatness_tolerance, position_tolerance
+from cad.build123d import annotate, datum, flatness_tolerance, position_tolerance
 from cad.engine import step, xbf
 
 
@@ -1884,7 +1884,7 @@ class MultiPartStepTest(_Folder):
         located = plate().replace(flat_top, "")
         flat = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, flatness_tolerance, position_tolerance
+from cad.build123d import annotate, datum, flatness_tolerance, position_tolerance
 from cad.engine import step, xbf
 
 
@@ -1914,7 +1914,7 @@ class UnitsTest(_Folder):
         metre: the export puts the millimetre back (``export.step._pmi_records``)."""
         self.build('''
 import build123d as bd
-from cad.ap242 import annotate, flatness_tolerance
+from cad.build123d import annotate, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -1935,7 +1935,7 @@ def pmi_plate():
 # ILLUSTRATIVE.
 FRAMES = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, position_tolerance, surface_profile_tolerance
+from cad.build123d import annotate, datum, position_tolerance, surface_profile_tolerance
 from cad.engine import step, xbf
 
 
@@ -2015,7 +2015,7 @@ class RefTest(_Folder):
         ``missing`` and its xbf written."""
         model = '''
 import build123d as bd
-from cad.ap242 import annotate, flatness_tolerance
+from cad.build123d import annotate, flatness_tolerance
 from cad.engine import xbf
 
 
@@ -2054,7 +2054,7 @@ def pmi_plate():
         the annotations its run gave."""
         model = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, flatness_tolerance
+from cad.build123d import annotate, datum, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -2080,7 +2080,7 @@ def pmi_plate():
         model = '''
 import build123d as bd
 from cad import memo
-from cad.ap242 import annotate, flatness_tolerance
+from cad.build123d import annotate, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -2109,7 +2109,7 @@ def pmi_plate():
         head = '''
 import build123d as bd
 from cad import memo
-from cad.ap242 import annotate, flatness_tolerance
+from cad.build123d import annotate, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -2140,7 +2140,7 @@ def pmi_plate():
         script = self.folder / "two.py"
         script.write_text(textwrap.dedent('''
             import build123d as bd
-            from cad.ap242 import annotate, flatness_tolerance
+            from cad.build123d import annotate, flatness_tolerance
             from cad.engine import xbf
 
 
@@ -2172,7 +2172,7 @@ def pmi_plate():
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from cad import memo
-            from cad.ap242 import annotate, flatness_tolerance
+            from cad.build123d import annotate, flatness_tolerance
             from cad.engine import xbf
 
 
@@ -2202,7 +2202,7 @@ def pmi_plate():
 
 BROKEN = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, flatness_tolerance
+from cad.build123d import annotate, datum, flatness_tolerance
 from cad.engine import step, xbf
 
 
@@ -2223,7 +2223,7 @@ class DatumStatusTest(_Folder):
         its STEP is refused for both, where the position was once served ``ok``."""
         source = '''
 import build123d as bd
-from cad.ap242 import annotate, datum, position_tolerance
+from cad.build123d import annotate, datum, position_tolerance
 from cad.engine import step, xbf
 
 
@@ -2270,7 +2270,7 @@ class StepWriteTest(_Folder):
         with self.assertRaisesRegex(export.ExportRefused,
                                     r"a STEP would drop PMI linked to no geometry: A \(ref 'nosuchface'"):
             export.translate(export.Source.read(self.xbf), None, target)
-        # ``cad export`` and ``api.export``: the worker's export request, no viewer's expectation.
+        # ``cad model export`` and ``api.export``: the worker's export request, no viewer's expectation.
         with self.assertRaisesRegex(export.ExportRefused, "a STEP would drop PMI"):
             _export({"source": {"path": str(self.xbf)}, "destinations": [str(target)]}, [].append)
         self.assertFalse(target.exists())
@@ -2297,7 +2297,7 @@ class StepWriteTest(_Folder):
         for failed, said in ((mismatched, r"\(8 of 9 matched\): hole-diameter: not the model's face"),
                              (unread, r"\(0 of 9 matched\): The STEP reader could not complete the check")):
             target.write_bytes(b"an earlier file")
-            with mock.patch("cad.engine.export.ap242.check", return_value=failed):
+            with mock.patch("cad.step._ap242.check", return_value=failed):
                 with self.assertRaisesRegex(export.ExportRefused,
                                             r"part.step not written: the PMI in the STEP written does not match the "
                                             r"model's document, or could not be checked against it " + said):
@@ -2342,7 +2342,7 @@ class StepWriteTest(_Folder):
         mismatched = {"matched": 9, "total": 10, "problems": ["A: values, units, datum order or face association could "
                                                              "not be verified."], "sha256": "x"}
         again.write_bytes(b"an earlier file")
-        with mock.patch("cad.engine.export.ap242.check", return_value=mismatched):
+        with mock.patch("cad.step._ap242.check", return_value=mismatched):
             with self.assertRaisesRegex(export.ExportRefused, r"again.step not written: .* \(9 of 10 matched\): A: "):
                 _export({"source": {"path": str(self.step)}, "destinations": [str(again)]}, [].append)
         self.assertEqual(again.read_bytes(), b"an earlier file")
@@ -2435,7 +2435,7 @@ class RefusedTest(_Folder):
         return held
 
     def test_an_xbf_of_a_models_document_is_its_own_and_carries_its_pmi(self) -> None:
-        """An xbf written from a model's document (Save As, ``cad export ID m.xbf``) is the
+        """An xbf written from a model's document (Save As, ``cad model export ID m.xbf``) is the
         document's own bytes, the ones its declared xbf would hold: its annotations, notes and views
         all kept. Its STEP is the document's own, its GD&T checked in the file."""
         for model in (plate(), views()):

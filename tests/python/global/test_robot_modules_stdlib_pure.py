@@ -9,7 +9,7 @@ pass, because the test environment has the kernel installed.
 
 Static check over the AST (not an import-time sys.modules probe) so an offending
 import is caught even when it is lazy, conditional, or function-local. Drawing a robot
-is the engine's (`cad snapshot` draws one), outside this family.
+is the engine's (`cad <type> snapshot` draws one), outside this family.
 """
 
 from __future__ import annotations
@@ -28,38 +28,59 @@ OURS = ("cad", "cad_server", "cadgen")
 
 FAMILY = [
     LIBRARY_SRC / "cad" / name for name in (
-        "urdf_source.py",
-        "srdf_source.py",
-        "srdf_validation.py",
-        "sdf_source.py",
-        "sdf_validation.py",
-        "sdf_external.py",
-        "findings.py",
-        "xml_common.py",
-        # The public namespaces the CLIs are shells over (packages/cad/README.md, law 6).
-        # They are the family's front door now, so they inherit its purity rule.
-        "urdf.py",
-        "srdf.py",
-        "sdf.py",
+        "urdf/_source.py",
+        "srdf/_source.py",
+        "srdf/_validation.py",
+        "sdf/_source.py",
+        "sdf/_validation.py",
+        "sdf/_external.py",
+        "_internal/findings.py",
+        "_internal/xml_common.py",
+        # The document types the CLIs are shells over (packages/cad/README.md). They are the
+        # family's front door now, so they inherit its purity rule.
+        "urdf/__init__.py",
+        "srdf/__init__.py",
+        "sdf/__init__.py",
+        "_internal/document_type.py",
+        "_internal/aliases.py",
+        "registry.py",
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
     )
-] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf_validate.py", "srdf_validate.py", "sdf_validate.py")]
+] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py")]
 
 # Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
 FORBIDDEN_ROOTS = {"OCP", "build123d", "numpy", "ocp_tessellate", "ezdxf", "playwright"}
 ALLOWED_CADGEN = {
-    "cad.findings",
-    "cad.xml_common",
-    "cad.urdf_source",
-    "cad.srdf_source",
-    "cad.srdf_validation",
-    "cad.sdf_source",
-    "cad.sdf_validation",
-    "cad.sdf_external",
+    "cad._internal.findings",
+    "cad._internal.xml_common",
+    "cad.urdf._source",
+    "cad.srdf._source",
+    "cad.srdf._validation",
+    "cad.sdf._source",
+    "cad.sdf._validation",
+    "cad.sdf._external",
     "cad_server.cli",  # shared CLI plumbing, itself lazy
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
+    "cad.registry",  # the document types and integrations: stdlib only
+    "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
+    "cad.engine.ids",  # what a document id is: re and os alone
+    # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
+    # is imported in the function that measures.
+    "cad._internal.manufacturing",
+    "cad._internal.aliases",  # the earlier spellings: stdlib only
+    "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
+    # Reached only when a decorator or an engine operation is called (``cad.step.export``,
+    # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.
+    "cad.engine",
+    "cad.engine.api",
+    "cad.engine.model",
+    "cad_server.engine.cli",
+    # The producers the registry gathers: matchers that read type names, stdlib only.
+    "cad.build123d._producers",
+    "cad.kicad._producers",
+    "cad_server.cli.document_types",  # every type's commands, from the registry
     "cad._internal.validation_door",  # findings -> ValidationResult, stdlib only
     "cad_server._internal.cli_from_function",  # argparse over a signature, stdlib only
     # A mesh reference's scheme and local file, read the same way by the engine's stills

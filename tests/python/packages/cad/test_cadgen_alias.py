@@ -33,23 +33,24 @@ class AliasTest(unittest.TestCase):
     def test_every_module_of_cadgen_is_the_library_s_own_module(self) -> None:
         found = run("""
             import json, sys
-            import cadgen.ap242
-            import cad, cad.ap242
-            from cadgen.gltf import animation
+            import cadgen.build123d
+            import cad, cad.build123d
+            from cadgen.step import read
             from cadgen.engine.model import Model
-            import cad.gltf, cad.engine.model
+            import cad.step, cad.engine.model
             print(json.dumps({
-                "ap242": cadgen.ap242 is cad.ap242,
-                "gltf": sys.modules["cadgen.gltf"] is cad.gltf and animation is cad.gltf.animation,
+                "build123d": cadgen.build123d is cad.build123d,
+                "step": sys.modules["cadgen.step"] is cad.step and read is cad.step.read,
                 "model": sys.modules["cadgen.engine.model"] is cad.engine.model and Model is cad.engine.model.Model,
-                "named": [cad.ap242.__name__, Model.__module__],
+                "named": [cad.build123d.__name__, Model.__module__],
                 "copies": sorted({module.__file__ for name, module in sys.modules.items()
                                   if name.startswith("cadgen.") and getattr(module, "__file__", None)}
                                  - {module.__file__ for name, module in sys.modules.items()
                                     if name.startswith("cad.") and getattr(module, "__file__", None)}),
             }))
         """)
-        self.assertEqual(found, {"ap242": True, "gltf": True, "model": True, "named": ["cad.ap242", "cad.engine.model"],
+        self.assertEqual(found, {"build123d": True, "step": True, "model": True,
+                                 "named": ["cad.build123d", "cad.engine.model"],
                                  "copies": []})
 
     def test_every_top_level_name_is_the_library_s(self) -> None:
@@ -101,7 +102,7 @@ class EarlierProgramTest(unittest.TestCase):
 
     def test_a_name_0_7_had_names_the_guide(self) -> None:
         guide = "https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.7-to-0.8.md"
-        for source, said in (("from cadgen import build123d\n", "cannot import name 'build123d' from 'cadgen'"),
+        for source, said in (("from cadgen import read_scene\n", "cannot import name 'read_scene' from 'cadgen'"),
                              ("import cadgen.no_such_module_here\n", "No module named 'cadgen.no_such_module_here'")):
             with self.subTest(source=source):
                 done = self.run_program(source)

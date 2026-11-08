@@ -239,7 +239,7 @@ class ExportsTest(unittest.TestCase):
         self.assertEqual(ready["pmiVerification"], result)
 
     def test_a_step_the_pmi_check_refuses_is_the_jobs_error_and_no_file(self):
-        """The worker refuses a STEP whose PMI check finds a problem, as ``cad export`` does: the
+        """The worker refuses a STEP whose PMI check finds a problem, as ``cad model export`` does: the
         job fails with that reason, the person's toast, and holds no file to hand over."""
         said = ("export.step not written: the PMI in the STEP written does not match the model's document, or "
                 "could not be checked against it (4 of 6 matched): b/A: values, units, datum order or face "
@@ -329,6 +329,144 @@ class MeshFileExportTest(unittest.TestCase):
             _export({"source": {"path": str(self.part)}, "expected": {"version": "1-1"},
                      "destinations": [str(self.downloads / "late.glb")]}, lambda _text: None)
         self.assertFalse((self.downloads / "late.glb").exists())
+
+
+class BoardExportTest(unittest.TestCase):
+    """A KiCad board's page: each of KiCad's exports is a job that runs ``cad.kicad_pcb.export`` where kicode
+    is (``integration_env``, stood in for here) on the board the page shows, never on a request's thread;
+    one file downloads as it is, a folder of them as one .zip."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.board = Path(self.tmp.name).resolve() / "blinky.kicad_pcb"
+        self.board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        self.downloads = Path(self.tmp.name) / "downloads"
+        self.downloads.mkdir()
+        self.jobs = ExportJobs(SimpleNamespace(touch=lambda: None), root=self.downloads)
+        self.addCleanup(self.jobs.close)
+        self.called = []
+        cache = patch.dict("os.environ", {"CAD_CACHE_DIR": str(Path(self.tmp.name) / "cache")})
+        cache.start()
+        self.addCleanup(cache.stop)
+
+    def kicad(self, args):
+        board, to, out = args
+        self.called.append((to, threading.current_thread().name))
+        out = Path(out)
+        names = {"gerbers": ["blinky-F_Cu.gtl", "blinky-Edge_Cuts.gm1"], "bom": ["blinky-bom.csv"]}[to]
+        out.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (out / name).write_text(name, encoding="utf-8")
+        return {"path": board, "to": to, "written": [str(out / name) for name in names], "warnings": []}
+
+    def exported(self, kind, source=None):
+        from cad_server.viewer.scanner import asset_for_path
+
+        source = source or {"doc": str(self.board), "revision": asset_for_path(str(self.board))["hash"]}
+        with patch("cad_server._internal.integration_env.environment", lambda *_a, **_k: "python"), \
+                patch("cad_server._internal.integration_env.call",
+                      lambda _python, _type, operation, args, _kwargs: self.kicad(args)):
+            ident = self.jobs.create({"requestId": f"board-request-{kind:0>8}-{len(self.called)}", "epoch": self.jobs.epoch,
+                                      "source": source, "format": kind})["id"]
+            with self.jobs.changed:
+                self.assertTrue(self.jobs.changed.wait_for(lambda: self.jobs.jobs[ident]["state"] in
+                                                           ("ready", "failed") and not self.jobs.executing, 30))
+        return self.jobs.get(ident)
+
+    def test_a_folder_of_files_is_one_zip_and_one_file_is_itself(self):
+        import zipfile
+
+        job = self.exported("gerbers")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "blinky-gerbers.zip"), job)
+        with self.jobs.artifact(job["id"]) as path:
+            self.assertEqual(sorted(zipfile.ZipFile(path).namelist()), ["blinky-Edge_Cuts.gm1", "blinky-F_Cu.gtl"])
+        job = self.exported("bom")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "blinky-bom.csv"), job)
+        with self.jobs.artifact(job["id"]) as path:
+            self.assertEqual("blinky-bom.csv", path.read_text(encoding="utf-8"))
+        # KiCad ran on the job's own thread, never the request's.
+        self.assertEqual({"cad-operation"}, {thread for _to, thread in self.called})
+        # The same bytes again: the kept download, without KiCad (a BOM reads the schematic, so it runs again).
+        again = self.exported("gerbers")
+        self.assertEqual((again["state"], again["filename"]), ("ready", "blinky-gerbers.zip"), again)
+        self.assertEqual(["gerbers", "bom"], [to for to, _thread in self.called])
+        self.exported("bom")
+        self.assertEqual(["gerbers", "bom", "bom"], [to for to, _thread in self.called])
+
+    def test_a_board_offers_kicads_kinds_alone_and_a_changed_board_is_refused(self):
+        from cad.kicad._export import EXPORTS
+        from cad_server.viewer.exports import BOARD
+        from cad_server.viewer.kinds import EXPORTS as OFFERED
+
+        self.assertEqual(list(EXPORTS), OFFERED["kicad_pcb"])
+        self.assertEqual(list(EXPORTS), list(BOARD))
+        for kind in ("xbf", "threemf", "original"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ExportError, "Invalid export format"):
+                self.exported(kind)
+        stale = self.exported("bom", {"doc": str(self.board), "revision": "0" * 64})
+        self.assertEqual(stale["state"], "failed")
+        self.assertIn("The source changed", stale["error"])
+        self.assertEqual([], self.called, "KiCad never ran for a board the page no longer shows")
+
+
+class SchematicExportTest(unittest.TestCase):
+    """A KiCad schematic's page: its exports are KiCad's too, each a job that runs ``cad.kicad_sch.export``
+    where kicode is (stood in for here), named as the menu names them, and never kept: a schematic is the
+    many files of its hierarchy."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.schematic = Path(self.tmp.name).resolve() / "divider.kicad_sch"
+        self.schematic.write_text("(kicad_sch (version 20250114))\n", encoding="utf-8")
+        self.jobs = ExportJobs(SimpleNamespace(touch=lambda: None), root=Path(self.tmp.name))
+        self.addCleanup(self.jobs.close)
+        self.called = []
+
+    def kicad(self, document_type, args):
+        schematic, to, out = args
+        self.called.append((document_type, to))
+        out = Path(out)
+        names = {"svg": ["divider.svg", "divider-load.svg"], "pdf": ["divider.pdf"]}[to]
+        out.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (out / name).write_text(name, encoding="utf-8")
+        return {"path": schematic, "to": to, "written": [str(out / name) for name in names], "warnings": []}
+
+    def exported(self, kind):
+        from cad_server.viewer.scanner import asset_for_path
+
+        source = {"doc": str(self.schematic), "revision": asset_for_path(str(self.schematic))["hash"]}
+        with patch("cad_server._internal.integration_env.environment", lambda *_a, **_k: "python"), \
+                patch("cad_server._internal.integration_env.call",
+                      lambda _python, document_type, _operation, args, _kwargs: self.kicad(document_type, args)):
+            ident = self.jobs.create({"requestId": f"schematic-request-{kind:0>8}-{len(self.called)}", "epoch": self.jobs.epoch,
+                                      "source": source, "format": kind})["id"]
+            with self.jobs.changed:
+                self.assertTrue(self.jobs.changed.wait_for(lambda: self.jobs.jobs[ident]["state"] in
+                                                           ("ready", "failed") and not self.jobs.executing, 30))
+        return self.jobs.get(ident)
+
+    def test_a_schematic_offers_kicads_kinds_each_run_again(self):
+        import zipfile
+
+        from cad.kicad._schematic import EXPORTS
+        from cad_server.viewer.exports import SCHEMATIC
+        from cad_server.viewer.kinds import EXPORTS as OFFERED
+
+        self.assertEqual(list(EXPORTS), OFFERED["kicad_sch"])
+        self.assertEqual(list(EXPORTS), list(SCHEMATIC))
+        job = self.exported("pdf")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "divider.pdf"), job)
+        job = self.exported("svg")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "divider-svg.zip"), job)
+        with self.jobs.artifact(job["id"]) as path:
+            self.assertEqual(sorted(zipfile.ZipFile(path).namelist()), ["divider-load.svg", "divider.svg"])
+        self.exported("pdf")
+        self.assertEqual([("kicad_sch", "pdf"), ("kicad_sch", "svg"), ("kicad_sch", "pdf")], self.called)
+        with self.assertRaisesRegex(ExportError, "Invalid export format"):
+            self.exported("gerbers")
 
 
 if __name__ == "__main__":

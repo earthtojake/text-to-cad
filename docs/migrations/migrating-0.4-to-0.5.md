@@ -173,7 +173,7 @@ at ONE coordinate, so it unfolds a flat plate but **not a folded bracket**.
 Unfolding a multi-panel part is the caller's job: select each panel's faces with
 `flatten.planar_faces(...)` per plane, flatten each with its own placement, and
 fuse with `flatten.union_faces(...)`. A worked multi-plane example lives in the
-dxf skill's `references/generator-templates.md`.
+cad skill's `references/2d-profiles-and-dxf.md`.
 
 ### 2. Convert the generator into a model
 

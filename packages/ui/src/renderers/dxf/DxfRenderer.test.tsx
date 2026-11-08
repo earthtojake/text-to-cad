@@ -144,9 +144,14 @@ it('Select is the hand, with the 3D views\' cursor: a drag pans under the arrow,
   const { canvas, dispose } = await openDrawing();
   const cursor = () => ['cursor-default', 'cursor-grab', 'cursor-grabbing', 'cursor-pointer'].filter(name => canvas.classList.contains(name));
   expect(cursor()).toEqual(['cursor-default']);
-  // A secondary press is not a drag: it belongs to whatever the host puts on it.
+  // A secondary press that lets go where it went down is no drag: it opens the view's menu, the framing over bare paper.
   fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
+  fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Zoom to fit', 'Zoom to selection']);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   const fitted = painted.at(-1)!;
   fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 600, clientY: 350 });
   fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 602, clientY: 350 });
@@ -169,19 +174,21 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure: no Display, no Preview, no view controls", async () => {
+it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure, its zoom the corner's pill: no Display, no Preview", async () => {
   const { pane, delivered, dispose } = await openDrawing();
   const inPane = within(pane);
   const strip = inPane.getByRole('group', { name: 'Interaction tools' });
   expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(strip).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
+  // Tools alone, no rule: the drawing's zoom is the corner's pill (`ViewCorner.jsx`).
   expect(strip.querySelector('[data-strip-rule]')).toBeNull();
+  expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   for (const name of ['Orbit', 'Position', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
-  // A drawing of one layer and no blocks has nothing for a Layers section to say: no sidebar.
-  expect(pane.querySelector('[data-file-sidebar-tools]')).toBeNull();
+  // A drawing of one layer and no blocks has nothing for a Layers tab to say: no panel, and no pill.
+  expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).toBeNull();
   // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.
   expect(pane.querySelector('[data-quick-edit-box]')).toBeNull();
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
@@ -255,7 +262,8 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   expect(controller.setZoom).toBeUndefined();
 
   const fitted = painted.at(-1)!;
-  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015, clientX: 300, clientY: 300 });
+  // A mouse's wheel (in lines, as Firefox's counts: a trackpad's fine pixel steps would pan) zooms.
+  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015 / 16, deltaMode: 1, clientX: 300, clientY: 300 });
   await waitFor(() => expect(painted.at(-1)!.scale).toBeCloseTo(fitted.scale * 0.5, 6));
   await act(async () => { await controller.resetCamera(); });
   expect(painted.at(-1)).toEqual(fitted);
@@ -266,12 +274,15 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   dispose();
 });
 
-it('a drawing with layers and blocks has a Layers section: a layer hidden is not drawn, a block reference is picked from it', async () => {
+it('a drawing with layers and blocks has the docked panel and its Layers tab: a layer hidden is not drawn, a block reference is picked from it', async () => {
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
-  const tile = await waitFor(() => within(pane.querySelector('[data-file-sidebar-tools]') as HTMLElement).getByRole('button', { name: 'Layers' }));
-  fireEvent.click(tile);
-  const list = await waitFor(() => { const element = pane.querySelector('[data-drawing-layers]'); expect(element).not.toBeNull(); return element as HTMLElement; });
+  // The view's panel, a board's: docked at the left, its search, then its one list, Layers, with no row of tabs.
+  const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
+  expect([aside.getAttribute('data-flat-panel'), aside.hidden, aside.getAttribute('aria-label')]).toEqual(['docked', false, 'Drawing panel']);
+  expect(within(aside).queryAllByRole('tab')).toEqual([]);
+  expect(within(aside).getByRole('region', { name: 'Layers' })).toBeTruthy();
+  const list = aside.querySelector<HTMLElement>('[data-drawing-layers]')!;
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']);
   fireEvent.click(list.querySelector('[data-layer-visibility="CENTRE"]')!);
@@ -279,8 +290,48 @@ it('a drawing with layers and blocks has a Layers section: a layer hidden is not
   // HARDWARE holds the two M5_NUT references; a click picks one, as a tap on the drawing would.
   const inserts = [...list.querySelectorAll('[data-insert-row]')];
   expect(inserts.map(row => row.getAttribute('data-insert-row'))).toEqual(['99', '9B']);
+  // Each its block's name, then its handle marked as one (the payload holds no insertion point).
+  expect(inserts.map(row => row.textContent)).toEqual(['M5_NUT#99', 'M5_NUT#9B']);
   fireEvent.click(inserts[0]);
   await waitFor(() => expect(within(pane.querySelector('[data-quick-edit-box]') as HTMLElement).getByRole('button', { name: 'Block M5_NUT on HARDWARE' })).toBeTruthy());
+
+  // The panel's search keeps the layers whose names match, and the blocks whose names do, under their layer.
+  const search = within(aside).getByRole('textbox', { name: 'Search the drawing' });
+  const hits = (kind: string) => [...aside.querySelectorAll(`[data-flat-panel-hit] [data-${kind}-row]`)].map(row => row.getAttribute(`data-${kind}-row`));
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect(hits('layer')).toEqual(['HARDWARE']));
+  expect(hits('insert')).toEqual(['99', '9B']);
+  // A handle finds its reference, as it is shown or bare.
+  fireEvent.change(search, { target: { value: '#9b' } });
+  await waitFor(() => expect(hits('insert')).toEqual(['9B']));
+  fireEvent.change(search, { target: { value: 'zzz' } });
+  await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
+  // The search decides the candidates; among them HARDWARE's chevron folds its hits, its own row staying, and
+  // the fold holds as the query is edited.
+  const hardware = () => aside.querySelector<HTMLElement>('[data-layer-row="HARDWARE"]')!;
+  fireEvent.change(search, { target: { value: 'nut' } });
+  fireEvent.click(await waitFor(() => within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' })));
+  await waitFor(() => expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]));
+  fireEvent.change(search, { target: { value: 'm5' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]);
+  // Cleared, the search's fold goes with it: the layer as the person left it, open. One they fold themselves
+  // is opened on its hits by a search, and shut again when it is cleared.
+  fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(2));
+  fireEvent.click(within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' }));
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0));
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect(hits('insert')).toEqual(['99', '9B']));
+  fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0);
+
+  // Hidden, its expand button stands alone on a pill at the canvas's top-left, and brings it back.
+  fireEvent.click(within(aside).getByRole('button', { name: 'Hide panel' }));
+  const pill = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel-pill]'); expect(element).not.toBeNull(); return element!; });
+  fireEvent.click(within(pill).getByRole('button', { name: 'Show panel' }));
+  await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(false));
   dispose();
 });
 

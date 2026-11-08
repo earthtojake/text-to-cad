@@ -2,11 +2,11 @@
 as XCAF's GD&T objects and written to STEP AP242 as AP242's semantic entities.
 
 A model gives its part annotations, each on faces of that part, and returns the part. The functions
-are defined here and are ``cad.ap242``'s, each that writes an AP242 entity named after it; notes,
+are defined here and are ``cad.build123d``'s, each that writes an AP242 entity named after it; notes,
 views and presentation, the xbf's alone, keep plain names (the root and ``cad.engine`` export
 none of them)::
 
-    from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
+    from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
                               plus_minus_tolerance, position_tolerance)
     from cad.engine import step, xbf
 
@@ -64,7 +64,7 @@ for it, so the engine appends CAx-IF's 'default tolerances' property of its part
 
 **Views** (``view``) are the xbf's alone too: a part's named views, the views its requirements are
 walked through in (a front, a section, a detail; an iso view showing all). Each is seen down a camera
--- a preset's name, ``cad snapshot --camera``'s own table (``render/presets.py``), or
+-- a preset's name, ``cad <type> snapshot --camera``'s own table (``render/presets.py``), or
 ``camera(direction, up)``, ``direction`` from the part toward the eye as a preset's is --
 orthographic, cut where it has a section (``section``: the viewer's Clip, ``{axis, at, invert}``),
 showing the ids of its ``annotate`` call it names (every one where it names none) with its own
@@ -155,7 +155,7 @@ with an ordered datum reference frame and a diametral zone; a surface profile on
 several, of any kind, with a frame of up to three datums or none; a part's general profile, on
 the faces nothing else controls; a part's ISO 2768 general tolerances; and, in the xbf alone, general and flag notes and a part's named
 views. Each
-is written by the function named after its AP242 entity (``cad.ap242``'s); no function writes
+is written by the function named after its AP242 entity (``cad.build123d``'s); no function writes
 another XCAF characteristic or dimension type, and every other modifier and tolerance form is
 refused by name (``PMIUnsupported``), never approximated. PMI is part-level: an annotation is on one part, and an
 assembly is refused.
@@ -399,7 +399,7 @@ def note(id: str, text: str, *, faces: Any = (), annotations: Iterable[str] = ()
 
 def camera(direction: Iterable[float], up: Iterable[float]) -> dict[str, Any]:
     """A view's camera of the code's own: ``direction`` from the part toward the eye (as a
-    preset's, ``cad snapshot --camera``'s: ``front`` is ``(0, -1, 0)``) and the camera's
+    preset's, ``cad <type> snapshot --camera``'s: ``front`` is ``(0, -1, 0)``) and the camera's
     ``up``, in the part's frame, each made a unit vector. An ``up`` along the direction is refused."""
     found = [_unit(direction, "a camera's direction"), _unit(up, "a camera's up")]
     if _cross(*found) < 1e-9:
@@ -424,7 +424,7 @@ def _section(axis: Any, at: Any, invert: Any) -> dict[str, Any]:
 def view(name: str, *, camera: str | dict, shows: Sequence[str] | None = None, section: dict | None = None,
          place: Mapping[str, dict] | None = None, label: str | None = None) -> dict[str, Any]:
     """A named view of the part, given to ``annotate`` among its annotations: seen down ``camera``
-    (a preset's name, ``cad snapshot --camera``'s, or ``camera(direction, up)``), orthographic,
+    (a preset's name, ``cad <type> snapshot --camera``'s, or ``camera(direction, up)``), orthographic,
     cut by ``section`` (``section``) where it has one, showing the annotations and notes of the
     same call ``shows`` names by id (None: every one, as an iso view does), each it ``place``-s by
     id drawn there in this view (``place``) and elsewhere as its own presentation says. Its
@@ -2412,7 +2412,7 @@ def checked(source: Any, entries: list[dict[str, Any]], target: Any,
 
     from cad.engine import refs as grammar
     from cad.engine.export import ExportRefused
-    from cad.engine.export.ap242 import check
+    from cad.step._ap242 import check
 
     target = Path(target)
     binding = not source.foreign

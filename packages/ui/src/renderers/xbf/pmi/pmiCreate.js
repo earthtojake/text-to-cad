@@ -146,7 +146,7 @@ export function parseToleranceInput(text, t = english) {
   const limits = value.match(LIMITS);
   if (limits) {
     const [lower, upper] = [Number(limits[1]), Number(limits[2])];
-    // As `cad.ap242`'s `limits` holds them: a size above 0, then a greater one.
+    // As `cad.build123d`'s `limits` holds them: a size above 0, then a greater one.
     if (!(lower > 0)) return { error: t("pmi.error.sizePositive") };
     return upper > lower ? { tolerance: { type: "limits", lower, upper } } : { error: t("pmi.error.limitsOrder") };
   }

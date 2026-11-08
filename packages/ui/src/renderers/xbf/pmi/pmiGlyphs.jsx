@@ -18,7 +18,7 @@ const GLYPHS = Object.freeze({
   datum: <path d="M5 18h14l-7-11Z" fill="currentColor" />,
   // A dimension: two extension lines and the line between them, its arrowheads.
   dimension: <><path d="M4 5v14M20 5v14M4 12h16" /><path d="m7 9-3 3 3 3M17 9l3 3-3 3" /></>,
-  // A frame: two cells, a row of a frame's kind (the PMI section's tile too, `PmiIcon`).
+  // A frame: two cells, a row of a frame's kind.
   frame: <><rect x="2.5" y="7" width="19" height="10" rx="1" /><path d="M9.5 7v10" /></>,
   // A flag note's flag, its number beside it where a callout says one.
   flag: <path d="M6 21V4h11l-2.5 4.5L17 13H6" />,
@@ -35,7 +35,3 @@ export function PmiGlyph({ name, ...props }) {
   return <svg {...SVG} data-pmi-glyph={name} {...props}>{glyph}</svg>;
 }
 
-/** The PMI section's icon, its file sidebar tile and tab (`ToolPanel`'s `icon`): a feature control frame. */
-export function PmiIcon(props) {
-  return <PmiGlyph name="frame" {...props} />;
-}

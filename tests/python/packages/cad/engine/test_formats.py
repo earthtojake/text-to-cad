@@ -965,7 +965,6 @@ class PictureTest(FixtureTest):
             "glb": (folder / "rig.glb", {}),
             "urdf": (folder / "kinematics.urdf", {"pose": {"spin": 75, "lift": 40, "reach": 0.03, "output_joint": 20}}),
             "dxf": (folder / "plate.dxf", {}),
-            "dxf-dark": (folder / "plate.dxf", {"display": {"appearance": "dark"}}),
         }
 
     def draw(self, path: Path, **fields) -> tuple[bytes, dict]:
@@ -1009,20 +1008,25 @@ class PictureTest(FixtureTest):
         blue = ((parts[..., 2] - parts[..., 0]) > 90).sum()
         self.assertLess(blue, 5, "Parts paints over the texture")
 
-    def test_a_drawing_takes_its_appearance_as_the_word_or_the_json(self) -> None:
-        # `--display dark` and `--display '{"appearance": "dark"}'` draw one picture; a 3D mode is
-        # refused naming the two words a drawing takes.
+    def test_a_drawing_is_drawn_on_white_paper_and_takes_no_display(self) -> None:
+        # Every snapshot is light: the paper is the light theme's white, and no display names a theme.
+        # A theme, as a word or as a key, is refused as a mode or a key that never was; a 3D mode as a
+        # drawing's display says a drawing takes none.
+        from PIL import Image
+
         path = self.folder / "plate.dxf"
 
-        def drawn(display: str) -> bytes:
-            out = self.folder / "appearance.png"
+        def drawn(display: str | None) -> Image.Image:
+            out = self.folder / "paper.png"
             snapshot(path, out, display=parse_display(display, False), size=SIZE, daemon=False)  # as the verb parses it
-            return out.read_bytes()
+            return Image.open(out).convert("RGB")
 
-        word, json_form, light = drawn("dark"), drawn('{"appearance": "dark"}'), drawn("light")
-        self.assertEqual(word, json_form)
-        self.assertNotEqual(word, light)
-        with self.assertRaisesRegex(SnapshotRefused, r"is a drawing.*display.mode does not apply.*light or dark"):
+        self.assertEqual(drawn(None).getpixel((2, 2)), (255, 255, 255))
+        with self.assertRaisesRegex(SnapshotRefused, r"^--display 'dark' is no display mode; the modes are solid"):
+            drawn("dark")
+        with self.assertRaisesRegex(SnapshotRefused, r"^display has no appearance; an engine document's display takes camera"):
+            drawn('{"appearance": "dark"}')
+        with self.assertRaisesRegex(SnapshotRefused, r"is a drawing.*display.mode does not apply to it\. It takes no display"):
             drawn("xray")
 
     def test_a_drawings_quick_edit_is_drawn_back_in_its_window_with_its_ink(self) -> None:

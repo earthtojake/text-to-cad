@@ -5,7 +5,7 @@ Ink is the person's note on a view; an engine document's manufacturing annotatio
 tolerances, datums and GD&T) are the document's own, read from it and asked for in its code, and
 are not ink: see [PMI](pmi.md). A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
-were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot and DXF renderers offer them
+were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF and board renderers offer them
 ([Pencil and Shapes](cad-renderer.md#pencil-and-shapes)).
 
 ## Pieces
@@ -154,7 +154,7 @@ Copy Prompt, Queue or Send is pressed (`host.promptFiles`). The snapshot packet
 includes shared annotation and measurements: up to 1 KiB of compact UTF-8 JSON
 travels inline, and larger packets are saved to a temporary `.snapshot.json`.
 No images are rendered at handoff. Save inline JSON to a file, then
-`cad snapshot <document> <out.png> --annotation <file> --camera authored` draws the
+`cad <type> snapshot <document> <out.png> --annotation <file> --camera authored` draws the
 view the ink was drawn in over the model, or over an edit of it.
 The Annotation chip does not copy references or save individual files.
 Queue and Send clear the annotation with the note; Copy Prompt keeps it.

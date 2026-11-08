@@ -30,6 +30,12 @@ const unit = v => { const length = Math.hypot(...v); return v.map(c => c / lengt
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
+// PMI's tab in the view's panel, where the panel has others to pick it from: alone it has no tab.
+async function showPmi(pane) {
+  const tab = pane.getByRole('tab', { name: 'PMI', exact: true });
+  if (await tab.count()) await tab.click();
+}
+
 async function openBracket(t, options = { edit: withPmi }) {
   const harness = await serveXbfHarness(t, options);
   const opened = await harness.open();
@@ -109,8 +115,8 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   await page.waitForFunction(() => document.querySelector('[data-pmi-label="top-flat"]')?.getAttribute('aria-pressed') === 'true');
   await settle();
   assert.ok(!(await capture()).equals(still), 'its face is lit');
-  // Its values read in the PMI section, with their units and where each came from.
-  await pane.getByRole('button', { name: 'PMI', exact: true }).click();
+  // Its values read in the PMI tab, with their units and where each came from.
+  await showPmi(pane);
   const details = pane.locator('[data-pmi-details="top-flat"]');
   await details.waitFor();
   assert.match(await details.innerText(), /Kind\s*Flatness/);
@@ -131,7 +137,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   await page.evaluate(() => window.cadHarness.mounted(false));
   await page.evaluate(() => window.cadHarness.mounted(true));
   await loaded();
-  await pane.getByRole('button', { name: 'PMI', exact: true }).click();
+  await showPmi(pane);
   await pane.getByRole('button', { name: 'Reveal PMI', exact: true }).click();
   await drawn();
   assert.deepEqual(await labels(), ['A', 'thickness']);
@@ -157,7 +163,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   // Limits stacked in words as in the box; the flag note its flag and its number.
   assert.equal(await label('thickness').getAttribute('aria-label'), '9.8\u201310.2');
   assert.equal(await label('mask').innerText(), '3');
-  await pane.getByRole('button', { name: 'PMI', exact: true }).click();
+  await showPmi(pane);
   assert.deepEqual(await pane.locator('[data-tool-panel-id="pmi"] h2').allInnerTexts(), ['Views', 'Notes', 'Coverage', 'Annotations']);
   const read = () => page.evaluate(`({ state: ${controller}.readState(), camera: window.__cadCamera(), cut: window.__cadStage().cut })`);
   const unpicked = await read();
@@ -213,7 +219,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   assert.ok(text.includes(`flatness_tolerance("top-flat", "${TOP}", 0.05, presentation=place(anchor=(`), text);
 
   // A tolerance edited in the section: the call, its references as the code wrote them, the new tolerance.
-  await pane.getByRole('button', { name: 'PMI', exact: true }).click();
+  await showPmi(pane);
   await pane.locator('[data-pmi-pick="thickness"]').click();
   const tolerance = pane.locator('[data-pmi-details="thickness"]').getByRole('textbox', { name: 'Tolerance' });
   await tolerance.click(); await tolerance.fill('+0.1/-0.05'); await tolerance.press('Enter');
@@ -243,7 +249,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   await pane.locator('[data-pmi-add]').click();
   await pane.getByRole('button', { name: 'Add flatness', exact: true }).waitFor();
   text = await prompt();
-  assert.ok(text.includes(`Add this PMI to the annotate(...) call of the model's part "plate" (from cad.ap242 import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`), text);
+  assert.ok(text.includes(`Add this PMI to the annotate(...) call of the model's part "plate" (from cad.build123d import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`), text);
 
   // The model rebuilt without the top's name: the flatness names nothing now. It is drawn where the
   // code placed it, broken, and its row says why; an annotation the viewer does not draw is listed,
@@ -266,7 +272,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   assert.deepEqual(errors, []);
 });
 
-// The engine's own: a plate built with `cad.ap242`'s calls (`annotate`, its faces named by the
+// The engine's own: a plate built with `cad.build123d`'s calls (`annotate`, its faces named by the
 // engine's element names), served as the engine served it (`pmi_plate/v1`), then rebuilt twice: 10
 // mm thick with a Ø10 hole, located by basic distances from the front and the left side to its axis,
 // then 12 mm with a Ø12 hole (every name kept: the same annotations, measured anew), then with a
@@ -310,7 +316,7 @@ test('PMI the engine built follows the model through edits: nominals measured an
   // its part's, linked to no geometry, it is still the one picked.
   assert.equal(await label('hole-diameter').getAttribute('aria-label'), '\u2300? +0.1/0: f:edit_plate.cut.1;M:edit_plate.body is a plane face; a diameter is on a cylinder face');
   assert.equal(await label('hole-diameter').getAttribute('aria-pressed'), 'true');
-  await pane.getByRole('button', { name: 'PMI', exact: true }).click();
+  await showPmi(pane);
   assert.match(await pane.locator('[data-pmi-details="hole-diameter"]').innerText(), /is a plane face; a diameter is on a cylinder face/);
 
   // Reopened, the document says the same: its PMI is the file's, not the view's.
@@ -323,12 +329,12 @@ test('PMI the engine built follows the model through edits: nominals measured an
   assert.deepEqual(errors, []);
 });
 
-// A document with no PMI has no PMI tile. A face's menu offers what it can carry, and a choice
-// opens the PMI section on that kind's form, the face picked: the first annotation is made there.
-test('a file with no PMI has no tile for it, and a face\'s menu starts the first one', async (t) => {
+// A document with no PMI has no PMI tab. A face's menu offers what it can carry, and a choice
+// opens the PMI tab on that kind's form, the face picked: the first annotation is made there.
+test('a file with no PMI has no tab for it, and a face\'s menu starts the first one', async (t) => {
   const { page, pane, errors, view, loaded } = await openBracket(t, { fixture: 'bracket' });
   await loaded();
-  assert.equal(await pane.getByRole('button', { name: 'PMI', exact: true }).count(), 0, 'no tile while there is no PMI');
+  assert.equal(await pane.locator('[data-tool-panel-id="pmi"]').count(), 0, 'no tab while there is no PMI');
   await pane.locator('[data-select-filter-trigger]').click();
   const filter = page.locator('[role=menu][aria-label="Selection filter"]');
   await filter.locator('[data-select-filter="faces"]').click();
@@ -342,12 +348,12 @@ test('a file with no PMI has no tile for it, and a face\'s menu starts the first
   await menu.getByRole('menuitem', { name: 'Add flatness', exact: true }).click();
   const form = pane.locator('[data-pmi-new="flatness"]');
   await form.waitFor();
-  assert.ok(await pane.locator('[data-tool-panel-id="pmi"]').isVisible(), 'the PMI section is open on it');
+  assert.ok(await pane.locator('[data-tool-panel-id="pmi"]').isVisible(), 'the PMI tab is open on it');
   const value = form.getByRole('textbox', { name: 'Tolerance' });
   await value.click(); await value.fill('0.05'); await value.press('Enter');
   await pane.locator('[data-pmi-add]').click();
   await pane.getByRole('button', { name: 'Add flatness', exact: true }).waitFor();
-  // Its tile stays while the new one waits in Quick Edit for the agent.
-  assert.equal(await pane.getByRole('button', { name: 'PMI', exact: true }).count(), 1);
+  // Its tab stays while the new one waits in Quick Edit for the agent.
+  assert.equal(await pane.locator('[data-tool-panel-id="pmi"]').count(), 1);
   assert.deepEqual(errors, []);
 });

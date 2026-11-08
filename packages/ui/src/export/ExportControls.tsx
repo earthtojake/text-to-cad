@@ -186,7 +186,7 @@ export function ExportControls({ service, downloads, file, children }: {
   const usage = useControlUsage();
   const begin = (choice: ExportChoice) => {
     if (!displayed) return;
-    usage.used(`export_${choice.format}`);
+    usage.used(choice.control || `export_${choice.format}`);
     // The document as its code built it, at the revision on screen: never a selection or a pose.
     const request: ExportRequest = { requestId: crypto.randomUUID(), epoch: '', source: { doc: displayed.doc, revision: displayed.revision }, format: choice.format };
     const stem = (displayed.name.split('::').pop() || 'model').replace(/\.[^.]+$/, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 100);
@@ -204,7 +204,7 @@ export function ExportControls({ service, downloads, file, children }: {
   const menu = enabled && choices.length ? <DropdownMenuSub>
     <DropdownMenuSubTrigger data-export-menu="">{label}</DropdownMenuSubTrigger>
     <DropdownMenuSubContent aria-label={label}>
-      {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.label}</DropdownMenuItem>)}
+      {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.labelKey ? t(choice.labelKey as Parameters<typeof t>[0]) : choice.label}</DropdownMenuItem>)}
       {pmi?.gdt || kept ? <>
         <DropdownMenuSeparator />
         {pmi?.gdt ? <DropdownMenuLabel className="text-muted-foreground" data-export-pmi="">{t('export.pmiIncluded')}</DropdownMenuLabel> : null}

@@ -8,9 +8,9 @@ section, a detail, each showing its own requirements), for which faces of a part
 requirement, or for a STEP a supplier or an inspection tool can read requirements from.
 
 A part's requirements are written in its model, on the faces they control, and the
-document keeps them. The functions are `cad.ap242`'s: AP242's semantic PMI, which a
+document keeps them. The functions are `cad.build123d`'s: AP242's semantic PMI, which a
 STEP carries, and the notes and named views around it, which the document keeps and no
-STEP carries (`from cad.ap242 import annotate, datum, ...`):
+STEP carries (`from cad.build123d import annotate, datum, ...`):
 
 - **`annotate(part, *annotations)`** gives one part its annotations and returns
   the part.
@@ -34,7 +34,7 @@ requirements a program reads off the faces, not drawn callouts. Notes and views 
 the document: no STEP carries them. A GLB, STL or 3MF carries none. The viewer draws
 datums, dimensions (limits stacked), flatness, position, surface profiles and flag notes
 on the model and lists every annotation and note in its PMI section, one it does not
-draw with why; `cad snapshot` draws them as the viewer does, and `--view` draws a
+draw with why; `cad model snapshot` draws them as the viewer does, and `--view` draws a
 named view.
 
 ## A model-based definition
@@ -70,7 +70,7 @@ not confirmed:
    nothing left to ask.
 
 ```python
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
                           general_profile, limits, note, position_tolerance, section, surface_profile_tolerance,
                           view)
 from lib.notes import NOTES   # the project's notes, in its own module (Notes, below)
@@ -104,7 +104,7 @@ has its own requirement, so the run warns of nothing.
 # src/plate.py
 import build123d as bd
 from cad import model
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance,
                           plus_minus_tolerance, position_tolerance)
 
 
@@ -231,7 +231,7 @@ return annotate(
 - **Notes are the document's**: no STEP carries them, and no STEP is refused for one.
   A flag note on faces is drawn as its flag and number on its first face; a general
   note and the general profile (Note 1) are the viewer's notes alone, which
-  `cad snapshot` lists among what it leaves out.
+  `cad model snapshot` lists among what it leaves out.
 
 ## Views
 
@@ -248,11 +248,11 @@ return annotate(
 )
 ```
 
-- **A camera** is a preset's name, the same as `cad snapshot --camera`'s: `iso`,
+- **A camera** is a preset's name, the same as `cad model snapshot --camera`'s: `iso`,
   `front`, `back`, `left`, `right`, `top`, `bottom`. Or your own,
   `camera(direction, up)`: `direction` points from the part toward the eye, as a
   preset's does (`front` is `(0, -1, 0)`). Every view is orthographic as
-  `cad snapshot` draws it; the viewer keeps the person's projection (its
+  `cad model snapshot` draws it; the viewer keeps the person's projection (its
   Projection menu).
 - **A section** is the viewer's Clip: `section(axis, at, invert=False)` cuts
   across `"x"`, `"y"` or `"z"` at `at` millimetres and keeps the lower side
@@ -268,7 +268,7 @@ return annotate(
   show, is refused.
 - **Views are the document's**, kept as the kernel's own views: no STEP carries them,
   and no STEP is refused for one. A view is no annotation: the build report does not
-  count it. The viewer applies a view from its PMI section, and `cad snapshot
+  count it. The viewer applies a view from its PMI tab, and `cad model snapshot
   --view A-A` draws it ([snapshots](snapshot-review.md)); a view whose section the
   part's placement turns off the world's axes is refused there, not cut along
   another.
@@ -356,14 +356,15 @@ pmi: PART: ask: What is the 9 mm hole for? Suggest dimensional_size(...), positi
 
 ## Read and check
 
-`cad inspect` reads the PMI a document or a file holds: a model's id, the STEP it was
-exported to (what a supplier reads), an `.xbf`, or a vendor's STEP. Its first screen lists
+`cad <type> inspect` reads the PMI a document or a file holds: `cad model inspect` a model's
+id, `cad step inspect` the STEP it was exported to (what a supplier reads) or a vendor's, and
+`cad xbf inspect` an `.xbf`. Its first screen lists
 each annotation's id, kind and status; `--json` gives all of it under `summary`, as `pmi`,
 `pmi_views` and `pmi_coverage`.
 
 ```bash
-cad export "$ID" STEP/plate.step
-cad inspect STEP/plate.step --json
+cad model export "$ID" STEP/plate.step
+cad step inspect STEP/plate.step --json
 ```
 
 Each entry of `pmi` has `id`, `kind` (`datum`, `dimension`, `geometric_tolerance`, `note`),
@@ -385,23 +386,23 @@ has none (`nominal` is null), since the file states limits, not a nominal.
 
 ## Export
 
-A STEP of the model writes the PMI: `cad export "$ID" STEP/plate.step`, `export(plate(),
-...)` in an `exports.py`, or the viewer's Export ([exports](exports.md)). A STEP that
+A STEP of the model writes the PMI: `cad model export "$ID" STEP/plate.step`,
+`model.export(plate(), ...)` in an `exports.py`, or the viewer's Export ([exports](exports.md)). A STEP that
 would drop an annotation the code made (one linked to no geometry, [After an
 edit](#after-an-edit)) is refused, naming each. An `.xbf` exported from the model
-(`cad export "$ID" plate.xbf`, the viewer's XBF) is the document's own bytes, the ones
+(`cad model export "$ID" plate.xbf`, the viewer's XBF) is the document's own bytes, the ones
 its `@xbf` holds: every annotation, note and view kept. No export poses a model or
 takes a part out of it: a posed file or a part on its own is a model of its own
 ([exports](exports.md#posed-files-and-parts-on-their-own)).
 
-A vendor's STEP converts as ever (`cad export vendor/motor.step vendor/motor.xbf`):
+A vendor's STEP converts as ever (`cad step export vendor/motor.step vendor/motor.xbf`):
 the `.xbf` keeps the file's GD&T as read, and an export of either writes it. What an
 export of a vendor's document cannot carry whole is said in its log, `warning: pmi:
 ...`, never refused. A STEP of a document whose faces carry names -- a STEP this
 writes, read back, or its `.xbf` -- is checked as the model's is, and refused where the
 written file does not carry what it read.
 
-Every STEP written of the model -- a declared `@step`, `cad export`, `export()`, the
+Every STEP written of the model -- a declared `@step`, `cad model export`, `model.export()`, the
 viewer's Export -- is read back with a reader of its own, without the kernel, and every
 annotation matched to the file: values, units, datum order, zone, a basic dimension's
 mark, and its faces by name and by geometry (a plane's normal and offset, a cylinder's
@@ -421,7 +422,7 @@ say "general".
 
 ## Review
 
-`cad snapshot` draws a document's PMI as the viewer shows it, a broken one in red
+`cad model snapshot` draws a document's PMI as the viewer shows it, a broken one in red
 or amber at the place the code gave it; `pmi=off` draws the model alone, and
 `--view NAME` a named view ([snapshots](snapshot-review.md)). In the viewer, picking a callout or its row lights
 its faces and shows its values: a toleranced dimension's limits, a tolerance's datums

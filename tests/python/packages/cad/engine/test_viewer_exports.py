@@ -15,7 +15,7 @@ class ViewerExportsTest(unittest.TestCase):
         self.assertNotEqual(fingerprint({"pmi": [{"value": .1}]}), fingerprint({"pmi": [{"value": .2}]}))
 
     def test_step_result_checks_the_written_file(self):
-        """The viewer's STEP is checked as ``cad export``'s is, staged before it lands: one the
+        """The viewer's STEP is checked as ``cad model export``'s is, staged before it lands: one the
         check passes carries its verification; one it finds any problem with is refused, its job's
         error the person's toast, and no file is handed over (law 17)."""
         from types import SimpleNamespace
@@ -33,7 +33,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.engine.export.ap242.check",
+                 patch("cad.step._ap242.check",
                        return_value={"matched": 1, "total": 1, "problems": []}) as check:
                 result = _export(request, lambda _: None)
                 check.assert_called_once_with([entry], output, {}, {0: "plate"})
@@ -43,7 +43,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.engine.export.ap242.check", return_value=failed):
+                 patch("cad.step._ap242.check", return_value=failed):
                 with self.assertRaisesRegex(ExportRefused, r"result.step not written: the PMI in the STEP written does "
                                                            r"not match the model's document.*\(0 of 1 matched\): A: "):
                     _export(request, lambda _: None)
@@ -52,7 +52,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.engine.export.ap242.check") as check:
+                 patch("cad.step._ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"}, "destinations": [str(output)]}, lambda _: None)
                 check.assert_not_called()
                 self.assertNotIn("pmiVerification", result["files"][0])
@@ -75,14 +75,14 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.engine.export.ap242.check") as check:
+                 patch("cad.step._ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"},
                                   "destinations": [str(output)]}, lambda _: None)
                 check.assert_not_called()
                 self.assertNotIn("pmiVerification", result["files"][0])
             root = Path(folder).resolve()
             script = root / "plate.py"
-            script.write_text('from cad import xbf\nfrom cad.ap242 import annotate, note\nimport build123d as bd\n'
+            script.write_text('from cad import xbf\nfrom cad.build123d import annotate, note\nimport build123d as bd\n'
                               '@xbf("plate.xbf")\ndef plate():\n'
                               '    return annotate(bd.Box(2, 3, 4), note("deburr", "Break all sharp edges 0.2 max"))\n',
                               encoding="utf-8")

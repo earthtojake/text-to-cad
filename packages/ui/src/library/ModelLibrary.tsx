@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Box, ChevronDown, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
@@ -12,6 +12,7 @@ import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
 import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
 import { useControlUsage } from "../usage/controls.js";
+import { ViewerHostContext } from "../host/context.js";
 import { activityLabel, ageLabel } from "../lib/age.js";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
@@ -34,6 +35,11 @@ export interface LibraryModel {
   missing: boolean;
   /** A picture's name (its content's): `thumbnail()` reads the picture of the row that names it. */
   thumbnail: string | null;
+  /**
+   * Its picture in the dark theme's own colours, where its view draws one (a board's): the card shows
+   * it in the dark theme. Null or absent: `thumbnail` in both.
+   */
+  thumbnailDark?: string | null;
   /** When the picture was taken, in seconds; null without one. A document updated since has an old one. */
   pictured: number | null;
   /**
@@ -53,8 +59,11 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   list(): Promise<readonly Model[]>;
   /** `delete` for a model's row (`deletes`), `remove` for a file's. */
   change(action: "pin" | "unpin" | "remove" | "delete", model: Model): Promise<readonly Model[]>;
-  /** An image URL for a model's thumbnail (the one its `thumbnail` names), or null. */
-  thumbnail(model: Model): Promise<string | null>;
+  /**
+   * An image URL for a model's thumbnail (the one its `thumbnail` names), or null; with `"dark"`, its
+   * dark theme's (`thumbnailDark`) where it has one.
+   */
+  thumbnail(model: Model, scheme?: "light" | "dark"): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
    * Open: choose a file with the desktop's own file chooser, and show it. A host on a computer with
@@ -95,8 +104,12 @@ const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
-function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(item: Model): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
+function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(item: Model, scheme: "light" | "dark"): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
   const { t } = useI18n();
+  // The theme the home is in: a picture drawn in the dark theme's own colours too shows that one in
+  // it, swapped as the theme switches; any other picture is its one in both.
+  const scheme = useContext(ViewerHostContext)?.environment.colorScheme;
+  const variant: "light" | "dark" = scheme === "dark" && item.thumbnailDark ? "dark" : "light";
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const latest = useRef({ item, seen });
@@ -108,7 +121,7 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     if (item.missing || !element.current) return;
     const name = item.thumbnail;
     const show = () => {
-      if (name) void load(latest.current.item).then(value => { if (active) setImage(value); }).catch(() => {});
+      if (name) void load(latest.current.item, variant).then(value => { if (active) setImage(value); }).catch(() => {});
       latest.current.seen(latest.current.item);
     };
     if (typeof IntersectionObserver === "undefined") { show(); return () => { active = false; }; }
@@ -119,11 +132,11 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     });
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
-  }, [item.path, item.thumbnail, item.missing, item.updated, load]);
+  }, [item.path, item.thumbnail, item.missing, item.updated, load, variant]);
   // A drawing's picture is its line work on nothing, in the light theme's pen (`useDrawingView`'s
   // `thumbnail`): a dark card turns it light, its colours kept.
   const drawing = /\.dxf$/i.test(item.path) ? "" : undefined;
-  return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing}>
+  return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing} data-thumbnail-variant={variant}>
     {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
     {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
   </span>;
@@ -232,12 +245,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     };
     draw.current(next).then(done, () => done(false));
   }, [queue, refresh]);
-  const load = useCallback((item: Model) => {
-    // A picture is kept by its name, its content's: a new picture of the row is another name.
-    const name = String(item.thumbnail);
+  const load = useCallback((item: Model, scheme: "light" | "dark") => {
+    // A picture is kept by its name, its content's: a new picture of the row is another name, and its
+    // dark theme's another again.
+    const dark = scheme === "dark" && Boolean(item.thumbnailDark);
+    const name = dark ? `dark:${item.thumbnailDark}` : String(item.thumbnail);
     let image = images.current.get(name);
     if (!image) {
-      image = current.current.thumbnail(item);
+      image = dark ? current.current.thumbnail(item, "dark") : current.current.thumbnail(item);
       images.current.set(name, image);
     }
     return image;

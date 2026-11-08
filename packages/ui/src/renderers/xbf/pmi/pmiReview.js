@@ -1,6 +1,6 @@
 import { pmiDimensionPlaces } from "@cad/core/lib/xbf/xbfPmi.js";
 
-// What the PMI section reads out to review a requirement by, all of it the document's: a
+// What the PMI tab reads out to review a requirement by, all of it the document's: a
 // dimension's current limits (its nominal plus each signed deviation, or the limits the code gave
 // it; none where the code gave no tolerance), the requirements on the features picked, a frame's
 // datums in their order and the tolerances a datum is used by -- each datum looked for on the

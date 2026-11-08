@@ -14,7 +14,7 @@ import { pmiViewAt, pmiViewFromHere, pmiViewPlacements, pmiViewShows } from "./p
 // (`readXbfPmi`); which of it the person has hidden (the file's view, `xbfViewSlices`), the view
 // picked and whether the faces no requirement is on are lit; and the changes asked for it -- a new
 // annotation or note, a view from where the viewport looks now, a value edited, a label moved --
-// each the `cad.ap242` call it would make the code say, which Quick Edit hands the agent
+// each the `cad.build123d` call it would make the code say, which Quick Edit hands the agent
 // (`changeChips`). The viewer writes nothing: the model's code is the document's source, and a
 // change reaches the view as the engine's next version.
 //
@@ -211,7 +211,7 @@ export function useXbfPmi({ scene, tree, bounds, moving, editable, hiddenParts =
       : t(change.placementOnly ? "pmi.move" : "pmi.change", { id: change.id });
     return { key: `pmi:${change.key}`, label, icon: <PmiGlyph name={callGlyph(change.call)} className="size-2.5 shrink-0 text-muted-foreground" aria-hidden="true" />,
       request: text, copy: text, onRemove: () => remove(change.key),
-      card: <p className="whitespace-pre-wrap break-all px-2 pb-2 font-mono text-micro leading-4 text-foreground" data-pmi-change-card="">{pmiCallText(change.call)}</p> };
+      detail: { facts: [{ label: t("pmi.call"), value: <code className="block whitespace-pre-wrap break-all text-left font-mono" data-pmi-change-card="">{pmiCallText(change.call)}</code>, copy: false }] } };
   }), [changes, remove, t]);
 
   return {

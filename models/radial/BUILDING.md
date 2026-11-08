@@ -31,7 +31,7 @@ where it is.
     authored DIRECTLY in the engine frame at crank angle θ = 0.
 - Build: `python src/radial.py` builds the whole engine into its document (an
   unchanged system is a no-op: the server keeps each system's work in memory) and the
-  CAD Viewer follows it; `cad snapshot <id> out.png` renders it
+  CAD Viewer follows it; `cad model snapshot <id> out.png` renders it
   (`skills/cad/references/snapshot-review.md` has the camera and size flags).
 - Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `mechanism.py`,
   `radial.py`, or another builder's module. If you need a shared number
@@ -273,7 +273,7 @@ safety wire, casting parting line, machined boss and lifting eye.
    (e.g. 0..720° in 10° steps) and `cad.geometry` / OCP distance checks.
    Report the minimum clearances you measured. Moving-part builders must sweep
    their parts against their moving neighbours over 720°.
-4. Renders IN CONTEXT of the whole engine, largest size profile: `cad snapshot <id>
+4. Renders IN CONTEXT of the whole engine, largest size profile: `cad model snapshot <id>
    tmp/<name>/front34.png` with a camera of your own (`--camera`, `--size-profile`,
    `--width`: `skills/cad/references/snapshot-review.md`); camera position and target
    are engine-frame mm. READ every render you make. Do not loop on renders: rerender

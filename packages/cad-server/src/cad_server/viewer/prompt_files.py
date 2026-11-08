@@ -4,11 +4,12 @@ POST /api/v1/local/prompt-files validates a snapshot packet in memory, then retu
 with compact inline JSON up to 1024 UTF-8 bytes, or writes one .snapshot.json and
 returns its path. Shared input and inline annotation are stored once (Measure's
 measurements are the person's alone: a prompt carries none);
-jobs reserve output names for an agent to render later (``cad snapshot --job`` draws
-every one of them; ``cad snapshot`` reads the packet as ``--annotation``, and ``--camera
+jobs reserve output names for an agent to render later (``cad <type> snapshot --job`` draws
+every one of them; ``cad <type> snapshot`` reads the packet as ``--annotation``, and ``--camera
 authored`` draws a job's view). A packet with
 ink also names the parts hidden and isolated where the ink was last drawn, which
-``--annotation`` leaves out of its stills. No PNG is produced by this route.
+``--annotation`` leaves out of its stills; a board's names what its prompt named (``references``,
+board references), which ``--job`` lights. No PNG is produced by this route.
 Guarded GET /api/v1/local/prompt-files/<name> reads only JSON from this process's
 scratch directory. Files outlive the viewer until the system clears them.
 """
@@ -22,6 +23,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from cad.registry import DOCUMENT_TYPES
+
 from cad._internal.atomic_replace import write_bytes_atomic
 
 __all__ = ["PROMPT_FILES_ROUTE", "PromptFiles"]
@@ -32,11 +35,13 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 MAX_VIEWS = 16
 # Compact UTF-8 JSON, not whitespace or a model-specific tokenizer.
 INLINE_SNAPSHOT_BYTES = 1024
-_REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline"})
+_REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline", "references"})
 _VIEW_KEYS = frozenset({"label", "camera", "display", "kinematics", "jointValues", "animation", "selection", "width", "height"})
 _ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
-# What ``cad snapshot`` draws, by suffix (``cad.engine.snapshot``): the files a packet's input may be.
-SNAPSHOT_SUFFIXES = (".xbf", ".step", ".stp", ".stl", ".3mf", ".glb", ".urdf", ".srdf", ".sdf", ".dxf")
+# What ``cad <type> snapshot`` draws (``cad.engine.snapshot``): the files a packet's input may be, every
+# type with a snapshot (``cad.registry``).
+SNAPSHOT_SUFFIXES = tuple(extension for entry in DOCUMENT_TYPES.values() if "snapshot" in entry.operation_names
+                          for extension in entry.extensions)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 _FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.json")
 
@@ -84,15 +89,17 @@ class PromptFiles:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError(f"a prompt's files are requested as JSON: {error}") from None
         name, input_path, views, annotation = _checked(request)
+        references = request.get("references")
         directory = self.directory
         with self._lock:
             self._count += 1
             prefix = f"{_stem(name or input_path)}-{self._count}"
         labels: set[str] = set()
         jobs = []
-        # A drawing's view is its plan view, framed as the pane framed it (its camera): it has no 3D
-        # framing to pin. Every view carries its label, by which a mark names the view it was drawn in.
-        drawing = str(input_path).lower().endswith(".dxf")
+        # A drawing's view, a board's and a schematic's, is its plan view, framed as the pane framed it (its
+        # camera): it has no 3D framing to pin. Every view carries its label, by which a mark names the view it
+        # was drawn in.
+        drawing = str(input_path).lower().endswith((".dxf", ".kicad_pcb", ".kicad_sch"))
         for index, view in enumerate(views):
             slug = _slug(view["label"].lower(), f"view-{index + 1}")
             while slug in labels:
@@ -113,9 +120,11 @@ class PromptFiles:
             job["outputs"] = [output]
             jobs.append(job)
         packet: dict[str, object] = {"input": input_path, "jobs": jobs}
+        if references:
+            packet["references"] = references
         if annotation is not None:
             packet["annotation"] = annotation
-            # What ``cad snapshot --annotation`` leaves out of the stills it draws the ink on.
+            # What ``cad <type> snapshot --annotation`` leaves out of the stills it draws the ink on.
             packet.update(_drawn_in(annotation, views))
         _accepted(packet)
         compact = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
@@ -205,18 +214,19 @@ def _drawn_in(annotation: dict, views: list[dict]) -> dict:
 
 
 def _accepted(packet: dict) -> None:
-    """The packet as ``cad snapshot`` reads it, checked before anything renders: its input a
+    """The packet as ``cad <type> snapshot`` reads it, checked before anything renders: its input a
     file the snapshot draws (or a document's id), each job's camera and display, its annotation and
     the parts it hides and isolates, by the snapshot's own parsers (``cad.engine.snapshot``).
     Their refusal is this request's 400.
     """
-    from cad.engine.snapshot import (AUTHORED, SnapshotRefused, packet_visibility, parse_annotation, parse_camera, parse_display)
+    from cad.engine.snapshot import (AUTHORED, SnapshotRefused, packet_visibility, parse_annotation, parse_camera, parse_display,
+                                     parse_references)
 
     from cad.engine.ids import is_id
 
     suffix = Path(str(packet["input"])).suffix.lower()
     if not is_id(packet["input"]) and suffix not in SNAPSHOT_SUFFIXES:
-        raise ValueError(f"{Path(str(packet['input'])).name} is no file cad snapshot draws: "
+        raise ValueError(f"{Path(str(packet['input'])).name} is no file cad <type> snapshot draws: "
                          f"one of {', '.join(SNAPSHOT_SUFFIXES)}")
     try:
         for index, job in enumerate(packet["jobs"]):
@@ -227,8 +237,11 @@ def _accepted(packet: dict) -> None:
             if job.get("display") is not None:
                 if not isinstance(job["display"], dict):
                     raise SnapshotRefused(f"jobs[{index}].display is the view's display object")
-                parse_display(json.dumps(job["display"]), False)
+                parse_display(json.dumps(job["display"]), False, board=suffix == ".kicad_pcb",
+                              schematic=suffix == ".kicad_sch")
         parse_annotation(packet.get("annotation"))
         packet_visibility(packet)
+        if packet.get("references") is not None:
+            packet["references"] = parse_references(packet["references"], Path(str(packet["input"])))
     except SnapshotRefused as error:
         raise ValueError(str(error)) from None

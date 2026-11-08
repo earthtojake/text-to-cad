@@ -76,7 +76,7 @@ export function quickEditReferenceIds(selection) {
  *   chips?: readonly import("./ReferenceChips.jsx").ReferenceChip[] | null,
  *   annotation?: { present: boolean, clear?: () => void } | null,
  *   requests?: ReadonlyArray<import("./ReferenceChips.jsx").ReferenceChip & { request: string }> | null,
- *   prompt?: { views(): { label: string }[], files(views: { label: string }[]): Promise<object> | null,
+ *   prompt?: { views(): { label: string }[], files(views: { label: string }[], references?: object[]): Promise<object> | null,
  *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
@@ -204,7 +204,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   }, [docked, open, boxNode]);
   useEffect(() => { if (docked && unfolded) takeKeyboard(); }, [docked, unfolded, takeKeyboard]);
   // While the sheet peeks, the view knows how tall the peek is (`--cad-quick-edit-peek`), so what
-  // runs down the view (a phone's file sidebar) stops above it.
+  // runs down the view stops above it.
   const peek = docked && open && !hidden && folded && stops ? stops[0] : null;
   useEffect(() => {
     const element = viewerElement?.current;
@@ -246,7 +246,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     try {
       const unavailable = prompt?.unavailable?.() || "";
       const views = unavailable ? [] : prompt?.views() ?? [];
-      const files = views.length ? prompt.files(views) : null;
+      // The selection goes with the views: a board's packet lights what it names when it is drawn again.
+      const files = views.length ? prompt.files(views, selection) : null;
       void files?.catch(() => {});
       const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable,
         requests: (requests || EMPTY).map(item => item.request).filter(Boolean) });

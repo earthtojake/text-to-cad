@@ -45,7 +45,7 @@ MODEL = '''from __future__ import annotations
 import build123d as bd
 
 from cad import xbf
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
                           limits, note, place, plus_minus_tolerance, position_tolerance, section,
                           surface_profile_tolerance, view)
 

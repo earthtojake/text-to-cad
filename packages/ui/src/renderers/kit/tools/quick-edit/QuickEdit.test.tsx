@@ -146,8 +146,9 @@ it('copies the note with its references by their files\' absolute paths, and its
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([note(), clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
   expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2'
-    + '\nSnapshot (cad snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
-  expect(prompt.files).toHaveBeenCalledWith(views);
+    + '\nSnapshot (cad step snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
+  // The views go with the selection they were sent with, for a packet that carries it (a board's).
+  expect(prompt.files).toHaveBeenCalledWith(views, [face]);
   // Copied as text, no file's bytes were read.
   expect(prompt.read).not.toHaveBeenCalled();
 });
@@ -368,7 +369,7 @@ it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON 
   write('Keep it.');
   expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON (cad snapshot --annotation):'));
+  await waitFor(() => expect(message).toContain('Snapshot JSON (cad step snapshot --annotation):'));
   expect(message).toContain(packet);
   expect(message).toContain('/models/parts/bracket.step#base/f:base.extrude1.2');
   expect(prompt.read).not.toHaveBeenCalled();

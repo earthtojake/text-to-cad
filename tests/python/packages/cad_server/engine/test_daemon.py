@@ -921,17 +921,15 @@ class StandbyStartTest(unittest.TestCase):
         self.assertEqual([service for service, _environment in asked], ["worker"])
         self.assertEqual(asked[0][1]["PYTHONPATH"], "/mine", "without the engine's folder its starter put first")
 
-    def test_an_engine_with_no_base_makes_it_at_its_start_and_stands_its_standby_once_made(self) -> None:
-        # The plugin's server alone, as a host's CAD app installs it: the engine it starts, outside any sandbox,
-        # makes the base at its start in the background (an agent's sandboxed command cannot), and its standby
-        # stands once the base is made.
+    def core(self):
+        """An installation whose own environment has no kernel (the plugin's server alone), its cache a
+        scratch folder, and a fake making gated by the event returned."""
         import contextlib
         import dataclasses
         import io
         import threading
 
         from cad_server._internal import base
-        from cad_server.engine import daemon
 
         scratch = Path(tempfile.mkdtemp(prefix="engine-base-"))
         self.addCleanup(shutil.rmtree, scratch, True)
@@ -947,23 +945,61 @@ class StandbyStartTest(unittest.TestCase):
             (env / marker).write_text(json.dumps(written), encoding="utf-8")
             return written
 
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(scratch), "CAD_ENGINE_STANDBY": "1"}))
+        stack.enter_context(mock.patch.object(base, "MAKING", base.Making()))
+        made = stack.enter_context(mock.patch.object(base, "make", side_effect=make))
+        stack.enter_context(mock.patch.object(base.Installation, "here", return_value=core))
+        stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        return core, go, made
+
+    def test_an_engine_with_no_base_makes_none_and_stands_no_standby_until_its_first_need_made_it(self) -> None:
+        # The plugin's server alone, as a host's CAD app installs it: its engine's start makes nothing, and no
+        # standby stands; the first kernel process's start makes the base, and the standby stands once it is made.
+        import threading
+
+        from cad_server._internal import base
+        from cad_server.engine import daemon
+
+        core, go, made = self.core()
         engine = daemon.Daemon()
         self.addCleanup(engine.supervisor.stop)
         stood: list[bool] = []  # whether the base was there each time a standby was asked to stand
-        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(scratch), "CAD_ENGINE_STANDBY": "1"}), \
-                mock.patch.object(base, "MAKING", base.Making()), mock.patch.object(base, "make", side_effect=make) as made, \
-                mock.patch.object(base.Installation, "here", return_value=core), contextlib.redirect_stderr(io.StringIO()), \
-                mock.patch.object(engine.supervisor, "stand",
-                                  side_effect=lambda _service, _env: stood.append(base.complete(base.where(core)) is not None)):
+        with mock.patch.object(engine.supervisor, "stand",
+                               side_effect=lambda _service, _env: stood.append(base.complete(base.where(core)) is not None)):
             engine.stand()
-            self.assertEqual((engine.status()["base"]["state"], stood), ("making", [False]))
-            go.set()
+            self.assertEqual((engine.status()["base"], stood), (None, []), "nothing made, and no standby, at the start")
+            made.assert_not_called()
+            found: list = []
+            asking = threading.Thread(target=lambda: found.append(daemon._places.kernel(make=True)), daemon=True)
+            asking.start()
             deadline = time.monotonic() + 30
-            while len(stood) < 2 and time.monotonic() < deadline:
+            while (engine.status()["base"] or {}).get("state") != "making" and time.monotonic() < deadline:
                 time.sleep(0.01)
-            self.assertEqual(engine.status()["base"]["state"], "made")
+            self.assertEqual((engine.status()["base"]["state"], found, stood), ("making", [], []),
+                             "the kernel process's start waits on the making; no standby meanwhile")
+            go.set()
+            asking.join(30)
+            deadline = time.monotonic() + 30
+            while not stood and time.monotonic() < deadline:
+                time.sleep(0.01)
+        self.assertEqual(found[0]["python"], str(base.interpreter(base.where(core))))
         made.assert_called_once()
-        self.assertEqual(stood, [False, True], "none to stand in at the start; the standby once the base is made")
+        self.assertEqual(stood, [True], "the standby, once the base is made")
+
+    def test_an_engine_whose_base_is_made_stands_its_standby_at_its_start(self) -> None:
+        from cad_server._internal import base
+        from cad_server.engine import daemon
+
+        core, go, _made = self.core()
+        go.set()
+        base.ensure(core, told=lambda _line: None)  # made already, by an earlier engine
+        engine = daemon.Daemon()
+        self.addCleanup(engine.supervisor.stop)
+        with mock.patch.object(engine.supervisor, "stand") as stand:
+            engine.stand()
+        self.assertEqual([call.args[0] for call in stand.call_args_list], ["worker"])
 
     def test_with_the_switch_off_none_stands_by_and_none_replaces_one(self) -> None:
         from unittest import mock
@@ -1710,7 +1746,10 @@ if __name__ == '__main__':
         self.assertEqual(get(f"{api}/parts/{keys(after)['block']}", token)[:4], b"XBM2")
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
-        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "inspect", doc, ref], cwd=self.folder,
+        from cad.engine.ids import is_id
+
+        kind = "model" if is_id(doc) else "xbf"
+        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", kind, "inspect", doc, ref], cwd=self.folder,
                                   env=self.env)
         self.assertEqual(found.returncode, 0, found.stderr)
         return json.loads(found.stdout)

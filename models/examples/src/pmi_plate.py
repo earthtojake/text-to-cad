@@ -17,7 +17,7 @@ from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
 from cad import step
-from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+from cad.build123d import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
                           note, place, plus_minus_tolerance, position_tolerance, section, surface_profile_tolerance,
                           view)
 from lib.notes import NOTES

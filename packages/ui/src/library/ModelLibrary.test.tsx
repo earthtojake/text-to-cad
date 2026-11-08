@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { activityLabel, ageLabel, lastActivity } from '../../dist/lib/age.js';
 import { ControlUsageProvider } from '../../dist/usage/controls.js';
+import { ViewerHostContext } from '../../dist/host/context.js';
 import type { LibraryModel, ModelLibrarySource } from './ModelLibrary.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -499,4 +500,26 @@ it("marks a drawing's picture, which a dark card turns light, and no other", asy
   const picture = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('.cad-library-thumbnail')!;
   expect((await picture('gasket.dxf')).hasAttribute('data-drawing')).toBe(true);
   expect((await picture('kit.step')).hasAttribute('data-drawing')).toBe(false);
+});
+
+// A board's view draws its picture in both themes: the card shows the theme's, swapped as the theme
+// switches, with no turning of its colours; a picture with no dark one is its one in both, a drawing's turned.
+it("a card shows its dark theme's picture in the dark theme, swapped live, and its one picture where it has no other", async () => {
+  const thumbnail = vi.fn(async (item: LibraryModel, scheme?: string) => `data:${item.name}:${scheme === 'dark' ? item.thumbnailDark : item.thumbnail}`);
+  const source = library([model('video.kicad_pcb', { thumbnail: 'light.png', thumbnailDark: 'dark.png', pictured: Date.now() / 1000 }),
+    model('plate.dxf', { thumbnail: 'plate.png', pictured: Date.now() / 1000 })], { thumbnail });
+  const home = (colorScheme: 'light' | 'dark') => <ViewerHostContext.Provider value={{ environment: { colorScheme } } as any}><ModelLibrary library={source} /></ViewerHostContext.Provider>;
+  const view = render(home('light'));
+  const picture = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-thumbnail')!;
+  await waitFor(() => expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png'));
+  view.rerender(home('dark'));
+  await waitFor(() => expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:dark.png'));
+  // The board's own dark picture is never turned; the drawing's one picture is, as before.
+  expect(picture('video.kicad_pcb').hasAttribute('data-drawing')).toBe(false);
+  expect(picture('video.kicad_pcb').getAttribute('data-thumbnail-variant')).toBe('dark');
+  expect(picture('plate.dxf').getAttribute('data-thumbnail-variant')).toBe('light');
+  expect(picture('plate.dxf').hasAttribute('data-drawing')).toBe(true);
+  expect(thumbnail.mock.calls.filter(([item]) => item.name === 'plate.dxf').every(([, scheme]) => scheme === undefined)).toBe(true);
+  view.rerender(home('light'));
+  await waitFor(() => expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png'));
 });

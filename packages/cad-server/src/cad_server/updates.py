@@ -7,9 +7,10 @@ At most once an hour, the server reads the version feed (``GET /v1/versions``, `
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
 set) or for a copy that is not told. The feed as last read is kept in the state directory
-(``versions.json``), where every process of the person's reads it. It only says a release is out:
-nothing is fetched and nothing switches until the person asks -- the update button in the CAD Viewer
-and the CAD app (``cad_server._internal.update``), ``cad update``, or the install command run again.
+(``versions.json``), where every process of the person's reads it. It says a release is out; the
+update moves to it when the person asks -- the update button in the CAD Viewer and the CAD app
+(``cad_server._internal.update``), ``cad update``, or the install command run again -- or, with
+automatic updates on (``cad_server/auto_updates.py``), once the device's engine is idle.
 
 A release is also known with no network at all: an agent app whose plugin moved ahead runs the newer
 release's CAD server, which says its release as it connects (``see``), and that proves the release
@@ -30,9 +31,10 @@ gets one line (``line``) with its first ``cad_show`` result: the release, and th
 every agent app on the computer (``cad setup``). A skill's ``cad`` command says nothing.
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
-the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
-or tool call waits on it -- what is told comes from the feed as last read. Each hour's attempt is
-spent before it is made, so a feed that cannot be reached is tried once an hour.
+the background (``refresh``) or for the update a person asked for (``newest``) or asked to see
+(``newest_now``, ``cad update --dry-run``: read and kept nowhere), so no start, request or tool call
+waits on it -- what is told comes from the feed as last read. Each hour's attempt is spent before it is
+made, so a feed that cannot be reached is tried once an hour.
 """
 
 from __future__ import annotations
@@ -65,15 +67,18 @@ _seen: set[str] = set()
 _seen_lock = threading.Lock()
 
 
-def _release(value: Any) -> tuple[int, ...] | None:
+def parse_release(value: Any) -> tuple[int, int, int] | None:
+    """A release, a plain ``X.Y.Z``, as its three numbers; None for anything else (a development or
+    pre-release version). The one reading of a release for both questions an update asks: whether it is
+    newer (here) and whether it installs itself (``auto_updates.takes``)."""
     match = _RELEASE.fullmatch(value) if isinstance(value, str) else None
-    return tuple(int(part) for part in match.groups()) if match else None
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
     """The feed as the server reads it: a release as ``latest`` (``None`` when there is none). Anything
     else in it is left out, so the feed can grow without a release of text-to-cad."""
-    if not isinstance(data, dict) or _release(data.get("latest")) is None:
+    if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
     return {"latest": data["latest"]}
 
@@ -156,15 +161,15 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
 def see(release: Any) -> None:
     """A release an agent app's CAD server runs, as it said when it connected: one newer than this
     install proves a release exists, and the update button shows it, with no network."""
-    if _release(release) is not None:
+    if parse_release(release) is not None:
         with _seen_lock:
             _seen.add(release)
 
 
 def _newest(candidates: list[Any], version: str) -> str | None:
     """The newest of ``candidates`` that is newer than ``version``, or None."""
-    current = _release(version)
-    found = [(_release(value), value) for value in candidates if _release(value) is not None]
+    current = parse_release(version)
+    found = [(parse_release(value), value) for value in candidates if parse_release(value) is not None]
     newer = [(parsed, value) for parsed, value in found if current is not None and parsed > current]
     return max(newer)[1] if newer else None
 
@@ -184,6 +189,29 @@ def newest(*, fetch: bool = True) -> str | None:
     if found is not None and checking(asked=True):
         candidates.append(found["latest"])
     return _newest(candidates, __version__)
+
+
+def newest_now(*, get: Callable[[str], Any] | None = None) -> tuple[str, str | None]:
+    """For an update's dry run, which changes nothing: the feed read now, bounded (``TIMEOUT_SECONDS``) and
+    kept nowhere, and what an update would do: ``("newer", release)``, the release it would install;
+    ``("newest", None)``, this release's own setup again; ``("unreachable", None)``, the feed out of reach
+    (an update then sets this release up again); ``("off", None)``, no feed read here (``checking``)."""
+    from cad_server import __version__
+
+    if not checking(asked=True):
+        return "off", None
+    with _seen_lock:
+        candidates: list[Any] = [*_seen]
+    fresh = parse_feed((get or _get)(f"{api_url()}/versions"))
+    if fresh is None:
+        return "unreachable", None
+    newer = _newest([*candidates, fresh["latest"]], __version__)
+    return ("newer", newer) if newer is not None else ("newest", None)
+
+
+def feed_url() -> str:
+    """Where the version feed is read from: what ``cad update --dry-run`` names when it cannot reach it."""
+    return f"{api_url()}/versions"
 
 
 def command(system: str | None = None) -> str:

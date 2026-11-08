@@ -1,6 +1,6 @@
 """Quick Edit writes replayable JSON synchronously, never starting a render.
 
-A packet is what ``cad snapshot`` reads: ``--annotation PACKET`` draws its ink, and
+A packet is what ``cad <type> snapshot`` reads: ``--annotation PACKET`` draws its ink, and
 ``--camera authored`` draws the view the ink was drawn in, found in the packet's jobs by label
 (``cad.engine.snapshot``). Its readers are the replay asserted here.
 """
@@ -15,7 +15,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from cad.engine.snapshot import _view_of, packet_visibility, parse_annotation
+from cad.engine.snapshot import _view_of, job_pictures, packet_visibility, parse_annotation
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 from cad_server.viewer.prompt_files import PromptFiles
@@ -57,7 +57,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def request(self, **overrides) -> dict:
         return {"acceptInline": True, "name": "part.stl", "input": str(self.model), "annotation": ANNOTATION, "views": [
-            {"label": "view 1", "camera": CAMERA, "display": {"appearance": "dark"}, "width": 640, "height": 480},
+            {"label": "view 1", "camera": CAMERA, "display": {"mode": "xray", "grid": True}, "width": 640, "height": 480},
             {"label": "view 2", "camera": "iso"},
         ], **overrides}
 
@@ -75,7 +75,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(_view_of(packet, "view 2").camera, "iso")
         common = {"output": {"padding": 0, "tightFrame": False}}
         self.assertEqual(packet, {"input": str(self.model), "annotation": ANNOTATION, "jobs": [
-            {**common, "camera": CAMERA, "display": {"appearance": "dark"},
+            {**common, "camera": CAMERA, "display": {"mode": "xray", "grid": True},
              "outputs": [{"path": str(self.files / "part-1-view-1.png"), "label": "view 1", "width": 640, "height": 480}]},
             {**common, "camera": "iso", "outputs": [{"path": str(self.files / "part-1-view-2.png"), "label": "view 2"}]},
         ]})
@@ -119,6 +119,66 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertNotIn("output", packet["jobs"][0])
         self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "panel-1-view-1.png"), "label": "view 1",
                                                          "width": 1600, "height": 900}])
+
+    def test_a_boards_view_is_its_plan_view_with_its_display_and_its_job_carries_the_ink(self) -> None:
+        """A board's Quick Edit, as a drawing's: the window as a plan-view camera, the board's Display,
+        the ink on the sheet, in a job `cad <type> snapshot` takes."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        display = {"mode": "copper", "side": "bottom", "poured": False, "layers": ["B.Cu", "Edge.Cuts"]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {
+            "name": "blinky.kicad_pcb", "input": str(board), "annotation": ANNOTATION,
+            "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]})
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, _out, prepared] = job_pictures(packet)[0]
+        self.assertEqual((source, prepared.camera), (board, plan))
+        self.assertEqual({key: prepared.display[key] for key in display}, display)
+        self.assertEqual(prepared.annotation, ANNOTATION)
+        self.assertNotIn("output", packet["jobs"][0])
+        self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "blinky-1-current-view.png"),
+                                                         "label": "current view", "width": 1600, "height": 1200}])
+
+    def test_a_schematics_view_is_its_plan_view_with_its_sheet_and_names_no_theme(self) -> None:
+        """A schematic's Quick Edit, as a board's: the window as a plan-view camera and the sheet shown, in a
+        job `cad kicad_sch snapshot` takes. A snapshot is light whatever the viewer's theme, so a view that
+        names one is refused as a key that never was."""
+        schematic = self.tmp / "divider.kicad_sch"
+        schematic.write_text("(kicad_sch (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [114, -65, 60], "target": [114, -65, 0], "up": [0, 1, 0], "orthographicHalfHeight": 20}
+        display = {"sheet": "/Load/", "border": False}
+        request = {"name": "divider.kicad_sch", "input": str(schematic), "annotation": ANNOTATION,
+                   "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, _out, prepared] = job_pictures(packet)[0]
+        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, display))
+        self.assertNotIn("output", packet["jobs"][0])
+        dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", dark)
+        self.assertEqual(status, 400, body)
+        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet:")
+
+    def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
+        """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        request = {"name": "blinky.kicad_pcb", "input": str(board), "annotation": None,
+                   "views": [{"label": "current view", "camera": plan, "display": {"mode": "board"}}],
+                   "references": ["#R1", "#track:7A1C0000-0000-4000-8000-000000000001", "#F.Cu@x20y15..x10y5"]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(packet["references"], ["#R1", "#track:7a1c0000-0000-4000-8000-000000000001", "#F.Cu@x10y5..x20y15"])
+        self.assertEqual(job_pictures(packet)[0][2].references, packet["references"])
+        for references, said in ((["#R1", "not one"], "is not a board reference"), ("#R1", "references lists board references")):
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {**request, "references": references})
+            self.assertEqual((status, said in json.loads(body)["error"]), (400, True), references)
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(references=["#R1"]))
+        self.assertEqual((status, "is no board" in json.loads(body)["error"]), (400, True))
 
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
         _, first, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
@@ -200,7 +260,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             # Measure's measurements are the person's alone: they never travel in a prompt.
             (self.request(measurements=[]), "unknown field(s): measurements"),
             # a file snapshot does not draw
-            (self.request(input=str(self.notes)), "is no file cad snapshot draws"),
+            (self.request(input=str(self.notes)), "is no file cad <type> snapshot draws"),
         ):
             status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
             self.assertEqual(status, 400, request)

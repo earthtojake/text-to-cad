@@ -4,7 +4,7 @@ from unittest import mock
 
 from build123d import Compound, Pos, Shell, Solid, Wire
 from OCP.TopoDS import TopoDS
-from cad.geometry import GeometryError, boundary_edges, is_sound, self_intersections, topology_errors
+from cad.build123d._geometry import GeometryError, boundary_edges, is_sound, self_intersections, topology_errors
 
 
 def _open_solid():
@@ -50,7 +50,7 @@ class GeometryDiagnosticsTests(unittest.TestCase):
         """OCP 8 binds no NCollection_List<BRepCheck_Status>: BRepCheck_Result.Status()
         raises TypeError there. The per-type checkers then name the fault, under the
         same BRepCheck_* codes. Forced here so the fallback runs on every kernel."""
-        from cad import geometry
+        from cad.build123d import _geometry as geometry
 
         with mock.patch.object(geometry, "_result_statuses", side_effect=TypeError("unregistered type")):
             issues = topology_errors(_open_solid())
@@ -171,7 +171,7 @@ class OcctListIterationTests(unittest.TestCase):
     def test_items_never_exhausts_the_binding_iterator(self):
         # Exhausting a pybind iterator over an OCCT list unwinds a C++
         # exception (milliseconds each on macOS); _items takes Size() elements.
-        from cad.geometry import _items
+        from cad.build123d._geometry import _items
 
         class Guarded:
             def __init__(self, values):
@@ -189,7 +189,7 @@ class OcctListIterationTests(unittest.TestCase):
 
     def test_items_match_full_iteration_of_real_checker_lists(self):
         from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
-        from cad.geometry import _items
+        from cad.build123d._geometry import _items
         checker = BRepAlgoAPI_Check(_overlapping_boxes().wrapped, False, True)
         results = list(checker.Result())
         self.assertTrue(results)

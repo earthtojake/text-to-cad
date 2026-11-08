@@ -85,6 +85,8 @@ it('the menu is the formats the file\'s kind writes and nothing else, there at o
     ['/scene.glb', ['STL', '3MF']],
     ['/part.stl', ['3MF', 'GLB']],
     ['/kit.3mf', ['STL', 'GLB']],
+    // A KiCad board, as KiCad writes it: each of its fabrication, assembly and 3D files.
+    ['/blinky.kicad_pcb', ['Gerbers', 'Drill', 'Position', 'BOM', 'STEP', 'GLB', 'ODB++', 'IPC-2581', 'PDF', 'DXF']],
   ];
   // A document the view draws flat on z=0 writes a DXF too; a mesh file never does.
   kinds.push(['/plate.xbf#planar', ['STEP', 'STL', '3MF', 'GLB', 'DXF', 'XBF']], ['/scene.glb#planar', ['STL', '3MF']]);
@@ -139,6 +141,20 @@ it('a choice starts its export at once with a spinning toast; the menu stays the
   expect(service.create.mock.calls[1][0]).toMatchObject({ format: 'original', epoch: 'epoch' });
   await waitFor(() => expect(toasts()).toHaveLength(2));
   expect(downloads.save).not.toHaveBeenCalled();
+});
+
+it('a board\'s choice is KiCad\'s format, named as the server names its download: a folder of files is one .zip', async () => {
+  const { service } = server();
+  const downloads = { save: vi.fn(), remember: vi.fn() };
+  const board = { doc: '/b/blinky.kicad_pcb', revision: 'h1', file: '/b/blinky.kicad_pcb', name: 'blinky.kicad_pcb' };
+  mount(service, downloads, { view: board });
+  const user = userEvent.setup({ skipHover: true });
+  await exportOnce(user, 'Gerbers');
+  await waitFor(() => expect(service.create).toHaveBeenCalledTimes(1));
+  const request = service.create.mock.calls[0][0];
+  expect(request).toEqual({ requestId: expect.any(String), epoch: 'epoch', source: { doc: '/b/blinky.kicad_pcb', revision: 'h1' }, format: 'gerbers' });
+  expect(downloads.remember).toHaveBeenLastCalledWith([{ request, filename: 'blinky-gerbers.zip' }]);
+  await shown('loading', 'Preparing blinky-gerbers.zip…');
 });
 
 it('a ready file is handed to the browser once, and its toast goes that moment: there is no success toast', async () => {

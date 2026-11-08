@@ -244,8 +244,10 @@ _KERNEL_LOADED = False
 def kernel(say: Callable[[str], None]) -> None:
     """The kernel loaded before a build of this worker, unless it is (``load_kernel``): a load that
     takes longer than ``KERNEL_PATIENCE`` is said once, while it goes on (``KERNEL_NOTICE``), and
-    a warm worker says nothing."""
-    if _KERNEL_LOADED:
+    a warm worker says nothing. An environment without the build123d integration (a script whose
+    imports name none of it: the server's ``cad run`` makes it with the integrations they name) loads
+    none: what its build imports is its own."""
+    if _KERNEL_LOADED or not _has_kernel():
         return
     told = threading.Timer(KERNEL_PATIENCE, say, (KERNEL_NOTICE,))
     told.daemon = True
@@ -255,6 +257,16 @@ def kernel(say: Callable[[str], None]) -> None:
     finally:
         told.cancel()
         told.join()  # gone before the build: a profile records every thread's calls (``profiling``)
+
+
+def _has_kernel() -> bool:
+    """Whether this environment has build123d installed (found, not loaded)."""
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("build123d") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def kept() -> dict[str, str]:
@@ -369,8 +381,8 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         # Each destination written, counted of them all (``progress.py``: an export's ``write``).
         say("write", detail=target.name, count=[index, len(request["destinations"])])
         before = _stat(target)
-        # A STEP of a document with PMI is checked in the file written (``export/ap242.py``), within
-        # its ``write`` frame, whoever asked for it -- ``cad export``, ``api.export`` or the
+        # A STEP of a document with PMI is checked in the file written (``cad/step/_ap242.py``), within
+        # its ``write`` frame, whoever asked for it -- ``cad model export``, ``api.export`` or the
         # viewer, alike: with the PMI a STEP carries, its notes being the xbf's alone
         # (``pmi.step_entries``), against the document's faces (``pmi.step_surfaces``), staged
         # before it lands and refused when the check finds any problem (``pmi.checked``); the

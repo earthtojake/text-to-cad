@@ -54,3 +54,11 @@ test('a storage that is blocked or holds junk is a tab at its defaults, and a bl
   junk.setItem(TAB_RECORD_KEY, JSON.stringify({ version: 0, settings: { appearance: 'dark' } }));
   assert.equal(createTabStore(sessionTabRecord(junk)).settings.getSnapshot().appearance, 'system', 'another version is the defaults');
 });
+
+
+test("index.html's first paint reads the tab record's current version, so a tab left in Dark never flips", async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
+  const [, version] = html.match(/record\.version === (\d+)/) || [];
+  assert.equal(Number(version), TAB_RECORD_VERSION);
+});

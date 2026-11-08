@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
+import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 
 // The drawing under test is a COMMITTED payload: exactly what
 // a DXF document's `drawing` answered for `__fixtures__/sample.dxf`, so this test
@@ -92,8 +93,8 @@ async function frame(pane, before = null) {
   let last = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await settle(pane.page());
-    // The drawing alone: the tools that float over it (the strip, Quick Edit) are not its picture.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right] { visibility: hidden !important; }' });
+    // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture.
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill] { visibility: hidden !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }
@@ -170,6 +171,8 @@ const wheelAt = (page, box, point, deltaY) => page.mouse.move(box.x + point.x, b
 const deltaForFactor = factor => -Math.log(factor) / 0.0015;
 
 // The room the view measures for its tool strip at the pane's top, which a fit keeps clear of.
+// Both margins of a fit: every flat view's, 6% of the pane's shorter side and at least 16px (`fitBoardBounds`).
+const margins = shot => 2 * Math.max(16, 0.06 * Math.min(shot.width, shot.height));
 const stripRoom = page => page.evaluate(() => Number.parseFloat(getComputedStyle(document.querySelector('[data-slot="cad-file-view"]')).getPropertyValue('--cad-tools-bottom')) || 0);
 
 test('a drawing opens fitted and centred, in the theme’s ink, and flips with the theme', async (t) => {
@@ -188,19 +191,20 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   const light = await frame(pane);
   const box = inkBox(light);
   const strip = await stripRoom(page);
-  // Fitted: the drawing's own aspect, centred, filling the pane below its tool strip but for the gutter.
+  // Fitted: the drawing's own aspect, centred, filling the pane below its tool strip but for its margin.
   assert.ok(strip > 0, `the strip's room is measured: ${strip}`);
   assert.ok(Math.abs(box.centreX - light.width / 2) <= 2, `centred across: ${box.centreX} of ${light.width}`);
   assert.ok(Math.abs(box.centreY - (strip + (light.height - strip) / 2)) <= 2, `centred down, under the strip: ${box.centreY} of ${light.height}`);
   const aspect = box.width / box.height;
   assert.ok(Math.abs(aspect - MODEL.width / MODEL.height) < 0.05, `the drawing's own aspect: ${aspect}`);
   // The pane is wider than the drawing, so height is the binding axis: the ink
-  // reaches to the 16 px gutter and no further.
-  assert.ok(Math.abs(box.height - (light.height - strip - 32)) <= 3, `fitted to the gutter: ${box.height} in ${light.height}`);
+  // reaches to the margin and no further.
+  assert.ok(Math.abs(box.height - (light.height - strip - margins(light))) <= 3, `fitted to the margin: ${box.height} in ${light.height}`);
 
-  // Default pen: the theme's foreground, on the theme's background. The outline is
+  // Default pen: the theme's foreground, on the canvas. The outline is
   // default-pen line-work.
-  assert.ok(near(box.backdrop, [255, 255, 255], 12), `light background: ${box.backdrop}`);
+  const canvas = [1, 3, 5].map(at => Number.parseInt(APP_THEME_COLORS.light.canvas.slice(at, at + 2), 16));
+  assert.ok(near(box.backdrop, canvas, 12), `light canvas: ${box.backdrop}`);
   const edgeLight = darkestInk(light);
   assert.ok(edgeLight[0] < 110 && edgeLight[1] < 110 && edgeLight[2] < 110, `dark ink on light: ${edgeLight}`);
 
@@ -323,7 +327,7 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   const resized = await frame(pane, fittedShot);
   const refitted = inkBox(resized);
   assert.ok(refitted.height < fitted.height * 0.8, `re-fitted smaller: ${fitted.height} -> ${refitted.height}`);
-  assert.ok(Math.abs(refitted.height - (resized.height - await stripRoom(page) - 32)) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
+  assert.ok(Math.abs(refitted.height - (resized.height - await stripRoom(page) - margins(resized))) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
 
   // Touched: the person's framing is theirs and a resize does not take it back — but it is
   // kept in the terms it was chosen in, not in pixels. The view holds the same zoom
@@ -338,9 +342,9 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   const grownShot = await frame(pane, chosenShot);
   const kept = inkBox(grownShot);
   // The canvas is the pane less its navbar; the share of what a fit fills (below the strip, inside
-  // the gutter) that the drawing covers is the person's zoom, and that is what survives.
+  // the margin) that the drawing covers is the person's zoom, and that is what survives.
   const strip = await stripRoom(page);
-  const share = (ink, shot) => ink.height / (shot.height - strip - 32);
+  const share = (ink, shot) => ink.height / (shot.height - strip - margins(shot));
   assert.ok(Math.abs(share(kept, grownShot) - share(chosen, chosenShot)) < 0.02,
     `half the fit, before and after: ${share(chosen, chosenShot)} -> ${share(kept, grownShot)}`);
   assert.ok(kept.height > chosen.height * 1.3,
@@ -361,7 +365,11 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
   await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.camera?.scale > 0, key);
   const record = await page.evaluate(stateKey => window.cadHarness.state.renderers[stateKey], key);
   assert.equal(record.version, 2);
-  assert.deepEqual(Object.keys(record.camera).sort(), ['offsetX', 'offsetY', 'scale'], 'the drawing\'s transform is its camera');
+  // Its camera is its transform with the pane it was framed in, in CSS pixels (`kit/viewport/flatView.js`).
+  assert.deepEqual(Object.keys(record.camera).sort(), ['height', 'offsetX', 'offsetY', 'scale', 'width'],
+    'the drawing\'s transform and its pane are its camera');
+  assert.ok(Math.abs(record.camera.width - canvas.width) <= 1 && Math.abs(record.camera.height - canvas.height) <= 1,
+    `the pane is the canvas it was framed in: ${record.camera.width}x${record.camera.height} vs ${canvas.width}x${canvas.height}`);
   assert.deepEqual([record.display, record.renderer], [null, {}], 'and a drawing has nothing else');
 
   await page.evaluate(() => window.cadHarness.mounted(false));

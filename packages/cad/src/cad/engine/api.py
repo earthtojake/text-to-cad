@@ -511,7 +511,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
     print whose fits are finer: each part is then meshed again at the finer of the two for these
     files, and each file says it; every destination is then an STL or a 3MF. A call the program's own
-    code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
+    code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
     terminal and nowhere when it is not, ``False`` nowhere, a callable each frame."""
@@ -529,10 +529,10 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
 
 def _said(written: list[Written], destinations: tuple) -> list[Written]:
     """``written``, a line said of each file when the call is the program's own (the first frame
-    outside this module, past the verb's observer, is ``__main__``'s), as a model call's report is
-    said (``Model.__call__``)."""
+    outside this module and a document type's dispatch of it, past the verb's observer, is
+    ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
     frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get("__name__") == __name__:
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.document_type"):
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         from cad.engine.said import written as said_written
@@ -619,13 +619,13 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     annotation: its file's path, its object, or the Quick Edit packet that carries it) and
     ``measurements`` are drawn over the model; ``camera="authored"`` draws it from the view the
     annotation's ink was drawn in, which the packet holds. ``view`` draws a part's named view
-    (``cad.ap242``'s ``view``: ``NAME``, or ``PART/NAME`` where two parts have one): its camera, its section, its
+    (``cad.build123d``'s ``view``: ``NAME``, or ``PART/NAME`` where two parts have one): its camera, its section, its
     PMI (``snapshot.view_of``), refused with ``camera``. ``out`` a folder (a path ending in a
     separator, or one that is there) is given a name inside it, the source's stem and the time
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
     was (``snapshot.write_png``).
 
-    ``job`` in place of ``out`` is every picture a job names (``cad snapshot --job``), a list of
+    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
     object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
     and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
@@ -696,7 +696,9 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
-    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile, view)
+    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile, view,
+                                          board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
+                                          schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
     found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
@@ -729,7 +731,13 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     path = key(os.fspath(source))
     if isinstance(path, Path):
         if path.suffix.lower() not in (".xbf", ".step", ".stp"):
-            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a document id")
+            # A script is the commonest such source, as for an export (``_source``): its run makes the document.
+            from cad.engine.said import COMMAND
+
+            run = (f"; run `{COMMAND} run {os.fspath(source)}` first, then {verb} its document by id"
+                   if path.suffix.lower() == ".py" else "")
+            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a "
+                             f"document id{run}")
         if not path.is_file():
             raise ValueError(f"no document {named or source}")
     return path
@@ -758,7 +766,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cad inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad xbf inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -882,7 +890,7 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
         from cad.engine.said import COMMAND
 
-        said = (f"`{COMMAND} inspect {path.name}` alone tells its nodes, meshes and animations, and "
+        said = (f"`{COMMAND} glb inspect {path.name}` alone tells its nodes, meshes and animations, and "
                 f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
                 f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
                 "was exported from, inspected, tells the rest")
@@ -935,7 +943,7 @@ def _no_closure(path: Path) -> str:
     from cad.engine.said import COMMAND
 
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file ({COMMAND} inspect {path.name} REF)")
+            f"document by its id for its closure, or name a ref in the file ({COMMAND} step inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -963,16 +971,17 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cad inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad xbf inspect DOC``): its name and id; its
     state -- a model's (``live``, ``held``, ...: ``ModelDocuments.state``), where the engine holds
     it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
-    occurrences stand; its materials and their masses, where any part has one; its joints,
+    occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
+    materials and their masses, where any part has one; its joints,
     mechanism states, configuration sequences and animations; its PMI, as the structure serves it;
     and a model's declared files.
-    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume or masses, and
-    nothing measured for them -- the lists alone."""
+    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
+    masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
 
     model = None
@@ -1004,10 +1013,13 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     low, high, volume = [math.inf] * 3, [-math.inf] * 3, 0.0
     materials: dict[str, dict[str, Any]] = {}
     unweighed: list[str] = []
+    inverted: list[str] = []
     for instance in instances:
         prototype = prototypes[instance["prototype"]]
         facts = each[prototype["key"]] if measured else {}
         volume += facts.get("volume") or 0.0
+        if facts.get("inverted"):
+            inverted.append(instance["path"])
         if facts.get("box"):
             box = placed_facts({"box": facts["box"]}, instance["matrix"])["box"]
             low = [min(a, b) for a, b in zip(low, box["min"])]
@@ -1033,7 +1045,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     found = {
         "name": structure.get("name"), "id": ident, "state": state,
         "parts": {"occurrences": len(instances), "distinct": len(prototypes), "root": (structure.get("tree") or {}).get("name")},
-        "bounds": bounds, "volume": volume,
+        "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
         "unweighed": unweighed if materials else [],
         "joints": joints,
@@ -1048,7 +1060,7 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     }
     if not measured:
         # The lists alone: nothing was measured, so there are no bounds, volume or masses (never a zero).
-        for name in ("bounds", "volume", "mass"):
+        for name in ("bounds", "volume", "inverted", "mass"):
             del found[name]
         found["materials"] = [{key: value for key, value in row.items() if key != "mass"} for row in found["materials"]]
     return found
@@ -1102,7 +1114,8 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf"}
+             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
 _DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``services.WORKER``)
@@ -1218,8 +1231,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
-        trace = failed.get("trace")
-        return {**_read(trace or failed.get("error") or ""), **told, "engine": bool(trace)}
+        return told_error(failed)
     if error is None:
         return None
     if isinstance(error, EngineError):
@@ -1245,6 +1257,18 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
             "refused": isinstance(error, refusals), "here": True}
+
+
+def told_error(report: dict[str, Any]) -> dict[str, Any]:
+    """A failed build report's error as the verbs tell it (``observers``' ``error``): its type and frames,
+    innermost last -- the whole traceback the build kept (``build._raised``), else what its text shows --
+    and whether it was the engine's own, writing a file (``trace``). The server reads it to tell a mistake
+    in the library's code from the model's: for a crash report, and for whether a page offers to report
+    the failure (``cad_server.analytics.told_signature``, the one rule for both)."""
+    trace = report.get("trace")
+    raised = report.get("raised")
+    found = dict(raised) if isinstance(raised, dict) and raised.get("frames") else _read(trace or report.get("error") or "")
+    return {**found, "engine": bool(trace), "refused": False, "here": False}
 
 
 def _read(text: str) -> dict[str, Any]:

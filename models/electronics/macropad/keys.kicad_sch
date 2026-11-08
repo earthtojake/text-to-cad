@@ -1,0 +1,7605 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "10d255d2-1e11-586c-aff3-d5d7a1026b8e")
+	(paper "A3")
+	(title_block
+		(title "3x3 hot-swap keys, per-key SK6812MINI-E, EC11 encoder")
+		(date "2026-11-06")
+		(rev "A")
+		(company "Nine macropad (text-to-cad demo)")
+	)
+	(lib_symbols
+		(symbol "Switch:SW_Push"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "SW"
+				(at 1.27 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "SW_Push"
+				(at 0 -1.524 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SW_Push_0_1"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27)
+						(xy 0 3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.27)
+						(xy -2.54 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "power:GND"
+			(power global)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#PWR"
+				(at 0 -6.35 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "GND"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "GND_0_1"
+				(polyline
+					(pts
+						(xy 0 0)
+						(xy 0 -1.27)
+						(xy 1.27 -1.27)
+						(xy 0 -2.54)
+						(xy -1.27 -1.27)
+						(xy 0 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "GND_1_1"
+				(pin power_in line
+					(at 0 0 270)
+					(length 0)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "Device:RotaryEncoder_Switch"
+			(pin_names
+				(offset 0.254)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "SW"
+				(at 0 6.604 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "RotaryEncoder_Switch"
+				(at 0 -6.604 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at -3.81 4.064 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 6.604 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Rotary encoder, dual channel, incremental quadrate outputs, with switch"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "rotary switch encoder switch push button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "RotaryEncoder*Switch*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "RotaryEncoder_Switch_0_1"
+				(rectangle
+					(start -5.08 5.08)
+					(end 5.08 -5.08)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(polyline
+					(pts
+						(xy -5.08 2.54)
+						(xy -3.81 2.54)
+						(xy -3.81 2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -5.08 0)
+						(xy -3.81 0)
+						(xy -3.81 -1.016)
+						(xy -3.302 -2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -5.08 -2.54)
+						(xy -3.81 -2.54)
+						(xy -3.81 -2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -4.318 0)
+						(xy -3.81 0)
+						(xy -3.81 1.016)
+						(xy -3.302 2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center -3.81 0)
+					(radius 0.254)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(polyline
+					(pts
+						(xy -0.635 -1.778)
+						(xy -0.635 1.778)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center -0.381 0)
+					(radius 1.905)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -0.381 -1.778)
+						(xy -0.381 1.778)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(arc
+					(start -0.381 -2.794)
+					(mid -3.0988 -0.0635)
+					(end -0.381 2.667)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -0.127 1.778)
+						(xy -0.127 -1.778)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.254 2.921)
+						(xy -0.508 2.667)
+						(xy 0.127 2.286)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.254 -3.048)
+						(xy -0.508 -2.794)
+						(xy 0.127 -2.413)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 3.81 1.016)
+						(xy 3.81 -1.016)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 3.81 0)
+						(xy 3.429 0)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 4.318 1.016)
+					(radius 0.127)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 4.318 -1.016)
+					(radius 0.127)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 5.08 2.54)
+						(xy 4.318 2.54)
+						(xy 4.318 1.016)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 5.08 -2.54)
+						(xy 4.318 -2.54)
+						(xy 4.318 -1.016)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "RotaryEncoder_Switch_1_1"
+				(pin passive line
+					(at -7.62 2.54 0)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 -2.54 0)
+					(length 2.54)
+					(name "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 0 0)
+					(length 2.54)
+					(name "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 7.62 2.54 180)
+					(length 2.54)
+					(name "S1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "S1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 7.62 -2.54 180)
+					(length 2.54)
+					(name "S2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "S2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "74xGxx:74AHCT1G125"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(embedded_fonts no)
+			(property "Reference" "U"
+				(at -2.54 3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "74AHCT1G125"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" "http://www.ti.com/lit/sg/scyt129e/scyt129e.pdf"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Single Buffer Gate Tri-State, Low-Voltage CMOS"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "Single Gate Buff Tri-State LVC CMOS"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "SOT* SG-*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "74AHCT1G125_0_1"
+				(polyline
+					(pts
+						(xy -7.62 6.35)
+						(xy -7.62 -6.35)
+						(xy 5.08 0)
+						(xy -7.62 6.35)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "74AHCT1G125_1_1"
+				(pin input inverted
+					(at 0 10.16 270)
+					(length 7.62)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 0 0)
+					(length 7.62)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at -5.08 -10.16 90)
+					(length 5.08)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin tri_state line
+					(at 12.7 0 180)
+					(length 7.62)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at -5.08 10.16 270)
+					(length 5.08)
+					(name "VCC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+		)
+		(symbol "power:+5V"
+			(power global)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#PWR"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "+5V"
+				(at 0 3.556 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"+5V\""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "+5V_0_1"
+				(polyline
+					(pts
+						(xy -0.762 1.27)
+						(xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 2.54)
+						(xy 0.762 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 0)
+						(xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "+5V_1_1"
+				(pin power_in line
+					(at 0 0 90)
+					(length 0)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "LED:SK6812MINI-E"
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(embedded_fonts no)
+			(property "Reference" "D"
+				(at 5.08 5.715 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify right bottom)
+				)
+			)
+			(property "Value" "SK6812MINI-E"
+				(at 1.27 -5.715 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left top)
+				)
+			)
+			(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+				(at 1.27 -7.62 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left top)
+				)
+			)
+			(property "Datasheet" "https://www.lcsc.com/datasheet/C5149201.pdf"
+				(at 2.54 -9.525 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left top)
+				)
+			)
+			(property "Description" "RGB LED with integrated controller"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "RGB LED NeoPixel addressable"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "LED?SK6812MINI?E?3.2x2.8mm?P1.5mm*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SK6812MINI-E_0_0"
+				(text "RGB"
+					(at 2.286 -4.191 0)
+					(effects
+						(font
+							(size 0.762 0.762)
+						)
+					)
+				)
+			)
+			(symbol "SK6812MINI-E_0_1"
+				(polyline
+					(pts
+						(xy 1.27 -2.54)
+						(xy 1.778 -2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 -3.556)
+						(xy 1.778 -3.556)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.286 -1.524)
+						(xy 1.27 -2.54)
+						(xy 1.27 -2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.286 -2.54)
+						(xy 1.27 -3.556)
+						(xy 1.27 -3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 3.683 -1.016)
+						(xy 3.683 -3.556)
+						(xy 3.683 -4.064)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 4.699 -1.524)
+						(xy 2.667 -1.524)
+						(xy 3.683 -3.556)
+						(xy 4.699 -1.524)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 4.699 -3.556)
+						(xy 2.667 -3.556)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start 5.08 5.08)
+					(end -5.08 -5.08)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "SK6812MINI-E_1_1"
+				(pin power_in line
+					(at 0 -7.62 90)
+					(length 2.54)
+					(name "VSS"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -7.62 0 0)
+					(length 2.54)
+					(name "DIN"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 7.62 270)
+					(length 2.54)
+					(name "VDD"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 7.62 0 180)
+					(length 2.54)
+					(name "DOUT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+		)
+		(symbol "Device:C"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "C"
+				(at 0.635 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "C"
+				(at 0.635 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 0.9652 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Unpolarized capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "C_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "C_0_1"
+				(polyline
+					(pts
+						(xy -2.032 0.762)
+						(xy 2.032 0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.032 -0.762)
+						(xy 2.032 -0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "Mechanical:MountingHole"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "H"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "MountingHole"
+				(at 0 3.175 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Mounting Hole without connection"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "mounting hole"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "MountingHole*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "MountingHole_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 1.27)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(rectangle
+		(start 20.32 30.48)
+		(end 199.39 119.38)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "5fd5490a-b7a4-5f72-85b4-11a4d38855a0")
+	)
+	(text "Keys: Kailh MX hot-swap sockets, wired direct to GPIO (internal pull-ups)"
+		(exclude_from_sim no)
+		(at 21.59 33.02 0)
+		(effects
+			(font
+				(size 1.6 1.6)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "0e1b4b27-9435-5798-9a07-7244e1d9c7f0")
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 44.45 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "87a09867-3755-530f-8eb0-51500038ba7c")
+		(property "Reference" "SW1"
+			(at 43.18 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 43.18 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 44.45 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 44.45 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 44.45 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "62693932-4924-5a9b-915b-62ddc717390b")
+		)
+		(pin "2"
+			(uuid "6aeda9c0-6381-53fb-8529-64bcfedf846b")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 39.37 49.53)
+			(xy 31.75 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "207537e2-51cf-53e5-a06d-d5c9d3751b40")
+	)
+	(hierarchical_label "KEY1"
+		(shape output)
+		(at 31.75 49.53 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "7cdc4a0b-4cfe-5066-a671-bd6ec3654afb")
+	)
+	(wire
+		(pts
+			(xy 49.53 49.53)
+			(xy 54.61 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dac61123-db92-5637-9703-cd62e41454bb")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 54.61 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ce352cb3-bbac-5973-b907-47d122813f25")
+		(property "Reference" "#PWRKE01"
+			(at 54.61 53.34 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 54.61 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 54.61 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 54.61 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d6b6c268-9f4f-5a5b-adc3-3799998c71aa")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE01")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 100.33 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "430f7489-bad1-5572-9c9a-cb9a805b5fbc")
+		(property "Reference" "SW2"
+			(at 97.79 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 97.79 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 100.33 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 100.33 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 100.33 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 100.33 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "9cf215f7-7689-51d3-9d5f-f4a9aba14752")
+		)
+		(pin "2"
+			(uuid "627a50d8-b9c2-57d2-8db9-cf26d2181456")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 95.25 49.53)
+			(xy 87.63 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0c57398a-34d9-5d15-840e-59bb4633ba38")
+	)
+	(hierarchical_label "KEY2"
+		(shape output)
+		(at 87.63 49.53 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "eadf4315-f017-59f3-a6f4-cae8dbe90bc8")
+	)
+	(wire
+		(pts
+			(xy 105.41 49.53)
+			(xy 110.49 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "97810373-72d9-5c4a-9455-ac175b151fb4")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 110.49 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "336f291a-9c04-5728-9ba4-7f43fdc460d6")
+		(property "Reference" "#PWRKE02"
+			(at 110.49 53.34 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 110.49 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 110.49 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.49 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "89c9d688-b0de-5629-ac3c-044d710c90bd")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE02")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 154.94 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d06cafd0-0c70-5f07-86df-e607d4d40142")
+		(property "Reference" "SW3"
+			(at 152.4 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 152.4 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 154.94 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 154.94 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 154.94 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 154.94 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "e2b8bd59-2d91-591c-b2e8-a4dcf5880342")
+		)
+		(pin "2"
+			(uuid "e7663b66-7954-52d0-9494-9be3e70f676e")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 149.86 49.53)
+			(xy 142.24 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c8b735c7-73e8-5761-888c-658fac3f71f6")
+	)
+	(hierarchical_label "KEY3"
+		(shape output)
+		(at 142.24 49.53 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "6ae1fcc7-2405-56c6-adbe-35306bfaba94")
+	)
+	(wire
+		(pts
+			(xy 160.02 49.53)
+			(xy 165.1 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1e32713d-42c3-51f9-8787-e2046a798c75")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 165.1 49.53 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "049ffbc5-03eb-5acc-84d8-4ab6ca741ddf")
+		(property "Reference" "#PWRKE03"
+			(at 165.1 53.34 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 165.1 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 165.1 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 165.1 49.53 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cd6dd9ac-89b9-595e-9a8e-dfd3f100184c")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 44.45 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7d474e56-74ef-582c-b317-c789a41df281")
+		(property "Reference" "SW4"
+			(at 43.18 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 43.18 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 44.45 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 44.45 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 44.45 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "e12ae5fb-e535-5d10-be16-64bed6401c9e")
+		)
+		(pin "2"
+			(uuid "f2adbd5e-bfec-561b-b16c-b9aa3e3ef225")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 39.37 74.93)
+			(xy 31.75 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc7df427-943b-5829-9bb9-3d0fcb59e068")
+	)
+	(hierarchical_label "KEY4"
+		(shape output)
+		(at 31.75 74.93 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "17980191-12a2-5905-b1f7-94448cb1566a")
+	)
+	(wire
+		(pts
+			(xy 49.53 74.93)
+			(xy 54.61 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b3b5330-e8c2-5766-9ee0-8f61c5b20f67")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 54.61 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "36e95292-5235-5a12-9dc1-852a0db33b70")
+		(property "Reference" "#PWRKE04"
+			(at 54.61 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 54.61 80.01 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 54.61 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 54.61 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2f40c5e4-157f-5e2f-872a-db258a832bf0")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE04")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 100.33 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "66c007d7-44ca-5e56-84f0-eb465b8acc72")
+		(property "Reference" "SW5"
+			(at 97.79 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 97.79 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 100.33 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 100.33 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 100.33 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 100.33 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "9d8733a4-2fca-59e2-9e9f-ed77302e5e28")
+		)
+		(pin "2"
+			(uuid "cbdc8b8c-970d-52d1-8c0f-7d41fe7294cd")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 95.25 74.93)
+			(xy 87.63 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c2ef5454-14ec-533e-aead-c9ea81ad6ebd")
+	)
+	(hierarchical_label "KEY5"
+		(shape output)
+		(at 87.63 74.93 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "f95890f2-d5b9-5a00-a665-ebfb6496c3cc")
+	)
+	(wire
+		(pts
+			(xy 105.41 74.93)
+			(xy 110.49 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8a1b3c0e-cd53-553e-80f1-0954cbcd4e78")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 110.49 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "8238e917-0f94-5294-87fc-7ac58da827db")
+		(property "Reference" "#PWRKE05"
+			(at 110.49 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 110.49 80.01 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 110.49 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.49 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9611b412-a843-5b04-912b-22b058057f2f")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE05")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 154.94 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "29aac95b-4ffd-5caf-a1c7-4c7484f8727e")
+		(property "Reference" "SW6"
+			(at 152.4 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 152.4 78.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 154.94 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 154.94 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 154.94 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 154.94 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "2e76dd9e-8299-5676-b02a-47a4d43a71d8")
+		)
+		(pin "2"
+			(uuid "0c3c4b63-d2c0-5b61-a400-8dc309678ce8")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 149.86 74.93)
+			(xy 142.24 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "51c47fbe-37be-5c64-9fc2-57d02ea38935")
+	)
+	(hierarchical_label "KEY6"
+		(shape output)
+		(at 142.24 74.93 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "a259184a-c530-5b3f-9904-a34c92b0f45a")
+	)
+	(wire
+		(pts
+			(xy 160.02 74.93)
+			(xy 165.1 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5498b293-5dd4-5d61-b372-859bb264c8c7")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 165.1 74.93 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ac0873e8-0f21-5461-b3b0-0c43dadd5f93")
+		(property "Reference" "#PWRKE06"
+			(at 165.1 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 165.1 80.01 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 165.1 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 165.1 74.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0e32b17a-e465-5b2c-b90f-a5060378325c")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE06")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 44.45 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "cadd02b1-7ef1-5594-8143-f8bb223670b6")
+		(property "Reference" "SW7"
+			(at 43.18 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 43.18 102.87 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 44.45 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 44.45 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 44.45 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "667d2ab2-5329-5c17-98de-091fc92fa510")
+		)
+		(pin "2"
+			(uuid "550bcb72-9336-5610-8c8d-7a5e23d60c51")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 39.37 100.33)
+			(xy 31.75 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "07dab1ae-1710-54c4-b081-c6518b9b66d6")
+	)
+	(hierarchical_label "KEY7"
+		(shape output)
+		(at 31.75 100.33 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "08e1b034-901c-5094-8863-10a352a88066")
+	)
+	(wire
+		(pts
+			(xy 49.53 100.33)
+			(xy 54.61 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7f924e40-ca5d-53cc-8539-4525d1bbfa35")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 54.61 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "eeb57ced-0b00-575a-92f1-eb2659335e26")
+		(property "Reference" "#PWRKE07"
+			(at 54.61 104.14 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 54.61 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 54.61 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 54.61 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "630e1129-dfc1-59d5-b61a-d2581d02f200")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE07")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 100.33 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "694a2e33-7f30-59b7-9b86-a3f704b9f5ce")
+		(property "Reference" "SW8"
+			(at 97.79 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 97.79 102.87 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 100.33 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 100.33 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 100.33 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 100.33 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "30d2d4ec-cdf5-571a-979e-5a0b24e83e41")
+		)
+		(pin "2"
+			(uuid "24fc4773-415a-52ab-9cab-a0bcc6073d16")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 95.25 100.33)
+			(xy 87.63 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0f3c1450-9019-575c-b5ea-3f450260d895")
+	)
+	(hierarchical_label "KEY8"
+		(shape output)
+		(at 87.63 100.33 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "4ce175ad-d7aa-5217-a99e-6fa86e792640")
+	)
+	(wire
+		(pts
+			(xy 105.41 100.33)
+			(xy 110.49 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8d628c59-1dca-5f47-9160-0bbaea06fc00")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 110.49 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a76ec0bb-fa6d-594c-841f-99ac5661f8be")
+		(property "Reference" "#PWRKE08"
+			(at 110.49 104.14 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 110.49 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 110.49 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.49 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2b7d3624-f12d-5e2e-a7ed-4eb105fd2264")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE08")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 154.94 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9b963050-a422-5472-b72e-6260ecd8281c")
+		(property "Reference" "SW9"
+			(at 152.4 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "MX"
+			(at 152.4 102.87 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:SW_Kailh_HotSwap_MX_1.00u"
+			(at 154.94 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 154.94 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CPG151101S11"
+			(at 154.94 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Kailh"
+			(at 154.94 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "f372c4b8-3efb-5ebe-afc6-4efbbd72eae8")
+		)
+		(pin "2"
+			(uuid "12e2b26a-69d7-5411-8171-4bf0160a0ab4")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 149.86 100.33)
+			(xy 142.24 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "eccfdbe4-ea45-5011-823c-55f0175e8d26")
+	)
+	(hierarchical_label "KEY9"
+		(shape output)
+		(at 142.24 100.33 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "67dd9841-8612-5cd0-96c4-adfe215a045c")
+	)
+	(wire
+		(pts
+			(xy 160.02 100.33)
+			(xy 165.1 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "845c4009-1ede-57c1-9405-19c62a9dbcb8")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 165.1 100.33 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "56764ab7-c20b-5411-8ee2-7494032be6aa")
+		(property "Reference" "#PWRKE09"
+			(at 165.1 104.14 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 165.1 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 165.1 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 165.1 100.33 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "43469a98-ccb4-5999-838d-e0a1d40c1af3")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE09")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(rectangle
+		(start 214.63 30.48)
+		(end 400.05 119.38)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "d2cba15a-f0fb-53ff-a8ad-ba53802cda66")
+	)
+	(text "Rotary encoder with push switch"
+		(exclude_from_sim no)
+		(at 215.9 33.02 0)
+		(effects
+			(font
+				(size 1.6 1.6)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "aab99371-857d-5eb7-87ea-fe9162a94861")
+	)
+	(symbol
+		(lib_id "Device:RotaryEncoder_Switch")
+		(at 299.72 69.85 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "410726f1-eaa6-5299-a902-5b6f4004560c")
+		(property "Reference" "SW10"
+			(at 297.18 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "EC11E"
+			(at 297.18 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "macropad:RotaryEncoder_Alps_EC11E-Switch_Vertical_H20mm"
+			(at 299.72 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "EC11E18244A5"
+			(at 299.72 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Alps"
+			(at 299.72 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "A"
+			(uuid "a833fb46-e465-5cda-af1f-ff28b1e9f185")
+		)
+		(pin "B"
+			(uuid "1ccd7444-7ff3-5c08-a5ad-2f4cf943138d")
+		)
+		(pin "C"
+			(uuid "e7787bf8-be1b-5d62-897a-ac7529cd756f")
+		)
+		(pin "S1"
+			(uuid "0ddeffe9-a291-561e-ad25-735db64713b1")
+		)
+		(pin "S2"
+			(uuid "5f400f4a-dd1f-595e-a05b-ed35b0ed8aac")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "SW10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 292.1 67.31)
+			(xy 289.56 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a77051e8-1a45-5fb6-8de4-2a6d22e7a8f7")
+	)
+	(wire
+		(pts
+			(xy 289.56 67.31)
+			(xy 289.56 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b80ff0d0-8d89-5fb4-93be-f7e6cb713023")
+	)
+	(wire
+		(pts
+			(xy 289.56 62.23)
+			(xy 281.94 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e8ccdfec-1b5f-537c-89c1-bd93768788f5")
+	)
+	(hierarchical_label "ENC_A"
+		(shape output)
+		(at 281.94 62.23 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "094b30f2-abf6-5f1c-93d4-ec7d50cb195a")
+	)
+	(wire
+		(pts
+			(xy 292.1 72.39)
+			(xy 289.56 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "559b2a44-ceb5-526f-b26c-2f34ec0b2c7a")
+	)
+	(wire
+		(pts
+			(xy 289.56 72.39)
+			(xy 289.56 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "43ba8ace-7bb2-546e-9f0c-db8c819a0697")
+	)
+	(wire
+		(pts
+			(xy 289.56 77.47)
+			(xy 281.94 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc50f927-7f93-54ce-af5e-24f033c80d83")
+	)
+	(hierarchical_label "ENC_B"
+		(shape output)
+		(at 281.94 77.47 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "f1a809b4-ac31-5cee-9a19-75b8ad136503")
+	)
+	(wire
+		(pts
+			(xy 292.1 69.85)
+			(xy 284.48 69.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "edf079a5-d60e-55c8-a892-fe4cc8a20bbd")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 284.48 69.85 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f154919e-6c88-58a4-a828-fd8caf95a17e")
+		(property "Reference" "#PWRKE10"
+			(at 279.4 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 279.4 69.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 284.48 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 284.48 69.85 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "22f372d0-e63c-530d-8c60-ae900a42abba")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 307.34 67.31)
+			(xy 314.96 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b1620531-73a6-5305-87c8-3f608e1b6ca0")
+	)
+	(hierarchical_label "ENC_SW"
+		(shape output)
+		(at 314.96 67.31 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "78c4f157-1b24-5947-b420-d45e571ca85f")
+	)
+	(wire
+		(pts
+			(xy 307.34 72.39)
+			(xy 312.42 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8bcd2edc-e95d-51de-ac06-d7c3b3de5099")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 312.42 72.39 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c27bca03-2c9b-5d2a-a077-35ff86a3cc7d")
+		(property "Reference" "#PWRKE11"
+			(at 312.42 76.2 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 312.42 77.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 312.42 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 312.42 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "af014fde-5fcb-5bb8-8b38-f343f6bbf05b")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(text "A, B and the switch pull up inside the RP2040; C and S2 to ground."
+		(exclude_from_sim no)
+		(at 219.71 110.49 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d43138d1-e634-5be9-956e-bbf079b0cf02")
+	)
+	(rectangle
+		(start 20.32 134.62)
+		(end 400.05 229.87)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "6d667800-1433-5a82-a889-ec3656a4f913")
+	)
+	(text "Per-key RGB: SK6812MINI-E (5 V), data level-shifted from 3.3 V by U5 (VIH 0.7 VDD = 3.5 V)"
+		(exclude_from_sim no)
+		(at 21.59 138.43 0)
+		(effects
+			(font
+				(size 1.6 1.6)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "fd8931e3-e2ea-551d-985c-3994dda6001f")
+	)
+	(symbol
+		(lib_id "74xGxx:74AHCT1G125")
+		(at 44.45 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "102e5014-0972-534b-a805-6f675da1abc7")
+		(property "Reference" "U5"
+			(at 49.53 162.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "74AHCT1G125"
+			(at 49.53 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-23-5"
+			(at 44.45 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "74AHCT1G125GV,125"
+			(at 44.45 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 44.45 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "a697f839-7c44-571d-a2e2-0b565775e55d")
+		)
+		(pin "2"
+			(uuid "95147596-6253-5412-941c-a9328d30d9f4")
+		)
+		(pin "3"
+			(uuid "400a5b98-d101-5bcb-aa61-e3eba81b8200")
+		)
+		(pin "4"
+			(uuid "d881d037-b269-5929-8c34-2f0e68e3a9b6")
+		)
+		(pin "5"
+			(uuid "6ade94ae-4c30-5432-86cd-b619c428c92b")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "U5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 29.21 175.26)
+			(xy 24.13 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3da40eaf-2ede-57b7-a2e5-389ff903e076")
+	)
+	(hierarchical_label "LED_DATA"
+		(shape input)
+		(at 24.13 175.26 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d868a930-63dd-579b-a298-8c60769e27be")
+	)
+	(wire
+		(pts
+			(xy 44.45 165.1)
+			(xy 44.45 162.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "314a929a-fd88-5d91-ba6b-83c523061a2d")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 44.45 162.56 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "52a27357-398d-52f2-b5b2-112b660b6920")
+		(property "Reference" "#PWRKE12"
+			(at 44.45 158.75 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 44.45 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 44.45 162.56 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 162.56 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0d0e9057-2a64-5f3e-9c05-d5d0fe89beef")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 39.37 165.1)
+			(xy 39.37 162.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cfabb880-dd0f-5f26-b8d8-e3738800414e")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 39.37 162.56 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e5a3ab91-ab5a-5218-8b5f-96826714c83c")
+		(property "Reference" "#PWRKE13"
+			(at 39.37 158.75 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 39.37 157.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 39.37 162.56 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 162.56 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d4757ccf-630f-5922-9755-9845b77b8c5c")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 39.37 185.42)
+			(xy 39.37 187.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a6eb4d16-aa71-55a2-aff0-3785479c847a")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 39.37 187.96 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e227150d-c0a5-5de8-9e9b-0baf21e73f2f")
+		(property "Reference" "#PWRKE14"
+			(at 39.37 191.77 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 39.37 193.04 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 39.37 187.96 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 187.96 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "da594197-0cad-567e-8a6f-7df1247bdd28")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 85.09 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f7c704ef-37ec-57fb-873a-76149f2e1c73")
+		(property "Reference" "D1"
+			(at 87.63 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 87.63 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 85.09 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 85.09 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 85.09 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 85.09 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "9a4edcf6-af40-509d-8164-47ad0dcd25bf")
+		)
+		(pin "2"
+			(uuid "9f72450d-ed24-56e9-ae65-bd14881bdd19")
+		)
+		(pin "3"
+			(uuid "bb52409a-8ebd-50cf-85f0-7071e9e89025")
+		)
+		(pin "4"
+			(uuid "dd3fc6b8-4bb8-51d9-8f16-5de376d83af2")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 57.15 175.26)
+			(xy 77.47 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bfaee4ed-0cb5-57c7-a9e2-56e7222c4a3f")
+	)
+	(wire
+		(pts
+			(xy 85.09 167.64)
+			(xy 85.09 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f55fbf35-a3a8-5e88-a914-8e3ad46e3bfa")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 85.09 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "20989a0c-bf94-5223-bd5e-3c93bfb4e61b")
+		(property "Reference" "#PWRKE15"
+			(at 85.09 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 85.09 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 85.09 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 85.09 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b3aa3f85-1c47-5b06-a7e2-3b26b48dc0d1")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 85.09 182.88)
+			(xy 85.09 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f978d96b-6e75-55d5-8ca5-b2c8cca456ea")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 85.09 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "43f71291-cba2-5294-84a0-0e5dba50f7ce")
+		(property "Reference" "#PWRKE16"
+			(at 85.09 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 85.09 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 85.09 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 85.09 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "dcc6b3bd-c158-5878-96c0-7d35ac5b0bff")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 118.11 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "fa19d6b0-5ab2-56cf-90ec-3796193c041e")
+		(property "Reference" "D2"
+			(at 120.65 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 120.65 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 118.11 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 118.11 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 118.11 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 118.11 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "85df2d4d-b17a-51dd-8711-17ac86030d69")
+		)
+		(pin "2"
+			(uuid "7319f1f5-73b8-5cec-a206-492540932a5d")
+		)
+		(pin "3"
+			(uuid "5d296c9e-8b60-5962-af65-038e01384a20")
+		)
+		(pin "4"
+			(uuid "43c685c9-593a-510a-8215-8f1d5e6fe266")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 92.71 175.26)
+			(xy 110.49 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d3b81525-eddd-50e3-a8bb-c32ec1846a41")
+	)
+	(wire
+		(pts
+			(xy 118.11 167.64)
+			(xy 118.11 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dbf8b92b-782c-52e2-9813-00a1fee24f0d")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 118.11 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "95392601-583b-576d-a360-d19974c19c61")
+		(property "Reference" "#PWRKE17"
+			(at 118.11 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 118.11 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 118.11 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 118.11 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "28236c41-9b55-5248-888c-81c089c82d3c")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 118.11 182.88)
+			(xy 118.11 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "880f1275-7bb8-5f9a-9b68-9ed07d9529e3")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 118.11 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c62e219a-0690-53dd-9bc9-def2b072efc7")
+		(property "Reference" "#PWRKE18"
+			(at 118.11 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 118.11 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 118.11 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 118.11 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "6d2f3ccc-605d-5617-845b-ee7af72310d6")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 151.13 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "36da670a-b8b3-54d6-a8b1-83d57798d2e1")
+		(property "Reference" "D3"
+			(at 153.67 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 153.67 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 151.13 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 151.13 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 151.13 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 151.13 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "3d08ac53-67c9-558e-8efa-a0191f5c690b")
+		)
+		(pin "2"
+			(uuid "acffd757-bc3f-5b54-8b86-978267c37ee8")
+		)
+		(pin "3"
+			(uuid "251b11f3-4afc-501a-ace5-3e87ef7f4a9e")
+		)
+		(pin "4"
+			(uuid "94d05d07-e4c8-5f6b-a0f0-27b97773341e")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 125.73 175.26)
+			(xy 143.51 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ce1e58e9-79a0-569d-8d9f-3e74c2b7100e")
+	)
+	(wire
+		(pts
+			(xy 151.13 167.64)
+			(xy 151.13 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "00195c5d-7146-50b1-95d0-6a82d3be474a")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 151.13 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e986c91d-da8f-55fb-a1a8-dd8117e16e92")
+		(property "Reference" "#PWRKE19"
+			(at 151.13 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 151.13 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 151.13 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 151.13 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "58fc21e7-750a-5bc7-8c4d-bd11c5a44758")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 151.13 182.88)
+			(xy 151.13 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ee290516-d06b-593e-a4b0-5c65e8c50e7c")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 151.13 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f12b9336-6e93-555f-84bb-8a6da42af773")
+		(property "Reference" "#PWRKE20"
+			(at 151.13 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 151.13 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 151.13 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 151.13 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3adc07ad-d969-5a09-adaa-0e1e6eff4921")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 184.15 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d4201e55-8108-54f1-9c4d-b9298a410235")
+		(property "Reference" "D4"
+			(at 186.69 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 186.69 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 184.15 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 184.15 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 184.15 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 184.15 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "efbc447e-8b34-5daf-8c05-0718395806c0")
+		)
+		(pin "2"
+			(uuid "58bc99a8-3c00-5de0-8e33-24a2b9c5ca6a")
+		)
+		(pin "3"
+			(uuid "782525df-4e61-57b1-afda-d8bd74754310")
+		)
+		(pin "4"
+			(uuid "29f38506-a3ee-512b-91eb-f8acb9f6777a")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 158.75 175.26)
+			(xy 176.53 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "11faa64c-c353-5908-89a1-6088f7335fff")
+	)
+	(wire
+		(pts
+			(xy 184.15 167.64)
+			(xy 184.15 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "855b4832-885f-5a9b-9dc3-0fb04306a8a2")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 184.15 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "313a9176-cd6c-5331-b948-be092c6ab01d")
+		(property "Reference" "#PWRKE21"
+			(at 184.15 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 184.15 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 184.15 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 184.15 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9476328b-7188-5988-af0b-50e72f39383c")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 184.15 182.88)
+			(xy 184.15 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc97c16b-0fb7-5d51-abc8-814a8a7b9b02")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 184.15 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e91ffab3-9a23-5d71-a37a-76b8ca031eb8")
+		(property "Reference" "#PWRKE22"
+			(at 184.15 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 184.15 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 184.15 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 184.15 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ee0f1482-06f4-560c-b45f-4a6e5e12e9d5")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE22")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 217.17 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "bdff0236-d39a-522a-a9b4-f1fecb46358c")
+		(property "Reference" "D5"
+			(at 219.71 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 219.71 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 217.17 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 217.17 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 217.17 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 217.17 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "31521637-40b9-5766-bab1-6891e41cd217")
+		)
+		(pin "2"
+			(uuid "7941dabc-fc2a-50ea-a139-2497fb26f679")
+		)
+		(pin "3"
+			(uuid "ca443ac4-a9fa-5b33-85d6-3a56ff9e238e")
+		)
+		(pin "4"
+			(uuid "879946de-db9e-574d-95f4-f285a3b818b9")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 191.77 175.26)
+			(xy 209.55 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "54065f11-3641-56c5-9a0f-38f0fd8e2a68")
+	)
+	(wire
+		(pts
+			(xy 217.17 167.64)
+			(xy 217.17 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "15ed73d4-004b-5225-8438-8a74d0570642")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 217.17 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "831fac69-2445-592b-94df-f2bfc960e27b")
+		(property "Reference" "#PWRKE23"
+			(at 217.17 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 217.17 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 217.17 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 217.17 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "61bcde6f-5e01-50fc-ba76-9e56c906acd3")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE23")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 217.17 182.88)
+			(xy 217.17 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f91225fa-67ac-5bc6-8222-f084aeeb5456")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 217.17 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "bc5ac529-4e97-5166-b1aa-810d1950f33b")
+		(property "Reference" "#PWRKE24"
+			(at 217.17 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 217.17 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 217.17 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 217.17 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7d8dd4ff-e559-5440-ad3a-bd3a41a1c243")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE24")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 250.19 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ca338b04-25a7-57cb-9863-096f469dbf79")
+		(property "Reference" "D6"
+			(at 252.73 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 252.73 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 250.19 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 250.19 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 250.19 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 250.19 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "bdaa0066-20d4-50f5-ac22-22845963aa65")
+		)
+		(pin "2"
+			(uuid "bdcac28c-8570-5fa1-9f69-d509a30a8cf1")
+		)
+		(pin "3"
+			(uuid "54490ab9-1e7c-581d-9bea-87ca26b1bc4b")
+		)
+		(pin "4"
+			(uuid "9a23baad-aba4-5e69-bffc-78a3b2afe823")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 224.79 175.26)
+			(xy 242.57 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e49e3f57-a93a-5389-8000-9ca45f8ab054")
+	)
+	(wire
+		(pts
+			(xy 250.19 167.64)
+			(xy 250.19 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ffdd19c8-627d-5f81-a889-61ed62e1db46")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 250.19 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "5aa02dd1-4a65-5b3a-8a4b-bf205c9ac904")
+		(property "Reference" "#PWRKE25"
+			(at 250.19 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 250.19 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 250.19 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 250.19 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7237832b-9895-5220-af9f-9014b5a326ad")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE25")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 250.19 182.88)
+			(xy 250.19 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5ec863bb-edd6-5f01-b7a5-1f4e37ccc865")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 250.19 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a8e81e84-34d6-5c7a-a35d-e987aff0ee99")
+		(property "Reference" "#PWRKE26"
+			(at 250.19 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 250.19 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 250.19 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 250.19 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "422906f9-593f-5887-ad70-0c3abac6446f")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE26")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 283.21 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d3223b91-c353-5011-9b64-2efde9ad4be5")
+		(property "Reference" "D7"
+			(at 285.75 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 285.75 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 283.21 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 283.21 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 283.21 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 283.21 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "f0638b4c-acab-5422-8069-c19117c94393")
+		)
+		(pin "2"
+			(uuid "07d48e62-daa1-5408-8326-9376a271e62b")
+		)
+		(pin "3"
+			(uuid "ced41af2-c858-512f-914e-3725f6ae1e40")
+		)
+		(pin "4"
+			(uuid "e0336cf1-86b1-5208-b33c-f565fc083540")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 257.81 175.26)
+			(xy 275.59 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8d2e8f0a-1c64-51fa-bdbb-85ecf1bfc01c")
+	)
+	(wire
+		(pts
+			(xy 283.21 167.64)
+			(xy 283.21 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "12af828a-41aa-5c42-a963-68ab7dff3e11")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 283.21 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "53a9b573-3566-5958-9cb5-50bd3be78833")
+		(property "Reference" "#PWRKE27"
+			(at 283.21 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 283.21 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 283.21 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 283.21 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a5c55b5d-cae8-509d-9283-fc99620cb1f1")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE27")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 283.21 182.88)
+			(xy 283.21 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2ee06068-b40a-58c3-8f9b-8aef5cedfa8f")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 283.21 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "5c9286bc-0707-58ff-98b1-cab826457454")
+		(property "Reference" "#PWRKE28"
+			(at 283.21 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 283.21 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 283.21 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 283.21 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ec62e01a-b138-5699-a181-05b2056c0f2a")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE28")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 316.23 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d2962d03-9bad-5dd5-a300-7de5a5d0752a")
+		(property "Reference" "D8"
+			(at 318.77 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 318.77 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 316.23 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 316.23 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 316.23 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 316.23 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "5a7989fd-b8d0-59c8-abc0-39fafd4a817b")
+		)
+		(pin "2"
+			(uuid "75bd3bc0-9769-503a-b092-7c2900320187")
+		)
+		(pin "3"
+			(uuid "5908c2e3-a850-50c5-944a-bec714a3e030")
+		)
+		(pin "4"
+			(uuid "88f09d89-1879-5c29-abe5-5bb7276a88bb")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 290.83 175.26)
+			(xy 308.61 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "975975b9-0922-51a5-a062-fd129b5e582c")
+	)
+	(wire
+		(pts
+			(xy 316.23 167.64)
+			(xy 316.23 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5556de5e-89d1-54ea-921a-e2fd395359d6")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 316.23 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c7ce2b5b-e45b-51d3-a4df-cfb68ab5abd7")
+		(property "Reference" "#PWRKE29"
+			(at 316.23 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 316.23 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 316.23 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 316.23 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "6a7464f6-6d45-5a66-9875-1602d974fe52")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE29")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 316.23 182.88)
+			(xy 316.23 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d109db73-e251-5208-aeb5-b0ffb0bf6c4a")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 316.23 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a959db9e-7629-53e8-b1cb-d1eba1962ea9")
+		(property "Reference" "#PWRKE30"
+			(at 316.23 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 316.23 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 316.23 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 316.23 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1a616682-83d7-5567-b96a-33e42bb41e7a")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE30")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "LED:SK6812MINI-E")
+		(at 349.25 175.26 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ca2e948b-2a3e-5b95-8783-4e3f1c5eab41")
+		(property "Reference" "D9"
+			(at 351.79 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SK6812MINI-E"
+			(at 351.79 167.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+			(at 349.25 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 349.25 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "SK6812MINI-E"
+			(at 349.25 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C5149201"
+			(at 349.25 175.26 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "1c83f92d-ef05-52c3-b81b-01dd0df44ad7")
+		)
+		(pin "2"
+			(uuid "6642c15e-ea99-5c19-88f5-002883f36bfe")
+		)
+		(pin "3"
+			(uuid "e105b338-4fad-5bc1-ba32-e6e1c6cc3719")
+		)
+		(pin "4"
+			(uuid "0928a82e-2e0f-5bf1-83fb-9b921c8c6b5e")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "D9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 323.85 175.26)
+			(xy 341.63 175.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "611e0119-3a82-5614-9d24-7a93d582b87d")
+	)
+	(wire
+		(pts
+			(xy 349.25 167.64)
+			(xy 349.25 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7a9ed0c8-e10b-5d02-9f37-55b22baec56a")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 349.25 165.1 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f1f3126c-9a68-5be3-a76c-3973ddf22958")
+		(property "Reference" "#PWRKE31"
+			(at 349.25 161.29 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 349.25 160.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 349.25 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 349.25 165.1 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "36c98ea0-9b5d-50d9-a71d-1edc88512ee4")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE31")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 349.25 182.88)
+			(xy 349.25 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "72def5e4-384f-5876-be0e-b8d1e77dd5fe")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 349.25 185.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "0bc97f5e-5269-5af2-946b-eeb336a95a85")
+		(property "Reference" "#PWRKE32"
+			(at 349.25 189.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 349.25 190.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 349.25 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 349.25 185.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "bab44c0d-5f3f-5967-93e7-b794fdb3d5f7")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE32")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(no_connect
+		(at 356.87 175.26)
+		(uuid "017fbf25-5eb8-59a1-96b4-7902567edfaa")
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 44.45 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "31ad2112-009f-51de-bc59-6435458363e9")
+		(property "Reference" "C19"
+			(at 46.99 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 46.99 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 44.45 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 44.45 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 44.45 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 44.45 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "866f95ce-fd19-57d9-a649-8d48dfb27478")
+		)
+		(pin "2"
+			(uuid "98fc75ae-b4c5-545b-8a96-2f24ff94aa4f")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 54.61 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "65ab151d-c6df-5cc2-9603-3842f47c6bfc")
+		(property "Reference" "C20"
+			(at 57.15 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 57.15 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 54.61 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 54.61 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 54.61 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 54.61 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "efeeec79-8ef6-5b0f-a28b-8987edd3648b")
+		)
+		(pin "2"
+			(uuid "7404e16b-6893-5ddb-a4f9-28c1fab3e577")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 64.77 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "b90cda76-ad20-5d61-8fd9-febdcdb29ec0")
+		(property "Reference" "C21"
+			(at 67.31 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 67.31 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 64.77 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 64.77 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 64.77 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 64.77 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "fba7d402-79cd-5295-9fb3-088f9945ad35")
+		)
+		(pin "2"
+			(uuid "6757acec-f131-565d-bfbf-c0f9a394e0e1")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 74.93 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "38a39b3b-1efe-5d13-8af4-3f010adc25e0")
+		(property "Reference" "C22"
+			(at 77.47 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 77.47 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 74.93 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 74.93 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 74.93 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 74.93 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "03fb955d-0e53-5482-bec8-176526764f76")
+		)
+		(pin "2"
+			(uuid "55b061f1-b971-5968-88da-586f4dd75794")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C22")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 85.09 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7b34ec4a-32d1-5de1-9c43-46758b9f5eee")
+		(property "Reference" "C23"
+			(at 87.63 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 87.63 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 85.09 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 85.09 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 85.09 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 85.09 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "dccf0374-e116-5eff-b81a-25fd56007e12")
+		)
+		(pin "2"
+			(uuid "31c4dc38-153e-5b51-9823-60b94f747f93")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C23")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 95.25 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "6dccbf1b-7b94-545b-a412-597129df18c9")
+		(property "Reference" "C24"
+			(at 97.79 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 97.79 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 95.25 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 95.25 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 95.25 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 95.25 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "fa9ccdfb-30c3-57ed-823b-491fd714c178")
+		)
+		(pin "2"
+			(uuid "f54eaed6-e6da-5ec4-a8d3-81b2c20de449")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C24")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 105.41 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8526710f-6d21-56a1-b63c-482a4e18703d")
+		(property "Reference" "C25"
+			(at 107.95 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 107.95 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 105.41 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 105.41 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 105.41 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 105.41 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "7f251ecb-c438-5d64-9ad6-83e1f25ebd7a")
+		)
+		(pin "2"
+			(uuid "3df9c2bf-4714-516b-892d-f10977fa2dd2")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C25")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 115.57 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "0b4bb4e6-ad52-5a17-9bcc-88a0718f7044")
+		(property "Reference" "C26"
+			(at 118.11 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 118.11 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 115.57 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 115.57 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 115.57 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 115.57 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "d2d40184-17a6-542f-b845-add12b346e8a")
+		)
+		(pin "2"
+			(uuid "b36eea79-e8d4-52e5-bb3a-b54c4f09c29d")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C26")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 125.73 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "05bea43b-57f9-543e-9050-5034a2b1a876")
+		(property "Reference" "C27"
+			(at 128.27 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 128.27 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 125.73 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 125.73 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 125.73 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 125.73 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "e50f451b-da26-5f43-b1f2-824a3f2c2188")
+		)
+		(pin "2"
+			(uuid "23fff99c-83ee-5131-8bf1-dd026612342e")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C27")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C")
+		(at 135.89 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "152d5c1c-f641-54fa-95d4-fda5b5d32f4e")
+		(property "Reference" "C28"
+			(at 138.43 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 138.43 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 135.89 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 135.89 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 135.89 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 135.89 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "06dbcbf0-2073-5e2d-a3c0-302264821ce3")
+		)
+		(pin "2"
+			(uuid "7ea32460-f73c-52a3-817a-dd9af3a84f0b")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "C28")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 36.83 205.74)
+			(xy 44.45 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "99f826f8-ef90-5884-87f5-bb8d273d90eb")
+	)
+	(wire
+		(pts
+			(xy 44.45 205.74)
+			(xy 54.61 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0f4d47b0-c5d8-5ca3-a743-0d473dfe90d8")
+	)
+	(wire
+		(pts
+			(xy 54.61 205.74)
+			(xy 64.77 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3f8afa23-f6d9-53fa-a7af-2d16dbcd8fc0")
+	)
+	(wire
+		(pts
+			(xy 64.77 205.74)
+			(xy 74.93 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f056eca8-e2e5-5cf0-832f-ce5cf1882785")
+	)
+	(wire
+		(pts
+			(xy 74.93 205.74)
+			(xy 85.09 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2e239c93-fc45-5f46-bc56-25431865a471")
+	)
+	(wire
+		(pts
+			(xy 85.09 205.74)
+			(xy 95.25 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9f1c15ff-54b5-54e8-ac01-1e9ffd67a1c5")
+	)
+	(wire
+		(pts
+			(xy 95.25 205.74)
+			(xy 105.41 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74610ecf-e1a0-5073-8331-87893e2b3567")
+	)
+	(wire
+		(pts
+			(xy 105.41 205.74)
+			(xy 115.57 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9634f678-a74a-5072-a1ba-b084497a498c")
+	)
+	(wire
+		(pts
+			(xy 115.57 205.74)
+			(xy 125.73 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6fb2dc7b-af32-5242-b198-d1c9ba9bd38d")
+	)
+	(wire
+		(pts
+			(xy 125.73 205.74)
+			(xy 135.89 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "02bdb342-be83-5682-ac6f-8237f3c9d740")
+	)
+	(wire
+		(pts
+			(xy 36.83 213.36)
+			(xy 44.45 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9d7de989-6b1e-567f-9d3d-059d48f7bb24")
+	)
+	(wire
+		(pts
+			(xy 44.45 213.36)
+			(xy 54.61 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e53663d1-f402-5b89-b5d9-dc7218dcab2b")
+	)
+	(wire
+		(pts
+			(xy 54.61 213.36)
+			(xy 64.77 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "83b88947-2682-57b6-9114-e8d93ae831ef")
+	)
+	(wire
+		(pts
+			(xy 64.77 213.36)
+			(xy 74.93 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "22094924-937e-5da2-8312-668d79f880d2")
+	)
+	(wire
+		(pts
+			(xy 74.93 213.36)
+			(xy 85.09 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "02cc8d13-2a40-5c44-a6a9-68c00c59e776")
+	)
+	(wire
+		(pts
+			(xy 85.09 213.36)
+			(xy 95.25 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "00f3ab58-15bf-5be2-a7a2-32b7409b1e03")
+	)
+	(wire
+		(pts
+			(xy 95.25 213.36)
+			(xy 105.41 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "931ef155-eb13-5791-b374-99acabea7142")
+	)
+	(wire
+		(pts
+			(xy 105.41 213.36)
+			(xy 115.57 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "890710db-c484-5efd-81cf-919305b70e97")
+	)
+	(wire
+		(pts
+			(xy 115.57 213.36)
+			(xy 125.73 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f9cbb8c2-4f06-5878-8ec2-2d64428e8038")
+	)
+	(wire
+		(pts
+			(xy 125.73 213.36)
+			(xy 135.89 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "246a77a8-94c4-5bcd-8b69-53eee52d981b")
+	)
+	(junction
+		(at 44.45 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "0bef10d7-1cb8-51af-90e9-70fc5a361712")
+	)
+	(junction
+		(at 54.61 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "c6bd8b7b-f69f-5153-b605-7a3331f27c61")
+	)
+	(junction
+		(at 64.77 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "2e4a9806-1709-58eb-b8a3-5d00e199a0cd")
+	)
+	(junction
+		(at 74.93 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "240820d8-4357-571d-bd21-132ef3d8ab17")
+	)
+	(junction
+		(at 85.09 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "b9d7bfe6-5edc-5ed3-9d82-b018e422f77a")
+	)
+	(junction
+		(at 95.25 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "1595d69c-707a-54a6-ac7b-e82051ae4e19")
+	)
+	(junction
+		(at 105.41 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "c6373a5f-62e6-588a-bd08-d8b8d40c67c1")
+	)
+	(junction
+		(at 115.57 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "713cd192-7126-52ed-b5f7-6c5698ed949d")
+	)
+	(junction
+		(at 125.73 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "e3ae96ad-669b-5f8f-b8c1-64ba0657a0c8")
+	)
+	(junction
+		(at 44.45 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "39e0ae4f-9efd-55fa-bd17-a852265c7820")
+	)
+	(junction
+		(at 54.61 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "537b5fdc-47ee-522c-aa4c-4251d1ef016d")
+	)
+	(junction
+		(at 64.77 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d81fc3ee-ac35-5add-b130-cd0ef8945c7a")
+	)
+	(junction
+		(at 74.93 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "e6ff5869-8d93-519d-8c1a-447997750b00")
+	)
+	(junction
+		(at 85.09 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "1c063dd3-1ec8-518d-a0c5-57b55820ae63")
+	)
+	(junction
+		(at 95.25 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "1232da8f-9633-51cd-a4dd-7fdb7889e6ec")
+	)
+	(junction
+		(at 105.41 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "706f6f2e-0e23-5660-905c-b8afc082bed9")
+	)
+	(junction
+		(at 115.57 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "e20cf2e6-7329-5a75-a1af-71987be05bee")
+	)
+	(junction
+		(at 125.73 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "1c15f78a-6571-523b-95a1-013bc3d2f084")
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 36.83 205.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c22c8f03-dbc5-5adc-b448-b5e833f868d7")
+		(property "Reference" "#PWRKE33"
+			(at 36.83 201.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 36.83 200.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 36.83 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 36.83 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3018b6ae-9f30-5453-b37c-30369c52a52b")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE33")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 36.83 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "9a578884-b82e-5ba3-a1fc-d74b116a0917")
+		(property "Reference" "#PWRKE34"
+			(at 36.83 217.17 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 36.83 218.44 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 36.83 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 36.83 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d71750f1-da98-52fd-b5b9-8325b7841feb")
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "#PWRKE34")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(text "One 100 nF at each LED (datasheet section 16), one at U5"
+		(exclude_from_sim no)
+		(at 36.83 196.85 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "93f072e5-e763-5e52-97b6-63548d271347")
+	)
+	(rectangle
+		(start 214.63 240.03)
+		(end 400.05 270.51)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "55a7d0f6-a8aa-52ce-92d6-6c20d2cbb712")
+	)
+	(text "Mounting holes: M2, between the keys"
+		(exclude_from_sim no)
+		(at 215.9 242.57 0)
+		(effects
+			(font
+				(size 1.6 1.6)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "e5fc71f4-5d36-5b10-9acc-598a76413d19")
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 229.87 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8010b47c-0e1a-56f6-8715-072eceab9e1e")
+		(property "Reference" "H1"
+			(at 232.41 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 232.41 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 229.87 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 229.87 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 257.81 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ffbbdfe9-54c1-51a0-950e-6d4b457b9c07")
+		(property "Reference" "H2"
+			(at 261.62 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 261.62 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 257.81 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 257.81 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 285.75 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1c57d4ce-dc2c-5700-8105-bafc8aac1f34")
+		(property "Reference" "H3"
+			(at 289.56 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 289.56 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 285.75 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 285.75 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 313.69 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c095c9ea-2b12-5af1-ae68-92beeff6e015")
+		(property "Reference" "H4"
+			(at 317.5 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 317.5 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 313.69 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 313.69 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 341.63 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5da064c2-4a52-5deb-9dec-f4d5c5545861")
+		(property "Reference" "H5"
+			(at 345.44 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 345.44 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 341.63 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 341.63 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Mechanical:MountingHole")
+		(at 369.57 255.27 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9f39c4d3-951b-5c89-bb82-a4a7588e7bf0")
+		(property "Reference" "H6"
+			(at 373.38 254 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "M2"
+			(at 373.38 256.54 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MountingHole:MountingHole_2.2mm_M2"
+			(at 369.57 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 369.57 255.27 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "macropad"
+				(path "/33cf07fd-15d9-5b90-9ea0-57b97f80ce13/4ef6076f-069d-563f-9a12-c0d72ba05536"
+					(reference "H6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(embedded_fonts no)
+)

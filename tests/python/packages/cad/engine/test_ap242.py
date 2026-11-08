@@ -1,5 +1,5 @@
 """An exported file's requirements must match its source, without guessing identities
-(``export/ap242.py``): the AP242 reader of no OCCT, and ``compare``/``check`` of a document's PMI
+(``cad/step/_ap242.py``): the AP242 reader of no OCCT, and ``compare``/``check`` of a document's PMI
 against the file it wrote, each part against its own product's records."""
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cad.engine.export.ap242 import Report, check, parse, report
-from cad.engine.export.ap242 import compare as _compare
+from cad.step._ap242 import Report, check, parse, report
+from cad.step._ap242 import compare as _compare
 
 # The one part of the fixtures' document, by its index, as the file names its product.
 PARTS = {0: "part"}
@@ -167,12 +167,12 @@ class VerificationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp) / "export.step"
             target.write_bytes(b"exported bytes")
-            with patch("cad.engine.export.ap242.report", return_value=found) as reader:
+            with patch("cad.step._ap242.report", return_value=found) as reader:
                 result = check(entries, target, None, PARTS)
             reader.assert_called_once_with(target, b"exported bytes")
             self.assertEqual(result["matched"], 3)
             self.assertEqual(result["sha256"], hashlib.sha256(b"exported bytes").hexdigest())
-            with patch("cad.engine.export.ap242.report", side_effect=ValueError("unsupported syntax")):
+            with patch("cad.step._ap242.report", side_effect=ValueError("unsupported syntax")):
                 self.assertTrue(check(entries, target, None, PARTS)["problems"])
 
     def test_a_note_is_never_counted_even_where_the_check_fails(self) -> None:
@@ -183,7 +183,7 @@ class VerificationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp) / "export.step"
             target.write_bytes(b"exported bytes")
-            with patch("cad.engine.export.ap242.report", side_effect=ValueError("unsupported syntax")):
+            with patch("cad.step._ap242.report", side_effect=ValueError("unsupported syntax")):
                 result = check([entries[0], note], target, None, PARTS)
         self.assertEqual((result["matched"], result["total"]), (0, 1))
         self.assertEqual(result["problems"], ["The STEP reader could not complete the check: unsupported syntax"])

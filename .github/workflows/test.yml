@@ -77,6 +77,7 @@ jobs:
       skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
+      kicad: ${{ steps.select.outputs.kicad }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -323,6 +324,34 @@ jobs:
 
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
+
+  # Native KiCad boards through kicode's kicad-cli and KiPy, in the environment of cad[kicad] the server
+  # makes, as on a person's computer: DRC, every export, a STEP and mesh round trip of a saved board, and a
+  # board's and a schematic's edit through the headless api-server. Only KiCad's code, its suite and its runner
+  # select it (and a full run): viewing and drawing a board need no KiCad and are the package suites'.
+  # kicode is ~110 MB from PyPI for Linux (kicode-pcb and kicode-sch), some 10 s; no apt, no PPA.
+  kicad:
+    name: KiCad boards
+    needs: changes
+    if: needs.changes.outputs.kicad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Run the KiCad suite
+        # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
+        run: scripts/test/test-kicad.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.

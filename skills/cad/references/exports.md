@@ -2,7 +2,7 @@
 
 Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a model in
 another pose, a part on its own, a project's standing deliverables, or a vendor STEP
-converted for use in a model. A 2D DXF drawing is not covered here.
+converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-profiles-and-dxf.md).
 
 ## Contents
 
@@ -23,32 +23,36 @@ prepares the file, the browser saves it. No code changes, nothing rebuilds, and 
 destination is written from the document the server holds, by its suffix:
 
 ```bash
-cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-`$ID` is the `id:` line the model's run printed. The output folders are generated on
+`$ID` is the `id:` line the model's run printed: `cad model` takes a model by its id, and
+every other type takes a file of its own. The output folders are generated on
 request and gitignored by default ([version control](project-layout.md#version-control)). The source can also be a file the
-server reads as a document, an `.xbf` or a `.step`:
+server reads as a document, an `.xbf` or a `.step`, by its own type:
 
 ```bash
-cad export vendor/motor.step vendor/motor.xbf
-cad export share/arm.xbf GLB/arm.glb
+cad step export vendor/motor.step vendor/motor.xbf
+cad xbf export share/arm.xbf GLB/arm.glb
 ```
 
 A mesh file converts to another mesh format: an `.stl`, `.glb` or `.3mf` exports to
 either of the other two, keeping what the target format can hold, with no kernel loaded
-(`cad export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
-it has no B-rep, so model it in build123d, with `read_mesh` for its numbers
+(`cad stl export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
+it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
-"seconds", "written"}]}`), and a failure as `{"ok": false, "error": ...}` with exit status 1.
+"seconds", "written"}]}`), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
+the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
+`usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
 An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)). What a file shows is the model's
+mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
+export take and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
-A written file is a detached copy, whether `cad export`, `exports.py` or a file
+A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
 decorator (`@step`, `@glb`, ...) wrote it: nothing ties it to the model, nothing reruns
 it, and a viewer page of it follows the file's bytes on disk, never the model. It
 changes only when it is written again. Give the person its path; open it only when they
@@ -62,7 +66,7 @@ files ([projects built around exported files](../SKILL.md#projects-built-around-
 | | Model page | File page |
 | --- | --- | --- |
 | When | The default. | The person asks to iterate on the exported file, or the project revolves around its files: an `exports.py`, a consumer reading them (a robot description, a slicer, a drawing pipeline), a 0.7-era layout. |
-| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad export`) and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad <type> export`) and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | `made_by` is null, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 
@@ -70,16 +74,18 @@ files ([projects built around exported files](../SKILL.md#projects-built-around-
 
 A project whose files are delivered again after each change (a print set, a STEP for a
 supplier) keeps one script beside its models that imports them and exports each. From
-Python the one spelling is `export(x, path, ...)`, where `x` is what a model call returns
-(the document's handle), a document id, or a file. The model function itself is taken
-too: it is called as the script's own call is, so an unchanged model comes from the
-server's cache or is replayed, and the file is written from that call's document.
+Python the one spelling is `model.export(x, path, ...)`, where `x` is what a model call
+returns (the document's handle) or a document id; a file is its own type's
+(`xbf.export("share/arm.xbf", ...)`). The model function itself is taken too: it is called
+as the script's own call is, so an unchanged model comes from the server's cache or is
+replayed, and the file is written from that call's document. A handle's own `.export(path,
+...)` is the same function.
 
 ```python
 # src/exports.py
 from pathlib import Path
 
-from cad import export
+from cad import model
 
 from assembly import assembly
 from standoff import standoff_m3, standoff_m4
@@ -87,9 +93,9 @@ from standoff import standoff_m3, standoff_m4
 ROOT = Path(__file__).resolve().parent.parent      # the project's folder
 
 if __name__ == "__main__":
-    export(assembly(), ROOT / "STEP/assembly.step", ROOT / "GLB/assembly.glb")
-    export(standoff_m3(), ROOT / "STL/standoff_m3.stl", ROOT / "3MF/standoff_m3.3mf")
-    export(standoff_m4(), ROOT / "STL/standoff_m4.stl")
+    model.export(assembly(), ROOT / "STEP/assembly.step", ROOT / "GLB/assembly.glb")
+    model.export(standoff_m3(), ROOT / "STL/standoff_m3.stl", ROOT / "3MF/standoff_m3.3mf")
+    model.export(standoff_m4(), ROOT / "STL/standoff_m4.stl")
 ```
 
 ```bash
@@ -97,7 +103,7 @@ cad run src/exports.py
 ```
 
 Write `exports.py` only when the person wants files kept current; a one-off file is a
-`cad export`. Nothing else in the project writes files.
+`cad <type> export`. Nothing else in the project writes files.
 
 ## Posed files and parts on their own
 
@@ -107,7 +113,7 @@ part's file is the part's own model:
 ```python
 # src/arm_poses.py
 from cad import model
-from cad.ap242 import posed
+from cad.build123d import posed
 
 from arm import arm                              # an assembly with a mechanism state "folded"
 
@@ -119,7 +125,7 @@ def arm_folded():
 
 ```bash
 cad run src/arm_poses.py                          # prints arm_folded's id
-cad export "$FOLDED_ID" STEP/arm_folded.step
+cad model export "$FOLDED_ID" STEP/arm_folded.step
 ```
 
 `posed(assembly, state)` places the assembly's parts at a state the assembly names
@@ -134,16 +140,16 @@ materials, element names, mechanism and PMI, read back losslessly, and the compi
 the model's animations, which only a GLB exported from it reads. Export one only:
 
 - to share a model without its code;
-- to compose it in another project, where `read_xbf` reads it as an input.
+- to compose it in another project, where `xbf.read` reads it as an input.
 
 A server restart needs none: the server keeps each model document it built in its own
-cache, so after a restart the document's id opens in the viewer, answers `cad inspect`,
+cache, so after a restart the document's id opens in the viewer, answers `cad <type> inspect`,
 exports and snapshots without a rebuild. It is the last built state: the server never
 checks the code against it and nothing reruns, so after an edit run the script to build it
 again.
 
-A vendor STEP converted once (`cad export vendor/motor.step vendor/motor.xbf`) is
-read by `read_xbf` many times faster than `read_step` parses the STEP, with the same
+A vendor STEP converted once (`cad step export vendor/motor.step vendor/motor.xbf`) is
+read by `xbf.read` many times faster than `step.read` parses the STEP, with the same
 geometry, names, colours and materials. Keep the xbf beside the STEP, and read the xbf
 ([inputs](model-contract.md#inputs)).
 
@@ -163,7 +169,7 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   the model's configuration sequences as an animation of its name
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
   ([animation](animation.md)). A GLB exported from the model, by its id, by
-  `export(x, path)` or from an xbf the model exported, carries its sequences and its
+  `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
   animations, byte for byte the same file.
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
   and materials through the materials extension.
@@ -188,10 +194,10 @@ faces, give it an absolute tolerance in millimetres, about a tenth of the smalle
 the part is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints):
 
 ```bash
-cad export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 ```
 
-The same is `export(x, path, tolerance=0.02)` in an `exports.py` and
+The same is `model.export(x, path, tolerance=0.02)` in an `exports.py` and
 `@stl("hopper.stl", tolerance=0.02)` or `@threemf(...)` on a model. Each part is meshed again
 at the finer of the tolerance and its own, for that file alone, so a small part is never made
 coarser; the viewer, snapshots and every other export keep the viewer's mesh. The tolerance

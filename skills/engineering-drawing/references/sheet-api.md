@@ -54,12 +54,12 @@ read from its file instead:
 ```python
 from pathlib import Path
 
-from cad import read_step
+from cad import step
 
-part = read_step(Path(__file__).parent / "../vendor/enclosure.step")
+part = step.read(Path(__file__).parent / "../vendor/enclosure.step")
 ```
 
-`read_xbf` reads an xbf the same way. Anchor the path on the
+`xbf.read` reads an xbf the same way. Anchor the path on the
 script, since it resolves against the process's working directory otherwise. Any
 build123d shape works: a drawing takes geometry, not a file.
 

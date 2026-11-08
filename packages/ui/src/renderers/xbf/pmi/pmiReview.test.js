@@ -1,4 +1,4 @@
-// What the PMI section reviews a requirement by (`pmiReview.js`): a dimension's limits from its
+// What the PMI tab reviews a requirement by (`pmiReview.js`): a dimension's limits from its
 // signed deviations, or those it was given, and none without a tolerance; the requirements on a
 // face; a frame's datums and a datum's users, each on the annotation's own part.
 import assert from "node:assert/strict";

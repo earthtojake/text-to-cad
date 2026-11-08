@@ -10,7 +10,7 @@ import { useXbfPmi } from '../../../../dist/renderers/xbf/pmi/useXbfPmi.js';
 import { usePmiViewApplied } from '../../../../dist/renderers/xbf/pmi/usePmiView.js';
 import { presentXbfTree } from '../../../../dist/renderers/xbf/xbfTree.js';
 import { createViewSettingsStore } from '../../../../dist/renderers/kit/view-settings/viewSettingsStore.js';
-import FileSidebar from '../../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../../dist/renderers/kit/shell/FlatPanel.js';
 
 const restores: (() => void)[] = [];
 function override(target: object, key: string, descriptor: PropertyDescriptor) {
@@ -106,13 +106,14 @@ function Mbd({ structure, viewer, store, fit, picked = [], here = NOWHERE }: any
   live = pmi;
   return <PmiSection pmi={pmi} picked={picked} moving={false} />;
 }
-function openMbd(edit = (structure: any) => structure, { sidebar = false, ...props }: Record<string, unknown> = {}) {
+function openMbd(edit = (structure: any) => structure, { panel = false, ...props }: Record<string, unknown> = {}) {
   const viewer = { getPerspective: vi.fn(() => BEFORE), setPerspective: vi.fn(() => true) };
   const store = createViewSettingsStore({ mode: 'solid' });
   const fit = vi.fn((at: any) => ({ position: at.direction.map((c: number) => c * 200), target: [0, 0, 0], up: at.up }));
   const mbd = <Mbd structure={edit(structuredClone(V4))} viewer={viewer} store={store} fit={fit} {...props} />;
-  // In the file sidebar, as the renderer shows it: its head holds New.
-  render(sidebar ? <FileSidebar layout={{ panels: {}, collapsed: {} }} onLayoutChange={() => {}}>{mbd}</FileSidebar> : mbd);
+  // In the view's panel, as the renderer shows it: its one tab.
+  render(panel ? <FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search" sections={mbd} tab="pmi" onTabChange={() => {}}
+    width={216} maxWidth={400} onWidthChange={() => {}} focusSearch={0} /> : mbd);
   return { viewer, store, fit };
 }
 const drawnKeys = () => live.items.map((item: any) => item.key);
@@ -257,13 +258,12 @@ it('a flag note naming annotations alone is listed with its flag, drawn nowhere,
 // ---- New: what a model-based definition adds, each the call it asks the code for -------------------
 const V4_HOLE = 'plate/f:edit_plate.cut.1;M:edit_plate.body';
 const HOLE_FACE = { id: 'i0/face/7', part: 0, ref: V4_HOLE, surface: { type: 'cylinder', axis: [0, 0, 1], origin: [0, 0, 0], radius: 5 } };
-// A new annotation's request, of the names its call takes from cad.ap242.
-const ADD = (...names: string[]) => `Add this PMI to the annotate(...) call of the model's part "plate" (from cad.ap242 import ${['annotate', ...names].join(', ')})`;
+// A new annotation's request, of the names its call takes from cad.build123d.
+const ADD = (...names: string[]) => `Add this PMI to the annotate(...) call of the model's part "plate" (from cad.build123d import ${['annotate', ...names].join(', ')})`;
 const requests = () => live.changeChips.map((chip: any) => chip.request);
 const form = () => document.querySelector<HTMLElement>('[data-pmi-new]')!;
-async function openNew(user: ReturnType<typeof userEvent.setup>, edit?: (structure: any) => any, props: Record<string, unknown> = {}) {
-  openMbd(edit, { sidebar: true, ...props });
-  await user.click(screen.getByRole('button', { name: 'PMI', exact: true }));
+async function openNew(_user: ReturnType<typeof userEvent.setup>, edit?: (structure: any) => any, props: Record<string, unknown> = {}) {
+  openMbd(edit, { panel: true, ...props });
 }
 async function choose(user: ReturnType<typeof userEvent.setup>, kind: string) {
   await user.click(screen.getByRole('button', { name: 'New PMI', exact: true }));

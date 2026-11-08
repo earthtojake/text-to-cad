@@ -1,7 +1,7 @@
 """The camera presets: one table, each name's ``(side, up)`` -- ``side`` the direction from the
 target toward the eye, ``up`` the camera's up -- in the document's frame. The stills draw by it
-(``occt.py``'s ``direction_of``, which makes ``side`` a unit vector), ``cad snapshot --camera``
-takes its names (``snapshot.CAMERA_PRESETS``), and a PMI view names one (``cad.ap242``'s
+(``occt.py``'s ``direction_of``, which makes ``side`` a unit vector), ``cad <type> snapshot --camera``
+takes its names (``snapshot.CAMERA_PRESETS``), and a PMI view names one (``cad.build123d``'s
 ``view``). It imports nothing, so the engine reads it without the renderer."""
 
 PRESETS = {

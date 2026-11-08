@@ -29,7 +29,7 @@ export const ENTRY_ACTIONS = Object.freeze(["copy-path", "copy-link", "reveal", 
  *   target?: string, app?: string }} OpenInEntry  One place Open in opens the document in: an app's
  *   (`action: "app"`) names the file (`target`) and the app (`app`, or `"default"`, the OS's own).
  * @typedef {{ targets: readonly { target: string, kind: string, name: string, present: boolean,
- *   apps: readonly { id: string, name: string }[] }[], fileManager?: string }} OpenInFiles
+ *   apps: readonly { id: string, name: string }[], default?: boolean }[], fileManager?: string }} OpenInFiles
  */
 
 /** A home card's item that shows the file in the OS's file browser. */
@@ -112,6 +112,7 @@ export function openInMenu(platform, capabilities, t = english, { sourceMissing 
       entries.push({ action: "app", label: `${app.name} (${exported.name})`, group: "exports", target: exported.target, app: app.id, enabled: true });
     }
   }
-  if (source) entries.push({ action: "app", label: t("file.defaultApp"), group: "default", target: "source", app: "default", ...opens });
+  // Default app is offered unless the server says no app is ever started on the file (a KiCad file's).
+  if (source && source.default !== false) entries.push({ action: "app", label: t("file.defaultApp"), group: "default", target: "source", app: "default", ...opens });
   return entries;
 }
