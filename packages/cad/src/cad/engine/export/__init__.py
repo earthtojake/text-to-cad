@@ -386,7 +386,22 @@ class Source:
             if prototype.get("exclude"):
                 made.__dict__["_exclude"] = tuple(prototype["exclude"])
             if prototype.get("drives"):
-                made.__dict__["_drives"] = {label: tuple(bounds) for label, bounds in prototype["drives"].items()}
+                made.__dict__["_drives"] = {label: dict(bounds) for label, bounds in prototype["drives"].items()}
+            if prototype.get("pointMasses"):
+                points = {}
+                for point_name, point in prototype["pointMasses"].items():
+                    rows = matrix_of(point["at"])
+                    trsf = gp_Trsf()
+                    trsf.SetValues(*(float(value) for value in rows[:3, :].reshape(-1)))
+                    inertia = point.get("inertia")
+                    points[point_name] = (float(point["grams"]), Location(TopLoc_Location(trsf)),
+                                          None if inertia is None else tuple(float(value) for value in inertia))
+                made.__dict__["_points"] = points
+            if prototype.get("friction"):
+                made.__dict__["_friction"] = tuple(float(value) for value in prototype["friction"])
+            if prototype.get("mass"):
+                # Each mass back on the node that declared it, ``up`` levels above the part (``declare``).
+                made.__dict__[_MASSES] = [(int(up), float(grams)) for up, grams in prototype["mass"]]
             # A part stands where its instance does: at its own placement in its assembly, unless the
             # document places it elsewhere (a posed structure), where it stands in its assembly's frame.
             world = matrix_of(instance["matrix"])
@@ -394,10 +409,22 @@ class Source:
                 local = np.linalg.inv(parent) @ world
             return located(made, local)
 
-        return node(self.structure["tree"], (), np.eye(4))
+        def declare(made: Any, above: list[Any]) -> None:
+            chain = [*above, made]
+            for up, grams in made.__dict__.pop(_MASSES, ()):
+                if up < len(chain):
+                    chain[-1 - up].__dict__["_mass"] = grams
+            for child in made.__dict__.get("_NodeMixin__children") or ():
+                declare(child, chain)
+
+        made = node(self.structure["tree"], (), np.eye(4))
+        declare(made, [])
+        return made
 
 
 _STRUCTURES: dict[int, tuple[Any, Any, dict[str, Any]]] = {}
+# A rebuilt part's masses until ``Source.shape`` puts each on the node that declared it.
+_MASSES = "_cad_masses"
 
 
 def structure_of(tree: Any, path: Path | None) -> dict[str, Any]:

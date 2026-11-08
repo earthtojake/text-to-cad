@@ -24,7 +24,8 @@ the element names the memo's history gave them (``kernel.trace``), so a face's n
 survives into the file and into a STEP; and on each part the key of its geometry
 (``KEY_GUID``), which a reader caches the part's tessellation by only once the part it
 read makes that key again (``Loaded``); and on a part that declares them, its collision, its
-named frames, its body, its exclusions and its joints' drive limits (``declarations``:
+named frames, its body, its exclusions, its joints' drive limits and dynamics, the masses it is
+declared part of, its point masses and its contact friction (``declarations``:
 ``DECLARATIONS_GUID``), what a robot description is made of beside the material. Saved with the
 BinXCAF driver as ``.xbf``, atomically, and only when its bytes changed -- every
 sub-shape's ``Checked`` flag written cleared (``unchecked``), so a cold build and a
@@ -283,7 +284,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
 
     def visit(obj: Any, topods: Any, inherited: tuple | None, inherited_material: Any,
               path: str, inherited_collision: str | None = None,
-              inherited_exclude: tuple[str, ...] = ()) -> tuple[Part | Assembly, tuple, tuple | None]:
+              inherited_exclude: tuple[str, ...] = (), inherited_masses: tuple[tuple[int, float], ...] = (),
+              inherited_friction: tuple[float, ...] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
@@ -291,6 +293,10 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         material = own_material or inherited_material
         collision = _collision(state.get(declarations.COLLISION), path) or inherited_collision
         excluded = tuple(sorted({*inherited_exclude, *(state.get(declarations.EXCLUDE) or ())}))
+        # Each mass declared at or above the node, as (how many levels above it, grams): the outermost first.
+        own_mass = state.get(declarations.MASS)
+        masses = inherited_masses + (((0, _grams(own_mass, path)),) if own_mass is not None else ())
+        surface = _friction(state.get(declarations.FRICTION), path) or inherited_friction
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
         held = _children(topods) if children and int(topods.ShapeType()) == int(TopAbs_COMPOUND) else []
@@ -302,7 +308,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                 child_label = child.__dict__.get("label") or ""
                 prototype, signature, child_color = visit(child, child_topods.Located(_identity()), color, material,
                                                           path + "/" + (child_label or f"{own}.{at}"), collision,
-                                                          excluded)
+                                                          excluded, tuple((up + 1, grams) for up, grams in masses),
+                                                          surface)
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -328,7 +335,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
         frames = _frames(state.get(declarations.FRAMES), path)
-        declared = _declared(state, excluded, path)
+        declared = _declared(state, excluded, path, masses, surface)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
                      tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
                      declarations_key(collision, frames, declared))
@@ -2030,15 +2037,37 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 
 
 #: What a part declares beside its collision and its frames, by the key the structure and the label hold it
-#: under: its body's name ("" for the part's own), the labels it does not collide with, and its joints'
-#: drive limits (``{label: [effort, velocity]}``, None where unbounded).
-DECLARED = ("body", "exclude", "drives")
+#: under: its body's name ("" for the part's own), the labels it does not collide with, its joints' drive
+#: limits and dynamics (``{label: {"effort": ..., "damping": ...}}``, the keys declared), the masses
+#: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the
+#: part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm, "inertia"?}}``) and its
+#: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``).
+DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction")
 
 
-def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str) -> dict[str, Any]:
-    """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``) as JSON holds them: a key
-    only where it declares one."""
+def _grams(value: Any, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{path}: a mass is a positive number of grams, not {value!r}")
+    return float(value)
+
+
+def _friction(value: Any, path: str) -> tuple[float, ...] | None:
+    """A part's contact friction (``declarations.friction``) checked, or None."""
+    if value is None:
+        return None
+    if (not isinstance(value, tuple) or len(value) not in (1, 3)
+            or any(isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) or item < 0
+                   for item in value)):
+        raise ValueError(f"{path}: friction {value!r} is no coefficient, nor three")
+    return tuple(float(item) for item in value)
+
+
+def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
+              masses: tuple[tuple[int, float], ...] = (), surface: tuple[float, ...] | None = None) -> dict[str, Any]:
+    """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``, ``mass``, ``point_mass``,
+    ``friction``) as JSON holds them: a key only where it declares one."""
     from cad.engine import declarations
+    from cad.engine.mechanism import _numpy
 
     found: dict[str, Any] = {}
     body = state.get(declarations.BODY)
@@ -2050,8 +2079,21 @@ def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str) -> di
         found["exclude"] = list(excluded)
     drives = state.get(declarations.DRIVES)
     if drives:
-        found["drives"] = {str(label): [None if value is None else float(value) for value in bounds]
+        found["drives"] = {str(label): {key: float(bounds[key]) for key in declarations.DRIVE if key in bounds}
                            for label, bounds in sorted(drives.items())}
+    if masses:
+        found["mass"] = [[up, grams] for up, grams in masses]
+    points = state.get(declarations.POINTS)
+    if points:
+        held: dict[str, Any] = {}
+        for name, (grams, at, inertia) in sorted(points.items()):
+            if not hasattr(at, "wrapped"):
+                raise ValueError(f"{path}: point mass {name!r} is at no build123d Location")
+            held[str(name)] = {"grams": _grams(grams, path), "at": [float(item) for item in _numpy(at).T.reshape(-1)],
+                               **({"inertia": [float(item) for item in inertia]} if inertia is not None else {})}
+        found["pointMasses"] = held
+    if surface is not None:
+        found["friction"] = list(surface)
     return found
 
 

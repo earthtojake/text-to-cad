@@ -1,7 +1,8 @@
 """MJCF as an export of every document (``export/mjcf.py``): a robot description written as Menagerie lays
 a robot out -- the exact text of a small hand-built one, its meshes binary STLs in metres beside it, the
 same bytes written twice, and MuJoCo compiling it to the bodies, masses and keys it describes; a body
-fixed to its link, a body and a joint of one name, a drive's effort, and the contact pairs excluded, a
+fixed to its link, a body and a joint of one name, a drive's effort, a joint's armature, damping and
+frictionloss and a part's contact friction, and the contact pairs excluded, a
 link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop
 refused by name, and a mesh file refused as a source; and a jointed model built by the engine and
 exported to ``.xml``, its bodies standing where the mechanism puts its links, as built and at a state."""
@@ -226,6 +227,29 @@ class ContactTest(_Folder):
         data = mujoco.MjData(bare)
         mujoco.mj_forward(bare, data)
         self.assertGreater(data.ncon, 0)
+
+    def test_a_joint_s_dynamics_and_a_part_s_contact_friction_are_written_as_mujoco_reads_them(self) -> None:
+        description = jointed()
+        arm = description.joints[1]
+        arm.armature, arm.damping, arm.friction = 0.012, 0.5, 0.2
+        base = description.link("base")
+        base.collisions[0] = Collision("base", base.collisions[0].geometry, (0.9,))
+        hand = description.link("hand")
+        hand.collisions[0] = Collision("hand", hand.collisions[0].geometry, (1.2, 0.01, 0.001))
+        path = self.folder / "rig.xml"
+        write_description(description, path)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('<joint name="arm" type="hinge" axis="0 0 1" range="-1 1" actuatorfrcrange="-12.5 12.5" '
+                      'armature="0.012" damping="0.5" frictionloss="0.2"/>', text)
+        self.assertIn('<joint name="wrist" type="hinge" axis="0 0 1"/>', text)  # none declared: none written
+        model = mujoco.MjModel.from_xml_path(str(path))
+        dof = model.jnt_dofadr[model.joint("arm").id]
+        self.assertEqual((model.dof_armature[dof], model.dof_damping[dof], model.dof_frictionloss[dof]), (0.012, 0.5, 0.2))
+        # The sliding coefficient alone keeps MuJoCo's torsional and rolling; three are written as given; a part
+        # that declares none has MuJoCo's default.
+        np.testing.assert_allclose(model.geom("base").friction, [0.9, 0.005, 0.0001])
+        np.testing.assert_allclose(model.geom("hand").friction, [1.2, 0.01, 0.001])
+        np.testing.assert_allclose(model.geom("arm").friction, [1, 0.005, 0.0001])
 
     def test_the_contact_rule_measures_convex_shapes_exactly(self) -> None:
         from cad.engine.export.contact import TOUCH, _distance, _shape

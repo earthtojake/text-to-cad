@@ -1,5 +1,6 @@
 """What a part declares for a simulator, beside its material: its collision, its named frames, whether it
-is a body of its own, what it does not collide with, and how hard and fast its joints are driven.
+is a body of its own, what it does not collide with, how its joints are driven, what it weighs and how
+it grips.
 
 ``collision(part, kind)`` says what a simulator collides the part as (``description.COLLISIONS``):
 the mesh itself (the default a description is made with), a ``box``, a ``sphere``, a ``cylinder``
@@ -15,7 +16,32 @@ below it. ``limits(assembly, joint, effort=, velocity=)`` bounds the drive of ev
 linear joint of that label on the assembly or below it: its effort in N*m (a revolute joint) or N
 (a linear one), its speed in rad/s or m/s, SI as the description is. ISO 10303-105 names which
 values a pair is driven in (``actuated_kinematic_pair``) and no bound on the drive, so the limits
-are a simulator's, as a collision is, and no fact of the mechanism (the package's law 13).
+are a simulator's, as a collision is, and no fact of the mechanism (the package's law 13). Beside its
+bounds, ``limits`` gives the joint's own dynamics, each a fact of the hardware a simulator reads off
+the joint: ``armature`` (the rotor's inertia reflected through the gearbox, kg*m^2 for a turn, kg for
+a slide), ``damping`` (N*m*s/rad, N*s/m) and ``friction`` (the drive's dry friction, N*m or N:
+MuJoCo's ``frictionloss``). An actuator, its gains and the contact's tuning are the scene's.
+
+**Mass.** ``mass(shape, grams)`` says what a part or an assembly weighs, all of it: its solids keep
+the density ratios their materials give them and are scaled alike until they, with every point mass
+below it, weigh ``grams``, so the centre of mass and the shape of the inertia come from the geometry
+and the total from the scale. Where no part below it has a density, every solid is taken at one.
+Declarations nest: an inner one (on a part or an assembly below) fixes what is below it, and an outer
+one scales only the solids no inner one holds, to make up its total less what the inner ones and the
+point masses outside them weigh; an outer total that leaves its own solids nothing (or less), or that
+the inner ones do not make up where it holds no solid of its own, is refused when the robot is
+described. ``point_mass(part, grams, at, name=, inertia=)`` is a lump the CAD leaves out -- a motor
+inside a filled housing -- at ``at`` in the part's own frame (a frame's frame), with no inertia of its
+own unless ``inertia`` gives its diagonal (kg*m^2, in ``at``'s axes); it goes into the part's link
+exactly, the parallel-axis theorem moving it to the link's centre. A point mass counts towards every
+``mass`` total above it: the total is what the hardware weighs, the lumps are fixed, and the solids
+are scaled to make up the rest.
+
+**Friction.** ``friction(shape, coefficient)`` is the contact friction of a part's surface -- a
+rubber pad's, an aluminium finger's -- set where its material is and inherited as one is, the part's
+own over its assembly's: a sliding coefficient, or MuJoCo's three (sliding, torsional, rolling). It
+is the surface's, which the material's library does not carry, so it is declared beside it. No
+material's friction is assumed: where none is declared, a simulator uses its own default.
 
 Each is an attribute of the object, as a material is, and travels as build123d moves it: a copy,
 ``moved`` and ``located`` keep them. ``limits`` is kept on the part that holds the joint, so it is
@@ -39,14 +65,19 @@ from typing import Any
 
 from cad.engine.description import COLLISIONS
 
-__all__ = ["body", "collision", "exclude", "frame", "limits"]
+__all__ = ["body", "collision", "exclude", "frame", "friction", "limits", "mass", "point_mass"]
 
 # The attributes the declarations are kept in on a shape (``document.collect`` reads them).
 COLLISION = "_collision"
 FRAMES = "_frames"
 BODY = "_body"  # the body's name, "" for the part's own
 EXCLUDE = "_exclude"  # the labels it does not collide with, sorted
-DRIVES = "_drives"  # {joint label: (effort, velocity)}, each None where not bounded
+DRIVES = "_drives"  # {joint label: {"effort": ..., "velocity": ..., ...}}, the keys it declares (``DRIVE``)
+MASS = "_mass"  # grams, the part's or the assembly's whole
+POINTS = "_points"  # {name: (grams, Location in the part's own frame, (ixx, iyy, izz) kg*m^2 or None)}
+FRICTION = "_friction"  # (sliding,) or (sliding, torsional, rolling)
+#: What ``limits`` declares of a joint, by its keyword: the drive's bounds, then the joint's dynamics.
+DRIVE = ("effort", "velocity", "armature", "damping", "friction")
 # The joints a drive bounds, by build123d's class, and the ones it refuses: a bound of one value.
 DRIVEN = ("RevoluteJoint", "LinearJoint")
 UNDRIVEN = ("CylindricalJoint", "BallJoint")
@@ -133,27 +164,35 @@ def exclude(a: Any, b: Any) -> Any:
     return a
 
 
-def _bound(value: Any, what: str, joint: str) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-        raise ValueError(f"limits {joint!r}: {what} is a positive number, not {value!r}")
+def _number(value: Any, said: str, *, zero: bool = False) -> float:
+    """``value`` as a finite float above zero (or at it, where ``zero``), else refused as ``said``."""
+    if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+            or value < 0 or (value == 0 and not zero)):
+        raise ValueError(f"{said} is a {'non-negative' if zero else 'positive'} number, not {value!r}")
     return float(value)
 
 
-def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None) -> Any:
+def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None,
+           armature: float | None = None, damping: float | None = None, friction: float | None = None) -> Any:
     """Bound the drive of every revolute or linear joint labelled ``joint`` on ``assembly`` or below
-    it: ``effort`` in N*m for a revolute joint and N for a linear one, ``velocity`` in rad/s or m/s,
-    either None where it is not bounded (URDF's ``<limit effort velocity>``, SDFormat's, MJCF's
-    ``actuatorfrcrange``; MJCF bounds no speed). A cylindrical or a ball joint, of two and three
-    values, is refused. A second declaration for one joint replaces the first. Declare it after the
-    joint is made: it is kept on the part that holds it. Returns ``assembly``."""
+    it, and give its dynamics: ``effort`` in N*m for a revolute joint and N for a linear one,
+    ``velocity`` in rad/s or m/s (URDF's ``<limit effort velocity>``, SDFormat's, MJCF's
+    ``actuatorfrcrange``; MJCF bounds no speed), each positive; ``armature``, the rotor's inertia
+    reflected through its gearbox, in kg*m^2 or kg (MJCF's ``armature``; URDF and SDFormat have
+    none), ``damping`` in N*m*s/rad or N*s/m and ``friction``, the drive's dry friction, in N*m or N
+    (MJCF's ``damping`` and ``frictionloss``, URDF's ``<dynamics damping friction>``, SDFormat's
+    ``<axis><dynamics>``), each zero or more; each None where the model gives none. A cylindrical or
+    a ball joint, of two and three values, is refused. A second declaration for one joint replaces
+    the first. Declare it after the joint is made: it is kept on the part that holds it. Returns
+    ``assembly``."""
     _shape(assembly, "limits")
     if not isinstance(joint, str) or not joint:
         raise ValueError(f"limits: a joint's label, a non-empty string, not {joint!r}")
-    bounds = (_bound(effort, "effort", joint), _bound(velocity, "velocity", joint))
-    if bounds == (None, None):
-        raise ValueError(f"limits {joint!r}: give effort, velocity or both")
+    given = dict(zip(DRIVE, (effort, velocity, armature, damping, friction)))
+    bounds = {key: _number(value, f"limits {joint!r}: {key}", zero=key not in ("effort", "velocity"))
+              for key, value in given.items() if value is not None}
+    if not bounds:
+        raise ValueError(f"limits {joint!r}: give effort, velocity, armature, damping or friction")
     found = []
     pending = [assembly]
     while pending:
@@ -169,5 +208,72 @@ def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: 
         raise ValueError(f"limits: no revolute or linear joint {joint!r} on {assembly.label or 'the shape'} or "
                          "below it (declare the limits after the joint is made)")
     for shape in found:
-        shape.__dict__[DRIVES] = {**(shape.__dict__.get(DRIVES) or {}), joint: bounds}
+        shape.__dict__[DRIVES] = {**(shape.__dict__.get(DRIVES) or {}), joint: dict(bounds)}
     return assembly
+
+
+def mass(shape: Any, grams: float) -> Any:
+    """Say that ``shape``, a part or an assembly, weighs ``grams`` in all, its point masses included:
+    its solids keep their densities' ratios and are scaled alike to make up the rest (the module's
+    **Mass**, where nested declarations are). A second declaration replaces the first. Returns
+    ``shape``."""
+    _shape(shape, "mass")
+    shape.__dict__[MASS] = _number(grams, f"mass of {shape.label or 'the shape'}: grams")
+    return shape
+
+
+def point_mass(part: Any, grams: float, at: Any, *, name: str | None = None,
+               inertia: tuple[float, float, float] | None = None) -> Any:
+    """Add ``grams`` to ``part`` at ``at`` (a build123d ``Location`` or ``Plane``) in its own frame, the
+    one its geometry is in before ``part.location``, as a frame is: a lump its solids leave out. It has
+    no inertia of its own unless ``inertia`` gives its diagonal, ``(ixx, iyy, izz)`` in kg*m^2 about
+    the point in ``at``'s axes. ``name`` tells several apart (``point1``, ``point2`` where None); a
+    second of one name replaces the first. A part's, not an assembly's. Returns ``part``."""
+    import build123d as bd
+
+    _shape(part, "point_mass")
+    held = dict(part.__dict__.get(POINTS) or {})
+    if name is None:
+        count = len(held) + 1
+        while f"point{count}" in held:
+            count += 1
+        name = f"point{count}"
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"a point mass's name is a non-empty string, not {name!r}")
+    if _assembly(part):
+        raise ValueError(f"point_mass {name!r}: {part.label or 'the shape'} is an assembly; put the point mass on "
+                         "the part it is in")
+    weight = _number(grams, f"point_mass {name!r}: grams")
+    if isinstance(at, bd.Plane):
+        at = bd.Location(at)
+    elif not isinstance(at, bd.Location):
+        raise TypeError(f"point_mass {name!r}: at is a build123d Location (Pos, Rot) or Plane, not "
+                        f"{type(at).__name__}")
+    moments = None
+    if inertia is not None:
+        if isinstance(inertia, (str, bytes)) or not hasattr(inertia, "__len__") or len(inertia) != 3:
+            raise ValueError(f"point_mass {name!r}: inertia is (ixx, iyy, izz) in kg*m^2, not {inertia!r}")
+        moments = tuple(_number(value, f"point_mass {name!r}: inertia", zero=True) for value in inertia)
+        for index in range(3):
+            if moments[index] > moments[(index + 1) % 3] + moments[(index + 2) % 3] * (1 + 1e-9):
+                raise ValueError(f"point_mass {name!r}: inertia {moments!r} is no body's: each moment is at most "
+                                 "the other two's sum")
+    # A dict of its own each time, as a frame's: a copy of the part shares the one it held.
+    part.__dict__[POINTS] = {**held, name: (weight, bd.Location(at.wrapped), moments)}
+    return part
+
+
+def friction(shape: Any, coefficient: float | tuple[float, float, float]) -> Any:
+    """Give ``shape``'s surface its contact friction: a sliding coefficient, or MuJoCo's three
+    (sliding, torsional, rolling), each zero or more. On an assembly, every part below it that
+    declares none, as a material is (the module's **Friction**). Returns ``shape``."""
+    _shape(shape, "friction")
+    said = f"friction of {shape.label or 'the shape'}"
+    if isinstance(coefficient, (tuple, list)):
+        if len(coefficient) != 3:
+            raise ValueError(f"{said}: one coefficient, or three (sliding, torsional, rolling), not {coefficient!r}")
+        values = tuple(_number(value, said, zero=True) for value in coefficient)
+    else:
+        values = (_number(coefficient, said, zero=True),)
+    shape.__dict__[FRICTION] = values
+    return shape

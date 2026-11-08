@@ -26,9 +26,12 @@ part); a link no pair moves keeps its first part's placement as its frame; the g
 model's space. Colours are sRGB in 0..1 with alpha, as the formats write them (the document's are
 linear).
 
-**Mass.** A link's ``inertial`` sums its parts' solids at their materials' densities: mass, centre
-of mass in the link frame, and the inertia tensor about that centre in the link frame's axes. A
-link whose parts have no density has ``inertial`` None, and each writer does what its format does
+**Mass.** A link's ``inertial`` sums its parts' solids at their materials' densities, and their
+point masses (``cad.build123d.point_mass``): mass, centre of mass in the link frame, and the inertia
+tensor about that centre in the link frame's axes. A part or an assembly declared to weigh so much
+(``cad.build123d.mass``) has its solids scaled alike to make up that total, its point masses
+included (``describe``'s **Mass**). A link whose parts have no density and no declared mass has
+``inertial`` None, and each writer does what its format does
 with a link that has none: MuJoCo computes one from the geoms, a URDF link goes without and its
 validator warns, SDFormat gives it its default kilogram. A part whose material names a density that
 is not positive is refused by name.
@@ -39,7 +42,9 @@ by, so a writer writes each prototype once however many links place it. A visual
 its colour; a collision is what the part's ``collision`` declaration asked for
 (``cad.build123d.collision``): the mesh itself (a simulator hulls it; the default), a ``box``, a
 ``sphere``, a ``cylinder`` or a ``capsule`` fitted to the part by the kernel (an oriented bounding
-box, its axis the longest side), or none. Named frames (``cad.build123d.frame``) are kept on their
+box, its axis the longest side), or none; its ``friction`` is the part's contact friction
+(``cad.build123d.friction``: sliding, or sliding, torsional and rolling), empty where it declares
+none and a simulator's default applies. Named frames (``cad.build123d.frame``) are kept on their
 link, in the link's frame, for a writer's sites or fixed frames. A part declared a body
 (``cad.build123d.body``) is a link of its own, at its own placement, hung by a ``fixed`` joint of its
 name from the link it would have merged into, with its own mass, geometry and frames.
@@ -53,7 +58,8 @@ unless the model names it. A coupling is written on the joint that follows: ``fo
 URDF's ``<mimic>`` and MuJoCo's ``<equality><joint>`` say; a coupling of more than two joints is
 a chain of followers from its first. A joint's ``effort`` and ``velocity`` are its drive's bounds
 (``cad.build123d.limits``): N*m and rad/s for a turn, N and m/s for a slide, None where the model
-gives none. A mechanism with a loop is described with its pairs and
+gives none; its ``armature`` (kg*m^2, kg), ``damping`` (N*m*s/rad, N*s/m) and ``friction`` (N*m, N)
+are the joint's own dynamics, None where the model gives none. A mechanism with a loop is described with its pairs and
 ``loops`` naming them, and every writer refuses it (no format here solves a loop).
 
 **Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
@@ -124,6 +130,7 @@ class Visual:
 class Collision:
     name: str
     geometry: Geometry
+    friction: tuple[float, ...] = ()  # (sliding,) or (sliding, torsional, rolling); () where none is declared
 
 
 @dataclass(frozen=True)
@@ -158,6 +165,9 @@ class Joint:
     follows: tuple[str, float, float] | None = None  # (leader joint, ratio, offset): value = ratio * leader + offset
     effort: float | None = None  # the drive's bound: N*m for a turn, N for a slide; None where unbounded
     velocity: float | None = None  # rad/s for a turn, m/s for a slide; None where unbounded
+    armature: float | None = None  # the rotor's reflected inertia: kg*m^2 for a turn, kg for a slide
+    damping: float | None = None  # N*m*s/rad for a turn, N*s/m for a slide
+    friction: float | None = None  # the drive's dry friction: N*m for a turn, N for a slide
 
     def __post_init__(self) -> None:
         if self.kind not in JOINT_KINDS:
@@ -195,8 +205,8 @@ class Description:
     meshes: dict[str, Mesh] = field(default_factory=dict)
     poses: list[Pose] = field(default_factory=list)
     loops: tuple[str, ...] = ()
-    warnings: tuple[str, ...] = ()
-    excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)  # what the description could not carry, said once each
+    warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
+    excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
 
     @property
     def root(self) -> Link:

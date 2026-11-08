@@ -4,7 +4,10 @@ description's frames composed at zero and at a state placing every part where th
 forward kinematics does, a pair followed backwards and a chain with a slide too; a coupling written
 on the joints that follow; a part's collision and named frames, declared on the part and round-tripped
 through the xbf and through a warm build; a part kept a body of its own, an exclusion and a joint's drive
-limits, declared, described and round-tripped through the xbf, and refused where they are wrong; a model with no mechanism a link per top-level part; a loop described and refused;
+limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
+wrong; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
+and a mass that cannot be made refused; a turned link's inertia in its own frame, as the description, the
+MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop described and refused;
 a part with no density warned, one whose density is not positive refused."""
 
 from __future__ import annotations
@@ -417,7 +420,7 @@ def bodies():
     body(cam, "camera")
     exclude(cam, "base")
     root = bd.Compound(children=[base, arm, cam], label="bodies")
-    return limits(root, "arm", effort=27, velocity=6.28)
+    return limits(root, "arm", effort=27, velocity=6.28, armature=0.012, damping=0.5, friction=0)
 """
 
 
@@ -437,7 +440,8 @@ class BodiesTest(_Folder):
         self.assertAlmostEqual(camera.inertial.mass, 1e-6 * _aluminium(), delta=1e-12)
         self.assertAlmostEqual(arm.inertial.mass, 0.12 * 0.02 * 0.01 * _aluminium(), delta=1e-9)
         elbow = description.joints[1]
-        self.assertEqual((elbow.effort, elbow.velocity), (27.0, 6.28))
+        self.assertEqual((elbow.effort, elbow.velocity, elbow.armature, elbow.damping, elbow.friction),
+                         (27.0, 6.28, 0.012, 0.5, 0.0))
         self.assertEqual(description.excludes, (("base", "camera"),))
         self.assertEqual(description.warnings, ())
         # The structure carries them, the same from the file as from the build's tree, and a shape rebuilt from
@@ -447,11 +451,12 @@ class BodiesTest(_Folder):
         self.assertEqual(loaded["prototypes"], document.tree_structure(document.saved(path), path)["prototypes"])
         by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
         self.assertEqual((by_name["cam"]["body"], by_name["cam"]["exclude"]), ("camera", ["base"]))
-        self.assertEqual(by_name["base"]["drives"], {"arm": [27.0, 6.28]})
+        drive = {"effort": 27.0, "velocity": 6.28, "armature": 0.012, "damping": 0.5, "friction": 0.0}
+        self.assertEqual(by_name["base"]["drives"], {"arm": drive})
         self.assertNotIn("body", by_name["arm"])
         rebuilt = {child.label: child for child in Source.read(path).shape().children}
         self.assertEqual((rebuilt["cam"].__dict__["_body"], rebuilt["cam"].__dict__["_exclude"]), ("camera", ("base",)))
-        self.assertEqual(rebuilt["base"].__dict__["_drives"], {"arm": (27.0, 6.28)})
+        self.assertEqual(rebuilt["base"].__dict__["_drives"], {"arm": drive})
 
     def test_a_wrong_body_exclusion_or_limit_is_refused_by_name(self) -> None:
         import build123d as bd
@@ -473,14 +478,196 @@ class BodiesTest(_Folder):
         bd.RevoluteJoint("elbow", part)
         with self.assertRaisesRegex(ValueError, "effort is a positive number, not 0"):
             limits(assembly, "elbow", effort=0)
+        with self.assertRaisesRegex(ValueError, "damping is a non-negative number, not -1"):
+            limits(assembly, "elbow", damping=-1)
+        with self.assertRaisesRegex(ValueError, "give effort, velocity, armature, damping or friction"):
+            limits(assembly, "elbow")
         with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
             self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
+
+
+# A filled housing with no material, declared to weigh 350 g with a 200 g motor inside it; a hand of
+# 120 g whose finger, two pads of aluminium and brass, weighs 50 g; contact friction on the hand and its
+# own on one pad.
+MASSES = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import friction, mass, point_mass
+from cad.engine import xbf
+
+
+@xbf("XBF/masses.xbf")
+def masses():
+    housing = bd.Box(40, 20, 10)
+    housing.label = "housing"
+    point_mass(housing, 200, bd.Pos(10, 0, 0), name="motor")
+    mass(housing, {housing})
+    palm = bd.Pos(100, 0, 0) * bd.Box(20, 20, 10)
+    palm.label = "palm"
+    pad_a = bd.Pos(130, 0, 0) * bd.Box(10, 10, 10)
+    pad_a.label = "pad_a"
+    pad_b = bd.Pos(130, 20, 0) * bd.Box(10, 10, 10)
+    pad_b.label = "pad_b"
+    palm.material = pad_a.material = metals.aluminum()
+    pad_b.material = metals.brass()
+    friction(pad_b, (1.2, 0.01, 0.001))
+    finger = mass(bd.Compound(children=[pad_a, pad_b], label="finger"), 50)
+    hand = mass(bd.Compound(children=[palm, finger], label="hand"), {hand})
+    friction(hand, 0.9)
+    return bd.Compound(children=[housing, hand], label="masses")
+"""
+
+
+def _box(mass: float, a: float, b: float, c: float) -> np.ndarray:
+    return np.diag([mass / 12 * (b * b + c * c), mass / 12 * (a * a + c * c), mass / 12 * (a * a + b * b)])
+
+
+def _moved(inertia: np.ndarray, mass: float, offset: Any) -> np.ndarray:
+    offset = np.asarray(offset, dtype=float)
+    return inertia + mass * (float(offset @ offset) * np.eye(3) - np.outer(offset, offset))
+
+
+class MassTest(_Folder):
+    def test_a_declared_mass_scales_its_solids_point_masses_count_towards_it_and_inner_ones_fix_theirs(self) -> None:
+        from bd_materials import metals
+
+        description, structure = self.described("masses", MASSES.format(housing=350, hand=120))
+        self.assertEqual([link.name for link in description.links], ["world", "housing", "hand"])
+        # The housing: 150 g of uniform box about its centre and the 200 g motor 10 mm along X.
+        housing = description.link("housing").inertial
+        self.assertAlmostEqual(housing.mass, 0.35, delta=1e-12)
+        centre = np.array([0.2 * 0.01 / 0.35, 0, 0])
+        np.testing.assert_allclose(housing.center, centre, atol=1e-12)
+        expected = _moved(_box(0.15, 0.04, 0.02, 0.01), 0.15, -centre) + _moved(np.zeros((3, 3)), 0.2,
+                                                                                  np.array([0.01, 0, 0]) - centre)
+        np.testing.assert_allclose(housing.inertia, expected, atol=1e-12)
+        # The hand: its finger's 50 g split between the pads as aluminium is to brass, the palm the other 70 g.
+        aluminium, brass = float(metals.aluminum().material.density), float(metals.brass().material.density)
+        pad_a, pad_b = 0.05 * aluminium / (aluminium + brass), 0.05 * brass / (aluminium + brass)
+        hand = description.link("hand")
+        self.assertAlmostEqual(hand.inertial.mass, 0.12, delta=1e-12)
+        centre = (pad_a * np.array([0.03, 0, 0]) + pad_b * np.array([0.03, 0.02, 0])) / 0.12
+        np.testing.assert_allclose(hand.inertial.center, centre, atol=1e-12)
+        expected = (_moved(_box(0.07, 0.02, 0.02, 0.01), 0.07, -centre)
+                    + _moved(_box(pad_a, 0.01, 0.01, 0.01), pad_a, np.array([0.03, 0, 0]) - centre)
+                    + _moved(_box(pad_b, 0.01, 0.01, 0.01), pad_b, np.array([0.03, 0.02, 0]) - centre))
+        np.testing.assert_allclose(hand.inertial.inertia, expected, atol=1e-12)
+        # Friction: the hand's on every part below it, the pad's own over it; the housing declares none.
+        self.assertEqual([(c.name, c.friction) for c in hand.collisions],
+                         [("palm", (0.9,)), ("pad_a", (0.9,)), ("pad_b", (1.2, 0.01, 0.001))])
+        self.assertEqual(description.link("housing").collisions[0].friction, ())
+        self.assertEqual(description.warnings, ())
+        # The structure carries each mass on the parts below it, levels above them; a shape rebuilt from the
+        # document puts each back on the node that declared it.
+        path = self.folder / "XBF/masses.xbf"
+        loaded = document.Loaded(path).structure()
+        self.assertEqual(loaded["prototypes"], document.tree_structure(document.saved(path), path)["prototypes"])
+        by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
+        self.assertEqual((by_name["palm"]["mass"], by_name["pad_b"]["mass"]), ([[1, 120.0]], [[2, 120.0], [1, 50.0]]))
+        self.assertEqual(by_name["housing"]["pointMasses"]["motor"]["grams"], 200.0)
+        self.assertEqual(by_name["pad_a"]["friction"], [0.9])
+        rebuilt = Source.read(path).shape()
+        nodes = {node.label: node for node in [rebuilt, *rebuilt.descendants]}
+        self.assertEqual({label: node.__dict__.get("_mass") for label, node in nodes.items()},
+                         {"masses": None, "housing": 350.0, "hand": 120.0, "palm": None, "finger": 50.0,
+                          "pad_a": None, "pad_b": None})
+        self.assertEqual(nodes["housing"].__dict__["_points"]["motor"][0], 200.0)
+
+    def test_a_mass_its_lumps_or_its_inner_masses_cannot_make_is_refused_by_name(self) -> None:
+        import build123d as bd
+
+        from cad.build123d import friction, mass, point_mass
+
+        for housing, hand, said in ((150, 120, "'housing', declared to weigh 150 g, holds point masses and inner "
+                                                "masses of 200 g"),
+                                    (350, 40, "'hand', declared to weigh 40 g, holds point masses and inner masses "
+                                              "of 50 g")):
+            with self.assertRaisesRegex(DescriptionError, said):
+                self.described("masses", MASSES.format(housing=housing, hand=hand))
+        part = bd.Box(1, 1, 1)
+        part.label = "part"
+        with self.assertRaisesRegex(ValueError, "mass of part: grams is a positive number, not 0"):
+            mass(part, 0)
+        with self.assertRaisesRegex(ValueError, "an assembly; put the point mass on the part"):
+            point_mass(bd.Compound(children=[part], label="assembly"), 10, bd.Location())
+        with self.assertRaisesRegex(ValueError, "is no body's"):
+            point_mass(part, 10, bd.Location(), inertia=(1, 0, 0))
+        with self.assertRaisesRegex(ValueError, "one coefficient, or three"):
+            friction(part, (1, 2))
+
+
+# A slab of aluminium turned off every axis, in a link whose frame is an anchor (no material) turned
+# another way: its inertia in the link frame is ``R I R^T`` with ``R`` the slab's turn seen from the anchor.
+TURNED = """
+import build123d as bd
+from bd_materials import metals
+from cad.engine import xbf
+
+
+@xbf("XBF/turned.xbf")
+def turned():
+    anchor = bd.Location((5, -10, 20), (0, 0, 1), 90) * bd.Box(4, 4, 4)
+    anchor.label = "anchor"
+    slab = bd.Location((30, 15, -5), (1, 2, 3), 40) * bd.Box(60, 20, 10)
+    slab.label = "slab"
+    slab.material = metals.aluminum()
+    return bd.Compound(children=[bd.Compound(children=[anchor, slab], label="rig")], label="turned")
+"""
+
+
+def _turn(axis: Any, degrees: float) -> np.ndarray:
+    """Rodrigues: a turn of ``degrees`` about ``axis``."""
+    k = np.asarray(axis, dtype=float) / np.linalg.norm(axis)
+    cross = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    angle = math.radians(degrees)
+    return np.eye(3) + math.sin(angle) * cross + (1 - math.cos(angle)) * cross @ cross
+
+
+class InertiaRotationTest(_Folder):
+    def test_a_turned_link_s_inertia_is_written_in_its_own_frame_in_each_format(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        import mujoco
+
+        from cad.engine.export import mjcf, urdf
+
+        description, _structure = self.described("turned", TURNED)
+        anchor, slab = _turn((0, 0, 1), 90), _turn((1, 2, 3), 40)
+        turn = anchor.T @ slab
+        mass = 0.06 * 0.02 * 0.01 * _aluminium()
+        expected = turn @ _box(mass, 0.06, 0.02, 0.01) @ turn.T
+        centre = anchor.T @ (np.array([0.03, 0.015, -0.005]) - np.array([0.005, -0.01, 0.02]))
+        self.assertGreater(abs(expected[0, 1]) + abs(expected[0, 2]) + abs(expected[1, 2]), 1e-7)  # truly off-axis
+        link = description.link("rig")
+        np.testing.assert_allclose(link.frame[:3, :3], anchor, atol=1e-12)
+        np.testing.assert_allclose(link.inertial.inertia, expected, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(link.inertial.center, centre, atol=1e-12)
+        # MJCF: principal moments on a quat in the body frame, as MuJoCo compiles them.
+        out = self.folder / "mjcf/turned.xml"
+        mjcf.write_description(description, out)
+        model = mujoco.MjModel.from_xml_path(str(out))
+        body = model.body("rig")
+        axes = np.zeros(9)
+        mujoco.mju_quat2Mat(axes, body.iquat)
+        axes = axes.reshape(3, 3)
+        np.testing.assert_allclose(axes @ np.diag(body.inertia) @ axes.T, expected, rtol=0, atol=1e-11)
+        np.testing.assert_allclose(body.ipos, centre, atol=1e-9)
+        # URDF: the six terms about the centre, rpy zero, in the link frame.
+        out = self.folder / "urdf/turned.urdf"
+        urdf.write_description(description, out)
+        (written,) = ET.parse(out).getroot().iter("inertial")
+        self.assertEqual(written.find("origin").get("rpy"), "0 0 0")
+        np.testing.assert_allclose([float(v) for v in written.find("origin").get("xyz").split()], centre, atol=1e-9)
+        terms = {key: float(value) for key, value in written.find("inertia").attrib.items()}
+        tensor = np.array([[terms["ixx"], terms["ixy"], terms["ixz"]], [terms["ixy"], terms["iyy"], terms["iyz"]],
+                           [terms["ixz"], terms["iyz"], terms["izz"]]])
+        np.testing.assert_allclose(tensor, expected, rtol=1e-8, atol=1e-14)
 
 
 # A declared part moved after its declarations: an edit of one rebuilds what the memo hands back.
 MOVED = """
 import build123d as bd
-from cad.build123d import collision, frame
+from cad.build123d import collision, frame, mass
 from cad.engine import xbf
 
 
@@ -490,6 +677,7 @@ def moved():
     block.label = "block"
     collision(block, "{kind}")
     frame(block, "tip", bd.Pos({at}, 0, 15))
+    mass(block, {at} * 10)
     return bd.Compound(children=[block.moved(bd.Pos(50, 0, 0))], label="moved")
 """
 
@@ -501,6 +689,7 @@ class WarmEditTest(_Folder):
             (prototype,) = document.Loaded(path).structure()["prototypes"]
             self.assertEqual(prototype["collision"], kind)
             self.assertEqual(prototype["frames"]["tip"][12:15], [at, 0, 15])
+            self.assertEqual(prototype["mass"], [[0, at * 10.0]])
 
 
 class UnjointedTest(_Folder):

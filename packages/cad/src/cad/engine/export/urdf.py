@@ -40,14 +40,18 @@ massless link between them: ``<name>`` the turn (revolute or continuous) to ``<n
 ``<limit>`` carries the joint's drive limits (``cad.build123d.limits``: ``effort`` in N*m or N,
 ``velocity`` in rad/s or m/s), a continuous joint's only where it has one; where the model gives
 none, ``0``, which URDF requires and a ROS controller reads literally (``cad urdf validate`` warns of
-it). A bound the description leaves open is written
+it). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
+friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
+(``export.note``: an MJCF carries it). A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
 ends. A spherical joint is refused by name: URDF has no ball (export an SDF or an MJCF, which do).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
 SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
 (``cad.build123d.exclude``) are not written (an SRDF's ``disable_collisions`` is where MoveIt keeps
-them). A loop is refused by name, as every robot format refuses one.
+them). URDF has no contact friction either (Gazebo's ``<gazebo>`` extensions are outside URDF): a
+part's (``cad.build123d.friction``) is not written, and said. A loop is refused by name, as every robot
+format refuses one.
 
 **Names.** URDF names are any text, but ROS tooling reads ``[A-Za-z0-9_]``: every other character
 is ``_``, and a name already held in its kind is given ``_2``, ``_3`` and said (``export.note``):
@@ -353,6 +357,14 @@ class _Writer:
                                   ("upper", _number(UNBOUNDED if upper is None else upper)), *driven])
         elif kind == "continuous" and (joint.effort is not None or joint.velocity is not None):
             element.add("limit", driven)
+        if kind in ("revolute", "continuous", "prismatic"):
+            dynamics = [(key, _number(value, snap=0)) for key, value in (("damping", joint.damping),
+                                                                         ("friction", joint.friction))
+                        if value is not None]
+            if dynamics:
+                element.add("dynamics", dynamics)
+            if joint.armature is not None:
+                note(f"joint {name!r}'s armature is not written: URDF has none (an MJCF carries it)")
         if mimic and joint.follows is not None:
             leader, ratio, offset = joint.follows
             if self.kinds.get(leader) not in ("revolute", "continuous", "prismatic", "cylindrical"):
@@ -381,6 +393,9 @@ class _Writer:
                 piece.add("geometry").children.append(self._shape(geometry))
                 piece.add("material", [("name", material)])
         for collision in link.collisions:
+            if collision.friction:
+                note(f"collision {collision.name!r}'s contact friction is not written: URDF has none (an MJCF "
+                     "carries it)")
             wanted = name_of(collision.name, "collision")
             for suffix, placement, geometry in shaped(collision.geometry):
                 piece = element.add("collision", [("name", collisions(wanted + suffix))])

@@ -2,7 +2,9 @@
 the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the same bytes written twice,
 the repository's own URDF check passing it and the stills reading its links where the description has them;
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
-and a joint keeping one name and a name repeated in its kind renamed and said, a ball and a loop refused by
+and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
+friction as its dynamics and its armature and a part's contact friction said and not written, a ball and a
+loop refused by
 name; and a jointed model built by the engine and exported to ``.urdf``, its links moving
 as the mechanism moves them."""
 
@@ -261,6 +263,22 @@ class HandBuiltTest(_Folder):
         with self.assertWarnsRegex(ExportWarning, "link 'base' is written 'base_2': another link holds its name"):
             write_description(description, path)
         self.assertEqual(sorted(read_urdf(path).links), ["base", "base_2", "post", "slider", "slider_turn"])
+
+    def test_a_joint_s_damping_and_friction_are_its_dynamics_and_what_urdf_cannot_say_is_said(self) -> None:
+        description = arm()
+        shoulder = description.joints[0]
+        shoulder.armature, shoulder.damping, shoulder.friction = 0.012, 0.5, 0.2
+        upper = description.link("arm")
+        upper.collisions[0] = Collision("arm", upper.collisions[0].geometry, (0.9,))
+        path = self.folder / "arm.urdf"
+        with self.assertWarns(ExportWarning) as said:
+            write_description(description, path)
+        self.assertEqual(sorted(str(warning.message) for warning in said.warnings),
+                         ["collision 'arm''s contact friction is not written: URDF has none (an MJCF carries it)",
+                          "joint 'shoulder''s armature is not written: URDF has none (an MJCF carries it)"])
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('<dynamics damping="0.5" friction="0.2"/>', text)
+        self.assertEqual(text.count("<dynamics"), 1)  # the knuckle declares none
 
     def test_a_ball_and_a_loop_are_refused_by_name_and_nothing_is_written(self) -> None:
         with self.assertRaisesRegex(ExportRefused, "joint 'shoulder' is spherical, and URDF has no ball joint"):

@@ -24,14 +24,19 @@ on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a fixed o
 declared a body (``cad.build123d.body``) is a child ``<body>`` of its link's with none. A joint's drive
 effort (``cad.build123d.limits``) is its ``actuatorfrcrange``, ``-effort effort`` (N*m, N), which bounds
 what any actuator on it applies; MJCF has no bound on a joint's speed, so a drive's velocity is not
-written (an actuator's own ``ctrlrange`` is the scene's). A link's
+written (an actuator's own ``ctrlrange`` is the scene's). A joint's dynamics are its ``armature``,
+``damping`` and ``frictionloss`` (``limits``' ``armature``, ``damping`` and ``friction``), each where
+declared; an actuator, its gains and contact tuning are the scene's. A link's
 ``inertial`` is written on its principal axes (a tensor whose moments miss MuJoCo's triangle
 inequality by rounding alone is nudged onto it; any further and MuJoCo says so); a link with none is
 given none, and MuJoCo computes one from its geoms (visual and collision alike). A visual is a geom
 of class ``visual``, a collision one of class ``collision`` named ``<part>_collision`` where its
 visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJoCo's half sizes (a
 box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
-capsule's length its cylinder's, as ``describe`` fits it and SDF has it); a named frame a ``site``.
+capsule's length its cylinder's, as ``describe`` fits it and SDF has it), its ``friction`` the part's
+contact friction (``cad.build123d.friction``: the sliding coefficient alone, the torsional and rolling
+then MuJoCo's defaults, or all three) where it declares one, none where it does not, so MuJoCo's
+default (or a scene's ``default`` class) holds; a named frame a ``site``.
 Every name is unique in its kind -- bodies among bodies, joints among joints, MuJoCo's namespaces, so a
 body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``export.note``). ``contact``
 excludes each body pair that touches at rest across a joint that moves (``export/contact.py``'s rule:
@@ -285,12 +290,14 @@ class _Writer:
             return
         name = self.joint_names[joint.name] = self._joint_name(joint.name)
         effort = ("actuatorfrcrange", None if joint.effort is None else _numbers((-joint.effort, joint.effort), snap=0))
+        dynamics = [(key, None if value is None else _number(value, snap=0)) for key, value in (
+            ("armature", joint.armature), ("damping", joint.damping), ("frictionloss", joint.friction))]
         if joint.kind in ("revolute", "continuous"):
             body.add("joint", [("name", name), ("type", "hinge"), axis,
-                               ("range", ranged(0) if joint.kind == "revolute" else None), effort])
+                               ("range", ranged(0) if joint.kind == "revolute" else None), effort, *dynamics])
             self.qpos.append((joint, 1))
         elif joint.kind == "prismatic":
-            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort])
+            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort, *dynamics])
             self.qpos.append((joint, 1))
         elif joint.kind == "cylindrical":
             body.add("joint", [("name", name), ("type", "hinge"), axis, ("range", ranged(0))])
@@ -316,6 +323,7 @@ class _Writer:
             # A part's collision shares its visual's name: it is told apart as Menagerie tells them.
             named = collision.name if collision.name not in self.geoms.taken else f"{collision.name}_collision"
             body.add("geom", [("class", "collision"), *self._shape(collision.geometry), ("name", self.geoms(named)),
+                              ("friction", _numbers(collision.friction, snap=0) if collision.friction else None),
                               *_placement(frame @ collision.geometry.placement)])
         for name, placed in link.frames.items():
             body.add("site", [("name", self.sites(name)), *_placement(frame @ np.asarray(placed, dtype=float))])

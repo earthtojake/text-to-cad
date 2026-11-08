@@ -41,9 +41,24 @@ its limits are each angle's range less its as-built angle.
 
 **Geometry and mass.** Each instance a link holds is a visual of its prototype's mesh, placed in the
 link frame; its collision is what the prototype declares, ``collision_default`` where it declares
-none, a primitive fitted to its oriented bounding box (``Bnd_OBB``). Its mass is its solids' at its
-material's density, measured once per prototype in the prototype's frame and moved to the link's
-(``I' = R I R^T``, then the parallel-axis theorem about the link's centre of mass).
+none, a primitive fitted to its oriented bounding box (``Bnd_OBB``), with the contact friction the
+part declares (``declarations.friction``). Its mass is its solids' at its material's density,
+measured once per prototype in the prototype's frame and moved to the link's (``I' = R I R^T``, then
+the parallel-axis theorem about the link's centre of mass), and each point mass it declares
+(``declarations.point_mass``), a mass at a point with the inertia it is given (none, else its
+diagonal in its frame's axes), moved the same way.
+
+**Mass.** A node of the tree declared to weigh ``grams`` (``declarations.mass``) holds the instances
+below it. Each instance belongs to its innermost declared node; a node's own solids are the
+instances that belong to it, and its inner nodes the declared nodes below it whose nearest declared
+node above is it. Innermost first, each node's solids are scaled by one factor so that they, the
+point masses on them and its inner nodes' totals weigh ``grams``: a solid's weight before the scale
+is its volume at its material's density, or at one density for all where none of the node's own
+solids has one (one that has none, among some that do, carries no mass, and is warned). A node is
+refused by name where its inner nodes and point masses weigh its total or more while it holds solids
+of its own, where it has a remainder and its own solids no volume, or where it holds none and its
+inner nodes and point masses do not weigh its total (within a part in 10^9). A declared node is
+the tree's own node, not its label, so two siblings of one label are two nodes.
 """
 
 from __future__ import annotations
@@ -53,6 +68,7 @@ from typing import Any
 
 import numpy as np
 
+from cad.engine.declarations import DRIVE
 from cad.engine.description import (COLLISIONS, Collision, Description, DescriptionError, Geometry, Inertial, Joint,
                                     Link, Mesh, Pose, Visual, column_major, srgb)
 
@@ -161,6 +177,7 @@ class _Describer:
             self._unjointed(links, joints)
         self._bodies(links, joints)
         excludes = self._excludes(links)
+        self.masses = self._masses()
         meshes = self._meshes()
         for link in links[1:]:
             self._geometry(link)
@@ -236,8 +253,11 @@ class _Describer:
                 if bounds is None:
                     continue
                 declared.discard((index, label))
-                if joint.effort is None and joint.velocity is None:
-                    joint.effort, joint.velocity = (None if value is None else float(value) for value in bounds)
+                if any(getattr(joint, key) is not None for key in DRIVE):
+                    continue
+                for key in DRIVE:
+                    if bounds.get(key) is not None:
+                        setattr(joint, key, float(bounds[key]))
         for index, label in sorted(declared):
             self.warn(f"part {self._name(index)!r} limits joint {label!r}, which is no joint of the description: "
                       "the limits are left out")
@@ -419,11 +439,12 @@ class _Describer:
                                        srgb(instance.get("color") or prototype.get("color")),
                                        material.get("name") or None))
             kind = prototype.get("collision") or self.collision_default
+            surface = tuple(float(value) for value in prototype.get("friction") or ())
             if kind == "mesh":
-                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key)))
+                link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface))
             elif kind != "none":
                 frame, size = self._fit(key, prototype["name"], kind)
-                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size)))
+                link.collisions.append(Collision(name, Geometry(kind, placement @ frame, size=size), surface))
             for frame_name, values in sorted((prototype.get("frames") or {}).items()):
                 named = frame_name
                 if named in link.frames:
@@ -431,12 +452,18 @@ class _Describer:
                     self.warn(f"link {link.name!r} holds frame {frame_name!r} twice: the one on {name} is "
                               f"{named!r}")
                 link.frames[named] = placement @ column_major(values)
-            measured = self._mass(prototype, material)
+            rotation = placement[:3, :3]
+            points = self._points(prototype)
+            for mass, center, inertia in points:
+                masses.append((mass, rotation @ center + placement[:3, 3], rotation @ inertia @ rotation.T))
+            measured = self.masses.get(index, False)
+            if measured is False:
+                measured = self._mass(prototype, material)
             if measured is None:
-                massless.append(name)
+                if not points:
+                    massless.append(name)
                 continue
             mass, center, inertia = measured
-            rotation = placement[:3, :3]
             masses.append((mass, rotation @ center + placement[:3, 3], rotation @ inertia @ rotation.T))
         if not masses:
             if link.parts:
@@ -451,6 +478,88 @@ class _Describer:
             offset = at - center
             inertia += own + mass * (float(offset @ offset) * np.eye(3) - np.outer(offset, offset))
         link.inertial = Inertial(float(total), center, inertia)
+
+    def _points(self, prototype: dict[str, Any]) -> list[tuple[float, np.ndarray, np.ndarray]]:
+        """A prototype's point masses (``declarations.point_mass``): each mass (kg), point (m) and inertia
+        about it (kg*m^2), in the prototype's frame."""
+        found = []
+        for _name, point in sorted((prototype.get("pointMasses") or {}).items()):
+            at = column_major(point["at"])
+            rotation = at[:3, :3]
+            own = np.diag([float(value) for value in point.get("inertia") or (0.0, 0.0, 0.0)])
+            found.append((float(point["grams"]) * 1e-3, at[:3, 3].copy(), rotation @ own @ rotation.T))
+        return found
+
+    def _masses(self) -> dict[int, tuple[float, np.ndarray, np.ndarray] | None]:
+        """Each instance below a declared mass, its solids' mass (kg), centre (m) and inertia (kg*m^2) in its
+        prototype's frame, scaled as the module's **Mass** says; None where it carries none."""
+        chains: dict[int, list[tuple[int, ...]]] = {}
+        names: dict[tuple[int, ...], str] = {}
+
+        def walk(node: dict[str, Any], at: tuple[int, ...], above: list[tuple[int, ...]]) -> None:
+            names[at] = node.get("name") or "the model"
+            if "children" in node:
+                for position, child in enumerate(node["children"]):
+                    walk(child, at + (position,), above + [at])
+            else:
+                chains[int(node["instance"])] = above + [at]
+
+        walk(self.structure["tree"], (), [])
+        totals: dict[tuple[int, ...], float] = {}
+        owner: dict[int, tuple[int, ...]] = {}
+        for index, chain in chains.items():
+            entries = self._declared(index).get("mass") or ()
+            for up, grams in entries:
+                if not 0 <= int(up) < len(chain):
+                    raise DescriptionError(f"part {self._name(index)!r} is declared part of a mass {up} levels above "
+                                           "it, which the tree does not hold")
+                totals[chain[-1 - int(up)]] = float(grams)
+            if entries:
+                owner[index] = chain[-1 - int(min(int(up) for up, _grams in entries))]
+        found: dict[int, tuple[float, np.ndarray, np.ndarray] | None] = {}
+        for node in sorted(totals, key=len, reverse=True):
+            grams = totals[node]
+            said = f"{names[node]!r}, declared to weigh {grams:g} g,"
+            inner = [other for other in totals if len(other) > len(node) and other[:len(node)] == node
+                     and not any(len(node) < len(between) < len(other) and other[:len(between)] == between
+                                 for between in totals)]
+            own = [index for index, held in sorted(owner.items()) if held == node]
+            fixed = sum(totals[other] for other in inner)
+            fixed += sum(float(point["grams"]) for index in own
+                         for point in (self._declared(index).get("pointMasses") or {}).values())
+            solids: list[tuple[int, float, tuple[float, np.ndarray, np.ndarray]]] = []
+            weighed = []
+            for index in own:
+                prototype = self._declared(index)
+                material = (prototype.get("material") or {}).get("material") or {}
+                weighed.append((index, self._density(prototype, material)))
+            uniform = all(density is None for _index, density in weighed)
+            for index, density in weighed:
+                if density is None and not uniform:
+                    found[index] = None
+                    continue
+                measured = self._measured(self._declared(index))
+                if measured is None:
+                    found[index] = None
+                    continue
+                solids.append((index, 1.0 if density is None else density, measured))
+            weight = sum(volume * density * 1e-9 for _index, density, (volume, _c, _i) in solids)  # kg
+            rest = (grams - fixed) * 1e-3  # kg
+            slack = grams * 1e-12  # kg: a part in 10^9 of the total
+            if weight > 0 and rest <= slack:
+                raise DescriptionError(f"{said} holds point masses and inner masses of {fixed:g} g, which leave its "
+                                       "own solids nothing to weigh")
+            if weight <= 0 and abs(rest) > slack:
+                if own:
+                    raise DescriptionError(f"{said} has {grams - fixed:g} g left for its own parts after its point "
+                                           "masses and inner masses, and they have no volume to carry it")
+                raise DescriptionError(f"{said} holds inner masses and point masses of {fixed:g} g, and no solid of "
+                                       "its own to make up the rest")
+            scale = rest / weight if weight > 0 else 0.0
+            for index, density, (volume, center, inertia) in solids:
+                per_mm3 = density * scale * 1e-9
+                found[index] = (volume * per_mm3, center * MM, inertia * per_mm3 * 1e-6)
+        return found
 
     def _density(self, prototype: dict[str, Any], material: dict[str, Any]) -> float | None:
         density = material.get("density")
