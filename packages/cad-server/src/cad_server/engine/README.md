@@ -633,7 +633,8 @@ failure: the next asker makes it again.
 | `reader.py` | what a model imports: an XCAF document described as data and assembled into a build123d tree (`read_step`, `read_xbf`); the reader process a build's STEP files are parsed in; a mesh file as data (`read_mesh`, `Mesh`); a read of a file the build writes refused (`refuse_written`) |
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
-| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
+| `description.py`, `describe.py`, `declarations.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), and what a model declares for it (`collision`, `frame`) |
+| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF with its meshes beside it from the robot description (`mjcf`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
@@ -677,6 +678,8 @@ cad model export ID DST [DST ...] [--tolerance MM] [--json]
 cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--json]
                                              SRC an .xbf or a .step; --tolerance (a model's, an xbf's, a
                                              STEP's) meshes an .stl or a .3mf at MM (Mesh)
+                                             DST .step, .glb, .stl, .3mf, .dxf, .xbf, or .xml: an MJCF of the
+                                             document (the robot description), its meshes in assets/ beside it
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
@@ -2560,6 +2563,17 @@ housing.material.pbr = housing.material.pbr.override(
 housing.color = "#606b78"  # assign after material: build123d's setter sets colour
 paint(housing, housing.faces().sort_by(bd.Axis.Z)[-1], metals.copper())
 ```
+
+**What a model declares for a simulator.** Beside its material, a part may say how a simulator
+collides it and name frames on it (`cad.build123d.collision`, `frame`), the two facts a
+robot description needs that geometry does not decide: `collision(part, "box")` (one of `mesh`,
+the default -- a simulator hulls it --, `box`, `sphere`, `cylinder`, `capsule`, fitted by the kernel
+to the part's oriented bounding box, or `none`; on an assembly, for every part below it that declares
+none) and `frame(part, "tool", bd.Pos(160, 0, 25))` (in the part's own frame, before its placement).
+Both travel with the prototype, in the structure (`collision`, `frames`) and the xbf (a JSON string
+under `DECLARATIONS_GUID` on the part's label, written only where a part declares something), and
+two parts that differ only in them are two prototypes. The robot description reads them
+(`describe.py`); an MJCF export writes them as collision geoms and sites.
 
 `FinishedMaterial.material` is the native physical dataclass; `.pbr` is a native
 `threejs_materials.PbrProperties`. Catalogue factories return fresh finished materials.

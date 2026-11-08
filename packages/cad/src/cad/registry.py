@@ -195,8 +195,8 @@ class DocumentTypeEntry:
 _KERNEL = "build123d"
 
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
-                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance meshes an .stl or a "
-                                       ".3mf finer", _KERNEL, engine=True)
+                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it)); "
+                                       "--tolerance meshes an .stl or a .3mf finer", _KERNEL, engine=True)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
 _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "

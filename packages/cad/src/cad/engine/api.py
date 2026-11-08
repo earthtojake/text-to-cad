@@ -499,11 +499,13 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
-    ``.glb``, ``.stl``, ``.3mf``, and ``.dxf`` of a planar document): the document of an
+    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the
+    document's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,
+    ``export/mjcf.py``): the document of an
     ``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the
     engine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,
     ``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,
-    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP or DXF is made from one). Several
+    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF or MJCF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
     carries every configuration sequence the document defines, as a clip. An STL and a 3MF are

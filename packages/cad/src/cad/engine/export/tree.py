@@ -72,7 +72,10 @@ def tree_of(view: Any) -> Any:
                 {int(ordinal): tuple(rgba) for ordinal, rgba in (prototype.get("faceColors") or {}).items()},
                 key, _names(prototype), material=_material(prototype.get("material")),
                 face_materials={int(ordinal): _material(given)
-                                for ordinal, given in (prototype.get("faceMaterials") or {}).items() if given})
+                                for ordinal, given in (prototype.get("faceMaterials") or {}).items() if given},
+                collision=prototype.get("collision"),
+                frames={name: tuple(float(value) for value in values)
+                        for name, values in (prototype.get("frames") or {}).items()})
             order.append(found)
         return found
 

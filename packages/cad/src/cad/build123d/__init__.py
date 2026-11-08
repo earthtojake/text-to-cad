@@ -8,6 +8,8 @@ and the helpers a model calls with build123d objects:
 
 * ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);
 * ``paint(shape, faces, material)``: a material or colour on some faces;
+* what a part declares for a simulator: ``collision(part, kind)``, what it collides as, and
+  ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites);
 * the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``
   (``mechanism_state_representation``), ``configuration_sequence``
   (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,
@@ -30,6 +32,8 @@ from typing import TYPE_CHECKING, Any
 _NAMES = {
     "memo": "cad.engine.model",
     "paint": "cad.engine.model",
+    "collision": "cad.engine.declarations",
+    "frame": "cad.engine.declarations",
     "mechanism_state": "cad.engine.model",
     "configuration_sequence": "cad.engine.model",
     "animation": "cad.engine.model",
@@ -68,5 +72,6 @@ if TYPE_CHECKING:
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
+    from cad.engine.declarations import collision, frame
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint

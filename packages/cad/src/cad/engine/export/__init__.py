@@ -1,7 +1,7 @@
 """Exports: a document translated to a file. One writer, one document, two triggers.
 
 ``translate(document, kind, path)`` writes one
-file of ``kind`` (``KINDS``: ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``) from a
+file of ``kind`` (``KINDS``: ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``mjcf``) from a
 document: a ``Source`` -- the document a build made, held in the worker's memory
 (``Source.built``), or one read from an ``.xbf`` or a ``.step`` (``Source.read``), or a mesh
 file's triangles (``.glb``, ``.stl``, ``.3mf``: ``export/mesh_file.py``). A
@@ -21,16 +21,19 @@ The file holds the document as its code built it: every part, placed where the d
 places it, in its colours, with its motion. No translation selects a part or a state: a
 posed or partial file is a function in the model's code. A mesh file is a source of the other
 two mesh kinds, holding what its format carries (``README``, **Translation formats**), and of
-nothing else: there is no B-rep in it, so no xbf, STEP or DXF; nor is a mesh file written from one
-of its own kind. An xbf is written from a STEP (read into a document first); an xbf is
-never written from another, which already is the document. A GLB carries every configuration sequence the document defines as a glTF
+nothing else: there is no B-rep in it, so no xbf, STEP, DXF or MJCF (a robot description's masses
+are its solids'); nor is a mesh file written from one of its own kind. An xbf is written from a STEP
+(read into a document first); an xbf is never written from another, which already is the document. A GLB carries every configuration sequence the document defines as a glTF
 animation of the same name, baked by forward kinematics (``export/motion.py``), and every
 ``animation()`` its code made (``export/animation.py``), from a build's tree or from the record of
 them the xbf carries, so a GLB exported from the xbf is the build's own. STEP, STL and 3MF ignore both. A
-DXF is drawn from a planar document alone (``export/dxf.py``): a 3D one is refused.
+DXF is drawn from a planar document alone (``export/dxf.py``): a 3D one is refused. An MJCF
+(``.xml``, ``.mjcf``) is the document's robot description (``describe``, ``description.py``) as MuJoCo
+reads one, its meshes binary STLs in an ``assets`` folder beside it (``export/mjcf.py``); describing
+loads the kernel, so it happens in the writer alone.
 
 Every file is written to a temporary file beside its target and moved over it; a DXF only
-when its bytes change.
+when its bytes change, and an MJCF and each of its meshes alike (its writer stages them itself).
 
 Importing this package imports no kernel: a kind's writer loads on its first use.
 """
@@ -81,12 +84,14 @@ KINDS: dict[str, Kind] = {
     "threemf": Kind("threemf", (".3mf",), "cad.engine.export.threemf:write"),
     # A drawing replaces its file itself, and only when its bytes change.
     "dxf": Kind("dxf", (".dxf",), "cad.engine.export.dxf:write", atomic=False),
+    # A MuJoCo model and its mesh folder, staged and moved into place by its writer.
+    "mjcf": Kind("mjcf", (".xml", ".mjcf"), "cad.engine.export.mjcf:write", atomic=False),
 }
 # What a source file is read as: a document, or a mesh file's triangles.
 SOURCES = (".xbf", ".step", ".stp")
 MESHES = (".glb", ".stl", ".3mf")
 # A kind's name in a sentence.
-LABELS = {"xbf": "xbf", "step": "STEP", "glb": "GLB", "stl": "STL", "threemf": "3MF", "dxf": "DXF"}
+LABELS = {"xbf": "xbf", "step": "STEP", "glb": "GLB", "stl": "STL", "threemf": "3MF", "dxf": "DXF", "mjcf": "MJCF"}
 # The date of every entry of a zip the package writes (a 3MF): a file is a function of
 # what it holds, never of the clock it was written by (zipfile stamps each entry with the time).
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
@@ -98,14 +103,14 @@ MIN_TOLERANCE = 0.001
 
 def refused(source: Any, destination: Any) -> str | None:
     """Why the file at ``source`` (a path) is never translated to ``destination``, by their
-    suffixes alone, or None: a mesh holds no B-rep, so no xbf, STEP or DXF is made from one, and
+    suffixes alone, or None: a mesh holds no B-rep, so no xbf, STEP, DXF or MJCF is made from one, and
     a mesh file is not written from one of its own kind."""
     source, kind = Path(source), kind_of(destination)
     if source.suffix.lower() == ".xbf" and kind == "xbf" and source.resolve() == Path(destination).resolve():
         return "export to a different XBF path; the original document is preserved"
     if source.suffix.lower() not in MESHES:
         return None
-    if kind in ("xbf", "step", "dxf"):
+    if kind in ("xbf", "step", "dxf", "mjcf"):
         return f"{source.name} is a mesh: it has no B-rep, and no {LABELS[kind]} export is made from one"
     if kind == kind_of(source):
         article = "an" if kind == "stl" else "a"
@@ -332,6 +337,18 @@ class Source:
             material = _material(prototype.get("material"))
             if material is not None:
                 made.material = material
+            # What the part declares for a simulator travels with it (``declarations``): its collision as
+            # the word, each frame as the Location the model gave, read back from its 16 floats.
+            if prototype.get("collision") is not None:
+                made.__dict__["_collision"] = prototype["collision"]
+            if prototype.get("frames"):
+                frames = {}
+                for frame_name, values in prototype["frames"].items():
+                    rows = matrix_of(values)
+                    trsf = gp_Trsf()
+                    trsf.SetValues(*(float(value) for value in rows[:3, :].reshape(-1)))
+                    frames[frame_name] = Location(TopLoc_Location(trsf))
+                made.__dict__["_frames"] = frames
             # A part stands where its instance does: at its own placement in its assembly, unless the
             # document places it elsewhere (a posed structure), where it stands in its assembly's frame.
             world = matrix_of(instance["matrix"])

@@ -3822,6 +3822,10 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get(CONFIGURATIONS) or {}, state),
         _normalize(state_dict.get(COUPLINGS) or {}, state),
         _normalize(state_dict.get(ANIMATIONS) or {}, state),
+        # What a part declares for a simulator (``declarations``): a hit hands back the attributes the
+        # first run's result held, so they are its input, as its material is.
+        state_dict.get("_collision"),
+        _normalize(state_dict.get("_frames") or {}, state),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
     return _intern((placed, attrs, children))

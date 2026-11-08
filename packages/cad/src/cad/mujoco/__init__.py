@@ -8,13 +8,17 @@ MuJoCo's own compiler and says what it refused, in its words, as findings (``cad
 the standard library alone: nothing here is needed to open one. ``cad run mujoco-studio --model FILE`` shows
 the person a model in Studio's web viewer (``_command``: the environment's own ``mujoco-studio``).
 
+What it does for every document: ``spec`` makes one a ``mujoco.MjSpec`` (``_spec``): a model call's
+handle, a build123d shape, a STEP or an xbf described as a robot and written as the engine's MJCF
+export writes it (``cad.engine.export.mjcf``), for a scene to attach; an MJCF path read as it is.
+
 Everything loads on first use: ``import cad.mujoco`` imports no mujoco. A helper called where the
 extra is missing says so by name (``cad[mujoco]``), as every integration's does.
 """
 
 from __future__ import annotations
 
-__all__ = ["compile_findings", "compile_model"]
+__all__ = ["compile_findings", "compile_model", "spec"]
 
 
 def compile_model(path):
@@ -33,3 +37,14 @@ def compile_findings(path, *, mode="auto"):
     from cad.mujoco._compile import compile_findings as _findings
 
     return _findings(path, mode=mode)
+
+
+def spec(thing, *, assets=None, tolerance=None):
+    """``thing`` -- a model call's handle, a build123d shape, a ``.step``/``.xbf`` path, or an MJCF path read as
+    it is -- as a ``mujoco.MjSpec`` for a scene to attach (``scene.attach(spec(arm()), prefix="arm/",
+    frame=...)``). Its meshes are written where MuJoCo will read them when the scene compiles: ``assets``, a
+    folder relative to the working directory where the scene is saved, else a folder of the engine's cache named
+    by what it holds (``cad.mujoco._spec``). ``tolerance`` meshes them to within it, in mm."""
+    from cad.mujoco._spec import spec as _spec
+
+    return _spec(thing, assets=assets, tolerance=tolerance)
