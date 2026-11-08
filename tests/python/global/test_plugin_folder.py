@@ -45,9 +45,9 @@ plugin_branch = _load("plugin_folder_plugin_branch", REPO_ROOT / "scripts" / "re
 wheel_contents = _load("plugin_folder_wheel_contents", REPO_ROOT / "scripts" / "release" / "wheel_contents.py")
 
 VERSION = "9.9.9"
-# The file each host's CAD server line is in, and the channel the installer always told it.
-CHANNELS = {"claude.mcp.json": "claude-github", "codex.mcp.json": "codex-github", "cursor.mcp.json": "cursor-github",
-            "gemini-extension.json": "gemini-github", "mcp.json": "agent-plugins"}
+# The file each host's CAD server line is in, and the channel it is told: the install command's, never GitHub's.
+CHANNELS = {"claude.mcp.json": "claude-install", "codex.mcp.json": "codex-install", "cursor.mcp.json": "cursor-install",
+            "gemini-extension.json": "gemini-install", "mcp.json": "agent-plugins"}
 
 
 def _files(folder: Path) -> dict[str, Path]:

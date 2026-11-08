@@ -228,6 +228,8 @@ export default {
   "file.fileExplorer": "文件资源管理器",
   "file.fileManager": "文件管理器",
   "file.sourceMissing": "源文件已被移动或删除。",
+  "file.kicadBoardTooNew": "{app} 无法打开此电路板：它由更新版本的 KiCad 保存。",
+  "file.kicadSchematicTooNew": "{app} 无法打开此原理图：它由更新版本的 KiCad 保存。",
   "file.defaultApp": "默认应用",
 
   "menu.backToHome": "返回主页",
@@ -769,7 +771,6 @@ export default {
   "selection.padOf": "{part} 的焊盘",
   "selection.pinOf": "{part} 的引脚",
   "selection.connectedTo": "连接到 {name}",
-  "view.home": "主视图",
   "zoom.current": "缩放 {percent}",
   "zoom.in": "放大",
   "zoom.out": "缩小",

@@ -23,7 +23,8 @@ export type OpenInEntry = { action: EntryAction | "app"; label: string; enabled:
 /**
  * The navbar's Open in: Browser and the file manager by its name (Finder, File Explorer, File manager), each where the
  * host can do it; then, from the host's answer (`files`), the source's apps, each present export's apps as "App (file)",
- * and Default app. What opens the source is disabled, with its reason, while it was moved or deleted.
+ * and Default app. What opens the source is disabled, with its reason, while it was moved or deleted; an app that
+ * refuses its file (`refuses`: a KiCad older than the file's format) is disabled, saying so.
  */
 export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
   state?: { sourceMissing?: boolean; files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];

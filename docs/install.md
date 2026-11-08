@@ -29,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.0 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.1 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -49,7 +49,8 @@ checksum. It:
    Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
    `cad-launcher`), as the CAD server does when it starts.
 7. Installs no CAD kernel: the environment a model runs in, the release with its CAD
-   kernel (OCP, build123d and what they need, about 220 MB the first time), is made on
+   kernel (OCP, build123d and what they need: about 240 MB to download, about 620 MB on
+   disk), is made on
    first need -- the first model, or the first view that needs the kernel -- in
    text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
    you run makes none either; an automatic update makes its release's before it restarts
@@ -99,6 +100,18 @@ Asking for it is the yes: the install command passes `--yes` to `cad uninstall`.
 anything (`Take text-to-cad out as planned? (y/N)`); where nothing can ask (a script,
 an agent), it changes nothing without `--yes`, and says the command with it.
 `cad delete`, `cad doctor --prune` and `cad server --rotate-token` ask the same way.
+
+Without `--purge`, `cad uninstall` leaves these behind:
+
+- In the state folder (`~/Library/Application Support/cad` on macOS, `~/.local/state/cad`
+  on Linux, `%USERPROFILE%\.local\state\cad` on Windows): `settings.json`, `versions.json`,
+  the lock files (`*.lock`), an empty `installations` folder, and the documents' records and
+  Recents (`documents`, `recents`) if you have any.
+- The cache folder, `~/.cache/cad` (`%USERPROFILE%\.cache\cad` on Windows): the environments
+  models ran in, the documents as last built, and compiled bytecode.
+
+`--purge` removes both folders. Neither touches uv or what uv keeps in its own cache.
+
 `--version <release>` installs that release instead of the latest; a release from
 before the install command has no `cad setup` to run. To read the script before it
 runs, download it first, then run it:
@@ -126,7 +139,7 @@ another release. Each app takes it the way it takes a local plugin:
 | App | What it gets | After an update |
 | --- | --- | --- |
 | Claude Code | the folder added as a local catalog, `text-to-cad`, and its plugin installed, `text-to-cad@text-to-cad`; Claude Code reads the folder in place. A copy from claude.ai's directory is uninstalled first (`claude plugin uninstall`); one an administrator manages, or claude.ai syncs, is kept, and nothing is added beside it | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
-| Codex | the same catalog and plugin; Codex copies the plugin when it is added. A copy from Codex's plugin directory is removed first (`codex plugin remove`), its catalog kept | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
+| Codex | the same catalog and plugin; Codex copies the plugin when it is added. On a Mac, ChatGPT.app bundles Codex's command (`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`), so with that app installed Codex counts as present even with no `codex` command; with a `codex` command too (npm's, say), the install command uses the newer of the two. A copy from Codex's plugin directory is removed first (`codex plugin remove`), its catalog kept | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
 | Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad`. A copy from the Cursor Marketplace is kept, since Cursor has no command to uninstall it, and without Claude Code nothing is added beside it: uninstall it in Cursor, then run the install command again | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's; without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
@@ -215,7 +228,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.0", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.1", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -442,9 +455,8 @@ new one not start, and older ones go at the next update. A release whose update 
 and went back is removed once the release before is running again (it is still not tried
 again by itself for a day), and `cad doctor --prune` removes any release folder but the
 current one and the one before, once you say yes to the list it prints (`--yes` where it
-cannot ask). `cad doctor` says
-which releases are there, which one is current, the release the server runs, the
-plugin folder's, and where each app's plugin comes from and its release.
+cannot ask). `cad doctor` lists them
+([Checking what your computer runs](#checking-what-your-computer-runs)).
 
 Copies from a plugin directory or the Cursor Marketplace are not told of a release
 from the feed, since their store updates their plugin. Once the store has moved an
@@ -471,6 +483,19 @@ A CAD project written for cadgen 0.7 needs porting to 0.8:
 [the migration guide](migrations/migrating-0.7-to-0.8.md) takes one across, step by
 step, and an agent with the CAD skill can follow it.
 
+## Checking what your computer runs
+
+Run `cad doctor`. It says which releases are there and which one is current
+(`releases 0.10.4 (the release before), 0.11.0 (current)`), the release the server runs,
+the plugin folder's, where each app's plugin comes from and its release, and whether the
+CAD kernel loads.
+
+`cad doctor` starts the CAD server if none is running. `cad doctor --no-server` does not,
+and says whether one runs; `cad doctor --check` only reports, writing and starting nothing.
+
+`cad status` reports only the server, and starts none: the release it runs, its workers and
+what it serves. It does not list the releases on your computer.
+
 ## What a model runs in
 
 The release the install command runs is text-to-cad's server (`cad-server`): the
@@ -483,6 +508,8 @@ imports use (`import build123d`: `cad[build123d]`), on the server's Python, 3.14
 kernel processes run in the `cad[build123d]` one: exports, snapshots and the meshes the viewer
 shows. Nothing is installed in advance: each environment is made the first time something needs
 it, and a first model or view waits for it. A model run so imports what its environment holds.
+`cad[build123d]` is about 240 MB to download, and `cad[kicad]`, made the first time a board needs
+it, about 100 MB. On disk, measured on an Apple silicon Mac, they take about 620 MB and 340 MB.
 
 A model that needs another package names it at the top of its script, in Python's inline
 script metadata, and `cad run` installs it beside cad once, in an environment of its own that
@@ -508,8 +535,8 @@ model has used for a week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.11.0'` (`cad requirement build123d` prints the exact
-requirement; `pip install cad==0.11.0` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.11.1'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.11.1` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says

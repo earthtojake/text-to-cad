@@ -107,6 +107,12 @@ class SidesTest(unittest.TestCase):
                         offenders.append(f"{name}:{line} -> {imported}")
         self.assertEqual(offenders, [])
 
+    def test_nothing_of_ours_imports_the_deprecated_alias(self) -> None:
+        offenders = [f"{name}:{line} -> {imported}" for top in ("cad", SERVER_PACKAGE, SHIM_PACKAGE)
+                     for name, path in modules(top).items() for line, imported in imports(name, path)
+                     if of("cadgen", imported)]
+        self.assertEqual(offenders, [], "it warns where it is imported: only a person's program may")
+
     def test_a_models_process_loads_no_module_of_the_server_or_the_shim(self) -> None:
         code = ("import importlib, json, sys\n"
                 f"for name in {MODEL_ENTRY_POINTS!r}:\n"

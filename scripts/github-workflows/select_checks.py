@@ -210,7 +210,10 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/boards.py",
               f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/cli/run.py",
               f"{LIBRARY_SRC}/_internal/integrations.py",
-              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
+              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py",
+              # The library's project pins kicode, the integration itself. Selection is by path: any
+              # change to the file runs the job.
+              "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
 # A CAM job (cad <type> cam): its operation and orchestration, the freecad integration, its result type, the two
 # types that answer it, and the server's command and the environment it runs a job in. Each also reaches what its
@@ -268,9 +271,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
-    # The Windows installer rehearsal: a workflow of its own, dispatched by hand or by a push to main
-    # that changes the installer; no test reads it and no test.yml job runs it.
-    Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
+    # The installer rehearsals: workflows of their own, dispatched by hand or by a push to main that
+    # changes the installer; a light contract reads their triggers and no test.yml job runs them.
+    Rule((".github/workflows/install-windows.yml", ".github/workflows/install-linux.yml"), NOTHING, final=True),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((

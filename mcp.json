@@ -10,7 +10,7 @@
         "--python",
         "3.14",
         "--from",
-        "cad-mcp==0.11.0",
+        "cad-mcp==0.11.1",
         "cad-mcp"
       ],
       "env": {
