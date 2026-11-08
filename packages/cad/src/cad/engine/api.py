@@ -704,7 +704,21 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
                 "measurements": drawing.parse_measurements(measurements)}
         order = {"op": "export", "source": spec, "destinations": [], "draw": draw,
                  "cwd": str(source.cwd) if isinstance(source, Document) else os.getcwd()}
-        found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        try:
+            found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        except Exception as error:
+            # An engine with no OpenGL context: drawn here, where this process can draw (``snapshot.drawable_here``),
+            # from an xbf of the document the engine exports (an export draws nothing).
+            if not (daemon and "id" in spec and drawing._here_instead(error)):
+                raise
+            import tempfile
+
+            with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
+                saved = Path(folder) / "document.xbf"
+                export(spec["id"], saved, progress=False)
+                found = _snapshot(saved, out, display=display, camera=camera, grid=grid, pose=pose, width=width,
+                                  height=height, size_profile=size_profile, daemon=False, annotation=annotation,
+                                  measurements=measurements, progress=progress).report
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)

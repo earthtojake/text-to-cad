@@ -2011,7 +2011,12 @@ process (`Service.draws`) is started with it, and a model's worker is told it wi
 (`worker.told_display`) -- the daemon's own `DISPLAY` and `XAUTHORITY`, else an Xvfb's the daemon starts
 at the first picture where `Xvfb` is on PATH (a cookie of its own, which only this user can read) and
 stops with it;
-where none can be made the snapshot fails, naming what to install. Nothing is written but OUT.
+where none can be made the engine fails the picture (`snapshot.NO_GL`). The caller then draws it itself where it
+can (`snapshot.drawable_here`: the kernel in its process and a context it makes, on its own `DISPLAY`), saying so
+on stderr -- a held document's picture from an xbf the engine exports to a temporary folder --; a `cad` command
+that carries no kernel but has a display (`xvfb-run cad mjcf snapshot ...`) runs the same snapshot in the
+installation's base from its own process, which draws it so (`cli._drawn_elsewhere`); and with neither the
+snapshot fails, naming what to install. Nothing is written but OUT.
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own

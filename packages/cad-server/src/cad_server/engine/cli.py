@@ -218,7 +218,10 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     except ConnectionError:
         raise  # the engine not reached: its one line, as every verb says it (``answered``)
     except Exception as error:  # noqa: BLE001 - a failed render is the command's answer
-        raise Failed(f"{type(error).__name__}: {error}") from None
+        drawn = _drawn_elsewhere(error, args, prog)
+        if drawn is None:
+            raise Failed(f"{type(error).__name__}: {error}") from None
+        report = drawn["report"]
     if args.json:
         print(json.dumps(report))
     else:
@@ -226,6 +229,56 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
         print(f"wrote {_said.given(report['output'], args.out)} ({report['width']}x{report['height']}, {report['displayMode']}"
               f"{', preview' if report['preview'] else ''}) in {timings['totalMs'] / 1000:.2f}s")
     return 0
+
+
+def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) -> dict[str, Any] | None:
+    """A picture the engine could not draw for want of an OpenGL context (``snapshot.no_gl``: on Linux, a daemon
+    with no X display), drawn instead by the installation's base -- the environment that holds the kernel --
+    run from this process, so on this process's display (``xvfb-run cad mjcf snapshot ...``): the same snapshot,
+    which there, the engine failing it again, is drawn by that process itself (``snapshot.drawable_here``). None
+    where it is no such failure, where this process carries the kernel (the library drew here already, or could
+    not), or where it has no display to lend (Linux with no ``DISPLAY``): the engine's failure stands. What it
+    drew, as ``api.Drawn``'s fields (``path``, ``width``, ``height``, ``report``); its own failure is said as
+    the command's (``Failed``)."""
+    from cad.engine import snapshot
+
+    if not snapshot.no_gl(error) or not _lends_display():
+        return None
+    from cad_server._internal import integration_env
+
+    if integration_env.carries("build123d"):
+        return None
+    from cad.engine.ids import is_id
+    from cad.registry import type_of
+
+    document = str(args.document) if is_id(str(args.document)) else str(Path(args.document).expanduser().resolve())
+    entry = None if is_id(document) else type_of(document)
+    document_type = "model" if is_id(document) else entry.id if entry is not None else None
+    if document_type is None:
+        return None
+    options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "pose": args.pose,
+               "width": args.width, "height": args.height, "size_profile": args.size_profile,
+               "annotation": args.annotation, "measurements": args.measurements}
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    said("the engine could not make an OpenGL context to draw in; drawing the picture with this command's display")
+    try:
+        python = integration_env.environment("build123d", said)
+        # Run in this folder, with this environment: its relative paths and its DISPLAY are the base's process's.
+        return integration_env.call(python, document_type, "snapshot", [document, str(args.out)],
+                                    {name: value for name, value in options.items() if value not in (None, False)})
+    except integration_env.Failed as failed:
+        raise Failed(str(failed)) from None
+
+
+def _lends_display() -> bool:
+    """Whether this process has a display a process it starts draws on: on Linux an X display (``DISPLAY``);
+    elsewhere the session's own, always."""
+    from cad.engine.render.context import platform
+
+    return platform() != "linux" or bool(os.environ.get("DISPLAY"))
 
 
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
@@ -241,7 +294,10 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
     except (snapshot.SnapshotRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:
-        raise Failed(str(error)) from None
+        found = _drawn_elsewhere(error, args, prog)
+        if found is None:
+            raise Failed(str(error)) from None
+        drawn = api.Drawn(Path(found["path"]), found["width"], found["height"], found["report"])
     told_state(args.document, "drawing")
     if args.json:
         print(json.dumps(drawn.report))
