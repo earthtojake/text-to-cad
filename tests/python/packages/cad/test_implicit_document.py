@@ -63,6 +63,79 @@ class DocumentBytesTest(unittest.TestCase):
             self.assertIsNone(implicit.read_extras(path.read_bytes()), "a GLB with no extras of ours")
 
 
+def _cube() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A unit cube welded at its eight corners, two triangles a side wound outward, each corner's normal the
+    mean of its three sides' (as a sample's vertex on a crease carries one)."""
+    positions = np.array([[x, y, z] for x in (0.0, 1.0) for y in (0.0, 1.0) for z in (0.0, 1.0)])
+    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    triangles = np.array([tri for a, b, c, d in quads for tri in ((a, b, c), (a, c, d))])
+    normals = positions - 0.5
+    return positions, normals / np.linalg.norm(normals, axis=1, keepdims=True), triangles
+
+
+def _sphere(rings: int = 16, segments: int = 32) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A welded UV sphere of radius 10, its normals the exact ones: no fold anywhere."""
+    theta = np.linspace(0.0, np.pi, rings + 1)[1:-1]
+    phi = np.linspace(0.0, 2 * np.pi, segments, endpoint=False)
+    t, f = np.meshgrid(theta, phi, indexing="ij")
+    ring = np.stack([np.sin(t) * np.cos(f), np.sin(t) * np.sin(f), np.cos(t)], -1).reshape(-1, 3)
+    unit = np.concatenate([[[0.0, 0.0, 1.0]], ring, [[0.0, 0.0, -1.0]]])
+    at = lambda r, s: 1 + r * segments + s % segments  # noqa: E731
+    triangles = [(0, at(0, s), at(0, s + 1)) for s in range(segments)]
+    for r in range(rings - 2):
+        for s in range(segments):
+            triangles += [(at(r, s), at(r + 1, s), at(r + 1, s + 1)), (at(r, s), at(r + 1, s + 1), at(r, s + 1))]
+    south = len(unit) - 1
+    triangles += [(south, at(rings - 2, s + 1), at(rings - 2, s)) for s in range(segments)]
+    return unit * 10.0, unit, np.array(triangles)
+
+
+def _drawn(positions: np.ndarray, normals: np.ndarray, triangles: np.ndarray) -> tuple:
+    """The document of a sample read back: its mesh's points, normals and triangles."""
+    data, _facts = implicit.document_bytes("part", positions, normals, triangles, closure=None, digest="d" * 32, cell=0.5)
+    mesh = next(iter(implicit.source_of(data, "part").meshes.values()))
+    return (np.asarray(mesh.positions, np.float64), np.asarray(mesh.normals, np.float64),
+            np.asarray(mesh.indices, np.int64).reshape(-1, 3))
+
+
+class FoldTest(unittest.TestCase):
+    """A sample's vertex on a crease carries one normal for both sides; the document has one per side."""
+
+    def test_a_cube_is_written_with_each_corner_once_per_side_shaded_flat(self) -> None:
+        positions, normals, triangles = _cube()
+        points, drawn, faces = _drawn(positions, normals, triangles)
+        self.assertEqual((len(points), len(faces)), (24, 12), "each of the eight corners once per side it meets")
+        a, b, c = (points[faces[:, k]] for k in range(3))
+        planes = np.cross(b - a, c - a)
+        planes /= np.linalg.norm(planes, axis=1, keepdims=True)
+        for corner in range(3):
+            agree = np.degrees(np.arccos(np.clip(np.einsum("ij,ij->i", drawn[faces[:, corner]], planes), -1, 1)))
+            self.assertLess(agree.max(), 1.0, "every corner's normal is its side's plane's")
+        np.testing.assert_allclose(points[faces], positions[triangles], atol=1e-6, err_msg="the same corners at the same points")
+        facts = implicit.facts_of(positions, triangles)
+        self.assertEqual((facts["triangles"], facts["volume"]), (12, 1.0), "the facts are the welded sample's")
+
+    def test_a_smooth_sample_keeps_its_vertices_and_the_fields_normals(self) -> None:
+        positions, normals, triangles = _sphere()
+        points, drawn, faces = _drawn(positions, normals, triangles)
+        self.assertEqual(len(points), len(positions))
+        np.testing.assert_array_equal(faces, triangles)
+        np.testing.assert_allclose(drawn, normals, atol=1e-6)
+
+    def test_the_split_reindexes_only_the_folds_vertices(self) -> None:
+        positions, normals, triangles = _cube()
+        split_positions, split_normals, split_triangles = implicit.split_folds(positions, normals, triangles)
+        self.assertEqual(split_positions.shape, (24, 3))
+        np.testing.assert_array_equal(split_positions[:8], positions, "the sample's vertices keep their indices")
+        np.testing.assert_array_equal(split_positions[split_triangles], positions[triangles])
+        _edges, uses = np.unique(np.sort(np.concatenate([split_triangles[:, [0, 1]], split_triangles[:, [1, 2]],
+                                                         split_triangles[:, [2, 0]]]), axis=1), axis=0, return_counts=True)
+        self.assertEqual((int((uses == 2).sum()), int((uses == 1).sum())), (6, 24),
+                         "each side's diagonal stays shared, each fold's edge is now one per side")
+        # A fold within the crease is no fold: the cube's sides part by 90 degrees.
+        self.assertEqual(len(implicit.split_folds(positions, normals, triangles, crease=95.0)[0]), 8)
+
+
 class DeclarationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="implicit-decl-"))

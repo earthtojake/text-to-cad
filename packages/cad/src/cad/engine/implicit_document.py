@@ -9,6 +9,9 @@ on its main label in the glTF's ``asset.extras`` under ``cad`` -- the writer, th
 xbf is (``build._previous``), a rebuild to the same field keeps its bytes, and the run line's delta reads
 its facts. The daemon holds it as a document with no file of the author's: ``documents/<id>/document.glb``
 in its cache, served to the page's mesh view, and every verb of it the mesh file's (``cad glb ...``).
+Its normals are split at folds (``split_folds``): a sample's vertex on a crease carries one normal, the
+mean of both sides', which shading would blend across the crease, so a vertex there is written once per
+smooth side, each with its side's normal.
 
 Nothing here imports cadjoint: the engine knows a sample's arrays, never the field.
 """
@@ -21,7 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-__all__ = ["EXTRAS", "FORMAT", "document_bytes", "extras_of", "facts_of", "is_glb", "read_extras", "source_of"]
+__all__ = ["EXTRAS", "FORMAT", "document_bytes", "extras_of", "facts_of", "is_glb", "read_extras", "source_of",
+           "split_folds"]
 
 #: The document's format, as the daemon's records, the cache and the worker's frames name it.
 FORMAT = "glb"
@@ -61,6 +65,100 @@ def facts_of(positions: Any, triangles: Any) -> dict[str, Any]:
             "triangles": int(len(faces)), "volume": round(volume, 3)}
 
 
+def _roots(parent: Any, start: Any, end: Any) -> Any:
+    """Each item's root under the joins ``start[i]``--``end[i]``: a union-find of numpy's alone (as the
+    sampling's ``_bodies``), each round hooking every root onto the lowest root a join reaches."""
+    import numpy as np
+
+    while True:
+        a, b = parent[start], parent[end]
+        apart = a != b
+        if not apart.any():
+            return parent
+        low, high = np.minimum(a[apart], b[apart]), np.maximum(a[apart], b[apart])
+        np.minimum.at(parent, high, low)
+        while True:
+            jumped = parent[parent]
+            if (jumped == parent).all():
+                break
+            parent = jumped
+
+
+def split_folds(positions: Any, normals: Any, triangles: Any, *, crease: float | None = None) -> tuple[Any, Any, Any]:
+    """The sample with a vertex for each smooth side of a fold: what the document's shading takes.
+
+    The triangles at a vertex fall into sides: two that share an edge through it are on one side when their
+    normals part by no more than ``crease`` degrees (the viewer's, ``formats.buffer.CREASE``), and a side
+    reaches as far round the vertex as such edges join it. A vertex of one side keeps its index and the
+    field's normal, closer than any average of facets on a smooth surface. A vertex where a fold divides its
+    triangles (two sides or more) is one vertex per side: the first keeps its index, the rest follow the
+    sample's vertices in order, each side's triangles name its own, and its normal is the mean of the side's
+    triangles' normals weighted by their areas: the field's one normal there is a mean of both sides (a
+    cadjoint vertex's is the mean of the Hermite normals its cell saw), true of neither. With no ``normals``,
+    every vertex takes its side's mean. A triangle of no area folds nowhere. Returns ``(positions, normals,
+    triangles)``: as many triangles, the same corners at the same points; only a fold's vertices split, so
+    the mesh is welded everywhere else."""
+    import math
+
+    import numpy as np
+
+    from cad.engine.formats.buffer import CREASE
+
+    positions = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
+    faces = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+    count = len(positions)
+    if not len(faces):
+        return positions, normals, faces
+    limit = math.cos(math.radians(CREASE if crease is None else crease))
+    a, b, c = (positions[faces[:, at]] for at in range(3))
+    weighted = np.cross(b - a, c - a)  # twice each triangle's area along its normal
+    length = np.linalg.norm(weighted, axis=1, keepdims=True)
+    flat = length[:, 0] <= 1e-12 * max(1.0, float(np.abs(positions).max()) ** 2)
+    unit = np.where(flat[:, None], 0.0, weighted / np.where(flat[:, None], 1.0, length))
+    # Corner ``3 t + k`` is triangle t's k-th; the half-edge it starts runs to the next corner's vertex.
+    vertex = faces.reshape(-1)
+    corners = np.arange(len(vertex))
+    following = corners - corners % 3 + (corners + 1) % 3
+    end = vertex[following]
+    low, high = np.minimum(vertex, end), np.maximum(vertex, end)
+    order = np.lexsort((high, low))
+    first = np.flatnonzero(np.r_[True, (low[order][1:] != low[order][:-1]) | (high[order][1:] != high[order][:-1])])
+    sizes = np.diff(np.r_[first, len(order)])
+    one, two = order[first[sizes == 2]], order[first[sizes == 2] + 1]
+    owner_one, owner_two = one // 3, two // 3
+    smooth = (np.einsum("ij,ij->i", unit[owner_one], unit[owner_two]) >= limit) | flat[owner_one] | flat[owner_two]
+    one, two = one[smooth], two[smooth]
+    # An edge the two triangles run opposite ways (a welded mesh's): one's start is two's end.
+    opposite = vertex[one] == end[two]
+    near = np.where(opposite, following[two], two)
+    far = np.where(opposite, two, following[two])
+    root = _roots(corners.copy(), np.r_[one, following[one]], np.r_[near, far])
+    sides, side_of = np.unique(root, return_inverse=True)
+    side_vertex = vertex[sides]
+    per_vertex = np.bincount(side_vertex, minlength=count)
+    if not (per_vertex > 1).any():
+        return positions, normals, faces
+    summed = np.zeros((len(sides), 3))
+    np.add.at(summed, side_of, weighted[corners // 3])
+    size = np.linalg.norm(summed, axis=1, keepdims=True)
+    mean = np.where(size > 0, summed / np.where(size > 0, size, 1.0), 0.0)
+    # Each vertex's side of its lowest corner keeps the vertex's index; every other side of a divided
+    # vertex is a new vertex after the sample's.
+    by_vertex = np.lexsort((sides, side_vertex))
+    leading = np.zeros(len(sides), dtype=bool)
+    leading[by_vertex[np.r_[True, side_vertex[by_vertex][1:] != side_vertex[by_vertex][:-1]]]] = True
+    index = side_vertex.copy()
+    extra = np.flatnonzero(~leading)
+    index[extra] = count + np.arange(len(extra))
+    split_positions = np.concatenate([positions, positions[side_vertex[extra]]])
+    given = None if normals is None else np.asarray(normals, dtype=np.float64).reshape(-1, 3)
+    kept = mean if given is None else np.where((per_vertex[side_vertex] > 1)[:, None], mean, given[side_vertex])
+    split_normals = np.zeros_like(split_positions)
+    split_normals[:count] = 0.0 if given is None else given
+    split_normals[index] = kept
+    return split_positions, split_normals, index[side_of].reshape(-1, 3)
+
+
 def _source(name: str, positions: Any, normals: Any, triangles: Any) -> Any:
     """The sample as an ``export.Source`` of one part, placed at the origin: what the engine's mesh writers take."""
     import numpy as np
@@ -84,7 +182,7 @@ def document_bytes(name: str, positions: Any, normals: Any, triangles: Any, *, c
     from cad.engine.export import translate
 
     facts = facts_of(positions, triangles)
-    source = _source(name, positions, normals, triangles)
+    source = _source(name, *split_folds(positions, normals, triangles))
     with tempfile.TemporaryDirectory(prefix="cad-implicit-") as folder:
         path = Path(folder) / "document.glb"
         translate(source, FORMAT, path)
