@@ -45,7 +45,7 @@ PROTOCOL = 1
 # The first release whose worker measures a manufacturing check (an ``export`` carrying ``check``) and
 # answers ``cancel``: additions to protocol 1, which the server sends only to a worker of this release or
 # later (``answers_checks``), never to an older one, which would answer such an export with nothing.
-CHECKS_SINCE = "0.11.3"
+CHECKS_SINCE = "0.12.0"
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"

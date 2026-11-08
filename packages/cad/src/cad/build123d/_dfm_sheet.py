@@ -1658,6 +1658,7 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
                 "location": item["location"], "xyz": item["xyz"]})
     pairs: dict[tuple[int, int], dict] = {}
     for i, first in enumerate(analysis.holes):
+        checkpoint()
         nearest = None
         for j, second in enumerate(analysis.holes):
             if i == j:
