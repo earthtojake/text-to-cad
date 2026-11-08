@@ -4,9 +4,10 @@ the engine's checks process, nothing exported or read again (``worker._check``, 
 equals the one the same document gets read from a file in a process of its own, for every process, with no
 process given and ranking candidates; the same check of an unchanged document is the engine's kept result
 (``checks``), measuring nothing; an edit, other options or another file's bytes -- even ones of the same size
-and time -- are measured again; a build of the model's script cancels a check running in its worker or
-waiting for it, and a cancel landing as a check ends hangs nothing; a worker killed in a check says so. On
-an engine, a state and a cache folder of this file's own."""
+and time -- are measured again; a check outlives its caller, and the same check asked while it runs waits for it;
+a build of the model's script cancels a check running in its worker or waiting for it, and a cancel landing as a
+check ends hangs nothing; a worker killed in a check says so. On an engine, a state and a cache folder of this
+file's own."""
 
 from __future__ import annotations
 
@@ -359,6 +360,50 @@ class ReleaseTest(unittest.TestCase):
         self.assertNotIn("checked", done)
         self.assertEqual(_counts()["measured"], before["measured"])
 
+    def test_a_result_is_kept_under_no_version_a_build_landed_on(self) -> None:
+        """A build landing between the version read and the document's bytes: the bytes are the new version's and
+        the version read the old one's, so the result is answered and kept under neither."""
+        from cad.engine.previous import version
+        from cad_server.engine.checks import Checks
+        from cad_server.engine.daemon import Daemon
+
+        records = {"id": {"version": "v1"}}
+
+        def document(_ident: str) -> tuple[dict[str, Any], bytes]:
+            records["id"]["version"] = "v2"
+            return {"document": "id", "name": "plate"}, b"bytes"
+
+        def call(_routed: Any, _order: Any, answered: Any, _payload: bytes) -> None:
+            answered({"done": {"checked": {"measured": {"report": {}}, "release": version()}}})
+
+        fake = SimpleNamespace(models=SimpleNamespace(adopt=lambda _ident: None, lock=threading.Lock(), records=records),
+                               checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(), document=document,
+                               _call=call)
+        fake._version = lambda ident: Daemon._version(fake, ident)
+        said: list[dict[str, Any]] = []
+        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version()},
+                     said.append)
+        self.assertIn("checked", said[-1]["done"])
+        self.assertEqual((fake.checks.status()["measured"], fake.checks.status()["held"]), (1, 0))
+        self.assertEqual((fake.asked, fake.running), ({}, {}))
+
+    def test_a_build_says_it_is_asking_before_the_worker_answers(self) -> None:
+        from cad_server.engine.daemon import Daemon, _Asked
+
+        asked = _Asked("t", "/m/parts.py", None)
+        asked.worker = SimpleNamespace(label="/m/parts.py")
+        order: list[str] = []
+
+        def stop(check: Any) -> bool:
+            order.append("stop")
+            check.finished.set()
+            return True
+
+        fake = SimpleNamespace(asked={"t": asked}, asked_lock=threading.Lock(), _stop=stop)
+        Daemon._cancel_check(fake, "/m/parts.py", None, lambda message: order.append(message["log"]))
+        self.assertEqual(order[1], "stop")
+        self.assertIn("asking the manufacturing check", order[0])
+
     def test_the_process_lost_says_what_it_held(self) -> None:
         from cad_server.engine.daemon import CHECKS, _check_lost
 
@@ -469,44 +514,85 @@ class WorkerTest(unittest.TestCase):
                 self.assertNotIn("cancelled the manufacturing check", fixture.said)
             hold.unlink()
 
-    def test_a_checks_caller_going_cancels_it_and_costs_a_warm_worker_nothing(self) -> None:
-        """Its caller killed: a model's check stops at a checkpoint in its warm worker, which lives on; a file's
-        stops the checks process outright, and the next check starts a fresh one."""
+    def caller(self, call: str, env: dict[str, str], reached: Path) -> tuple[subprocess.Popen, int]:
+        """A process that calls a check, once its check says it is measuring: the process and the pid measuring."""
+        reached.unlink(missing_ok=True)
+        process = subprocess.Popen([sys.executable, "-c", f"import cad; {call}"], env=env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+        _until(self, lambda: reached.exists() and reached.read_text(encoding="utf-8"), "the check reached its seam")
+        return process, int(reached.read_text(encoding="utf-8"))
+
+    def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
+        """Its caller killed (a shell's time limit), a model's check and a file's run to their end and keep their
+        results: the same call again measures nothing. A file's check waiting behind another says so."""
         import build123d as bd
 
         import cad
         from cad.engine import api
 
-        def caller(call: str, env: dict[str, str], reached: Path) -> tuple[subprocess.Popen, int]:
-            reached.unlink(missing_ok=True)
-            process = subprocess.Popen([sys.executable, "-c", f"import cad; {call}"], env=env,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.addCleanup(process.wait)
-            self.addCleanup(process.kill)
-            _until(self, lambda: reached.exists() and reached.read_text(encoding="utf-8"), "the check reached its seam")
-            return process, int(reached.read_text(encoding="utf-8"))
-
-        api.stop()  # no checks process stands: the next starts with the seam of the caller that asks for it
+        api.stop()  # no checks process stands: the next starts with the seam of the engine this file's builds start
+        self.addCleanup(api.stop)  # the seam goes with its engine's processes
         fixture, hold = self.waiting()
         reached = Path(f"{hold}.reached")
-        process, worker = caller(f"cad.model.dfm({fixture.ids[0]!r}, process='cnc')", fixture.env, reached)
+        process, worker = self.caller(f"cad.model.dfm({fixture.ids[0]!r}, process='cnc')", fixture.env, reached)
         process.kill()
-        _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone stops")
+        process.wait()
+        before = _counts()
+        hold.write_text("", encoding="utf-8")
+        _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone ends")
+        self.assertEqual(_counts()["measured"], before["measured"] + 1, "it ran to its end")
+        held = cad.model.dfm(fixture.ids[0], process="cnc")
+        self.assertEqual(_counts()["measured"], before["measured"] + 1, "and the next call reuses its result")
+        self.assertEqual(_counts()["reused"], before["reused"] + 1)
+        self.assertEqual(held.measurements["process"], "cnc")
         self.assertIn(worker, [row["pid"] for row in api.status()["workers"] if row["alive"]], "the warm worker lives on")
 
+        hold.unlink()
         step = fixture.folder / "part.step"
         bd.export_step(bd.Box(30, 20, 6), str(step))
-        process, checks = caller(f"cad.step.dfm({str(step)!r}, process='printing')", fixture.env, reached)
-        self.assertNotEqual(checks, worker)
+        process, checks = self.caller(f"cad.step.dfm({str(step)!r}, process='printing')", fixture.env, reached)
         self.assertEqual(_counts()["process"]["pid"], checks)
+        behind = subprocess.Popen([sys.executable, "-c", f"import cad; cad.step.dfm({str(step)!r}, process='sheet')"],
+                                  env=fixture.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(behind.stderr.close)  # last: once it is gone, its reader is done
+        self.addCleanup(behind.wait)
+        self.addCleanup(behind.kill)
+        said: list[str] = []
+        reader = threading.Thread(target=lambda: said.extend(behind.stderr), daemon=True)  # its stderr as it comes
+        reader.start()
+        _until(self, lambda: any("waiting for another manufacturing check" in line for line in said),
+               "the other check says it waits")
         process.kill()
-        _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone stops")
-        _until(self, lambda: (_counts()["process"] or {}).get("pid") != checks, "the checks process is stopped")
-        self.assertIn(worker, [row["pid"] for row in api.status()["workers"] if row["alive"]], "and no warm worker with it")
+        process.wait()
+        before = _counts()
         hold.write_text("", encoding="utf-8")
-        self.assertAlmostEqual(cad.step.dfm(step, process="printing").measurements["bodies"][0]["volume_mm3"], 3600.0,
-                               delta=1e-6)
-        api.stop()  # the seam goes with its engine's processes
+        self.assertEqual(behind.wait(JOIN_SECONDS), 0, said)
+        reader.join(JOIN_SECONDS)
+        _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone ends")
+        self.assertEqual(_counts()["measured"], before["measured"] + 2)
+        self.assertEqual(_counts()["process"]["pid"], checks, "no one stopped the checks process")
+        cad.step.dfm(step, process="printing")
+        self.assertEqual(_counts()["measured"], before["measured"] + 2, "the next call reuses its result")
+
+    def test_the_same_check_asked_while_it_runs_waits_for_it_and_measures_once(self) -> None:
+        fixture, hold = self.waiting()
+        before = _counts()
+        first, _pid = self.started(fixture.ids[0], hold, "7")
+        code = (f"import cad, dataclasses, json; found = cad.model.dfm({fixture.ids[0]!r}, process='cnc', tools='7'); "
+                "print(json.dumps(dataclasses.asdict(found), default=str))")
+        second = subprocess.Popen([sys.executable, "-c", code], env=fixture.env, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True)
+        self.addCleanup(second.stdout.close)
+        self.addCleanup(second.stderr.close)
+        self.addCleanup(second.wait)
+        _until(self, lambda: _counts()["waited"] == before["waited"] + 1, "the second waits for the first")
+        hold.write_text("", encoding="utf-8")
+        out, said = second.communicate(timeout=JOIN_SECONDS)
+        self.assertIn("waiting for the same manufacturing check", said)
+        self.assertEqual(json.loads(out), _plain(first.result(self)))
+        self.assertEqual(_counts()["measured"], before["measured"] + 1, "measured once")
 
     def test_a_build_behind_a_build_is_not_silent_and_a_check_queued_there_goes_at_once(self) -> None:
         """A check waiting for a worker a build holds: the next build of the script cancels it and it answers at
@@ -573,6 +659,7 @@ class WorkerTest(unittest.TestCase):
         self.assertIn("it is retired, and the next check starts a fresh one", said.getvalue())
         self.assertEqual(first.measurements["process"], "printing")
         self.assertEqual(second.measurements["process"], "sheet")
+        self.assertIn("checks", [row.get("process") for row in api.status()["retired"]], "listed as what it is")
 
     def test_a_worker_killed_in_a_check_says_so_and_the_next_build_starts_another(self) -> None:
         from cad.engine.api import EngineError

@@ -54,6 +54,7 @@ class Checks:
         self.measured = 0
         self.reused = 0
         self.read = 0
+        self.waited = 0
 
     @staticmethod
     def key(check: dict[str, Any], release: str) -> str:
@@ -99,6 +100,11 @@ class Checks:
             self.measured += 1
             self.read += int(read)
 
+    def attached(self) -> None:
+        """One check that waited for the same one running, measuring nothing."""
+        with self.lock:
+            self.waited += 1
+
     def forget(self, document: str) -> None:
         """Every result of ``document`` dropped (it was deleted)."""
         with self.lock:
@@ -107,4 +113,4 @@ class Checks:
     def status(self) -> dict[str, Any]:
         with self.lock:
             return {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,
-                    "read": self.read}
+                    "read": self.read, "waited": self.waited}

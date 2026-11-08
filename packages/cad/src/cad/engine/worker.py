@@ -36,10 +36,10 @@ held (``_check``: the integration ``cad.registry.manufacturing_check`` names), a
 running stops at its next checkpoint (the integration's ``checkpoint``: between parts, families, faces and
 rays, so after whatever kernel call it is in, the whole part's mesh the longest), one still queued is
 dropped before it starts, and either is answered as cancelled (``cancelled``). The daemon asks it when a
-build of the worker's script arrives, or the check's caller goes. A process over its memory cap after a check
-is retired as after a build, and the check's answer says so (``retired``). The daemon sends ``check`` and
-``cancel`` only to a process of the library of the caller's release, and never to one before
-``contract.CHECKS_SINCE``; it checks another worker's document from the bytes its ``result`` gives.
+build of the worker's script arrives, and only then: a check outlives its caller, as a build does. A process
+over its memory cap after a check is retired as after a build, and the check's answer says so (``retired``). The
+daemon sends ``check`` and ``cancel`` only to a process of the library of the caller's release, and never to one
+before ``contract.CHECKS_SINCE``; it checks another worker's document from the bytes its ``result`` gives.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
@@ -524,7 +524,7 @@ def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
 
 # A cancelled check's answer, which its caller raises (``api.check``).
 CANCELLED = ("the manufacturing check was cancelled before it finished: its document is being replaced by a "
-             "build of its script, or its caller went; check it again")
+             "build of its script; check it again once the build is done")
 
 # Cancelling (``_cancel``): the token of the check this worker is running, and the tokens of checks queued
 # here that were cancelled before they started (a few, the most recent last).

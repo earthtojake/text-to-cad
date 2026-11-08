@@ -643,7 +643,9 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     exported or read again -- a STEP's or an xbf's path, or a document no warm worker holds, in the engine's
     checks process, a file read once while its bytes stay as they were. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its
     options resolved by the caller (``manufacturing.options``). The same check of an unchanged document is
-    answered from the results the engine keeps (``reused``: true), measuring nothing. The answer says the
+    answered from the results the engine keeps (``reused``: true), measuring nothing, and one asked while the
+    same one runs waits for it, which is said on stderr; a check runs to its end even if its caller goes, as a
+    build does, so asking again finds its result. The answer says the
     release whose library measured it (``release``); a worker retired for its memory after the check is said
     on stderr (``retired``). ``Unanswered`` from a server that measured nothing: of a release before checks in
     memory, or of another than this library's, which the engine says before anything is measured.
@@ -668,7 +670,12 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
 
     order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd, "caller": release(),
              "check": {**check, "token": os.urandom(8).hex()}}
-    done = _ask(order, connection=connection)["done"]
+
+    def relay(message: dict[str, Any]) -> None:
+        if message.get("stream") == "waiting":  # what it waits for: the same check running, or a busy process
+            print(message["log"], file=sys.stderr, flush=True)
+
+    done = _ask(order, relay, connection=connection)["done"]
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):
         # Another release's server, or one before the check in memory, answers with no check, having measured nothing.
