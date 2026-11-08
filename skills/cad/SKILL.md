@@ -395,13 +395,16 @@ they supply overrides every rule.
   still reported; never read it as "no findings"). **Exit 0** is not an approval: warnings remain, and
   a rule `not_evaluated` is never a pass. **Exit 2**: the command itself was refused; fix the command,
   not the part.
+- **Count by rule, never by findings**: several failures at one ref are one finding, and a rule shows at
+  most eight refs. The counts are the last line's digest (`FAILED <id>: ... failed: molding.draft_min x10,
+  ...`: errors only) and, for each rule in `measurements.rules.failed`, its outcome's `failures`.
 - Resolve a finding's ref with `cad model inspect "$ID" '<ref>'` or `cad step inspect part.step '<ref>'`.
 - `--candidates` ranks pulls or orientations and judges nothing: check again with the one chosen.
 - **A redesign** gets the same check with the same flags on the new revision: compare
   `measurements.rules.failed` before and after, matching failures by position (`xyz`), since face
   numbers change with an edit; check the exported file the shop takes, never the model alone.
-- For a review, read [references/manufacturing-review.md](references/manufacturing-review.md): the
-  result in full, the report and checking a redesign.
+- For a review, or the result in full beyond these lines (every code and field, the report, a
+  redesign), read [references/manufacturing-review.md](references/manufacturing-review.md).
 
 ## Hand off
 
