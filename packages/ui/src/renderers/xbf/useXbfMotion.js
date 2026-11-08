@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@text-to-cad/core/common/animationClock.js";
-import { xbfMotions, xbfMotionTimeline } from "@text-to-cad/core/lib/xbf/xbfMotion.js";
+} from "@cad/core/common/animationClock.js";
+import { xbfMotions, xbfMotionTimeline } from "@cad/core/lib/xbf/xbfMotion.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
@@ -23,8 +23,8 @@ function motionRows(kinematics) {
 
 /**
  * An engine document's motions (AP242's interpolated configuration sequences, `xbfMotion.js`) as
- * the kit's routine runtime: what the file sidebar's section (`AnimationSection.jsx`, headed
- * "Motion") and Preview's playbar drive, on this renderer's own clock. Each frame is the motion's
+ * the kit's routine runtime: what the playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`,
+ * its words "Motion") drives in the tools view and Preview, on this renderer's own clock. Each frame is the motion's
  * pair values at the clock's time, handed to `pose`, which poses the scene through the page's
  * forward kinematics.
  *

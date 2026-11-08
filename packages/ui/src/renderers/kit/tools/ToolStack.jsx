@@ -1,5 +1,5 @@
 import { createContext, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { normalizeToolStack, toolPanelDefaultHeight } from "./toolStackLayout.js";
 
 /**
@@ -39,7 +39,7 @@ export default function ToolStack({ layout: stored, onLayoutChange, hidden = fal
   useLayoutEffect(() => {
     const element = column.current;
     if (!element) return undefined;
-    const viewer = element.closest("[data-cad-scene-backdrop]");
+    const viewer = element.closest("[data-cad-canvas]");
     const measure = () => setMeasured(current => {
       const next = { stack: element.clientHeight, viewer: Math.round(viewer?.getBoundingClientRect().width || 0) };
       return current.stack === next.stack && current.viewer === next.viewer ? current : next;

@@ -23,7 +23,7 @@ skips such an edge (and fails when none is left); a chamfer fails on it. Shape
 equality compares native handles, so `edge in solid.edges()` is true only for the
 solid's own edge.
 
-A face or edge a person picked is named by a ref: `cadgen inspect` says what it is
+A face or edge a person picked is named by a ref: `cad <type> inspect` says what it is
 and which code made it, and the body picks the same element with build123d's
 selectors ([a picked element in a model's body](inspection-and-validation.md#a-picked-element-in-a-models-body)).
 
@@ -60,7 +60,7 @@ after its material.
 
 ```python
 from bd_materials import metals
-from cadgen import paint
+from cad.build123d import paint
 
 body.material = metals.aluminum()
 body.material.pbr = body.material.pbr.override(roughness=0.35, anisotropy=0.3)
@@ -74,15 +74,18 @@ paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
-with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cadgen inspect` reports kilograms.
-There is no cadgen material class, catalogue or adapter.
+with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
+There is no text-to-cad material class, catalogue or adapter.
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,
 `attenuation_color`, `attenuation_distance`, `clearcoat`, `clearcoat_roughness`,
 `emissive`, `emissive_intensity`, and `opacity`. Base colour floats are sRGB ratios;
 emission and attenuation floats are linear. Hex strings avoid that ambiguity.
-Shape colours and plain paints also accept 0–255 integers and build123d `Color`.
+A shape's colour (`shape.color = ...`, build123d's own setter) takes a hex string (`"#f2f0ea96"`
+with alpha), a colour name, a build123d `Color` or 0–1 sRGB floats `(0.95, 0.94, 0.92, 0.59)`; it
+refuses 0–255 integers with OCCT's `Color out`. A paint (`paint(shape, faces, ...)`) takes those and
+0–255 integers, `(242, 240, 234)` or four with alpha.
 
 XBF keeps native physics and the resolved PBR data; GLB and the viewer retain the
 appearance. STEP keeps name, density and colour. Native texture maps are preserved in
@@ -99,6 +102,9 @@ Use scalar PBR looks for those paths. OCCT snapshots keep their documented appea
 - **Absolute versus relative placement:** `.located(loc)` replaces location;
   `.moved(loc)` and `Location * shape` compose it, so `.located()` after a
   rotation can discard the orientation.
+- **A face's winding sets its extrusion:** `bd.extrude(face, h)` runs along the face's
+  normal, so a `Polygon` whose points run clockwise (seen from +Z) faces -Z and extrudes
+  down. Give the direction (`dir=(0, 0, 1)`) or list the points anticlockwise.
 
 ```python
 # A local box, rotated before placement:
@@ -109,13 +115,13 @@ placed = bd.Location((5, 0, 0)) * rotated  # retains the rotation
 
 In build123d 0.11.1, a moved assembly compound's `intersect()` can traverse
 unmoved `.children` although `.wrapped` carries the placement: extract the placed
-`.solids()` first. `cadgen.geometry.overlap_volume` takes individual solids and
+`.solids()` first. `cad.build123d.overlap_volume` takes individual solids and
 handles placement itself.
 
 ## Kernel pitfalls
 
 - **Build with build123d's constructions** (`bd.Cylinder`, not OCCT's
-  `BRepPrimAPI_MakeCylinder`). The engine keys and names build123d's operations, and
+  `BRepPrimAPI_MakeCylinder`). The server keys and names build123d's operations, and
   of the OCCT makers a model drives itself only the transforms, `BRepBuilderAPI_Copy`,
   `ShapeFix_Shape`, `ShapeUpgrade_UnifySameDomain` and `BRepFilletAPI_MakeFillet`; a
   body built with another cannot be replayed. Where build123d has no construction for
@@ -147,13 +153,13 @@ handles placement itself.
   coincident-face fusion on some densely sampled profiles; a simpler
   representation or an explicitly constructed offset works around it.
 - **Meshes are not B-rep:** a triangulated face (`import_stl`, `Mesher`) cannot go
-  in a document. Read a scan with `read_mesh` and build B-rep from its numbers.
+  in a document. Read a scan with `stl.read` and build B-rep from its numbers.
 
 ## Validity and visual artifacts
 
 Topology validity does not prove positive orientation, the requested shape, or
 suitability for a later Boolean ([inspection](inspection-and-validation.md#geometry-diagnostics)).
 A validity gate inside a model body (a retry ladder that keeps a fillet only when
-the result is sound) uses `shape.is_valid` and `cadgen.geometry.is_sound`; each
+the result is sound) uses `shape.is_valid` and `cad.build123d.is_sound`; each
 check costs kernel time when its body runs. A periodic cylinder or revolved face has
 a seam edge that appears in CAD linework; it is not a crack.

@@ -1,11 +1,11 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Check, Copy, ListPlus, PenLine, X } from "lucide-react";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { Drawer, DrawerContent, DrawerTitle } from "@text-to-cad/ui/primitives/drawer";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
-import { promptReferenceIds } from "@text-to-cad/core/prompt";
+import { Button } from "@cad/ui/primitives/button";
+import { Drawer, DrawerContent, DrawerTitle } from "@cad/ui/primitives/drawer";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { promptReferenceIds } from "@cad/core/prompt";
 import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../../../host/context.js";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { capturePointer } from "../../../../lib/pointerCapture.js";
@@ -15,7 +15,7 @@ import { copiedQuickEdit, createQuickEditContext, pastedLines, quickEditSelectio
 import { insertAtCaret, markSelectedPills, noteText, pasteNodes, selectPillAt } from "./noteEditor.js";
 import ReferenceChips from "./ReferenceChips.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // The sheet's open stop: most of the screen, so the note has room; the box fills it, the note
 // taking what its header and buttons leave. Its handle is the sheet's top 24px.
@@ -69,13 +69,13 @@ export function quickEditReferenceIds(selection) {
  * as long as it is open: the size is the box's own, written to it a frame at a time, so a drag
  * renders nothing, and it goes with the box — the next one opens at the default size.
  *
- * @param {{ resource: import("@text-to-cad/core/prompt").ResourceRef,
- *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
+ * @param {{ resource: import("@cad/core/prompt").ResourceRef,
+ *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   chips?: readonly import("./ReferenceChips.jsx").ReferenceChip[] | null,
  *   annotation?: { present: boolean, clear?: () => void } | null,
- *   prompt?: { views(): { label: string }[], files(views: { label: string }[]): Promise<object> | null,
+ *   prompt?: { views(): { label: string }[], files(views: { label: string }[], references?: object[]): Promise<object> | null,
  *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
- *   nameReference?: ((reference: import("@text-to-cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
+ *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `nameReference`: what the renderer calls a reference into the file on screen, for its chip in
@@ -200,7 +200,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   }, [docked, open, boxNode]);
   useEffect(() => { if (docked && unfolded) takeKeyboard(); }, [docked, unfolded, takeKeyboard]);
   // While the sheet peeks, the view knows how tall the peek is (`--cad-quick-edit-peek`), so what
-  // runs down the view (a phone's file sidebar) stops above it.
+  // runs down the view stops above it.
   const peek = docked && open && !hidden && folded && stops ? stops[0] : null;
   useEffect(() => {
     const element = viewerElement?.current;
@@ -241,7 +241,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     try {
       const unavailable = prompt?.unavailable?.() || "";
       const views = unavailable ? [] : prompt?.views() ?? [];
-      const files = views.length ? prompt.files(views) : null;
+      // The selection goes with the views: a board's packet lights what it names when it is drawn again.
+      const files = views.length ? prompt.files(views, selection) : null;
       void files?.catch(() => {});
       const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable });
       if (action === "send") outcome = host.promptContext.send(context);

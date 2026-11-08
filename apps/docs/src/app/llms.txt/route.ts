@@ -1,14 +1,13 @@
 // /llms.txt: the homepage for an agent, as markdown (https://llmstxt.org). It says what the page
 // says, from the same copy (src/lib/content.ts), so the two never drift apart.
 import {
-  agentInstallByline,
-  agentInstallMessage,
-  howItWorks,
-  installs,
+  contributing,
+  features,
+  featuresIntro,
+  installCommands,
+  installSummary,
+  manualInstall,
   pluginDescription,
-  skillGroups,
-  support,
-  telemetryNote,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -22,43 +21,26 @@ export function GET() {
     "",
     `> ${pluginDescription}`,
     "",
-    `${support.before} [${support.link.text}](${support.link.href}) ${support.after}`,
-    "",
-    "## How it works",
-    "",
-    ...howItWorks.map((step, index) => `${index + 1}. ${step}`),
-    "",
     "## Install",
     "",
-    agentInstallByline,
+    ...installCommands.flatMap(({ system, language, command }) => [`${system}:`, "", "```" + language, command, "```", ""]),
+    installSummary,
     "",
-    "```text",
-    agentInstallMessage,
-    "```",
+    `${manualInstall.label}: ${onGitHub(manualInstall.path)}`,
     "",
-    `${telemetryNote} See the [privacy policy](${absoluteUrl("/privacy-policy")}).`,
+    "## Features",
     "",
-    ...installs.flatMap((item) => [
-      `### ${item.agent}`,
-      "",
-      ...(item.note ? [item.note, ""] : []),
-      ...(item.listing ? [`${item.listing.label}: ${item.listing.href}`, "", "Or install it by hand:", ""] : []),
-      "```bash",
-      item.command,
-      "```",
-      "",
-      ...(item.update
-        ? ["Update, then restart the app:", "", "```bash", item.update, "```", ""]
-        : ["Run the install command again to update or reinstall, then restart the app.", ""]),
-      ...(item.remove
-        ? ["Reinstall: remove it, then install it again:", "", "```bash", item.remove, "```", ""]
-        : []),
-    ]),
-    `The README has each install's full notes: ${siteConfig.repository}#readme`,
+    featuresIntro,
     "",
-    "## Skills",
+    ...features.map((feature) => `- [${feature.name}](${onGitHub(feature.path)}): ${feature.summary.replace(/\]\((skills\/[^)]+)\)/g, (_, path) => `](${onGitHub(path)})`)}`),
     "",
-    ...skillGroups.map((skill) => `- [${skill.name}](${onGitHub(`${skill.path}/SKILL.md`)}): ${skill.summary}`),
+    "## Contributing",
+    "",
+    contributing.intro,
+    "",
+    ...contributing.items.map(({ title, body, links }) =>
+      `- **${title}**: ${body} ${links.map(({ text, href }) => `[${text}](${href})`).join(" ")}`
+    ),
     "",
     "## Optional",
     "",

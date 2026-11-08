@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
+import { unavailablePromptContext } from '@cad/core/prompt';
+import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import type { FileViewerState } from '../file-viewer/types.js';
 import { createLiveRegistry, type LiveRegistry } from '../host/liveRegistry.js';
 import type { ViewerHost } from '../host/types.js';
 import { THUMBNAIL_SIZE } from '../library/thumbnails.js';
+import { createBoardRenderer } from '../renderers/board/index.js';
 import { createDxfRenderer } from '../renderers/dxf/index.js';
 import { createGlbRenderer } from '../renderers/glb/index.js';
 import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
+import { createSchematicRenderer } from '../renderers/schematic/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
 import { createXbfRenderer } from '../renderers/xbf/index.js';
 import { createCadFileSource } from './catalog.js';
@@ -21,6 +23,8 @@ import { createCadFileSource } from './catalog.js';
 export function cadRenderers(client: CadWorkspaceService, preferences: CadPreferenceSource, live: LiveRegistry['binding']) {
   return [
     createDxfRenderer({ client, preferences, live }),
+    createBoardRenderer({ client, preferences, live }),
+    createSchematicRenderer({ client, preferences, live }),
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),

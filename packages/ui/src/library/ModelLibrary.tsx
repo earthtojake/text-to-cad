@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Box, ChevronDown, Ellipsis, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../primitives/alert-dialog.jsx";
@@ -12,12 +12,15 @@ import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
 import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
 import { useControlUsage } from "../usage/controls.js";
+import { ViewerHostContext } from "../host/context.js";
 import { activityLabel, ageLabel } from "../lib/age.js";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
 export interface LibraryModel {
   /** The model's identity in the host's library; the absolute path where there is one. */
   path: string;
+  /** Its document's id, where the host names one: its picture is read by it. */
+  id?: string;
   name: string;
   /** Where it is, as the person reads it. */
   folder: string;
@@ -30,8 +33,13 @@ export interface LibraryModel {
   pinned: boolean;
   /** Gone from where it was: listed, but not openable. */
   missing: boolean;
-  /** A picture's name, for `thumbnail()`. */
+  /** A picture's name (its content's): `thumbnail()` reads the picture of the row that names it. */
   thumbnail: string | null;
+  /**
+   * Its picture in the dark theme's own colours, where its view draws one (a board's): the card shows
+   * it in the dark theme. Null or absent: `thumbnail` in both.
+   */
+  thumbnailDark?: string | null;
   /** When the picture was taken, in seconds; null without one. A document updated since has an old one. */
   pictured: number | null;
   /**
@@ -51,8 +59,11 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   list(): Promise<readonly Model[]>;
   /** `delete` for a model's row (`deletes`), `remove` for a file's. */
   change(action: "pin" | "unpin" | "remove" | "delete", model: Model): Promise<readonly Model[]>;
-  /** An image URL for a model's thumbnail, or null. */
-  thumbnail(name: string): Promise<string | null>;
+  /**
+   * An image URL for a model's thumbnail (the one its `thumbnail` names), or null; with `"dark"`, its
+   * dark theme's (`thumbnailDark`) where it has one.
+   */
+  thumbnail(model: Model, scheme?: "light" | "dark"): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
    * Open: choose a file with the desktop's own file chooser, and show it. A host on a computer with
@@ -93,8 +104,12 @@ const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
-function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
+function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(item: Model, scheme: "light" | "dark"): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
   const { t } = useI18n();
+  // The theme the home is in: a picture drawn in the dark theme's own colours too shows that one in
+  // it, swapped as the theme switches; any other picture is its one in both.
+  const scheme = useContext(ViewerHostContext)?.environment.colorScheme;
+  const variant: "light" | "dark" = scheme === "dark" && item.thumbnailDark ? "dark" : "light";
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const latest = useRef({ item, seen });
@@ -106,7 +121,7 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     if (item.missing || !element.current) return;
     const name = item.thumbnail;
     const show = () => {
-      if (name) void load(name).then(value => { if (active) setImage(value); }).catch(() => {});
+      if (name) void load(latest.current.item, variant).then(value => { if (active) setImage(value); }).catch(() => {});
       latest.current.seen(latest.current.item);
     };
     if (typeof IntersectionObserver === "undefined") { show(); return () => { active = false; }; }
@@ -117,11 +132,11 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     });
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
-  }, [item.path, item.thumbnail, item.missing, item.updated, load]);
+  }, [item.path, item.thumbnail, item.missing, item.updated, load, variant]);
   // A drawing's picture is its line work on nothing, in the light theme's pen (`useDrawingView`'s
   // `thumbnail`): a dark card turns it light, its colours kept.
   const drawing = /\.dxf$/i.test(item.path) ? "" : undefined;
-  return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing}>
+  return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing} data-thumbnail-variant={variant}>
     {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
     {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
   </span>;
@@ -230,10 +245,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     };
     draw.current(next).then(done, () => done(false));
   }, [queue, refresh]);
-  const load = useCallback((name: string) => {
+  const load = useCallback((item: Model, scheme: "light" | "dark") => {
+    // A picture is kept by its name, its content's: a new picture of the row is another name, and its
+    // dark theme's another again.
+    const dark = scheme === "dark" && Boolean(item.thumbnailDark);
+    const name = dark ? `dark:${item.thumbnailDark}` : String(item.thumbnail);
     let image = images.current.get(name);
     if (!image) {
-      image = current.current.thumbnail(name);
+      image = dark ? current.current.thumbnail(item, "dark") : current.current.thumbnail(item);
       images.current.set(name, image);
     }
     return image;
@@ -267,11 +286,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The type filter is there only where there is something to tell apart: models and files both listed.
   const kinds = all.some(deletes) && all.some(item => !deletes(item));
   const now = Date.now();
-  // What the host can do with a file on disk: a file's menu items. A model is no file: it has none.
+  // What the host can do with a card's document: Copy path, Copy link and Reveal for a file on disk;
+  // a model is no file, and takes Copy link alone (its page needs no file).
   const fileItems = entryMenu(fileActions?.platform ?? "linux", new Set(Object.keys(fileActions?.perform ?? {}) as EntryAction[]), t);
+  const modelItems = fileItems.filter(entry => entry.action === "copy-link");
+  const HOME_CONTROLS = { "copy-path": "home_copy_path", "copy-link": "home_copy_link", reveal: "home_reveal" } as const;
   const perform = (action: EntryAction, item: Model) => {
-    usage.used(action === "reveal" ? "home_reveal" : "home_copy_path");
-    void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file" })).catch(fail);
+    if (action in HOME_CONTROLS) usage.used(HOME_CONTROLS[action as keyof typeof HOME_CONTROLS]);
+    void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file", ...(item.id ? { id: item.id } : {}) })).catch(fail);
   };
   // A card's pin and its one menu (Open, what the host can do with a file on disk, Pin or Unpin, then
   // Delete), there while the pointer is on the card (Figma's star): the pin toggles, and a pinned
@@ -287,7 +309,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
-        {!deletes(item) ? fileItems.map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>) : null}
+        {(deletes(item) ? modelItems : fileItems).map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
         <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(item)}>{t("home.delete")}</DropdownMenuItem>

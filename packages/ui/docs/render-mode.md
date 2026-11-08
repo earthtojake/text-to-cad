@@ -41,7 +41,8 @@ contains `colorMode` (`original`, `single`, `by-part`), `color` and `colors`; `l
 contains `quality`, `exposure`, `rotation`, `size`, `fill`; `background` contains `color`,
 `opacity`; `floor` contains `enabled`, `placement`, `color`, `opacity`, `finish`.
 
-Viewer appearance inherits the host; snapshots default to light. Preview's lighting quality
+Viewer appearance inherits the host. A snapshot is always light, whatever the viewer's: `cad <type> snapshot`'s
+display takes no `appearance`, and a view a Quick Edit packet carries names none. Preview's lighting quality
 defaults to Preview. There is no Custom state, legacy alias or
 migration. A stored display or Preview settings record is read setting by setting at the
 file-session read boundary (`readViewSettings`, `readPreviewSettings`): what this build
@@ -79,7 +80,7 @@ softbox environment; the other modes use neutral CAD lighting, but for an engine
 `lib/viewer/sceneRig.js`): the viewport lights it by that in place of the theme's lights, with
 the look's environment and under its own tone curve. Authored finishes show in Solid and Shaded:
 a file's reflect a small neutral environment; an engine document's reflect its look's
-environment, the studio image its engine serves beside the look (`GET /api/look/environment`),
+environment, the studio image its engine serves beside the look (`GET /api/v1/look/environment`),
 which lights every surface of the document and which the engine's OCCT stills reflect too, and
 every surface of it answers light as OCCT's PBR program does (core's `lib/viewer/surfaceBrdf.js`,
 the look's `brdf`), not by three's own physical model. Parts draws a plain finish. An engine
@@ -175,7 +176,7 @@ Behind it, Background is a studio backdrop rather than a flat fill: its color li
 toward white behind the middle of the frame, shaded toward the corners (more for a dark
 color) and above the horizon. Its opacity carries the gradient; at zero it draws nothing.
 Light Render defaults to a pure white background and retains the slightly gray
-floor (`#e7e7e5`); dark Render's background and floor are one charcoal (`#202226`), never
+floor (`#e7e7e5`); dark Render's background and floor are one neutral charcoal (`#222222`), never
 black. Explicit background colors still override the mode default.
 Pose and animation passes publish current placed bounds before
 drawing, and so does the exploded view wherever it comes to rest (a slider move,
@@ -201,8 +202,8 @@ draws the model in Render whatever the file's mode (the store's `renderScene()`,
 `kit/viewport/previewViewScene.js` draws it), and the tools view never does. Preview's own
 settings are its settings panel (`kit/shell/PreviewSettings.jsx`: Orbit, then
 `PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree and Position are
-sections of the file sidebar (see
-[settings-ui.md](./settings-ui.md#the-file-sidebar-and-the-tool-stack)); nothing in them is
+tabs of the view's panel (see
+[settings-ui.md](./settings-ui.md#the-views-panel-and-the-tool-stack)); nothing in them is
 a display setting.
 
 Display and Preview, the view's controls at the strip's end, are offered by a 3D view
@@ -215,6 +216,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `mesh` | STL, 3MF | Yes |
 | `robot` | URDF, SRDF, SDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
 
 A view without them has no Display or Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.

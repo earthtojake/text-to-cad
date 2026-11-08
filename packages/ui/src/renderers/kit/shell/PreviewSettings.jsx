@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { FILE_SIDEBAR_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
+import { SETTINGS_PANEL_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection } from "../inspector/FileSheet.js";
 import { ORBIT_SPEEDS } from "../tools/PlaybackMenu.jsx";
 
@@ -19,7 +19,7 @@ export default function PreviewSettings({ orbit, onOrbitChange, speed, onSpeedCh
   const { t } = useI18n();
   const speeds = ORBIT_SPEEDS.includes(speed) ? ORBIT_SPEEDS : [...ORBIT_SPEEDS, speed].sort((a, b) => a - b);
   return <div role="region" aria-label={t("preview.settings")} data-preview-settings-panel=""
-    className={cn("pointer-events-auto flex max-h-full w-60 min-h-0 flex-col overflow-hidden rounded-md text-tiny", FILE_SIDEBAR_SURFACE_CLASS)}>
+    className={cn("pointer-events-auto flex max-h-full w-60 min-h-0 flex-col overflow-hidden rounded-md text-tiny", SETTINGS_PANEL_SURFACE_CLASS)}>
     <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 pl-3 pr-1">
       <h3 className="min-w-0 flex-1 truncate text-tiny text-foreground">{t("preview.settingsTitle")}</h3>
       <button type="button" aria-label={t("preview.close")} onClick={onClose}

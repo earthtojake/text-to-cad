@@ -1,5 +1,5 @@
 /**
- * What cadgen sends (`cadgen/analytics.py`), checked field by field and turned into rows. Every schema a
+ * What text-to-cad sends (`cad_server/analytics.py`), checked field by field and turned into rows. Every schema a
  * released cadgen sends is read, for as long as that release can still be running (README.md): a copy
  * nobody updates keeps counting. Anything outside the contract is refused, not stored: an unknown field, a
  * name outside its vocabulary, a count that is not one, a string longer than a version or a client name
@@ -47,7 +47,9 @@
  * (`MAX_EVENTS_7`): one per control a person used that window. A receiver that reads a new schema is deployed
  * before any release sends it. Schema 8 adds `model` for live model builds, views and snapshots, while
  * actual file formats (including opened/exported `xbf`) keep their names. Earlier `xbf` rows remain as sent:
- * their mixed model/file usage cannot be separated after the fact.
+ * their mixed model/file usage cannot be separated after the fact. Schema 9 is schema 8 with one more kind,
+ * `implicit`: a model built from a signed-distance field, held as the mesh sampled from it, with no file. A
+ * schema before it names none.
  */
 
 import { createHash } from 'node:crypto';
@@ -61,15 +63,18 @@ const MAX_EVENTS_7 = 256; // schema 7's: a window's controls, one event each, be
 const MAX_COUNT = 1_000_000;
 const MAX_SECONDS = 10_000_000; // a window's builds, added up across every worker: far past any there are
 const MAX_FRAMES = 30;
-// A crash's frame, as cadgen names one (`cadgen/analytics.py`: `signature`; a page's: core's `crashOf`).
+// A crash's frame, as the server names one (`cad_server/analytics.py`: `signature`; a page's: core's `crashOf`).
 // A path inside a place: segments of letters, digits and `_.+-`, none of them `.` or `..`.
 const FRAME_FILE = /^(?:<user>|<\?>|<frozen>|(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}){0,8})$/;
+// A frame in our own code: the library's (`cad/`) and the server's (`cad_server/`), and, from releases before
+// 0.10, the one package they were (`cadgen/`).
+export const OUR_FRAMES = /^(?:cad|cad_server|cadgen)\//;
 const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
 const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
-// Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
+// Where the install came from, as its plugin's startup command named it (`cad_server/_internal/channel.py`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
   'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
@@ -81,10 +86,11 @@ const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
-const KINDS_8 = new Set([...KINDS_6, 'model']);
+const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
+const KINDS_9 = new Set([...KINDS_8, 'implicit']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
-// What a person used in a CAD view (`cadgen/analytics.py`: `CONTROLS`, the page's own in `@text-to-cad/ui`'s
+// What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
 // `usage/controls.js`): a closed list of names the page chose, never a value typed or a file's.
 export const CONTROLS = new Set([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode
@@ -115,7 +121,7 @@ export const CONTROLS = new Set([
   // A model's routines (the sidebar's Animation or Motion, Preview's playbar), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
-  // The file sidebar's sections, and its trees.
+  // The floating sidebar's sections (which older releases send), and the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
   // A part's menu, over the model or in its tree.
@@ -128,20 +134,21 @@ export const CONTROLS = new Set([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
-  'explorer', 'explorer_filter', 'file_copy_path', 'file_reveal', 'home',
+  'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
+  'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home.
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
-  'home_open', 'home_pick', 'home_copy_path', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
+  'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
 ]);
 const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
-// Why a CAD tool's call failed (`cadgen/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
+// Why a CAD tool's call failed (`cad_server/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
 // cadgen's own, as cadgen named it where the call failed.
 const FAILURES = new Set(['no_path', 'relative_path', 'no_file', 'not_cad', 'no_view', 'wrong_view', 'bad_request',
   'timeout', 'view_error', 'too_large', 'no_viewer', 'bug', 'other']);
-// Why a build failed (`cadgen/analytics.py`: `BUILD_FAILURES`), from what the error was and whose code raised it:
+// Why a build failed (`cad_server/analytics.py`: `BUILD_FAILURES`), from what the error was and whose code raised it:
 // the model's, the CAD kernel's under it, cadgen's refusal or its mistake, the machine's.
 const BUILD_FAILURES = new Set(['model_error', 'kernel_error', 'refused', 'script_error', 'arguments', 'child_failed',
   'missing_module', 'missing_file', 'io_error', 'timeout', 'memory', 'export_error', 'bug', 'other']);
@@ -343,6 +350,9 @@ const SCHEMAS = new Map([
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
   // A live model is distinct from an actual file, even an xbf. Older schemas keep their own vocabulary.
   [8, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
+  // An implicit's document (`implicit`), a model with no file. Older schemas keep their own vocabulary.
+  [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_9,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7 }],
 ]);
 

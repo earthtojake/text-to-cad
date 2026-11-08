@@ -6,7 +6,7 @@ Binding for viewer work that touches more than one file format. The rule it exis
 
 Every `renderFormat === RENDER_FORMAT.X` check is a place a new format must be hand-added and a
 place an improvement to one format fails to reach the others. What a format does lives in its
-renderer slice (`src/renderers/dxf`, `glb`, `mesh`, `robot` and `xbf`, one per file family) and is
+renderer slice (`src/renderers/board`, `dxf`, `glb`, `mesh`, `robot` and `xbf`, one per file family) and is
 described in [CAD renderer](cad-renderer.md#kit); the one thing the table below is read for is a
 file's icon.
 
@@ -23,8 +23,9 @@ for every other kind.
 | `step` (`stp`), `xbf` | `step` |
 | `stl` | `stl-mesh` |
 | `3mf` | `3mf-mesh` |
-| `glb` (`gltf`) | `glb-mesh` |
+| `glb` (`gltf`), `implicit` | `glb-mesh` |
 | `dxf` | `dxf` |
+| `kicad_pcb` | `kicad_pcb` |
 | `urdf`, `srdf`, `sdf` | `robot` |
 | anything else | `step`, the table's default row |
 
@@ -32,7 +33,12 @@ An entry names its format twice, the catalog's `kind` and the resolved source fo
 disagree, `entryIconKind` takes the first of `dxf`, `robot`, `stl-mesh`, `3mf-mesh`, `glb-mesh`
 and `step` that either one names (an `.srdf` kind names `robot` itself), and a file still loading
 is `loading` whatever its format. A new format adds its `RENDER_FORMAT` value, a row here and a
-renderer slice; no shared component learns its name.
+renderer slice; no shared component learns its name. A mesh with no file of its own (`implicit`, held
+by its id) has no format of its own either: it is the format its bytes are served in, by the
+registry's MIME type (`filelessDocumentFormat` in `fileFormats.js`: an implicit's is a GLB), and takes
+that format's icon, asset key and renderer. That renderer draws no edges of it, as of any GLB, and keeps
+the file's normals: no fold is guessed of a sampled field, whose creases are the field's to state (the
+server's stills, which do draw a mesh file's folds, key the same on the GLB's `asset.extras.cad`).
 
 ## Enforcement
 

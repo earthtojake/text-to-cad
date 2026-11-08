@@ -1,4 +1,0 @@
-interface:
-  display_name: "URDF"
-  short_description: "Author and validate URDF robot descriptions."
-  default_prompt: "Use $urdf to author or edit the URDF robot description I describe as direct XML, validate it with cadgen urdf validate, and show me the result."

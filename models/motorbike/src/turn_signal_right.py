@@ -8,7 +8,7 @@ placed with `Pos` — exactly as it links `turn_signal_left.py`.
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from lib import spec as S
 from lib import trim as T

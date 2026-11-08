@@ -1,13 +1,9 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { cn } from "@text-to-cad/ui/utils";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import {
-  FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
-} from "../kit/inspector/FileSheet.js";
+import { FileSheetStatusText, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
+import { SliderField } from "../kit/inspector/SliderField.jsx";
 import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const CONTROL_SYNC_EPSILON = 0.001;
 const CONTROL_LOCAL_OVERRIDE_MS = 3500;
@@ -22,11 +18,22 @@ function isAngular(control) {
   return String(control?.unit || "").trim().toLowerCase() === "deg";
 }
 
+// A slide in metres reads in millimetres: a robot's are mostly centimetres long, and "0.0125 m" is hard to read.
+function isMetres(control) {
+  return !isAngular(control) && String(control?.unit || "m").trim().toLowerCase() === "m";
+}
+/** How many of what the field shows make one of the control's unit, and what it shows. */
+function displayUnit(control) {
+  if (isAngular(control)) return { scale: 1, unit: "°", spoken: "deg" };
+  if (isMetres(control)) return { scale: 1000, unit: " mm", spoken: "mm" };
+  const unit = String(control?.unit || "").trim();
+  return { scale: 1, unit: unit ? ` ${unit}` : "", spoken: unit };
+}
+
 function formatControlValue(value, control) {
-  const scale = isAngular(control) ? 10 : 10000;
-  const rounded = Math.round(Number(value) * scale) / scale;
-  const safeValue = Number.isFinite(rounded) ? rounded : 0;
-  return isAngular(control) ? `${safeValue}°` : `${safeValue} ${control?.unit || "m"}`;
+  const { scale, unit } = displayUnit(control);
+  const rounded = Math.round(Number(value) * scale * 10) / 10;
+  return `${Number.isFinite(rounded) ? rounded : 0}${unit}`;
 }
 
 /** The slider's span: the control's declared limits, else one turn or one metre about zero
@@ -46,12 +53,12 @@ function clampInputValue(value, min, max, fallback) {
 // A row keeps its own live value while it is being driven: it writes at most once per
 // animation frame, and after a local change it ignores the pose's value until the two
 // agree (or a few seconds pass), so a slider never fights the hand moving it.
-const ControlRow = memo(function ControlRow({ control, value, onValueChange }) {
+const ControlRow = memo(function ControlRow({ control, value, rest, onValueChange }) {
   const { t } = useI18n();
   const label = String(control?.label || control?.id || "").trim();
   const [min, max] = sliderSpan(control);
   const safeValue = clampInputValue(value, min, max, 0);
-  const unitLabel = isAngular(control) ? "deg" : String(control?.unit || "m");
+  const { scale, spoken: unitLabel } = displayUnit(control);
   const sliderStep = isAngular(control) ? 1 : 0.001;
   const pendingFrameRef = useRef(0);
   const pendingValueRef = useRef(safeValue);
@@ -131,35 +138,32 @@ const ControlRow = memo(function ControlRow({ control, value, onValueChange }) {
   };
 
   return (
-    <FileSheetSliderField
+    <SliderField
       label={label || t("position.joint")}
-      value={formatControlValue(liveValue, control)}
-      onValueCommit={(nextValue) => {
-        commitValue(parseFileSheetNumberInput(nextValue, { fallback: liveValue, min, max }));
+      name={label || t("position.jointValue")}
+      text={formatControlValue(liveValue, control)}
+      onTextCommit={(nextValue) => {
+        // What is typed is in the field's unit (a slide's millimetres).
+        commitValue(parseFileSheetNumberInput(nextValue, { fallback: liveValue * scale, min: min * scale, max: max * scale }) / scale);
       }}
-      valueInputProps={{ ariaLabel: t("position.valueIn", { name: label || t("position.joint"), unit: unitLabel }) }}
-    >
-        <TooltipHint content={t("position.range", { min: formatControlValue(min, control), max: formatControlValue(max, control) })}>
-          <Slider
-            className={cn(FILE_SHEET_PRECISION_SLIDER_CLASSES, "min-w-0")}
-            min={min}
-            max={max}
-            step={sliderStep}
-            value={[liveValue]}
-            onValueChange={(nextValue) => {
-              const next = clampInputValue(nextValue?.[0], min, max, liveValue);
-              if (controlValuesClose(next, pendingValueRef.current)) {
-                return;
-              }
-              setLiveValue(next);
-              holdLocalValueUntilParentSettles(next);
-              scheduleValueChange(next);
-            }}
-            onValueCommit={(nextValue) => { commitValue(nextValue?.[0]); }}
-            thumbProps={{ "aria-label": label || t("position.jointValue") }}
-          />
-        </TooltipHint>
-    </FileSheetSliderField>
+      textLabel={t("position.valueIn", { name: label || t("position.joint"), unit: unitLabel })}
+      hint={t("position.range", { min: formatControlValue(min, control), max: formatControlValue(max, control) })}
+      min={min}
+      max={max}
+      step={sliderStep}
+      value={liveValue}
+      origin={clampInputValue(rest, min, max, 0)}
+      onValueChange={(nextValue) => {
+        const next = clampInputValue(nextValue, min, max, liveValue);
+        if (controlValuesClose(next, pendingValueRef.current)) {
+          return;
+        }
+        setLiveValue(next);
+        holdLocalValueUntilParentSettles(next);
+        scheduleValueChange(next);
+      }}
+      onValueCommit={(nextValue) => { commitValue(nextValue); }}
+    />
   );
 });
 
@@ -171,7 +175,7 @@ function PoseControlRow({ pose, control }) {
   const usage = useControlUsage();
   const read = () => pose.getSnapshot().values[control.id] ?? pose.defaults[control.id] ?? 0;
   const value = useSyncExternalStore(pose.subscribe, read, read);
-  return <ControlRow control={control} value={value} onValueChange={(...args) => { usage.changed("position_joint"); return pose.write(...args); }} />;
+  return <ControlRow control={control} value={value} rest={pose.defaults[control.id] ?? 0} onValueChange={(...args) => { usage.changed("position_joint"); return pose.write(...args); }} />;
 }
 
 /** The Pose row: Default, then the SRDF's named group states, if it declares any. */
@@ -191,7 +195,7 @@ export function PoseGroupStateRow({ pose }) {
 }
 
 /**
- * A robot's Position section (the file sidebar's): its Pose row — Default, then an SRDF's group
+ * A robot's Position tab (the view's panel's): its Pose row — Default, then an SRDF's group
  * states — then a compact slider row per driven joint, with no sections of their own.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props
@@ -200,7 +204,7 @@ export default function PositionControls({ pose }) {
   const { t } = useI18n();
   if (!pose.controls.length) return <FileSheetStatusText className="py-2">{t("position.noJoints")}</FileSheetStatusText>;
   return (
-    <div className="space-y-1.5 pb-1.5 pt-0.5">
+    <div className="space-y-1 pb-2 pt-0.5">
       {/* A pose is a way of SETTING the controls, so it leads them: Default for any robot, the
           named states where an SRDF declares them. */}
       <PoseGroupStateRow pose={pose} />

@@ -1,10 +1,10 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Copy, X } from "lucide-react";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
-import { english, useI18n } from "@text-to-cad/ui/i18n";
+import { Button } from "@cad/ui/primitives/button";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { english, useI18n } from "@cad/ui/i18n";
 import { useFollow } from "../../../file-viewer/navigation/NavbarLinks.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { ViewerHostContext } from "../../../host/context.js";
@@ -81,7 +81,7 @@ export const COPIED_MS = 1600;
 
 /**
  * The card's Details: the whole diagnostic in a box that scrolls, with a copy icon in its
- * top-right corner, as a code block on GitHub has (the update card's prompt has one too). It
+ * top-right corner, as a code block on GitHub has. It
  * copies all of the details, however far they scroll, through the host's clipboard
  * (`ClipboardPort.writeText`); a host with no clipboard gets no icon. A copy shows a tick for a
  * moment. A copy the clipboard refuses is said under the box, where the text stays to select.
@@ -150,7 +150,8 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
   const readableReason = shortReason.length > 360 ? `${shortReason.slice(0, 360)}…` : shortReason;
   const title = alertTitle(shown, t);
   // The issue is the project's, in English: the title it is filed under is the alert's own or English's.
-  const report = alertIssueUrl(host?.links?.issues, { ...shown, title: alertTitle(shown) },
+  // An error that is the model's to correct (`reportable: false`, `buildFailedAlert`) is no issue of the project's.
+  const report = shown.reportable === false ? "" : alertIssueUrl(host?.links?.issues, { ...shown, title: alertTitle(shown) },
     { file, version: host?.links?.version, platform: host?.environment.platform });
   return (
     <div className={cn("pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center py-3", mobile ? "px-3" : "px-4")}>

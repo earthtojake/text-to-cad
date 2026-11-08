@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
-import AnimationSection from '../../../dist/renderers/kit/tools/playbar/AnimationSection.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
+import PreviewPlaybar from '../../../dist/renderers/kit/tools/playbar/PreviewPlaybar.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import { useXbfMotion } from '../../../dist/renderers/xbf/useXbfMotion.js';
 import { useMotionExclusion } from '../../../dist/renderers/kit/tools/model-effects/motionExclusion.js';
 
-// An engine document's motions played from the file sidebar's Motion section (`useXbfMotion.js`
-// through the shell's `AnimationSection`), over Position as the renderer composes them: while a
+// An engine document's motions played from the tools view's playbar (`useXbfMotion.js`
+// through the shell's playbar, `PreviewPlaybar` `toolsView`), over Position as the renderer composes them: while a
 // motion owns the pose its frames pose the scene and Position shows them read-only. A motion and
 // the pose are one motion at a time (`motionExclusion.js`): taking the motion up puts the pose at
 // rest, nothing set aside, so Reset leaves the model as built. Frames are driven by hand: the
@@ -25,7 +25,6 @@ function override(target: object, key: string, descriptor: PropertyDescriptor) {
 let frames: FrameRequestCallback[] = [];
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  override(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return this.hasAttribute('data-file-sidebar-room') ? 600 : 0; } });
   override(Element.prototype, 'scrollIntoView', { value() {} });
   for (const name of ['setPointerCapture', 'releasePointerCapture']) override(Element.prototype, name, { value() {} });
   override(Element.prototype, 'hasPointerCapture', { value: () => false });
@@ -61,7 +60,6 @@ const kinematics = {
 // the pose, by the motion's frames while it does, and by Position as it lets go; the pose and the
 // motion one motion at a time.
 function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { setPose: (values: any) => void } }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const pose = useXbfPose(mechanism);
   const position = useRef(pose);
   position.current = pose;
@@ -73,35 +71,53 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
     motion: { applied: Boolean(motion?.enabled), reset: () => motion?.onRelease() }
   });
   useEffect(() => { if (!owns.current) scene.setPose(pose.applied ? pose.values : null); }, [pose.values, pose.applied]);
-  return <FileSidebar layout={layout} onLayoutChange={(patch: any) => setLayout((current: any) => ({ ...current, ...patch }))}>
-    <XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
-      preset={pose.preset} changed={pose.applied} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />
-    {motion ? <AnimationSection runtime={motion} autoplay={false} onAutoplayChange={() => {}} /> : null}
-  </FileSidebar>;
+  // As the shell draws them: Position a tab of the view's panel, the motions the playbar's under the model.
+  return <div style={{ position: 'relative' }}>
+    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+      sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
+        preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
+      tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
+    {motion ? <PreviewPlaybar runtime={motion} autoplay={false} onAutoplayChange={() => {}} toolsView /> : null}
+  </div>;
 }
 
 const lastPose = (scene: { setPose: ReturnType<typeof vi.fn> }) => scene.setPose.mock.calls.at(-1)?.[0] ?? null;
 const hingeAt = (scene: { setPose: ReturnType<typeof vi.fn> }) => lastPose(scene)?.hinge?.[0] ?? null;
-const tiles = () => within(screen.getByRole('group', { name: 'File sidebar' })).getAllByRole('button').map(button => button.getAttribute('aria-label'));
+const playbar = () => document.querySelector<HTMLElement>('[data-playbar="tools"]');
+// Reset is the last item of the playbar's Playback settings, after a rule; the row has no Reset.
+async function resetItem(user: ReturnType<typeof userEvent.setup>) {
+  expect(within(playbar()!).queryByRole('button', { name: 'Reset motion' })).toBeNull();
+  await user.click(within(playbar()!).getByRole('button', { name: 'Playback settings' }));
+  const menu = await screen.findByRole('menu');
+  const items = [...menu.querySelectorAll('[role^="menuitem"]')];
+  expect(items.at(-1)!.textContent).toBe('Reset motion');
+  expect(items.at(-1)!.previousElementSibling?.getAttribute('role')).toBe('separator');
+  return within(menu).getByRole('menuitem', { name: 'Reset motion' });
+}
+const resetDisabled = async (user: ReturnType<typeof userEvent.setup>) => {
+  const disabled = (await resetItem(user)).getAttribute('aria-disabled') === 'true';
+  await user.keyboard('{Escape}');
+  return disabled;
+};
 
-it('a document with no motions has no Motion section', () => {
+it('a document with no motions has no motion playbar', () => {
   const { motions: _none, ...still } = kinematics;
   render(<Harness mechanism={still} scene={{ setPose: vi.fn() }} />);
-  expect(tiles()).toEqual(['Position']);
+  expect(playbar()).toBeNull();
 });
 
-it("the Motion section lists the document's motions with their durations, and plays, pauses, scrubs, loops and speeds them", async () => {
+it("the playbar lists the document's motions with their durations, and plays, pauses, scrubs, loops and speeds them", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0, skipHover: true });
   const scene = { setPose: vi.fn() };
   render(<Harness scene={scene} />);
-  expect(tiles()).toEqual(['Position', 'Motion']);
-  await user.click(screen.getByRole('button', { name: 'Motion' }));
-  const panel = screen.getByRole('region', { name: 'Motion' });
-  expect(within(panel).getByRole('heading').textContent).toBe('Motion');
+  const panel = playbar()!;
+  // The tools view's playbar is a transparent row on no surface, as Preview's is.
+  expect(panel.className).not.toMatch(/border|bg-|shadow|backdrop-blur/);
+  expect(panel.getAttribute('aria-label')).toBe('Motion playback');
   // At rest as the file opens: nothing to reset, the scene as Position has it.
-  expect((screen.getByRole('button', { name: 'Reset motion' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(await resetDisabled(user)).toBe(true);
   expect(lastPose(scene)).toBeNull();
-  await user.click(within(panel).getByRole('button', { name: 'Motion: wave' }));
+  await user.click(within(panel).getByRole('button', { name: 'Motions' }));
   expect(within(screen.getByRole('menu')).getAllByRole('menuitemradio').map(item => item.textContent))
     .toEqual(['wave2.00s', 'swing1.00s']);
   await user.keyboard('{Escape}');
@@ -121,7 +137,7 @@ it("the Motion section lists the document's motions with their durations, and pl
   // Paused, its frame stays.
   await user.click(within(panel).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.25, 9);
-  expect((screen.getByRole('button', { name: 'Reset motion' }) as HTMLButtonElement).disabled).toBe(false);
+  expect(await resetDisabled(user)).toBe(false);
 
   // Speed 2x and Loop off: a second of clock is two of the motion (played from the frame it is
   // paused at, the clock reading 0 as it starts), and it stops at its end.
@@ -140,10 +156,12 @@ it("the Motion section lists the document's motions with their durations, and pl
   expect(within(panel).getByRole('button', { name: 'Play motion' })).toBeTruthy();
   expect(frames).toEqual([]);
 
-  // Another motion is chosen at its start, at rest until it plays: `swing` opens at `open`.
-  await user.click(within(panel).getByRole('button', { name: 'Motion: wave' }));
+  // Another motion is chosen at its start, paused until it plays: `swing` opens at `open`.
+  await user.click(within(panel).getByRole('button', { name: 'Motions' }));
   await user.click(screen.getByRole('menuitemradio', { name: /^swing/ }));
   expect(hingeAt(scene)).toBe(90);
+  // Paused at its start, it still holds the pose: Reset is what lets go.
+  expect(await resetDisabled(user)).toBe(false);
 });
 
 it("a motion replaces Position's pose, shown read-only while it owns it, and Reset leaves the model as built, nothing set aside", async () => {
@@ -151,19 +169,16 @@ it("a motion replaces Position's pose, shown read-only while it owns it, and Res
   const scene = { setPose: vi.fn() };
   render(<Harness scene={scene} />);
   // Position first: the `open` configuration.
-  await user.click(screen.getByRole('button', { name: 'Position' }));
   await user.click(screen.getByRole('button', { name: 'Pose: Default' }));
   await user.click(screen.getByRole('menuitemradio', { name: 'open' }));
   expect(hingeAt(scene)).toBe(90);
 
   // The motion takes the pose: half a second of `wave` is 7.5 degrees, and Position says so, read-only.
-  await user.click(screen.getByRole('button', { name: 'Motion' }));
-  const motionPanel = screen.getByRole('region', { name: 'Motion' });
+  const motionPanel = playbar()!;
   await user.click(within(motionPanel).getByRole('button', { name: 'Play motion' }));
   frameAt(500);
   await user.click(within(motionPanel).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(7.5, 9);
-  await user.click(screen.getByRole('button', { name: 'Position' }));
   const position = screen.getByRole('region', { name: 'Position controls' });
   const field = within(position).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
   expect(field.value).toBe('7.50°');
@@ -173,10 +188,8 @@ it("a motion replaces Position's pose, shown read-only while it owns it, and Res
   expect((screen.getByRole('button', { name: 'Reset position' }) as HTMLButtonElement).disabled).toBe(true);
 
   // Reset lets go: `open` was put at rest as the motion took the pose, so the model is as built.
-  await user.click(screen.getByRole('button', { name: 'Motion' }));
-  await user.click(screen.getByRole('button', { name: 'Reset motion' }));
+  await user.click(await resetItem(user));
   expect(lastPose(scene)).toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Position' }));
   const again = screen.getByRole('region', { name: 'Position controls' });
   const after = within(again).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
   expect([after.value, after.disabled]).toEqual(['0.00°', false]);

@@ -1,5 +1,5 @@
-import { spellEngineRefs } from "@text-to-cad/core/lib/cadRefs.js";
-import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { spellEngineRefs } from "@cad/core/lib/cadRefs.js";
+import { xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 
 // An engine document's tree as a STEP's model tree presented an assembly: its
 // assemblies over their children and each placed part a leaf, its faces and edges never rows
@@ -13,7 +13,7 @@ import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
 // name's stem fold into one row carrying the count, as a STEP's repeated components do.
 //
 // Each node, and each element of a part, is also a ref into the document as the engine spells it
-// (`spellEngineRefs`, `cadgen.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
+// (`spellEngineRefs`, `cad.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
 // itself, never the rows a fold made.
 
 /**
@@ -167,8 +167,8 @@ export function xbfPickFrontier(tree, partId, expanded) {
 }
 
 /**
- * The tree paths the selection reveals: a selected part or assembly at its own row, a picked
- * face or edge at the row of the part it belongs to.
+ * The tree paths of the selection: a selected part or assembly at its own row, a picked face or edge
+ * at the row of the part it belongs to.
  */
 export function xbfSelectionPaths(roots, selectedIds) {
   const paths = [];
@@ -187,4 +187,19 @@ export function xbfSelectionPaths(roots, selectedIds) {
     if (path) found.push(path);
   }
   return [...new Map(found.map(path => [path.at(-1).id, path])).values()];
+}
+
+/**
+ * The rows that hold the selection (`paths`, `xbfSelectionPaths`'), where it is lit and revealed: each
+ * path's own row, but a folded row for its parts once every one of them is selected -- a press on it
+ * selects them all -- so selecting a folded row opens only its owners, never the row itself, as a
+ * selected assembly's row stays as it is.
+ */
+export function xbfHeldPaths(paths, selectedIds) {
+  const picked = new Set(selectedIds);
+  const held = paths.map(path => {
+    const members = path.at(-2)?.memberSelectionIds;
+    return members?.length && members.every(id => picked.has(id)) ? path.slice(0, -1) : path;
+  });
+  return [...new Map(held.map(path => [path.at(-1).id, path])).values()];
 }

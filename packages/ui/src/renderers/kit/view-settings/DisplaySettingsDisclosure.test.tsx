@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
+import { resolveViewSettings } from '@cad/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
 import { CrossSectionControls, ExplodeControls, clipSummary } from '../../../../dist/renderers/kit/tools/model-effects/ModelViewControls.js';
 import { FileSheetSettingsSection } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
@@ -46,8 +46,8 @@ it('Cross-section turns on at an X centre cut; its body is the axis dropdown and
   render(<Tools />);
   await user.click(screen.getByRole('button', { name: 'Cross-section' }));
   expect(resolveViewSettings(current).clip).toEqual({ enabled: true, axis: 'x', invert: false, partColors: true });
-  // One slider and nothing else: no typed value, no Flip.
-  expect(screen.queryByRole('textbox', { name: 'Clip amount value' })).toBeNull();
+  // The slider control: the slider and its share, typed as well; no Flip.
+  expect((screen.getByRole('textbox', { name: 'Clip amount value' }) as HTMLInputElement).value).toBe('50%');
   expect(screen.queryByRole('checkbox', { name: 'Flip' })).toBeNull();
   const amount = () => screen.getByRole('slider', { name: 'Clip amount' });
   expect(amount().getAttribute('aria-valuenow')).toBe('50');

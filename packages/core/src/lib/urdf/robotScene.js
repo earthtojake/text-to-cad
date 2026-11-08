@@ -11,7 +11,7 @@ import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSurfaceLook } from "../viewer/surfaceLook.js";
 import { shapeSourceColor } from "../viewer/surfaceMaterials.js";
 
-// A robot as a SCENE GRAPH, played from the payload cadgen resolved (`cadgen.robot_payload`):
+// A robot as a SCENE GRAPH, played from the payload cadgen resolved (`cad_server.robot_payload`):
 // the articulation (joints in rest space with affine rows over the controls, and which link
 // each joint carries) and the visual list (each mesh at its rest placement). One node per
 // joint, nested under its parent joint's, whose matrix is the joint's own motion in rest
@@ -386,6 +386,15 @@ export function createRobotScene(THREE, { robot, parts }, { shareFrom = null } =
       return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
     },
     hasComponent(id) { return recordByComponent.has(id); },
+    /** The box, where they stand now, of links and objects as a pick names them (`link:<name>`, an object's id): what Zoom to selection frames. */
+    selectionBounds(ids) {
+      const box = new THREE.Box3();
+      for (const id of ids) {
+        const records = String(id).startsWith("link:") ? meshesByLink.get(String(id).slice(5)) || [] : [recordByComponent.get(id)].filter(Boolean);
+        for (const record of records) if (record.mesh.visible) box.union(new THREE.Box3().setFromObject(record.mesh, true));
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
+    },
     /** Hide visual meshes only: their joint nodes still carry and pose the links below them. */
     setHiddenPartIds(ids) {
       if (disposed) return;

@@ -2,17 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { FileMetadata } from "../file-viewer/types.js";
 import { selectRenderer } from "../file-viewer/registry.js";
+import { createBoardRenderer } from "./board/index.js";
 import { createDxfRenderer } from "./dxf/index.js";
 import { createGlbRenderer } from "./glb/index.js";
 import { createMeshRenderer } from "./mesh/index.js";
 import { createRobotRenderer } from "./robot/index.js";
+import { createSchematicRenderer } from "./schematic/index.js";
 import { createXbfRenderer } from "./xbf/index.js";
 
 // A registration loads its component beside its document; these tests are about the document.
+vi.mock("./board/BoardRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./dxf/DxfRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./glb/GlbRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./mesh/MeshRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./robot/RobotRenderer.jsx", () => ({ default: () => null }));
+vi.mock("./schematic/SchematicRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./xbf/XbfRenderer.jsx", () => ({ default: () => null }));
 
 const file = (path: string, mediaType: string, mime?: string): FileMetadata => ({
@@ -38,12 +42,23 @@ describe("viewer renderer registrations", () => {
   });
 
   it("opens a STEP and an .xbf in the engine document's renderer, and nothing else in it", () => {
-    const renderers = [createDxfRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createXbfRenderer({ client })];
+    const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("xbf");
-    for (const [path, id] of [["plate.dxf", "dxf"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
+    for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["divider.kicad_sch", "schematic"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
       expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe(id);
     }
+  });
+
+  it("opens a document held by its id whose bytes are a GLB (an implicit's) in the GLB renderer, by its MIME type", () => {
+    const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
+    const id = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab";
+    const held = (mediaType: string, mime?: string): FileMetadata => ({ path: id, name: "gyroid", kind: "file", size: 0,
+      extension: mime ? "glb" : "xbf", mediaType, mime });
+    expect(selectRenderer(renderers, held("cad", "model/gltf-binary"))?.id).toBe("glb");
+    // A model's document, by its id, is the engine's.
+    expect(selectRenderer(renderers, held("cad-document"))?.id).toBe("xbf");
   });
 
   it("prepares every workspace file from its catalog entry alone, and its document releases the render session it opened", async () => {
@@ -53,8 +68,8 @@ describe("viewer renderer registrations", () => {
       resolveEntry: async (path: string) => ({ file: path, kind: "part" }),
       createRenderSession: () => ({ dispose: () => { disposed += 1; } }),
     } as never;
-    const renderers = [createDxfRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createXbfRenderer({ client })];
+    const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const renderer of renderers) {
       const prepared = await renderer.prepare({ file: file("part.step", "cad"), source: {} as never, signal: new AbortController().signal });
       prepared.dispose?.();

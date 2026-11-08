@@ -275,6 +275,21 @@ test('schema 7 counts the controls a person used, and how long a tool that stays
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad).slice(0, 200));
 });
 
+test('schema 9 counts an implicit as a kind of its own; schema 8 and before refuse it', async () => {
+  const events = [
+    { ...ENGINE.events[0], kind: 'implicit' },
+    { name: 'files', kind: 'implicit', count: 1 },
+  ];
+  const batch = { ...CONTROLS, schema: 9, events: [...events, CONTROLS.events[0]] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    batch.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  for (const schema of [7, 8]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...batch, schema })).status, 400, `schema ${schema}`);
+  }
+});
+
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
   const kinds = ['model', 'xbf'];
   const events = kinds.flatMap(kind => [
@@ -437,8 +452,8 @@ test('a refused request is logged by the rule it broke and the release that sent
     await send(store, 'POST', '/v1/events', BATCH); // taken: nothing to say
   });
   assert.deepEqual(lines.warn, [
-    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, cadgen 0.8.0)',
-    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, cadgen 0.9.1)',
+    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, release 0.8.0)',
+    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, release 0.9.1)',
     'telemetry /v1/events refused 400: the body is not JSON',
     'telemetry /v1/forget refused 400: not an install id',
     'telemetry /v1/events refused 403: not from a browser',

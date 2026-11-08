@@ -1,6 +1,6 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { FileText } from "lucide-react";
-import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
+import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
@@ -13,6 +13,7 @@ import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { I18nProvider, translator } from "../i18n/index.js";
 import { mayTakeKeyboard } from "./takeKeyboard.js";
+import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
 
 class RenderBoundary extends Component<{ children: ReactNode; title: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -25,7 +26,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -67,10 +68,6 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     if (mayTakeKeyboard(element.ownerDocument, element.ownerDocument.defaultView as Window)) element.focus({ preventScroll: true });
   }, [ready, key, appearance.compact]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
-  // A departing renderer flushes its last per-file state during unmount. That write belongs to its
-  // own key even after another file opens; whether it is kept is the host's (`CadViewer` keeps the
-  // file on screen's alone, and drops this one once it has landed).
-  const setRendererState = useCallback((value: JsonValue) => { if (latest.current.sourceId === source.id && rendererStateKey) changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } })); }, [changeState, rendererStateKey, source.id]);
 
   // The renderer is re-rendered only when what it is handed changes: not by a navbar action it
   // published, a resize within one layout, or anything else this frame redraws for itself. Its
@@ -80,16 +77,33 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const openedKey = `${String(key)}\u0000${rendererStateKey}`;
   if (openedState.current.key !== openedKey) openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
   const rendererState = openedState.current.value;
+  // The view's panel, the file's (`filePanel.js`): held here for the file on screen, from
+  // its record as it opened, and merged into every record its renderer writes, so a renderer that
+  // writes its view wholesale never drops it. One holder per file opened: a departing renderer's last
+  // write carries its own file's panel.
+  const opened = useMemo(() => ({ record: rendererState as JsonValue | undefined, panel: filePanelOf(rendererState) as object }), [openedKey]);
+  // A departing renderer flushes its last per-file state during unmount. That write belongs to its
+  // own key even after another file opens; whether it is kept is the host's (`CadViewer` keeps the
+  // file on screen's alone, and drops this one once it has landed).
+  const writeView = useCallback(() => {
+    if (latest.current.sourceId !== source.id || !rendererStateKey) return;
+    const value = withFilePanel(opened.record, opened.panel) as JsonValue;
+    changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } }));
+  }, [changeState, rendererStateKey, source.id, opened]);
+  const setRendererState = useCallback((value: JsonValue) => { opened.record = value; writeView(); }, [opened, writeView]);
+  // `panel` is read live: a renderer that mounts again for the same file (a remount, a layout change)
+  // starts from the panel as the person last left it, not as the file opened.
+  const filePanel = useMemo(() => ({ get panel() { return opened.panel; }, change: (panel: object) => { opened.panel = panel; writeView(); } }), [opened, writeView]);
   const shown = loaded.status === "ready" ? loaded : null;
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><Renderer notice={notice} key={key} file={shown.file} source={source}
+    return <RenderBoundary key={key} title={t("file.displayFailed")} onError={onError}><FilePanelContext.Provider value={filePanel}><Renderer notice={notice} key={key} file={shown.file} source={source}
       onPreviewChange={onPreviewChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
-      state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
+      state={rendererState} onStateChange={setRendererState} reload={reload} /></FilePanelContext.Provider></RenderBoundary>;
   }, [shown, key, onError, notice, source, onPreviewChange, onReady,
-    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, reload, t]);
+    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, filePanel, reload, t]);
 
   let body: ReactNode;
   if (loaded.status === "empty") body = presentation?.home ?? null;
@@ -108,15 +122,32 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     : path && !isDocumentId(path) ? path : null;
   const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
   const folder = navigationPath ? null : explorerFolder;
-  // What the host can do with the file on screen: its ⋯ menu.
+  // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
+  // disk (a model's: the script that builds it, where its metadata names one), its page in the
+  // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
+  // Open in's apps, where the host has them: asked by the document's own name as the menu opens.
+  const appsOf = host.fileActions?.apps;
+  const openApp = host.fileActions?.openApp;
+  const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
+  // A source moved or deleted keeps Copy path (where it was) and draws what opens it disabled.
+  const sourceMissing = Boolean(shown?.file.sourceMissing);
   const fileMenu = useMemo(() => {
-    const capabilities = new Set(Object.keys(perform ?? {}) as EntryAction[]);
-    return navigationPath && capabilities.size ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities,
-      onAction: (action: EntryAction, target: string) => { void Promise.resolve(perform?.[action]?.({ path: target, kind: "file" })).catch(error => onError?.(error)); },
+    const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
+      .filter(action => action === "browser" || action === "copy-link" ? Boolean(path) : Boolean(onDisk)));
+    // The page's own actions (Browser, Copy link) name the document; the rest, its file on disk.
+    const target = (action: EntryAction) => action === "browser" || action === "copy-link" ? path : onDisk;
+    const document = { path: path ?? "", kind: "file" as const };
+    const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
+    return path && (capabilities.size || fileMenuItems) ? {
+      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps,
+      onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
+        const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
+          : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
+        void Promise.resolve(done).catch(error => onError?.(error));
+      },
     } : null;
-  }, [navigationPath, perform, host.fileActions?.platform, onError]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

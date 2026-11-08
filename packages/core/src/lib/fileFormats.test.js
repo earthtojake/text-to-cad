@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  documentMime,
   entrySourceFormat,
+  filelessDocumentFormat,
   fileExtensionFromPath,
   isMeshRenderFormat,
+  isPlotRenderFormat,
   meshAssetKeyForEntry,
+  renderFormatFromMime,
   renderFormatFromPath,
   RENDER_FORMAT
 } from "./fileFormats.js";
@@ -21,6 +25,23 @@ test("entrySourceFormat maps manifest kinds to stable render formats", () => {
   assert.equal(entrySourceFormat({ kind: "urdf" }), RENDER_FORMAT.URDF);
   assert.equal(entrySourceFormat({ kind: "srdf" }), RENDER_FORMAT.SRDF);
   assert.equal(entrySourceFormat({ kind: "sdf" }), RENDER_FORMAT.SDF);
+  assert.equal(entrySourceFormat({ kind: "kicad_pcb" }), RENDER_FORMAT.KICAD_PCB);
+});
+
+test("a KiCad board is a plot: a CAD file with its own asset, not a mesh", () => {
+  for (const path of ["boards/blinky.kicad_pcb", "BLINKY.KICAD_PCB", "https://example.test/w/blinky.kicad_pcb?download=1#top"]) {
+    assert.equal(renderFormatFromPath(path), RENDER_FORMAT.KICAD_PCB, path);
+  }
+  assert.equal(isPlotRenderFormat(RENDER_FORMAT.KICAD_PCB), true);
+  assert.equal(isMeshRenderFormat(RENDER_FORMAT.KICAD_PCB), false);
+  assert.equal(meshAssetKeyForEntry({ kind: "kicad_pcb" }), RENDER_FORMAT.KICAD_PCB);
+  // The project beside a board is not drawn; its schematic is a plot of its own, every sheet a page.
+  for (const path of ["blinky.kicad_pro", "config.yml"]) {
+    assert.equal(renderFormatFromPath(path), "", path);
+  }
+  assert.equal(renderFormatFromPath("blinky.kicad_sch"), RENDER_FORMAT.KICAD_SCH);
+  assert.equal(isPlotRenderFormat(RENDER_FORMAT.KICAD_SCH), true);
+  assert.equal(isPlotRenderFormat(RENDER_FORMAT.DXF), false);
 });
 
 test("the mesh format predicate stays narrow", () => {
@@ -56,4 +77,20 @@ test("file extension parsing handles URLs, queries, and supported render formats
   assert.equal(renderFormatFromPath("/assets/bracket.stp"), RENDER_FORMAT.STEP);
   assert.equal(renderFormatFromPath("/assets/bracket.gltf"), RENDER_FORMAT.GLB);
   assert.equal(renderFormatFromPath("/assets/unknown"), "");
+});
+
+test("a document with no file of its own reads as the format its bytes are served in, by MIME type", () => {
+  // An implicit's source is a GLB (`model/gltf-binary`): it is read, keyed and parsed as one.
+  assert.equal(filelessDocumentFormat("implicit"), RENDER_FORMAT.GLB);
+  assert.equal(entrySourceFormat({ kind: "implicit" }), RENDER_FORMAT.GLB);
+  assert.equal(meshAssetKeyForEntry({ kind: "implicit" }), RENDER_FORMAT.GLB);
+  assert.equal(isMeshRenderFormat("implicit"), true);
+  assert.equal(documentMime("implicit"), "model/gltf-binary");
+  assert.equal(renderFormatFromMime(documentMime("implicit")), RENDER_FORMAT.GLB);
+  // A model's names no MIME type: the engine serves it as its document. A file's kind has a format of its own.
+  assert.equal(filelessDocumentFormat("model"), "");
+  assert.equal(filelessDocumentFormat("glb"), "");
+  assert.equal(entrySourceFormat({ kind: "xbf" }), RENDER_FORMAT.STEP);
+  assert.equal(renderFormatFromMime("model/stl"), RENDER_FORMAT.STL);
+  assert.equal(renderFormatFromMime(""), "");
 });

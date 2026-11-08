@@ -1,6 +1,6 @@
 /**
  * What is drawn OVER a drawing: an annotation's ink, on its 2D canvas, under the view's transform.
- * The viewer's DXF pane paints a person's ink with this as they draw it, and `cadgen snapshot`
+ * The viewer's DXF pane paints a person's ink with this as they draw it, and `cad <type> snapshot`
  * paints a job's `annotation` with it, so a Quick Edit's views come back as the person saw them.
  *
  * The ink is an annotation's marks (`../../common/annotation.js`) lying on the sheet: on no part, their
@@ -39,7 +39,7 @@ export function annotationMarkOnScreen(mark, transform) {
   return { id: mark.id, kind: "stroke", points, closed: Boolean(mark.closed), width: Math.max(...(mark.widths || [1])) * (mark.width || 0) };
 }
 
-function paintText(ctx, mark, corners) {
+function paintText(ctx, mark, corners, keyline = null) {
   const [a, b, , d] = corners;
   const across = Math.hypot(b.x - a.x, b.y - a.y), down = Math.hypot(d.x - a.x, d.y - a.y);
   if (!(across > 0) || !(down > 0)) return;
@@ -50,18 +50,25 @@ function paintText(ctx, mark, corners) {
   ctx.transform((b.x - a.x) / across, (b.y - a.y) / across, (d.x - a.x) / down, (d.y - a.y) / down, a.x, a.y);
   ctx.font = `500 ${px}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textBaseline = "top";
+  if (keyline) {
+    // The box's axes are a screen pixel long, so its keyline is as wide on screen as a stroke's.
+    ctx.strokeStyle = keyline.color;
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 2 * keyline.width;
+    lines.forEach((line, index) => ctx.strokeText(line, 0, index * px * TEXT_LINE_HEIGHT));
+  }
   ctx.fillStyle = mark.color;
   lines.forEach((line, index) => ctx.fillText(line, 0, index * px * TEXT_LINE_HEIGHT));
   ctx.restore();
 }
 
-function paintStroke(ctx, mark, points, lineScale) {
+function paintStroke(ctx, mark, points, lineScale, extra = 0) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const path = mark.closed ? [...points, points[0]] : points;
   if (mark.widths?.length === points.length) {
     for (let index = 1; index < points.length; index += 1) {
-      ctx.lineWidth = mark.width * lineScale * (mark.widths[index - 1] + mark.widths[index]) / 2;
+      ctx.lineWidth = mark.width * lineScale * (mark.widths[index - 1] + mark.widths[index]) / 2 + extra;
       ctx.beginPath();
       ctx.moveTo(points[index - 1].x, points[index - 1].y);
       ctx.lineTo(points[index].x, points[index].y);
@@ -69,23 +76,34 @@ function paintStroke(ctx, mark, points, lineScale) {
     }
     return;
   }
-  ctx.lineWidth = mark.width * lineScale;
+  ctx.lineWidth = mark.width * lineScale + extra;
   ctx.beginPath();
   path.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
+  ctx.stroke();
+}
+
+/** A ring of screen points, stroked. */
+function strokeRing(ctx, points, closed) {
+  ctx.beginPath();
+  const ring = closed ? [...points, points[0]] : points;
+  ring.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
   ctx.stroke();
 }
 
 /**
  * Paint an annotation's marks over a drawing. `lineScale` multiplies a stroke's screen width (a
  * snapshot's picture is as heavy against its height as the viewer was); `selected` and `hovered`
- * (mark ids) are haloed in the selection's blue, as Select shows picked ink.
+ * (mark ids) are haloed in the selection's blue, as Select shows picked ink. `keyline`: a thin edge
+ * of a contrasting colour round each opaque mark (`{ color, width }`, its width in screen pixels each
+ * side), for a picture whose own colours the ink may share — a board's red copper under red ink;
+ * a translucent mark (the highlighter's) has none.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {readonly import("../../common/annotation.js").AnnotationMark[]} marks
  * @param {{ transform: import("./transform.js").DrawingTransform, pixelRatio?: number, lineScale?: number,
- *   selected?: readonly string[], hovered?: readonly string[] }} options
+ *   selected?: readonly string[], hovered?: readonly string[], keyline?: { color: string, width: number } | null }} options
  */
-export function drawAnnotationMarks(ctx, marks, { transform, pixelRatio = 1, lineScale = 1, selected = [], hovered = [] }) {
+export function drawAnnotationMarks(ctx, marks, { transform, pixelRatio = 1, lineScale = 1, selected = [], hovered = [], keyline = null }) {
   if (!marks?.length || !transform) return;
   ctx.save();
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -103,6 +121,14 @@ export function drawAnnotationMarks(ctx, marks, { transform, pixelRatio = 1, lin
       ring.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
       ctx.stroke();
     }
+    const opaque = (mark.opacity ?? 1) >= 1;
+    const edge = keyline && opaque && keyline.width > 0 ? keyline : null;
+    if (edge && mark.kind !== "text" && screen.points.length) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = edge.color;
+      if (mark.kind === "stroke") paintStroke(ctx, mark, screen.points, lineScale, 2 * edge.width);
+      else { ctx.lineJoin = "round"; ctx.lineWidth = 2 * edge.width; strokeRing(ctx, screen.points, true); }
+    }
     ctx.globalAlpha = mark.opacity ?? 1;
     ctx.strokeStyle = mark.color;
     ctx.fillStyle = mark.color;
@@ -112,7 +138,7 @@ export function drawAnnotationMarks(ctx, marks, { transform, pixelRatio = 1, lin
       screen.points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
       ctx.closePath();
       ctx.fill();
-    } else paintText(ctx, mark, screen.points);
+    } else paintText(ctx, mark, screen.points, edge);
   }
   ctx.restore();
 }

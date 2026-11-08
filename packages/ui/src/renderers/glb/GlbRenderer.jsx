@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
@@ -9,14 +9,16 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { useMotionExclusion } from "../kit/tools/model-effects/motionExclusion.js";
 import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
-import { useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import { useDocumentVersion } from "../workspace/useDocumentVersion.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);
@@ -27,6 +29,8 @@ function GlbSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
   const loaded = useGlbScene({ entry: document.entry, resources: document.client.resources });
+  // A GLB the engine holds by its id (an implicit's) is built again in place: its next version reads its row again.
+  useDocumentVersion({ client: document.client, file: view.file.path });
   const scene = loaded.scene;
   const loadAlert = useMemo(() => workspaceLoadAlert({
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene), t
@@ -109,12 +113,15 @@ function GlbSurface({ view, data }) {
   const previewAnimation = useGlbAnimation(previewScene?.document || null, () => shell.frame.previewViewRef.current?.requestRender?.());
   const previewView = useMemo(() => ({ scene: previewScene, animation: previewAnimation }), [previewScene, previewAnimation]);
 
-  // Export converts the file shown to the other two mesh kinds: its path names it and the bytes on
-  // screen (their catalog hash) are its revision; the server refuses a file that has changed since.
+  // Export converts the file shown to the other two mesh kinds, and writes a document held by its id
+  // (an implicit's, its `kind`) as each of the three: its path names it and the bytes on screen (their
+  // catalog hash) are its revision; the server refuses a document that has changed since.
   const host = useViewerHost();
+  // A document with no file of its own names its kind, which its file does not.
+  const kind = view.file.navigationPath === null ? document.entry?.kind || "" : "";
   const exportView = useMemo(() => scene && loaded.revision && document.modelKey && !host.environment.compact ? {
-    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name
-  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name]);
+    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name, ...(kind ? { kind } : {})
+  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name, kind]);
   useExportView(exportView);
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: true, clearParts: selection.clear });
   const selectActive = !previewing && Boolean(scene) && shell.toolMode === GLB_TOOL.SELECT;
@@ -131,14 +138,34 @@ function GlbSurface({ view, data }) {
     if (hit && !modifiers?.multiSelect) measureRef.current.select([]);
   }, [selection.pick]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} previewView={previewView}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): the reference, Select, the framing.
+  const viewportRef = useRef(null);
+  const contextMenuItems = scene && !previewing && shell.toolMode === GLB_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null
+  }) : null;
+
+  const zoomToSelection = {
+    available: selection.selected.length > 0 && Boolean(scene?.selectionBounds),
+    run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  const described = useSceneDescribe(scene);
+  const inspect = useSceneInspect({ scene: previewing ? null : scene, selection, describe: described });
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
+    inspect={inspect}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />
-    </>} />;
+    </>; }} />;
 }
 
 export default function GlbRenderer(props) {

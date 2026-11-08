@@ -1,10 +1,10 @@
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
-import { TREE_GLYPH_STROKE, TREE_ROW_INSET_PX, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { TREE_GLYPH_STROKE, TREE_ROW_INSET_PX, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
+import { useI18n } from "@cad/ui/i18n";
 import { ageLabel, lastActivity } from "../../lib/age.js";
 import { DOCUMENT_ROW_GLYPH_CLASS, DocumentGlyph } from "./DocumentGlyph.jsx";
 import { useControlUsage } from "../../usage/controls.js";

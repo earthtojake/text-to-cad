@@ -21,7 +21,7 @@ import { createContext, createElement, useContext, useEffect, useRef, useState }
  *
  * The page reports at most every minute it has something to say, as it is hidden, and as the view goes;
  * the host's server adds the reports up into its own batch, and sends nothing without the person's yes.
- * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cadgen/analytics.py`:
+ * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cad_server/analytics.py`:
  * `CONTROLS`), which refuse any other.
  */
 export const CONTROLS = Object.freeze(/** @type {const} */ ([
@@ -50,10 +50,11 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'preview_lighting_size', 'preview_lighting_fill', 'preview_background_color', 'preview_background_opacity',
   'preview_floor_enabled', 'preview_floor_color', 'preview_floor_opacity', 'preview_floor_placement',
   'preview_floor_finish', 'preview_reset',
-  // A model's routines (the sidebar's Animation or Motion, Preview's playbar), and its Position.
+  // A model's routines (the playbar, in the tools view and Preview), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
-  // The file sidebar's sections, and its trees.
+  // The floating sidebar's sections: no view sends them now, but older releases do, and the three
+  // lists are one vocabulary. Then the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
   // A part's menu, over the model or in its tree.
@@ -66,13 +67,14 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
-  'explorer', 'explorer_filter', 'file_copy_path', 'file_reveal', 'home',
+  'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
+  'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home.
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
-  'home_open', 'home_pick', 'home_copy_path', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
+  'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
 ]));
 
 /**

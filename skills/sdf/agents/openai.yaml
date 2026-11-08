@@ -1,4 +1,0 @@
-interface:
-  display_name: "SDF"
-  short_description: "Author and validate SDFormat robot models."
-  default_prompt: "Use $sdf to author or edit the SDFormat model or world I describe as direct XML, validate it with cadgen sdf validate, and show me the result."

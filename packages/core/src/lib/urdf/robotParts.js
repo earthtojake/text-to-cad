@@ -1,7 +1,7 @@
 import { paletteIndices } from "../render/meshObjects.js";
 
 // The once-per-load part list a robot scene is built from: one part per visual of the
-// payload cadgen resolved (`cadgen.robot_payload`), or per NAMED object of a visual's mesh,
+// payload cadgen resolved (`cad_server.robot_payload`), or per NAMED object of a visual's mesh,
 // each with its link, its rest placement, the mesh it draws in that mesh's own units and
 // frame (a loaded link mesh, or the primitive cadgen meshed into the store), the colour the
 // description gives it, and the place "Color by part" deals it. Every part is a component
@@ -75,7 +75,7 @@ function placementOf(visual) {
  * A visual whose mesh is not in `meshesByUrl` has no part: the loader fails a robot with a
  * missing link mesh before it gets here.
  *
- * @param {object} robot  The payload (`cadgen.robot_payload`).
+ * @param {object} robot  The payload (`cad_server.robot_payload`).
  * @param {Map<string, object> | Record<string, object>} meshesByUrl  Every mesh the visuals name, loaded, by URL.
  */
 export function robotVisualParts(robot, meshesByUrl) {

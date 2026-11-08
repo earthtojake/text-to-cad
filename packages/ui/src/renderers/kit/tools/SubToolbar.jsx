@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
-import { cn } from "@text-to-cad/ui/utils";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { useStripTouch } from "./stripTouch.js";
 
@@ -70,23 +70,11 @@ export default function SubToolbar({ label, className, children, ...props }) {
 export const SUB_TOOLBAR_WIDTH_CLASS = "w-[202px]";
 
 /**
- * The width of a slider tool's sub-toolbar: one width for all of
- * them, their slider taking whatever their buttons leave (`min-w-0 flex-1`), so a conditional
- * button (Animation's Routines) shortens the slider rather than the row.
+ * The width of a slider tool's sub-toolbar: one width for all of them, its slider control
+ * (`inspector/SliderField.jsx`, `inline`) taking whatever its buttons leave, so a conditional button
+ * shortens the slider rather than the row.
  */
 export const SLIDER_SUB_TOOLBAR_CLASS = `${SUB_TOOLBAR_WIDTH_CLASS} flex-nowrap data-[touch]:w-80`;
-
-/**
- * A slider tool's row is one shape: what leads it (Clip's axis; Animation's routines and Play),
- * the slider, its value right beside it, then its actions, Reset last. Its slider is shadcn's, as
- * shadcn draws it (`primitives/slider.jsx`): this only sizes it to the row.
- */
-export const SUB_TOOLBAR_SLIDER_CLASS = "h-6 min-w-0 flex-1 px-2";
-
-/** A slider's value, right beside it and only as wide as it reads: the slider takes the rest. */
-export function SubToolbarValue({ children, ...props }) {
-  return <span className="shrink-0 pr-1 text-tiny tabular-nums text-muted-foreground" {...props}>{children}</span>;
-}
 
 /** The thin rule between a sub-toolbar's groups; invisible, its room kept, where the row wrapped. */
 export function SubToolbarSeparator() {

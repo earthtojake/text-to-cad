@@ -2,7 +2,7 @@
 
 The original's choreography (`lib/animgen.py`'s `ANIMATION_JS`, embedded in `w16.py`) moved
 whole systems and per-bank sets of parts by straight, eased translations while the crank
-kept turning. Here both clips are GLB animations (`cadgen.gltf`), each the original's
+kept turning. Here both clips are GLB animations (`cad.gltf`), each the original's
 tables exactly: the crank cycle posed at every key (`kinematics.pose`, the engine turning
 throughout), and every part or system the old clips moved translated after the pose, so a
 part moved clear still carries its own motion:
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen.gltf import animation
+from cad.gltf import animation
 
 from lib import kin, kinematics as K, spec as S
 from lib.valvetrain import valve_tag

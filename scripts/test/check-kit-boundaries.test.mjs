@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, checkSharedSceneBuilders, FILE_VIEWER_ROOT, HEADLESS_ENTRY, HEADLESS_SCENE,
-  KIT_ROOT, RENDERERS_ROOT, SHARED_SCENE_PIECES
+  checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, checkSharedSceneBuilders, checkViewFrame, FILE_VIEWER_ROOT, HEADLESS_ENTRY, HEADLESS_SCENE,
+  KIT_ROOT, RENDERERS_ROOT, SHARED_SCENE_PIECES, VIEW_FRAME
 } from './check-kit-boundaries.mjs';
 
 function fixture(files, run, allowlist = []) {
@@ -20,14 +20,14 @@ function fixture(files, run, allowlist = []) {
 const kit = name => `${KIT_ROOT}/${name}`;
 
 test('a format-blind kit module passes, including its shared-UI and core imports', () => fixture({
-  [kit('camera/fit.js')]: "import { cn } from '@text-to-cad/ui/utils';\nimport { mergeBoundsList } from '@text-to-cad/core/lib/viewer/autoZoom.js';\nimport { other } from '../viewport/other.js';\nimport { fuzzy } from '../../../file-viewer/navigation/fuzzy.js';\nexport const stepKeyboardOrbit = () => document.querySelector('canvas');\n",
+  [kit('camera/fit.js')]: "import { cn } from '@cad/ui/utils';\nimport { mergeBoundsList } from '@cad/core/lib/viewer/autoZoom.js';\nimport { other } from '../viewport/other.js';\nimport { fuzzy } from '../../../file-viewer/navigation/fuzzy.js';\nexport const stepKeyboardOrbit = () => document.querySelector('canvas');\n",
 }, result => assert.deepEqual(result.errors, [])));
 
 test('the kit never imports a renderer or a file-family core module', () => fixture({
   [kit('tools/a.js')]: "import x from '../../step/workbench/state.js';\n",
-  [kit('tools/b.js')]: "const load = () => import('@text-to-cad/core/lib/urdf/parseUrdf.js');\n",
-  [kit('tools/c.js')]: "import { createXbfScene } from '@text-to-cad/core/lib/xbf/xbfScene.js';\n",
-  [kit('tools/d.js')]: "import y from '@text-to-cad/ui/renderers/step';\n",
+  [kit('tools/b.js')]: "const load = () => import('@cad/core/lib/urdf/parseUrdf.js');\n",
+  [kit('tools/c.js')]: "import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';\n",
+  [kit('tools/d.js')]: "import y from '@cad/ui/renderers/step';\n",
 }, result => {
   assert.equal(result.errors.filter(error => error.includes('imports a renderer')).length, 2);
   assert.equal(result.errors.filter(error => error.includes('file-family core module')).length, 2);
@@ -64,12 +64,12 @@ function sliceFixture(files, run) {
 }
 
 test('a renderer slice imports the kit, the workspace module, shared UI and core', () => sliceFixture({
-  'glb/index.ts': "import { defineFileRenderer } from '../../file-viewer/registry.js';\nimport { prepareWorkspaceEntry } from '../workspace/index.js';\nimport Shell from '../kit/shell/RendererShell.jsx';\nimport { x } from '@text-to-cad/core/lib/entryAssets.js';\nimport { scene } from './glbScene.js';\nconst load = () => import('./GlbRenderer.jsx');\n",
+  'glb/index.ts': "import { defineFileRenderer } from '../../file-viewer/registry.js';\nimport { prepareWorkspaceEntry } from '../workspace/index.js';\nimport Shell from '../kit/shell/RendererShell.jsx';\nimport { x } from '@cad/core/lib/entryAssets.js';\nimport { scene } from './glbScene.js';\nconst load = () => import('./GlbRenderer.jsx');\n",
 }, result => assert.deepEqual(result.errors, [])));
 
 test('a renderer slice never imports another renderer; its tests are not scanned', () => sliceFixture({
   'glb/a.js': "import view from '../step/file-view/StepSurface.jsx';\n",
-  'glb/b.js': "const load = () => import('@text-to-cad/ui/renderers/step');\n",
+  'glb/b.js': "const load = () => import('@cad/ui/renderers/step');\n",
   'glb/c.test.js': "import '../step/live.js';\n",
 }, result => {
   assert.equal(result.errors.length, 2);
@@ -92,12 +92,12 @@ function hostFixture(files, run) {
 const host = name => `${FILE_VIEWER_ROOT}/${name}`;
 
 test('the file viewer builds its own chrome out of the kit', () => hostFixture({
-  [host('Stage.tsx')]: "import Viewport from '../renderers/kit/shell/ShellViewport.jsx';\nimport { prepareWorkspaceEntry } from '../renderers/workspace/prepare.js';\nimport { cn } from '@text-to-cad/ui/utils';\n",
+  [host('Stage.tsx')]: "import Viewport from '../renderers/kit/shell/ShellViewport.jsx';\nimport { prepareWorkspaceEntry } from '../renderers/workspace/prepare.js';\nimport { cn } from '@cad/ui/utils';\n",
 }, result => assert.deepEqual(result.errors, [])));
 
 test('the file viewer never imports a family slice: it mounts one through the registry', () => hostFixture({
   [host('Mount.tsx')]: "const Stage = () => import('../renderers/step/components/StepStage.js');\n",
-  [host('navigation/icons.ts')]: "import { GLB } from '@text-to-cad/ui/renderers/glb';\n",
+  [host('navigation/icons.ts')]: "import { GLB } from '@cad/ui/renderers/glb';\n",
   [host('Mount.test.tsx')]: "import '../renderers/robot/RobotRenderer.jsx';\n",
 }, result => {
   assert.equal(result.errors.length, 2, 'both sources are caught and the test file is not scanned');
@@ -114,7 +114,7 @@ test('a missing file viewer fails rather than passing silently', () => hostFixtu
 function sharedFixture(patch, run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'text-to-cad-shared-scenes-'));
   const files = {};
-  const coreSpecifier = module => `@text-to-cad/core/${module.replace('packages/core/src/', '')}`;
+  const coreSpecifier = module => `@cad/core/${module.replace('packages/core/src/', '')}`;
   const relativeTo = (from, module) => {
     const rel = path.relative(path.dirname(from), module).split(path.sep).join('/');
     return rel.startsWith('.') ? rel : `./${rel}`;
@@ -165,3 +165,19 @@ test('the snapshot entry routes families through the shared scenes and reaches f
   `${HEADLESS_ENTRY} does not route a family's job through headlessSceneFamily (${HEADLESS_SCENE})`,
   'packages/core/src/common/renderMeshScene.js imports buildMeshDataFromGlbBuffer: the snapshot draws a family with its shared builder, never a copy flattened for it'
 ])));
+
+test('only the one frame draws the panel, its pill, the strip\'s column, the top-right, the hover tip and the cards', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'text-to-cad-view-frame-'));
+  const write = (name, code) => { fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); fs.writeFileSync(path.join(root, name), code); };
+  try {
+    write(VIEW_FRAME, 'const flat = useFlatPanelState({});\nuseStageReach(a, b);\n<div data-cad-tool-groups="">\n<FlatPanelPill />\n<ViewportTopRight />\n<ViewerLoadingOverlay />\n<ViewerAlertCard />\n<HoverTip tip={tip} />\n');
+    write(`${KIT_ROOT}/shell/FlatPanel.jsx`, 'export function useFlatPanelState() {}\n');
+    write(`${RENDERERS_ROOT}/board/Board.jsx`, 'return <ViewerAlertCard alert={a} />;\n');
+    write(`${RENDERERS_ROOT}/board/Board.test.tsx`, 'render(<ViewerAlertCard />);\n');
+    write(`${RENDERERS_ROOT}/schematic/Schematic.jsx`, 'return <HoverTip tip={tip} />;\n');
+    assert.deepEqual(checkViewFrame(root).errors.map(error => error.split(' which ')[0]), [`${RENDERERS_ROOT}/board/Board.jsx:1 renders ViewerAlertCard,`,
+      `${RENDERERS_ROOT}/schematic/Schematic.jsx:1 renders HoverTip,`]);
+    write(VIEW_FRAME, 'useStageReach(a, b);\n');
+    assert.equal(checkViewFrame(root).errors.filter(error => error.startsWith(`${VIEW_FRAME} no longer`)).length, 7);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

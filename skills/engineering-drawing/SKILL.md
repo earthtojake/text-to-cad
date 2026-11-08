@@ -1,15 +1,14 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part".
+description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # Engineering drawing
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth.
-
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, places dimensions between points ON
 that geometry, finds centre marks on it, and lays the result out on an ISO
 sheet with a frame and a title block. Change the model, rerun the drawing
@@ -19,31 +18,28 @@ you chose to override a value.
 
 **The output is one PDF.** That is what a shop receives and what every
 operating system opens. No DXF is written, nothing is paired or linked, and
-there is no CLI: the script is the interface. `$dxf` makes cut layouts and flat
-patterns, which are toolpaths, not documents; the two are different jobs.
+there is no CLI: the script is the interface. Cut layouts and flat patterns are
+toolpaths, not documents, and a different job.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.2` (`~/.local/bin/cadgen +0.8.2` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.2 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-If `cadgen` is not on your PATH, or it says 0.8.2 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.2 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 ## Workflow
 
 1. Get the part. Call the model: `enclosure()`, imported from the model's script,
-   is built by cadgen's engine (a replay when the engine already holds it), and
-   its `.shape` is the part. For a part with no model, read its file: `read_step` for a
-   STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
+   is built by text-to-cad's server (a replay when the server already holds it), and
+   its `.shape` is the part. For a part with no model, read its file: `step.read` for a
+   STEP, `xbf.read` for an xbf, anchored on `Path(__file__).parent`. Any build123d
    shape works. The drawing documents geometry, it does not build it.
 2. Write `<name>_drawing.py` beside the model, from
    [the template](references/sheet-api.md#template). Import the model facts the
@@ -67,7 +63,7 @@ outside the sandbox once.
    wider than the sheet's note column is refused, and `notes=` takes a LIST
    (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
    too).
-5. Run `python <name>_drawing.py`. It prints the PDF it wrote, and **anything
+5. Run `cad run <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
      view's geometry. Almost always the part was built from a corner and the

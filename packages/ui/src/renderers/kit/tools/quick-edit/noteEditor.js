@@ -1,4 +1,4 @@
-import { promptReferenceIds } from "@text-to-cad/core/prompt";
+import { promptReferenceIds } from "@cad/core/prompt";
 import { referenceToken } from "./quickEditPrompt.js";
 import { compactSuffix, hasPickGlyph, pickGlyphNode } from "../../inspector/pickGlyph.jsx";
 

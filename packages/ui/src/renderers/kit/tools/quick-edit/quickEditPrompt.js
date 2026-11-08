@@ -1,7 +1,18 @@
-import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@text-to-cad/core/prompt";
+import { DOCUMENT_TYPE_REGISTRY } from "@cad/core/lib/documentTypes.generated.js";
+import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
-const stemOf = resource => stem(resource.kind === "url" ? new URL(resource.url).pathname : resource.path);
+const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
+const stemOf = resource => stem(pathOf(resource));
+// The command that draws the packet again: the file's document type's snapshot (`cad <type> snapshot`),
+// the type read off the registry by the file's extension; a model's document, which has no file of its
+// own, is the engine's.
+const typeOf = path => {
+  const name = String(path || "").split("/").pop().toLowerCase();
+  const found = DOCUMENT_TYPE_REGISTRY.documentTypes.find(type => type.extensions.some(extension => name.endsWith(extension)));
+  return found ? found.id : "model";
+};
+const snapshotCommand = resource => `cad ${typeOf(pathOf(resource))} snapshot --annotation`;
 // Awaited the first time something reads it: a file is fetched only by a host that carries its bytes.
 const lazy = start => {
   let started = null;
@@ -17,7 +28,7 @@ const lazy = start => {
  * what it copied, to the chip — an annotation's file path) is `{ chip, token }`.
  *
  * @param {string} pasted
- * @returns {Array<string | import("@text-to-cad/core/prompt").PromptReference | { annotation: object }>}
+ * @returns {Array<string | import("@cad/core/prompt").PromptReference | { annotation: object }>}
  */
 export function pastedLines(pasted, copied = null) {
   const text = String(pasted || "");
@@ -62,8 +73,8 @@ export function createQuickEditContext({ resource, references = [], text, views 
     const made = pick => { const path = files.then(pick); path.catch(() => {}); return path; };
     const path = made(result => result.snapshot || "");
     const inlineText = made(result => typeof result.inline === "string"
-      ? `Snapshot JSON (cadgen snapshot --annotation):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
-    parts.push({ id: "snapshot", kind: "attachment", label: "Snapshot (cadgen snapshot --annotation)",
+      ? `Snapshot JSON (${snapshotCommand(resource)}):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
+    parts.push({ id: "snapshot", kind: "attachment", label: `Snapshot (${snapshotCommand(resource)})`,
       name: `${name}.snapshot.json`, mimeType: "application/json", path, inlineText,
       content: lazy(() => files.then(result => typeof result.inline === "string"
         ? new Blob([result.inline], { type: "application/json" }) : read(result.snapshot))), about: ["file"] });

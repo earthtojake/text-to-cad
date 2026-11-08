@@ -77,6 +77,8 @@ jobs:
       skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
+      kicad: ${{ steps.select.outputs.kicad }}
+      cadjoint: ${{ steps.select.outputs.cadjoint }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -148,8 +150,9 @@ jobs:
       - name: Check the tracked tree
         run: scripts/github-workflows/check-builds.sh --tree-only
 
-  # The cadgen package suite, the engine's and the CAD Viewer backend's included, on both
-  # platforms -- or the files of it a change selected (a test edited, a document a test reads).
+  # The packages' suites -- the library's, the server's (the engine's and the CAD Viewer backend's
+  # included) and the shim's -- on both platforms, or the files of them a change selected (a test
+  # edited, a document a test reads).
   cadgen-linux:
     name: cadgen (Linux)
     needs: changes
@@ -158,7 +161,7 @@ jobs:
     timeout-minutes: 40
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
@@ -180,8 +183,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Check cadgen types (basic)
-        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
+      - name: Check the packages' types (basic)
+        run: |
+          for project in cad cad-server cad-mcp; do
+            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
+          done
 
       - name: Run the cadgen package suite
         env:
@@ -205,7 +211,7 @@ jobs:
     env:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
       # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
@@ -219,8 +225,12 @@ jobs:
           playwright: "false"
           npm: packages/core
 
-      - name: Check cadgen types (basic)
-        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
+      - name: Check the packages' types (basic)
+        run: |
+          for project in cad cad-server cad-mcp; do
+            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
+          done
+        shell: bash
 
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
@@ -316,6 +326,64 @@ jobs:
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
 
+  # Native KiCad boards through kicode's kicad-cli and KiPy, in the environment of cad[kicad] the server
+  # makes, as on a person's computer: DRC, every export, a STEP and mesh round trip of a saved board, and a
+  # board's and a schematic's edit through the headless api-server. Only KiCad's code, its suite and its runner
+  # select it (and a full run): viewing and drawing a board need no KiCad and are the package suites'.
+  # kicode is ~110 MB from PyPI for Linux (kicode-pcb and kicode-sch), some 10 s; no apt, no PPA.
+  kicad:
+    name: KiCad boards
+    needs: changes
+    if: needs.changes.outputs.kicad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Run the KiCad suite
+        # Makes the environment of cad[kicad] (the checkout's library, editable, and kicode) once, then runs.
+        run: scripts/test/test-kicad.sh
+
+  # The cadjoint integration: a field made a build123d solid (cad.cadjoint.solid), its refusals, a field's
+  # section drawn, and one model built through an engine of the suite's own, with cad[cadjoint] installed in
+  # the job's interpreter. cadjoint and JAX are ~130 MB from PyPI, cached by uv after the first run; the suite
+  # meshes small fields on CPU and builds one model. Only the integration's code, its suite, its runner and a
+  # full run select it; the package jobs never install it.
+  cadjoint:
+    name: cadjoint integration
+    needs: changes
+    if: needs.changes.outputs.cadjoint == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Install the cadjoint integration's extra
+        run: uv pip install --system --python python --editable "./packages/cad[cadjoint]"
+
+      - name: Run the cadjoint suite
+        run: scripts/test/test-cadjoint.sh
+
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.
   api:
@@ -356,7 +424,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Stop when the selection did not run
@@ -373,7 +441,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -470,26 +538,23 @@ jobs:
       - name: Check production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
-      # cadgen ships the JS it executes as package data. A package-data glob that stops
+      # The server ships the JS it executes as package data. A package-data glob that stops
       # matching produces a wheel that imports fine and fails on a user's machine, so the
-      # wheel is built and inspected here rather than trusted.
-      - name: Check cadgen wheel contents
+      # wheels (the library's, the server's and the shim's) are built and inspected here rather
+      # than trusted.
+      - name: Check the wheels' contents
         env:
-          CADGEN_KEEP_WHEEL: "1"
-          CADGEN_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      # The CLIs the way a user gets them -- pip-installed, from a directory that is not
-      # this repo -- which is the only place a missing package-data glob or an accidental
-      # repo-relative path shows up.
-      - name: Run installed-mode checks against the verified wheel
-        run: |
-          shopt -s nullglob
-          wheels=("$RUNNER_TEMP/cadgen-wheel-check/"*.whl)
-          [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
-          scripts/test/test-installed.sh --wheel "${wheels[0]}"
+      # The CLIs the way a user gets them -- the three wheels pip-installed together, from a
+      # directory that is not this repo -- which is the only place a missing package-data glob or
+      # an accidental repo-relative path shows up.
+      - name: Run installed-mode checks against the verified wheels
+        run: scripts/test/test-installed.sh --wheels "$RUNNER_TEMP/cadgen-wheel-check"
 
       # The client the wheel ships, served by the backend from the bundle built above. After
       # the wheel steps, so what they inspect is the tree as the bundle left it.

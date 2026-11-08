@@ -1,15 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
-import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
-import { createSurfaceLook } from "@text-to-cad/core/lib/viewer/surfaceLook.js";
-import { releaseGeometry, shareGeometry } from "@text-to-cad/core/lib/render/sharedGeometry.js";
-import { createPromptContext, referencePart, textPart } from "@text-to-cad/core/prompt";
+import { EDGELESS_VIEW_FEATURES } from "@cad/core/common/viewSettings.js";
+import { createSurfaceLook } from "@cad/core/lib/viewer/surfaceLook.js";
+import { releaseGeometry, shareGeometry } from "@cad/core/lib/render/sharedGeometry.js";
+import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
-import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
+import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is
@@ -188,7 +188,7 @@ function HarnessSurface({ view, data }) {
   ]), [picked]);
 
   // `panel*.harness` stands in for a file whose sidebar is full: a tree far taller than any
-  // viewer and a Reference, each a section of the file sidebar; a retained effect — "Keep" keeps a
+  // viewer and a Reference, each a tab of the view's panel; a retained effect — "Keep" keeps a
   // small panel in the tool stack, highlighted, whatever tool is up — and "Pose", a tool that adds
   // a Position section to the sidebar while it is up.
   const [kept, setKept] = useState(false);
@@ -205,7 +205,7 @@ function HarnessSurface({ view, data }) {
     onSelect: () => setPosing(value => !value) };
   const rows = (count, name) => <ul className="px-2 py-1">{Array.from({ length: count }, (_, index) =>
     <li key={index} className="flex h-6 items-center">{name} {index + 1}</li>)}</ul>;
-  // The file sidebar: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
+  // The view's panel: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
   const sidebar = withPanel ? <>
       <ToolPanel id="tree" label="Harness tree" fit="tree" resizable collapsible={false}
         header={<TreeFilterInput label="Filter tree" placeholder="Search…" value={filter} onChange={setFilter} dense className="px-0 shadow-none" />}>{rows(treeRows, "Row")}</ToolPanel>
@@ -220,7 +220,7 @@ function HarnessSurface({ view, data }) {
   const previewView = useMemo(() => ({ scene: previewScene, animation: data.previewAnimation ?? null, onCameraSettled }),
     [previewScene, data.previewAnimation, onCameraSettled]);
 
-  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the file sidebar (down the left).
+  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the view's panel (down the left).
   return <RendererShell shell={shell} tools={withPanel ? [selectTool, ...shell.tools.drawing, keepTool, poseTool] : shell.tools.drawing}
     previewView={previewView}
     toolPanels={toolPanels} sidebar={sidebar} references={references} onClearReferences={() => setPicked("")}

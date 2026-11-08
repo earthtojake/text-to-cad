@@ -23,6 +23,9 @@ export function resolveCadEdgeSettings(value = null) {
       thickness: WIDTHS[classId]
     }])),
     highlightColor: "#8dc5ff",
+    // A picked edge, and a picked face's outline: the highlight's blue, deep enough to read as a
+    // line on the model's light surfaces, which the fill's pale blue barely did; at 3 pixels, a line, not a band.
+    highlightEdgeColor: "#1a73e8",
     highlightOpacity: 1,
     highlightThickness: 3,
     silhouetteScale: 0.004,

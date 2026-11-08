@@ -1,7 +1,7 @@
 import SelectFilterMenu from "../select/SelectFilterMenu.jsx";
 import { ModeGlyph, modeGlyphIcon } from "../select/modeGlyphs.jsx";
 import { MEASURE_SNAP_KINDS } from "./measureFilter.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // Each kind's glyph, Select's own: a point in a ring for Vertices, the cube with an edge or a face drawn solid.
 const GLYPHS = Object.freeze({ vertex: "points", edge: "edges", face: "faces" });

@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { ChangedDot } from "../ChangedDot.jsx";
 import { useStripButtonClass } from "../stripTouch.js";
-import SubToolbar, { SLIDER_SUB_TOOLBAR_CLASS, SUB_TOOLBAR_SLIDER_CLASS, SubToolbarValue } from "../SubToolbar.jsx";
-import { CrossSectionControls, ExplodeControls, clipSummary } from "./ModelViewControls.js";
+import SubToolbar, { SLIDER_SUB_TOOLBAR_CLASS } from "../SubToolbar.jsx";
+import { CrossSectionControls, ExplodeControls } from "./ModelViewControls.js";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /** Separated assembly layers, distinct from an expand affordance. */
 function ExplodeIcon(props) {
@@ -81,12 +81,10 @@ export function useModelTools({ view, features, store, mesh, disabled }) {
   const definitions = [
     { id: "exploded", label: t("explode.label"), reset: t("explode.reset"), Icon: ExplodeIcon,
       // Named, as Clip's axis and Animation's Play lead theirs: a bare slider says nothing of what it moves.
-      lead: <span className="shrink-0 pl-1.5 pr-1 text-tiny text-foreground">{t("explode.label")}</span>,
-      summary: `${Math.round((view.exploded.enabled ? view.exploded.amount : 0) * 100)}%`,
-      controls: <ExplodeControls viewSettings={view} onViewSettingsPatch={store.patch} className={SUB_TOOLBAR_SLIDER_CLASS} /> },
-    { id: "clip", label: t("clip.label"), reset: t("clip.reset"), Icon: ClipIcon, summary: clipSummary(view, clipBounds),
-      controls: <CrossSectionControls viewSettings={view} onViewSettingsPatch={store.patch} bounds={clipBounds}
-        className="flex min-w-0 flex-1 items-center gap-1" sliderClassName={SUB_TOOLBAR_SLIDER_CLASS} /> }
+      controls: <ExplodeControls viewSettings={view} onViewSettingsPatch={store.patch}
+        label={<span className="shrink-0 pl-1.5 pr-1 text-tiny text-foreground">{t("explode.label")}</span>} /> },
+    { id: "clip", label: t("clip.label"), reset: t("clip.reset"), Icon: ClipIcon,
+      controls: <CrossSectionControls viewSettings={view} onViewSettingsPatch={store.patch} bounds={clipBounds} /> }
   ].filter(tool => features.settings.includes(tool.id));
   // Neutral is the amount at zero, nothing else: Clip's axis and its settings (Part colours, Reverse) stay as set.
   const neutral = id => id === "exploded" ? { exploded: { enabled: false, amount: 0 } } : { clip: { enabled: false } };
@@ -94,11 +92,9 @@ export function useModelTools({ view, features, store, mesh, disabled }) {
     tools: definitions.map(tool => {
       const changed = applied.includes(tool.id);
       const icon = <tool.Icon className="size-3" strokeWidth={2} aria-hidden="true" />;
-      // Its row, unnamed but for what leads it: the slider, the amount, Reset.
+      // Its row, unnamed but for what leads it: the slider control (what leads it, the slider, the amount), Reset.
       const row = <SubToolbar label={t("effects.controls", { tool: tool.label })} className={SLIDER_SUB_TOOLBAR_CLASS} data-model-tool={tool.id}>
-        {tool.lead || null}
         {tool.controls}
-        <SubToolbarValue data-model-tool-amount="">{tool.summary}</SubToolbarValue>
         <ToolbarButton label={tool.reset} disabled={!changed} onClick={() => { controls.used(tool.id === "exploded" ? "explode_reset" : "clip_reset"); store.patch(neutral(tool.id)); }}>
           <RotateCcw className="size-3" strokeWidth={2} aria-hidden="true" />
         </ToolbarButton>

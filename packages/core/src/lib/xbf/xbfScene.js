@@ -1,5 +1,5 @@
 // A cadgen engine document's scene (`../viewer/sceneContract.js`): the ONE builder of an
-// `.xbf`'s scene. The viewer's xbf renderer (`@text-to-cad/ui` renderers/xbf) and the parity
+// `.xbf`'s scene. The viewer's xbf renderer (`@cad/ui` renderers/xbf) and the parity
 // page's headless stage (`common/headlessScene.js`) both call it, so neither can draw a document
 // the other does not.
 //
@@ -111,6 +111,10 @@ export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
     clearcoat: finite(material.clearcoat, 0), clearcoatRoughness: finite(material.clearcoatRoughness, 0),
     emissiveIntensity: finite(material.emissiveIntensity, 1)
   });
+  // The diffuse layer as rough as the surface (three's EON, an energy-preserving rough diffuse): a
+  // matte plastic or rubber stays lit toward its silhouette, as a real one does, where Lambert's
+  // darkens it. Only a material's own look takes it (the regular modes draw OCCT's model).
+  if (parameters.metalness < 1) parameters.diffuseRoughness = parameters.roughness;
   for (const key of ["sheen", "sheenRoughness", "specularIntensity", "iridescence", "iridescenceIOR", "dispersion", "alphaTest"]) {
     if (material[key] != null) parameters[key] = material[key];
   }
@@ -638,7 +642,7 @@ export function createXbfScene(THREE, document) {
   // --- element highlights --------------------------------------------------------------
 
   // A STEP's reference highlight (`useStepHighlights.js`): a face filled in the highlight colour,
-  // opaque, and outlined in it; an edge drawn in it, heavy and over everything -- its lines the
+  // opaque, and outlined in its deeper edge blue; an edge drawn in that, heavy and over everything -- its lines the
   // screen-space lines a STEP's are (`renderEdges.js`), so they are as wide at every pixel ratio.
   // A face or edge under the pointer is drawn as a picked one is.
   const fillMaterial = new THREE.MeshBasicMaterial({ color: INK.highlightColor, transparent: INK.highlightOpacity < 0.999, opacity: INK.highlightOpacity,
@@ -656,7 +660,7 @@ export function createXbfScene(THREE, document) {
   };
   const highlightLine = (positions, onTop) => {
     const line = createScreenSpaceLineSegments(lineContext, positions, {
-      color: INK.highlightColor, opacity: INK.highlightOpacity, lineWidth: EDGE_HIGHLIGHT_PIXELS, renderOrder: HIGHLIGHT_ORDER + 1,
+      color: INK.highlightEdgeColor, opacity: INK.highlightOpacity, lineWidth: EDGE_HIGHLIGHT_PIXELS, renderOrder: HIGHLIGHT_ORDER + 1,
       depthTest: !onTop, depthWrite: false, depthBias: topologyLineDepthBiasForWidth(EDGE_HIGHLIGHT_PIXELS)
     }, screenSpaceLineMaterials);
     if (!line) return null;
@@ -917,6 +921,16 @@ export function createXbfScene(THREE, document) {
       const placed = { kind: "face", id, surface: placeXbfSurface(matrix, surface) };
       if (points) placed.points = (xbfFaceNodes(mesh, parsed.ordinal)?.points || []).map(point => placeXbfPoint(matrix, point));
       return placed;
+    },
+    /** The box, where they stand now, of what is shown: every part but the hidden ones and, while some are isolated, those alone. What Zoom to fit frames. */
+    shownBounds() {
+      const box = new THREE.Box3();
+      for (const entry of instances) {
+        if (!entry || hidden.has(entry.index) || dimmed(entry.index)) continue;
+        const placed = instanceBox(entry);
+        if (placed) box.union(placed);
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
     },
     /** The box, in the scene's coordinates where they stand now, of instances and elements (ids `i3`, `i3/face/12`): what Zoom to selection frames. */
     selectionBounds(ids) {

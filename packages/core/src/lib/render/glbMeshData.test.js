@@ -612,15 +612,20 @@ test('external glTF buffers use the resource provider and release temporary URLs
 
 // Two triangles at a fold and no NORMAL attribute: glTF asks a client for flat normals, each
 // triangle its own, kept outward under a mirroring placement (a negative determinant).
-function twoTriangleGlb(scale = [1, 1, 1]) {
+// With `normals` (glTF, six of them) a NORMAL attribute; with `extras` the asset's extras (an
+// implicit document's marker, `asset.extras.cad`).
+function twoTriangleGlb(scale = [1, 1, 1], { normals = null, extras = null } = {}) {
   const positions = floatBuffer([0, 0, 0, 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0, 0, 0, 0.001, 0.001, 0, 0]);
-  const binary = pad4(positions);
+  const normalBytes = normals ? floatBuffer(normals.flat()) : Buffer.alloc(0);
+  const binary = pad4(Buffer.concat([positions, normalBytes]));
   const gltf = {
-    asset: { version: "2.0" }, scenes: [{ nodes: [0] }], nodes: [{ name: "fold", mesh: 0, scale }],
-    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+    asset: { version: "2.0", ...(extras ? { extras } : {}) }, scenes: [{ nodes: [0] }], nodes: [{ name: "fold", mesh: 0, scale }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, ...(normals ? { NORMAL: 1 } : {}) }, mode: 4 }] }],
     buffers: [{ byteLength: binary.length }],
-    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.length, target: 34962 }],
-    accessors: [{ bufferView: 0, componentType: 5126, count: 6, type: "VEC3", min: [0, 0, 0], max: [0.001, 0.001, 0.001] }]
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.length, target: 34962 },
+      ...(normals ? [{ buffer: 0, byteOffset: positions.length, byteLength: normalBytes.length, target: 34962 }] : [])],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 6, type: "VEC3", min: [0, 0, 0], max: [0.001, 0.001, 0.001] },
+      ...(normals ? [{ bufferView: 1, componentType: 5126, count: 6, type: "VEC3" }] : [])]
   };
   const json = pad4(Buffer.from(JSON.stringify(gltf)), 0x20);
   const header = Buffer.alloc(12);
@@ -645,6 +650,24 @@ test("a GLB primitive without normals is shaded flat, each triangle its own, mir
   }
 });
 
+
+test("an implicit document's GLB (asset.extras.cad) loads with no edges and the field's own normals", async () => {
+  // The mesh view guesses no fold of a GLB: an implicit document's creases are its field's to state,
+  // and a dual-contour sample's points settle either side of each, so a fold rule would draw stubs.
+  // The field's normals lean toward the fold: neither triangle's own (glTF +Z and +Y).
+  const field = [...Array(3).fill([0, 0.6, 0.8]), ...Array(3).fill([0, 0.8, 0.6])];
+  const marker = { cad: { format: "glb", writer: "cad.engine glb", closure: null } };
+  const meshData = await buildMeshDataFromGlbBuffer(twoTriangleGlb([1, 1, 1], { normals: field, extras: marker }));
+  assert.equal(meshData.edge_indices.length, 0, "no edge indices");
+  assert.deepEqual(meshData.parts.map(part => part.edgeIndexCount), [0], "no part owns an edge");
+  // glTF (x, y, z) is CAD (x, -z, y): the file's normals, turned to the CAD frame, never recomputed.
+  const expected = field.map(([x, y, z]) => [x, -z, y].map(value => Math.round(value * 1e6) / 1e6 + 0));
+  const normals = [];
+  for (let at = 0; at < meshData.normals.length; at += 3) {
+    normals.push(Array.from(meshData.normals.slice(at, at + 3), value => Math.round(value * 1e6) / 1e6 + 0));
+  }
+  assert.deepEqual(normals, expected);
+});
 
 test("native GLB materials keep authored Standard and Physical finishes in edit and sibling views", async () => {
   for (const physical of [false, true]) {

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
@@ -9,13 +9,14 @@ import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { noGeometryAlert } from "../kit/status/loadAlerts.js";
 import { useSceneToolState, useSceneTools } from "../kit/tools/sceneTools.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
-import { useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { MESH_DECLINED_LIVE_COMMANDS, MESH_TOOL, STL_TOOL_MODES, THREE_MF_TOOL_MODES } from "./tools.js";
 import { useMeshScene } from "./useMeshScene.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);
@@ -103,14 +104,34 @@ function MeshSurface({ view, data }) {
     if (hit && !modifiers?.multiSelect) measureRef.current.select([]);
   }, [selection.pick]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} previewView={previewView}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): the reference, Select, the framing.
+  const viewportRef = useRef(null);
+  const contextMenuItems = scene && !previewing && shell.toolMode === MESH_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null
+  }) : null;
+
+  const zoomToSelection = {
+    available: selection.selected.length > 0 && Boolean(scene?.selectionBounds),
+    run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  // What is picked, as the frame reads it: the hover tip, and the chips' cards' rows. No panel, so no Selected pane.
+  const described = useSceneDescribe(parted ? scene : null);
+  const inspect = useSceneInspect({ scene: previewing ? null : parted ? scene : null, selection, describe: described });
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
+    inspect={inspect}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameObject}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       {parted ? <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} /> : null}
-    </>} />;
+    </>; }} />;
 }
 
 export default function MeshRenderer(props) {

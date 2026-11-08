@@ -1,8 +1,8 @@
 import path from "node:path";
 
 // Development tooling and its tests consume the root workspace's compiled
-// @text-to-cad/core export, just like the app.
-import { pathIsInside } from "@text-to-cad/core/lib/pathUtils.mjs";
+// @cad/core export, just like the app.
+import { pathIsInside } from "@cad/core/lib/pathUtils.mjs";
 
 // The folder the dev backend starts in, which is only where a relative `?file=`
 // resolves (`serverInfo.start`): where `npm run dev` was invoked (`INIT_CWD`),

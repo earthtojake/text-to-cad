@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { ToolbarTooltipScope } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
-import { SIDEBAR_SLIDE_CLASS } from "./FileSidebar.jsx";
 
 /** How long Preview's chrome stays up after the pointer last moved, as a video player's controls do:
  * counted from the frame that shows it, so a long frame (a slow GPU drawing Render) is not idle time. */
 export const PREVIEW_IDLE_MS = 2000;
+// How Preview's settings panel slides in and out from the view's right edge: its translate and
+// opacity, 200ms, easing out; at once where motion is reduced.
+export const SIDEBAR_SLIDE_CLASS = "transition-[translate,opacity] duration-200 ease-out motion-reduce:transition-none";
 // How what fades goes and comes back.
 export const PREVIEW_FADE_CLASS = "transition-opacity duration-300 motion-reduce:transition-none";
 
@@ -120,7 +122,7 @@ export function usePreviewIdle(root, active, held) {
  * the right (its settings and the way out), nothing else, on no surface: the model shows through.
  * It comes and goes with the playbar (`idle`, `usePreviewIdle`). Under its right end `panel`,
  * Preview's settings, docked at the view's right edge, sliding in from it while `panelOpen` and out
- * again as it closes, as the file sidebar's panel does from its edge (`SIDEBAR_SLIDE_CLASS`).
+ * again as it closes (`SIDEBAR_SLIDE_CLASS`).
  *
  * @param {{ active: boolean, name?: string, controls?: import("react").ReactNode, panel?: import("react").ReactNode,
  *   panelOpen?: boolean, idle?: ReturnType<typeof createPreviewIdle> | null, children?: import("react").ReactNode }} props

@@ -1,4 +1,4 @@
-import { SCENE_QUALITY, resolveSceneQuality } from "@text-to-cad/core/common/sceneSettings.js";
+import { SCENE_QUALITY, resolveSceneQuality } from "@cad/core/common/sceneSettings.js";
 import { previewDisplaySettings } from "../view-settings/viewerDisplaySettings.js";
 
 // How Preview's own view (`kit/shell/PreviewView.jsx`) draws the file's Render settings.

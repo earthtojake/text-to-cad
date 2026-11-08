@@ -1,5 +1,5 @@
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 function Input({
   className,

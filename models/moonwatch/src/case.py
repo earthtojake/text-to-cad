@@ -4,7 +4,7 @@ z = 0 at the case-middle / caseback joint plane, +Z through the crystal,
 crown at +X (see `lib/spec.py`).
 """
 
-from cadgen import model
+from cad import model
 
 from lib import watch
 

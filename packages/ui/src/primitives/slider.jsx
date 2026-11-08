@@ -1,10 +1,11 @@
 import * as React from "react"
 import { Slider as SliderPrimitive } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
-// shadcn's slider: every slider in the viewer is this one (a row may size and place it; Position's
-// joints leave out its fill). Two changes from shadcn's, for the viewer's denser, see-through
+// shadcn's slider: every slider in the viewer is this one (a row may size and place it). A slider
+// with an `origin` (Position's joints: a joint's rest is mostly mid-range) fills from that value to
+// the thumb, a tick at the origin, where shadcn's fills from its left end. Two changes from shadcn's, for the viewer's denser, see-through
 // panels (11px text, 24px rows): a 12px thumb, not 16px, and a track a shade darker than muted,
 // which all but vanishes on a translucent panel. It adds only the rounding below.
 
@@ -28,6 +29,7 @@ function Slider({
   max = 100,
   step = 1,
   thumbProps,
+  origin,
   ...props
 }) {
   const decimals = stepDecimals(step)
@@ -65,12 +67,12 @@ function Slider({
           "relative grow overflow-hidden rounded-full bg-foreground/15 data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
         )}
       >
-        <SliderPrimitive.Range
+        {Number.isFinite(origin) && max > min ? <OriginFill origin={origin} value={values[0]} min={min} max={max} /> : <SliderPrimitive.Range
           data-slot="slider-range"
           className={cn(
             "absolute bg-primary data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
           )}
-        />
+        />}
       </SliderPrimitive.Track>
       {values.map((_, index) => (
         <SliderPrimitive.Thumb
@@ -82,6 +84,16 @@ function Slider({
       ))}
     </SliderPrimitive.Root>
   )
+}
+
+// A horizontal slider's fill from `origin` to its value, and a tick at the origin where it is inside the range.
+function OriginFill({ origin, value, min, max }) {
+  const at = number => Math.min(100, Math.max(0, ((Number(number) - min) / (max - min)) * 100))
+  const from = at(origin), to = at(value)
+  return <>
+    <span data-slot="slider-fill" className="absolute h-full bg-primary" style={{ left: `${Math.min(from, to)}%`, width: `${Math.abs(to - from)}%` }} />
+    {from > 0 && from < 100 ? <span data-slot="slider-origin" className="absolute inset-y-0 w-px bg-foreground/45" style={{ left: `calc(${from}% - 0.5px)` }} /> : null}
+  </>
 }
 
 export { Slider }

@@ -1,11 +1,11 @@
-"""Every `cadgen ...` command form a skill -- or the package's own markdown --
+"""Every `cad ...` command form a skill -- or the package's own markdown --
 documents has to be a real command.
 
 Skills are the product, and an agent runs what they say verbatim; the package's
 markdown (README, STORE, SNAPSHOTS) is what ships in the wheel beside them. A renamed or
 retired command leaves the docs still confidently teaching it — that is how
 `scripts/test/test-installed.sh` came to check four commands that no longer
-existed, and how `cadgen step export` would have outlived its deletion.
+existed, and how `cadgen step export` (0.7's) would have outlived its deletion.
 
 So: extract the command forms out of the skills' own fenced code blocks and put
 them through the real dispatcher's registry and the real parsers. Nothing is
@@ -24,14 +24,13 @@ import shlex
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import PROJECTS, add_sources, repo_path
 
-add_repo_path("packages/cadgen/src")
+add_sources()
 
-from cadgen import cli  # noqa: E402
+from cad_server import cli  # noqa: E402
 
 SKILLS = Path(repo_path("skills"))
-PACKAGE_DOCS = Path(repo_path("packages/cadgen"))
 
 FENCE = re.compile(r"^\s*```")
 
@@ -42,9 +41,9 @@ ELISION = "..."
 
 
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
-    """The `cadgen` argv forms inside this document's fenced code blocks.
+    """The `cad` argv forms inside this document's fenced code blocks.
 
-    Each carries whether an elision cut it short: `cadgen step snapshot ...` names
+    Each carries whether an elision cut it short: `cad <type> snapshot ...` names
     a command but is not a complete invocation, so it is checked for existence
     and not put through the parser.
     """
@@ -63,7 +62,7 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
         if line.endswith("\\"):
             pending = line[:-1].strip()
             continue
-        if not line.startswith("cadgen "):
+        if not line.startswith("cad "):
             continue
         try:
             tokens = shlex.split(line, comments=True)
@@ -84,32 +83,29 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
 def _documented_forms() -> list[tuple[Path, list[str], bool]]:
     found: list[tuple[Path, list[str], bool]] = []
     # The package's TOP-LEVEL markdown only: that is what the wheel ships.
-    for path in (*sorted(SKILLS.rglob("*.md")), *sorted(PACKAGE_DOCS.glob("*.md"))):
+    for path in (*sorted(SKILLS.rglob("*.md")), *(path for project in PROJECTS for path in sorted(project.glob("*.md")))):
         for argv, elided in _command_forms(path.read_text(encoding="utf-8")):
             found.append((path.relative_to(SKILLS.parent), argv, elided))
     return found
 
 
 def _split_command(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The registry entry this form dispatches to, exactly as `cli.main` picks it."""
-    for width in (2, 1):
-        name = " ".join(argv[:width])
-        if name in cli._COMMANDS:  # noqa: SLF001 - the registry IS the thing under test
-            return name, argv[width:]
-    return None
+    """The command this form dispatches to, exactly as `cli.main` picks it: a document type's operation
+    (`xbf export`) or a command."""
+    return cli.resolve(argv)
 
 
-def _parse(module, rest: list[str]) -> None:
+def _parse(name: str, rest: list[str]) -> None:
     """Put the form through the command's real parser, or skip if it has none.
 
-    Every command in the schema — generated or argparse — answers with
-    ``build_parser``. A command that builds its parser inside ``main()`` has
-    nothing to call without running it, so those forms are checked for
-    existence only.
+    Every document type's operation, and every command in the schema, answers with
+    its parser (``cli.build_parser_for``). A command that builds its parser inside
+    ``main()`` has nothing to call without running it, so those forms are checked
+    for existence only.
     """
-    parser_builder = getattr(module, "build_parser", None)
-    if parser_builder is not None:
-        parser_builder().parse_args(rest)
+    parser = cli.build_parser_for(name)
+    if parser is not None:
+        parser.parse_args(rest)
 
 
 class DocumentedCommands(unittest.TestCase):
@@ -127,7 +123,7 @@ class DocumentedCommands(unittest.TestCase):
             with self.subTest(source=str(source), form=" ".join(argv)):
                 self.assertIsNotNone(
                     _split_command(argv),
-                    f"{source} documents `cadgen {' '.join(argv)}`, which no command answers",
+                    f"{source} documents `cad {' '.join(argv)}`, which no command answers",
                 )
 
     def test_every_documented_form_parses(self):
@@ -137,17 +133,16 @@ class DocumentedCommands(unittest.TestCase):
                 continue  # reported by the test above / not a complete invocation
             name, rest = split
             with self.subTest(source=str(source), form=" ".join(argv)):
-                module = importlib.import_module(cli._COMMANDS[name][0])  # noqa: SLF001
                 errors = io.StringIO()
                 try:
                     with contextlib.redirect_stderr(errors):
-                        _parse(module, rest)
+                        _parse(name, rest)
                 except SystemExit:  # argparse's usage error
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {errors.getvalue().strip()}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {errors.getvalue().strip()}")
                 except argparse.ArgumentError as exc:
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {exc}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {exc}")
                 except Exception as exc:  # a hand-written parser's own error type
-                    self.fail(f"{source}: `cadgen {' '.join(argv)}` -> {exc}")
+                    self.fail(f"{source}: `cad {' '.join(argv)}` -> {exc}")
 
 
 class DocumentedSnapshotOutputPaths(unittest.TestCase):
@@ -180,8 +175,7 @@ class DocumentedSnapshotOutputPaths(unittest.TestCase):
             if split is None:
                 continue
             name, rest = split
-            module = importlib.import_module(cli._COMMANDS[name][0])  # noqa: SLF001
-            out = getattr(module.build_parser().parse_args(rest), "out", None)
+            out = getattr(cli.build_parser_for(name).parse_args(rest), "out", None)
             if out is not None:
                 forms.append((source, argv, str(out)))
         return forms

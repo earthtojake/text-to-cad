@@ -7,21 +7,20 @@
       "description": "Model, draw, source, check and fabricate parts.",
       "skills": [
         "cad",
-        "cadjoint",
-        "dxf",
         "engineering-drawing",
-        "step-parts",
-        "dfm",
-        "dfam-check",
-        "gcode",
-        "bambu-labs",
+        "print3d",
         "sendcutsend"
       ]
     },
     {
+      "title": "Electronics",
+      "description": "Design, check and manufacture circuit boards.",
+      "skills": ["pcb"]
+    },
+    {
       "title": "Robotics",
-      "description": "Robot descriptions for ROS, MoveIt2 and Gazebo.",
-      "skills": ["urdf", "srdf", "sdf"]
+      "description": "Robots and worlds for simulation and motion planning: ROS, MoveIt2 and Gazebo.",
+      "skills": ["robot-simulation"]
     }
   ]
 }

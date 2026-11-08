@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
-import { sceneFramingBounds } from "@text-to-cad/core/lib/viewer/sceneContract.js";
-import { boundsInUnits } from "@text-to-cad/core/lib/viewer/sceneUnits.js";
+import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
+import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
 import { useModelTools } from "./model-effects/ModelTools.jsx";
 import { useMeasureSession } from "./measure/useMeasureSession.js";
 import { MeasurementsBar } from "./measure/measurementChips.jsx";
 import { measureSelectHandlers } from "./measure/measureSelection.js";
 import { MeasureIcon, SCENE_MEASURE_TOOL, SceneMeasureOverlay } from "./measure/SceneMeasure.jsx";
 import { TOOL_SHORTCUTS } from "./toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // The tools a scene the kit draws offers, in two halves around the shell: what Quick Edit must know
 // before the shell is made (the tool in hand, Measure's session), and the strip, the row under it
@@ -34,7 +34,7 @@ export function useSceneToolState({ toolModes, previewing, fileKey, revision, me
  * measurement.
  *
  * @param {{ shell: ReturnType<typeof import("../shell/useRendererShell.js").useRendererShell>, scene: object | null,
- *   features: import("@text-to-cad/core/common/viewSettings.js").ViewFeatures,
+ *   features: import("@cad/core/common/viewSettings.js").ViewFeatures,
  *   state: ReturnType<typeof useSceneToolState>, measurable: boolean, clearParts?: () => void }} options
  *   `features`: the view's, as the shell was given them: a model effect is offered where they list it.
  */

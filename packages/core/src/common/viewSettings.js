@@ -212,8 +212,8 @@ export function previewDefaults({ appearance = "light", lightingQuality = "final
   return {
     parts: { colorMode: "original", color: DEFAULT_PART_COLOR_SETTINGS.color, colors: [...DEFAULT_PART_COLOR_SETTINGS.colors] },
     lighting: { quality: choice(lightingQuality, VIEW_LIGHTING_QUALITY_VALUES, "lightingQuality"), exposure: 0, rotation: 0, size: 1, fill: 0.25 },
-    background: { color: dark ? "#202226" : "#ffffff", opacity: 1 },
-    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#202226" : "#e7e7e5", opacity: 0.6, finish: "matte" }
+    background: { color: dark ? "#222222" : "#ffffff", opacity: 1 },
+    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#222222" : "#e7e7e5", opacity: 0.6, finish: "matte" }
   };
 }
 

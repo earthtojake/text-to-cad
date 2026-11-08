@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
-import { sceneFramingBounds } from "@text-to-cad/core/lib/viewer/sceneContract.js";
-import { boundsInUnits } from "@text-to-cad/core/lib/viewer/sceneUnits.js";
-import { fetchXbfPartGroups } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
+import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
+import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
+import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -30,7 +30,7 @@ import XbfMeasureOverlay from "./XbfMeasure.jsx";
 import XbfModelTree from "./XbfModelTree.jsx";
 import XbfPositionSection, { useXbfPose, writeXbfPosition, xbfPoseGiven, xbfPositionRows } from "./XbfPositionSection.jsx";
 import { MeasureIcon, SelectIcon, SelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from "./XbfSelectionModes.jsx";
-import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfNodeRefs } from "./xbfChips.jsx";
+import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
 import { viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTopologyMenu } from "./xbfMenus.js";
@@ -39,10 +39,11 @@ import { isXbfAssemblyId, presentXbfTree, xbfAssemblyIds, xbfCoveringIds, xbfPic
 import { XBF_DECLINED_LIVE_COMMANDS, XBF_TOOL, XBF_TOOL_MODES } from "./tools.js";
 import { xbfLookSubject } from "./xbfLookAt.js";
 import { readXbfView, xbfViewSignatures, xbfViewSlices } from "./xbfViewSlices.js";
+import { NO_EXPANSION, openAllRows, openRows, personsExpansion, personsRows, shutOpenedBy, shutRows, toggleRow } from "./xbfExpansion.js";
 import { goneFromEngine, useXbfScene } from "./useXbfScene.js";
 import { useXbfMotion } from "./useXbfMotion.js";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // A part menu's item as telemetry names it (`usage/controls.js`), by the action it runs.
 const MENU_CONTROLS = Object.freeze({
@@ -55,9 +56,9 @@ const MENU_CONTROLS = Object.freeze({
 // An engine document in the viewer, exactly as a STEP is: the same tools in the same order
 // (Select with its filter, Pencil, Shapes, Measure, Explode, Clip), the same selection (Parts, Faces and
 // Edges as the filter ticks them, a collapsed assembly picked as a unit, a part's faces and edges
-// once it is open, Group faces and Group edges), the same file sidebar (Model tree, Position), the
-// same menus, the same Quick Edit chips; and, for a document with motions, the file sidebar's
-// Motion section, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
+// once it is open, Group faces and Group edges), the same view's panel (Model tree, Position), the
+// same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
+// model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
 // hand from the start, so nothing waits on topology.
 
@@ -69,11 +70,15 @@ const isElementId = id => String(id).includes("/");
 // How far off z=0 a point may be, in the document's millimetres, for its DXF: the writer's own test.
 const PLANAR = 1e-6;
 
-/** The selection after a pick of a part or subassembly, as a STEP's: a plain pick drops the faces and edges. */
+/**
+ * The selection after a pick of a part or subassembly, as a STEP's: a plain pick drops the faces and edges.
+ * `id` may be several (a folded row's parts, picked as the one row they are).
+ */
 function pickNode(current, id, multiSelect) {
+  const ids = [id].flat();
   const nodes = current.filter(item => !isElementId(item)), elements = current.filter(isElementId);
-  if (!multiSelect && elements.length) return [id];
-  const next = nextSelectionIds(nodes, [id], multiSelect);
+  if (!multiSelect && elements.length) return ids;
+  const next = nextSelectionIds(nodes, ids, multiSelect);
   return multiSelect ? [...next, ...elements] : next;
 }
 
@@ -150,9 +155,13 @@ function XbfSurface({ view, data }) {
   const shape = treeShape(mode);
 
   // ---- the model tree's state, the host's: what is open, hidden, isolated, selected ------------
-  const [expandedIds, setExpandedIds] = useState(EMPTY);
+  // What is open, and who opened what the person did not (`xbfExpansion.js`): a pick's reveal, an isolation.
+  const [expansion, setExpansion] = useState(NO_EXPANSION);
+  const expandedIds = expansion.open;
   const [hiddenIds, setHiddenIds] = useState(EMPTY);
   const [isolatedIds, setIsolatedIds] = useState(EMPTY);
+  const isolatedIdsRef = useRef(isolatedIds);
+  isolatedIdsRef.current = isolatedIds;
   const [chosen, setChosen] = useState(EMPTY);
   const [hover, setHover] = useState(NO_HOVER);
   const selected = useMemo(() => (scene ? chosen.filter(id => (isElementId(id) ? scene.describeElement(id) : tree.nodes.has(id))) : EMPTY),
@@ -215,7 +224,7 @@ function XbfSurface({ view, data }) {
     requestRender();
   }, [scene, poseValues, poseApplied, requestRender]);
   // A prompt's view, as a STEP's carried its pose and what it hid: the pose Position holds off as
-  // built, as `cadgen snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
+  // built, as `cad <type> snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
   // its `--display` takes them (`hidden`, `isolated`), each node as Copy Prompt copies it and the
   // hidden parts by the fewest nodes that name them -- so the view ink was drawn in is drawn as it was.
   // While a motion owns the pose, the pose on screen is its frame.
@@ -247,18 +256,23 @@ function XbfSurface({ view, data }) {
   useLayoutEffect(() => {
     if (viewRestored || !viewSignatures) return;
     const kept = readXbfView(readFileView(stored, viewSignatures).renderer);
-    if (kept.tree.expanded.length) setExpandedIds(kept.tree.expanded);
+    // The person's rows, then what an isolation kept opens again, as isolating opened it (the tree's reveal
+    // opens the rows above it), so leaving it shuts what it opened as before the reload.
+    if (kept.tree.expanded.length || kept.tree.isolated.length) {
+      setExpansion(openRows(personsExpansion(kept.tree.expanded), kept.tree.isolated.filter(id => tree.nodes.has(id)), "isolation"));
+    }
     if (kept.tree.hidden.length) setHiddenIds(kept.tree.hidden);
     if (kept.tree.isolated.length) setIsolatedIds(kept.tree.isolated);
     if (kept.pose && kinematics) restorePose(kept.pose);
     setViewRestored(true);
-  }, [viewRestored, viewSignatures, stored, kinematics, restorePose]);
+  }, [viewRestored, viewSignatures, stored, kinematics, restorePose, tree]);
   const viewInputs = useRef(null);
-  viewInputs.current = { tree: { expanded: expandedIds, hidden: hiddenIds, isolated: isolatedIds }, pose: kinematics ? pose.saved : null };
+  // The file's view keeps the rows the person opened, never a reveal's or an isolation's.
+  viewInputs.current = { tree: { expanded: personsRows(expansion), hidden: hiddenIds, isolated: isolatedIds }, pose: kinematics ? pose.saved : null };
   const rendererState = useMemo(() => (viewRestored && viewSignatures
     ? { signatures: viewSignatures, read: () => xbfViewSlices(viewInputs.current) } : null), [viewRestored, viewSignatures]);
   useEffect(() => { if (viewRestored) shellRef.current?.scheduleStateSave(); },
-    [viewRestored, viewSignatures, expandedIds, hiddenIds, isolatedIds, pose.saved]);
+    [viewRestored, viewSignatures, expansion, hiddenIds, isolatedIds, pose.saved]);
 
   // ---- the shell ------------------------------------------------------------------------------
   const clearSelection = useCallback(() => setChosen(now => (now.length ? EMPTY : now)), []);
@@ -362,10 +376,12 @@ function XbfSurface({ view, data }) {
   const previewView = useMemo(() => ({ scene: previewScene, animation: previewMotion }), [previewScene, previewMotion]);
 
   // ---- the tree's actions --------------------------------------------------------------------
-  const toggleExpanded = useCallback(id => setExpandedIds(now => (now.includes(id) ? now.filter(item => item !== id) : [...now, id])), []);
+  // The person's: a chevron, a key, the menu's Expand or Collapse. A reveal's: the tree opening what a pick or an isolation needs.
+  const toggleExpanded = useCallback(id => setExpansion(now => toggleRow(now, id)), []);
+  const revealExpanded = useCallback((ids, reason) => setExpansion(now => openRows(now, ids, reason === "isolation" ? "isolation" : "reveal")), []);
   const collapseSubtree = useCallback(id => {
     const under = subtreeIds(tree, [id]);
-    setExpandedIds(now => (now.some(item => under.has(item)) ? now.filter(item => !under.has(item)) : now));
+    setExpansion(now => shutRows(now, [...under]));
   }, [tree]);
   const selectTreeNode = useCallback((id, { multiSelect = false } = {}) => {
     ensureSelect();
@@ -379,13 +395,15 @@ function XbfSurface({ view, data }) {
     const leaves = new Set(leavesOf(targets));
     setChosen(EMPTY);
     setIsolatedIds(targets);
-    setExpandedIds(now => [...new Set([...now, ...targets])]);
+    setExpansion(now => openRows(now, targets, "isolation"));
     setHiddenIds(now => (now.some(id => leaves.has(id)) ? now.filter(id => !leaves.has(id)) : now));
   }, [assembly, tree, leavesOf]);
+  // Leaving isolation puts the tree back as it was: what isolating opened (and its reveal, the rows above
+  // what it isolated) shuts again; what was open before, or the person opened or shut meanwhile, stays.
   const exitIsolate = useCallback(() => {
-    for (const id of isolatedIds) collapseSubtree(id);
+    setExpansion(now => shutOpenedBy(now, "isolation"));
     setIsolatedIds(EMPTY);
-  }, [isolatedIds, collapseSubtree]);
+  }, []);
   escapeRef.current = () => {
     const now = measureRef.current;
     if (!previewing && toolMode === XBF_TOOL.MEASURE && now.drafting) { now.cancelDraft(); return true; }
@@ -396,9 +414,11 @@ function XbfSurface({ view, data }) {
     return false;
   };
   const exitSingleIsolate = useCallback((id) => {
-    collapseSubtree(id);
-    setIsolatedIds(now => now.filter(item => item !== id));
-  }, [collapseSubtree]);
+    const left = isolatedIdsRef.current.filter(item => item !== id);
+    // One isolation of several: what it opened under it; the last: everything isolating opened.
+    setExpansion(now => shutOpenedBy(now, "isolation", left.length ? subtreeIds(tree, [id]) : null));
+    setIsolatedIds(left);
+  }, [tree]);
   const hideNodes = useCallback((ids) => {
     const leaves = new Set(leavesOf(ids));
     for (const id of ids) collapseSubtree(id);
@@ -528,17 +548,20 @@ function XbfSurface({ view, data }) {
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
   }, [ensureSelect, grownIds, nodeOf, selectableIds]);
+  // What a press would pick, which the frame names in its hover tip: the face or edge, else the node a press reaches.
+  const [pointed, setPointed] = useState("");
   const handleHover = useCallback((found) => {
     const hit = found?.rest || null;
-    if (!hit) { setHover(now => (now === NO_HOVER ? now : NO_HOVER)); return; }
-    if (hit.kind) { setHover({ parts: EMPTY, element: hit.id }); return; }
+    if (!hit) { setHover(now => (now === NO_HOVER ? now : NO_HOVER)); setPointed(""); return; }
+    if (hit.kind) { setHover({ parts: EMPTY, element: hit.id }); setPointed(hit.id); return; }
     const node = nodeOf(hit);
     setHover({ parts: node ? tree.nodes.get(node)?.leafPartIds || EMPTY : EMPTY, element: null });
+    setPointed(node || "");
   }, [nodeOf, tree]);
   const selectActive = !previewing && Boolean(scene) && toolMode === XBF_TOOL.SELECT;
   // A pick under Explode or Clip takes Select up, as a STEP's does.
   const picking = !previewing && Boolean(scene) && toolMode === XBF_TOOL.SELECT;
-  useEffect(() => { if (!picking) setHover(NO_HOVER); }, [picking]);
+  useEffect(() => { if (!picking) { setHover(NO_HOVER); setPointed(""); } }, [picking]);
 
   // ---- references and copies -------------------------------------------------------------------
   const facts = useXbfElementFacts({ source, fetch: engineFetch, version: loaded.revision, scene, elementIds: selectedElementIds });
@@ -549,8 +572,10 @@ function XbfSurface({ view, data }) {
     setHover(elements.length ? { parts: EMPTY, element: elements[0] } : { parts: ids, element: null });
   }, []);
   const resource = shell.frame.resource;
+  // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`xbfDescriber`).
+  const describe = useMemo(() => xbfDescriber({ scene, tree, facts, t }), [scene, tree, facts, t]);
   const { references, chips } = useXbfSelectionChips({ scene, tree, resource, selectedIds: selected, facts,
-    onRemove: removeFromSelection, onHover: hoverChip });
+    onRemove: removeFromSelection, onHover: hoverChip, describe });
   promptReferencesRef.current = previewing ? NO_REFERENCES : references;
   // What a node or an element copies: its reference, the file's path with it.
   const singleChip = useCallback(ids => xbfCopyText({ scene, tree, resource, ids }), [scene, tree, resource]);
@@ -563,7 +588,7 @@ function XbfSurface({ view, data }) {
     return chip.compact || { name: chip.label, kind: chip.glyph };
   }, [chips]);
 
-  // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation ----
+  // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation or fits ----
   // A face or an edge: the view turns square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
   // nothing is picked; navigation only.
   const lookAt = useCallback((id) => {
@@ -578,7 +603,8 @@ function XbfSurface({ view, data }) {
     if (activated && lastPick.current) setChosen(lastPick.current.before);
     lastPick.current = null;
     const hit = pickAtClient(clientX, clientY);
-    if (!hit) { exitIsolate(); return; }
+    // Empty space: out of isolation, or, with nothing isolated, the model fitted (as F, and every view's double-click).
+    if (!hit) { if (isolatedIdsRef.current.length) exitIsolate(); else shellRef.current?.frame.viewerRef.current?.resetZoom?.(); return; }
     if (hit.kind) { usage.used("look_at"); lookAt(hit.id); return; }
     const node = nodeOf(hit);
     if (node && assembly) { usage.used("isolate"); isolate([node]); }
@@ -626,8 +652,8 @@ function XbfSurface({ view, data }) {
     onReveal: menu => revealNodes(menu.actionNodeIds),
     onExpandSelected: menu => menu.collapsedActionNodeIds.forEach(toggleExpanded),
     onCollapseSelected: menu => menu.expandedActionNodeIds.forEach(toggleExpanded),
-    onExpandAll: menu => setExpandedIds(now => [...new Set([...now, ...menu.collapsedExpandableTreeNodeIds])]),
-    onCollapseAll: menu => setExpandedIds(now => now.filter(id => !menu.expandedExpandableTreeNodeIds.includes(id))),
+    onExpandAll: menu => setExpansion(now => openAllRows(now, menu.collapsedExpandableTreeNodeIds)),
+    onCollapseAll: menu => setExpansion(now => shutRows(now, menu.expandedExpandableTreeNodeIds)),
     onZoomFit: () => shellRef.current?.frame.viewerRef.current?.resetZoom?.(),
     onZoomSelection: zoomToSelection
   }).map(([name, action]) => [name, (menu) => { usage.used(MENU_CONTROLS[name]); ensureSelect(); return action(menu); }])),
@@ -679,28 +705,46 @@ function XbfSurface({ view, data }) {
   [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
   const handleLayoutRef = useRef(null);
 
-  // ---- the file sidebar: the Model tree (an assembly's), then Position --------------------------
+  // ---- the view's panel: the Model tree (an assembly's), then Position -------------------------
   const partControls = useMemo(() => ({
     isAssemblyView: assembly, hiddenPartIds: hiddenIds, focusedNodeIds: isolatedIds, selectableNodeIds: selectableIds ? [...selectableIds] : null,
-    expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onSelectTreeNode: selectTreeNode,
+    expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onRevealTreeNodes: revealExpanded, onSelectTreeNode: selectTreeNode,
     onFocusTreeNode: ids => { ensureSelect(); isolate(ids); }, onUnfocusTreeNode: exitSingleIsolate, onExitAllIsolate: exitIsolate,
     onTogglePartVisibility: toggleVisibility, showAllHiddenParts: showAll,
     onHoverTreeNode: id => setHover(id ? { parts: tree.nodes.get(id)?.leafPartIds || EMPTY, element: null } : NO_HOVER),
     menuForNode, partMenuActions
-  }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
+  }), [assembly, hiddenIds, isolatedIds, selectableIds, expandedIds, toggleExpanded, revealExpanded, selectTreeNode, ensureSelect, isolate, exitSingleIsolate,
     exitIsolate, toggleVisibility, showAll, tree, menuForNode, partMenuActions]);
   const sidebar = scene && (assembly || kinematics) ? <>
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
     {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
-      changed={poseApplied} onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
+      onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
   </> : null;
 
+  // What is picked, as the frame reads it: the Selected pane under the Model tree, the hover tip, the rows of
+  // both, which pick, light and frame as the tree's rows do.
+  const inspectSelect = useCallback((id, { multiSelect = false } = {}) => {
+    ensureSelect();
+    setChosen(now => (isElementId(id) ? pickElements(now, [id], multiSelect) : pickNode(now, id, multiSelect)));
+  }, [ensureSelect]);
+  const inspectHover = useCallback(id => hoverChip(id ? [id] : null), [hoverChip]);
+  const inspectFrame = useCallback((ids) => {
+    const bounds = scene?.selectionBounds([...leavesOf(ids.filter(id => !isElementId(id))), ...ids.filter(isElementId)]);
+    if (bounds) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(bounds);
+  }, [scene, leavesOf]);
+  // The hover tip's own short path: names from the tree, nothing measured (`xbfTipper`).
+  const tip = useMemo(() => xbfTipper({ scene, tree }), [scene, tree]);
+  const inspect = useMemo(() => (scene && !previewing ? { selected, describe, tip, hovered: pointed, select: inspectSelect, hover: inspectHover,
+    frame: inspectFrame, copyText: singleChip, data: "model" } : null), [scene, previewing, selected, describe, tip, pointed, inspectSelect, inspectHover, inspectFrame, singleChip]);
+
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}
+    inspect={inspect}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
-    inkTouches={inkTouches} contextMenuItems={contextMenuItems}
+    inkTouches={inkTouches} contextMenuItems={contextMenuItems} doubleClickFits={false}
+    zoomToSelection={{ run: zoomToSelection, available: zoomSelectionAvailable }}
     viewportOverlay={viewport => {
       viewportRef.current = viewport;
       return <>

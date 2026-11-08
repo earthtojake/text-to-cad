@@ -5,7 +5,7 @@
 // edited, so a program that names no model is three's own.
 //
 // `occt` is OCCT 7.9's PBR raster program (`occt_phong-pbr`), which the engine's look of the
-// regular modes is defined by (`cadgen/engine/render/look.py`). Where three's physical model
+// regular modes is defined by (`cad/engine/render/look.py`). Where three's physical model
 // differs from it, the model draws OCCT's:
 //   - the roughness as given (at least 0.01), with no floor of 0.0525 and no roughness added for a
 //     curved surface's screen-space normal change;
@@ -62,11 +62,11 @@ void RE_IndirectSpecular_Occt( const in vec3 radiance, const in vec3 irradiance,
 		clearcoatSpecularIndirect += clearcoatRadiance * EnvironmentBRDF( geometryClearcoatNormal, geometryViewDir, material.clearcoatF0, material.clearcoatF90, material.clearcoatRoughness );
 	#endif
 	vec3 reflected = radiance;
-	#ifdef ENVMAP_TYPE_CUBE_UV
+	#ifdef ENVMAP_TYPE_PMREM
 		// The environment along the mirror direction itself (three bends it toward the normal, and an
 		// anisotropic surface's toward its brushing).
 		vec3 mirror = transformDirectionByInverseViewMatrix( reflect( - geometryViewDir, geometryNormal ), viewMatrix );
-		reflected = textureCubeUV( envMap, envMapRotation * mirror, material.roughness ).rgb * envMapIntensity;
+		reflected = textureLod( envMap, envMapRotation * mirror, roughnessToMip( material.roughness ) ).rgb * envMapIntensity;
 	#endif
 	float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
 	vec2 scaleBias = texture2D( occtEnvironmentTable, vec2( dotNV, material.roughness ) ).rg;

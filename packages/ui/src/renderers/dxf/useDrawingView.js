@@ -1,53 +1,20 @@
 /**
- * The canvas a drawing is painted on, and the three things a person does to it:
- * drag to pan, wheel or pinch to zoom about the pointer, double-click to fit —
- * and, for the tool in hand, a tap (a press that lets go without dragging) and
- * the pointer resting over the drawing (`onTap`, `onHover`), in the pane's CSS
- * pixels. A drag that has gone further than a tap may is a pan, whatever the tool.
- *
- * The view lives in a REF, not in React state. A pan is a stream of pointer
- * moves and a zoom is a stream of wheel ticks; re-rendering a component tree per
- * event would make both stutter and would tell React about a number only the
- * canvas cares about. The component re-renders when something it actually shows
- * changes — whether a drag is in progress, so the cursor can say so — and never
- * per frame.
- *
- * Painting is on demand: one `requestAnimationFrame` is scheduled when
- * something changed, and an idle drawing draws nothing at all. A resize is the
- * exception: resizing the canvas wipes it, so the pane's observer paints at once.
- * What the tools draw over the drawing (a highlight, ink) is painted in the same
- * frame, after it (`overlay`), so a capture of the canvas holds it too.
+ * The canvas a drawing is painted on: every flat view's (`../kit/viewport/useFlatCanvasView.js` — a
+ * mouse's wheel or a pinch to zoom about the pointer, a trackpad's two-finger scroll to pan, a drag to
+ * pan, the 3D views' pans too (the middle or the right button's drag, or a drag with Ctrl, Cmd or
+ * Shift), double-click to fit, a tap and the pointer resting over it for the tool in hand), painting
+ * the drawing on the theme's background in the theme's pen, without the layers hidden, then what the
+ * tools draw over it (`overlay`, a highlight and ink) in the same frame, so a capture of the canvas
+ * holds it too. The fit is every flat view's, a board's and a schematic's: their margin (`fitBoardBounds`,
+ * 6% of the pane's shorter side, at least 16px), clear of the view's tool strip.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  clampScale,
-  clearSurface,
-  drawDrawing,
-  fitTransform,
-  panTransform,
-  sameTransform,
-  screenToModel,
-  zoomLimits,
-  zoomTransform
-} from "@text-to-cad/core/lib/drawing2d/index.js";
-import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
-import { capturePointer, releasePointer } from "../../lib/pointerCapture.js";
+import { useCallback, useEffect, useRef } from "react";
+import { clearSurface, drawDrawing, fitTransform } from "@cad/core/lib/drawing2d/index.js";
+import { fitBoardBounds } from "@cad/core/lib/plot2d/index.js";
+import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js";
 
-/** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
-const WHEEL_ZOOM_SPEED = 0.0015;
-/** A trackpad pinch arrives as a ctrl-wheel with much smaller deltas. */
-const PINCH_WHEEL_ZOOM_SPEED = 0.01;
-const LINE_HEIGHT_PX = 16;
-const PAGE_HEIGHT_PX = 400;
-/** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
-const TAP_SLOP_PX = 4;
 const NO_LAYERS = new Set();
-function wheelZoomFactor(event) {
-  const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
-  const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
-  return Math.exp(-event.deltaY * unit * speed);
-}
 
 /**
  * @param {object} options
@@ -56,7 +23,7 @@ function wheelZoomFactor(event) {
  *   The view this file was left at, when it was left anywhere but the fit.
  * @param {"light"|"dark"} options.colorScheme
  * @param {(transform: object|null) => void} options.onViewMoved  Called after the person moves the
- *   view, with the transform to remember. Never called for a fit.
+ *   view, with the transform to remember; with null when it is the fit again.
  * @param {ReadonlySet<string>} [options.hiddenLayers]  Layers not drawn.
  * @param {(ctx: CanvasRenderingContext2D, view: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  *   Painted over the drawing in each frame.
@@ -66,284 +33,26 @@ function wheelZoomFactor(event) {
  */
 export function useDrawingView({ drawing, restored = null, colorScheme = "light", onViewMoved, hiddenLayers = NO_LAYERS,
   overlay = null, onTap = null, onHover = null }) {
-  const containerRef = useRef(null);
-  const canvasRef = useRef(null);
-  const contextRef = useRef(null);
-  const sizeRef = useRef({ width: 0, height: 0 });
-  const transformRef = useRef(null);
-  const fitScaleRef = useRef(0);
-  // The person has framed this drawing themselves: a resize must not take it back,
-  // and it is worth remembering. A restored view is already theirs.
-  const movedRef = useRef(Boolean(restored));
-  const restoredRef = useRef(restored);
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
-  const schemeRef = useRef(colorScheme);
-  schemeRef.current = colorScheme;
-  const onViewMovedRef = useRef(onViewMoved);
-  onViewMovedRef.current = onViewMoved;
   const hiddenRef = useRef(hiddenLayers);
   hiddenRef.current = hiddenLayers;
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
-  const tapRef = useRef(onTap);
-  tapRef.current = onTap;
-  const hoverRef = useRef(onHover);
-  hoverRef.current = onHover;
-  const [dragging, setDragging] = useState(false);
-  const frameRef = useRef(0);
-
-  const paint = useCallback(() => {
-    frameRef.current = 0;
-    const canvas = canvasRef.current;
-    const { width, height } = sizeRef.current;
-    if (!canvas || width <= 0 || height <= 0) return;
-    const ctx = contextRef.current || (contextRef.current = canvas.getContext("2d"));
-    if (!ctx) return;
-    const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
-    const { background, foreground } = readDrawingThemeColors(containerRef.current, schemeRef.current);
+  const paint = useCallback((ctx, { width, height, pixelRatio, transform, element, colorScheme: scheme }) => {
+    const { background, foreground } = readDrawingThemeColors(element, scheme);
     clearSurface(ctx, { width, height, pixelRatio, background });
     const drawable = drawingRef.current;
-    if (drawable && transformRef.current) {
-      drawDrawing(ctx, drawable, { transform: transformRef.current, foreground, pixelRatio, hiddenLayers: hiddenRef.current });
-      overlayRef.current?.(ctx, { transform: transformRef.current, pixelRatio, width, height });
-    }
+    if (!drawable || !transform) return;
+    drawDrawing(ctx, drawable, { transform, foreground, pixelRatio, hiddenLayers: hiddenRef.current });
+    overlayRef.current?.(ctx, { transform, pixelRatio, width, height });
   }, []);
-
-  const requestPaint = useCallback(() => {
-    if (frameRef.current) return;
-    frameRef.current = requestAnimationFrame(paint);
-  }, [paint]);
-
-  /** Paint in the caller's task, in place of any frame already asked for. */
-  const paintNow = useCallback(() => {
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    paint();
-  }, [paint]);
-
-  /** Recompute the fitted scale for the current pane, and adopt it unless the view is the person's. */
-  const refit = useCallback((force) => {
-    const drawable = drawingRef.current;
-    const { width, height } = sizeRef.current;
-    if (!drawable?.bounds || width <= 0 || height <= 0) return;
-    // The drawing frames clear of the view's tool strip, which the view measures as `--cad-tools-bottom`.
-    const frame = containerRef.current?.closest?.("[data-slot=cad-file-view]");
-    const strip = frame ? Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom")) : 0;
-    const fitted = fitTransform(drawable.bounds, width, height, { top: Number.isFinite(strip) ? strip : 0 });
-    fitScaleRef.current = fitted.scale;
-    if (force || !movedRef.current) {
-      movedRef.current = false;
-      transformRef.current = fitted;
-      onViewMovedRef.current?.(null);
-    } else if (!transformRef.current) {
-      transformRef.current = restoredRef.current;
-    }
-    requestPaint();
-  }, [requestPaint]);
-
-  /** Record a view the person chose. */
-  const moveTo = useCallback((next) => {
-    if (!next || sameTransform(transformRef.current, next)) return;
-    transformRef.current = next;
-    movedRef.current = true;
-    onViewMovedRef.current?.(next);
-    requestPaint();
-  }, [requestPaint]);
-
-  const fit = useCallback(() => refit(true), [refit]);
-
-  const zoomBy = useCallback((factor, anchor) => {
-    const transform = transformRef.current;
-    if (!transform || !fitScaleRef.current) return;
-    const { width, height } = sizeRef.current;
-    const point = anchor || { x: width / 2, y: height / 2 };
-    moveTo(zoomTransform(transform, point, factor, zoomLimits(fitScaleRef.current)));
-  }, [moveTo]);
-
-  // ---- the pane's size -------------------------------------------------------
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas || typeof ResizeObserver === "undefined") return undefined;
-    const measure = () => {
-      const rect = container.getBoundingClientRect();
-      const width = Math.max(0, Math.round(rect.width));
-      const height = Math.max(0, Math.round(rect.height));
-      const previous = sizeRef.current;
-      if (width === previous.width && height === previous.height) return;
-      // What the pane held in its middle, and how far the view was from the fitted scale.
-      // Both are read BEFORE the size changes: a view the person chose is carried across a
-      // resize in those terms rather than in pixels (see below).
-      const heldCentre = transformRef.current && previous.width > 0 && previous.height > 0
-        ? screenToModel(transformRef.current, previous.width / 2, previous.height / 2)
-        : null;
-      const heldZoom = transformRef.current && fitScaleRef.current > 0
-        ? transformRef.current.scale / fitScaleRef.current
-        : 0;
-      sizeRef.current = { width, height };
-      const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
-      canvas.width = Math.max(1, Math.round(width * pixelRatio));
-      canvas.height = Math.max(1, Math.round(height * pixelRatio));
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      // A canvas resize wipes its backing store AND its context state, so the
-      // cached context has to be re-read along with the picture.
-      contextRef.current = canvas.getContext("2d");
-      refit(false);
-      // A view the person framed is not taken back by a resize — but it must not keep an
-      // absolute pixel scale either, or a pane that narrows (the window resizing) simply
-      // crops the drawing where it stands. So it keeps what it MEANT: the same zoom
-      // relative to the fit, still centred on what it was centred on.
-      // That is how the 3D viewports behave when their pane changes size.
-      if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
-        const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));
-        moveTo({
-          scale,
-          offsetX: width / 2 - heldCentre[0] * scale,
-          offsetY: height / 2 + heldCentre[1] * scale
-        });
-      }
-      // Resizing the canvas above wiped it. The observer runs after layout and before
-      // paint, but after this frame's animation callbacks, so a frame asked for now would
-      // only be painted in the NEXT frame and the pane would show empty for one. Paint the
-      // drawing at its new size here, so the frame the pane changed in already shows it.
-      paintNow();
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [moveTo, paintNow, refit]);
-
-  // A new drawing frames itself, unless this file's view is already the person's.
-  useEffect(() => {
-    transformRef.current = drawing?.bounds ? transformRef.current : null;
-    refit(false);
-  }, [drawing, refit]);
-
-  // The theme moved: same view, different ink.
-  //
-  // The host's `colorScheme` is one trigger, but not the only one — whatever
-  // swaps the tokens does it by writing the class or the style on `<html>`, and
-  // that write is not a React render here. So watch the element the tokens are
-  // declared on, exactly as the 3D viewers' backdrop does.
-  useEffect(() => {
-    requestPaint();
-    if (typeof document === "undefined" || typeof MutationObserver === "undefined") return undefined;
-    const observer = new MutationObserver(requestPaint);
-    observer.observe(document.documentElement, { attributeFilter: ["class", "style"] });
-    return () => observer.disconnect();
-  }, [colorScheme, requestPaint]);
-
-  // The handle is cleared with the frame it names: React's development StrictMode runs this
-  // cleanup and then the effects again on the SAME refs, and a stale non-zero handle would
-  // make `requestPaint` believe a frame is still pending and never paint again.
-  useEffect(() => () => {
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    frameRef.current = 0;
-  }, []);
+  const view = useFlatCanvasView({ content: drawing, bounds: drawing?.bounds ?? null, restored, colorScheme, onViewMoved, paint,
+    onTap, onHover, fitBox: fitBoardBounds, clearStrip: true, middlePan: true, orbitPan: true });
+  const { requestPaint, encode } = view;
 
   // A layer shown or hidden: the same view, without it.
   useEffect(() => { requestPaint(); }, [hiddenLayers, requestPaint]);
-
-  // ---- pointer and wheel -----------------------------------------------------
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    /** @type {Map<number, {x: number, y: number}>} */
-    const pointers = new Map();
-    const local = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    };
-    const pinchState = { distance: 0, centre: { x: 0, y: 0 } };
-    const measurePinch = () => {
-      const [first, second] = [...pointers.values()];
-      pinchState.distance = Math.hypot(first.x - second.x, first.y - second.y);
-      pinchState.centre = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-    };
-
-    // The press that may still be a tap: where it went down, until it travels or a second finger lands.
-    let press = null;
-    const onPointerDown = (event) => {
-      // Primary press only: a secondary or middle press belongs to whatever the
-      // host puts on them, not to panning.
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      capturePointer(canvas, event.pointerId);
-      const point = local(event);
-      pointers.set(event.pointerId, point);
-      press = pointers.size === 1 ? { id: event.pointerId, start: point, moved: false } : null;
-      if (pointers.size === 2) measurePinch();
-      if (pointers.size === 1) setDragging(true);
-      hoverRef.current?.(null, null);
-      event.preventDefault();
-    };
-    const onPointerMove = (event) => {
-      const previous = pointers.get(event.pointerId);
-      if (!previous) {
-        // Nothing pressed: the pointer resting over the drawing, for the tool in hand.
-        if (!pointers.size && event.pointerType !== "touch") hoverRef.current?.(local(event), event);
-        return;
-      }
-      const point = local(event);
-      pointers.set(event.pointerId, point);
-      const transform = transformRef.current;
-      if (!transform) return;
-      if (pointers.size === 1) {
-        if (press && !press.moved) {
-          if (Math.hypot(point.x - press.start.x, point.y - press.start.y) <= TAP_SLOP_PX) return;
-          press.moved = true;
-          moveTo(panTransform(transform, point.x - press.start.x, point.y - press.start.y));
-          return;
-        }
-        moveTo(panTransform(transform, point.x - previous.x, point.y - previous.y));
-      } else if (pointers.size === 2 && fitScaleRef.current) {
-        const before = { ...pinchState };
-        measurePinch();
-        if (before.distance > 0 && pinchState.distance > 0) {
-          const zoomed = zoomTransform(transform, before.centre, pinchState.distance / before.distance,
-            zoomLimits(fitScaleRef.current));
-          moveTo(panTransform(zoomed, pinchState.centre.x - before.centre.x, pinchState.centre.y - before.centre.y));
-        }
-      }
-    };
-    const onPointerUp = (event) => {
-      const at = pointers.get(event.pointerId);
-      if (!pointers.delete(event.pointerId)) return;
-      releasePointer(canvas, event.pointerId);
-      if (pointers.size === 2) measurePinch();
-      if (pointers.size === 0) setDragging(false);
-      const tapped = press && press.id === event.pointerId && !press.moved && event.type === "pointerup";
-      press = null;
-      if (tapped && at) tapRef.current?.(at, event);
-    };
-    const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
-    const onWheel = (event) => {
-      if (!transformRef.current) return;
-      // The page must not scroll under a drawing being zoomed, so this listener
-      // is registered non-passive and always consumes the event.
-      event.preventDefault();
-      zoomBy(wheelZoomFactor(event), local(event));
-    };
-    const onDoubleClick = (event) => { event.preventDefault(); fit(); };
-
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerup", onPointerUp);
-    canvas.addEventListener("pointercancel", onPointerUp);
-    canvas.addEventListener("pointerleave", onPointerLeave);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("dblclick", onDoubleClick);
-    return () => {
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerup", onPointerUp);
-      canvas.removeEventListener("pointercancel", onPointerUp);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("dblclick", onDoubleClick);
-    };
-  }, [fit, moveTo, zoomBy]);
 
   /**
    * The drawing on its own, for a library card: fitted whole to `width` × `height`, painted on a
@@ -370,14 +79,8 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   }), []);
 
   /** The framed picture as a PNG, background included: it is painted into the canvas. */
-  const capture = useCallback(() => new Promise((resolve, reject) => {
-    const canvas = canvasRef.current;
-    if (!canvas) { reject(new Error("This drawing is not on screen yet.")); return; }
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("The browser could not encode this drawing as a PNG."));
-    }, "image/png");
-  }), []);
+  const capture = useCallback(() => encode("drawing"), [encode]);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, capture, thumbnail, transformRef, sizeRef, requestPaint };
+  return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame,
+    zoomBy: view.zoomBy, zoom: view.zoom, setView: view.setView, capture, thumbnail, transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

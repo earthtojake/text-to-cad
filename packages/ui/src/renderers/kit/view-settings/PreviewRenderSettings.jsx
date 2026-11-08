@@ -1,17 +1,16 @@
 import { Minus, Plus, RotateCcw } from "lucide-react";
-import { previewSettingsChanged, resolvePreviewSettings } from "@text-to-cad/core/common/viewSettings.js";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { previewSettingsChanged, resolvePreviewSettings } from "@cad/core/common/viewSettings.js";
+import { Button } from "@cad/ui/primitives/button";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetColorPicker, FileSheetSettingRow,
-  FileSheetSettingsSection, FileSheetValueInput
+  FileSheetSettingsSection
 } from "../inspector/FileSheet.js";
-import { SUB_TOOLBAR_SLIDER_CLASS } from "../tools/SubToolbar.jsx";
+import { SliderField } from "../inspector/SliderField.jsx";
 
 // Every control fills the row's control column at the row's 24px height.
 const CONTROL_CLASS = "!h-6 w-full min-w-0";
@@ -32,7 +31,7 @@ function Range({ label, name = label, value, onChange, min = 0, max = 1, step = 
   scale = 100, format = v => `${Math.round(v * 100)}%` }) {
   const { t } = useI18n();
   const commit = draft => {
-    // FileSheetValueInput also commits an untouched blur. Its formatted readout may be
+    // The value also commits an untouched blur. Its formatted readout may be
     // rounded, so only a changed draft is an edit to Preview's sparse settings.
     if (draft === format(value)) return;
     const parsed = Number.parseFloat(draft) / scale;
@@ -42,12 +41,8 @@ function Range({ label, name = label, value, onChange, min = 0, max = 1, step = 
     const next = Number(clamped.toFixed(precision));
     if (next !== value) onChange(next);
   };
-  return <FileSheetSettingRow label={label} disabled={disabled}>
-    <Slider className={cn(SUB_TOOLBAR_SLIDER_CLASS, "px-1")} value={[value]} min={min} max={max} step={step} disabled={disabled}
-      thumbProps={{ "aria-label": name }} onValueChange={([next]) => onChange(next)} />
-    <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={format(value)} onValueCommit={commit} disabled={disabled}
-      className="h-6 w-13 px-1.5" />
-  </FileSheetSettingRow>;
+  return <SliderField label={label} name={name} value={value} min={min} max={max} step={step} disabled={disabled}
+    onValueChange={onChange} text={format(value)} onTextCommit={commit} textLabel={t("render.valueOf", { name })} />;
 }
 function Color({ label, name = label, value, onChange, disabled = false }) {
   return <FileSheetSettingRow label={label} disabled={disabled}>
