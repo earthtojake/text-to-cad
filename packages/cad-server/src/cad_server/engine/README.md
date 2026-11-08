@@ -1962,7 +1962,8 @@ process. The context is a hidden window: Cocoa on macOS, a hidden window on Wind
 X server's -- the OCP wheels draw through GLX alone, so there is no context without one. A Linux
 still draws on its request's `DISPLAY`, else on the engine's ([display.py](display.py)): every
 process that draws (a worker, a render process: `Service.draws`) is started with the daemon's own
-`DISPLAY`, else with an Xvfb's the daemon starts once where `Xvfb` is on PATH and stops with it;
+`DISPLAY` and `XAUTHORITY`, else with an Xvfb's the daemon starts once where `Xvfb` is on PATH (a cookie
+of its own, which only this user can read) and stops with it;
 where none can be made the snapshot fails, naming what to install. Nothing is written but OUT.
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader

@@ -12,7 +12,8 @@ dropped). The window it draws through is the platform's:
 - **Linux**: OCP's Linux build draws through GLX, which needs an X server: an X display's window,
   virtual (never mapped: ``Xw_Window`` with ``SetVirtual``), on an X display (``display``): the
   request's own ``DISPLAY``, else the engine's (``CAD_ENGINE_DISPLAY``: the daemon's own display, or
-  an Xvfb it started itself, ``cad_server.engine.display``). The wheels we pin
+  an Xvfb it started itself, ``cad_server.engine.display``), connected to with the engine's X authority
+  (``CAD_ENGINE_XAUTHORITY``: the daemon's ``XAUTHORITY``, or its Xvfb's cookie). The wheels we pin
   (``cadquery-ocp-novtk`` 8.0, x86-64 and aarch64) draw through GLX alone: ``libTKOpenGl`` links
   ``libGL`` and ``libX11`` and no EGL, and its ``InitEglContext`` is "not implemented", so there is no
   off-screen context without an X server. An OCCT built with EGL and no Xlib would make its context
@@ -45,7 +46,7 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 
-from cad.engine.places import DISPLAY
+from cad.engine.places import DISPLAY, XAUTHORITY
 
 __all__ = ["ENGINE_DISPLAY", "INSTALL", "Canvas", "Unavailable", "available", "display", "driver", "platform",
            "pool"]
@@ -209,8 +210,28 @@ def _connection() -> Any:
         else:
             from OCP.TCollection import TCollection_AsciiString
 
-            made[named] = Aspect_DisplayConnection(TCollection_AsciiString(named))
+            with _engine_authority():
+                made[named] = Aspect_DisplayConnection(TCollection_AsciiString(named))
     return made[named]
+
+
+@contextlib.contextmanager
+def _engine_authority() -> Iterator[None]:
+    """``XAUTHORITY`` the engine's (``places.XAUTHORITY``) while a connection to its display is made: the
+    file Xlib reads the cookie that admits it from, as it connects. The request's own is put back after."""
+    authority = os.environ.get(XAUTHORITY)
+    if not authority:
+        yield
+        return
+    before = os.environ.get("XAUTHORITY")
+    os.environ["XAUTHORITY"] = authority
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("XAUTHORITY", None)
+        else:
+            os.environ["XAUTHORITY"] = before
 
 
 def driver() -> Any:

@@ -24,6 +24,7 @@ SRC = add_sources()
 # Says display 7 on the descriptor -displayfd names, notes its pid and the times it started, and waits.
 FAKE = """\
 #!/bin/sh
+echo "$*" > "${FAKE_XVFB_LOG%/*}/argv"
 while [ $# -gt 0 ]; do case "$1" in -displayfd) fd=$2; shift;; esac; shift; done
 echo $$ >> "$FAKE_XVFB_LOG"
 eval "echo 7 >&$fd"
@@ -78,15 +79,31 @@ class EngineDisplayTest(unittest.TestCase):
         self.xvfb(FAKE)
         with mock.patch.dict(os.environ, {"DISPLAY": ":3"}):
             self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":3"})
+            with mock.patch.dict(os.environ, {"XAUTHORITY": "/run/user/1000/gdm/Xauthority"}):  # and what admits it
+                self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":3",
+                                                         "CAD_ENGINE_XAUTHORITY": "/run/user/1000/gdm/Xauthority"})
         self.assertEqual(self.started(), [])
 
     def test_a_daemon_with_none_starts_one_xvfb_and_stops_it(self) -> None:
+        import stat
+        import struct
+
         self.xvfb(FAKE)
-        self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":7"})
-        self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":7"})
+        given = display.environment()
+        self.assertEqual(given["CAD_ENGINE_DISPLAY"], ":7")
+        self.assertEqual(display.environment(), given)
         [pid] = self.started()  # once, for every process after
+        # Its cookie, for any display here (FamilyWild), which only this user can read: no other user draws on it.
+        cookie = Path(given["CAD_ENGINE_XAUTHORITY"])
+        self.assertEqual(stat.S_IMODE(cookie.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(cookie.parent.stat().st_mode), 0o700)
+        data = cookie.read_bytes()
+        self.assertEqual(struct.unpack(">HHHH", data[:8]), (0xFFFF, 0, 0, 18))
+        self.assertEqual((data[8:26], struct.unpack(">H", data[26:28])[0], len(data)), (b"MIT-MAGIC-COOKIE-1", 16, 44))
+        self.assertIn(f"-auth {cookie}", (self.folder / "argv").read_text())
         display.stop()
         self.gone(pid)
+        self.assertFalse(cookie.parent.exists(), "its cookie goes with it")
 
     def test_its_xvfb_goes_with_a_daemon_that_is_killed(self) -> None:
         self.xvfb(FAKE)
@@ -110,7 +127,7 @@ class EngineDisplayTest(unittest.TestCase):
     def test_none_on_path_starts_nothing_and_is_looked_for_again(self) -> None:
         self.assertEqual(display.environment(), {})
         self.xvfb(FAKE)  # installed meanwhile: the next process finds it
-        self.assertEqual(display.environment(), {"CAD_ENGINE_DISPLAY": ":7"})
+        self.assertEqual(display.environment()["CAD_ENGINE_DISPLAY"], ":7")
 
     def test_one_that_does_not_start_is_said_once_and_not_started_again(self) -> None:
         self.xvfb(BROKEN)

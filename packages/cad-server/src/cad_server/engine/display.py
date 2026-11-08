@@ -5,13 +5,15 @@ OCP's Linux wheels draw through GLX alone (``render/context.py``), so a still ne
 agent's shell often has none to name: a server over SSH, a container, a sandbox, or an agent app that
 does not pass its ``DISPLAY`` on. Every process a declaration says draws (``Service.draws``: a model's
 worker, a document's render process) is started with ``places.DISPLAY`` (``CAD_ENGINE_DISPLAY``) naming
-the engine's own display (``environment``), first of:
+the engine's own display, and ``places.XAUTHORITY`` (``CAD_ENGINE_XAUTHORITY``) the file that admits a
+client to it, where it takes one (``environment``) -- first of:
 
-1. the daemon's own ``DISPLAY``, where it has one (started from a desktop session, or by an app that
-   has one);
+1. the daemon's own ``DISPLAY`` (and ``XAUTHORITY``), where it has one: started from a desktop session,
+   or by an app that has one;
 2. an Xvfb the daemon starts itself, once, where ``Xvfb`` is on ``PATH``: the first display number free
-   (``-displayfd``), a 24-bit screen and GLX, no TCP. It lives as long as the daemon: it is started
-   under a shell that reads the daemon's pipe and stops it when the pipe closes (the daemon stopped,
+   (``-displayfd``), a 24-bit screen and GLX, no TCP, and a cookie of its own that only this user can read
+   (``-auth``), so no other user's program draws on it or reads it. It lives as long as the daemon: it is
+   started under a shell that reads the daemon's pipe and stops it when the pipe closes (the daemon stopped,
    or killed), and ``stop`` stops it with the daemon;
 3. none: a still is refused, naming what to install (``render.context.INSTALL``).
 
@@ -25,16 +27,19 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import select
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import IO, Any
 
-from cad.engine.places import DISPLAY
+from cad.engine.places import DISPLAY, XAUTHORITY
 
 __all__ = ["READY_SECONDS", "environment", "name", "stop"]
 
@@ -42,11 +47,12 @@ LOG = logging.getLogger("cad_server.engine.display")
 # How long an Xvfb has to say it is ready (its display number on ``-displayfd``).
 READY_SECONDS = 10.0
 SCREEN = "1280x1024x24"
-# The shell an Xvfb runs under: it starts Xvfb (``"$@"``, its display number written to the pipe whose
-# number is ``$1``), lets go of that pipe, and stops Xvfb when its own standard input -- the daemon's pipe
-# -- closes, or exits as Xvfb does. A command run in the background reads ``/dev/null`` unless told
-# otherwise, so the reader is handed the pipe as descriptor 3.
-_WATCH = ('fd=$1; shift; "$@" -displayfd "$fd" </dev/null & x=$!; eval "exec $fd>&-"; exec 3<&0; '
+# The shell an Xvfb runs under. Xvfb (``"$@"``) writes its display number to the shell's standard output,
+# the daemon's pipe for it; the shell lets go of that pipe, and stops Xvfb when its own standard input --
+# the daemon's other pipe -- closes, or exits as Xvfb does. A command run in the background reads
+# ``/dev/null`` unless told otherwise, so the reader is handed that pipe as descriptor 3. One-digit
+# descriptors alone: dash, Debian's ``sh``, takes no other.
+_WATCH = ('"$@" -displayfd 1 </dev/null & x=$!; exec 1>/dev/null 3<&0; '
           '{ read -r _ <&3; kill "$x" 2>/dev/null; } & exec 3<&-; wait "$x"')
 
 _LOCK = threading.Lock()
@@ -55,10 +61,11 @@ _FAILED: str | None = None  # why this daemon's Xvfb did not start, said once
 
 
 class _Xvfb:
-    """An Xvfb the daemon started: the shell it runs under, its display (``:N``), and its log."""
+    """An Xvfb the daemon started: the shell it runs under, its display (``:N``), the cookie that admits a
+    client to it, and its log."""
 
-    def __init__(self, process: subprocess.Popen, display: str, log: IO[bytes]) -> None:
-        self.process, self.display, self.log = process, display, log
+    def __init__(self, process: subprocess.Popen, display: str, authority: Path, log: IO[bytes]) -> None:
+        self.process, self.display, self.authority, self.log = process, display, authority, log
 
     def alive(self) -> bool:
         return self.process.poll() is None
@@ -74,6 +81,7 @@ class _Xvfb:
         except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
+        shutil.rmtree(self.authority.parent, ignore_errors=True)
         if not keep_log:
             self.log.close()
 
@@ -85,9 +93,16 @@ def _linux() -> bool:
 
 def environment() -> dict[str, str]:
     """What a process that draws is started with (``Service.draws``): ``places.DISPLAY`` naming the engine's
-    display (``name``), or nothing where it has none or needs none."""
+    display (``name``) and ``places.XAUTHORITY`` the file that admits a client to it where it takes one;
+    nothing where it has none or needs none."""
     found = name()
-    return {DISPLAY: found} if found else {}
+    if not found:
+        return {}
+    if _XVFB is not None and found == _XVFB.display:
+        authority: str | None = str(_XVFB.authority)
+    else:
+        authority = os.environ.get("XAUTHORITY")
+    return {DISPLAY: found, **({XAUTHORITY: authority} if authority else {})}
 
 
 def name() -> str | None:
@@ -126,20 +141,37 @@ def _xvfb() -> str | None:
         return _XVFB.display
 
 
+def _cookie() -> Path:
+    """An X authority file of one MIT-MAGIC-COOKIE-1 for any display on this machine (family ``FamilyWild``,
+    no address, no display number: ``libXau`` takes it for every one), in a folder only this user may enter."""
+    folder = Path(tempfile.mkdtemp(prefix="cad-xauth-"))
+    path = folder / "Xauthority"
+
+    def field(data: bytes) -> bytes:
+        return struct.pack(">H", len(data)) + data
+
+    entry = struct.pack(">H", 0xFFFF) + field(b"") + field(b"") + field(b"MIT-MAGIC-COOKIE-1") + field(secrets.token_bytes(16))
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(entry)
+    return path
+
+
 def _start(program: str) -> _Xvfb:
     """An Xvfb started, once it has said its display; ``RuntimeError`` saying why when it does not within
     ``READY_SECONDS``."""
+    authority = _cookie()
     read, write = os.pipe()
     log = tempfile.TemporaryFile(prefix="cad-xvfb-")
     try:
-        process = subprocess.Popen(["/bin/sh", "-c", _WATCH, "sh", str(write), program, "-screen", "0", SCREEN,
-                                    "-nolisten", "tcp", "+extension", "GLX"],
-                                   stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log, pass_fds=(write,),
-                                   start_new_session=True)
+        process = subprocess.Popen(["/bin/sh", "-c", _WATCH, "sh", program, "-screen", "0", SCREEN, "-nolisten", "tcp",
+                                    "-auth", str(authority), "+extension", "GLX"],
+                                   stdin=subprocess.PIPE, stdout=write, stderr=log, start_new_session=True)
     except OSError as error:
         os.close(read)
         os.close(write)
         log.close()
+        shutil.rmtree(authority.parent, ignore_errors=True)
         raise RuntimeError(f"{program}: {error}") from None
     os.close(write)
     try:
@@ -147,12 +179,12 @@ def _start(program: str) -> _Xvfb:
     finally:
         os.close(read)
     if number is None:
-        _Xvfb(process, "", log).stop(keep_log=True)
+        _Xvfb(process, "", authority, log).stop(keep_log=True)
         log.seek(0)
         tail = log.read()[-600:].decode("utf-8", "replace").strip()
         log.close()
         raise RuntimeError(f"no display within {READY_SECONDS:g} s" + (f": {tail}" if tail else ""))
-    return _Xvfb(process, f":{number}", log)
+    return _Xvfb(process, f":{number}", authority, log)
 
 
 def _said(read: int, process: Any) -> str | None:

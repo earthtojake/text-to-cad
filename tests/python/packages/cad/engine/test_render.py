@@ -50,7 +50,7 @@ WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 SIZE = (320, 240)
 PLATFORM = context.platform()  # a row a platform draws apart has a golden of its own there
 # What reaches an X display: taken from the engine's environment and its requests, where a test draws with none.
-X_VARIABLES = ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "CAD_ENGINE_DISPLAY")
+X_VARIABLES = ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "CAD_ENGINE_DISPLAY", "CAD_ENGINE_XAUTHORITY")
 
 # The material fixture: a steel block, a brushed aluminium plate, a PLA part with a lacquered top,
 # a glass pane, and two placements of one bracket apart by a look alone. Its pane is hinged on the
@@ -288,18 +288,24 @@ class ContextTest(unittest.TestCase):
         # A worker adopts its request's environment; the engine's display is what it draws on where that has
         # none, named to OCCT: never this process's DISPLAY, which the request did not give.
         named = []
+
+        def connect(*given):  # the display named, and the authority Xlib reads as it connects
+            named.append(([str(arg.ToCString()) for arg in given], os.environ.get("XAUTHORITY")))
+            return object()
+
         environment = {**{key: value for key, value in os.environ.items() if key not in X_VARIABLES},
-                       "CAD_ENGINE_DISPLAY": ":42"}
+                       "CAD_ENGINE_DISPLAY": ":42", "CAD_ENGINE_XAUTHORITY": "/engine/cookie", "XAUTHORITY": "/mine"}
         with mock.patch.object(context, "platform", return_value="linux"), \
                 mock.patch.dict(os.environ, environment, clear=True), \
                 mock.patch.object(context, "_CONNECTION", threading.local()), \
-                mock.patch("OCP.Aspect.Aspect_DisplayConnection", side_effect=lambda *given: named.append(given) or object()):
+                mock.patch("OCP.Aspect.Aspect_DisplayConnection", side_effect=connect):
             self.assertEqual(context.display(), ":42")
             context._connection()
             context._connection()  # one connection a display, kept
+            self.assertEqual(os.environ["XAUTHORITY"], "/mine", "the request's own, put back")
             os.environ["DISPLAY"] = ":5"
             context._connection()  # the request's own, as OCCT reads it
-        self.assertEqual([[str(arg.ToCString()) for arg in given] for given in named], [[":42"], []])
+        self.assertEqual(named, [([":42"], "/engine/cookie"), ([], "/mine")])
 
     def test_a_refused_connection_is_asked_again_at_the_next_canvas(self) -> None:
         # One refused connection (an X server busy for a moment) fails that canvas, not the process's.
@@ -939,7 +945,7 @@ def _xvfb_pids() -> list[int]:
             parent = Path(f"/proc/{entry.name}/stat").read_text().rpartition(")")[2].split()[1]
         except (OSError, IndexError):
             continue
-        if any(b"exec 3<&0" in part for part in argv(parent)):
+        if any(b"read -r _ <&3" in part for part in argv(parent)):
             found.append(int(entry.name))
     return found
 
