@@ -336,15 +336,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         modules=("netgen",), distributions=("netgen-mesher",), identity=("netgen-mesher",),
         holds="the netgen mesher", download_mb=11),
     "calculix": Integration(
-        "calculix", "CalculiX's solver, ccx, as the ccx package carries it: a stress study (solve) writes its input, "
+        "calculix", "CalculiX's solver, ccx, as the cad-ccx package carries it: a stress study (solve) writes its input, "
                     "runs it headless on one thread in a private folder, and reads its answer",
         extra="calculix", process="separate",
-        # ccx is the ccx package's (the extra's), or the one CAD_CCX names; a person's own CalculiX is never run.
-        probe=Probe("ccx", "2.20", "ccx comes with cad's calculix integration, cad[calculix] (the ccx package), which "
+        # ccx is the cad-ccx package's (the extra's), or the one CAD_CCX names; a person's own CalculiX is never run.
+        probe=Probe("ccx", "2.20", "ccx comes with cad's calculix integration, cad[calculix] (the cad-ccx package), which "
                                    "the cad command installs on first need (a script run with cad run: name "
                                    "cad[calculix] in its header); or set CAD_CCX to a ccx of CalculiX 2.20 or newer",
                     "CAD_CCX"),
-        modules=("ccx",), distributions=("ccx",), identity=("ccx",), commands=("ccx",),
+        modules=("cad_ccx",), distributions=("cad-ccx",), identity=("cad-ccx",), commands=("ccx",),
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),

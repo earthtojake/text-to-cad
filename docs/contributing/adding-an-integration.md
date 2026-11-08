@@ -21,7 +21,7 @@ integration's) runs in the environment of that integration, made once by the eng
 so in the registry (`alongside`), and its environment holds them all (a B-rep type's `solve` reads the
 document with the kernel, meshes it with netgen and solves it with CalculiX: the environment of
 `cad[build123d,calculix,netgen]`). An external program that ships as a Python package (KiCad's `kicad-cli`, in
-kicode; CalculiX's `ccx`, in the ccx package) is its integration's extra and installs the same way; any other is
+kicode; CalculiX's `ccx`, in the cad-ccx package) is its integration's extra and installs the same way; any other is
 the person's to install, found by its probe: an integration with no extra and a probe alone. When a program
 ships no package, packaging it, its own binary unmodified in a wheel per platform with a launcher that names
 where it is, is usually better than asking a person to install it (`earthtojake/ccx` is that for CalculiX). `cad doctor` says, for each integration with an extra but build123d (the

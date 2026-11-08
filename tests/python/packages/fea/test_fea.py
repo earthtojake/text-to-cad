@@ -590,9 +590,9 @@ class Cantilever(unittest.TestCase):
             for card in ("*NODE", "*ELEMENT, TYPE=C3D10", "*STATIC", "*NODE PRINT"):
                 self.assertIn(card, text)
             # The deck solves again, to the same displacements, with the bundled ccx.
-            import ccx
+            import cad_ccx
 
-            self.assertTrue(ccx.run(deck).ok)
+            self.assertTrue(cad_ccx.run(deck).ok)
             self.assertTrue(any("ccx.inp" in line for line in result.human_lines()))
             # Solved again without it, the folder holds no deck of an earlier solve.
             solve(self.step, out, self.study)

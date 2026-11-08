@@ -243,7 +243,7 @@ jobs:
         shell: bash
 
   # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
-  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the ccx package), solves.
+  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
   # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
   # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
   # Xvfb), and the command through the library's runner of one operation. Only the study's code, its suite and runner, and the modules it reads
@@ -270,14 +270,13 @@ jobs:
 
       # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
       # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
-      # floor. The calculix extra pins ccx==2.23.0; until that release is on PyPI it is built from its
-      # repository's commit of that version (earthtojake/ccx: conda-forge's CalculiX, repackaged), which
-      # satisfies the pin. A ccx that does not run fails here by name rather than as every solve failing.
+      # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
+      # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
       - name: Install the netgen and calculix integrations
         run: |
           uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
-            "netgen-mesher==6.2.2608" "ccx @ git+https://github.com/earthtojake/ccx@924604cbff2cbecef262915419e27ecf40056bd8"
-          python -c "import ccx; print(ccx.executable(), ccx.version())"
+            "netgen-mesher==6.2.2608"
+          python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
 
       # A solve draws a picture of each field with the engine's stills, OCCT in an OpenGL context: on a runner with no
       # screen, Xvfb's, as the cadgen job draws them.

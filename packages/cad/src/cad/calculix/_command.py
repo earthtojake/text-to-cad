@@ -1,10 +1,10 @@
-"""``ccx`` as ``cad run ccx ARGS`` runs it: CalculiX's own solver, the ``ccx`` package's, headless.
+"""``ccx`` as ``cad run ccx ARGS`` runs it: CalculiX's own solver, the ``cad-ccx`` package's, headless.
 
 The calculix integration declares the command (``cad.registry.INTEGRATIONS["calculix"].commands``), so the server's
 ``cad run`` makes the environment of ``cad[calculix]`` for it and runs this module with that environment's Python
-(``python -P -m cad.calculix._command ccx ARGS``). The program is the environment's own: the ``ccx`` package's
-(``ccx.executable()``), never one on PATH, a FreeCAD's or one ``CAD_CCX`` names, which picks the ccx of cad's own
-studies: this runs the pinned one. An environment with no ``ccx`` package has no ccx to run: the run says so, with
+(``python -P -m cad.calculix._command ccx ARGS``). The program is the environment's own: the ``cad-ccx`` package's
+(``cad_ccx.executable()``), never one on PATH, a FreeCAD's or one ``CAD_CCX`` names, which picks the ccx of cad's own
+studies: this runs the pinned one. An environment with no ``cad-ccx`` package has no ccx to run: the run says so, with
 the extra's install hint, and exits 2.
 
 It runs with no display, homes of its own (``cad._internal.programs.private_run``) and the caller's working folder,
@@ -26,7 +26,7 @@ __all__ = ["main", "program"]
 
 
 def program() -> Path | None:
-    """The ``ccx`` to run: the ``ccx`` package's, where this environment holds one; else None."""
+    """The ``ccx`` to run: the ``cad-ccx`` package's, where this environment holds one; else None."""
     found = _program._installed()
     return found[0] if found else None
 

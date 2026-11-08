@@ -1028,7 +1028,7 @@ The options of the other use (`--out` or `--deck` with no study, `--occurrence` 
 file) are refused there, the standard library alone, before anything is read. The study reads a file's B-rep with
 the kernel in its own process (`cad._internal.fea.document`; a model's, from an `.xbf` the engine writes of it in a
 temporary folder), meshes it with netgen in a process of netgen's own (`cad.netgen._mesher`) and solves it with
-CalculiX (`cad.calculix`: the `calculix` integration's probe, `CAD_CCX`, else the ccx package's `ccx`, run headless
+CalculiX (`cad.calculix`: the `calculix` integration's probe, `CAD_CCX`, else the cad-ccx package's `ccx`, run headless
 in a private folder by `cad._internal.programs`; `--deck` keeps the input of the solve written). Its answer is a
 `cad.results.FeaResult`, a check's: findings, `measurements` and the files `written` into the folder `--out` names
 (`cad._internal.fea.run`): `result.json` (that answer), `result.glb` (the deformed surface coloured by a ramp

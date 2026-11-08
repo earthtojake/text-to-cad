@@ -74,7 +74,7 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
-        # A stress study is the calculix integration's, ccx from its extra (the ccx package), which cad run runs as
+        # A stress study is the calculix integration's, ccx from its extra (the cad-ccx package), which cad run runs as
         # a command of its own; its environment holds the kernel, which reads the B-rep, and netgen, which meshes it.
         self.assertEqual("calculix", integrations.for_name("cad.step.solve"))
         self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names

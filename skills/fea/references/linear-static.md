@@ -139,7 +139,7 @@ in g (1 g = 9.81 m/s²).
 ## The solver
 
 - Every study is solved by CalculiX (`ccx`), the one the `calculix` integration carries
-  (`cad[calculix]`, the ccx package: CalculiX 2.23), which the `cad` command installs on first need.
+  (`cad[calculix]`, the cad-ccx package: CalculiX 2.23), which the `cad` command installs on first need.
   text-to-cad runs `CAD_CCX` instead when it is set (2.20 or newer), never a `ccx` on PATH. It meshes
   with netgen, writes CalculiX's
   input (each part its own element set and material, a roller on a sloped or curved face in its own

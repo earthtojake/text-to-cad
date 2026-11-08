@@ -109,7 +109,7 @@ viewing a board needs no KiCad installed: its first plot fetches kicode, the `ki
 A B-rep type's `solve` (`cad model|xbf|step solve SRC`, the setup: the parts, the pairs that touch and a part's
 faces; `--study STUDY --out DIR`, the solve, which writes `result.json`, `result.glb`, `result.vtu` and a picture of
 each field into DIR, `--deck` adding CalculiX's input) is the stress study,
-meshed by the `netgen` integration and solved by the `calculix` integration's ccx (the ccx package), run in this
+meshed by the `netgen` integration and solved by the `calculix` integration's ccx (the cad-ccx package), run in this
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.

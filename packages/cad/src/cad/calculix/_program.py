@@ -3,13 +3,13 @@
 
 The ``calculix`` integration's probe (``cad.registry.INTEGRATIONS["calculix"]``: the program, its minimum, its install
 hint and ``CAD_CCX``), run by the library's one helper for the external programs our code runs
-(``cad._internal.programs``). ``ccx`` is the integration's extra's, ``cad[calculix]``: the ``ccx`` package carries
-CalculiX's own ``ccx``, unmodified, for each platform, and says where it is (``ccx.executable()``). ``CAD_CCX`` names
+(``cad._internal.programs``). ``ccx`` is the integration's extra's, ``cad[calculix]``: the ``cad-ccx`` package carries
+CalculiX's own ``ccx``, unmodified, for each platform, and says where it is (``cad_ccx.executable()``). ``CAD_CCX`` names
 another (a build of the person's own); a ``ccx`` on PATH, or a FreeCAD's, is never run, so every study on every device
 solves with the pinned release. One that is missing, or older than :data:`CCX`'s minimum, is an error naming how to
 install it. Every run is headless, in a private folder with homes of its own (``cad._internal.programs``), and on one
 thread, so the same study prints the same numbers; the input of a run may be kept (:func:`keeping_deck`). Stdlib only:
-the ``ccx`` package is read when a study looks for the program, never at import.
+the ``cad_ccx`` package is read when a study looks for the program, never at import.
 """
 
 from __future__ import annotations
@@ -67,24 +67,24 @@ class Ccx:
 
 
 def _installed() -> list[Path]:
-    """The ``ccx`` the integration's extra installed: the ``ccx`` package's, where this environment holds it."""
+    """The ``ccx`` the integration's extra installed: the ``cad-ccx`` package's, where this environment holds it."""
     try:
-        import ccx
+        import cad_ccx
     except ModuleNotFoundError:
         return []
     try:
-        return [Path(ccx.executable())]
-    except FileNotFoundError:  # a ccx package built with no program for this platform
+        return [Path(cad_ccx.executable())]
+    except FileNotFoundError:  # a cad-ccx built with no program for this platform
         return []
 
 
 def carried() -> bool:
-    """Whether this process can run CalculiX itself: ``CAD_CCX`` names one, or the ``ccx`` package is installed here.
+    """Whether this process can run CalculiX itself: ``CAD_CCX`` names one, or the ``cad-ccx`` package is installed here.
     Else a study runs in the environment of ``cad[calculix]``."""
     import importlib.util
     import os
 
-    return bool(os.environ.get(CCX_ENV, "").strip()) or importlib.util.find_spec("ccx") is not None
+    return bool(os.environ.get(CCX_ENV, "").strip()) or importlib.util.find_spec("cad_ccx") is not None
 
 
 class _Ccx(programs.Program):

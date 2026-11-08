@@ -90,7 +90,7 @@ that calls `cad.step.solve` their environment when its header names them:
 - **netgen**, which meshes, is the `netgen` integration (`cad[netgen]`, about 10 MB). netgen publishes
   it for macOS, Linux x86_64 and Windows x86_64 alone; anywhere else (Linux on ARM among them) a solve
   refuses, naming the platform.
-- **CalculiX** (`ccx`), which solves, is the `calculix` integration (`cad[calculix]`: the ccx package,
+- **CalculiX** (`ccx`), which solves, is the `calculix` integration (`cad[calculix]`: the cad-ccx package,
   CalculiX's own program for each platform, about 10 MB). A person's own CalculiX is never run unless
   `CAD_CCX` names it (the file itself, named `ccx` or `ccx_2.2x`, 2.20 or newer). It runs headless, on
   one thread, in a private folder, and every result names the CalculiX version that solved it.

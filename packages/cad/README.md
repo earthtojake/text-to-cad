@@ -634,7 +634,7 @@ src/cad/
                          #   on this computer (places)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
-  calculix/              # the calculix integration, the ccx package's ccx: found, checked and run
+  calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
   results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
@@ -791,7 +791,7 @@ do not balance. `_internal/fea/` solves one kind of study: linear elastic stress
 Three integrations run it. The kernel reads the B-rep. The mesher is `netgen` (`cad[netgen]`), installed
 only where netgen publishes wheels (macOS, Linux x86_64 and Windows x86_64; elsewhere a solve refuses,
 naming the platform) and always run in a process of its own, since its OpenCascade and OCP's cannot
-share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `ccx` package
+share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `cad-ccx` package
 carries for each platform (conda-forge's build, unmodified, pinned exactly), found by the integration's
 probe: `CAD_CCX` names another (2.20 or newer), and a `ccx` on PATH is never run. It runs headless, on
 one thread, in a private folder with homes of its own, so it reads and writes nothing of the person's,

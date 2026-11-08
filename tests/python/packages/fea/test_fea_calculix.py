@@ -1,4 +1,4 @@
-"""CalculiX, the program a study is solved by: the ccx package's, or the one CAD_CCX names, or refused in a sentence; its
+"""CalculiX, the program a study is solved by: the cad-ccx package's, or the one CAD_CCX names, or refused in a sentence; its
 input's elements in C3D10's order, kept where a study asks; its printed output read, its errors said. The solve itself is tested end to end by the
 static tests, on a real ``ccx``; these need none.
 """
@@ -47,7 +47,7 @@ class FindCcx(unittest.TestCase):
                     calculix.find_ccx()
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
-    def test_the_ccx_package_is_the_one_run_and_never_one_on_path(self):
+    def test_the_cad_ccx_package_is_the_one_run_and_never_one_on_path(self):
         with tempfile.TemporaryDirectory() as name:
             packaged = _program(Path(name), "This is Version 2.23")
             on_path = Path(name) / "path"
@@ -55,12 +55,12 @@ class FindCcx(unittest.TestCase):
             _program(on_path, "This is Version 2.22")
             ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)))
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: "", "PATH": str(on_path)}), \
-                    mock.patch.dict(sys.modules, {"ccx": ccx}):
+                    mock.patch.dict(sys.modules, {"cad_ccx": ccx}):
                 found = calculix.find_ccx()
         self.assertEqual((found.path, found.version), (packaged, "2.23"))
 
-    def test_without_the_ccx_package_it_is_refused_with_the_extra(self):
-        with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"ccx": None}):
+    def test_without_the_cad_ccx_package_it_is_refused_with_the_extra(self):
+        with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"cad_ccx": None}):
             self.assertFalse(calculix.carried())
             with self.assertRaises(calculix.CalculixMissingError) as caught:
                 calculix.find_ccx()
