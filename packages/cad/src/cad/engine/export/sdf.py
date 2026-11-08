@@ -32,17 +32,23 @@ a primitive in SDFormat's full sizes, ``<box><size>``, ``<sphere><radius>``, ``<
 has a capsule. A visual's colour is its ``<material>``'s ``<ambient>`` and ``<diffuse>``.
 
 **Joints.** A revolute joint is ``revolute`` with its ``<limit>`` (a bound the description leaves open
-not written: SDFormat's default is none), a continuous one ``continuous``, a prismatic one
+not written: SDFormat's default is none; the drive's ``<effort>`` and ``<velocity>``, in N*m or N and
+rad/s or m/s, where the model bounds them, ``cad.build123d.limits``, a continuous joint's too), a
+continuous one ``continuous``, a prismatic one
 ``prismatic``, a spherical one ``ball``, a fixed one ``fixed``; a cylindrical one two joints with a
 link between them, as the URDF writer writes it (``<name>`` the turn to ``<name>_turn``, then
 ``<name>_slide``). SDFormat 1.9 has no mimic (a ``gearbox`` is a different joint), so a coupling is
 said in a comment on its follower and not enforced: a simulator that wants it couples the two
-itself. SDFormat has no named states either: the description's poses are not written. A loop is
-refused by name, as every robot format refuses one.
+itself. SDFormat has no named states either: the description's poses are not written, and no
+contact exclusion: each pair the model declares (``cad.build123d.exclude``) is said in a comment on
+the model, for a simulator to filter itself. A part declared a body (``cad.build123d.body``) is a
+link of its own on a ``fixed`` joint. A loop is refused by name, as every robot format refuses one.
 
 **Names.** As the URDF writer's: ``[A-Za-z0-9_]``, the rest ``_``, a repeat given ``_2``, ``_3``;
-links, joints and frames share one namespace, as SDFormat's frame graph does, and visuals and
-collisions are unique within their link.
+but links, joints and frames share one namespace, as SDFormat 1.7's frame graph does (libsdformat
+refuses a model whose joint names a link: ``DUPLICATE_NAME``), so a joint that holds a link's name is
+renamed, and said (``export.note``), unless it is the fixed joint the description named for the link
+it holds. Visuals and collisions are unique within their link.
 """
 
 from __future__ import annotations
@@ -53,7 +59,7 @@ from typing import Any
 import numpy as np
 
 from cad.engine.description import Description, Geometry, Joint, Link
-from cad.engine.export import ExportRefused
+from cad.engine.export import ExportRefused, note
 from cad.engine.export.mjcf import _Names, _number, _numbers, place
 from cad.engine.export.urdf import MeshFiles, Xml, bounds, checked, inertia_terms, name_of, rooted, rpy
 
@@ -119,7 +125,11 @@ class _Writer:
         self.links[self.root.name] = self.names("ground" if wanted in RESERVED else wanted)
         for name in order:
             for joint in self.children.get(name, ()):
-                self.joint_of[joint.name] = self.names(name_of(joint.name, "joint"))
+                wanted = name_of(joint.name, "joint")
+                found = self.joint_of[joint.name] = self.names(wanted)
+                if found != wanted and not (joint.kind == "fixed" and joint.name == joint.child):
+                    note(f"joint {wanted!r} is written {found!r}: SDFormat names links and joints in one namespace, "
+                         "and a link or another joint holds its name")
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         model = Xml("model", [("name", name_of(self.description.name, "model"))])
@@ -131,6 +141,9 @@ class _Writer:
         fixed.add("child", text=root)
         self._frames(model, self.root)
         self._subtree(model, self.root)
+        for first, second in self.description.excludes:
+            model.children.append(f"exclude {self.links[first]} {self.links[second]}: they never collide (SDFormat "
+                                  f"{VERSION} has no contact exclusion: a simulator filters the pair itself)")
         lines = ['<?xml version="1.0" encoding="utf-8"?>', f'<sdf version="{VERSION}">']
         lines.extend(model.lines(1))
         lines.append("</sdf>")
@@ -179,13 +192,17 @@ class _Writer:
         if kind in ("revolute", "continuous", "prismatic"):
             axis = element.add("axis")
             axis.add("xyz", text="0 0 1")
-            lower, upper = bounds(joint, index)
-            if kind != "continuous" and (lower is not None or upper is not None):
+            lower, upper = bounds(joint, index) if kind != "continuous" else (None, None)
+            driven = [(key, value) for key, value in (("effort", joint.effort), ("velocity", joint.velocity))
+                      if value is not None]
+            if lower is not None or upper is not None or driven:
                 limit = axis.add("limit")
                 if lower is not None:
                     limit.add("lower", text=_number(lower))
                 if upper is not None:
                     limit.add("upper", text=_number(upper))
+                for key, value in driven:
+                    limit.add(key, text=_number(value, snap=0))
         return element
 
     def _link(self, name: str, link: Link, frame: Any) -> Xml:

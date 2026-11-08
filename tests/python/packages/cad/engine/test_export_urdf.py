@@ -1,8 +1,9 @@
 """URDF as an export of every document (``export/urdf.py``): a robot description written as ROS reads one --
 the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the same bytes written twice,
 the repository's own URDF check passing it and the stills reading its links where the description has them;
-a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a ball and
-a loop refused by name; and a jointed model built by the engine and exported to ``.urdf``, its links moving
+a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
+and a joint keeping one name and a name repeated in its kind renamed and said, a ball and a loop refused by
+name; and a jointed model built by the engine and exported to ``.urdf``, its links moving
 as the mechanism moves them."""
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import numpy as np
 from cad import urdf
 from cad.engine import api, document, mechanism
 from cad.engine.description import Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose, Visual
-from cad.engine.export import ExportRefused, kind_of, refused
+from cad.engine.export import ExportRefused, ExportWarning, kind_of, refused
 from cad.engine.export import mjcf
 from cad.engine.export.urdf import write_description
 from cad.engine.formats.robot import read_robot, read_urdf
@@ -61,7 +62,8 @@ def arm(loops: tuple[str, ...] = (), shoulder: str = "revolute") -> Description:
                   inertial=Inertial(0.5, np.array([0.05, 0.0, 0.0]),
                                     np.array([[2e-4, 1e-5, 0], [1e-5, 4e-4, 0], [0, 0, 5e-4]])))
     limits = ((-1.0, 1.5),) if shoulder == "revolute" else ((-1.0, 1.0),) * 3
-    joints = [Joint("shoulder", shoulder, "world", "arm", SHOULDER, limits=limits, as_built=(0.0,) * len(limits)),
+    joints = [Joint("shoulder", shoulder, "world", "arm", SHOULDER, limits=limits, as_built=(0.0,) * len(limits),
+                    effort=12.5, velocity=3.0),
               Joint("knuckle", "revolute", "arm", "finger", TIP, limits=((-0.5, 0.75),), as_built=(0.0,),
                     follows=("shoulder", 0.5, 0.1))]
     return Description("arm", [world, upper, finger], joints, meshes={"k1": tetrahedron},
@@ -93,7 +95,7 @@ GOLDEN = """\
     <parent link="world"/>
     <child link="arm"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-1" upper="1.5" effort="0" velocity="0"/>
+    <limit lower="-1" upper="1.5" effort="12.5" velocity="3"/>
   </joint>
 
   <link name="arm">
@@ -242,14 +244,23 @@ class HandBuiltTest(_Folder):
         # hangs from the base where it stood.
         self.assertEqual(robot.root, "base")
         self.assertEqual([(j.name, j.type, j.parent, j.child) for j in robot.joints],
-                         [("mount", "fixed", "base", "post"), ("slider_2", "continuous", "base", "slider_2_turn"),
-                          ("slider_2_slide", "prismatic", "slider_2_turn", "slider")])
+                         [("mount", "fixed", "base", "post"), ("slider", "continuous", "base", "slider_turn"),
+                          ("slider_slide", "prismatic", "slider_turn", "slider")])
         description = rig()
         space = np.linalg.inv(description.link("base").frame)
         for name in ("base", "post", "slider"):
             np.testing.assert_allclose(robot.links[name], space @ description.link(name).frame, atol=1e-8)
         slide = robot.joints[2]
         self.assertEqual((slide.lower, slide.upper), (0.0, 1e16))  # the open end: SDFormat's word for none
+
+    def test_a_name_repeated_in_its_kind_is_renamed_and_said(self) -> None:
+        # The rig's slider link keeps its name beside its joint (above); a frame named as a link is not a link's.
+        description = rig()
+        description.link("post").frames["base"] = np.eye(4)
+        path = self.folder / "rig.urdf"
+        with self.assertWarnsRegex(ExportWarning, "link 'base' is written 'base_2': another link holds its name"):
+            write_description(description, path)
+        self.assertEqual(sorted(read_urdf(path).links), ["base", "base_2", "post", "slider", "slider_turn"])
 
     def test_a_ball_and_a_loop_are_refused_by_name_and_nothing_is_written(self) -> None:
         with self.assertRaisesRegex(ExportRefused, "joint 'shoulder' is spherical, and URDF has no ball joint"):

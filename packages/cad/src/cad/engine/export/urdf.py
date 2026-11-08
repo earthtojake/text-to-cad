@@ -28,7 +28,8 @@ each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``.
 is a ``<material>`` declared once at the top and named in the visual: one per material name and
 colour (a part with no material is ``color``), a repeat given ``_2``, ``_3``. A named frame is a
 link of its own with nothing in it, hung from its link by a ``fixed`` joint ``<frame>_joint``, as a
-ROS ``tool0`` is.
+ROS ``tool0`` is; a part declared a body (``cad.build123d.body``) is a link with its own mass and
+geometry, hung by its ``fixed`` joint.
 
 **Joints.** A joint's ``<origin>`` is its frame in the parent link's (``xyz``, and ``rpy`` the
 fixed-axis roll, pitch and yaw of its turn), its ``<axis>`` that frame's Z, ``0 0 1``, since URDF
@@ -36,19 +37,24 @@ reads the axis in the joint frame. A revolute joint is ``revolute`` with its ran
 one ``continuous`` with none; a prismatic one ``prismatic``; a cylindrical one two joints with a
 massless link between them: ``<name>`` the turn (revolute or continuous) to ``<name>_turn``, then
 ``<name>_slide`` the slide to the child, as MJCF's writer orders its hinge and slide. A
-``<limit>`` carries ``effort="0" velocity="0"``, which URDF requires and the description does not
-know: a consumer that drives the joint sets them. A bound the description leaves open is written
+``<limit>`` carries the joint's drive limits (``cad.build123d.limits``: ``effort`` in N*m or N,
+``velocity`` in rad/s or m/s), a continuous joint's only where it has one; where the model gives
+none, ``0``, which URDF requires and a ROS controller reads literally (``cad urdf validate`` warns of
+it). A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
 ends. A spherical joint is refused by name: URDF has no ball (export an SDF or an MJCF, which do).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
-SRDF's group states are where ROS keeps them). A loop is refused by name, as every robot format
-refuses one.
+SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
+(``cad.build123d.exclude``) are not written (an SRDF's ``disable_collisions`` is where MoveIt keeps
+them). A loop is refused by name, as every robot format refuses one.
 
 **Names.** URDF names are any text, but ROS tooling reads ``[A-Za-z0-9_]``: every other character
-is ``_``, and a name already held is given ``_2``, ``_3``: links and joints share one namespace
-(Gazebo reads a URDF as SDFormat, whose frame graph names both; the description's links are named
-first), materials have their own. Numbers are
+is ``_``, and a name already held in its kind is given ``_2``, ``_3`` and said (``export.note``):
+links among links, joints among joints, materials among materials, as URDF keeps them, so a link
+``gripper`` and a joint ``gripper`` both keep their names (the description's are named first,
+then what the writer adds; Gazebo, which reads a URDF as SDFormat, names both in one frame graph,
+and ``cad urdf validate`` warns of a shared name). Numbers are
 MJCF's writer's: nine significant digits at most, ``-0`` as ``0``, a length or an angle within 1e-12
 of zero as zero.
 """
@@ -65,7 +71,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from cad.engine.description import Description, DescriptionError, Geometry, Inertial, Joint, Link
-from cad.engine.export import ExportRefused
+from cad.engine.export import ExportRefused, note
 from cad.engine.export.mjcf import SNAP, _Names, _number, _numbers, _stem, _stl, place
 
 __all__ = ["UNBOUNDED", "rendered", "rooted", "write", "write_description"]
@@ -259,8 +265,8 @@ class _Writer:
         self.children: dict[str, list[Joint]] = {}
         for joint in self.joints:
             self.children.setdefault(joint.parent, []).append(joint)
-        # Links and joints share one namespace: Gazebo reads a URDF as SDFormat, whose frame graph names both.
-        self.names = _Names()
+        # Each kind its own namespace, as URDF keeps them: links, joints, materials.
+        self.link_names, self.joint_names = _Names(), _Names()
         self.material_names = _Names()
         self.links: dict[str, str] = {}
         self.joint_of: dict[str, str] = {}
@@ -276,10 +282,18 @@ class _Writer:
             order.append(name)
             pending.extend(joint.child for joint in self.children.get(name, ()))
         for name in order:
-            self.links[name] = self.names(name_of(name, "link"))
+            self.links[name] = self._name(self.link_names, name_of(name, "link"), "link")
         for name in order:
             for joint in self.children.get(name, ()):
-                self.joint_of[joint.name] = self.names(name_of(joint.name, "joint"))
+                self.joint_of[joint.name] = self._name(self.joint_names, name_of(joint.name, "joint"), "joint")
+
+    @staticmethod
+    def _name(names: _Names, wanted: str, kind: str) -> str:
+        """``wanted`` unique among ``names``, a rename said (``export.note``)."""
+        found = names(wanted)
+        if found != wanted:
+            note(f"{kind} {wanted!r} is written {found!r}: another {kind} holds its name")
+        return found
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         body: list[Xml] = []
@@ -297,8 +311,8 @@ class _Writer:
     def _subtree(self, body: list[Xml], link: Link) -> None:
         body.append(self._link(self.links[link.name], link))
         for name, placed in link.frames.items():
-            frame = self.names(name_of(name, "frame"))
-            joint = Xml("joint", [("name", self.names(f"{frame}_joint")), ("type", "fixed")])
+            frame = self._name(self.link_names, name_of(name, "frame"), "link")
+            joint = Xml("joint", [("name", self._name(self.joint_names, f"{frame}_joint", "joint")), ("type", "fixed")])
             joint.add("origin", _origin(placed))
             joint.add("parent", [("link", self.links[link.name])])
             joint.add("child", [("link", frame)])
@@ -311,10 +325,10 @@ class _Writer:
     def _joint(self, body: list[Xml], joint: Joint) -> None:
         name, parent, child = self.joint_of[joint.name], self.links[joint.parent], self.links[joint.child]
         if joint.kind == "cylindrical":
-            turned = self.names(f"{name}_turn")
+            turned = self._name(self.link_names, f"{name}_turn", "link")
             body.append(self._element(joint, name, self._turn(joint), parent, turned, joint.origin, 0))
             body.append(Xml("link", [("name", turned)]))
-            slide = self.names(f"{name}_slide")
+            slide = self._name(self.joint_names, f"{name}_slide", "joint")
             body.append(self._element(joint, slide, "prismatic", turned, child, np.eye(4), 1, mimic=False))
             return
         kind = self._turn(joint) if joint.kind == "revolute" else joint.kind
@@ -332,11 +346,13 @@ class _Writer:
         element.add("child", [("link", child)])
         if kind != "fixed":
             element.add("axis", [("xyz", "0 0 1")])
+        driven = [("effort", _number(joint.effort or 0, snap=0)), ("velocity", _number(joint.velocity or 0, snap=0))]
         if kind in ("revolute", "prismatic"):
             lower, upper = bounds(joint, index)
             element.add("limit", [("lower", _number(-UNBOUNDED if lower is None else lower)),
-                                  ("upper", _number(UNBOUNDED if upper is None else upper)),
-                                  ("effort", "0"), ("velocity", "0")])
+                                  ("upper", _number(UNBOUNDED if upper is None else upper)), *driven])
+        elif kind == "continuous" and (joint.effort is not None or joint.velocity is not None):
+            element.add("limit", driven)
         if mimic and joint.follows is not None:
             leader, ratio, offset = joint.follows
             if self.kinds.get(leader) not in ("revolute", "continuous", "prismatic", "cylindrical"):

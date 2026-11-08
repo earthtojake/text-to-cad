@@ -2,7 +2,8 @@
 model -- the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the same bytes written
 twice, the repository's own SDF check passing it and the stills reading its links where the description has
 them; a ground holding nothing giving way to its fixed child, which the world holds, a cylindrical joint as a
-turn and a slide, a ball as SDFormat's, and a loop refused by name; and a jointed model built by the engine
+turn and a slide renamed and said where a link holds its name, a declared exclusion said in a comment, a
+ball as SDFormat's, and a loop refused by name; and a jointed model built by the engine
 and exported to ``.sdf``, its links moving as the mechanism moves them."""
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import numpy as np
 from cad import sdf
 from cad.engine import api, document, mechanism
 from cad.engine.description import Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose, Visual
-from cad.engine.export import ExportRefused, kind_of, refused
+from cad.engine.export import ExportRefused, ExportWarning, kind_of, refused
 from cad.engine.export import mjcf
 from cad.engine.export.sdf import write_description
 from cad.engine.formats.robot import read_robot, read_sdf
@@ -61,7 +62,8 @@ def arm(loops: tuple[str, ...] = (), shoulder: str = "revolute") -> Description:
                   inertial=Inertial(0.5, np.array([0.05, 0.0, 0.0]),
                                     np.array([[2e-4, 1e-5, 0], [1e-5, 4e-4, 0], [0, 0, 5e-4]])))
     limits = ((-1.0, 1.5),) if shoulder == "revolute" else ((-1.0, 1.0),) * 3
-    joints = [Joint("shoulder", shoulder, "world", "arm", SHOULDER, limits=limits, as_built=(0.0,) * len(limits)),
+    joints = [Joint("shoulder", shoulder, "world", "arm", SHOULDER, limits=limits, as_built=(0.0,) * len(limits),
+                    effort=12.5, velocity=3.0),
               Joint("knuckle", "revolute", "arm", "finger", TIP, limits=((-0.5, 0.75),), as_built=(0.0,),
                     follows=("shoulder", 0.5, 0.1))]
     return Description("arm", [world, upper, finger], joints, meshes={"k1": tetrahedron},
@@ -100,6 +102,8 @@ GOLDEN = """\
         <limit>
           <lower>-1</lower>
           <upper>1.5</upper>
+          <effort>12.5</effort>
+          <velocity>3</velocity>
         </limit>
       </axis>
     </joint>
@@ -201,7 +205,7 @@ def rig() -> Description:
               Joint("mount", "fixed", "world", "post", post.frame),
               Joint("slider", "cylindrical", "base", "slider", _frame(0, 0, 0.05),
                     limits=((None, None), (0.0, None)), as_built=(0.0, 0.0))]
-    return Description("rig", [Link("world", np.eye(4)), base, post, slider], joints)
+    return Description("rig", [Link("world", np.eye(4)), base, post, slider], joints, excludes=(("post", "slider"),))
 
 
 class _Folder(unittest.TestCase):
@@ -249,9 +253,12 @@ class HandBuiltTest(_Folder):
 
     def test_a_ground_holding_nothing_gives_way_to_its_fixed_child_which_the_world_holds(self) -> None:
         path = self.folder / "rig.sdf"
-        write_description(rig(), path)
+        with self.assertWarnsRegex(ExportWarning, "joint 'slider' is written 'slider_2': SDFormat names links and "
+                                                  "joints in one namespace"):
+            write_description(rig(), path)
         self.assertValid(path)
         text = path.read_text(encoding="utf-8")
+        self.assertIn("<!-- exclude post slider: they never collide (SDFormat 1.9 has no contact exclusion", text)
         self.assertIn('<joint name="rig" type="fixed">\n      <parent>world</parent>\n      <child>base</child>', text)
         robot = read_sdf(path)
         self.assertEqual(robot.root, "base")

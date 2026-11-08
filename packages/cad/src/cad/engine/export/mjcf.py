@@ -13,14 +13,18 @@ does one of theirs: ``compiler`` (radians, the mesh folder, ``autolimits``), ``o
 ``default`` (a class named for the model holding ``visual``, group 2 and colliding with nothing, and
 ``collision``, group 3: MuJoCo prefixes every class of an attached model, so the classes survive an
 attach), ``asset`` (a ``material`` per distinct material name and colour, a ``mesh`` per prototype),
-``worldbody``, ``equality`` and ``keyframe``.
+``worldbody``, ``contact``, ``equality`` and ``keyframe``.
 
 ``worldbody`` is the description's tree from its root: the ground's geometry in the world itself
 when the ground is MuJoCo's ``world``, else a body of its own with no joint; every other link a body
 at its joint's origin, which is the link's frame (the description's rule), so a joint stands at its
 body's origin on its Z (``axis="0 0 1"``) with ``ref`` zero. A revolute is a ``hinge`` with its
 range, a continuous one a hinge without; a prismatic a ``slide``; a cylindrical a hinge and a slide
-on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a fixed one no joint. A link's
+on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a fixed one no joint, so a part
+declared a body (``cad.build123d.body``) is a child ``<body>`` of its link's with none. A joint's drive
+effort (``cad.build123d.limits``) is its ``actuatorfrcrange``, ``-effort effort`` (N*m, N), which bounds
+what any actuator on it applies; MJCF has no bound on a joint's speed, so a drive's velocity is not
+written (an actuator's own ``ctrlrange`` is the scene's). A link's
 ``inertial`` is written on its principal axes (a tensor whose moments miss MuJoCo's triangle
 inequality by rounding alone is nudged onto it; any further and MuJoCo says so); a link with none is
 given none, and MuJoCo computes one from its geoms (visual and collision alike). A visual is a geom
@@ -28,7 +32,11 @@ of class ``visual``, a collision one of class ``collision`` named ``<part>_colli
 visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJoCo's half sizes (a
 box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
 capsule's length its cylinder's, as ``describe`` fits it and SDF has it); a named frame a ``site``.
-Every name is unique in its kind, a repeat given ``_2``, ``_3``. A coupling is an
+Every name is unique in its kind -- bodies among bodies, joints among joints, MuJoCo's namespaces, so a
+body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``export.note``). ``contact``
+excludes each body pair that touches at rest across a joint that moves (``export/contact.py``'s rule:
+MuJoCo's ``filterparent`` passes the pair at a robot's first joint, whose parent is welded to the
+world) and each pair the model declares (``cad.build123d.exclude``), in that order, each once. A coupling is an
 ``equality`` of the follower on its leader (``polycoef`` its offset and ratio). A pose is a ``key``,
 its ``qpos`` in MuJoCo's joint order (a ball's a unit quaternion from the three angles, x then y then
 z as the pair turns, a cylindrical's turn then slide), a joint it does not name at zero, a follower
@@ -57,7 +65,7 @@ import numpy as np
 
 from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
 from cad.engine.description import Description, DescriptionError, Geometry, Joint, Link
-from cad.engine.export import ExportRefused
+from cad.engine.export import ExportRefused, note
 
 __all__ = ["digest", "rendered", "write", "write_description"]
 
@@ -175,6 +183,9 @@ class _Writer:
         self.assets = assets
         self.geoms, self.sites, self.materials_named, self.meshes_named = _Names(), _Names(), _Names(), _Names()
         self.files_named = _Names()
+        # Bodies and joints, each its own namespace (MuJoCo's): a body and a joint may share a name.
+        self.bodies, self.joints = _Names(), _Names()
+        self.body_of: dict[str, str] = {}
         self.materials: dict[tuple, str] = {}
         self.material_rows: list[tuple[str, tuple]] = []
         self.meshes: dict[tuple[str, float], str] = {}
@@ -182,17 +193,20 @@ class _Writer:
         self.files: dict[str, bytes] = {}
         self.mesh_files: dict[str, str] = {}  # each mesh's file, by its key: written once however it is scaled
         self.qpos: list[tuple[Joint, int]] = []  # each moving joint and how many values it holds, in MuJoCo's order
+        self.joint_names: dict[str, str] = {}  # each moving joint's written name, by the description's
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         d = self.description
         world = _Element("worldbody")
         root = d.root
         if root.name == "world":
+            self.body_of[root.name] = self.bodies("world")
             self._content(world, root, np.asarray(root.frame, dtype=float))
             for joint in d.children(root.name):
                 self._body(world, joint, childclass=d.name)
         else:
-            body = world.add("body", [("name", root.name), ("childclass", d.name), *_placement(root.frame)])
+            body = world.add("body", [("name", self._named(root.name)), ("childclass", d.name),
+                                      *_placement(root.frame)])
             self._content(body, root, np.eye(4))
             for joint in d.children(root.name):
                 self._body(body, joint)
@@ -210,6 +224,9 @@ class _Writer:
         if asset.children:
             sections.append(asset)
         sections.append(world)
+        contact = self._contact()
+        if contact.children:
+            sections.append(contact)
         equality = self._equality()
         if equality.children:
             sections.append(equality)
@@ -232,9 +249,23 @@ class _Writer:
         own.add("default", [("class", "collision")]).add("geom", [("group", "3")])
         return default
 
+    def _named(self, link: str) -> str:
+        """A link's body name, unique among bodies; a rename said."""
+        found = self.body_of[link] = self.bodies(link)
+        if found != link:
+            note(f"body {link!r} is written {found!r}: another body holds its name")
+        return found
+
+    def _joint_name(self, wanted: str) -> str:
+        found = self.joints(wanted)
+        if found != wanted:
+            note(f"joint {wanted!r} is written {found!r}: another joint holds its name")
+        return found
+
     def _body(self, parent: _Element, joint: Joint, childclass: str | None = None) -> None:
         link = self.description.link(joint.child)
-        body = parent.add("body", [("name", link.name), ("childclass", childclass), *_placement(joint.origin)])
+        body = parent.add("body", [("name", self._named(link.name)), ("childclass", childclass),
+                                   *_placement(joint.origin)])
         if link.inertial is not None:
             body.children.append(_inertial(link))
         self._joint(body, joint)
@@ -250,19 +281,24 @@ class _Writer:
             return None if lower is None or upper is None else _numbers((lower, upper))
 
         axis = ("axis", "0 0 1")
+        if joint.kind == "fixed":
+            return
+        name = self.joint_names[joint.name] = self._joint_name(joint.name)
+        effort = ("actuatorfrcrange", None if joint.effort is None else _numbers((-joint.effort, joint.effort), snap=0))
         if joint.kind in ("revolute", "continuous"):
-            body.add("joint", [("name", joint.name), ("type", "hinge"), axis,
-                               ("range", ranged(0) if joint.kind == "revolute" else None)])
+            body.add("joint", [("name", name), ("type", "hinge"), axis,
+                               ("range", ranged(0) if joint.kind == "revolute" else None), effort])
             self.qpos.append((joint, 1))
         elif joint.kind == "prismatic":
-            body.add("joint", [("name", joint.name), ("type", "slide"), axis, ("range", ranged(0))])
+            body.add("joint", [("name", name), ("type", "slide"), axis, ("range", ranged(0)), effort])
             self.qpos.append((joint, 1))
         elif joint.kind == "cylindrical":
-            body.add("joint", [("name", joint.name), ("type", "hinge"), axis, ("range", ranged(0))])
-            body.add("joint", [("name", f"{joint.name}/slide"), ("type", "slide"), axis, ("range", ranged(1))])
+            body.add("joint", [("name", name), ("type", "hinge"), axis, ("range", ranged(0))])
+            body.add("joint", [("name", self._joint_name(f"{name}/slide")), ("type", "slide"), axis,
+                               ("range", ranged(1))])
             self.qpos.append((joint, 2))
         elif joint.kind == "spherical":
-            body.add("joint", [("name", joint.name), ("type", "ball")])
+            body.add("joint", [("name", name), ("type", "ball")])
             self.qpos.append((joint, 4))
 
     def _content(self, body: _Element, link: Link, frame: np.ndarray) -> None:
@@ -318,6 +354,19 @@ class _Writer:
         self.mesh_rows.append((found, file, scale))
         return found
 
+    def _contact(self) -> _Element:
+        from cad.engine.export.contact import touching
+
+        contact = _Element("contact")
+        seen: set[frozenset[str]] = set()
+        for first, second in [*touching(self.description), *self.description.excludes]:
+            key = frozenset((first, second))
+            if key in seen:
+                continue
+            seen.add(key)
+            contact.add("exclude", [("body1", self.body_of[first]), ("body2", self.body_of[second])])
+        return contact
+
     def _equality(self) -> _Element:
         equality = _Element("equality")
         kinds = {joint.name: joint.kind for joint in self.description.joints}
@@ -330,7 +379,7 @@ class _Writer:
                     raise ExportRefused(f"{self.description.name}: joint {joint.name!r} follows {leader!r}, and MJCF "
                                         f"couples one value to one value: {name!r} is "
                                         + (f"a {kinds[name]} joint" if name in kinds else "no joint here"))
-            equality.add("joint", [("joint1", joint.name), ("joint2", leader),
+            equality.add("joint", [("joint1", self.joint_names[joint.name]), ("joint2", self.joint_names[leader]),
                                    ("polycoef", _numbers((offset, ratio, 0, 0, 0), snap=0))])
         return equality
 

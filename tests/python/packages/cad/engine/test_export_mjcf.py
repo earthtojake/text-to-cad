@@ -1,6 +1,8 @@
 """MJCF as an export of every document (``export/mjcf.py``): a robot description written as Menagerie lays
 a robot out -- the exact text of a small hand-built one, its meshes binary STLs in metres beside it, the
-same bytes written twice, and MuJoCo compiling it to the bodies, masses and keys it describes; a loop
+same bytes written twice, and MuJoCo compiling it to the bodies, masses and keys it describes; a body
+fixed to its link, a body and a joint of one name, a drive's effort, and the contact pairs excluded, a
+link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop
 refused by name, and a mesh file refused as a source; and a jointed model built by the engine and
 exported to ``.xml``, its bodies standing where the mechanism puts its links, as built and at a state."""
 
@@ -176,6 +178,67 @@ class HandBuiltTest(_Folder):
         with self.assertRaisesRegex(ExportRefused, "no MJCF export is made from one"):
             api.export(self.folder / "part.glb", self.folder / "robot.xml", daemon=False, progress=False)
         self.assertFalse((self.folder / "robot.xml").exists())
+
+
+def jointed() -> Description:
+    """A base fixed to the world, an arm sunk 1 cm into its top on a joint named as the arm is, with its drive's
+    limits, a camera kept a body of its own on the arm, and a hand clear of them on a wrist, excluded from
+    the base by declaration."""
+    def box(name: str, z: float, size: tuple[float, ...]) -> list[Collision]:
+        return [Collision(name, Geometry("box", _frame(0, 0, z), size=size))]
+
+    mass = Inertial(0.1, np.zeros(3), np.diag([1e-4, 1e-4, 1e-4]))
+    base = Link("base", np.eye(4), collisions=box("base", 0.05, (0.2, 0.2, 0.1)), inertial=mass)
+    arm = Link("arm", _frame(0, 0, 0.1), collisions=box("arm", 0.14, (0.05, 0.05, 0.3)), inertial=mass)
+    camera = Link("camera", _frame(0, 0, 0.4), collisions=[Collision("camera", Geometry("sphere", np.eye(4),
+                                                                                        size=(0.02,)))])
+    hand = Link("hand", _frame(0, 0, 0.45), collisions=box("hand", 0.06, (0.05, 0.05, 0.1)), inertial=mass)
+    joints = [Joint("rig", "fixed", "world", "base", np.eye(4)),
+              Joint("arm", "revolute", "base", "arm", arm.frame, limits=((-1.0, 1.0),), as_built=(0.0,),
+                    effort=12.5, velocity=3.0),
+              Joint("camera", "fixed", "arm", "camera", _frame(0, 0, 0.3)),
+              Joint("wrist", "continuous", "arm", "hand", _frame(0, 0, 0.35), limits=((None, None),), as_built=(0.0,))]
+    return Description("rig", [Link("world", np.eye(4)), base, arm, camera, hand], joints,
+                       excludes=(("base", "hand"),))
+
+
+class ContactTest(_Folder):
+    def test_a_body_its_names_its_effort_and_the_pairs_that_touch_at_rest_are_written_as_mujoco_reads_them(self) -> None:
+        path = self.folder / "rig.xml"
+        write_description(jointed(), path)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('<joint name="arm" type="hinge" axis="0 0 1" range="-1 1" actuatorfrcrange="-12.5 12.5"/>', text)
+        # The arm sits in the base, which is welded to the world (MuJoCo's filterparent passes them); the hand is
+        # clear of the arm and the camera, and excluded from the base as declared.
+        self.assertIn('  <contact>\n    <exclude body1="base" body2="arm"/>\n    <exclude body1="base" body2="hand"/>\n'
+                      '  </contact>', text)
+        model = mujoco.MjModel.from_xml_path(str(path))
+        self.assertEqual((model.body("arm").name, model.joint("arm").name), ("arm", "arm"))  # a namespace each
+        self.assertEqual(model.body("camera").jntnum[0], 0)  # fixed to the arm, a body of its own
+        self.assertEqual(model.body("camera").parentid[0], model.body("arm").id)
+        np.testing.assert_allclose(model.jnt_actfrcrange[model.joint("arm").id], [-12.5, 12.5])
+        self.assertEqual(model.nexclude, 2)
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        self.assertEqual(data.ncon, 0)
+        # Without the exclusions, the arm and the base are in contact at rest.
+        bare = mujoco.MjModel.from_xml_string(text[:text.index("  <contact>")] + text[text.index("</contact>") + 11:])
+        data = mujoco.MjData(bare)
+        mujoco.mj_forward(bare, data)
+        self.assertGreater(data.ncon, 0)
+
+    def test_the_contact_rule_measures_convex_shapes_exactly(self) -> None:
+        from cad.engine.export.contact import TOUCH, _distance, _shape
+
+        def placed(kind: str, x: float, size: tuple[float, ...], turned: float = 0.0) -> object:
+            return _shape(Description("d", [], []), Geometry(kind, np.eye(4), size=size),
+                          _frame(x, 0, 0) @ _rotation_z(turned))[2]
+
+        self.assertAlmostEqual(_distance(placed("sphere", 0, (1,)), placed("sphere", 3, (1,))), 1.0, places=9)
+        self.assertAlmostEqual(_distance(placed("box", 0, (2, 2, 2)), placed("box", 3, (2, 2, 2), math.pi / 4)),
+                               2 - math.sqrt(2), places=9)
+        self.assertEqual(_distance(placed("capsule", 0, (0.5, 2)), placed("cylinder", 0.9, (0.5, 1))), 0.0)
+        self.assertLessEqual(_distance(placed("box", 0, (1, 1, 1)), placed("box", 1, (1, 1, 1))), TOUCH)
 
 
 def _rotation_z(angle: float) -> np.ndarray:
