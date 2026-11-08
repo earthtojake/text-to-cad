@@ -23,7 +23,12 @@ __all__ = ["Refused", "Renders", "answer_png"]
 
 
 class Refused(ValueError):
-    """A request the document does not offer, refused by name before anything was drawn."""
+    """A request the document does not offer, refused by name before anything was drawn; ``part``: which part
+    of the request (``SnapshotRefused.part``), where the render process said."""
+
+    def __init__(self, text: str, part: str | None = None) -> None:
+        super().__init__(text)
+        self.part = part
 
 
 class Renders:
@@ -74,7 +79,7 @@ class Renders:
             clock = time.perf_counter()
             answer = render.request({"op": "open", "path": str(path)})
             if "refused" in answer:
-                raise Refused(answer["refused"])
+                raise Refused(answer["refused"], answer.get("part"))
             if "opened" not in answer:
                 raise RuntimeError(answer.get("failed") or f"the renderer could not read {path.name}")
             opened = answer["opened"]
@@ -104,7 +109,7 @@ class Renders:
     @staticmethod
     def _drawn(render: Any, answer: dict[str, Any], timings: dict[str, int]) -> tuple[bytes, dict[str, Any]]:
         if "refused" in answer:
-            raise Refused(answer["refused"])
+            raise Refused(answer["refused"], answer.get("part"))
         if "done" not in answer:
             raise RuntimeError(answer.get("failed") or "the renderer drew nothing")
         report = answer["done"]

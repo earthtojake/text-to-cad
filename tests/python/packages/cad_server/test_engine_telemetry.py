@@ -107,11 +107,11 @@ class EngineTelemetryTest(unittest.TestCase):
         stopped = facts(ok=False, error=error("KeyboardInterrupt", here=True))
         self.assertEqual(engine_telemetry.counts(stopped, "script")["builds"][0]["outcome"], "cancelled")
 
-        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 8.
+        # Kept as a command's counts are, and sent by the sender as the process ``cli``, in schema 9.
         for found, via in ((built, "script"), (facts(ok=False, error=model), "script"), (died, "command")):
             self.assertTrue(analytics.spool(engine_telemetry.counts(found, via), path=self.settings))
         [payload] = self.sent()
-        self.assertEqual((payload["schema"], payload["process"]), (8, "cli"))
+        self.assertEqual((payload["schema"], payload["process"]), (9, "cli"))
         self.assertEqual(payload["events"], [
             {"name": "build", "kind": "model", "via": "command", "count": 1, "failed": 0, "crashed": 1, "cancelled": 0,
              "cached": 0, "seconds": 0.5, "longest": 0.5},
@@ -185,9 +185,61 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual([(row["kind"], row["count"], row["failed"]) for row in snapshots],
                          [("model", 4, 2), ("xbf", 4, 2)])
         failures = [event for event in payload["events"] if event["name"] == "snapshot_failure"]
-        self.assertEqual([(row["kind"], row["count"]) for row in failures], [("model", 2), ("xbf", 2)])
+        self.assertEqual([(row["kind"], row["reason"], row["part"], row["count"]) for row in failures],
+                         [("model", "bad_request", "other", 2), ("xbf", "bad_request", "other", 2)])
         self.assertNotIn("private", json.dumps(payload))
         self.assertNotIn(ident, json.dumps(payload))
+
+    def test_a_refused_snapshot_is_counted_by_the_part_of_its_request_it_refused_never_the_value(self) -> None:
+        from cad.engine import api, worker
+        from cad.engine.mechanism import KinematicsError
+        from cad.engine.snapshot import SnapshotRefused, parse_camera, parse_display, parse_size
+
+        def refused(call) -> BaseException:
+            try:
+                call()
+            except ValueError as error:
+                return error
+            raise AssertionError("not refused")
+
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+        cases = [
+            (refused(lambda: parse_display('{"clip": {"axis": "w-secret"}}', False)), "display.clip"),
+            (refused(lambda: parse_display("secret-mode", False)), "display.mode"),
+            (refused(lambda: parse_display('{"secret": 1}', False)), "display"),
+            (refused(lambda: parse_camera("secret-angle")), "camera"),
+            (refused(lambda: parse_size(9, 9, None)), "size"),
+            (KinematicsError("joint secret_joint is out of range"), "pose"),
+            (SnapshotRefused("named nothing"), "other"),
+        ]
+        for error, part in cases:
+            with self.subTest(part=part):
+                # As a worker answers it and this process raises it again (``api._failed``), and -- the library's
+                # own refusals -- as raised here.
+                answered = api._failed({"failed": str(error), **worker.refusal(error)})
+                for raised in (answered, *((error,) if isinstance(error, SnapshotRefused) else ())):
+                    told = api._facts("snapshot", source, {}, {}, None, raised, 0.5)
+                    [counted] = engine_telemetry.counts(told, "command")["snapshots"]
+                    self.assertEqual((counted["reason"], counted.get("part", "other")), ("bad_request", part))
+                    self.assertTrue(analytics.spool(engine_telemetry.counts(told, "command"), path=self.settings))
+        # Every word the library names a part by is one the receiver takes.
+        library = Path(inspect.getfile(api)).parent
+        import re
+
+        named = {word for path in library.rglob("*.py")
+                 for word in re.findall(r'(?:refusing\(|part=)"([a-z.]+)"', path.read_text(encoding="utf-8"))}
+        self.assertTrue(named)
+        self.assertLessEqual(named, analytics.SNAPSHOT_PARTS)
+        # A failure that was no refusal names no part.
+        told = api._facts("snapshot", source, {}, {}, None, RuntimeError("secret"), 0.5)
+        self.assertTrue(analytics.spool(engine_telemetry.counts(told, "command"), path=self.settings))
+        [payload] = self.sent()
+        failures = sorted((row["reason"], row["part"], row["count"]) for row in payload["events"]
+                          if row["name"] == "snapshot_failure")
+        self.assertEqual(failures, sorted([("bad_request", part, 2 if isinstance(error, SnapshotRefused) else 1)
+                                           for error, part in cases] + [("render_error", "none", 1)]))
+        self.assertNotIn("secret", json.dumps(payload))
 
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
         for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
@@ -236,7 +288,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertFalse(self.settings.with_name(analytics.SPOOL).exists())
         [kept] = [json.loads(line) for line in self.settings.with_name(analytics.KEPT).read_text(encoding="utf-8").splitlines()]
         self.assertEqual((kept["batch"]["process"], kept["batch"]["schema"], kept["batch"]["events"][0]["kind"]),
-                         ("cli", 8, "xbf"))
+                         ("cli", 9, "xbf"))
 
 
 class ThroughTheDaemonTest(unittest.TestCase):

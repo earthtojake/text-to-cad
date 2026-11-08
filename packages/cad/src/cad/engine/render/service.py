@@ -352,11 +352,11 @@ class Held:
         shown, posed = self.structure, None
         if still.pose is not None:
             if self.kind is not None and self.poser is None:
-                raise SnapshotRefused(f"--pose poses a mechanism; {self.name} is a mesh and has none")
+                raise SnapshotRefused(f"--pose poses a mechanism; {self.name} is a mesh and has none", part="pose")
             try:
                 shown = (self.poser or posed_structure)(self.structure, still.pose)
             except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
-                raise SnapshotRefused(f"--pose: {error}") from None
+                raise SnapshotRefused(f"--pose: {error}", part="pose") from None
             posed = shown["kinematics"]["pose"]
         refusals(still, shown, self.name)
         hidden = hidden_instances(shown, still.display, self.name)
@@ -587,7 +587,8 @@ def main() -> int:
             if retire:
                 return 0
         except (SnapshotRefused, FormatError) as error:
-            frames.write(protocol, {"id": ident, "refused": str(error)})
+            part = getattr(error, "part", None) if isinstance(error, SnapshotRefused) else "source"
+            frames.write(protocol, {"id": ident, "refused": str(error), **({"part": part} if part else {})})
         except Exception as error:  # noqa: BLE001 - the renderer answers every request
             frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
                               "trace": traceback.format_exc()})

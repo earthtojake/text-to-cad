@@ -38,7 +38,10 @@ exits, each batch under an id of its own and stamped with the time it was made:
 - ``snapshot`` (the command that rendered it): for each source kind (``model`` or a file format), how many renders, how many failed,
   and how long they took;
 - ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
-  the snapshot failed (``cad_server._internal.engine_telemetry``);
+  the snapshot failed (``cad_server._internal.engine_telemetry``), and for a refused request which part
+  of it the refusal named (``SNAPSHOT_PARTS``: the display's mode or its clip, the camera, the size, the
+  source...), a word cadgen chose where it refused, never the value given (``none`` for any other
+  reason);
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
   played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
   (``FEATURES``);
@@ -159,12 +162,13 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
 # 8: live models have their own kind (``model``), distinct from files, including exported/opened xbfs;
 # 7: the controls a person used in a CAD view (``control``), and room for one event each (``MAX_EVENTS``); 6: the
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 8
+SCHEMA = 9
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
@@ -174,6 +178,8 @@ SCHEMA = 8
 # which of a view's controls a person used, and how long a tool was in hand, is the use a view already counted
 # (``view``, ``feature``'s Quick Edit) told apart by control, under the same install and process ids.
 # Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
+# Nor schema 9: a refused snapshot told apart by which part of its request was refused -- a word of ours, as its
+# reason is, never the value given.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -371,6 +377,14 @@ BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_er
 # (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
 SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "render_error",
                                "bug", "other"})
+# Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
+# where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
+# grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's
+# references, a job; ``other`` where the refusal named none; ``none`` for a failure that was no refusal. A word,
+# never the value given.
+SNAPSHOT_PARTS = frozenset({"source", "out", "display", "display.mode", "display.exploded", "display.clip",
+                            "display.grid", "display.visibility", "camera", "pose", "size", "annotation",
+                            "measurements", "references", "job", "other"})
 # What a person used: a model with children (an engine model of several parts too), a model declaring mesh
 # exports (``@stl``, ``@glb``, ``@threemf``), a snapshot (or an engine export) that posed joints or played an
 # animation, an engineering drawing (``@eng_drawing``), and a CAD view's Quick Edit sending its prompt.
@@ -436,7 +450,7 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "build": (("kind", "via"), ("count", "failed", "crashed", "cancelled", "cached", "seconds", "longest")),
     "build_failure": (("kind", "via", "reason"), ("count",)),
     "snapshot": (("kind",), ("count", "failed", "seconds")),
-    "snapshot_failure": (("kind", "reason"), ("count",)),
+    "snapshot_failure": (("kind", "reason", "part"), ("count",)),
     "feature": (("feature",), ("count",)),
     "health": ((), HEALTH),
     "control": (("control",), ("count", "seconds")),
@@ -1619,13 +1633,18 @@ class Recorder:
             self._note("build_failure", (kind, via, reason if reason in BUILD_FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
-    def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None) -> None:
+    def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None,
+                 part: str | None = None) -> None:
         """A snapshot of a model or file format was rendered, or failed to be, for ``reason`` (one of
-        ``SNAPSHOT_FAILURES``; anything else is ``other``)."""
+        ``SNAPSHOT_FAILURES``; anything else is ``other``); a refused one (``bad_request``) refused ``part`` of
+        its request (one of ``SNAPSHOT_PARTS``; anything else, or none, is ``other``), and any other failure
+        none."""
         if kind in KINDS:
             self._note("snapshot", (kind,), {"count": 1, "failed": not ok, "seconds": _seconds(seconds)})
             if not ok:
-                self._note("snapshot_failure", (kind, reason if reason in SNAPSHOT_FAILURES else "other"), {"count": 1})
+                reason = reason if reason in SNAPSHOT_FAILURES else "other"
+                part = (part if part in SNAPSHOT_PARTS else "other") if reason == "bad_request" else "none"
+                self._note("snapshot_failure", (kind, reason, part), {"count": 1})
 
     @_guarded(lambda: None)
     def used(self, feature: str) -> None:
@@ -1682,7 +1701,8 @@ class Recorder:
                            cached=build.get("cached") is True, reason=build.get("reason"))
         for snapshot in each("snapshots"):
             if isinstance(snapshot, dict) and isinstance(snapshot.get("ok"), bool):
-                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"), snapshot.get("reason"))
+                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"), snapshot.get("reason"),
+                              snapshot.get("part"))
         for feature in each("features"):
             self.used(feature)
         for crash in each("crashes"):

@@ -495,12 +495,14 @@ def refusal(error: BaseException) -> dict[str, str]:
     """A refusal's type, carried beside its words: a ``ValueError`` (an ``ExportRefused``, a
     ``SnapshotRefused``, a ``KinematicsError``, ...) answered as ``kind``, ``module:name``, so the
     caller raises it as that type (``api._failed``) and a refused export or snapshot is refused the
-    same through the daemon as in the caller's own process (``daemon=False``). Anything else is
-    no refusal: its words alone."""
+    same through the daemon as in the caller's own process (``daemon=False``), with the part of the
+    request a snapshot's refusal named (``part``: ``SnapshotRefused.part``). Anything else is no
+    refusal: its words alone."""
     if not isinstance(error, ValueError):
         return {}
     kind = type(error)
-    return {"kind": f"{kind.__module__}:{kind.__qualname__}"}
+    part = getattr(error, "part", None)
+    return {"kind": f"{kind.__module__}:{kind.__qualname__}", **({"part": part} if isinstance(part, str) else {})}
 
 def main() -> int:
     os.environ["CAD_ENGINE_WORKER"] = "1"

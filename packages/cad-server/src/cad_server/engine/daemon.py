@@ -1437,7 +1437,7 @@ class Daemon:
             try:
                 data, report = self.renders.draw(Path(request["path"]), request["still"], said)
             except Refused as error:
-                send({"refused": str(error)})
+                send({"refused": str(error), **({"part": error.part} if error.part else {})})
                 return
             except Exception as error:  # noqa: BLE001 - a picture that could not be drawn is the answer
                 send({"failed": f"{type(error).__name__}: {error}"})

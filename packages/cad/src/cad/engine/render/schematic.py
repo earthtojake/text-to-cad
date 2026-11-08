@@ -158,7 +158,7 @@ def page_of(payload: dict, sheet: str) -> dict:
         if page["path"] == sheet:
             return page
     known = ", ".join(page["path"] for page in payload["sheets"])
-    raise SnapshotRefused(f"the schematic has no sheet {sheet}; its sheets are {known}")
+    raise SnapshotRefused(f"the schematic has no sheet {sheet}; its sheets are {known}", part="display")
 
 
 def draw_page(path: Path, still: Any) -> tuple[bytes, dict[str, Any]]:
