@@ -43,7 +43,7 @@ def plan_view(camera: Any, name: str) -> tuple[float, float, float]:
     refused = SnapshotRefused(
         f"{name} is a drawing, seen from above: its camera is a plan view, {{\"position\": [x, y, d], \"target\": "
         "[x, y, 0], \"up\": [0, 1, 0], \"orthographicHalfHeight\": h}, looking straight down at the sheet with +Y up "
-        "(the window a Quick Edit view of it names)")
+        "(the window a Quick Edit view of it names)", part="camera")
     if not isinstance(camera, dict) or set(camera) - PLAN_KEYS or not _numbers(camera.get("position"), 3) \
             or not _numbers(camera.get("target"), 3) or not _numbers(camera.get("up", [0, 1, 0]), 3):
         raise refused
@@ -74,7 +74,7 @@ def refusals(still: Any, name: str) -> None:
         named = ", ".join(REFUSED.get(key, key) for key in asked)
         raise SnapshotRefused(f"{name} is a drawing, drawn from above in its pens: {named} "
                               f"{'do' if len(asked) > 1 else 'does'} not apply to it. It takes no display, its "
-                              "camera is a plan view, and ink and dimensions lie on its sheet")
+                              "camera is a plan view, and ink and dimensions lie on its sheet", part="display")
 
 
 class Held:

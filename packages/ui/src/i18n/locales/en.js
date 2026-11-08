@@ -208,7 +208,7 @@ export default {
   "export.format.position": "Position",
 
   // The page before the viewer answers (`apps/web`'s starting view).
-  "app.start.notAnswering": "The CAD Viewer is not answering",
+  "app.start.notAnswering": "CAD is not answering",
   "app.engine.notRunning": "CAD is not running.",
   "app.engine.startIt": "It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.",
   "app.engine.linkReplaced": "This link no longer works.",
@@ -763,7 +763,7 @@ export default {
   "alert.environment.title": "Couldn’t prepare studio lighting",
   "alert.environment.message": "The reflection environment could not be created. The model is shown with the studio’s direct lighting, so reflective materials may look different.",
   "alert.environment.recovery": "Reload the viewer to retry the studio environment.",
-  "viewer.contextLost": "WebGL context was lost. Restoring CAD Viewer...",
+  "viewer.contextLost": "WebGL context was lost. Restoring the viewer...",
   "viewUpdate.preparingSection": "Preparing section view…",
   "drawing.canvas": "Drawing: {name}",
   "drawing.empty": "This drawing has no geometry in its modelspace, so there is nothing to show.",
@@ -933,11 +933,11 @@ export default {
   "sdf.metadata": "Metadata",
 
   // The CAD app's and the web page's own notices, outside the viewer.
-  "cad.unreachable.openModel": "This chat can't connect the CAD viewer to its engine. Open the model in the CAD Viewer instead.",
-  "cad.unreachable.openViewer": "This chat can't connect the CAD viewer to its engine. Open the CAD Viewer instead.",
-  "cad.unreachable.askModel": "This chat can't connect the CAD viewer to its engine. Ask your agent to open the model in the CAD Viewer instead.",
-  "cad.unreachable.askViewer": "This chat can't connect the CAD viewer to its engine. Ask your agent to open the CAD Viewer instead.",
-  "cad.openInViewer": "Open in CAD Viewer",
+  "cad.unreachable.openModel": "This chat can't connect to CAD's engine. Open the model in your browser instead.",
+  "cad.unreachable.openViewer": "This chat can't connect to CAD's engine. Open CAD in your browser instead.",
+  "cad.unreachable.askModel": "This chat can't connect to CAD's engine. Ask your agent to open the model in your browser instead.",
+  "cad.unreachable.askViewer": "This chat can't connect to CAD's engine. Ask your agent to open CAD in your browser instead.",
+  "cad.openInViewer": "Open in browser",
   "cad.lost.tabs": "The CAD plugin stopped responding in this thread. Quit and reopen {host} to restart it.",
   "cad.lost.inline": "The CAD plugin stopped responding. Quit and reopen {host} to restart it, then ask your agent to show the model again.",
   "cad.lost.thisApp": "this app",

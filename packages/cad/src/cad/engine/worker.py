@@ -3,12 +3,14 @@
 The daemon starts one per script and talks to it over the worker's stdin and its
 original stdout. A request is one JSON object per line: ``{"id", "op": "build", "script",
 "functions", "cwd", "run", "env"}`` (``run``: the calling process's run, ``build.build``; ``env``: its
-environment, ``adopt``). The answers are frames: a JSON object on one line and, when it has
+environment, ``adopt``); an export that draws carries the engine's X display too (``display``,
+``told_display``). The answers are frames: a JSON object on one line and, when it has
 ``bytes``, exactly that many bytes after it. A build is answered by ``{"id", "log"}`` frames while it
 builds and ``{"id", "progress"}`` frames saying where it is (``progress.py``: each stage, and each
 body a build runs), then one ``{"id", "done", "rssMb"}`` (the build's reports, and the worker's
 resident memory after it, in MiB; ``"retire": true`` too when it is over its cap, ``retirement``)
-or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``). A file the build writes
+or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``; with ``type`` where it is a
+failure said in words alone, a file not written: ``frames.failed_type``). A file the build writes
 is sent nowhere: a page serving it as a file reads it from the disk, as it reads any file another
 program wrote. What the model prints goes to the worker's stderr, which the daemon passes on. The
 worker exits when its stdin closes: the daemon's supervisor closes it to retire the worker
@@ -271,11 +273,26 @@ def _has_kernel() -> bool:
 
 def kept() -> dict[str, str]:
     """What of this worker's environment no run's replaces (``adopt``): what started its
-    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH) and what it
-    set for itself."""
+    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH), what it
+    set for itself; and, once an export that draws has told it (``told_display``), the engine's X display
+    and its authority."""
     from cad.engine.places import BYTECODE, RESTARTS
 
     return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER") if name in os.environ}
+
+
+def told_display(told: Any, own: dict[str, str]) -> None:
+    """The engine's X display and its authority (``places.DISPLAY``, ``places.XAUTHORITY``), as an export that
+    draws tells them (``display``), kept with what no run's environment replaces (``own``, ``kept``) and set
+    now: a still for a run with no ``DISPLAY`` of its own is drawn there (``render.context.display``). Told
+    with the first picture, never at the worker's start, so an engine that draws nothing starts no display."""
+    from cad.engine.places import DISPLAY, XAUTHORITY
+
+    if not isinstance(told, dict):
+        return
+    found = {name: told[name] for name in (DISPLAY, XAUTHORITY) if isinstance(told.get(name), str) and told[name]}
+    own.update(found)
+    os.environ.update(found)
 
 
 def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
@@ -504,12 +521,14 @@ def refusal(error: BaseException) -> dict[str, str]:
     """A refusal's type, carried beside its words: a ``ValueError`` (an ``ExportRefused``, a
     ``SnapshotRefused``, a ``KinematicsError``, ...) answered as ``kind``, ``module:name``, so the
     caller raises it as that type (``api._failed``) and a refused export or snapshot is refused the
-    same through the daemon as in the caller's own process (``daemon=False``). Anything else is
-    no refusal: its words alone."""
+    same through the daemon as in the caller's own process (``daemon=False``), with the part of the
+    request a snapshot's refusal named (``part``: ``SnapshotRefused.part``). Anything else is no
+    refusal: its words alone."""
     if not isinstance(error, ValueError):
         return {}
     kind = type(error)
-    return {"kind": f"{kind.__module__}:{kind.__qualname__}"}
+    part = getattr(error, "part", None)
+    return {"kind": f"{kind.__module__}:{kind.__qualname__}", **({"part": part} if isinstance(part, str) else {})}
 
 def main() -> int:
     os.environ["CAD_ENGINE_WORKER"] = "1"
@@ -621,6 +640,7 @@ def main() -> int:
             continue
         if op in ("export", "result"):
             try:
+                told_display(request.get("display"), own)
                 adopt(request.get("env"), own)
                 cwd = request.get("cwd")
                 os.chdir(cwd or home)
@@ -640,7 +660,8 @@ def main() -> int:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
-                send({"id": ident, "failed": str(error), **refusal(error)})
+                # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
+                send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})
@@ -679,7 +700,7 @@ def main() -> int:
             send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
                   **({"retire": True} if retire else {})})
         except BuildError as error:
-            send({"id": ident, "failed": str(error)})
+            send({"id": ident, "failed": str(error), **frames.failed_type(error)})
         except BaseException as error:  # noqa: BLE001 - the worker answers every request
             send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error, error.__traceback__))})
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

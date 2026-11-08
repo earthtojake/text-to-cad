@@ -1621,6 +1621,15 @@ X): the release's title, its items as a list, each a bold title and a sentence o
 muted text, and one primary button, **Got it**, which has the focus. The button, Escape and a press
 outside each close it and keep it seen for every view of the person's; nothing else is offered.
 
+## Naming the page
+
+Text a person reads in the viewer and the CAD app says "browser" (**Open in browser**, "open the
+model in your browser"), never "CAD Viewer", a name no one knows; where a sentence means the page
+itself it says "the viewer" or "this page". That holds for every button, notice, card, menu and tool
+message an agent relays to a person, in every locale. "CAD Viewer" stays only where it is a name
+someone looks up: the `cad viewer` command, developer docs, and the skills that tell an agent which
+verb to run.
+
 ## Verification
 
 Verify state transitions, touch cancellation, keyboard operation, nested popup

@@ -10,10 +10,16 @@ dropped). The window it draws through is the platform's:
   ``NSApplication``. A canvas is made and drawn inside an autorelease pool of its own, so a
   process that makes canvases for its life keeps nothing AppKit autoreleases for each.
 - **Linux**: OCP's Linux build draws through GLX, which needs an X server: an X display's window,
-  virtual (never mapped: ``Xw_Window`` with ``SetVirtual``), on ``$DISPLAY`` -- Xvfb on a machine
-  with no screen. An OCCT built with EGL and no Xlib makes its context on ``EGL_DEFAULT_DISPLAY``,
-  no X server at all, and a neutral virtual window stands in for the X window. With neither, a
-  canvas is refused by name (``Unavailable``), and the refusal names Xvfb.
+  virtual (never mapped: ``Xw_Window`` with ``SetVirtual``), on an X display (``display``): the
+  request's own ``DISPLAY``, else the engine's (``CAD_ENGINE_DISPLAY``: the daemon's own display, or
+  an Xvfb it started itself, ``cad_server.engine.display``), connected to with the engine's X authority
+  (``CAD_ENGINE_XAUTHORITY``: the daemon's ``XAUTHORITY``, or its Xvfb's cookie). The wheels we pin
+  (``cadquery-ocp-novtk`` 8.0, x86-64 and aarch64) draw through GLX alone: ``libTKOpenGl`` links
+  ``libGL`` and ``libX11`` and no EGL, and its ``InitEglContext`` is "not implemented", so there is no
+  off-screen context without an X server. An OCCT built with EGL and no Xlib would make its context
+  on ``EGL_DEFAULT_DISPLAY``, no X server at all, and a neutral virtual window stands in for the X
+  window. With none, a canvas is refused by name (``Unavailable``), and the refusal names what to
+  install (``INSTALL``).
 - **Windows**: a popup window never shown (``CreateWindowExW`` of the ``STATIC`` class) handed to
   ``WNT_Window``.
 
@@ -40,7 +46,10 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 
-__all__ = ["Canvas", "Unavailable", "available", "driver", "platform", "pool"]
+from cad.engine.places import DISPLAY, XAUTHORITY
+
+__all__ = ["ENGINE_DISPLAY", "INSTALL", "Canvas", "Unavailable", "available", "display", "driver", "platform",
+           "pool"]
 
 
 class Unavailable(RuntimeError):
@@ -115,6 +124,20 @@ def _darwin_window(width: int, height: int) -> Any:
 
 # --- Linux ---------------------------------------------------------------------------------
 
+# The X display the engine gives every process that draws (``places.DISPLAY``): its own ``DISPLAY``, or an
+# Xvfb it started. A request's own ``DISPLAY`` comes first.
+ENGINE_DISPLAY = DISPLAY
+# What a Linux with no X display installs, for the engine to start Xvfb itself.
+INSTALL = ("install Xvfb and Mesa's OpenGL (Debian, Ubuntu: sudo apt-get install xvfb libgl1 libgl1-mesa-dri; "
+           "Fedora: sudo dnf install xorg-x11-server-Xvfb mesa-libGL mesa-dri-drivers), and the engine starts "
+           "Xvfb itself (run cad stop, then try again); or set DISPLAY")
+
+
+def display() -> str | None:
+    """The X display a canvas draws on (Linux): this process's ``DISPLAY`` -- a worker's is its
+    request's --, else the engine's (``ENGINE_DISPLAY``), else None."""
+    return os.environ.get("DISPLAY") or os.environ.get(ENGINE_DISPLAY) or None
+
 
 def _has_xlib() -> bool:
     try:
@@ -170,16 +193,45 @@ _CONNECTION = threading.local()
 
 
 def _connection() -> Any:
-    """The thread's one connection to the display, made at its first canvas and kept: a canvas per
-    connection would hold as many X clients as the process holds scenes, and an X server refuses
+    """The thread's one connection to each display, made at its first canvas there and kept: a canvas
+    per connection would hold as many X clients as the process holds scenes, and an X server refuses
     clients past its limit (Xvfb's 256, shared by every process drawing on it). A connection
-    refused is not kept, so the next canvas asks again."""
+    refused is not kept, so the next canvas asks again. ``DISPLAY`` is OCCT's own default; the
+    engine's display (``display``) is named. macOS and Windows connect to nothing: OCCT's default."""
     from OCP.Aspect import Aspect_DisplayConnection
 
+    named = display() if platform() == "linux" and not os.environ.get("DISPLAY") else None
     made = getattr(_CONNECTION, "made", None)
     if made is None:
-        made = _CONNECTION.made = Aspect_DisplayConnection()
-    return made
+        made = _CONNECTION.made = {}
+    if named not in made:
+        if named is None:
+            made[named] = Aspect_DisplayConnection()
+        else:
+            from OCP.TCollection import TCollection_AsciiString
+
+            with _engine_authority():
+                made[named] = Aspect_DisplayConnection(TCollection_AsciiString(named))
+    return made[named]
+
+
+@contextlib.contextmanager
+def _engine_authority() -> Iterator[None]:
+    """``XAUTHORITY`` the engine's (``places.XAUTHORITY``) while a connection to its display is made: the
+    file Xlib reads the cookie that admits it from, as it connects. The request's own is put back after."""
+    authority = os.environ.get(XAUTHORITY)
+    if not authority:
+        yield
+        return
+    before = os.environ.get("XAUTHORITY")
+    os.environ["XAUTHORITY"] = authority
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("XAUTHORITY", None)
+        else:
+            os.environ["XAUTHORITY"] = before
 
 
 def driver() -> Any:
@@ -188,9 +240,9 @@ def driver() -> Any:
     at the next canvas, never remembered: an X server that refused one connection (Xvfb busy,
     say) is no reason to draw nothing for the rest of the process."""
     try:
-        if platform() == "linux" and _has_xlib() and not os.environ.get("DISPLAY"):
-            raise Unavailable("no X display for OpenGL: OCP's Linux build draws through GLX on an X server. Run "
-                              "under Xvfb (xvfb-run -a ..., or Xvfb :99 & export DISPLAY=:99), or set DISPLAY")
+        if platform() == "linux" and _has_xlib() and display() is None:
+            raise Unavailable("no X display for OpenGL: OCP's Linux build draws through GLX on an X server, and "
+                              f"neither the request (DISPLAY) nor the engine has one: {INSTALL}")
         from OCP.OpenGl import OpenGl_GraphicDriver
 
         if platform() == "darwin":
@@ -201,12 +253,14 @@ def driver() -> Any:
         options.contextCompatible = False
         if not made.InitContext():
             raise Unavailable(f"OCCT could not make an OpenGL context on {platform()}"
-                              + (" (does the X server have GLX? Xvfb +extension GLX)" if platform() == "linux" else ""))
+                              + (f" (does the X server at {display()} have GLX? Xvfb +extension GLX)"
+                                 if platform() == "linux" else ""))
     except Unavailable:
         raise
     except Exception as error:  # noqa: BLE001 - OCCT raises its own failures; each is this refusal
+        # Linux's: no libGL or libX11 to load (an ImportError naming it), or no X server at the display.
         raise Unavailable(f"OCCT could not make an OpenGL context on {platform()}: {type(error).__name__}: "
-                          f"{error}") from None
+                          f"{error}" + (f"; {INSTALL}" if platform() == "linux" else "")) from None
     return made
 
 

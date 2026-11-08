@@ -29,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.1 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.11.2 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -74,7 +74,8 @@ checksum. It:
     should it not start, the release before comes back. With none running, the next
     CAD session starts this release's.
 11. Says what each app has now, and lists the apps to restart to load what it
-    installed or updated.
+    installed or updated. An agent whose skills folder lacks one of the skills it
+    was given fails the run: its line says which, and the command exits 1.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
 to see the plan before anything changes. Run it again to update: an app that is up
@@ -228,7 +229,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.1", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.11.2", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -355,14 +356,17 @@ core CAD workflows and let you view CAD files in a localhost web app. The instal
 command gives them to the agents it knows when they are installed: GitHub Copilot
 (VS Code's agent too), Windsurf, Cline, Amp, Antigravity, OpenClaw, Droid, Goose,
 Kilo Code, Kiro CLI, Hermes Agent, OpenCode, Roo Code, Trae and Zed. It copies them
-from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) into each
-one's own skills folder with the [Skills CLI](https://skills.sh), which needs Node
-(`npx`), in one command:
+from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) with the
+[Skills CLI](https://skills.sh), which needs Node (`npx`), into the skills folder it
+keeps for each, in one command:
 `npx --prefer-offline -y skills@latest add <plugin folder>/skills -g -a <agent> ... -s '*' -y --copy --json`.
 It names each agent: it never does this for an app with a plugin, and moves a loose
-copy of the skills out of such an app's skills folder. Cline and Zed keep skills in
-`~/.agents/skills`, which Codex and Gemini CLI read too: there, those apps list the
-skills beside their plugin's. Its receipt records which skills each agent got, from which
+copy of the skills out of such an app's skills folder. For GitHub Copilot, Amp,
+Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed, the Skills CLI copies them
+into `~/.agents/skills`, never the agent's own folder (`~/.copilot/skills`,
+`~/.factory/skills` and so on). All of them but Antigravity, whose documentation
+names only its own folders, read it there, and so do Codex and Gemini CLI, which
+list the skills beside their plugin's. Its receipt records which skills each agent got, from which
 release; running it again, or an update, adds them again after a new release or when
 one of them is gone, and `--uninstall` removes them.
 
@@ -535,8 +539,8 @@ model has used for a week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.11.1'` (`cad requirement build123d` prints the exact
-requirement; `pip install cad==0.11.1` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.11.2'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.11.2` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says

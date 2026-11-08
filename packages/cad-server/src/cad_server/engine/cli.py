@@ -458,8 +458,10 @@ def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect"
 
 def _inspect(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
+    from cad.engine.addresses import parts
 
-    query = args.query or (None if args.ref is not None or "#" in str(args.document) else "summary")
+    referred = args.ref is not None or parts(str(args.document))[1] is not None  # REF, or a FILE#REF's
+    query = args.query or (None if referred else "summary")
     try:
         found = api.inspect(args.document, args.ref, query=query)
     except ValueError as error:

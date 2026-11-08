@@ -115,23 +115,30 @@ def plugin_source(root: Path) -> Path:
     return root
 
 
-# The Skills CLI, for Windsurf: `add` copies every skill into its folder and prints the CLI's JSON,
+# The Skills CLI, for Windsurf and GitHub Copilot: `add` copies every skill into the folder it keeps for
+# each agent named, as the real one does -- Windsurf's own, and for GitHub Copilot, whose project folder is
+# `.agents/skills`, `~/.agents/skills` and never its `~/.copilot/skills` -- and prints the CLI's JSON;
 # `remove` takes the named ones out.
 NPX = f"SKILLS = {providers.SKILLS!r}\n" + """
 import os, shutil
 from pathlib import Path
-folder = Path(os.environ["HOME"]) / ".codeium" / "windsurf" / "skills"
-assert args[:3] == ["--prefer-offline", "-y", "skills@latest"] and args[args.index("-a") + 1] == "windsurf", args
+home = Path(os.environ["HOME"])
+FOLDERS = {"windsurf": home / ".codeium" / "windsurf" / "skills", "github-copilot": home / ".agents" / "skills"}
+assert args[:3] == ["--prefer-offline", "-y", "skills@latest"], args
 args = args[1:]
+agents = [args[index + 1] for index, arg in enumerate(args) if arg == "-a"]
+assert agents and set(agents) <= set(FOLDERS), agents
 if args[2] == "add":
     assert os.path.isfile(os.path.join(args[3], "cad", "SKILL.md")), "the skills come from the plugin folder"
-    for name in SKILLS:
-        (folder / name).mkdir(parents=True, exist_ok=True)
-        (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
+    for folder in {FOLDERS[agent] for agent in agents}:
+        for name in SKILLS:
+            (folder / name).mkdir(parents=True, exist_ok=True)
+            (folder / name / "SKILL.md").write_text(f"---\\nname: {name}\\n---\\nMaintained at earthtojake/text-to-cad.\\n")
     print(json.dumps([{"name": name, "status": "installed"} for name in SKILLS]))
 elif args[2] == "remove":
-    for name in args[args.index("-s") + 1:args.index("-y")]:
-        shutil.rmtree(folder / name)
+    for folder in {FOLDERS[agent] for agent in agents}:
+        for name in args[args.index("-s") + 1:args.index("-y")]:
+            shutil.rmtree(folder / name)
 """
 
 
@@ -907,12 +914,20 @@ sys.exit(0)
                               rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
         document = json.loads(self.run_setup("--json", "--only", "windsurf")[1])
         self.assertEqual(document["verified"]["apps"], {"windsurf": {"verdict": "ok", "release": RELEASE}})
-        # The report reads the folder again: a skill gone since, which nothing here can add back, is said.
+        # The report reads the folder again: a skill gone since, which nothing here can add back (no Node), fails
+        # the run, said as a failure, never a footnote to a line that reads as done.
         shutil.rmtree(folder / providers.SKILLS[0])
         (self.bin / ("npx.cmd" if os.name == "nt" else "npx")).unlink()
         code, out, _err = self.run_setup()
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"verify   Windsurf: the skills .+, without {providers.SKILLS[0]}\n")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"verify   Windsurf: failed: {providers.SKILLS[0]} not in {where}, where the Skills CLI was to "
+                      f"copy the skills of text-to-cad {RELEASE}\n", out)
+        self.assertIn("Some steps failed (said above)", out)
+        self.assertNotIn("is already up to date here", out)
+        code, printed, _err = self.run_setup("--json", "--only", "windsurf")
+        self.assertEqual(code, 1, printed)
+        self.assertEqual(json.loads(printed)["verified"]["apps"],
+                         {"windsurf": {"verdict": "missing", "release": RELEASE, "missing": [providers.SKILLS[0]]}})
         command(self.bin, "npx", NPX)
         code, out, _err = self.run_setup()
         self.assertIn(f": {providers.SKILLS[0]} missing", out)
@@ -931,6 +946,28 @@ sys.exit(0)
         self.assertEqual(providers.ours_in(folder), [])
         self.assertIn("Restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
         self.assertNotIn("Restart to load it", out)
+
+    def test_an_agent_whose_skills_the_cli_keeps_in_the_shared_folder_is_read_there(self) -> None:
+        """GitHub Copilot's project folder is `.agents/skills`, so `npx skills add -g` copies its skills into
+        `~/.agents/skills`, never its `~/.copilot/skills` (which Copilot reads beside it): the plan, the receipt
+        and the report name that folder, and find the skills in it. Read in `~/.copilot/skills`, as 0.11.1 did,
+        they were missing after every run."""
+        command(self.bin, "npx", NPX)
+        own = self.home / ".copilot" / "skills"
+        (own / "theirs").mkdir(parents=True)
+        shared = providers.shared_skills(self.machine)
+        where = providers.shown(shared, self.machine)
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"GitHub Copilot  install  the skills, copied into {where} by the Skills CLI", out)
+        self.assertEqual(providers.ours_in(shared), [shared / name for name in providers.SKILLS])
+        self.assertEqual([path.name for path in own.iterdir()], ["theirs"])
+        self.assertEqual(self.receipt()["skills"]["github-copilot"]["folder"], str(shared))
+        self.assertRegex(out, rf"verify   GitHub Copilot: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
+                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"the skills in {where}, from text-to-cad {RELEASE}: up to date", out)
 
     def test_only_takes_a_skills_cli_agent(self) -> None:
         command(self.bin, "npx", NPX)

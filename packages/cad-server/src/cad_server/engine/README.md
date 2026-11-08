@@ -644,6 +644,7 @@ failure: the next asker makes it again.
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
+| `display.py` | the engine's X display on Linux, which a render process is started with (`Service.draws`) and a worker told with an export that draws: the daemon's own `DISPLAY`, else an Xvfb it starts at the first picture and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model** |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
@@ -1856,11 +1857,22 @@ unless given; `hidden` and `isolated`: lists of part refs, an occurrence's path 
 grammar, which every look -- Preview, X-ray, Explode, Clip -- leaves out or alone draws, as the
 viewer's hide and isolate do, and which a Quick Edit packet given to `--annotation` carries; a
 robot's parts are named by the viewer's visual ids too, `link:v1` (`link:v1/object/0` one object of
-it); a ref that names nothing is refused by name); `--json` reports what was drawn
+it); a ref that names nothing is refused by name), each key and value checked as the viewer checks its
+display settings (`clip.axis` is `x`, `y` or `z`, `clip.at` a number) and anything else refused by
+name, never left out of the picture; `--json` reports what was drawn
 and each stage's milliseconds (`serveMs`, `meshMs`, `sceneMs` when a scene is made, `presentMs`,
 `frameMs`, `drawMs`, `renderMs`, `totalMs`; a file no document: `readMs` its reader, `openMs` its
 render process opening it). `parts` and `exploded` for a document that places one
-part are refused by name before anything renders. A document's PMI (**PMI**) is drawn
+part are refused by name before anything renders, the document named as its file is, or a model's by
+its own name (the picture of a document no file holds is drawn under a name made from OUT, which no
+refusal says). `--camera` is a preset, an `azimuth:elevation` pair, a camera object or `authored`: an
+object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`, `zoom`,
+`orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
+`focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y
+up the picture, as `top` and `bottom` do. SRC is a whole document: one that names something inside a
+document (`ID#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
+(`display.isolated`).
+A document's PMI (**PMI**) is drawn
 as the viewer shows it: each callout's words, leader and dimension at its placement, at its part's
 first placement the picture shows (a dimension given its limits says them alone, stacked upper over
 lower; a surface profile's frame has its symbol; a flag note is its flag and its number, out from
@@ -1975,9 +1987,14 @@ it that version first, with the buffers of the parts it lacks: the parts it shar
 keep their shapes, the new ones are made, and its scene is made again. It goes
 with the daemon, and after a picture that leaves it over the workers' memory cap it says so
 (`retired`) and exits. `daemon=False`, and a model's own document in its worker, draw in that
-process. The context is a hidden window: Cocoa on macOS, an X server's (Xvfb on a machine with no
-screen) or OCCT's EGL on Linux, a hidden window on Windows; where none can be made the snapshot
-fails saying so. Nothing is written but OUT.
+process. The context is a hidden window: Cocoa on macOS, a hidden window on Windows, and on Linux an
+X server's -- the OCP wheels draw through GLX alone, so there is no context without one. A Linux
+still draws on its request's `DISPLAY`, else on the engine's ([display.py](display.py)): a render
+process (`Service.draws`) is started with it, and a model's worker is told it with the export that draws
+(`worker.told_display`) -- the daemon's own `DISPLAY` and `XAUTHORITY`, else an Xvfb's the daemon starts
+at the first picture where `Xvfb` is on PATH (a cookie of its own, which only this user can read) and
+stops with it;
+where none can be made the snapshot fails, naming what to install. Nothing is written but OUT.
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own
@@ -3382,7 +3399,9 @@ as another sibling's, is JSON-quoted. An element of an assembly resolves from it
 below holds it, so a document of one part takes its elements by the document's name
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
-JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
+JSON-quoted where it holds one; a command's or a tool's source, `FILE#REF`, takes the longest part of
+itself that is a file, so a path that holds a `#` -- a folder named `project#1` -- is never cut there:
+`addresses.parts`) is an absolute CAD file path, the last segments of the document's
 path, or a document's id (a model's, which `cad run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds
