@@ -98,8 +98,6 @@ class CamElsewhereTest(unittest.TestCase):
             self.assertEqual(out_glb.parent.resolve(), result.written[1].parent)
             self.assertEqual("ready", result.measurements["verdict"]["status"])
 
-
-class TheEnvironment(unittest.TestCase):
     def test_where_the_kernel_is_here_out_names_a_file_that_is_not_there_yet(self):
         written = self.step.with_name("new.cam.glb")
         with mock.patch.object(integration_env, "carries", return_value=True):
@@ -109,6 +107,8 @@ class TheEnvironment(unittest.TestCase):
         self.assertIn("not planned", out + err)
         self.assertFalse(written.exists())
 
+
+class TheEnvironment(unittest.TestCase):
     def test_the_kernels_environment_is_the_installations_base(self):
         environment = base.Environment(sys.executable, sys.prefix, False)
         with mock.patch.object(base, "ensure", return_value=environment) as ensure:
