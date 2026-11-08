@@ -360,10 +360,11 @@ def _producers() -> tuple[Producer, ...]:
 def manufacturing_check() -> Any:
     """The integration module that measures a manufacturing check of a document the engine holds, for the
     engine's worker: build123d's (``held``, and what stops one: ``Cancelled``, ``checkpoint``, ``stop``). As
-    with the producers, the one place the engine reaches an integration; imported only by a check."""
-    from cad.build123d import _dfm_check
+    with the producers, the one place the engine reaches an integration, and each integration names its own
+    (``_producers``); it loads only for a check."""
+    from cad.build123d._producers import manufacturing_check as named
 
-    return _dfm_check
+    return named()
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:

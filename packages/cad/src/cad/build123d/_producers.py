@@ -16,7 +16,15 @@ from typing import Any
 
 from cad.registry import Producer
 
-__all__ = ["PRODUCERS", "is_shape"]
+__all__ = ["PRODUCERS", "is_shape", "manufacturing_check"]
+
+
+def manufacturing_check() -> Any:
+    """The module that measures a manufacturing check of a document the engine holds (``_dfm_check``), loaded
+    now: asked by ``cad.registry.manufacturing_check``, for a check alone."""
+    from cad.build123d import _dfm_check
+
+    return _dfm_check
 
 
 def is_shape(value: Any) -> bool:
