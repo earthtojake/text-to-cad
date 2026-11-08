@@ -7,8 +7,9 @@
 # The library with its build123d extra: this environment runs models itself, so it is its own base
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
 # its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
-# environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py).
---editable ./packages/cad[build123d,trimesh]
+# environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py); and with
+# its mujoco extra (mujoco-core, 10 MB), so `cad mjcf validate --compile` compiles here the same way.
+--editable ./packages/cad[build123d,trimesh,mujoco]
 --editable ./packages/cad-server
 --editable ./packages/cad-mcp
 

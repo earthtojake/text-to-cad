@@ -22,6 +22,7 @@ and a still reads them through it (``render/occt.py`` ``camera_in_millimetres``,
 | ``.3mf`` | ``threemf.py`` (zip + XML) | its objects placed by its build, each triangle's colour, its unit |
 | ``.glb`` | ``glb.py`` (OCCT's ``RWGltf_CafReader``) | its node tree, meshes, materials and textures |
 | ``.urdf``, ``.sdf``, ``.srdf`` | ``robot.py`` (XML) | the link meshes placed by forward kinematics |
+| ``.xml``, ``.mjcf`` | ``robot.py`` over ``cad.mjcf._source`` (XML) | an MJCF's bodies' geoms, placed alike |
 | ``.dxf`` | ``dxf.py`` (text) | lines, arcs, circles, polylines, splines, ellipses, solids |
 
 A conversion reads a mesh file with these readers' numpy halves and no kernel
@@ -47,10 +48,10 @@ if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewe
 __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Placed", "ROBOTS", "assemble", "files_of",
            "read", "stale"]
 
-KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf",
-         ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
+KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".xml": "mjcf",
+         ".mjcf": "mjcf", ".dxf": "dxf", ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
 MESHES = (".stl", ".3mf", ".glb")
-ROBOTS = (".urdf", ".sdf", ".srdf")
+ROBOTS = (".urdf", ".sdf", ".srdf", ".xml", ".mjcf")
 DRAWING = ".dxf"
 
 

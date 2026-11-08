@@ -45,7 +45,7 @@ describe("viewer renderer registrations", () => {
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
       createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("xbf");
-    for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["divider.kicad_sch", "schematic"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
+    for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["divider.kicad_sch", "schematic"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"], ["scene.xml", "robot"], ["robot.mjcf", "robot"]]) {
       expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe(id);
     }
   });

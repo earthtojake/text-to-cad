@@ -91,6 +91,14 @@ trimesh = [
   "scipy>=1.14,<2",
   "networkx>=3.2,<4",
 ]
+# The mujoco integration's extra: MuJoCo's headless core alone -- the compiler and the Python bindings, numpy
+# their one dependency, no renderer, no window system (cad.mujoco). An MJCF's validate compiles the model with
+# it, so what MuJoCo refuses is a finding in its own words. Never `mujoco` itself, which from 4.0 is a
+# meta-package that adds Studio, glfw and PyOpenGL (a window and a GPU this never uses), nor the menagerie or
+# the USD plugin. Bounded above: the compiler's Python API (MjSpec, the warning hook) moved between majors.
+mujoco = [
+  "mujoco-core>=4.0,<5",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

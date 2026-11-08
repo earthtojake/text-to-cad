@@ -110,7 +110,12 @@ A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
 in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
-engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`). `cad serve`,
+engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`).
+An MJCF, a MuJoCo model, has `cad mjcf validate MODEL.xml [--compile auto|required|never]` (its structure,
+defaults, bodies, joints, geoms and mesh references, then MuJoCo's compiler, the `mujoco` integration's:
+`auto` where this environment holds it, `required` in the environment of `cad[mujoco]` the engine makes
+once) and `cad mjcf snapshot MODEL.xml OUT.png [--pose KEY|JSON]` (a keyframe by name, or joint values);
+the viewer lists a `.xml` only when its root is `<mujoco>`. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made and the
 integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's

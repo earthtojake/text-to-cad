@@ -1,4 +1,4 @@
-"""The URDF/SRDF/SDF VALIDATION family in cadgen must stay stdlib-pure.
+"""The URDF/SRDF/SDF/MJCF VALIDATION family in cadgen must stay stdlib-pure.
 
 These modules are deliberately extraction-ready: robot-description validation is a
 text/XML problem, not a CAD-kernel problem, and keeping the family free of
@@ -34,6 +34,7 @@ FAMILY = [
         "sdf/_source.py",
         "sdf/_validation.py",
         "sdf/_external.py",
+        "mjcf/_source.py",
         "_internal/findings.py",
         "_internal/xml_common.py",
         # The document types the CLIs are shells over (packages/cad/README.md). They are the
@@ -41,13 +42,15 @@ FAMILY = [
         "urdf/__init__.py",
         "srdf/__init__.py",
         "sdf/__init__.py",
+        "mjcf/__init__.py",
         "_internal/document_type.py",
         "_internal/aliases.py",
         "registry.py",
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
+        "engine/mjcf_source.py",  # the MJCF reader: the stills', the payload's and the type's, stdlib only
     )
-] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py")]
+] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py", "mjcf.py")]
 
 # Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
@@ -61,6 +64,11 @@ ALLOWED_CADGEN = {
     "cad.sdf._source",
     "cad.sdf._validation",
     "cad.sdf._external",
+    "cad.mjcf._source",
+    "cad.engine.mjcf_source",  # the reader itself, in the engine
+    # MuJoCo's compile (the mujoco integration's): imported in the function that compiles, never by a
+    # read, and itself imports mujoco only inside that function.
+    "cad.mujoco._compile",
     "cad_server.cli",  # shared CLI plumbing, itself lazy
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
     "cad.registry",  # the document types and integrations: stdlib only
@@ -137,7 +145,7 @@ class ImportCost(unittest.TestCase):
 
     def test_the_namespaces_import_without_the_heavy_stack(self) -> None:
         code = (
-            "import sys, cad.urdf, cad.srdf, cad.sdf;"
+            "import sys, cad.urdf, cad.srdf, cad.sdf, cad.mjcf;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY_AT_IMPORT!r} if m in sys.modules))"
         )
         proc = subprocess.run(

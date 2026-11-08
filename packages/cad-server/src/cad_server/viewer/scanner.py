@@ -102,13 +102,33 @@ def is_hidden_name(name) -> bool:
     return str(name or "").startswith(".")
 
 
+# The extension a document type shares with files that are not one: an ``.xml`` is an MJCF only when
+# its root element is ``<mujoco>`` (a ROS ``package.xml`` beside a robot is not a robot).
+_SNIFFED_EXTENSIONS = frozenset({".xml"})
+
+
+def _is_document_file(file_path, extension: str) -> bool:
+    """Whether a file of a CAD extension is that document: by its extension, but an ``.xml`` by
+    its first bytes (``cad.mjcf._source.is_mjcf_file``); a file that is not there is none."""
+    if extension not in _SNIFFED_EXTENSIONS:
+        return True
+    from cad.mjcf._source import is_mjcf_file
+
+    try:
+        return is_mjcf_file(os.path.abspath(str(file_path)))
+    except (OSError, ValueError):
+        return False
+
+
 def is_catalog_file(file_path) -> bool:
-    """Whether ``file_path`` can have a catalog row: a CAD file whose own name is not hidden.
+    """Whether ``file_path`` can have a catalog row: a CAD file whose own name is not hidden (an
+    ``.xml`` only an MJCF, read from its first bytes).
 
     Only the file's own name: a file under a hidden folder is named, never found, and has its row.
     """
     name = node_basename(str(file_path or ""))
-    return not is_hidden_name(name) and extension_of(name) in VIEWER_EXTENSIONS
+    extension = extension_of(name)
+    return not is_hidden_name(name) and extension in VIEWER_EXTENSIONS and _is_document_file(file_path, extension)
 
 
 # --- file stats / hashing / urls ------------------------------------------
@@ -303,12 +323,14 @@ def is_served_cad_asset(file_path) -> bool:
     nothing else -- never a ``.json``, a config or a key file beside it.
 
     The hidden check is on the BASENAME only: a file is named by its absolute path, and a hidden
-    folder on the way to it is no reason to refuse it.
+    folder on the way to it is no reason to refuse it. An ``.xml`` is served only when it is an
+    MJCF (its root ``<mujoco>``), never another XML file beside it.
     """
     text = str(file_path or "")
     if is_hidden_name(node_basename(text)):
         return False
-    return extension_of(text) in SOURCE_EXTENSIONS
+    extension = extension_of(text)
+    return extension in SOURCE_EXTENSIONS and _is_document_file(text, extension)
 
 
 # --- the row --------------------------------------------------------------

@@ -64,8 +64,18 @@ def _skipped(name: str) -> bool:
     return is_hidden_name(name) or name in VIEWER_SKIPPED_DIRECTORIES
 
 
-def _listed(name: str) -> bool:
-    return not is_hidden_name(name) and extension_of(name) in VIEWER_EXTENSIONS
+def _listed(path: str) -> bool:
+    """Whether the explorer lists the file at ``path``: a CAD file by its extension, its own name not hidden; a
+    ``.xml`` only when it is an MJCF (its root element ``<mujoco>``: ``cad.mjcf._source.is_mjcf_file``), so a
+    robot folder's ``package.xml`` is not a row."""
+    name = os.path.basename(path)
+    if is_hidden_name(name) or extension_of(name) not in VIEWER_EXTENSIONS:
+        return False
+    if extension_of(name) == ".xml":
+        from cad.mjcf._source import is_mjcf_file
+
+        return is_mjcf_file(path)
+    return True
 
 
 def _entries(folder: str, cache: str | None = None):
@@ -78,7 +88,7 @@ def _entries(folder: str, cache: str | None = None):
                 if entry.is_dir():
                     if not _skipped(entry.name) or _toward_cache(entry.path, cache):
                         yield entry.name, "directory"
-                elif entry.is_file() and _listed(entry.name):
+                elif entry.is_file() and _listed(entry.path):
                     yield entry.name, "file"
             except OSError:  # a broken link or an entry that went away while it was read
                 continue

@@ -1,4 +1,4 @@
-"""A robot description -- a URDF, an SDF, or an SRDF with the URDF it plans for -- as the stills
+"""A robot description -- a URDF, an SDF, an SRDF with the URDF it plans for, or an MJCF -- as the stills
 hold it: every link visual's mesh a part, placed where its link stands at the pose asked, by
 forward kinematics ported from the viewer's (``@cad/core`` ``lib/urdf/kinematics.js``
 and ``fourBarCoupling.js``) and held to a golden its own code made.
@@ -9,9 +9,16 @@ joints (fixed, revolute, continuous, prismatic: origin, axis, limits, ``<mimic>`
 skill's ``<tcad:four_bar>``); an SDF's one model (or a world's one model) with its nested models,
 frames and poses resolved by the SDFormat rules (``relative_to``, ``attached_to``, a joint's pose
 relative to its child, an axis ``expressed_in``), visual materials' diffuse colour and capsules
-too; an SRDF's group states, over the same-folder URDF whose ``<robot name>`` is its own. Every
-frame is placed at rest in the robot's space (the description as written, every joint at zero),
-in metres, as the viewer's payload places them (``cad_server.robot_payload``).
+too; an SRDF's group states, over the same-folder URDF whose ``<robot name>`` is its own; an
+MJCF (``.xml`` with a ``<mujoco>`` root, ``.mjcf``) as the mjcf type's own reader reads and
+articulates it (``cad.engine.mjcf_source``: ``read_mjcf``, ``articulate``): a body a link (the world
+the root), a hinge revolute (continuous without a range), a slide prismatic, a ball or a free
+joint fixed (the body drawn where it is authored, not posable), a body of several joints a chain
+of one-joint links, an equality coupling a mimic, the geoms of groups 0 to 2 its visuals (3 and
+up are collision geoms, not drawn) and each keyframe a pose by its name. Every
+frame is placed at rest in the robot's space (the description as written, every joint at zero;
+an MJCF's at each joint's ``ref``), in metres, as the viewer's payload places them
+(``cad_server.robot_payload``).
 
 **Posing**: a control is a revolute or continuous joint (degrees) or a prismatic one (metres);
 a mimic joint follows its leader (``multiplier * leader + offset`` in radians or metres) and a
@@ -19,11 +26,11 @@ four-bar input its driver (the planar linkage's closed form, on the branch its z
 describe). A link moves with every joint above it: each joint turns its subtree about its axis
 through its origin (or slides it along the axis), from the root down. The robot opens as the
 viewer opens it -- every control at zero, an SRDF's ``home`` group state over that -- and
-``--pose`` names a group state (``group/name``, or a name only one group has) or gives joint
-values over the opening pose; an unknown joint, a joint that is not a control and a value past
+``--pose`` names a group state (``group/name``, or a name only one group has), an MJCF's
+keyframe (its name), or gives joint values over the opening pose; an unknown joint, a joint that is not a control and a value past
 its limits are refused by name.
 
-**Meshes**: a link mesh is an STL or a 3MF (its numbers as they are, which the description's
+**Meshes**: a link mesh is an STL, an OBJ or a 3MF (its numbers as they are, which the description's
 mesh scale makes metres) or a GLB (metres), each drawn as the stills draw that file; a box,
 cylinder, sphere or capsule is made by the kernel and meshed as a part is (``mesh.py``). The
 robot is drawn in millimetres, and a length of it -- where ``display.clip.at`` stands, a Quick Edit
@@ -31,8 +38,8 @@ packet's camera, Measure's points, the ink -- is read in its metres, as the view
 (``millimetresPerUnit`` and ``millimetresPerSceneUnit`` 1000). A ``package://NAME/REST`` mesh is
 REST in the ROS package the description is in: the nearest folder at or above it named NAME, or
 holding a ``package.xml`` that names it (``package_file``, which the viewer's robot payload resolves
-by too). A description naming a mesh in any other format (OBJ, DAE), a package no folder above it
-is, or a file that is not there, is refused by name.
+by too). A description naming a mesh in any other format (DAE, MuJoCo's MSH), a package no folder
+above it is, or a file that is not there, is refused by name.
 """
 
 from __future__ import annotations
@@ -50,11 +57,12 @@ import numpy as np
 from cad.engine import mesh_uri
 from cad.engine.formats import Foreign, FormatError, Part, Placed, assemble, files_of
 
-__all__ = ["Robot", "RobotError", "package_file", "package_root", "read_robot", "robot_file"]
+__all__ = ["Robot", "RobotError", "package_file", "package_root", "read_mjcf", "read_robot", "robot_file"]
 
 MOVING = ("revolute", "continuous", "prismatic")
 ANGULAR = ("revolute", "continuous")
-DRAWABLE = (".stl", ".3mf", ".glb")
+DRAWABLE = (".stl", ".obj", ".3mf", ".glb")
+MJCF = (".xml", ".mjcf")
 FOUR_BAR_LENGTHS = ("input_length", "ground_length", "output_length", "coupler_length")
 LIMIT_TOLERANCE = 1e-6  # degrees or metres a value may pass a limit by: its own rounding
 _INTERSECTION_TOLERANCE = 1e-12
@@ -162,9 +170,9 @@ class Robot:
         return {**{name: 0.0 for name in self.controls()}, **self.home}
 
     def values(self, asked: Any) -> tuple[dict[str, float], str | None]:
-        """The controls' values for ``asked``: None (the opening pose), a group state's name, or
-        ``{joint: value}`` over the opening pose. Refused by name: an unknown state or joint, a
-        joint that is no control, a value that is no number or past its limits."""
+        """The controls' values for ``asked``: None (the opening pose), a group state's name (an
+        MJCF's keyframe's), or ``{joint: value}`` over the opening pose. Refused by name: an unknown
+        state or joint, a joint that is no control, a value that is no number or past its limits."""
         values, named = self.opening(), None
         if asked is None:
             return values, None
@@ -175,12 +183,13 @@ class Robot:
                 found = [key for key in self.poses if key.split("/", 1)[-1] == asked]
                 if len(found) != 1:
                     states = ", ".join(sorted(self.poses)) or "none"
-                    raise ValueError(f"{self.name} has {'no group state' if not found else 'several group states'} "
-                                     f"{asked!r}{'' if not found else ' (' + ', '.join(found) + ')'}; its group states: {states}")
+                    what = "keyframe" if self.kind == "mjcf" else "group state"
+                    raise ValueError(f"{self.name} has {'no ' + what if not found else 'several ' + what + 's'} "
+                                     f"{asked!r}{'' if not found else ' (' + ', '.join(found) + ')'}; its {what}s: {states}")
                 named = found[0]
             asked = self.poses[named]
         if not isinstance(asked, dict):
-            raise ValueError("a pose is a group state's name or {joint: value}")
+            raise ValueError("a pose is a group state's (or a keyframe's) name or {joint: value}")
         controls = self.controls()
         by_name = {joint.name: joint for joint in self.joints}
         for name, value in asked.items():
@@ -383,7 +392,7 @@ def _mesh_file(reference: str, base: Path, where: str) -> Path:
     if mesh_uri.scheme(reference) == "package":
         found = package_file(reference, base, where)
         if found.suffix.lower() not in DRAWABLE:
-            raise RobotError(f"{where} names {found.name}: the stills draw STL, 3MF and GLB link meshes, not "
+            raise RobotError(f"{where} names {found.name}: the stills draw STL, OBJ, 3MF and GLB link meshes, not "
                              f"{found.suffix or 'this'} files")
         if not found.is_file():
             raise RobotError(f"{where} names {reference!r}, and no file is at {found}")
@@ -394,7 +403,7 @@ def _mesh_file(reference: str, base: Path, where: str) -> Path:
                          "and name it by a relative path")
     found = (base / local).resolve()
     if found.suffix.lower() not in DRAWABLE:
-        raise RobotError(f"{where} names {found.name}: the stills draw STL, 3MF and GLB link meshes, not "
+        raise RobotError(f"{where} names {found.name}: the stills draw STL, OBJ, 3MF and GLB link meshes, not "
                          f"{found.suffix or 'this'} files")
     if not found.is_file():
         raise RobotError(f"{where} names {reference!r}, and no file is at {found}")
@@ -807,8 +816,61 @@ def read_srdf(path: Path) -> Robot:
     return robot
 
 
+# --- MJCF (the mjcf type's own reader, cad.engine.mjcf_source) ---------------------------------------
+
+
+def read_mjcf(path: Path) -> Robot:
+    """An MJCF as a robot: ``cad.engine.mjcf_source``'s model, articulated as the viewer poses it (a link per body,
+    a chain of one-joint links for a body of several joints), each visual's shape in the tuple a URDF's
+    gives (``_urdf_shape``), its keyframes the poses by their names. Refused with the reader's errors."""
+    from cad.engine.mjcf_source import articulate
+    from cad.engine.mjcf_source import read_mjcf as read_model
+
+    path = Path(path)
+    model, findings = read_model(path)
+    if model is None:
+        raise RobotError(f"{path.name} cannot be read as an MJCF:\n{findings.formatted()}")
+    articulation = articulate(model)
+    files: list[Path] = [Path(file) for file in model.files] or [path]
+    visuals: dict[str, list[Visual]] = {}
+    for link, found in articulation.visuals.items():
+        visuals[link] = []
+        for visual in found:
+            mesh = _mjcf_shape(visual.shape, f"{path.name} link {link!r} visual {visual.label!r}")
+            if mesh[0] == "file" and mesh[1] not in files:
+                files.append(mesh[1])
+            visuals[link].append(Visual(np.asarray(visual.local, float), mesh, visual.color, visual.label))
+    joints = [Joint(joint.name, joint.type, joint.parent, joint.child, frame=np.asarray(joint.frame, float),
+                    axis=None if joint.axis is None else np.asarray(joint.axis, float), lower=joint.lower,
+                    upper=joint.upper, mimic=joint.mimic) for joint in articulation.joints]
+    links = {name: np.asarray(frame, float) for name, frame in articulation.links.items()}
+    robot = Robot("mjcf", model.name, articulation.root, links, visuals, joints,
+                  poses={name: dict(values) for name, values in articulation.poses.items()}, files=files)
+    _followers(robot, path.name)
+    return robot
+
+
+def _mjcf_shape(shape: tuple, where: str) -> tuple:
+    """An articulated visual's shape (full sizes, metres, as a dictionary) as the mesh tuple a URDF's visual
+    carries: ``("file", path, scale)``, ``("box", (x, y, z))``, ``("cylinder"|"capsule", (radius, length))``
+    or ``("sphere", (radius,))``."""
+    kind = shape[0]
+    if kind == "file":
+        return ("file", Path(shape[1]), tuple(float(value) for value in shape[2]))
+    dimensions = shape[1]
+    if kind == "box":
+        return ("box", tuple(float(value) for value in dimensions["size"]))
+    if kind in ("cylinder", "capsule"):
+        return (kind, (float(dimensions["radius"]), float(dimensions["length"])))
+    if kind == "sphere":
+        return ("sphere", (float(dimensions["radius"]),))
+    raise RobotError(f"{where} is a {kind}; the stills draw a mesh, box, cylinder, sphere or capsule")
+
+
 def read_robot(path: Path) -> Robot:
     suffix = Path(path).suffix.lower()
+    if suffix in MJCF:
+        return read_mjcf(path)
     return read_urdf(path) if suffix == ".urdf" else read_sdf(path) if suffix == ".sdf" else read_srdf(path)
 
 
@@ -863,6 +925,14 @@ def _mesh_parts(mesh: tuple, colour: str, where: str) -> list[tuple[Part, np.nda
         corners = read_stl(source)
         points = corners.reshape(-1, 3)
         return [(mesh_part(source.stem, points, np.arange(len(points)).reshape(-1, 3), scale=1000.0 * uniform), np.eye(4))]
+    if suffix == ".obj":
+        from cad.engine.formats.obj import ObjError, read_obj
+
+        try:
+            points, triangles = read_obj(source)
+        except ObjError as error:
+            raise RobotError(f"{where}: {error}") from None
+        return [(mesh_part(source.stem, points, triangles, scale=1000.0 * uniform), np.eye(4))]
     if suffix == ".3mf":
         from cad.engine.formats.threemf import ThreeMfError, read_3mf
 

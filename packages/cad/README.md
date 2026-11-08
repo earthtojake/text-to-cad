@@ -49,14 +49,14 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `mjcf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
   engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`),
+  `kicad`, `trimesh`, `mujoco`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -81,7 +81,8 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF, SRDF and MJCF checks (an MJCF compiled by MuJoCo where `cad[mujoco]` is
+installed); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
 trimesh); and engineering drawings (`@eng_drawing`).
 
@@ -357,7 +358,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
-    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s) is fetched once, the
+    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s) is fetched once, the
     first time a command needs it, from uv's cache and the network, and works offline after that; a
     first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
@@ -467,7 +468,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 25. **A document type is one object.** *The package.* `cad.<type>` is a `DocumentType`: the type's decorator where it
     has one (`@step("arm.step")`), its reader where it has one (`step.read`), its operations one to one
     with the CLI's, and the vocabulary the type's own standard defines where it takes no third-party
-    objects (`sdf.GZ_CHECK_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
+    objects (`sdf.GZ_CHECK_MODES`, `mjcf.COMPILE_MODES`). Its attributes load on first use: `import cad` imports no kernel. A
     file of another type is refused by name before anything runs (`part.glb is a glb, not a stl`). A
     type's package (`cad/<type>/`) holds its reader, its operations' dispatch and its checks, and is
     neutral about producers: it imports no third-party library.
@@ -603,6 +604,9 @@ src/cad/
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
+  mjcf/                  # a MuJoCo model (MJCF XML): its reader (_source.py, the standard
+                         #   library alone: includes, defaults, bodies, joints, geoms, keyframes)
+                         #   and validate, compiled by the mujoco integration where it is installed
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); drc, export and edit (a with
@@ -621,6 +625,9 @@ src/cad/
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_molding,
                          #   _printing), and the dfm every 3D type runs with them (_check)
+  mujoco/                # the mujoco integration, MuJoCo's headless core (mujoco-core): an MJCF
+                         #   compiled by MuJoCo's own compiler, what it refuses and warns as
+                         #   findings (_compile)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,

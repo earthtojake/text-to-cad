@@ -29,10 +29,10 @@ export interface PreparedRobotDocument extends PreparedWorkspaceEntry {
   services: Omit<RobotRendererOptions, 'client'> & { preferences: CadPreferenceSource };
 }
 
-/** The robot descriptions: links joined by joints. An SRDF is shown on the URDF it is about; an SDF is read as one model. */
-export const ROBOT_FILE = /\.(?:urdf|srdf|sdf)$/i;
+/** The robot descriptions: links joined by joints. An SRDF is shown on the URDF it is about; an SDF is read as one model; an MJCF (`.xml` or `.mjcf`) as its bodies and joints. */
+export const ROBOT_FILE = /\.(?:urdf|srdf|sdf|xml|mjcf)$/i;
 
-/** A `.urdf`, `.srdf` or `.sdf` is shown as its kinematic tree. Registers without loading three.js, a viewport or a backend connection. */
+/** A `.urdf`, `.srdf`, `.sdf`, `.xml` or `.mjcf` is shown as its kinematic tree. Registers without loading three.js, a viewport or a backend connection. */
 export function createRobotRenderer({ client, ...options }: RobotRendererOptions) {
   const services = { ...options, preferences: options.preferences || createCadPreferences() };
   return defineFileRenderer<PreparedRobotDocument>({

@@ -1,6 +1,6 @@
 ---
 name: robot-simulation
-description: Robot and world descriptions (URDF, SRDF, SDF) for ROS, MoveIt and Gazebo. Use for ROS robot_description files (links, joints, limits, inertials, meshes), MoveIt planning groups, end effectors, group states and disabled collision pairs, Gazebo/gz models and worlds (sensors, plugins, physics), and opening or reviewing a `.urdf`, `.srdf` or `.sdf`. Not the 3D CAD part itself, which the `cad` skill makes, nor a part's structural or physics analysis, nor signed-distance fields.
+description: Robot and world descriptions (URDF, SRDF, SDF, MJCF) for ROS, MoveIt, Gazebo and MuJoCo. Use for ROS robot_description files (links, joints, limits, inertials, meshes), MoveIt planning groups, end effectors, group states and disabled collision pairs, Gazebo/gz models and worlds (sensors, plugins, physics), MuJoCo models (bodies, joints, geoms, default classes, actuators, keyframes), and opening or reviewing a `.urdf`, `.srdf`, `.sdf`, or an MJCF `.xml` or `.mjcf`. Not the 3D CAD part itself, which the `cad` skill makes, nor a part's structural or physics analysis or a simulation run, nor signed-distance fields.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -9,9 +9,9 @@ metadata:
 # Robots and worlds for simulation and motion planning
 
 A robot is described for its consumers in XML written by hand: a URDF for its structure (ROS,
-RViz, robot_state_publisher), an SRDF beside it for MoveIt's planning semantics, and an SDF for
-Gazebo and other simulators. Each `.urdf`, `.srdf` and `.sdf` is the source of truth: author and
-edit the XML directly; do not build a Python generation pipeline for it. The work is constrained
+RViz, robot_state_publisher), an SRDF beside it for MoveIt's planning semantics, an SDF for
+Gazebo and other simulators, and an MJCF for MuJoCo. Each `.urdf`, `.srdf`, `.sdf` and MJCF `.xml` is
+the source of truth: author and edit the XML directly; do not build a Python generation pipeline for it. The work is constrained
 kinematic modeling, not XML writing: the risks are frame placement, joint-axis semantics, units,
 mesh scale, inertial data and planning semantics, and a file can pass every check while placing a
 joint in the wrong spot.
@@ -23,13 +23,14 @@ joint in the wrong spot.
 | **Describe a robot's links and joints** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
 | **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf validate`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
 | **Model or world for Gazebo / gz** | The `.sdf` and its ledger, then `cad sdf validate`. | [Authoring](references/sdf-authoring.md), [frames](references/sdf-frames.md), [examples](references/sdf-examples.md), [ledger](references/sdf-ledger.md) |
+| **Model for MuJoCo** | The MJCF (`robot.xml`, and a `scene.xml` that includes it), then `cad mjcf validate --compile required`. | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | **SDF for a robot that has a URDF** | Derive it from the URDF; never re-author it. | [Interoperability](references/interoperability.md#sdf-from-a-urdf) |
 | **Link meshes from a CAD model** | One mesh per link in the link's frame: `cad model export <id> link.stl`. | [Meshes](references/meshes.md) |
 | **Mass, center of mass, inertia** | A formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
 | **Close a nonlinear four-bar in the CAD Viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
-| **See the robot, a pose or a named state** | `cad urdf snapshot`, `cad srdf snapshot` or `cad sdf snapshot`. | [Snapshots](references/snapshots.md) |
+| **See the robot, a pose or a named state** | `cad urdf snapshot`, `cad srdf snapshot`, `cad sdf snapshot` or `cad mjcf snapshot`. | [Snapshots](references/snapshots.md) |
 | **Check a change** | The format's `validate` command, then its review. | [Check each change](#check-each-change) |
-| **Open an existing URDF, SRDF or SDF** | Show it to the person. | [Show the model](#show-the-model) |
+| **Open an existing URDF, SRDF, SDF or MJCF** | Show it to the person. | [Show the model](#show-the-model) |
 
 ## Setup
 
@@ -45,7 +46,9 @@ only just added, its server may still be starting: try again for up to a minute 
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 `cad doctor --check` also reports the installation in use and the server's release. Validation needs
-nothing beyond the Python standard library; a snapshot draws with the CAD kernel. `cad <verb>
+nothing beyond the Python standard library; a snapshot draws with the CAD kernel. `cad mjcf validate
+--compile required` compiles the model with MuJoCo's headless core, `cad[mujoco]` (about 10 MB), which
+the `cad` command fetches into an environment of its own the first time and reuses after. `cad <verb>
 --help` gives the complete current interface.
 
 ## How the formats fit together
@@ -57,6 +60,8 @@ nothing beyond the Python standard library; a snapshot draws with the CAD kernel
   colocation and robot name alone: same folder, same `<robot name>`, exactly one such URDF.
 - **SDF** owns simulator and world semantics: physics, sensors, lights, plugins, worlds, and
   simulation-specific metadata. A robot that already has a URDF gets its SDF derived from it.
+- **MJCF** owns a MuJoCo model: bodies, joints, geoms, default classes, actuators, equalities and
+  keyframes, in one file or a `scene.xml` that includes the robot's.
 - **Meshes** are owned by the CAD workflow: one asset per link, exported in that link's frame, its
   source units recorded. Fix a wrong export there, never with URDF origins or SDF poses.
 
@@ -72,7 +77,8 @@ and joint names, so a rename updates every consumer in the same task, and any UR
    it as a comment block at the top of the file. Update it in the same edit that changes the
    modeled facts; a stale ledger is worse than none.
 3. SI units: meters, kilograms, seconds, radians, unless the target explicitly requires otherwise.
-   URDF limits and SRDF group states never hold degrees; an SDF pose avoids `degrees="true"`.
+   URDF limits and SRDF group states never hold degrees; an SDF pose avoids `degrees="true"`; an
+   MJCF says `<compiler angle="radian"/>`, since MuJoCo's default is degrees.
 4. Do not infer spatial transforms, mesh units, handedness, axes, joint signs or planning
    semantics from vague prose or visual impression. Use CAD transforms, dimensioned drawings,
    measured values, existing source data, simulator documentation, or explicit documented
@@ -166,6 +172,24 @@ signed-distance-field geometry, and not planning semantics.
 7. Check it ([SDF checks](references/sdf-checks.md)): `cad sdf validate` (which runs `gz sdf --check`
    whenever `gz` is on PATH), then simulator load, joint motion and plugin/sensor startup.
 
+## MJCF
+
+A MuJoCo model, MuJoCo's XML (`<mujoco>` at its root). The traps are units and defaults: MuJoCo reads
+angles in degrees unless `<compiler angle="radian"/>` says otherwise (a keyframe's `qpos` is radians
+whatever it says), and a geom or joint takes attributes from the default class it falls under.
+
+1. Identify the consumer (MuJoCo's version, a training stack, a viewer) and whether the robot has a
+   URDF to start from ([Interoperability](references/interoperability.md#mjcf)).
+2. Split the robot from its world: `robot.xml` with no floor or light, and `scene.xml` that
+   `<include>`s it and adds them ([MJCF authoring](references/mjcf-authoring.md)).
+3. Set `<compiler angle="radian" meshdir="assets" autolimits="true"/>` explicitly; give the robot
+   `<default>` classes, a `visual` one and a `collision` one, and `childclass` on its root body.
+4. A body with no joint is welded to its parent; a floating base gets `<freejoint/>`. Leave inertia
+   to the compiler from the geoms where it can, else compute an `<inertial>` ([Inertials](references/inertials.md)).
+5. Ship a `<key name="home">` whose `qpos` (and `ctrl`) is the model's length.
+6. Check it ([MJCF checks](references/mjcf-checks.md)): `cad mjcf validate --compile required`, then
+   a snapshot of `home` and of each joint moved.
+
 ## Check each change
 
 Each format has its validator and its snapshot:
@@ -176,9 +200,11 @@ cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
 cad srdf validate path/to/robot.srdf --strict
 cad sdf validate path/to/model.sdf --json
 cad sdf validate path/to/model.sdf --gz-check required
+cad mjcf validate path/to/scene.xml --compile required
 cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30}'
 cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
+cad mjcf snapshot path/to/scene.xml review.png --pose home
 ```
 
 | Change | Check it with |
@@ -190,6 +216,7 @@ cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 | Any `.srdf` | `cad srdf validate` (it cross-checks every name, chain, state and pair against the paired URDF); named states in a snapshot (`--pose group/state`). |
 | A URDF with an SRDF beside it | `cad srdf validate` on that SRDF again, and its group states against the new limits. |
 | Any `.sdf` | `cad sdf validate` (`gz sdf --check` included when `gz` is on PATH; `--gz-check required` demands it). |
+| Any MJCF | `cad mjcf validate --compile required` (MuJoCo's own compiler, fetched once as `cad[mujoco]`); the `home` key in a snapshot (`--pose home`). |
 | SDF dynamics, plugins, sensors | A load in the target simulator, a small positive motion of each joint, plugin and sensor startup ([smoke tests](references/sdf-checks.md#smoke-tests)). |
 | A MoveIt or ROS consumer | Its own load when available: RViz, robot_state_publisher's TF tree, a Gazebo load, MoveIt Setup Assistant (IK for the primary group, plan to a named state). |
 
@@ -198,7 +225,7 @@ cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
   [{"severity", "code", "message", "location", "hint"}], "summary"}`, where `location` is the XML
   path. It exits 1 if the target fails its checks, and 2, with nothing checked, for a command line
   it refuses -- a file of another format, one that is not there, an option or a value it does not
-  take (`--gz-check` is `auto`, `required` or `never`) -- which `--json` says as one
+  take (`--gz-check` and `--compile` are `auto`, `required` or `never`) -- which `--json` says as one
   `{"ok": false, "error", "reason"}`. Relative targets resolve from the working directory: run
   from the workspace that owns the files.
 - A clean check is a guardrail, not proof: it cannot show that a joint origin or axis matches the

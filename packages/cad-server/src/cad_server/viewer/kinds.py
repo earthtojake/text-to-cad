@@ -13,8 +13,8 @@ a document of that kind, and the same id under another kind is a 404 that names 
 * ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``drc`` (KiCad's design rule
   check of it), ``source``.
 * ``kicad_sch``: ``plot`` (every sheet of the schematic a page of layers, and its index), ``source``.
-* ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
-  (a primitive's mesh), ``source``.
+* ``urdf``, ``srdf``, ``sdf``, ``mjcf``: ``structure`` (the robot resolved for the page),
+  ``parts/<digest>`` (a primitive's mesh, or an MJCF's OBJ written as a GLB), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
-           "dxf": [], "urdf": [], "srdf": [], "sdf": [],
+           "dxf": [], "urdf": [], "srdf": [], "sdf": [], "mjcf": [],
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 # A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
 EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]

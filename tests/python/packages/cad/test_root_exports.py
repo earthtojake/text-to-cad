@@ -21,7 +21,7 @@ HEAVY = ("OCP", "build123d")
 ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
 # The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
-TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "mjcf", "kicad_pcb", "kicad_sch")
 ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {

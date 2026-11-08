@@ -1,6 +1,6 @@
 """A robot description resolved into what a page plays and draws.
 
-A URDF, an SDF, or an SRDF with the URDF it plans for, becomes ONE payload: the robot's
+A URDF, an SDF, an MJCF (MuJoCo's XML), or an SRDF with the URDF it plans for, becomes ONE payload: the robot's
 articulation (below: controls per movable joint, joints in their rest frames with affine
 rows over the controls, which link each joint carries, what a drag writes, the named poses
 and the opening pose), the list of visuals to draw (each with its rest placement, its colour
@@ -36,7 +36,7 @@ The payload::
 
     {
       "schemaVersion": 2,
-      "kind": "urdf" | "sdf" | "srdf",
+      "kind": "urdf" | "sdf" | "srdf" | "mjcf",
       "name": the robot's (an SDF model's) name,
       "root": the root link; "" for an SDF model whose links float free,
       "articulation": the articulation (above), whose ``carries`` name links,
@@ -59,6 +59,15 @@ The payload::
   nested model resolves in that model's namespace, a nested model is posed in the model it is
   nested in and attached to its ``canonical_link`` (else its first link), and a joint outside
   it names its links by scoped name. A model placed by ``placement_frame`` is refused.
+- An MJCF (``cad.mjcf._source``) is its bodies as links under ``world`` (its root), a body with
+  several joints a chain of links at the body's frame; its visuals are the geoms MuJoCo's viewer
+  draws by default (groups 0 to 2), its collisions the rest (their facts as written: type, group,
+  MuJoCo's sizes, material, alpha); a free or ball joint is fixed where it is authored; a hinge
+  with no range is continuous and a slide with no range a control with ``min`` and ``max`` null,
+  as a continuous joint's are (the page gives either one turn or one metre to slide over); its
+  keyframes are ``poses``, each control's zero the joint's ``ref``; and it opens at ``qpos0``, as
+  MuJoCo does (``opening`` every control at zero). A joint MuJoCo leaves unnamed is named
+  ``<link>:joint``.
 - A control is a joint a person or a job sets: revolute and continuous joints in DEGREES,
   prismatic joints in METRES, each at its declared limits (a continuous joint has none). A
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
@@ -75,7 +84,9 @@ The payload::
   limits) is checked here, and refused in words; the page solves nothing.
 - A visual's mesh is the file it names (``format`` the page's decoder: stl, 3mf or glb) or,
   for a box, cylinder, sphere or capsule, a GLB cadgen meshed (``_internal.primitive_mesh``)
-  and holds by the sha256 of its bytes. The payload names
+  and holds by the sha256 of its bytes. An MJCF's OBJ, which the page has no decoder for, is
+  held the same way: its triangles written as a GLB of the numbers the file holds, the mesh
+  scale left in the placement as an STL's is (``0.001`` times the scale). The payload names
   a file by its absolute path (``path``) and a primitive by that digest (``object``);
   the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`). A mesh
   lands in the robot's metres as its format defines it: a GLB is metres by the glTF spec,
@@ -83,12 +94,13 @@ The payload::
   numbers it holds, which the mesh scale converts (``0.001`` for millimetres). The placement
   carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
 - Refusals are the validators' (``cad.urdf._source``, ``cad.sdf._validation``,
-  ``cad.srdf._validation``) plus what the page cannot draw: a mesh in a format it has no
+  ``cad.srdf._validation``, the MJCF reader ``cad.mjcf._source``, and an ``.xml`` whose root is
+  not ``<mujoco>``) plus what the page cannot draw: a mesh in a format it has no
   decoder for, a shape it has no mesh for, a mesh it cannot reach. Every refusal is a
   :class:`RobotReadError` saying what to change.
 
 The payload is derived data, held in this process's memory keyed by the description's path
-and bytes and its paired URDF's bytes (``robot_payload_bytes``), so a second read of an
+and bytes and its paired URDF's bytes, or an MJCF's includes' and OBJ meshes' (``robot_payload_bytes``), so a second read of an
 unchanged description parses nothing; a primitive's mesh is held beside it by the digest of
 its bytes (``primitive_glb_bytes``). Nothing is written to disk.
 """
@@ -109,6 +121,7 @@ import xml.etree.ElementTree as ET
 from cad.engine import mesh_uri
 from cad._internal.findings import format_findings
 from cad._internal.xml_common import children, display_path, local_name
+from cad.registry import DOCUMENT_TYPES
 
 __all__ = [
     "DRAWABLE_MESH_FORMATS",
@@ -140,7 +153,11 @@ _RESOLUTION_REVISION = 2
 # go first. A payload whose mesh went is read again (``robot_payload_bytes(rebuild=True)``).
 PAYLOADS_HELD = 16
 MESHES_HELD = 256
-ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
+# Every document type viewed as a robot (``cad.registry``): a URDF, an SRDF, an SDF and an MJCF
+# (``.xml`` and ``.mjcf``; an ``.xml`` is one only when its root is ``<mujoco>``).
+ROBOT_SUFFIXES = tuple(extension for entry in DOCUMENT_TYPES.values() if entry.view == "robot"
+                       for extension in entry.extensions)
+_MJCF_SUFFIXES = tuple(DOCUMENT_TYPES["mjcf"].extensions)
 #: The mesh files the page decodes, by suffix: what a link mesh may be.
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
 #: The shapes cadgen meshes for a visual (``_internal.primitive_mesh``).
@@ -1043,6 +1060,167 @@ def _read_sdf(path: Path) -> _Description:
     return description
 
 
+# --- MJCF ------------------------------------------------------------------------------------
+
+
+def _matrix_origin(m: list[list[float]]) -> dict[str, list[float]]:
+    """A rigid placement as a person reads one back: ``xyz`` and URDF's ``rpy`` (fixed X, Y, Z)."""
+    pitch = math.asin(max(-1.0, min(1.0, -m[2][0])))
+    if abs(math.cos(pitch)) > 1e-9:
+        roll, yaw = math.atan2(m[2][1], m[2][2]), math.atan2(m[1][0], m[0][0])
+    else:  # gimbal lock: the roll is folded into the yaw
+        roll, yaw = 0.0, math.atan2(-m[0][1], m[1][1])
+    return {"xyz": [_number(m[i][3]) for i in range(3)], "rpy": [_number(roll), _number(pitch), _number(yaw)]}
+
+
+def _mjcf_geom_facts(geom, mesh_asset=None) -> dict:
+    """A geom as written: its name, its MuJoCo type, group and sizes (MuJoCo's own half-sizes), its
+    material, colour and alpha, its placement in its body, and the mesh file it names."""
+    facts: dict = {
+        "name": geom.name, "type": geom.type, "filename": "", "origin": _matrix_origin(geom.local),
+        "group": geom.group, "size": [_number(value) for value in geom.size],
+        "color": _hex(list(geom.rgba)), "alpha": _number(geom.rgba[3]),
+        "material": geom.material or "", "materialName": geom.material or "",
+    }
+    if geom.type == "mesh":
+        facts["mesh"] = geom.mesh or ""
+        if mesh_asset is not None and mesh_asset.file is not None:
+            facts["filename"] = mesh_asset.file.name
+            facts["path"] = str(mesh_asset.file)
+            facts["scale"] = [_number(value) for value in mesh_asset.scale]
+    return facts
+
+
+# The files an MJCF's payload was read from beside the model's own (its includes, and the OBJ
+# meshes its GLBs are made of), by the model's path: part of the key its payload is held under, so
+# an edited include or OBJ is read again (``robot_payload_bytes``).
+_DEPENDENCIES: OrderedDict[str, tuple[str, ...]] = OrderedDict()
+
+
+def _obj_descriptor(path: Path) -> dict:
+    """A prepared OBJ visual's mesh request, internal until resolution writes its GLB."""
+    return {"format": "glb", "_obj": {"path": str(path)}}
+
+
+def _obj_mesh(path: str) -> dict:
+    """An OBJ's mesh as the page decodes one: its triangles written as a GLB (the numbers the file
+    holds; the visual's placement carries its scale) and held by the digest of its bytes."""
+    from cad.engine.formats.obj import read_obj
+    from cad_server._internal.primitive_mesh import triangles_glb
+
+    try:
+        points, triangles = read_obj(Path(path))
+        data = triangles_glb(points, triangles)
+    except (OSError, ValueError) as exc:
+        raise RobotReadError(f"{display_path(Path(path))} could not be read as an OBJ mesh: {exc}") from None
+    digest = hashlib.sha256(data).hexdigest()
+    _held(_MESHES, digest, data, MESHES_HELD)
+    return {"format": "glb", "object": digest}
+
+
+def _read_mjcf(path: Path) -> _Description:
+    """An MJCF as the robot view takes one (``cad.mjcf._source``): a link per body (a body with
+    several joints a chain of links), the world its root, the drawn geoms (groups 0 to 2) its
+    visuals and the rest its collisions, a free or ball joint fixed where it is authored, a joint
+    with no range unbounded (a hinge continuous, a slide with ``min`` and ``max`` null), the
+    keyframes its poses, and the model opening at ``qpos0`` as MuJoCo's does."""
+    from cad.mjcf._source import DRAWN_GROUPS, articulate, is_mjcf_file, read_mjcf
+
+    display = display_path(path)
+    if path.suffix.lower() == ".xml" and not is_mjcf_file(path):
+        raise RobotReadError(
+            f"{display} is not an MJCF: an .xml is read as a robot only when its root element is <mujoco>; "
+            "open a MuJoCo model, or name a URDF .urdf and an SDF .sdf"
+        )
+    model, findings = read_mjcf(path)
+    if findings.errors or model is None:
+        raise RobotReadError(format_findings(findings.errors))
+    articulation = articulate(model)
+    description = _Description("mjcf", model.name, display)
+    description.root = articulation.root
+
+    # A joint MuJoCo leaves unnamed is named for the link it moves, so every row has an id.
+    taken = {joint.name for joint in articulation.joints if joint.name}
+    names: dict[int, str] = {}
+    for index, linked in enumerate(articulation.joints):
+        if linked.name:
+            names[index] = linked.name
+            continue
+        base = f"{linked.child}:joint"
+        candidate, suffix = base, 2
+        while candidate in taken:
+            candidate, suffix = f"{base}{suffix}", suffix + 1
+        taken.add(candidate)
+        names[index] = candidate
+
+    dependencies = [str(file) for file in model.files if Path(file) != path]
+    links: dict[str, _Link] = {}
+    for name, rest in articulation.links.items():
+        link = _Link(name)
+        link.placement = [list(map(float, row)) for row in rest]
+        for visual in articulation.visuals.get(name, ()):
+            geom = visual.geom
+            asset = model.meshes.get(geom.mesh or "") if geom.type == "mesh" else None
+            facts = _mjcf_geom_facts(geom, asset)
+            local = [list(map(float, row)) for row in visual.local]
+            shape = visual.shape
+            if shape[0] == "file":
+                file, scale = Path(shape[1]), [float(value) for value in shape[2]]
+                if file.suffix.lower() == ".obj":
+                    mesh = _obj_descriptor(file)
+                    dependencies.append(str(file))
+                else:
+                    mesh = {"format": _drawable_format(file.name, where=f"{display} geom {visual.label!r}"), "path": str(file)}
+                local = _multiply(local, _mesh_scale(mesh["format"], scale))
+            else:
+                mesh = _primitive_descriptor(shape[0], dict(shape[1]))
+                local = _multiply(local, _mesh_scale(mesh["format"]))
+            link.visuals.append(_Visual(visual.id, visual.label, local, visual.color, mesh, facts))
+        body = model.bodies.get(name)
+        if body is not None:
+            # MuJoCo's collision geoms by convention: the groups its viewer hides by default.
+            link.collisions = [_mjcf_geom_facts(geom, model.meshes.get(geom.mesh or "") if geom.type == "mesh" else None)
+                               for geom in body.geoms if geom.group not in DRAWN_GROUPS]
+        inertial = articulation.inertials.get(name)
+        if inertial is not None:
+            link.inertial = {"mass": inertial.get("mass"), "origin": _matrix_origin(inertial["origin"]),
+                             "inertia": inertial.get("inertia")}
+        links[name] = link
+        description.links.append(link)
+
+    for index, linked in enumerate(articulation.joints):
+        joint = _Joint(names[index], linked.type, linked.parent, linked.child)
+        joint.frame = [list(map(float, row)) for row in linked.frame]
+        joint.axis = None if linked.type == "fixed" else (list(linked.axis) if linked.axis is not None else None)
+        if linked.type != "fixed" and joint.axis is None:
+            raise RobotReadError(f"{display} joint {joint.name!r} axis must be nonzero")
+        joint.lower, joint.upper = linked.lower, linked.upper
+        joint.mimic = linked.mimic
+        source = linked.source
+        parent = links.get(linked.parent)
+        origin = _multiply(_invert_rigid(parent.placement), joint.frame) if parent is not None else joint.frame
+        limit = None
+        if source is not None and source.range is not None and linked.type != "fixed":
+            limit = {"lower": _number(source.range[0]), "upper": _number(source.range[1])}
+        joint.facts = {
+            "name": joint.name, "type": joint.type, "parent": joint.parent, "child": joint.child,
+            "axis": None if joint.type == "fixed" or source is None else [_number(value) for value in source.axis],
+            "origin": _matrix_origin(origin),
+            "limit": limit,
+            "mimic": {"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]} if joint.mimic else None,
+            "fourBar": None,
+            # MuJoCo's own: the joint's type (a free or ball joint is drawn fixed), ``ref`` (the
+            # authored position a control's zero is) and the range as written, around ``ref``.
+            "mjcfType": source.type if source is not None else None,
+            "ref": _number(source.ref) if source is not None else None,
+        }
+        description.joints.append(joint)
+
+    description.poses = {key: dict(values) for key, values in articulation.poses.items()}
+    _held(_DEPENDENCIES, str(path), tuple(dict.fromkeys(dependencies)), PAYLOADS_HELD * 4)
+    return description
+
+
 # --- SRDF ------------------------------------------------------------------------------------
 
 
@@ -1565,6 +1743,8 @@ def prepare_robot_description(path: Path | str) -> dict[str, Any]:
         description = _read_urdf(resolved)
     elif kind == ".sdf":
         description = _read_sdf(resolved)
+    elif kind in _MJCF_SUFFIXES:
+        description = _read_mjcf(resolved)
     else:
         description = _read_srdf(resolved)
     return _payload(description)
@@ -1581,6 +1761,9 @@ def resolve_robot_primitives(prepared: Mapping[str, Any]) -> dict[str, Any]:
         primitive = visual["mesh"].get("_primitive")
         if primitive is not None:
             visual["mesh"] = _primitive_mesh(primitive["shape"], primitive["dimensions"])
+        obj = visual["mesh"].get("_obj")
+        if obj is not None:
+            visual["mesh"] = _obj_mesh(obj["path"])
     return payload
 
 
@@ -1614,6 +1797,14 @@ def _file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _dependency_hash(path: str) -> str:
+    """A dependency's hash, or ``""`` for one that is gone (its absence is then the change)."""
+    try:
+        return _file_hash(Path(path))
+    except OSError:
+        return ""
+
+
 def robot_payload_bytes(path: Path | str, *, rebuild: bool = False) -> bytes:
     """The payload's bytes: the ones this process holds for an unchanged description (and, for an
     SRDF, an unchanged paired URDF), else read now and held. ``rebuild`` reads now regardless, for
@@ -1624,18 +1815,27 @@ def robot_payload_bytes(path: Path | str, *, rebuild: bool = False) -> bytes:
     if not resolved.is_file():
         raise RobotReadError(f"no file is at {resolved}")
     paired = paired_urdf_for_srdf(resolved) if resolved.suffix.lower() == ".srdf" else None
-    try:
-        key = (str(resolved), _file_hash(resolved), _file_hash(paired) if paired else None, robot_payload_scheme())
-    except OSError as exc:
-        raise RobotReadError(f"{resolved} could not be read: {exc}") from None
+
+    def key_now() -> tuple:
+        with _LOCK:
+            # An MJCF's includes and OBJ meshes, as its last read found them: an edit to one is a new key.
+            dependencies = _DEPENDENCIES.get(str(resolved), ())
+        try:
+            return (str(resolved), _file_hash(resolved), _file_hash(paired) if paired else None,
+                    tuple((dependency, _dependency_hash(dependency)) for dependency in dependencies), robot_payload_scheme())
+        except OSError as exc:
+            raise RobotReadError(f"{resolved} could not be read: {exc}") from None
+
     if not rebuild:
+        key = key_now()
         with _LOCK:
             cached = _PAYLOADS.get(key)
             if cached is not None:
                 _PAYLOADS.move_to_end(key)
                 return cached
     data = encode_robot_payload(read_robot_description(resolved))
-    _held(_PAYLOADS, key, data, PAYLOADS_HELD)
+    # Keyed after the read, by the dependencies that read found.
+    _held(_PAYLOADS, key_now(), data, PAYLOADS_HELD)
     return data
 
 

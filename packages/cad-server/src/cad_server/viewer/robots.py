@@ -1,5 +1,5 @@
 """A robot description resolved for the page, and the meshes cadgen made for it: what
-``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`` and ``.../parts/<digest>`` answer.
+``GET /api/v1/documents/<urdf|srdf|sdf|mjcf>/<id>/structure`` and ``.../parts/<digest>`` answer.
 
 This module is the route's decisions — what may be opened, and what the HTTP answer is.
 The payload itself is cadgen's (``cad_server.robot_payload``), imported inside the handler so the
@@ -10,15 +10,15 @@ Two answers, both of the description at its absolute path (its document's file):
 
 * ``structure`` -> the payload (``application/json``), every visual's mesh named by the URL
   this server answers for it: a link mesh file by its path (``/api/v1/local/files``), a
-  primitive cadgen meshed by its document's ``parts/<digest>``.
-* ``parts/<digest>`` -> that primitive's GLB (``model/gltf-binary``), served only when the
+  primitive cadgen meshed (or an MJCF's OBJ it wrote as a GLB) by its document's ``parts/<digest>``.
+* ``parts/<digest>`` -> that GLB (``model/gltf-binary``), served only when the
   description's payload names it; a mesh this process no longer holds costs one re-read of the
   description, never a 404.
 
 Statuses, in the order they are decided: no path, a ref that is not an absolute path or
-one that does not end in ``.urdf``, ``.srdf`` or ``.sdf`` -> 400; no such file -> 404; a
-description cadgen cannot resolve (its validator's findings, a mesh the page cannot draw, an
-SRDF with no paired URDF) -> ``RobotReadError`` (a ``ValueError``) -> 400 with the teaching
+one that does not end in ``.urdf``, ``.srdf``, ``.sdf``, ``.xml`` or ``.mjcf`` -> 400; no such
+file -> 404; a description cadgen cannot resolve (its validator's findings, a mesh the page cannot
+draw, an SRDF with no paired URDF, an ``.xml`` whose root is not ``<mujoco>``) -> ``RobotReadError`` (a ``ValueError``) -> 400 with the teaching
 message, through the API's funnel (``{"error", "hint"}``).
 """
 
@@ -49,7 +49,7 @@ def resolve_robot_path(file_ref) -> str | None:
     Raises ``ValueError`` for a ref this route will not take.
     """
     if not file_ref:
-        raise ValueError("a robot is read from the absolute path of a .urdf, .srdf or .sdf")
+        raise ValueError(f"a robot is read from the absolute path of a {', '.join(ROBOT_SUFFIXES)} file")
     candidate = absolute_path(file_ref)
     if not candidate.lower().endswith(ROBOT_SUFFIXES):
         raise ValueError(

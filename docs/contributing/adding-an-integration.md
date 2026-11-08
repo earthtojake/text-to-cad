@@ -13,6 +13,17 @@ An integration usually makes or checks a document type, and adding a type has it
 [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) adds
 KiCad's boards and the `kicad` integration together.
 
+A smaller one is `mujoco`, which backs the `mjcf` type's `validate`. Its extra, `cad[mujoco]`, is
+`mujoco-core` alone: MuJoCo's compiler and Python bindings, numpy their one dependency, about 10 MB,
+headless, Apache-2.0. Never `mujoco` itself, a meta-package that adds Studio, glfw and PyOpenGL (a window
+and a GPU our code never uses), nor the menagerie. It is in-process: `cad.mujoco._compile` loads the model
+with `MjModel.from_xml_path` and turns what MuJoCo refuses and warns into findings. Reading the model is
+the type's own (`cad.mjcf._source`, the standard library alone), so viewing an MJCF needs nothing
+installed; `cad mjcf validate --compile auto` compiles where this environment holds mujoco and says
+`compile_skipped` where it does not, and `--compile required` runs the check in the environment of
+`cad[mujoco]`, made once by the engine (`integration_env`). A script that imports `mujoco` gets the extra
+from `cad run` through the registry entry's `modules`.
+
 How an integration gets installed on a person's computer is covered for a Python library alone: `cad
 run` makes a program's environment with the integrations its imports use, and an operation the `cad`
 command runs that needs one its own environment lacks (a 3D type's `dfm`, the `trimesh`
@@ -32,7 +43,7 @@ an integration.
 
 | Kind | What it is | Examples | An integration? |
 | --- | --- | --- | --- |
-| A | Python libraries model code imports | build123d, pandas | yes, where we write helpers that take its objects or producers of its values |
+| A | Python libraries model code imports | build123d, mujoco, pandas | yes, where we write helpers that take its objects or producers of its values |
 | B | Python libraries our producers call | ezdxf, Pillow, netgen | yes, where the code that calls it is ours for that tool |
 | C | External programs our code runs | kicad-cli, ccx, freecadcmd | yes: a probe, headless runs, one missing-tool result |
 | D | Tools only the agent runs | a slicer's CLI the agent calls | no: the skill teaches it, cad's code never calls it |

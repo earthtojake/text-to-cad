@@ -95,6 +95,17 @@ class FoldersTest(unittest.TestCase):
             self.assertEqual(names(home / ".cache/cadgen/documents/6f1c2a4e"), ["document.xbf"])
             self.assertEqual(search_folder(str(home), "document")["results"], [slashed(document)])
 
+    def test_an_xml_is_listed_only_when_it_is_an_mjcf(self) -> None:
+        # A robot folder holds XML of many kinds; the explorer lists the MuJoCo models among them (root
+        # element <mujoco>) and not a ROS package.xml, while a .mjcf is always one.
+        (self.root / "arm" / "scene.xml").write_text("<?xml version='1.0'?>\n<!-- a scene -->\n<mujoco model='arm'/>", encoding="utf-8")
+        (self.root / "arm" / "package.xml").write_text("<package format='3'><name>arm</name></package>", encoding="utf-8")
+        (self.root / "arm" / "hand.mjcf").write_text("<mujoco/>", encoding="utf-8")
+        names = [entry["name"] for entry in list_folder(str(self.root / "arm"))["entries"]]
+        self.assertIn("scene.xml", names)
+        self.assertIn("hand.mjcf", names)
+        self.assertNotIn("package.xml", names)
+
     @unittest.skipIf(os.name == "nt", "a symlink to a folder needs privileges on Windows")
     def test_a_link_back_into_a_walked_folder_is_not_walked_again(self) -> None:
         (self.root / "arm" / "loop").symlink_to(self.root, target_is_directory=True)

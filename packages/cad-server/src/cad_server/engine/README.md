@@ -1,7 +1,7 @@
 # cad.engine
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+3MF, DXF, URDF, SRDF, SDF, MJCF) or something derived from code: a model, built by this engine. A document exists so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. Everything below is how the engine makes, holds and serves documents.
 
@@ -638,7 +638,7 @@ failure: the next asker makes it again.
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF/MJCF (XML, the viewer's forward kinematics; an MJCF read by `cad.mjcf._source`), OBJ (numpy: an MJCF's link meshes), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
@@ -692,8 +692,11 @@ cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
+cad urdf|sdf|srdf|mjcf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
+cad mjcf validate FILE [--compile auto|required|never] [--strict] [--json]
+                                             an MJCF's, compiled by MuJoCo too: auto where cad[mujoco]
+                                             is installed, required in its environment (made first)
 cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
                 [--zero-tol DEG] [--units U] [--candidates] [--json]
 cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG] [--samples N]
@@ -724,7 +727,7 @@ The rule: `cad <document_type> <operation> <file>`, the type's id as the registr
 has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
 type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
 before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
-file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
+file of no type (`robot.dae is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
 there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
 names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
 schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
@@ -1022,6 +1025,15 @@ is found by the library's helper (`cad._internal.programs`: the override, then `
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
 schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
 run the same way.
+
+**An MJCF's compile.** `cad mjcf validate` is `cad.mjcf.validate`: the type's own reading of the model
+(`cad.mjcf._source`, the standard library alone, as the viewer and the stills read it), then MuJoCo's
+compiler on the file, the `mujoco` integration's (`cad.mujoco._compile`: `MjModel.from_xml_path`, its
+warnings caught through `mju_user_warning`), what it refuses an error and what it warns a warning, in its
+words. `--compile auto` compiles in the command's own process where it holds mujoco and says
+`compile_skipped` where it does not; `required` runs the whole check in the environment of `cad[mujoco]`
+at the installation's release, made once by the engine (`mujoco-core` alone, about 10 MB: the compiler and
+the bindings, no renderer), and fails `compile_unavailable` only where that cannot be had; `never` reads alone.
 
 ## Profiling
 
@@ -1967,15 +1979,15 @@ per file (read again when a file it read changes) or with `daemon=False` in this
   IOR, transmission, clear coat, anisotropy, emissive strength) and its base colour texture,
   drawn on its texture coordinates in the lit looks. `--pose` is refused: a mesh has no
   mechanism.
-- **A robot** (`.urdf`, `.sdf`, `.srdf`) is its link visuals' meshes (STL, 3MF and GLB files, a
+- **A robot** (`.urdf`, `.sdf`, `.srdf`, and an MJCF's `.xml` or `.mjcf`) is its link visuals' meshes (STL, 3MF and GLB files, an MJCF's STL and OBJ, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
   box, cylinder, sphere or capsule made and meshed by the kernel), each link's in one colour of
   the Parts palette, placed by the viewer's forward kinematics (`lib/urdf/kinematics.js` and
   `fourBarCoupling.js`, ported and held to a golden its own code made: mimic joints and four-bar
   linkages followed) where the viewer opens the robot -- every control at zero, an SRDF's `home`
-  group state over that. `--pose` names an SRDF group state (`group/name`, or a name one group
-  has) or gives joint values (degrees, metres) over the opening pose; an unknown joint, a joint
+  group state over that (an MJCF at its joints' `ref`, MuJoCo's qpos0; its `home` key is a pose, not where it opens). `--pose` names an SRDF group state (`group/name`, or a name one group
+  has), an MJCF keyframe, or gives joint values (degrees, metres) over the opening pose; an unknown joint, a joint
   that is no control and a value past its limits are refused by name.
 - **A drawing** (`.dxf`) is drawn as the viewer's DXF pane draws it: from above, fitted with its
   16 px margin, lines, arcs, polylines, splines, ellipses, solids, solid hatches, blocks and

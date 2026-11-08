@@ -294,7 +294,7 @@ class SdfValidateCliTests(unittest.TestCase):
         self.assertIn("no such file", output)
 
     def test_non_sdf_suffix_fails(self) -> None:
-        path = self._write("model.xml", VALID_MODEL_SDF)
+        path = self._write("model.txt", VALID_MODEL_SDF)
         exit_code, output = self._run(str(path), "--gz-check", "never")
         self.assertEqual(exit_code, 2)
         self.assertIn("is not a sdf file: cad sdf takes .sdf", output)

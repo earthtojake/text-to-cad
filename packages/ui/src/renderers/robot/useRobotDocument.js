@@ -8,7 +8,7 @@ import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@ca
 // cap only bounds sockets and the worker's queue; it is tied to cores because the
 // worker still parses serially.
 const MESH_LOAD_CONCURRENCY = 8;
-const KINDS = new Set(["urdf", "srdf", "sdf"]);
+const KINDS = new Set(["urdf", "srdf", "sdf", "mjcf"]);
 const kindOf = entry => String(entry?.kind || "").trim().toLowerCase();
 
 function meshConcurrency() {

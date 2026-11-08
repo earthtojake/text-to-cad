@@ -33,12 +33,15 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
+    "cad.mjcf": ("validate",),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad.sdf", "validate"),
+    # An MJCF's: run here, or for --compile required where mujoco is not installed, in cad[mujoco]'s environment.
+    "mjcf validate": ("cad.mjcf", "validate"),
     "srdf validate": ("cad.srdf", "validate"),
     # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
     "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
@@ -71,7 +74,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
-                             "kicad_pcb")},
+                             "mjcf", "kicad_pcb")},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),

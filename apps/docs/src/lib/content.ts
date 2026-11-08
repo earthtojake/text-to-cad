@@ -124,7 +124,7 @@ export const features = [
     id: "robots",
     name: "Robotics and simulation",
     path: "skills/robot-simulation/SKILL.md",
-    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.",
+    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt, SDF for Gazebo and MJCF for MuJoCo.",
     file: "arm.urdf",
   },
 ];

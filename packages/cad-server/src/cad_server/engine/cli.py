@@ -150,7 +150,7 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
 
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
-        document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
+        document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf, MJCF .xml or .mjcf), "
                        "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
                        "model's, which cad run SCRIPT.py prints: drawn from what the engine holds)")
         + "; with --job, drawn in place of every job's input")

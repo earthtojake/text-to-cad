@@ -1,6 +1,6 @@
 # Mesh Preparation and References
 
-Bad mesh handling is a top URDF and SDF failure mode, and it usually happens *before* any XML is written: source CAD is split into per-link assets incorrectly, exported in the wrong frame, or referenced at the wrong scale. Prepare assets first, then author XML that matches them. A description references geometry and mesh assets; it does not regenerate them.
+Bad mesh handling is a top URDF, SDF and MJCF failure mode, and it usually happens *before* any XML is written: source CAD is split into per-link assets incorrectly, exported in the wrong frame, or referenced at the wrong scale. Prepare assets first, then author XML that matches them. A description references geometry and mesh assets; it does not regenerate them.
 
 ## Splitting Source CAD Into Link Assets
 
@@ -30,8 +30,8 @@ When a description references exported mesh assets, record in its ledger:
 
 ## Units and Scale
 
-- URDF and SDF lengths are meters. Mesh files are frequently millimeters, and STL carries no unit metadata at all.
-- Express the conversion explicitly on every mesh reference: in URDF the `scale` attribute, `scale="0.001 0.001 0.001"` for mm sources; in SDF `<mesh><scale>0.001 0.001 0.001</scale>`. Omit it only when the mesh is genuinely authored in meters.
+- URDF, SDF and MJCF lengths are meters. Mesh files are frequently millimeters, and STL carries no unit metadata at all.
+- Express the conversion explicitly on every mesh reference: in URDF the `scale` attribute, `scale="0.001 0.001 0.001"` for mm sources; in SDF `<mesh><scale>0.001 0.001 0.001</scale>`; in MJCF the asset's `<mesh file="..." scale="0.001 0.001 0.001"/>`. Omit it only when the mesh is genuinely authored in meters.
 - STL and 3MF are read as the numbers they hold (a 3MF's `unit` attribute is not applied), so the scale alone converts them: `cad` writes both in millimeters, which take a scale of `0.001 0.001 0.001`.
 - A GLB is meters by the glTF specification (`cad` writes GLB in meters), so a GLB link mesh takes no scale; give one only to resize the asset itself.
 - One convention per robot: do not mix mm and m assets in the same file without a ledger entry per exception.
@@ -57,6 +57,8 @@ The bundled SDF validator can confirm local relative paths, but it cannot prove 
 Keep mesh files under the same model directory tree as the description, so the file and its assets move together.
 
 What the CAD Viewer and the snapshots draw is narrower than what the validators accept: a local STL, 3MF or GLB file, beside the description or in its package (`package://`, above), and the `box`, `cylinder` and `sphere` primitives (and in SDF `capsule`), which the server meshes itself. A `.dae`, `.obj` or `.ply` mesh, a remote URI (and in SDF a `model://` one), a package no folder above the description is, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it. Each format's full list is in [snapshots.md](snapshots.md).
+
+An MJCF is the exception: its meshes are STL and OBJ files (the menagerie's are often OBJ), found under the compiler's `meshdir` (or `assetdir`) beside the main file, and both are drawn, an OBJ's geometry alone (its materials and textures are not read). An MSH (MuJoCo's own binary) or a mesh given inline (`vertex`) is not drawn, and a 3MF or GLB is no MuJoCo mesh at all: export the link as STL (`cad model export <id> link.stl`). MuJoCo hulls every mesh it collides, so an MJCF's collision mesh is its convex hull whatever its shape ([mjcf-authoring.md](mjcf-authoring.md#visual-and-collision-geoms)).
 
 ## Visual vs Collision Assets
 

@@ -289,6 +289,14 @@ test("the install command's channels are stored as what happened, and the -githu
   assert.deepEqual(store.rows, []);
 });
 
+test('schema 9 counts MuJoCo models, which no older schema names', async () => {
+  const file = { name: 'files', kind: 'mjcf', count: 1 };
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema: 9, events: [file] })).status, 204);
+  for (const schema of [6, 7, 8]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...ENGINE, schema, events: [file] })).status, 400, String(schema));
+  }
+});
+
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
   const kinds = ['model', 'xbf'];
   const events = kinds.flatMap(kind => [

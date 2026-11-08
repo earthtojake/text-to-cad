@@ -14,7 +14,9 @@ check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pul
 environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``.
+environment of ``cad[kicad]``. An MJCF's ``validate`` runs here, compiling with MuJoCo where this
+environment holds the mujoco integration; ``--compile required`` where it does not runs the whole check in
+the environment of ``cad[mujoco]``.
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -121,6 +123,44 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
         return answered(VERBS[verb][2], parser.parse_args(argv), prog)
 
     return run
+
+
+def _mjcf_validate(argv: list[str], prog: str) -> int:
+    """``cad mjcf validate``: the generated mirror of ``cad.mjcf.validate``, its options the signature's
+    (``--compile {auto,required,never}``, ``--strict``, ``--verbose``, ``--json``). The whole check runs here,
+    MuJoCo's compile with it where this environment holds the mujoco integration (``auto`` skipping it where
+    not); ``--compile required`` where it does not runs the whole check in the environment of
+    ``cad[mujoco]`` (``cad_server._internal.integration_env``), made first when it is not."""
+    from cad.results import CheckFinding, CheckResult
+    from cad_server._internal import integration_env
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, emit)
+
+    target = ("cad.mjcf", "validate")
+    verb = _verb(target)
+    parser = _typed(_present(build_parser("mjcf", "validate", prog)), "mjcf", "validate", "path")
+    parsed = parser.parse_args(argv)
+    positional, keywords = _call_arguments(verb, parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+    verbose = bool(getattr(parsed, "verbose", False))
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    def elsewhere() -> CheckResult:
+        python = integration_env.environment("mujoco", said)
+        found = integration_env.call(python, "mjcf", "validate",
+                                     [str(Path(value).expanduser().resolve()) for value in positional], keywords)
+        return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                           findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+    if keywords.get("compile") == "required" and not integration_env.carries("mujoco"):
+        invoke: Callable[[], object] = elsewhere
+    else:
+        def invoke() -> object:
+            return verb(*positional, **keywords)
+
+    return emit(invoke, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose=verbose)
 
 
 # --- a 3D type's manufacturing check: the trimesh integration's ---------------------------------------
@@ -489,6 +529,7 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
+    ("mjcf", "validate"): _mjcf_validate,
 }
 
 

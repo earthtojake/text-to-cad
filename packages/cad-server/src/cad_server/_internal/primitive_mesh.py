@@ -11,6 +11,10 @@ viewer's surface), and the ``cadUpAxis`` declaration every cadgen GLB carries. T
 payload names it by the digest of its bytes (``cad_server.robot_payload``), held in memory, so one
 shape at one size is meshed once for every robot that draws it. The page decodes a GLB into
 millimetres, so a primitive's placement carries the same ``0.001`` every GLB link mesh's does.
+
+The same writer (``triangles_glb``) serves a link mesh the page has no decoder for: an MJCF's OBJ
+is read into triangles and written as a GLB of the numbers the file holds, flat-shaded, its mesh
+scale left to the visual's placement as an STL's is.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import struct
 
 import numpy as np
 
-__all__ = ["PRIMITIVE_SHAPES", "primitive_glb", "primitive_segments"]
+__all__ = ["PRIMITIVE_SHAPES", "primitive_glb", "primitive_segments", "triangles_glb"]
 
 # The tolerance a primitive is meshed at: a sagitta of at most this share of the shape's bounding
 # diagonal (a shape 1,000 px across strays half a pixel from its exact surface), and at most this
@@ -199,9 +203,36 @@ def primitive_glb(shape: str, dimensions: dict) -> bytes:
     ``capsule`` (``radius``, ``length``, along Z), ``sphere`` (``radius``), each centred on
     its own origin as URDF and SDF place them."""
     positions, normals, indices = _build(shape, dimensions).arrays()
+    return triangles_glb(positions, indices.reshape(-1, 3), normals)
+
+
+def triangles_glb(points, triangles, normals=None) -> bytes:
+    """The GLB of a triangle mesh: ``points`` (n, 3) Z-up in the numbers they hold, written as
+    glTF's metres, and ``triangles`` (m, 3) indices into them, wound counter-clockwise seen from
+    outside. With ``normals`` (n, 3), one per point, the mesh is written indexed and smooth (a
+    primitive's); without, every triangle gets its own three vertices and its face's normal, so a
+    mesh read from a file (an MJCF's OBJ) draws flat-faced, its edges as sharp as it was cut.
+    A triangle of zero area keeps a zero normal's direction as +Z, which nothing lights wrongly."""
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    triangles = np.asarray(triangles, dtype=np.int64).reshape(-1, 3)
+    if normals is None:
+        corners = points[triangles]  # (m, 3, 3)
+        face = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+        length = np.linalg.norm(face, axis=1, keepdims=True)
+        face = np.where(length > 0.0, face / np.where(length > 0.0, length, 1.0), np.array([0.0, 0.0, 1.0]))
+        positions = corners.reshape(-1, 3)
+        normals = np.repeat(face, 3, axis=0)
+        indices = np.arange(len(positions), dtype=np.uint32)
+    else:
+        positions = points
+        normals = np.asarray(normals, dtype=np.float64).reshape(-1, 3)
+        normals = normals / np.linalg.norm(normals, axis=1, keepdims=True)
+        indices = triangles.reshape(-1).astype(np.uint32)
+    if not len(positions):
+        raise ValueError("a mesh with no triangles has nothing to draw")
     y_up = _y_up(positions)
     position_bytes = y_up.tobytes()
-    normal_bytes = _y_up(normals / np.linalg.norm(normals, axis=1, keepdims=True)).tobytes()
+    normal_bytes = _y_up(normals).tobytes()
     index_bytes = indices.astype("<u4").tobytes()
     views: list[dict] = []
     chunks: list[bytes] = []
@@ -223,7 +254,8 @@ def primitive_glb(shape: str, dimensions: dict) -> bytes:
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         # No node or mesh name: a primitive is a shape, not an authored object, and the page lists a
-        # named object of a link's mesh as a part of its own (its visual already says "box").
+        # named object of a link's mesh as a part of its own (its visual already says "box"); a
+        # mesh file's triangles are the visual's one object too.
         "nodes": [{"mesh": 0, "extras": {"cadSourceKind": "robot", "cadUnits": "m", "cadUpAxis": "y"}}],
         "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "mode": _TRIANGLES}]}],
         "accessors": [

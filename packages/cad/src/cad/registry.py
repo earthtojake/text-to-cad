@@ -255,6 +255,13 @@ _TYPES = (
         "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
         (Operation("validate", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
     DocumentTypeEntry(
+        "mjcf", "MJCF", "a MuJoCo model (MJCF XML): its bodies, joints and geoms, read as a robot with its "
+                        "mesh assets", (".xml", ".mjcf"), "application/xml; charset=utf-8", "robot",
+        ("bodies", "joints", "geoms", "mesh references", "keyframes"),
+        (Operation("validate", "check it for conformance: structure, defaults, bodies, joints, geoms and mesh "
+                               "references, and compile it with MuJoCo where cad[mujoco] is installed (--compile "
+                               "required makes that environment)", "mujoco"), _SNAPSHOT)),
+    DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
@@ -315,6 +322,12 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                    "and support", extra="trimesh", process="in-process",
         modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
+    "mujoco": Integration(
+        "mujoco", "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no "
+                  "renderer): an MJCF's validate compiles the model with it, so what MuJoCo refuses is a finding "
+                  "with MuJoCo's own words", extra="mujoco", process="in-process",
+        modules=("mujoco",), distributions=("mujoco-core",), identity=("mujoco", "mujoco-core"),
+        holds="MuJoCo's headless core", download_mb=10),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

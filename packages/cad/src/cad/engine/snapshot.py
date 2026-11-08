@@ -8,8 +8,9 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.stl``, ``.3mf``, ``.glb``: a mesh file, read by its reader (``formats/``: numpy, zip and XML,
   OCCT's glTF reader) into a structure and part buffers as a document's are, with the viewer's
   feature edges, and drawn by the documents' own path; a GLB's base colour textures through OCCT.
-- ``.urdf``, ``.sdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
-  kinematics (``formats/robot.py``), drawn as a document is; ``--pose`` poses it.
+- ``.urdf``, ``.sdf``, ``.srdf``, ``.xml``, ``.mjcf``: a robot (an MJCF a MuJoCo model's), its link
+  meshes placed by the viewer's forward kinematics (``formats/robot.py``), drawn as a document is;
+  ``--pose`` poses it (a group state's or an MJCF keyframe's name, or joint values).
 - ``.dxf``: a drawing, from above, in its pens, in the viewer's 2D look (``render/drawing.py``).
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
@@ -539,7 +540,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".xml", ".mjcf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -709,7 +710,7 @@ def snapshot(document: Path, out: Path, *, display: dict[str, Any] | None = None
     """Draw ``document`` -- an ``.xbf`` or a ``.step`` the engine serves and meshes, or a file its
     reader reads (``FILES``: a mesh, a robot, a drawing) -- into ``out`` (a ``.png``); returns what
     was drawn and how long each stage took. ``pose``: a configuration's name (a robot's group
-    state) or ``{joint: value}``, the engine placing each link by its pairs from the ground (a
+    state, an MJCF's keyframe) or ``{joint: value}``, the engine placing each link by its pairs from the ground (a
     robot's by its joints from its root); None draws the document as built (a robot where the
     viewer opens it); a mesh has no mechanism to pose. ``source``: the document is a
     build's, held in this process (``draw``). ``annotation`` (``parse_annotation``'s) and
