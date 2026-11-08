@@ -70,7 +70,7 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `fea` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -83,8 +83,8 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); a B-rep document's stress study (`cad.<type>.fea(source, study=..., out=...)`, meshed by netgen and
-solved by the person's CalculiX); and engineering drawings (`@eng_drawing`).
+trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
+and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -412,7 +412,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `fea`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -492,12 +492,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `fea` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `fea`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -602,7 +602,7 @@ src/cad/
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
-                         #   B-rep type's fea: xbf's and step's)
+                         #   B-rep type's solve: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -634,10 +634,10 @@ src/cad/
                          #   on this computer (places)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
-  calculix/              # the calculix integration, a program the person installs: ccx found,
-                         #   checked and run headless (_program, on _internal/programs), its
-                         #   input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, fea, drc, erc,
+  calculix/              # the calculix integration, the ccx package's ccx: found, checked and run
+                         #   headless (_program, on _internal/programs; `cad run ccx`, _command),
+                         #   its input and printed output (_files)
+  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
                          #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
@@ -656,7 +656,7 @@ src/cad/
                          #   (counts), the checks' findings and XML helpers, atomic replace,
                          #   the checks' door, the version, and the stress study a B-rep type
                          #   runs (fea: its signature and options in operation, stdlib only; the
-                         #   study file, the mesh, the solve, the checks and the result GLB)
+                         #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
@@ -745,46 +745,59 @@ or a `.ply` among them) and never changing it. A script run with `cad run` that 
 
 ## Stress studies
 
-A B-rep document's `fea` is a linear static stress study of a part or of an assembly bonded where its
-parts touch: `cad.step.fea` and `cad.xbf.fea`, one to one with `cad step fea` and `cad xbf fea` (a mesh
-has no faces a study can hold or load by, so the mesh types have none). It is a check (law 28): its
-answer is a `cad.results.FeaResult`, a `CheckResult` whose findings carry a severity, a code and a
-location, with two uses of one signature:
+A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
+parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
+`cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
+have none). It is a check (law 28): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+findings carry a severity, a code and a location, with two uses of one signature:
 
 ```python
 from cad import step
 
-setup = step.fea("bracket.step")                            # writes nothing
+setup = step.solve("bracket.step")                          # writes nothing
 setup.parts, setup.pairs, setup.faces                       # what a study names, by ref
-result = step.fea("bracket.step", study="study.json", out="FEA/bracket.glb")
+result = step.solve("bracket.step", study="study.json", out="/tmp/bracket")
 result.ok, result.findings, result.measurements["safety_factor"], result.written
 ```
 
 With no study it is the study's setup: the document's parts, the pairs that touch within the contact
 tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
 ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
-study (a JSON file, inline JSON or a dict) and `out`, the solve, which writes the result GLB `out`
-names, and nothing else (a `.vtu` beside it with `vtu`); every number is in `measurements`. An option
-of the other use is refused by name before anything is read. The study reads the document in its own
-process, as the engine reads a file (`engine.document.load`), with no worker and no build, and resolves
-faces in the document's structure as `cad <type> inspect` does (`engine.refs`). The GLB and its `.vtu`
-are each replaced only once both are written, so a failed run leaves the previous result as it was.
-Its `ok` is every check's rule, an error blocks: a part that yields or misses a check is a correct
-result of a part unfit to use, so its GLB is written and the command exits 1, as is a study stopped
-before the solve (a part nothing holds), with none. A study whose answer would be wrong is refused
+study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
+which writes its results there, each a standard file that stands on its own, and touches nothing else in
+the folder:
+
+| File | What it holds |
+| --- | --- |
+| `result.json` | the `FeaResult`, as `--json` prints it |
+| `result.glb` | the deformed surface coloured by stress (a ramp texture, so every glTF viewer and the engine's stills draw it), the raw fields as attributes |
+| `result.vtu` | the volume's tetrahedra with displacement and von Mises at their corner nodes, for meshio, PyVista or ParaView |
+| `stress.png`, `displacement.png` | the engine's stills of each field with a colour bar under each, where it can draw (else a `solver_note`) |
+| `ccx.inp` | with `deck`, the input CalculiX solved |
+
+There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
+opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+other use is refused by name before anything is read. The study reads a file in its own process, as the
+engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
+document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a
+temporary folder first, by the engine that holds it, and its result names it by its document id. The
+folder's files are each replaced only once all are written, so a failed run leaves the previous results
+as they were. Its `ok` is every check's rule, an error blocks: a part that yields or misses a check is a
+correct result of a part unfit to use, so its results are written and the command exits 1, as is a study
+stopped before the solve (a part nothing holds), with none. A study whose answer would be wrong is refused
 instead, writing nothing: a zero load, a load on a held face, a study no load reaches, reactions that
 do not balance. `_internal/fea/` solves one kind of study: linear elastic stress and displacement.
 
-Two integrations run it. The mesher is `netgen` (`cad[netgen]`), installed only where netgen publishes
-wheels (macOS, Linux x86_64 and Windows x86_64; elsewhere a solve refuses, naming the platform) and
-always run in a process of its own, since its OpenCascade and OCP's cannot share one. The solver is
-`calculix`, a program with no extra: CalculiX's `ccx`, 2.20 or newer, which the person installs
-(`conda install -c conda-forge calculix`, `calculix-ccx` on Debian and Ubuntu, or FreeCAD on macOS and
-Windows, which carries one), found by its probe: `CAD_CCX` names it, else `ccx` on PATH, else FreeCAD's.
-A missing or older one is an error saying how to install it; cad downloads no solver and has no other.
-It runs headless, on one thread, in a private folder with homes of its own, so it reads and writes
-nothing of the person's, and the result names the CalculiX version that ran. A study reads the B-rep
-with the kernel, so the `cad` command runs it where both the kernel and netgen are: its own process
-when its environment holds them, else the environment of `cad[build123d,netgen]` (law 29); a script run
-with `cad run` that calls `cad.<type>.fea` names `cad[netgen]` in its header, and a solve without it
-says so in one line.
+Three integrations run it. The kernel reads the B-rep. The mesher is `netgen` (`cad[netgen]`), installed
+only where netgen publishes wheels (macOS, Linux x86_64 and Windows x86_64; elsewhere a solve refuses,
+naming the platform) and always run in a process of its own, since its OpenCascade and OCP's cannot
+share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `ccx` package
+carries for each platform (conda-forge's build, unmodified, pinned exactly), found by the integration's
+probe: `CAD_CCX` names another (2.20 or newer), and a `ccx` on PATH is never run. It runs headless, on
+one thread, in a private folder with homes of its own, so it reads and writes nothing of the person's,
+and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
+a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the
+kernel and netgen `alongside`, so the `cad` command runs a study where all three are: its own process
+when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
+script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
+without one says so in one line.

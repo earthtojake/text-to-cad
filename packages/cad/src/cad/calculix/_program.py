@@ -3,36 +3,46 @@
 
 The ``calculix`` integration's probe (``cad.registry.INTEGRATIONS["calculix"]``: the program, its minimum, its install
 hint and ``CAD_CCX``), run by the library's one helper for the external programs our code runs
-(``cad._internal.programs``). ``ccx`` is installed by the person: ``CAD_CCX`` names the program, else the first of :data:`NAMES` on PATH, else the
-``ccx`` a FreeCAD install carries (FreeCAD's own FEM solves with it). One that is missing, or older than
-:data:`CCX`'s minimum, is an error naming how to install it; cad downloads nothing and solves with nothing else.
-Every run is headless, in a private folder with homes of its own (``cad._internal.programs``), and on one thread, so
-the same study prints the same numbers. Stdlib only.
+(``cad._internal.programs``). ``ccx`` is the integration's extra's, ``cad[calculix]``: the ``ccx`` package carries
+CalculiX's own ``ccx``, unmodified, for each platform, and says where it is (``ccx.executable()``). ``CAD_CCX`` names
+another (a build of the person's own); a ``ccx`` on PATH, or a FreeCAD's, is never run, so every study on every device
+solves with the pinned release. One that is missing, or older than :data:`CCX`'s minimum, is an error naming how to
+install it. Every run is headless, in a private folder with homes of its own (``cad._internal.programs``), and on one
+thread, so the same study prints the same numbers; the input of a run may be kept (:func:`keeping_deck`). Stdlib only:
+the ``ccx`` package is read when a study looks for the program, never at import.
 """
 
 from __future__ import annotations
 
-import os
+import contextvars
 import re
+import shutil
 import subprocess
-import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from cad._internal import programs
 from cad.registry import INTEGRATIONS
 
-__all__ = ["CCX", "CCX_ENV", "NAMES", "TIMEOUT_S", "CalculixMissingError", "Ccx", "find_ccx", "install_hint", "run"]
+__all__ = ["CCX", "CCX_ENV", "NAMES", "THREAD_VARIABLES", "TIMEOUT_S", "CalculixMissingError", "Ccx", "carried",
+           "find_ccx", "install_hint", "keeping_deck", "run"]
 
 _PROBE = INTEGRATIONS["calculix"].probe
 assert _PROBE is not None
 #: The environment variable naming the ``ccx`` program.
 CCX_ENV = _PROBE.override
-#: What ``ccx`` is called on PATH: the plain name, then the versioned names some packages install.
-NAMES = ("ccx", "ccx_2.23", "ccx_2.22", "ccx_2.21", "ccx_2.20")
+#: What ``ccx`` is called: the plain name, the Windows one, and the versioned names some builds have, so one can be
+#: named outright with ``CAD_CCX``.
+NAMES = ("ccx", "ccx.exe")
 #: The longest one solve may take (s): past it CalculiX is stopped and the study says so.
 TIMEOUT_S = 3600.0
+#: Every variable CalculiX reads a thread count from; a run sets each to one.
+THREAD_VARIABLES = ("OMP_NUM_THREADS", "CCX_NPROC_EQUATION_SOLVER", "CCX_NPROC_STIFFNESS", "CCX_NPROC_RESULTS")
 _JOB = "study"
+# Where the input of each run that succeeds is copied, while a caller keeps it (``keeping_deck``).
+_DECK: contextvars.ContextVar[Path | None] = contextvars.ContextVar("cad_calculix_deck", default=None)
 
 
 class CalculixMissingError(programs.ProgramMissing):
@@ -41,27 +51,6 @@ class CalculixMissingError(programs.ProgramMissing):
 
 def install_hint() -> str:
     return _PROBE.install_hint
-
-
-def _in_freecad() -> list[str]:
-    """Where each platform's FreeCAD installer puts the ``ccx`` it carries, newest first where the folder names a
-    version. A Linux FreeCAD (a distribution's package, the AppImage) carries none cad can find: PATH or
-    ``CAD_CCX`` names it."""
-    if sys.platform == "darwin":
-        apps = [Path("/Applications"), Path.home() / "Applications"]
-        return [str(app / "FreeCAD.app" / "Contents" / "Resources" / "bin" / "ccx") for app in apps]
-    if sys.platform == "win32":
-        # The installer's folder is "FreeCAD 1.1", for every user under Program Files or for one under Programs:
-        # exactly that name, newest version first by number (1.10 after 1.9), never by spelling.
-        roots = [Path(os.environ[name]) / under for name, under in (("ProgramFiles", ""), ("LOCALAPPDATA", "Programs"))
-                 if os.environ.get(name)]
-        found = []
-        for root in roots:
-            for folder in (root.iterdir() if root.is_dir() else ()):
-                if version := re.fullmatch(r"FreeCAD (\d+)\.(\d+)", folder.name):
-                    found.append(((int(version.group(1)), int(version.group(2))), folder))
-        return [str(folder / "bin" / "ccx.exe") for _version, folder in sorted(found, key=lambda each: each[0], reverse=True)]
-    return []
 
 
 @dataclass(frozen=True)
@@ -78,11 +67,24 @@ class Ccx:
 
 
 def _installed() -> list[Path]:
-    """Where ``ccx`` may be, in order: :data:`NAMES` on PATH, as the engine searches it (``executables.find``: its
-    absolute folders alone, never the working folder), then a FreeCAD install's."""
-    from cad.engine.executables import find
+    """The ``ccx`` the integration's extra installed: the ``ccx`` package's, where this environment holds it."""
+    try:
+        import ccx
+    except ModuleNotFoundError:
+        return []
+    try:
+        return [Path(ccx.executable())]
+    except FileNotFoundError:  # a ccx package built with no program for this platform
+        return []
 
-    return [Path(path) for path in (*map(find, NAMES), *_in_freecad()) if path]
+
+def carried() -> bool:
+    """Whether this process can run CalculiX itself: ``CAD_CCX`` names one, or the ``ccx`` package is installed here.
+    Else a study runs in the environment of ``cad[calculix]``."""
+    import importlib.util
+    import os
+
+    return bool(os.environ.get(CCX_ENV, "").strip()) or importlib.util.find_spec("ccx") is not None
 
 
 class _Ccx(programs.Program):
@@ -92,12 +94,12 @@ class _Ccx(programs.Program):
 
 
 #: ``ccx`` as the helper finds it. The oldest CalculiX cad runs is 2.20: C3D10 elements and ``*TRANSFORM`` behave as
-#: written here from it. ``search_path`` is off because :func:`_installed` searches PATH, for the versioned names too.
+#: written here from it. ``search_path`` is off: the program is the extra's, never one on PATH.
 CCX = _Ccx.from_probe(_PROBE, names=NAMES, installed=_installed, title=f"CalculiX {_PROBE.minimum}", search_path=False)
 
 
 def find_ccx() -> Ccx:
-    """The ``ccx`` to run: the file ``CAD_CCX`` names, else :func:`_installed`'s first. Raises
+    """The ``ccx`` to run: the file ``CAD_CCX`` names, else the ``ccx`` package's. Raises
     :class:`CalculixMissingError` naming why and how to install it."""
     try:
         path = programs.find(CCX).absolute()  # relative, it would be read in the folder a solve runs in
@@ -125,8 +127,18 @@ def _on_one_thread(env: dict[str, str]) -> dict[str, str]:
     On several threads CalculiX sums in a different order each run, so the same study printed different numbers; one
     thread was no slower on a 61k-DOF static solve, and studies solving side by side use the other cores.
     """
-    return {**env, **dict.fromkeys(("OMP_NUM_THREADS", "CCX_NPROC_EQUATION_SOLVER", "CCX_NPROC_STIFFNESS",
-                                    "CCX_NPROC_RESULTS"), "1")}
+    return {**env, **dict.fromkeys(THREAD_VARIABLES, "1")}
+
+
+@contextmanager
+def keeping_deck(path: Path | None) -> Iterator[None]:
+    """While it is open, the input of each run that succeeds is copied to ``path`` (each replacing the one before, so
+    the last solve's is kept); None keeps nothing. A study's ``deck``: CalculiX's ``.inp`` of the solve it wrote."""
+    token = _DECK.set(None if path is None else Path(path))
+    try:
+        yield
+    finally:
+        _DECK.reset(token)
 
 
 def run(ccx: Ccx, write) -> str:
@@ -146,4 +158,7 @@ def run(ccx: Ccx, write) -> str:
         if done.returncode != 0 or errors or not dat.is_file():
             detail = "; ".join(errors[:3]) or "\n  ".join(said.strip().splitlines()[-8:])
             raise RuntimeError(f"CalculiX failed (exit {done.returncode}): {detail}")
+        if (deck := _DECK.get()) is not None:
+            deck.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(folder / f"{_JOB}.inp", deck)
         return dat.read_text(errors="replace")

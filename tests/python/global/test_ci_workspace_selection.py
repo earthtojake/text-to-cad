@@ -260,10 +260,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual((route(path)["web_ui"], route(path)["web_viewer"]), ("false", "true"))
 
     def test_the_stress_study_runs_its_own_job_with_its_integrations_installed(self):
-        self.assertIn("calculix-ccx", JOBS["fea"])
+        self.assertIn("ccx @ git+https://github.com/earthtojake/ccx@", JOBS["fea"])
         # The netgen integration's extra, beside the development install's, with the mesher pinned to the version
         # the accuracy tests' margins were measured with; the extra keeps the floor.
-        self.assertIn('"./packages/cad[build123d,trimesh,netgen]"', JOBS["fea"])
+        self.assertIn('"./packages/cad[build123d,trimesh,netgen,calculix]"', JOBS["fea"])
         self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
         self.assertIn("scripts/test/test-fea.sh", JOBS["fea"])
         self.assertIn("timeout-minutes: 15", JOBS["fea"])

@@ -1,5 +1,5 @@
-"""CalculiX, the program a study is solved by: found as the person installed it or refused in a sentence, its input's
-elements in C3D10's order, its printed output read, its errors said. The solve itself is tested end to end by the
+"""CalculiX, the program a study is solved by: the ccx package's, or the one CAD_CCX names, or refused in a sentence; its
+input's elements in C3D10's order, kept where a study asks; its printed output read, its errors said. The solve itself is tested end to end by the
 static tests, on a real ``ccx``; these need none.
 """
 
@@ -36,7 +36,7 @@ class FindCcx(unittest.TestCase):
                 calculix.find_ccx()
         said = str(caught.exception)
         self.assertIn(f"CAD_CCX names {Path('/no/such/ccx')}, which is not a file", said)  # Windows prints its own slashes
-        self.assertIn("conda install", said)
+        self.assertIn("cad[calculix]", said)
 
     def test_a_setting_naming_anything_but_ccx_is_refused_and_never_run(self):
         with tempfile.TemporaryDirectory() as name:
@@ -46,38 +46,27 @@ class FindCcx(unittest.TestCase):
                 with self.assertRaisesRegex(calculix.CalculixMissingError, "which is not ccx"):
                     calculix.find_ccx()
 
-    def test_none_on_path_or_in_freecad_is_refused_with_the_install_hint(self):
-        with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch("cad.engine.executables.find", return_value=None), \
-                mock.patch.object(calculix, "_in_freecad", return_value=["/no/FreeCAD.app/Contents/Resources/bin/ccx"]):
+    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+    def test_the_ccx_package_is_the_one_run_and_never_one_on_path(self):
+        with tempfile.TemporaryDirectory() as name:
+            packaged = _program(Path(name), "This is Version 2.23")
+            on_path = Path(name) / "path"
+            on_path.mkdir()
+            _program(on_path, "This is Version 2.22")
+            ccx = mock.Mock(executable=mock.Mock(return_value=Path(packaged)))
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: "", "PATH": str(on_path)}), \
+                    mock.patch.dict(sys.modules, {"ccx": ccx}):
+                found = calculix.find_ccx()
+        self.assertEqual((found.path, found.version), (packaged, "2.23"))
+
+    def test_without_the_ccx_package_it_is_refused_with_the_extra(self):
+        with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch.dict(sys.modules, {"ccx": None}):
+            self.assertFalse(calculix.carried())
             with self.assertRaises(calculix.CalculixMissingError) as caught:
                 calculix.find_ccx()
         self.assertIn("ccx was not found", str(caught.exception))
-        self.assertIn("conda install -c conda-forge calculix", str(caught.exception))
-        self.assertIn("FreeCAD 1.0 or newer, which carries one", str(caught.exception))
-
-    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
-    def test_with_none_on_path_the_ccx_a_freecad_install_carries_is_found(self):
-        with tempfile.TemporaryDirectory() as name:
-            program = _program(Path(name), "This is Version 2.23")
-            with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch("cad.engine.executables.find", return_value=None), \
-                    mock.patch.object(calculix, "_in_freecad", return_value=["/no/such/ccx", program]):
-                found = calculix.find_ccx()
-        self.assertEqual((found.path, found.version), (program, "2.23"))
-
-    def test_freecad_installs_are_looked_for_where_each_installer_puts_them(self):
-        with mock.patch.object(calculix.sys, "platform", "darwin"):
-            self.assertIn(str(Path("/Applications/FreeCAD.app/Contents/Resources/bin/ccx")), calculix._in_freecad())
-        with mock.patch.object(calculix.sys, "platform", "linux"):
-            self.assertEqual(calculix._in_freecad(), [])
-        # Windows: the installer's "FreeCAD 1.1" folders, newest by number (1.10 after 1.9, which spelling sorts
-        # the other way round), and nothing else that starts with the name.
-        with tempfile.TemporaryDirectory() as name:
-            for folder in ("FreeCAD 1.9", "FreeCAD 1.10", "FreeCAD 1.1 dev", "FreeCAD-backup"):
-                (Path(name) / folder).mkdir()
-            with mock.patch.object(calculix.sys, "platform", "win32"), \
-                    mock.patch.dict(os.environ, {"ProgramFiles": name, "LOCALAPPDATA": ""}):
-                self.assertEqual(calculix._in_freecad(), [str(Path(name) / "FreeCAD 1.10" / "bin" / "ccx.exe"),
-                                                          str(Path(name) / "FreeCAD 1.9" / "bin" / "ccx.exe")])
+        self.assertIn("cad[calculix]", str(caught.exception))
+        self.assertIn("CAD_CCX", str(caught.exception))
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
     def test_a_newer_build_can_be_named_and_a_relative_path_is_kept_absolute(self):
@@ -87,6 +76,7 @@ class FindCcx(unittest.TestCase):
             program = program.rename(program.with_name("ccx_2.24_MT"))
             relative = os.path.relpath(program)
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: relative}):
+                self.assertTrue(calculix.carried())
                 found = calculix.find_ccx()
         self.assertTrue(os.path.isabs(found.path))
         self.assertEqual(found.version, "2.24")
@@ -114,6 +104,35 @@ class FindCcx(unittest.TestCase):
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: program}):
                 found = calculix.find_ccx()
         self.assertEqual((found.path, found.version, found.label), (program, "2.23", "calculix 2.23 (C3D10)"))
+
+
+@unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+class Deck(unittest.TestCase):
+    """``keeping_deck``: the input of each run that succeeds is kept where a study's ``deck`` names it."""
+
+    def _solver(self, folder: Path, fails: bool = False) -> calculix.Ccx:
+        path = folder / "ccx"
+        body = "echo ' *ERROR in a card'\n" if fails else "echo out > \"$2.dat\"\n"
+        path.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IEXEC)
+        return calculix.Ccx(path=str(path), version="2.23")
+
+    def test_the_last_run_that_succeeds_is_kept_and_nothing_without_it(self):
+        with tempfile.TemporaryDirectory() as name:
+            folder = Path(name)
+            solver = self._solver(folder)
+            deck = folder / "kept" / "study.inp"
+            calculix.run(solver, lambda path: path.write_text("*HEADING\nfirst\n", encoding="utf-8"))
+            self.assertFalse(deck.exists())
+            with calculix.keeping_deck(deck):
+                calculix.run(solver, lambda path: path.write_text("*HEADING\nfirst\n", encoding="utf-8"))
+                calculix.run(solver, lambda path: path.write_text("*HEADING\nsecond\n", encoding="utf-8"))
+                with self.assertRaises(RuntimeError):
+                    calculix.run(self._solver(folder / "kept", fails=True), lambda path: path.write_text("*HEADING\nthird\n", encoding="utf-8"))
+            self.assertEqual(deck.read_text(encoding="utf-8"), "*HEADING\nsecond\n")
+            deck.unlink()
+            calculix.run(solver, lambda path: path.write_text("*HEADING\nafter\n", encoding="utf-8"))
+            self.assertFalse(deck.exists())
 
 
 class Elements(unittest.TestCase):

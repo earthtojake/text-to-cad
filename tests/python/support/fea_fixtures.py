@@ -7,6 +7,7 @@ stay inside the helpers, so a suite's parse tests run without them.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import struct
@@ -31,6 +32,14 @@ except RuntimeError:
 
 needs_fea = unittest.skipUnless(HAVE_FEA, "netgen or CalculiX (ccx) is not installed")
 
+# Every solve the suite runs draws no pictures, as if they had been drawn: the stills cost seconds a solve, and the
+# pictures' own tests (test_fea.py's Pictures) draw them, through ``solve(..., pictures=True)``.
+from cad._internal.fea import outputs as _outputs  # noqa: E402
+from unittest import mock as _mock  # noqa: E402
+
+_DRAW = _outputs.draw_pictures
+_mock.patch.object(_outputs, "draw_pictures", return_value=None).start()
+
 
 #: The studies' own materials, as numbers (a study names no table material): the values a datasheet gives.
 STEEL_NUMBERS = {"name": "Steel (structural, generic)", "E_MPa": 200_000.0, "nu": 0.30, "yield_MPa": 250.0,
@@ -50,28 +59,33 @@ def quiet():
 
 
 def study_of(document: Path):
-    """``cad.<type>.fea`` for the document's type: ``cad.step.fea`` for a STEP, ``cad.xbf.fea`` for an .xbf."""
+    """``cad.<type>.solve`` for the document's type: ``cad.step.solve`` for a STEP, ``cad.xbf.solve`` for an .xbf."""
     import importlib
 
     from cad.registry import type_of
 
-    return importlib.import_module(f"cad.{type_of(document).id}").fea
+    return importlib.import_module(f"cad.{type_of(document).id}").solve
 
 
-def solve(step: Path, out: Path, study: dict, **options):
-    """A solve (``cad.<type>.fea`` with a study) with its progress lines silenced."""
-    with quiet():
+def solve(step: Path, out: Path, study: dict, *, pictures: bool = False, **options):
+    """A solve (``cad.<type>.solve`` with a study) with its progress lines silenced, and its pictures drawn only when
+    ``pictures`` (``PICTURES``)."""
+    from unittest import mock
+
+    from cad._internal.fea import outputs
+
+    with quiet(), (mock.patch.object(outputs, "draw_pictures", _DRAW) if pictures else contextlib.nullcontext()):
         return study_of(step)(step, study=study, out=out, **options)
 
 
 def setup(document: Path, **options):
-    """A study's setup (``cad.<type>.fea`` with no study): the parts, the pairs and one part's faces, quietly."""
+    """A study's setup (``cad.<type>.solve`` with no study): the parts, the pairs and one part's faces, quietly."""
     with quiet():
         return study_of(document)(document, **options)
 
 
 def reported(result) -> dict:
-    """The result as ``--json`` prints it: everything a solve says, the GLB aside."""
+    """The result as ``--json`` prints it: everything a solve says, the file aside."""
     from cad_server._internal.cli_from_function import result_payload
 
     return result_payload(result)
@@ -142,10 +156,10 @@ def side_faces(step: Path) -> list[str]:
     return [face.ref for face in _listing(step).faces if face.normal and abs(face.normal[0]) < 1e-6]
 
 
-# --- Result GLBs ----------------------------------------------------------------------------------------
+# --- Result files (.fea: a binary glTF) ------------------------------------------------------------------
 
 def read_glb(path: Path) -> tuple[dict, bytes]:
-    """A GLB's JSON chunk and its binary chunk's payload."""
+    """A binary glTF's (an .fea's) JSON chunk and its binary chunk's payload."""
     raw = Path(path).read_bytes()
     length, _ = struct.unpack_from("<II", raw, 12)
     return json.loads(raw[20:20 + length]), raw[20 + length + 8:]

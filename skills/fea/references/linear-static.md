@@ -43,7 +43,7 @@ good answer from a bad one. The keys are in [study-file.md](study-file.md).
 
 1. Prefer references the user selected in the Viewer: they arrive as `/work/bracket.step#bracket/face 17` and are
    exact.
-2. Otherwise run `cad step fea part.step` (the setup) and match by the hint (`plane, normal -Z, largest`),
+2. Otherwise run `cad step solve part.step` (the setup) and match by the hint (`plane, normal -Z, largest`),
    the centre, and the area. "The base", "the mounting face" and "the bottom" usually mean the
    largest planar face with a downward normal; "the top of the upright" is a small planar face at
    the highest Z. A hole is a `cylinder`.
@@ -106,7 +106,7 @@ in g (1 g = 9.81 m/s²).
   one inside out at either is made straight (the surface there is a little less curved). Many
   straightened elements mean the elements are larger than the wall is thick: a smaller
   `mesh.size_mm` keeps them curved. The result's
-  `mesh.straightened` counts them, also in the GLB's study. An element whose corners enclose no
+  `mesh.straightened` counts them, also in the result file's study. An element whose corners enclose no
   volume cannot be straightened, and the run refuses the mesh.
 - The run reports two von Mises peaks. The nodal one (the reported peak, which the safety factor
   uses) is each element's stress at its four integration points, extrapolated to its nodes and
@@ -138,14 +138,16 @@ in g (1 g = 9.81 m/s²).
 
 ## The solver
 
-- Every study is solved by CalculiX (`ccx`), 2.20 or newer, which the person installs: `conda
-  install -c conda-forge calculix`, or the `calculix-ccx` package on Debian and Ubuntu. text-to-cad runs
-  `CAD_CCX` when it is set, else `ccx` on PATH. It meshes with netgen, writes CalculiX's
+- Every study is solved by CalculiX (`ccx`), the one the `calculix` integration carries
+  (`cad[calculix]`, the ccx package: CalculiX 2.23), which the `cad` command installs on first need.
+  text-to-cad runs `CAD_CCX` instead when it is set (2.20 or newer), never a `ccx` on PATH. It meshes
+  with netgen, writes CalculiX's
   input (each part its own element set and material, a roller on a sloped or curved face in its own
   frame), runs it, and reads the displacements, the reactions and the stress at each element's
   integration points back.
 - A missing `ccx`, or one older than 2.20, stops the solve before meshing with an error naming how
-  to install it. text-to-cad downloads nothing and has no fallback solver.
+  to install it. text-to-cad has no fallback solver. `--deck PATH` keeps the input of the solve written,
+  the `.inp` CalculiX read, which `cad run ccx` runs again.
 - The result names the version that ran: `mesh.solver` in the result (`calculix 2.23 (C3D10)`),
   also at the end of the first line the command prints. A solve that runs past an hour is stopped
   and says so.

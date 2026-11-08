@@ -1,4 +1,4 @@
-"""The study file: what a stress study (``cad <type> fea --study``) is asked to compute.
+"""The study file: what a stress study (``cad <type> solve --study``) is asked to compute.
 
 A study is JSON (a path, an inline JSON string, or a dict from a library
 caller) of this shape::
@@ -106,7 +106,7 @@ class Study:
     loads: tuple[Load, ...]
     #: Target element size in mm; ``None`` derives one from the bounding box.
     mesh_size: float | None = None
-    #: A multiplier on the displacement baked into the GLB, or ``None`` for auto.
+    #: A multiplier on the displacement baked into the result's positions, or ``None`` for auto.
     deformation_scale: float | None = None
     #: The safety factor the part should keep above yield; below it is a warning.
     margin: float = 2.0
@@ -381,7 +381,7 @@ def parse_study(study: str | dict | Path | None) -> Study:
     if study is None:
         raise ValueError(
             "a study is required: --study study.json (or inline JSON) naming the fixed faces and the "
-            "loads; run `cad step fea IN.step` (no study) to list face refs"
+            "loads; run `cad step solve IN.step` (no study) to list face refs"
         )
     document = _load_document(study)
     unknown = set(document) - set(STUDY_KEYS)

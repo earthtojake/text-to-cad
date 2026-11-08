@@ -8,8 +8,8 @@
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
 # its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
 # environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py). The
-# netgen extra is not here: a stress study (`cad <type> fea`) is the fea job's, which installs it with
-# CalculiX (scripts/test/test-fea.sh); without it, here, the command makes cad[build123d,netgen].
+# netgen and calculix extras are not here: a stress study (`cad <type> solve`) is the fea job's, which installs
+# them (scripts/test/test-fea.sh); without them, here, the command makes cad[build123d,calculix,netgen].
 --editable ./packages/cad[build123d,trimesh]
 --editable ./packages/cad-server
 --editable ./packages/cad-mcp

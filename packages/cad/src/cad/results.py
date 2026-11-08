@@ -1,6 +1,6 @@
 """The operations' shared result types: what every check returns, typed.
 
-Every check -- ``dfm``, ``fea``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``,
+Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``,
 ``cad.kicad_pcb.drc``, ...) -- answers with a ``CheckResult`` (a stress study's, ``FeaResult``, one with its setup and
 the files its solve wrote) -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
@@ -107,7 +107,7 @@ class ExportResult:
 
 @dataclass(frozen=True)
 class FeaFace:
-    """One B-rep face of a part, as a stress study's setup lists it (``cad <type> fea`` with no study): the ref a
+    """One B-rep face of a part, as a stress study's setup lists it (``cad <type> solve`` with no study): the ref a
     study names it by, and enough geometry to pick it from a description."""
 
     #: The face's ref (``bracket/face 17``), as the viewer copies it.
@@ -192,47 +192,83 @@ def _check_lines(s: dict) -> list[str]:
 
 @dataclass(frozen=True)
 class FeaResult(CheckResult):
-    """The outcome of a stress study (``cad.<type>.fea``, ``cad <type> fea``): a check, so ``ok``, the document
+    """The outcome of a stress study (``cad.<type>.solve``, ``cad <type> solve``; ``result.json`` in the folder a solve
+    writes holds it): a check, so ``ok``, the document
     (``path``), its findings and ``measurements`` are every check's, and ``--json`` is this whole result.
 
     With no study it is the study's setup, which writes nothing: the document's parts (``parts``), the pairs that
     touch within the contact tolerance a study bonds by (``pairs``, ``contact_tolerance_mm``) and the faces of one
     part (``faces``, of ``occurrence``), each with the ref a study names it by. Overlapping parts are a warning.
 
-    With a study it is the solve: ``written`` the result GLB (and a ``.vtu`` beside it when asked), the one file it
-    writes, and ``measurements`` the numbers -- an engineer's first answer (the peak von Mises stress, nodal and at
+    With a study it is the solve: ``written`` the files it wrote into its folder (``result.json``, ``result.glb``,
+    ``result.vtu``, the pictures where they could be drawn, ``ccx.inp`` where asked), and ``measurements`` the numbers -- an engineer's first answer (the peak von Mises stress, nodal and at
     the integration points, the safety factor, the largest displacement, the applied force against the reactions,
     an assembly's weakest part and each part's own), each check the study asked for judged (``checks``), and what
-    the GLB does not carry under its own key (``mesh``, ``timings``, the ``study`` as given, its ``material``, each
+    the file's fields do not carry under its own key (``mesh``, ``timings``, the ``study`` as given, its ``material``, each
     named face in ``named_faces``, each fixture's reaction, an assembly's ``connections`` and ``overlaps``, the
     first solve when a finer one was written in ``refined``). ``ok`` is the validators' rule: false when any
-    finding is an error -- the part yields or misses a check, whose GLB is written all the same since it shows
-    where the part fails, or the study stopped before the solve (a part nothing holds), with no GLB.
+    finding is an error -- the part yields or misses a check, whose result is written all the same since it shows
+    where the part fails, or the study stopped before the solve (a part nothing holds), with nothing written.
     """
 
     #: The part the faces are of (setup), or the occurrence or assembly solved.
     occurrence: str = ""
-    #: The files the solve wrote: the result GLB first, then its VTU; none for a setup or a study stopped early.
+    #: The files the solve wrote into its folder; none for a setup or a study stopped early.
     written: tuple[Path, ...] = field(default_factory=tuple)
     contact_tolerance_mm: float | None = None
     parts: tuple[FeaPart, ...] = field(default_factory=tuple)
     pairs: tuple[FeaPair, ...] = field(default_factory=tuple)
     faces: tuple[FeaFace, ...] = field(default_factory=tuple)
 
+    def _written(self, name: str) -> Path | None:
+        return next((Path(path) for path in self.written if Path(path).name == name), None)
+
+    @property
+    def folder(self) -> Path | None:
+        """The folder the solve wrote its results into, or None (a setup, or a study stopped before the solve)."""
+        found = self._written("result.json")
+        return None if found is None else found.parent
+
     @property
     def glb(self) -> Path | None:
-        """The result GLB the solve wrote, or None (a setup, or a study stopped before the solve)."""
-        return next((path for path in self.written if Path(path).suffix.lower() == ".glb"), None)
+        """``result.glb``: the deformed surface coloured by its stress, which any viewer opens."""
+        return self._written("result.glb")
 
     @property
     def vtu(self) -> Path | None:
-        """The VTU the solve wrote beside its GLB when asked, or None."""
-        return next((path for path in self.written if Path(path).suffix.lower() == ".vtu"), None)
+        """``result.vtu``: the volume mesh and its fields, for meshio, PyVista or ParaView."""
+        return self._written("result.vtu")
+
+    @property
+    def pictures(self) -> tuple[Path, ...]:
+        """``stress.png`` and ``displacement.png``, where the engine's stills could draw them; else none."""
+        return tuple(found for name in ("stress.png", "displacement.png") if (found := self._written(name)))
+
+    @property
+    def deck(self) -> Path | None:
+        """``ccx.inp``, the input CalculiX solved, where the solve was asked to keep it; or None."""
+        return self._written("ccx.inp")
 
     @property
     def solved(self) -> bool:
-        """Whether this is a solve's result: a study ran and its GLB was written."""
-        return self.glb is not None
+        """Whether this is a solve's result: a study ran and its results were written."""
+        return self.folder is not None
+
+    def as_data(self) -> dict[str, Any]:
+        """The result as plain data, as ``--json`` prints it and ``result.json`` holds it: paths as text, tuples as
+        lists. :meth:`from_data` reads it back."""
+        import dataclasses
+
+        def plain(value: Any) -> Any:
+            if isinstance(value, Path):
+                return str(value)
+            if isinstance(value, dict):
+                return {str(key): plain(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [plain(item) for item in value]
+            return value
+
+        return plain(dataclasses.asdict(self))
 
     @classmethod
     def from_data(cls, data: dict[str, Any]) -> "FeaResult":
@@ -296,7 +332,7 @@ class FeaResult(CheckResult):
         s = self.measurements
         mesh = s.get("mesh") or {}
         size = f"{mesh.get('elements')} tets, {mesh.get('dofs')} DOF, {mesh.get('size_mm')} mm elements"
-        vtu = f", VTU: {_display(self.vtu)}" if self.vtu else ""
+
         solver = f"; solver {mesh['solver']}" if mesh.get("solver") else ""
         return [
             f"solved {self.occurrence} of {_display(self.path)}: {size}{solver}",
@@ -304,7 +340,8 @@ class FeaResult(CheckResult):
             *_check_lines(s),
             f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
             f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
-            f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}){vtu}",
+            f"wrote {', '.join(Path(path).name for path in self.written)} into {_display(self.folder)} "
+            f"(deformation x{s.get('deformation_scale')} in result.glb and the pictures)",
         ]
 
 

@@ -1,17 +1,19 @@
-"""What a stress study does, end to end: ``cad.<type>.fea`` (``cad._internal.fea.operation``) calls :func:`setup`
+"""What a stress study does, end to end: ``cad.<type>.solve`` (``cad._internal.fea.operation``) calls :func:`setup`
 with no study and :func:`solve_study` with one."""
 
 from __future__ import annotations
 
 import dataclasses
+import json
 import math
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cad._internal.atomic_replace import replace_atomic, temp_suffix
+from cad._internal.atomic_replace import replace_atomic
 from cad._internal.fea.checks import as_check_finding, finding, quoted
 from cad.results import CheckFinding, FeaFace, FeaPair, FeaPart, FeaResult
 
@@ -207,11 +209,12 @@ def list_assembly_parts(target: Path, *, verbose: bool = False, document: "Docum
             tuple(pairs))
 
 
-def setup(target: Path, *, occurrence: str | None = None, verbose: bool = False) -> FeaResult:
+def setup(target: Path, *, occurrence: str | None = None, verbose: bool = False, label: Path | None = None) -> FeaResult:
     """A study's setup, before one is written, and nothing written: the parts and the pairs that touch (each
     overlapping pair a warning: real parts can't, and a study does not bond them), and the faces of one part -- the
     one part of a document of one, or ``occurrence`` -- with the refs a study names them by. A document of several
-    parts with no ``occurrence`` lists no faces, and says how to list them."""
+    parts with no ``occurrence`` lists no faces, and says how to list them. ``label`` is what the result names the
+    source as where ``target`` is not it (a model's id, its ``.xbf`` written for the study)."""
     from cad._internal.fea.checks import overlapping_parts
 
     document = _open(Path(target))
@@ -228,9 +231,9 @@ def setup(target: Path, *, occurrence: str | None = None, verbose: bool = False)
     findings += [as_check_finding(overlapping_parts(*pair.between, pair.overlap_mm3)) for pair in pairs
                  if pair.type == "overlapping"]
     bonded = sum(1 for pair in pairs if pair.type == "bonded")
-    summary = (f"{_display_name(target)}: {len(parts)} part{'' if len(parts) == 1 else 's'}, {bonded} bonded "
+    summary = (f"{_display_name(label or target)}: {len(parts)} part{'' if len(parts) == 1 else 's'}, {bonded} bonded "
                f"pair{'' if bonded == 1 else 's'}" + (f"; {len(faces)} faces of {owner}" if faces else ""))
-    return FeaResult(ok=True, path=Path(target), findings=tuple(findings), summary=summary, occurrence=owner,
+    return FeaResult(ok=True, path=Path(label or target), findings=tuple(findings), summary=summary, occurrence=owner,
                      contact_tolerance_mm=tolerance, parts=parts, pairs=pairs, faces=faces)
 
 
@@ -545,10 +548,10 @@ def _mesh_assembly(mesh_assembly, doc, plan: _Plan, parsed, resolved, ordinal_of
     return volume
 
 
-def _document_ref(document: Path, glb_path: Path) -> str:
-    """The STEP relative to the GLB's folder; absolute when they share no root (another Windows drive)."""
+def _document_ref(document: Path, result: Path) -> str:
+    """The source relative to the result's folder; absolute when they share no root (another Windows drive)."""
     try:
-        return Path(os.path.relpath(document.resolve(), glb_path.resolve().parent)).as_posix()
+        return Path(os.path.relpath(document.resolve(), result.resolve().parent)).as_posix()
     except ValueError:
         return document.resolve().as_posix()
 
@@ -570,7 +573,7 @@ def finer_mesh_size(size_mm: float, dofs: int) -> float | None:
     return None
 
 
-#: The fields a result carries, for the viewer's field switch: its GLB attribute, name, units, the summary's
+#: The fields a result carries, for the viewer's field switch: its glTF attribute, name, units, the summary's
 #: maximum, and the scale that turns the stored value into those units (a vector is stored in glTF metres).
 FIELDS = (
     ("_VON_MISES", "von Mises stress", "MPa", "max_von_mises_MPa", 1.0),
@@ -601,30 +604,57 @@ def progress_log(logger: Narration):
     return log
 
 
-def solve_study(target: Path, out: Path, *, study, vtu: bool = False, verbose: bool = False) -> FeaResult:
-    """Mesh, solve and check one study, then write its GLB at ``out`` (and, with ``vtu``, a VTU beside it); every
-    number the result reports is in the :class:`FeaResult` returned, and no other file is written.
+#: What a solve writes into its folder, by name: the answer, the coloured surface any viewer opens, the fields for a
+#: program's own questions, a picture of each field, and (asked for) the input CalculiX solved.
+RESULT_JSON, RESULT_GLB, RESULT_VTU, STRESS_PNG, DISPLACEMENT_PNG, DECK = (
+    "result.json", "result.glb", "result.vtu", "stress.png", "displacement.png", "ccx.inp")
+
+
+def solve_study(target: Path, out: Path, *, study, deck: bool = False, verbose: bool = False,
+                label: Path | None = None) -> FeaResult:
+    """Mesh, solve and check one study, then write its results into the folder ``out``: ``result.json`` (the
+    :class:`FeaResult` returned, as ``--json`` prints it), ``result.glb`` (the deformed surface coloured by its stress,
+    the raw fields as attributes), ``result.vtu`` (the volume mesh and its fields), ``stress.png`` and
+    ``displacement.png`` (drawn by the engine's stills, where it can draw: a missing display is a ``solver_note``, not a
+    failure) and, with ``deck``, ``ccx.inp``. Nothing else in the folder is touched. ``label`` is what the result names
+    the source as where ``target`` is not it (a model's id, its ``.xbf`` written for the study).
 
     The physics is :mod:`.static`'s: its solve, checks and summary; this is the orchestration.
 
     When the safety factor is close to failing (:func:`checks.needs_finer`)
     the part is meshed again at half the element size (:func:`finer_mesh_size` keeps that under the DOF budget),
     finer by the same ratio at curved features, and solved again. When that succeeds its numbers are the ones
-    written, reported and checked (the first solve's peak is kept for convergence only); when it fails the GLB
-    stays the first solve's and the result carries one warning saying why.
+    written, reported and checked (the first solve's peak is kept for convergence only); when it fails the result
+    stays the first solve's and carries one warning saying why.
     """
-    return _solve_study(Path(target), Path(out), study, vtu, verbose)
+    return _solve_study(Path(target), Path(out), study, deck, verbose, None if label is None else Path(label))
 
 
-def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool) -> FeaResult:
+def _solve_study(document: Path, folder: Path, study, deck: bool, verbose: bool, label: Path | None) -> FeaResult:
     from cad._internal.fea.study import parse_study
 
     parsed = parse_study(study)  # stdlib, before any heavy import
     logger = Narration(verbose=verbose)
     progress = progress_log(logger)
-    if glb_path.suffix.lower() != ".glb":
-        raise ValueError(f"OUT names the result GLB and must end in .glb: {glb_path}")
-    vtu_path = glb_path.with_suffix(".vtu") if vtu else None
+    if folder.exists() and not folder.is_dir():
+        raise ValueError(f"OUT is the folder a solve writes its results into, and {folder} is a file")
+    # Every file is written into a staging folder inside ``folder`` under its own name, then each is replaced into
+    # place once all are written; CalculiX's input is kept there as each solve runs, so the one kept is the solve
+    # written. The staging folder is removed whatever happens.
+    made = not folder.exists()
+    folder.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".solve-", dir=folder))
+    try:
+        return _solved(document, folder, staging, parsed, deck, logger, progress, label)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+        if made and not any(folder.iterdir()):  # a study refused or stopped writes nothing, not even its folder
+            folder.rmdir()
+
+
+def _solved(document: Path, folder: Path, staging: Path, parsed, deck: bool, logger: Narration, progress,
+            label: Path | None) -> FeaResult:
+    named = label or document
 
     from cad._internal.fea import checks
     from cad._internal.fea.mesh import mesh_assembly, mesh_occurrence, require_fea_stack, small_feature_mm
@@ -650,12 +680,13 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
         part_index = {part.ref: i for i, part in enumerate(plan.parts)}
         held = {part_index[resolved[ref].occurrence_ref] for ref in parsed.fixed_refs}
         if unheld := _unheld_groups(plan, held):
-            return _unsolved(document, occurrence_ref, _not_connected(plan, unheld, logger))
+            return _unsolved(named, occurrence_ref, _not_connected(plan, unheld, logger))
 
     import numpy as np
 
     from cad._internal.fea import solve, static
-    from cad._internal.fea.outputs import RAMP, auto_deformation_scale, write_glb, write_vtu
+    from cad._internal.fea.outputs import RAMP, auto_deformation_scale, draw_pictures, write_glb, write_vtu
+    from cad.calculix._program import keeping_deck
     from cad._internal.fea.study import refine_points
 
     requested = parsed.mesh_size
@@ -672,7 +703,8 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
         return volume
 
     def solve_on(volume, automatic: bool = False):
-        return static.solve(volume, parsed, plan, ordinal_of, part_name=document.stem, log=progress, automatic=automatic)
+        with keeping_deck(staging / DECK if deck else None):
+            return static.solve(volume, parsed, plan, ordinal_of, part_name=named.stem, log=progress, automatic=automatic)
 
     # The study's own finer balls (mesh.refine), kept through every pass.
     study_points = refine_points(parsed.mesh_refine)
@@ -681,7 +713,7 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
         volume = mesh(requested, size_field=study_field)
         result = solve_on(volume)
     except _NotConnected as exc:
-        return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups, logger))
+        return _unsolved(named, occurrence_ref, _not_connected(plan, exc.groups, logger))
     finer_failure = None
     finer_size = None
     finer_written = False
@@ -709,7 +741,7 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
             )
         else:
             # The checks describe the solve that is written, so every number a
-            # finding quotes and every point it names is on the GLB shown.
+            # finding quotes and every point it names is on the result shown.
             volume = finer_volume
             result = static.merge_finer(first, finer_result, refined)
             finer_written = True
@@ -741,7 +773,7 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
     scale = parsed.deformation_scale if parsed.deformation_scale is not None else auto_deformation_scale(
         float(magnitude.max()), volume.bbox_diagonal)
     # The summary is the one place the numbers are rounded; everything else
-    # (the GLB's extras, the result) is derived from it.
+    # (the file's extras, the result) is derived from it.
     summary = static.summary(result, check_results, scale=scale,
                              part_refs=None if plan is None else [part.ref for part in plan.parts])
 
@@ -752,15 +784,15 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
     fields = [{"attribute": attribute, "name": name, "units": units, "min": 0.0, "max": summary[peak], "attribute_scale": factor}
               for attribute, name, units, peak, factor in FIELDS]
     extras = {
-        "name": f"{document.stem} von Mises",
-        "generator": "cadgen fea",
-        # Where the STEP is from the GLB's own folder, so a viewer can find it.
-        "document": _document_ref(document, glb_path),
+        "name": f"{named.stem} von Mises",
+        "generator": "cad solve",
+        # Where the source is from the result's own folder, so a viewer can find it; a model's id.
+        "document": str(label) if label is not None else _document_ref(document, folder / RESULT_GLB),
         "occurrence": occurrence_ref,
         "deformation_scale": scale,
         # The summary's safety factor, for the viewer's plain line.
         "safety_factor": summary["safety_factor"],
-        # One entry per raw attribute the GLB carries, for a viewer's field switch.
+        # One entry per raw attribute the file carries, for a viewer's field switch.
         "fields": fields,
         "ramp": [[stop, list(colour)] for stop, colour in RAMP],
         # What an engineer would say about the result (checks.py), errors first.
@@ -813,7 +845,7 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
                  "dofs": outcome.dofs, "size_mm": round(volume.max_h, 4), "order": 2, "mesher": "netgen",
                  "solver": outcome.solver}
     timings = {"mesh_s": round(volume.seconds, 3), **{k: round(v, 3) for k, v in outcome.timings.items()}}
-    # What the GLB's extras do not carry, for the result: the study as given, its material, each face it named,
+    # What the file's extras do not carry beside the result: the study as given, its material, each face it named,
     # each fixture's reaction, an assembly's joints and overlaps, and the first solve when there was a finer one.
     reported = {
         "study": parsed.source,
@@ -834,33 +866,57 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
     }
     # Von Mises colours the surface (each part's own stress in an assembly), deformed by the displacement.
     by_part = outcome.von_mises_parts
-    # Each file is written beside its target under a temporary name and replaced into place once every one is written.
-    # Each earlier file is kept under another name (a hard link, else a copy) until every rename is done, so a failure
-    # anywhere puts every earlier file back byte for byte and leaves none this run wrote.
-    suffix = temp_suffix()
-    temporary = {path: path.with_name(f".{path.name}{suffix}") for path in (glb_path, vtu_path) if path is not None}
-    kept = {path: path.with_name(f".{path.name}{suffix}.old") for path in temporary if path.exists()}
+    surface = dict(positions=outcome.dof_locations, displacement=outcome.displacement, triangles6=outcome.boundary_quadratic,
+                   face_of_triangle=face_of_triangle, scale=scale if scale is not None else 1.0)
+    parts_of = {} if plan is None or by_part is None else {"values_by_part": by_part, "part_of_triangle": part_of_triangle}
+    write_glb(staging / RESULT_GLB, values=outcome.von_mises, value_range=(0.0, summary["max_von_mises_MPa"]),
+              extras=extras, **surface, **parts_of)
+    vertex_count = outcome.vertices
+    write_vtu(staging / RESULT_VTU, positions=outcome.dof_locations[:vertex_count], tets=outcome.tets,
+              displacement=outcome.displacement[:vertex_count], values=outcome.von_mises[:vertex_count],
+              part_of_tet=None if plan is None else volume.domain)
+    if deck and not (staging / DECK).is_file():
+        raise RuntimeError("CalculiX's input was not kept")
+    # A picture of each field, as the engine's stills draw a GLB. A computer the stills cannot draw on (no display)
+    # writes none and says so: the numbers stand without them.
+    progress("drawing the pictures")
+    drawn = draw_pictures(staging, glb=staging / RESULT_GLB, stress_png=STRESS_PNG, displacement_png=DISPLACEMENT_PNG,
+                          surface=surface, max_von_mises_mpa=summary["max_von_mises_MPa"],
+                          max_displacement_mm=summary["max_displacement_mm"])
+    if drawn is not None:
+        warnings.append(f"no pictures were drawn ({drawn}); result.glb and the numbers are written")
+    # Every finding as a check says it; a warning the solve gave beside them (a finer solve that failed, pictures not
+    # drawn) is one too.
+    said = (*(as_check_finding(found) for found in findings),
+            *(CheckFinding("warning", "solver_note", str(warning)) for warning in warnings))
+    reported["named_faces"] = reported.pop("faces")
+    # ok is the validators' one rule: an error blocks. A part that yields, or misses a check, is a correct result of a
+    # part unfit to use: its results are written, and the command exits 1 (README, "Stress studies").
+    ok = not any(finding["severity"] == "error" for finding in findings)
+    weakest = f"weakest part '{summary['weakest_part']}', " if summary.get("weakest_part") else ""
+    line = (f"solved {occurrence_ref} of {_display_name(named)}: {weakest}peak {summary.get('max_von_mises_MPa')} MPa, "
+            f"safety factor {summary.get('safety_factor')}")
+    names = (RESULT_JSON, RESULT_GLB, RESULT_VTU, STRESS_PNG, DISPLACEMENT_PNG, DECK)
+    staged = [name for name in names if name == RESULT_JSON or (staging / name).is_file()]
+    answer = FeaResult(ok=ok, path=named, findings=said, summary=line,
+                       measurements={**summary, "mesh": mesh_info, "timings": timings, **reported},
+                       occurrence=occurrence_ref, written=tuple(folder / name for name in staged))
+    (staging / RESULT_JSON).write_text(json.dumps(answer.as_data(), indent=1, allow_nan=False) + "\n", encoding="utf-8")
+    # Each earlier file of a packet is kept under another name (a hard link, else a copy) until every rename is done,
+    # so a failure anywhere puts every earlier file back byte for byte and leaves none this run wrote. Files of an
+    # earlier packet this one does not write (its pictures, its deck) are removed once all of this one's are placed,
+    # so the folder never mixes two solves.
+    kept = {folder / name: staging / f"{name}.old" for name in names if (folder / name).exists()}
     placed: list[Path] = []
     try:
-        write_glb(
-            temporary[glb_path], positions=outcome.dof_locations, displacement=outcome.displacement, values=outcome.von_mises,
-            triangles6=outcome.boundary_quadratic,
-            face_of_triangle=face_of_triangle, scale=scale if scale is not None else 1.0,
-            value_range=(0.0, summary["max_von_mises_MPa"]), extras=extras,
-            **({} if plan is None or by_part is None else {"values_by_part": by_part, "part_of_triangle": part_of_triangle}),
-        )
-        if vtu_path is not None:
-            vertex_count = outcome.vertices
-            write_vtu(temporary[vtu_path], positions=outcome.dof_locations[:vertex_count], tets=outcome.tets,
-                      displacement=outcome.displacement[:vertex_count], values=outcome.von_mises[:vertex_count])
-        for path, old in kept.items():
+        for final, old in kept.items():
             try:
-                os.link(path, old)
+                os.link(final, old)
             except OSError:
-                shutil.copy2(path, old)
-        for final, held in temporary.items():
-            replace_atomic(held, final)
-            placed.append(final)
+                shutil.copy2(final, old)
+        for name in staged:
+            replace_atomic(staging / name, folder / name)
+            placed.append(folder / name)
     except BaseException:
         for final in placed:
             if final in kept:
@@ -868,20 +924,8 @@ def _solve_study(document: Path, glb_path: Path, study, vtu: bool, verbose: bool
             else:
                 final.unlink(missing_ok=True)
         raise
-    finally:
-        for held in (*temporary.values(), *kept.values()):
-            held.unlink(missing_ok=True)
-    logger.debug(f"wrote {glb_path.name}" + (f", {vtu_path.name}" if vtu_path else ""))
-    # ok is the validators' one rule: an error blocks. A part that yields, or misses a check, is a correct result of a
-    # part unfit to use: its GLB is written, and the command exits 1 (README, "Finite element analysis").
-    ok = not any(finding["severity"] == "error" for finding in findings)
-    # Every finding as a check says it; a warning the solve gave beside them (a finer solve that failed) is one too.
-    said = (*(as_check_finding(found) for found in findings),
-            *(CheckFinding("warning", "solver_note", str(warning)) for warning in warnings))
-    reported["named_faces"] = reported.pop("faces")
-    weakest = f"weakest part '{summary['weakest_part']}', " if summary.get("weakest_part") else ""
-    line = (f"solved {occurrence_ref} of {_display_name(document)}: {weakest}peak {summary.get('max_von_mises_MPa')} MPa, "
-            f"safety factor {summary.get('safety_factor')}")
-    return FeaResult(ok=ok, path=document, findings=said, summary=line,
-                     measurements={**summary, "mesh": mesh_info, "timings": timings, **reported},
-                     occurrence=occurrence_ref, written=tuple(path for path in (glb_path, vtu_path) if path is not None))
+    for name in names:
+        if name not in staged:
+            (folder / name).unlink(missing_ok=True)
+    logger.debug(f"wrote {', '.join(staged)} into {folder}")
+    return answer

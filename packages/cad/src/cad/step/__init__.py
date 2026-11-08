@@ -5,9 +5,9 @@
 its operations (``step.export(source, *destinations)``, ...) are the ``cad step <operation>`` commands'.
 ``step.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
 the trimesh integration (``cad._internal.manufacturing``).
-``step.fea(source, study=..., out="result.glb")`` runs a stress study on its part or bonded assembly
-(with no study, lists the parts, pairs and faces a study names), with the netgen and calculix integrations
-(``cad._internal.fea.operation``).
+``step.solve(source, study=..., out="results/")`` runs a stress study on its part or bonded assembly, writing
+its results into that folder (with no study, it lists the parts, pairs and faces a study names), with the
+kernel, netgen and calculix integrations (``cad._internal.fea.operation``).
 Everything loads on first use: ``import cad.step`` imports no CAD kernel (``cad._internal.document_type``).
 """
 

@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Run a linear elastic stress study on a STEP part or an assembly of bonded parts with text-to-cad, meshed by netgen and solved by CalculiX, reporting peak stress, safety factor and displacement as a colour map. Use when the user asks whether a part is strong enough, how much it bends, where it is most stressed, or asks for FEA or a stress simulation of a part.
+description: Run a linear elastic stress study on a STEP part, a model or an assembly of bonded parts with text-to-cad, meshed by netgen and solved by CalculiX, reporting peak stress, safety factor and displacement as a colour map. Use when the user asks whether a part is strong enough, how much it bends, where it is most stressed, or asks for FEA or a stress simulation of a part.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -9,8 +9,9 @@ metadata:
 # FEA: simulate a part or an assembly
 
 Use this skill to answer "will it hold, and how far does it move" for one part, or an assembly of
-parts bonded where they touch, by simulation. It meshes the saved STEP with netgen, has CalculiX
-solve it, and writes a colour-mapped result the Viewer renders. [linear-static.md](references/linear-static.md)
+parts bonded where they touch, by simulation. It meshes the part with netgen, has CalculiX
+solve it, and writes its results into a folder you choose: every number as JSON, a picture of the
+stress and of the displacement, a coloured GLB any viewer opens, and the fields as a VTU. [linear-static.md](references/linear-static.md)
 holds the model's assumptions, hand checks and limits; [study-file.md](references/study-file.md)
 holds every key of the study.
 
@@ -55,7 +56,7 @@ Vibration, buckling, heat, flow, fatigue, impact, contact and the rest are not i
 | Task | First action | Reference |
 | --- | --- | --- |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
-| **Check an assembly** | `cad step fea assembly.step` (the setup) first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
+| **Check an assembly** | `cad step solve assembly.step` (the setup) first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Compare variants of a design** | Get the study right on one variant, then map its faces onto each other variant and solve each. | [Compare variants](#compare-variants) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`/work/bracket.step#bracket/face 17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
 | **Write or edit a study** | One JSON object: material, fixtures, loads, mesh; for an assembly also parts and connections. | [Study file](references/study-file.md) |
@@ -63,8 +64,8 @@ Vibration, buckling, heat, flow, fatigue, impact, contact and the rest are not i
 | **Judge the answer** | Compare with a hand estimate, read the peak away from the fixture, refine if it matters. | [Validation](references/linear-static.md#judging-the-answer) |
 
 This skill studies a part, it does not model one: build or fix the model first. It reads a saved
-`.step` or `.xbf` (a model's `@step` or `@xbf` output, or `cad export <id> part.step`). Open the
-result GLB in the CAD Viewer beside the STEP, so the user sees the colour map.
+`.step` or `.xbf` (a model's `@step` or `@xbf` output), or a model the engine holds by its document id
+(`cad model solve <id>`).
 
 ## Setup
 
@@ -79,26 +80,24 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
 --check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
-A study is an operation of the document's type: `cad step fea` for a `.step`, `cad xbf fea` for an
-`.xbf`. With no `--study` it lists the study's setup and needs nothing else; a solve needs two tools:
+A study is an operation of the document's type, `solve`: `cad step solve` for a `.step`, `cad xbf
+solve` for an `.xbf`, `cad model solve` for a model the engine holds. With no `--study` it lists the
+study's setup; with one it solves and writes its results into the folder `--out` names. Both
+tools a solve needs are integrations the `cad` command installs, with the CAD kernel the study reads the
+part with, the first time a study needs them (nothing for you to install), and `cad run` gives a script
+that calls `cad.step.solve` their environment when its header names them:
 
-- **netgen**, which meshes, is text-to-cad's `netgen` integration (`cad[netgen]`): the `cad` command
-  installs it, with the CAD kernel the study reads the part with, the first time a study needs it
-  (about 10 MB, once; nothing for you to install), and `cad run` gives a script that calls
-  `cad.step.fea` its environment when its header names `cad[netgen]`. netgen publishes it for
-  macOS, Linux x86_64 and Windows x86_64 alone; anywhere else (Linux on ARM among them) a solve
+- **netgen**, which meshes, is the `netgen` integration (`cad[netgen]`, about 10 MB). netgen publishes
+  it for macOS, Linux x86_64 and Windows x86_64 alone; anywhere else (Linux on ARM among them) a solve
   refuses, naming the platform.
-- **CalculiX** (`ccx`) 2.20 or newer, which solves, is the `calculix` integration's program, installed
-  by the person: `conda install -c conda-forge calculix`, the `calculix-ccx` package on Debian and
-  Ubuntu, or FreeCAD 1.0 or newer on macOS or Windows, which carries one. text-to-cad runs `CAD_CCX`
-  when it is set (the file itself, named `ccx` or `ccx_2.2x`: `CAD_CCX=/path/to/ccx`), else the first
-  `ccx` (or `ccx_2.2x`) on PATH, else the one inside FreeCAD where its installer puts it. A missing or
-  older one stops the solve with an error that says how to install it. text-to-cad downloads no solver
-  and has no other: ask the user to install CalculiX, or install it yourself with their permission,
-  then run the study again. It runs headless, on one thread, in a private folder, and every result
-  names the CalculiX version that solved it.
+- **CalculiX** (`ccx`), which solves, is the `calculix` integration (`cad[calculix]`: the ccx package,
+  CalculiX's own program for each platform, about 10 MB). A person's own CalculiX is never run unless
+  `CAD_CCX` names it (the file itself, named `ccx` or `ccx_2.2x`, 2.20 or newer). It runs headless, on
+  one thread, in a private folder, and every result names the CalculiX version that solved it.
+  `cad run ccx ARGS` runs that same `ccx` on a deck of your own.
 
-A study reads the document in its own process, so it needs no model built and no engine document.
+A study of a file reads it in its own process, so it needs no model built; a model's is written to an
+`.xbf` the study reads.
 
 Units are fixed: mm for geometry, N for forces, MPa for pressure, modulus and stress, t/mm³ for
 density, and g (9.81 m/s²) for gravity and acceleration. Restate every load in those units before
@@ -109,14 +108,14 @@ you write it down ([study-file.md](references/study-file.md#units)).
 1. **List the faces.** Every study names faces by the engine's refs, the ones the Viewer copies.
 
    ```bash
-   cad step fea part.step
+   cad step solve part.step
    ```
 
    With no study it is the study's setup, and writes nothing: the parts, the pairs that touch, and
    then each face of the part, one a line: ref, area, centre, surface type and a hint such as `plane,
    normal -Z, largest`. Use the hint and the centre to match the user's words ("the mounting face",
    "the top of the upright") to a ref. A document with several parts lists no faces and says how;
-   name the part to list, `cad step fea assembly.step --occurrence post`, or for a whole assembly
+   name the part to list, `cad step solve assembly.step --occurrence post`, or for a whole assembly
    follow [Assemblies](#assemblies). When two faces fit equally, ask, quoting both refs. A face
    the user selected in the Viewer arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
@@ -148,29 +147,42 @@ you write it down ([study-file.md](references/study-file.md#units)).
 3. **Solve.**
 
    ```bash
-   cad step fea part.step --study study.json --out FEA/part.bracket-load.glb --json
+   cad step solve part.step --study study.json --out /tmp/bracket-load --json
    ```
 
-   This writes the GLB `--out` names (it must end in `.glb`) (the colour map on the deformed shape), and nothing else: one per
-   study, so name each for its study. `--json` prints the result as one JSON line, a check's
-   shape: `ok`, `findings` (each with its `severity`, `code`, `message`, `location` and `hint`), and
-   `measurements`, every number -- the study as given, the material, the faces it named
-   (`named_faces`), each fixture's reaction, the mesh and the timings -- with `written`, the files the
-   solve wrote. Without it the same result prints as lines.
+   `--out` is a folder, any you like (a temporary one is fine; put it in the project when the user
+   should keep the files), made when missing. One folder per study: a solve replaces its own files
+   there and touches nothing else. It holds:
+
+   | File | What it is for |
+   | --- | --- |
+   | `result.json` | the answer: what `--json` prints. Read this first. |
+   | `stress.png`, `displacement.png` | the deformed part coloured by each field (blue low, red high, the deformation exaggerated by `deformation_scale`), a colour bar under it giving the field, its units and its range. Look at them: they show at a glance whether the load points the way you meant and which faces are held. Show the stress one to the user. |
+   | `result.glb` | the same coloured part, for any glTF viewer or `cad viewer` |
+   | `result.vtu` | the volume mesh with `displacement` (mm) and `von_mises` (MPa) at its corner nodes, for a question the summary does not answer ([Your own questions](#your-own-questions)) |
+   | `ccx.inp` | with `--deck`: the input CalculiX solved (the finer solve's when there were two), to read or run again with `cad run ccx -i ccx` in that folder |
+
+   Where the engine cannot draw (a Linux machine with no display), the pictures are left out and a
+   `solver_note` says so; everything else is written.
+
+   `--json` prints the result as one JSON line, a check's shape: `ok`, `findings` (each with its
+   `severity`, `code`, `message`, `location` and `hint`), and `measurements`, every number -- the study
+   as given, the material, the faces it named (`named_faces`), each fixture's reaction, the mesh and the
+   timings -- with `written`, the files the solve wrote. Without it the same result prints as lines.
 
    When the safety factor comes out under 3 the run meshes again finer (half the element size,
    less on a big model) and solves again, by itself, and reports the finer result
-   ([Mesh](references/linear-static.md#mesh)). `--vtu` adds a ParaView file beside the GLB.
+   ([Mesh](references/linear-static.md#mesh)).
    Progress lines (`[fea] reading the parts`, `[fea]
    meshing the glued shape at 6.01 mm`) print to stderr, never into the result on stdout;
    `--verbose` adds mesh and solve detail there. A study with no fixture, a face that is not on the
    part, an unknown key, an out-of-range ref, a zero load or a load on a held face is refused with a
-   message naming the field. The result files are replaced only once every one is written: a run
-   that fails leaves the previous result as it was.
+   message naming the field. The folder's files are replaced only once every one is written: a run
+   that fails leaves the previous results as they were.
 
    The command exits 1 (`"ok": false`) when a finding is an error, as a validator does: the part
-   yields or misses a check, and the GLB is written all the same so the user sees where; or the
-   study stopped before the solve (`not_connected`), with no GLB. Warnings leave it at 0. Read the
+   yields or misses a check, and the result is written all the same so the user sees where; or the
+   study stopped before the solve (`not_connected`), with nothing written. Warnings leave it at 0. Read the
    result either way.
 
 4. **Read the findings.** Every solve prints them after the numbers, one line each, `error:` or
@@ -184,10 +196,28 @@ you write it down ([study-file.md](references/study-file.md#units)).
    do not is refused);
    the mesh size, element count and whether a finer re-solve ran. Then say in a sentence or two
    what the model assumes and what would change the answer most (a softer fixture, a fillet at the
-   peak, a different material). Open the GLB in the Viewer for the user; the deformation is
-   exaggerated by the summary's `deformation_scale`, so say that too. The Viewer draws
-   the loads as arrows and the fixed faces as cones on the model; a person can check them against
-   what they meant before trusting the numbers.
+   peak, a different material). Show the user `stress.png` (or open `result.glb` with `cad viewer`);
+   the deformation is exaggerated by the summary's `deformation_scale`, so say that too.
+
+## Your own questions
+
+The summary answers the usual ones. For anything else (the stress at the mounting holes, the sag
+along an edge, how much of the part is above some stress), read `result.vtu` with a few lines of
+Python rather than solving again. meshio or PyVista read it as it is (`uv run --with meshio`):
+
+```python
+import meshio, numpy as np
+
+mesh = meshio.read("/tmp/bracket-load/result.vtu")
+xyz, stress = mesh.points, mesh.point_data["von_mises"]          # mm, MPa
+moved = np.linalg.norm(mesh.point_data["displacement"], axis=1)  # mm
+near = np.linalg.norm(xyz - [42, 12, 3], axis=1) < 5             # within 5 mm of a point
+print(stress[near].max(), moved[xyz[:, 2] > 49].max())
+```
+
+It holds the corner nodes of the tetrahedra, inside the part as well as on its skin; the reported
+peak also counts the mid-edge nodes, so it can be a little higher than the VTU's own maximum. An
+assembly's elements carry their part (`part`, the index into the summary's `parts`).
 
 ## Assemblies
 
@@ -199,7 +229,7 @@ fixed. The keys are in [study-file.md](references/study-file.md#assemblies).
 1. **List the parts and joints first.**
 
    ```bash
-   cad step fea assembly.step
+   cad step solve assembly.step
    ```
 
    The setup prints each part (ref, name, volume), then each touching pair with its contact area and gap
@@ -231,9 +261,7 @@ fixed. The keys are in [study-file.md](references/study-file.md#assemblies).
 
 4. **Read the findings by part.** Each finding names its part ("'post' yields: ..."). Fix the named
    part, not the assembly in general: a thicker section, a fillet, a different material in `parts`,
-   a larger joint area (the joint's `area_mm2` is in the result's `connections`). The Viewer's
-   Study lists Parts and Connections; a part or joint the user selected there reaches you with its
-   ref or refs.
+   a larger joint area (the joint's `area_mm2` is in the result's `connections`).
 
 Findings an assembly adds:
 
@@ -258,15 +286,15 @@ configuration. Run the same study on each, with the faces mapped, and compare.
    solved and checked.
 2. **Map its faces onto every other variant.** Face numbers are not stable between versions: an
    edit renumbers faces, and a ref reused unchecked can land on a different face with no
-   error. Run `cad step fea variant.step` and match each face the study names by what it is,
+   error. Run `cad step solve variant.step` and match each face the study names by what it is,
    never by its number: the same surface type and normal, a centre where the edit would move it,
    an area that changed only as the edit explains. When two faces fit equally, or the edit removed
    the face, ask, quoting the candidates. Write one study per variant (`study.<variant>.json`):
    the mapped refs, everything else identical.
 3. **Hold the mesh still.** Accuracy follows the mesh, so a difference between variants is only
    the design's when they are meshed alike: give every study the baseline's `mesh.size_mm`.
-4. **Solve each to its own result:** `cad step fea variant.step --study study.<variant>.json --out
-   FEA/variant.fea.glb`.
+4. **Solve each into its own folder:** `cad step solve variant.step --study study.<variant>.json --out
+   /tmp/fea/variant`, and read each `result.json`.
 5. **Report one table**, a row per variant: max von Mises and where, safety factor, max
    displacement, whether a finer re-solve ran, and the face mapping used (`baseline bracket/face 17
    → bracket/face 21, the mounting face`) so the user can check it. Say which variant answers their
@@ -291,7 +319,7 @@ configuration. Run the same study on each, with the faces mapped, and compare.
   is marginal for a first pass; above it is a comfortable first answer for a static load on a
   ductile metal. Polymers and fatigue need more margin than that. Do not certify a design from one
   run.
-- Displacement is what the part moves, before any scale. The GLB positions carry
+- Displacement is what the part moves, before any scale. The result's positions carry
   `deformation_scale` times that; the result has the true number.
 - In an assembly the summary's `yield_MPa` and `safety_factor` are the weakest part's, while the
   `max_*` peaks are the whole assembly's, wherever they fall: do not divide one by the other
@@ -314,7 +342,7 @@ under 10 % settles it); above the margin they would not change the answer.
 | --- | --- | --- | --- |
 | `yields` | error | The peak stress is above the material's yield strength. | Make the part stronger where the peak is (thicker, deeper, a fillet or rib there), choose a stronger material, or confirm the load with the user; solve again. If a `peak_at_fixture` or `peak_concentration` finding sits beside it, read that first: the peak may be the model's, not the part's. |
 | `low_margin` | warning | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
-| `peak_at_fixture` | warning | The peak sits on a fixed face or at its edge, where a perfectly rigid clamp exaggerates stress, and a finer solve did not settle it. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
+| `peak_at_fixture` | warning | The peak sits on a fixed face or at its edge, where a perfectly rigid clamp exaggerates stress, and a finer solve did not settle it. | Read the stress a little away from the fixed face (the result's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
 | `peak_concentration` | warning | The integration-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | When the safety factor was under 3 the run already solved finer, so refining the whole part again is not the next step: fillet the corner or spread the load over a larger face. Above 3 (a `margin` higher than that), refine once and compare: halve `mesh.size_mm`, or at a fillet or hole set it to a third of the radius (see [Mesh](references/linear-static.md#mesh)). |
 | `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. In an assembly, only for a part whose safety factor is under 3: a part far from failing is not worth distrusting. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
 | `large_displacement` | warning | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |

@@ -70,7 +70,7 @@ def _uniaxial(directory: Path, angle: float, **more):
     study = {"material": STEEL_NUMBERS, "mesh": {"size_mm": 6.0},
              "fixtures": [{"faces": [faces["-x"], faces["-y"], faces["-z"]], "type": "roller"}],
              "loads": [_pull(faces)], **more}
-    return solve(step, directory / f"block{angle:g}.fea.glb", study)
+    return solve(step, directory / f"block{angle:g}.fea.fea", study)
 
 
 class StudyFile(unittest.TestCase):
@@ -128,7 +128,7 @@ class UniaxialBlock(unittest.TestCase):
     def test_rollers_on_one_face_leave_the_part_free_and_say_so(self):
         with tempfile.TemporaryDirectory() as name:
             step, faces = _block(Path(name), 0.0)
-            message = value_error(self, solve, step, Path(name) / "loose.fea.glb", {
+            message = value_error(self, solve, step, Path(name) / "loose.fea.fea", {
                 "material": STEEL_NUMBERS, "mesh": {"size_mm": 8.0}, "fixtures": [{"faces": [faces["-z"]], "type": "roller"}],
                 "loads": [_pull(faces)]})
         self.assertIn("the fixtures leave the part free to slide or turn (3 of its 6 rigid motions)", message)
@@ -138,7 +138,7 @@ class UniaxialBlock(unittest.TestCase):
         reactions sum to the pull and no "do not balance" warning appears."""
         with tempfile.TemporaryDirectory() as name:
             step, faces = _block(Path(name), 0.0)
-            written = reported(solve(step, Path(name) / "three.fea.glb", {
+            written = reported(solve(step, Path(name) / "three.fea.fea", {
                 "material": STEEL_NUMBERS, "mesh": {"size_mm": 6.0},
                 "fixtures": [{"faces": [faces[side]], "type": "roller"} for side in ("-x", "-y", "-z")],
                 "loads": [_pull(faces)]}))
@@ -170,7 +170,7 @@ class ConfinedCylinder(unittest.TestCase):
                         & Box(radius, radius, height, align=Align.MIN), str(step))
             listed = fea.faces(step).faces
             top = next(f.ref for f in listed if f.normal and f.normal[2] > 0.999)
-            result = solve(step, Path(name) / "quarter.fea.glb", {
+            result = solve(step, Path(name) / "quarter.fea.fea", {
                 "material": STEEL_NUMBERS, "mesh": {"size_mm": 2.5},
                 "fixtures": [{"faces": [f.ref for f in listed if f.ref != top], "type": "roller"}],
                 "loads": [{"faces": [top], "type": "pressure", "pressure_MPa": pressure}]})

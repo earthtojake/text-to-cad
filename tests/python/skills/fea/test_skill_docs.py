@@ -28,30 +28,37 @@ class SkillDocs(unittest.TestCase):
         checks = text.split("## `checks`", 1)[1].split("\n## ", 1)[0]
         self.assertEqual(re.findall(r"^\| `([a-z_]+)` \|", checks, re.M)[1:], list(CHECK_KEYS))  # past the header
 
-    def test_the_setup_names_the_mesher_and_the_installed_solver(self):
+    def test_the_setup_names_the_mesher_and_the_solver_the_cad_command_installs(self):
         from cad.calculix._program import CCX, CCX_ENV, install_hint
 
         text = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
         setup = text.split("## Setup", 1)[1].split("## Workflow", 1)[0]
         self.assertIn(f"`{CCX_ENV}`", setup)
         self.assertIn(f"{CCX.minimum[0]}.{CCX.minimum[1]} or newer", setup)
-        self.assertIn("conda install -c conda-forge calculix", install_hint())
-        self.assertIn("conda install -c conda-forge calculix", setup)
-        self.assertIn("calculix-ccx", setup)
-        # netgen is an integration the cad command installs; the solver is the person's, never fetched.
-        self.assertIn("`netgen` integration (`cad[netgen]`)", setup)
-        self.assertIn("downloads no solver", setup)
+        self.assertIn("cad[calculix]", install_hint())
+        # Both are integrations the cad command installs on first need; nothing is the person's to install.
+        self.assertIn("`netgen` integration (`cad[netgen]`", setup)
+        self.assertIn("`calculix` integration (`cad[calculix]`", setup)
+        self.assertNotIn("conda install", setup)
 
-    def test_every_command_is_a_types_fea_operation(self):
+    def test_every_command_is_a_types_operation(self):
         from cad.registry import DOCUMENT_TYPES
 
-        studied = {entry.id for entry in DOCUMENT_TYPES.values() if "fea" in entry.operation_names}
+        studied = {entry.id for entry in DOCUMENT_TYPES.values() if "solve" in entry.operation_names}
         for path in _pages():
             text = path.read_text(encoding="utf-8")
             with self.subTest(page=path.name):
-                self.assertNotRegex(text, r"`cad fea\b", "a study is an operation of its document's type")
-                for document_type in re.findall(r"`cad (\w+) fea\b", text):
+                for document_type in re.findall(r"`cad (\w+) solve\b", text):
                     self.assertIn(document_type, studied)
+                self.assertNotRegex(text, r"`cad (?:step|xbf|model) fea\b", "the study is solve")
+                self.assertNotRegex(text, r"`cad fea\b|\.fea\b", "a solve writes a folder of standard files")
+
+    def test_the_folder_the_skill_describes_is_the_one_a_solve_writes(self):
+        from cad._internal.fea import run
+
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        for name in (run.RESULT_JSON, run.RESULT_GLB, run.RESULT_VTU, run.STRESS_PNG, run.DISPLACEMENT_PNG, run.DECK):
+            self.assertIn(f"`{name}`", text)
 
     def test_the_nodal_peak_is_the_one_documented_as_usually_higher(self):
         for path in (SKILL / "SKILL.md", SKILL / "references" / "linear-static.md"):

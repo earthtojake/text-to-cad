@@ -294,7 +294,7 @@ def judge(check: dict, index: int, volume, ordinal_of: dict[str, int], result: S
 
 
 def summary(result: Static, check_results: list[dict], *, scale: float | None, part_refs: list[str] | None) -> dict:
-    """The one place the numbers are rounded; the GLB's extras and the result are derived from it."""
+    """The one place the numbers are rounded; the file's extras and the result are derived from it."""
     import numpy as np
 
     from cad._internal.fea import checks

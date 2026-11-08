@@ -15,20 +15,24 @@ import io
 import dataclasses
 import json
 import math
+import shutil
+import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
 from tests.python.support.fea_fixtures import (
     notes, kinds,
-    box_step, class_directory, ends, glb_array, glb_extras, needs_fea, quiet, read_glb, reported, solve, value_error,
+    box_step, class_directory, ends, glb_array, glb_extras, needs_fea, quiet, read_glb, reported, setup, solve, value_error,
 )
 from tests.python.support.fea_fixtures import AL6061_NUMBERS, AL7075_NUMBERS, PLA_NUMBERS, STEEL_NUMBERS  # noqa: E402
 
 from cad._internal.fea.materials import material_from_spec  # noqa: E402
 from cad._internal.fea.study import parse_study  # noqa: E402
+from cad.results import FeaResult  # noqa: E402
 
 # The cantilever: length along +X, fixed at x = 0, loaded at x = L in -Z.
 # Light enough that steel keeps a safety factor above 3, so it solves once.
@@ -92,11 +96,14 @@ def _vtu_von_mises(path: Path) -> "tuple[np.ndarray, np.ndarray]":
     """The VTU's corner-node positions (N, 3) and von Mises (N,)."""
     import numpy as np
 
+    import base64
+
     vtu = path.read_text(encoding="utf-8")
 
-    def block(marker: str) -> np.ndarray:
+    def block(marker: str) -> np.ndarray:  # binary, base64 of a UInt64 byte count and the float64s
         start = vtu.index(">", vtu.index(marker) + len(marker)) + 1
-        return np.array(vtu[start:vtu.index("</DataArray>", start)].split(), dtype=float)
+        raw = base64.b64decode(vtu[start:vtu.index("</DataArray>", start)])
+        return np.frombuffer(raw[8:], dtype="<f8")
 
     return block("<Points><DataArray").reshape(-1, 3), block('Name="von_mises"')
 
@@ -196,7 +203,7 @@ class Mesher(unittest.TestCase):
                 mock.patch.object(platform, "machine", return_value="aarch64"):
             with self.assertRaisesRegex(RuntimeError, r"meshes with netgen.*add `cad\[netgen\]`.*macOS, Linux x86_64 and "
                                                       r"Windows x86_64 alone, and this is Linux aarch64"):
-                fea.solve(Path(tmp) / "absent.step", Path(tmp) / "r.glb", study=BASE)
+                fea.solve(Path(tmp) / "absent.step", Path(tmp) / "r", study=BASE)
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_the_dependency_is_marked_for_the_platforms_netgen_has_wheels_for(self):
@@ -256,7 +263,7 @@ class StudyChecks(unittest.TestCase):
         self.assertIn("study: unknown keys ['analysis']", value_error(self, parse_study, {**BASE, "analysis": "static"}))
 
 
-class GlbJson(unittest.TestCase):
+class ResultJson(unittest.TestCase):
     def test_a_non_finite_number_is_refused_rather_than_written_as_json_no_reader_parses(self):
         import numpy as np
 
@@ -299,10 +306,10 @@ class Cantilever(unittest.TestCase):
                 {"kind": "displacement", "limit_mm": TIP, "faces": [cls.fixed_ref], "label": "Clamp"},
             ],
         }
-        cls.out = directory / "results" / "cantilever.glb"
+        cls.out = directory / "results" / "cantilever"
         cls.solver = _CountingSolve()
         with mock.patch("cad._internal.fea.solve.solve_linear_static", cls.solver):
-            cls.result = solve(cls.step, cls.out, cls.study, vtu=True)
+            cls.result = solve(cls.step, cls.out, cls.study)
 
     def test_the_face_listing_names_the_six_faces_with_hints(self):
         self.assertEqual(len(self.listing.faces), 6)
@@ -346,17 +353,31 @@ class Cantilever(unittest.TestCase):
         expected = _bending_stress(LENGTH / 4)
         self.assertAlmostEqual(values[probe].mean() / expected, 1.0, delta=0.08)
 
-    def test_the_result_files_are_where_the_result_says(self):
-        self.assertEqual(self.result.glb, self.out)
-        self.assertTrue(self.result.glb.is_file() and self.result.vtu.is_file())
-        # The GLB and the VTU asked for, and nothing beside them: the numbers are the result's.
-        self.assertEqual(sorted(p.name for p in self.out.parent.iterdir() if p.stem == self.out.stem),
-                         sorted([self.out.name, self.out.with_suffix(".vtu").name]))
+    def test_the_results_are_the_folders_files_and_the_json_is_the_answer(self):
+        names = ["result.json", "result.glb", "result.vtu"]
+        self.assertEqual([path.name for path in self.result.written], names)
+        self.assertEqual((self.result.folder, self.result.glb, self.result.vtu, self.result.deck, self.result.pictures),
+                         (self.out, self.out / "result.glb", self.out / "result.vtu", None, ()))
+        # The files asked for, and nothing beside them: no staging folder is left behind.
+        self.assertEqual(sorted(path.name for path in self.out.iterdir()), sorted(names))
         said = reported(self.result)
+        self.assertEqual(json.loads((self.out / "result.json").read_text(encoding="utf-8")), said)
         self.assertEqual(said["measurements"]["study"], self.study)
         self.assertEqual(said["measurements"], json.loads(json.dumps(self.result.measurements)))
         self.assertEqual(glb_extras(self.result.glb)["fields"][0]["max"], self.result.measurements["max_von_mises_MPa"])
         self.assertEqual(said["measurements"]["mesh"]["order"], 2)
+        self.assertEqual(reported(FeaResult.from_data(said)), said)
+
+    def test_the_vtu_is_the_volume_with_its_fields_at_the_corner_nodes(self):
+        import numpy as np
+
+        xyz, values = _vtu_von_mises(self.result.vtu)
+        self.assertEqual(len(xyz), len(values))
+        # The corner nodes alone: the reported peak, which counts the mid-edge nodes too, is at least theirs.
+        self.assertLessEqual(float(values.max()), self.result.measurements["max_von_mises_MPa"] + 1e-3)
+        # Inside the bar too, not only its skin.
+        inside = (np.abs(xyz[:, 1]) < WIDTH / 2 - 0.1) & (np.abs(xyz[:, 2]) < HEIGHT / 2 - 0.1)
+        self.assertTrue(inside.any())
 
     def test_the_glb_writes_von_mises_and_the_displacement(self):
         written = [field["attribute"] for field in glb_extras(self.result.glb)["fields"]]
@@ -396,7 +417,7 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(sum(line.startswith("check '") for line in lines), 4)
 
     def test_the_glb_names_its_step_relative_to_its_own_folder(self):
-        self.assertEqual(glb_extras(self.result.glb)["document"], f"../{self.step.name}")
+        self.assertEqual(glb_extras(self.result.glb)["document"], f"../../{self.step.name}")
         self.assertEqual(reported(self.result)["path"], str(self.step))
 
     def test_the_glb_names_its_step_absolutely_when_no_relative_path_exists(self):
@@ -407,8 +428,10 @@ class Cantilever(unittest.TestCase):
         with mock.patch("os.path.relpath", side_effect=ValueError("path is on mount 'C:', start on mount 'D:'")):
             self.assertEqual(_document_ref(self.step, self.out), self.step.resolve().as_posix())
 
-    def test_the_glb_is_a_valid_binary_gltf_with_colours_and_the_value_attribute(self):
+    def test_the_result_is_a_valid_binary_gltf_coloured_by_its_ramp_texture_with_the_value_attribute(self):
         import struct
+
+        from cad._internal.fea.outputs import ramp_png
 
         raw = self.result.glb.read_bytes()
         magic, version, length = struct.unpack_from("<4sII", raw)
@@ -424,10 +447,24 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(extras["fields"][1]["max"], self.result.measurements["max_displacement_mm"])
         self.assertEqual(len(extras["ramp"]), 5)
         self.assertEqual(extras["safety_factor"], self.result.measurements["safety_factor"])
-        colour = gltf["accessors"][attributes["COLOR_0"]]
-        self.assertEqual((colour["type"], colour["componentType"], colour.get("normalized")), ("VEC4", 5121, True))
+        # Coloured as any glTF reader draws it: the ramp's texture, read at each vertex's place on it.
+        self.assertNotIn("COLOR_0", attributes)
+        coordinates = gltf["accessors"][attributes["TEXCOORD_0"]]
+        self.assertEqual((coordinates["type"], coordinates["componentType"]), ("VEC2", 5126))
+        material = gltf["materials"][gltf["meshes"][0]["primitives"][0]["material"]]
+        texture = gltf["textures"][material["pbrMetallicRoughness"]["baseColorTexture"]["index"]]
+        image = gltf["images"][texture["source"]]
+        self.assertEqual(image["mimeType"], "image/png")
+        view = gltf["bufferViews"][image["bufferView"]]
+        _gltf, binary = read_glb(self.result.glb)
+        self.assertEqual(binary[view["byteOffset"]:view["byteOffset"] + view["byteLength"]], ramp_png())
         position = gltf["accessors"][attributes["POSITION"]]
-        self.assertEqual(position["count"], colour["count"])
+        self.assertEqual(position["count"], coordinates["count"])
+        # The hottest vertex samples the ramp's red end, the coolest its blue end.
+        u = glb_array(self.result.glb, "TEXCOORD_0", 2)[:, 0]
+        stress = glb_array(self.result.glb, "_VON_MISES", 1)[:, 0]
+        self.assertGreater(u[stress.argmax()], 0.99)
+        self.assertLess(u[stress.argmin()], 0.2)
         # glTF space is metres, Y up: the deformed tip dips below the undeformed bottom face (CAD -Z -> glTF -Y).
         self.assertLess(position["min"][1], -HEIGHT / 2 / 1000.0)
         self.assertAlmostEqual(position["max"][0], LENGTH / 1000.0, places=2)  # the scaled deformation stretches the tip a little
@@ -468,8 +505,8 @@ class Cantilever(unittest.TestCase):
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = cli.main(["step", "fea", str(self.step), "--study", json.dumps(self.study),
-                             "--out", str(self.out.with_name("again.glb")), "--json"])
+            code = cli.main(["step", "solve", str(self.step), "--study", json.dumps(self.study),
+                             "--out", str(self.out.with_name("again")), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertTrue(payload["ok"])
@@ -513,7 +550,7 @@ class Cantilever(unittest.TestCase):
             outcome = real(*args, **kwargs)
             return dataclasses.replace(outcome, reactions=[tuple(0.5 * c for c in r) for r in outcome.reactions])
 
-        out = self.out.with_name("unbalanced.glb")
+        out = self.out.with_name("unbalanced")
         with mock.patch.object(solver, "solve_linear_static", halved), \
                 self.assertRaisesRegex(RuntimeError, r"the reactions do not balance the applied load \(mismatch 10 N\)"):
             solve(self.step, out, {**self.study, "mesh": {"size_mm": 6.0}})
@@ -533,13 +570,57 @@ class Cantilever(unittest.TestCase):
             outcome = real(*args, **kwargs)
             return dataclasses.replace(outcome, von_mises=np.zeros_like(outcome.von_mises))
 
-        out = self.out.with_name("unloaded.glb")
+        out = self.out.with_name("unloaded")
         with mock.patch.object(solver, "solve_linear_static", unstressed):
             self.assertIn("no load reaches the part", value_error(self, solve, self.step, out, {**self.study, "mesh": {"size_mm": 6.0}}))
         self.assertFalse(out.exists())
 
-    def test_out_must_be_a_glb(self):
-        self.assertIn(".glb", value_error(self, solve, self.step, self.out.with_suffix(".vtu"), self.study))
+    def test_out_is_a_folder_and_the_deck_a_solves(self):
+        self.assertIn("is a file", value_error(self, solve, self.step, self.out / "result.json", self.study))
+        self.assertIn("give --out DIR", value_error(self, solve, self.step, None, self.study))
+        self.assertIn("--deck is a solve's", value_error(self, setup, self.step, deck=True))
+
+    def test_the_deck_kept_is_the_input_calculix_solved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r"
+            result = solve(self.step, out, self.study, deck=True)
+            deck = out / "ccx.inp"
+            self.assertEqual(result.deck, deck)
+            text = deck.read_text(encoding="utf-8")
+            for card in ("*NODE", "*ELEMENT, TYPE=C3D10", "*STATIC", "*NODE PRINT"):
+                self.assertIn(card, text)
+            # The deck solves again, to the same displacements, with the bundled ccx.
+            import ccx
+
+            self.assertTrue(ccx.run(deck).ok)
+            self.assertTrue(any("ccx.inp" in line for line in result.human_lines()))
+            # Solved again without it, the folder holds no deck of an earlier solve.
+            solve(self.step, out, self.study)
+            self.assertFalse(deck.exists())
+
+    def test_a_model_is_studied_from_an_xbf_of_it_and_named_by_its_document_id(self):
+        import cad
+        from cad.engine import api
+
+        model = "0f0e0d0c-0b0a-4908-8706-050403020100"
+        with tempfile.TemporaryDirectory() as tmp:
+            xbf = Path(tmp) / "part.xbf"
+            api.export(self.step, xbf, daemon=False, progress=False)
+            written = []
+
+            def held(source, target, **_options):  # the engine's model, as its document is written
+                written.append((source, target))
+                shutil.copyfile(xbf, target)
+
+            with mock.patch.object(api, "export", held), quiet():
+                listing = cad.model.solve(model)
+                result = cad.model.solve(model, study=self.study, out=Path(tmp) / "model")
+            self.assertEqual([source for source, _ in written], [model, model])
+            self.assertFalse(any(target.exists() for _, target in written))  # its temporary folder is gone
+            self.assertEqual((listing.path, len(listing.faces)), (Path(model), 6))
+            self.assertEqual((result.path, result.ok), (Path(model), True))
+            self.assertEqual(glb_extras(result.glb)["document"], model)
+            self.assertEqual(json.loads((result.folder / "result.json").read_text(encoding="utf-8"))["path"], model)
 
     def test_a_run_that_fails_at_its_last_file_leaves_the_earlier_result_byte_for_byte(self):
         from unittest import mock
@@ -547,9 +628,9 @@ class Cantilever(unittest.TestCase):
         from cad._internal.fea import run
 
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "r.glb"
-            solve(self.step, out, self.study, vtu=True)
-            earlier = {path: path.read_bytes() for path in (out, out.with_suffix(".vtu"))}
+            out = Path(tmp) / "r"
+            solve(self.step, out, self.study)
+            earlier = {path: path.read_bytes() for path in out.iterdir()}
             heavier = {**self.study, "loads": [{"faces": [self.load_ref], "type": "force", "vector_N": [0, 0, -2 * FORCE]}]}
             real, calls = run.replace_atomic, []
 
@@ -560,9 +641,71 @@ class Cantilever(unittest.TestCase):
                 return real(source, target)
 
             with mock.patch.object(run, "replace_atomic", fail_on_the_last), self.assertRaises(OSError):
-                solve(self.step, out, heavier, vtu=True)
+                solve(self.step, out, heavier)
             self.assertEqual({path: path.read_bytes() for path in earlier}, earlier)
-            self.assertEqual(sorted(path.name for path in Path(tmp).iterdir()), ["r.glb", "r.vtu"])
+            self.assertEqual(sorted(path.name for path in out.iterdir()), ["result.glb", "result.json", "result.vtu"])
+
+
+def _can_draw() -> bool:
+    """Whether the engine's stills can draw here: anywhere but a Linux with no X display (the fea job runs the suite
+    under Xvfb, so its pictures are drawn there)."""
+    import os
+
+    return not sys.platform.startswith("linux") or bool(os.environ.get("DISPLAY"))
+
+
+@needs_fea
+class Pictures(unittest.TestCase):
+    """A picture of each field, drawn by the engine's stills, and a computer they cannot be drawn on."""
+
+    @classmethod
+    def setUpClass(cls):
+        directory = class_directory(cls)
+        cls.directory = directory
+        cls.step = box_step(directory, "bar", (LENGTH, WIDTH, WIDTH), "x")
+        fixed, loaded = ends(cls.step)
+        cls.study = {"material": STEEL_NUMBERS, "fixtures": [{"faces": [fixed], "type": "fixed"}],
+                     "loads": [{"faces": [loaded], "type": "force", "vector_N": [0, 0, -FORCE]}],
+                     "mesh": {"size_mm": 4.0}}
+
+    @unittest.skipUnless(_can_draw(), "no display for the engine's stills (the fea job runs under Xvfb)")
+    def test_each_field_is_drawn_into_the_folder(self):
+        out = self.directory / "drawn"
+        result = solve(self.step, out, self.study, pictures=True)
+        self.assertEqual(result.pictures, (out / "stress.png", out / "displacement.png"))
+        for picture in result.pictures:
+            self.assertEqual(picture.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(notes(result), ())
+        self.assertNotIn("displacement.glb", [path.name for path in out.iterdir()])
+
+    def test_each_picture_says_what_its_colours_mean(self):
+        from PIL import Image
+
+        from cad._internal.fea.outputs import colour_bar
+
+        picture = self.directory / "plain.png"
+        Image.new("RGB", (1600, 1200), (240, 243, 248)).save(picture)
+        colour_bar(picture, "von Mises stress (MPa)", 211.8158)
+        drawn = Image.open(picture).convert("RGB")
+        self.assertEqual(drawn.size, (1600, 1320))
+        self.assertEqual(drawn.getpixel((5, 1300)), (240, 243, 248))  # on the picture's own background
+        middle = 1200 + 44 + 11
+        blue, red = drawn.getpixel((420, middle)), drawn.getpixel((1180, middle))
+        self.assertGreater(blue[2], 200)
+        self.assertGreater(red[0], 200)
+        self.assertLess(red[2], 60)
+
+    def test_no_display_writes_the_rest_and_says_so(self):
+        from cad.engine import api
+
+        out = self.directory / "undrawn"
+        with mock.patch.object(api, "snapshot", side_effect=RuntimeError("no X display for OpenGL")):
+            result = solve(self.step, out, self.study, pictures=True)
+        self.assertEqual(result.pictures, ())
+        self.assertEqual(sorted(path.name for path in out.iterdir()), ["result.glb", "result.json", "result.vtu"])
+        (note,) = notes(result)
+        self.assertIn("no pictures were drawn (no X display for OpenGL)", note)
+        self.assertTrue(result.ok)
 
 
 @needs_fea
@@ -596,7 +739,7 @@ class Yielding(unittest.TestCase):
 
         with mock.patch("cad._internal.fea.solve.solve_linear_static", cls.solver), \
                 mock.patch("cad._internal.fea.mesh.mesh_occurrence", mesh_spy):
-            cls.result = solve(cls.step, cls.directory / "bar.glb", cls.study)
+            cls.result = solve(cls.step, cls.directory / "bar", cls.study)
         cls.said = reported(cls.result)
 
     def test_it_yields_as_an_error_in_the_result_the_glb_and_the_cli(self):
@@ -663,7 +806,7 @@ class Yielding(unittest.TestCase):
 
         solver = _CountingSolve(later=halve)
         with mock.patch("cad._internal.fea.solve.solve_linear_static", solver):
-            result = solve(self.step, self.directory / "lower.glb", self.study)
+            result = solve(self.step, self.directory / "lower", self.study)
         refined = reported(result)["measurements"]["refined"]
         self.assertLess(refined["max_von_mises_MPa"], refined["from_max_von_mises_MPa"])
         self.assertAlmostEqual(result.measurements["safety_factor"], 250.0 / result.measurements["max_von_mises_MPa"], places=2)
@@ -682,7 +825,7 @@ class Yielding(unittest.TestCase):
 
         solver = _CountingSolve(fail_after=1)
         with mock.patch("cad._internal.fea.solve.solve_linear_static", solver):
-            result = solve(self.step, self.directory / "failed-resolve.glb", self.study)
+            result = solve(self.step, self.directory / "failed-resolve", self.study)
         self.assertEqual(solver.calls, 2)
         self.assertEqual(result.measurements["mesh"]["size_mm"], self.SIZE)
         types = [finding.code for finding in result.findings]
@@ -703,7 +846,7 @@ class Yielding(unittest.TestCase):
                 raise KeyError("a fault of cad's")
             return solver(*args, **kwargs)
 
-        out = self.directory / "faulty-resolve.glb"
+        out = self.directory / "faulty-resolve"
         with mock.patch("cad._internal.fea.solve.solve_linear_static", faulty), self.assertRaises(KeyError):
             solve(self.step, out, self.study)
         self.assertFalse(out.exists())
@@ -874,7 +1017,7 @@ class ThinTube(unittest.TestCase):
         bottom, top = ends(cls.step, axis=2)
         cls.study = {"material": STEEL_NUMBERS, "fixtures": [{"faces": [bottom], "type": "fixed"}],
                      "loads": [{"faces": [top], "type": "force", "vector_N": [50.0, 0, 0]}], "mesh": {"size_mm": 3.0}}
-        cls.result = solve(cls.step, directory / "tube.glb", cls.study)
+        cls.result = solve(cls.step, directory / "tube", cls.study)
 
     def test_it_solves_and_says_how_many_elements_were_straightened(self):
         straightened = self.result.measurements["mesh"]["straightened"]
@@ -1022,17 +1165,17 @@ class DefaultSizeAccuracy(unittest.TestCase):
         rod = tmp / "rod.step"
         export_step(Rot(0, 90, 0) * Cylinder(cls.ROD_RADIUS, cls.ROD_LENGTH, align=(Align.CENTER, Align.CENTER, Align.MIN)), str(rod))
         fixed, loaded = ends(rod)
-        cls.rod = solve(rod, tmp / "rod.glb", {
+        cls.rod = solve(rod, tmp / "rod", {
             "material": STEEL_NUMBERS,
             "fixtures": [{"faces": [fixed]}],
             "loads": [{"faces": [loaded], "type": "force", "vector_N": [0, 0, -cls.ROD_FORCE]}],
-        }, vtu=True)
+        })
 
         plate = tmp / "plate.step"
         body = Box(cls.PLATE_LENGTH, cls.PLATE_WIDTH, cls.PLATE_THICKNESS, align=(Align.MIN, Align.CENTER, Align.CENTER))
         export_step(body - Pos(cls.PLATE_LENGTH / 2, 0, 0) * Cylinder(cls.HOLE / 2, 2 * cls.PLATE_THICKNESS), str(plate))
         fixed, loaded = ends(plate)
-        cls.plate = solve(plate, tmp / "plate.glb", {
+        cls.plate = solve(plate, tmp / "plate", {
             "material": STEEL_NUMBERS,
             "fixtures": [{"faces": [fixed]}],
             "loads": [{"faces": [loaded], "type": "force", "vector_N": [cls.PULL, 0, 0]}],
@@ -1107,7 +1250,7 @@ class HumanLine(unittest.TestCase):
         from cad.results import FeaResult
 
         result = FeaResult(
-            ok=True, path=Path("p.step"), occurrence="part", written=(Path("p.glb"),),
+            ok=True, path=Path("p.step"), occurrence="part", written=(Path("r/result.json"),),
             measurements={"safety_factor": 1.684, "mesh": {}},
         )
         self.assertIn("safety factor 1.6", result.human_lines()[1])
@@ -1137,7 +1280,7 @@ class CurvedFacetLoads(unittest.TestCase):
             # Light enough to keep a safety factor over 3: one solve, at the size that met the stalling element.
             study = {"material": AL7075_NUMBERS, "fixtures": [{"faces": ["face 7"]}],
                      "loads": [{"faces": ["face 8"], "type": "force", "vector_N": [3600, 0, 0]}], "mesh": {"size_mm": 3.585}}
-            result = solve(_write_link_bar(Path(tmp)), Path(tmp) / "bar.fea.glb", study)
+            result = solve(_write_link_bar(Path(tmp)), Path(tmp) / "bar", study)
         self.assertTrue(result.ok)
         self.assertEqual(result.measurements["applied_force_N"], [3600.0, 0.0, 0.0])
         self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -3600.0, places=3)
@@ -1155,7 +1298,7 @@ class CheckLines(unittest.TestCase):
         def stress(value, ratio):
             return {"label": "Strength", "value": value, "limit": 250.0, "unit": "MPa", "ratio": ratio, "status": "passes"}
 
-        result = FeaResult(ok=True, path=Path("p.step"), occurrence="part", written=(Path("p.glb"),),
+        result = FeaResult(ok=True, path=Path("p.step"), occurrence="part", written=(Path("r/result.json"),),
                            measurements={"safety_factor": 2.5, "checks": [stress(0.0053, 2.12e-05), stress(2.5, 0.01)],
                                          "mesh": {"elements": 10}})
         lines = result.human_lines()
@@ -1219,11 +1362,11 @@ class ModelMaterial(unittest.TestCase):
         from bd_materials import metals
 
         physics = metals.aluminum().material
-        said = reported(solve(self.xbf, self.directory / "own.glb", self.study))["measurements"]["material"]
+        said = reported(solve(self.xbf, self.directory / "own", self.study))["measurements"]["material"]
         self.assertEqual((said["name"], said["source"]), (metals.aluminum().name, "document"))
         self.assertEqual(said["yield_MPa"], physics.yield_strength.min)    # the low end: the weakest it may be
         self.assertEqual(said["ranges"]["yield_MPa"], [physics.yield_strength.min, physics.yield_strength.max])
 
     def test_a_studys_own_numbers_win_over_the_models(self):
-        said = reported(solve(self.xbf, self.directory / "given.glb", {**self.study, "material": AL6061_NUMBERS}))["measurements"]["material"]
+        said = reported(solve(self.xbf, self.directory / "given", {**self.study, "material": AL6061_NUMBERS}))["measurements"]["material"]
         self.assertEqual((said["name"], said["yield_MPa"], said["source"]), ("Aluminum 6061-T6", 276.0, "study"))

@@ -8,7 +8,7 @@ The root holds ``__version__``, ``CadDeprecationWarning`` and the document types
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
 has one (``step.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
-``.inspect``, and those named for what they do (``.dfm``, ``.fea``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
+``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,

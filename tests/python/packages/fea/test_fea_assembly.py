@@ -364,7 +364,7 @@ class FeaPartsVerbTest(unittest.TestCase):
 
         err = io.StringIO()
         with redirect_stderr(err), redirect_stdout(io.StringIO()):
-            main(["fea", str(_write_assembly(self.tmp))])
+            main(["solve", str(_write_assembly(self.tmp))])
         lines = err.getvalue().splitlines()
         self.assertTrue(any(line.endswith("reading the parts") for line in lines), lines)
         self.assertTrue(any("read 2 parts" in line for line in lines), lines)
@@ -416,7 +416,7 @@ class FeaPartsVerbTest(unittest.TestCase):
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = main(["fea", str(_write_assembly(self.tmp)), "--json"])
+            code = main(["solve", str(_write_assembly(self.tmp)), "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertTrue(payload["ok"])
@@ -458,7 +458,7 @@ class DuplicateNamesTest(unittest.TestCase):
 
     def test_a_study_can_name_each_bar_by_its_ref(self):
         study = self.study(parts={self.first: {"material": STEEL_NUMBERS}, self.second: {"material": AL6061_NUMBERS}, "base": {"material": AL6061_NUMBERS}})
-        result = solve(self.step, self.tmp / "refs.glb", study)
+        result = solve(self.step, self.tmp / "refs", study)
         self.assertIsNotNone(result.glb)  # solved; ok is the part's verdict (a bar yields under this load)
         names = [part["name"] for part in result.measurements["parts"]]
         self.assertEqual(names, ["base", f"bar ({self.first})", f"bar ({self.second})"])
@@ -470,18 +470,18 @@ class DuplicateNamesTest(unittest.TestCase):
         study = {key: value for key, value in self.study(parts={"base": {"material": AL6061_NUMBERS}}).items()
                  if key != "material"}
         with self.assertRaisesRegex(ValueError, rf"'bar' \({re.escape(self.first)}\) has no material"):
-            solve(self.step, self.tmp / "default.glb", study)
+            solve(self.step, self.tmp / "default", study)
 
     def test_a_name_both_bars_share_is_an_error_naming_the_refs(self):
         with self.assertRaisesRegex(ValueError, rf"parts\['bar'\]: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
-            solve(self.step, self.tmp / "ambiguous.glb", self.study(parts={"bar": {"material": STEEL_NUMBERS}}))
+            solve(self.step, self.tmp / "ambiguous", self.study(parts={"bar": {"material": STEEL_NUMBERS}}))
         connections = [{"between": ["bar", "base"], "type": "free"}]
         with self.assertRaisesRegex(ValueError, rf"connections\[0\].between: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
-            solve(self.step, self.tmp / "ambiguous.glb", self.study(connections=connections))
+            solve(self.step, self.tmp / "ambiguous", self.study(connections=connections))
 
     def test_a_connection_can_name_a_bar_by_its_ref_and_the_other_part_by_name(self):
         # Freeing the second bar from the base leaves it unheld, and the error says which bar.
-        result = solve(self.step, self.tmp / "free.glb", self.study(connections=[{"between": [self.second, "base"], "type": "free"}]))
+        result = solve(self.step, self.tmp / "free", self.study(connections=[{"between": [self.second, "base"], "type": "free"}]))
         self.assertFalse(result.ok)
         (finding,) = result.findings
         self.assertEqual(finding.code, "not_connected")
@@ -519,9 +519,9 @@ class AssemblyStudyFileTest(unittest.TestCase):
         from cad import step
         from cad_server.cli.document_types import build_parser
 
-        self.assertNotIn("contact_tolerance_mm", inspect.signature(step.fea).parameters)
+        self.assertNotIn("contact_tolerance_mm", inspect.signature(step.solve).parameters)
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            build_parser("step", "fea").parse_args(["a.step", "--contact-tolerance-mm", "0.2"])
+            build_parser("step", "solve").parse_args(["a.step", "--contact-tolerance-mm", "0.2"])
 
     def test_a_study_without_them_is_a_one_part_study(self):
         parsed = self._parse()
@@ -576,7 +576,7 @@ class SolveAssemblyTest(unittest.TestCase):
         from tests.python.support import fea_fixtures as fea
 
         # Not quiet: a test of what a study says reads its stderr.
-        return fea.study_of(cls.step)(cls.step, study=cls.study(materials, **extra), out=cls.tmp / f"{name}.glb")
+        return fea.study_of(cls.step)(cls.step, study=cls.study(materials, **extra), out=cls.tmp / f"{name}")
 
     def _types(self, result) -> list[str]:
         return [finding.code for finding in result.findings]
@@ -666,8 +666,8 @@ class SolveAssemblyTest(unittest.TestCase):
         # default stands in for it.
         study = {key: value for key, value in self.study({"post": "steel"}).items() if key != "material"}
         with self.assertRaisesRegex(ValueError, r"'base' has no material: set part.material in its model"):
-            solve(self.step, self.tmp / "nothing.glb", study)
-        self.assertFalse((self.tmp / "nothing.glb").exists())
+            solve(self.step, self.tmp / "nothing", study)
+        self.assertFalse((self.tmp / "nothing").exists())
 
     def test_the_result_records_the_joint(self):
         written = reported(self.mixed)
@@ -735,14 +735,14 @@ class SolveAssemblyTest(unittest.TestCase):
         # part's faces, is refused beside a study by name, before anything is read.
         from cad_server.cli.step import main
 
-        solve = ["fea", str(self.step), "--study", json.dumps(self.alone), "--out", str(self.tmp / "cli.glb")]
+        solve = ["solve", str(self.step), "--study", json.dumps(self.alone), "--out", str(self.tmp / "cli")]
         with redirect_stderr(io.StringIO()) as said, self.assertRaises(SystemExit):
             main([*solve, "--mesh-size", "2"])
         self.assertIn("unrecognized arguments: --mesh-size", said.getvalue())
         with redirect_stderr(io.StringIO()) as said, redirect_stdout(io.StringIO()):
             self.assertEqual(main([*solve, "--occurrence", self.refs["post"]]), 2)
         self.assertIn("--occurrence lists one part's faces for a study's setup", said.getvalue())
-        self.assertFalse((self.tmp / "cli.glb").exists())
+        self.assertFalse((self.tmp / "cli").exists())
 
     def _first_solve_only(self, name):
         """The mixed study solved once at the first mesh size, with the outcome and the mesh it was solved on."""
@@ -815,7 +815,7 @@ class SolveAssemblyTest(unittest.TestCase):
         }
         out = io.StringIO()
         with mock.patch("cad._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out), quiet():
-            code = main(["fea", str(step), "--study", json.dumps(study), "--out", str(self.tmp / "stopped.glb"), "--json"])
+            code = main(["solve", str(step), "--study", json.dumps(study), "--out", str(self.tmp / "stopped"), "--json"])
         self.assertEqual(code, 1)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertFalse(payload["ok"])
@@ -825,7 +825,7 @@ class SolveAssemblyTest(unittest.TestCase):
     def _closed(self, lift: float, name: str, **extra):
         """The post lifted (or, below 0, pressed into the base) by ``lift``, glued anyway: the study solves."""
         step = _write_assembly(self.tmp, lift=lift, name=name)
-        result = solve(step, self.tmp / f"{name}.glb", _pushed(step, "post", 40.0 + lift, mesh=MESH, **extra))
+        result = solve(step, self.tmp / f"{name}", _pushed(step, "post", 40.0 + lift, mesh=MESH, **extra))
         (finding,) = [f for f in result.findings if f.code == "gap_closed"]
         self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -1000.0, delta=0.5)
         return result, finding.message
@@ -873,10 +873,10 @@ class SolveAssemblyTest(unittest.TestCase):
         from unittest import mock
 
         with mock.patch("cad._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")):
-            result = solve(step, self.tmp / "none.glb", study)
+            result = solve(step, self.tmp / "none", study)
         self.assertFalse(result.ok)
         self.assertIsNone(result.glb)
-        self.assertFalse((self.tmp / "none.glb").exists())
+        self.assertFalse((self.tmp / "none").exists())
         return result
 
     def test_a_floating_part_stops_the_study_before_the_solve(self):
@@ -900,7 +900,7 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_overlapping_parts_are_not_bonded_and_the_study_suggests_fixing_them(self):
         step, study = self._with_sunk_block(held_block=True)
-        result = solve(step, self.tmp / "sunk.glb", study)
+        result = solve(step, self.tmp / "sunk", study)
         (finding,) = [f for f in result.findings if f.code == "overlapping_parts"]
         self.assertEqual(finding.severity, "warning")
         self.assertEqual(
@@ -913,13 +913,13 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_marking_an_overlapping_pair_free_silences_the_suggestion(self):
         step, study = self._with_sunk_block(held_block=True, connections=[{"between": ["block", "base"], "type": "free"}])
-        result = solve(step, self.tmp / "sunk-free.glb", study)
+        result = solve(step, self.tmp / "sunk-free", study)
         self.assertNotIn("overlapping_parts", self._types(result))
 
     def test_an_overlap_cannot_be_bonded(self):
         step, study = self._with_sunk_block(held_block=True, connections=[{"between": ["block", "base"], "type": "bonded"}])
         with self.assertRaisesRegex(ValueError, r"overlap by 100 mm³, so they can't be bonded"):
-            solve(step, self.tmp / "sunk-bonded.glb", study)
+            solve(step, self.tmp / "sunk-bonded", study)
 
     def test_a_part_an_overlap_leaves_unheld_says_so(self):
         result = self._not_solved(*self._with_sunk_block(held_block=False))
@@ -944,20 +944,20 @@ class SolveAssemblyTest(unittest.TestCase):
         joint = _face_at(self.scene, self.refs["post"], 10.0)
         study = self.study(None, loads=[{"faces": [joint], "type": "force", "vector_N": [0, 0, -1]}])
         with self.assertRaisesRegex(ValueError, rf"{joint} is where 'post' is bonded to 'base'"):
-            solve(self.step, self.tmp / "joint.glb", study)
+            solve(self.step, self.tmp / "joint", study)
 
     def test_a_face_partly_covered_by_a_joint_loads_its_exposed_area(self):
         study = self.study(None, loads=[{"faces": [_face_at(self.scene, self.refs["base"], 10.0)], "type": "force", "vector_N": [0, 0, -100]}])
-        result = solve(self.step, self.tmp / "exposed.glb", study)
+        result = solve(self.step, self.tmp / "exposed", study)
         self.assertEqual(result.measurements["applied_force_N"], [0.0, 0.0, -100.0])
         self.assertAlmostEqual(result.measurements["reaction_force_N"][2], 100.0, delta=0.1)
 
     def test_the_parts_the_study_names_must_exist(self):
         with self.assertRaisesRegex(ValueError, r"parts\['lid'\]: no part named 'lid'; the parts are 'base', 'post'"):
-            solve(self.step, self.tmp / "lid.glb", self.study({"lid": "steel"}))
+            solve(self.step, self.tmp / "lid", self.study({"lid": "steel"}))
         far = _write_assembly(self.tmp, far_block=20.0, name="far")
         with self.assertRaisesRegex(ValueError, "don't touch within 0.1 mm"):
-            solve(far, self.tmp / "far.glb", self.study(None, connections=[{"between": ["block", "base"], "type": "bonded"}]))
+            solve(far, self.tmp / "far", self.study(None, connections=[{"between": ["block", "base"], "type": "bonded"}]))
 
     def _two_posts(self, name: str, right_x: float) -> Path:
         """Posts 'left' at x = 0 and 'right' at ``right_x`` side by side on the base: both bonded to it."""
@@ -968,7 +968,7 @@ class SolveAssemblyTest(unittest.TestCase):
         step = self._two_posts("two-posts", 10)
         study = _pushed(step, "right", 40.0, 100, connections=[{"between": ["left", "right"], "type": "free"}])
         with self.assertRaisesRegex(ValueError, "'left' and 'right' are also joined through other bonded parts"):
-            solve(step, self.tmp / "two.glb", study)
+            solve(step, self.tmp / "two", study)
 
     def test_a_free_joint_that_splits_the_assembly_glues_each_group_apart(self):
         step = _write_assembly(self.tmp, cap=True, name="capped")
@@ -984,7 +984,7 @@ class SolveAssemblyTest(unittest.TestCase):
             "connections": [{"between": ["cap", "post"], "type": "free"}],
             "mesh": MESH,
         }
-        result = solve(step, self.tmp / "capped.glb", study)
+        result = solve(step, self.tmp / "capped", study)
         self.assertTrue(result.ok)
         self.assertNotIn("not_connected", self._types(result))
         self.assertEqual({c["between"][0]: c["type"] for c in reported(result)["measurements"]["connections"]}, {"post": "bonded", "cap": "free"})
@@ -996,7 +996,7 @@ class SolveAssemblyTest(unittest.TestCase):
         study = _pushed(step, "right", 40.0, 100, mesh=MESH)
         for connections in ([], [{"between": ["left", "right"], "type": "free"}]):
             with self.assertRaisesRegex(ValueError, r"'left' and 'right' overlap by .* mm³ and are joined through 'base'"):
-                solve(step, self.tmp / "overlapping.glb", {**study, "connections": connections})
+                solve(step, self.tmp / "overlapping", {**study, "connections": connections})
 
     def test_gluing_refuses_a_solid_two_parts_both_became(self):
         from cad._internal.fea.assembly import glue
@@ -1042,7 +1042,7 @@ class RoundPartTest(unittest.TestCase):
                 "loads": [{"faces": [_face_at(scene, refs["pin"], 40.0)], "type": "force", "vector_N": [100, 0, 0]}],
                 "mesh": MESH,
             }
-            result = solve(step, tmp / "pin.glb", study)
+            result = solve(step, tmp / "pin", study)
         self.assertTrue(result.ok)
         self.assertAlmostEqual(result.measurements["reaction_force_N"][0], -100.0, delta=0.5)
 

@@ -215,18 +215,20 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               # change to the file runs the job.
               "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
-# The stress study (cad <type> fea): its operation and orchestration, the netgen and calculix integrations, its
-# result type, the library's extras (netgen's pin among them), and the server's
-# command and the environment of cad[build123d,netgen] it runs a study in. Each also reaches what its package
-# reaches; the fea job, which installs netgen and CalculiX, runs on these, its own suite and runner, and a full run.
+# The stress study (cad <type> solve): its operation and orchestration, the netgen and calculix integrations, its
+# result type, the library's extras (netgen's and ccx's pins among them), and the server's command and the environment
+# of cad[build123d,calculix,netgen] it runs a study in. Each also reaches what its package reaches; the fea job, which
+# installs netgen and ccx, runs on these, its own suite and runner, and a full run.
 FEA_CODE = (f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**",
             f"{LIBRARY_SRC}/results.py", f"{LIBRARY_SRC}/_internal/document_type.py",
             f"{LIBRARY_SRC}/_internal/operation.py", "packages/cad/pyproject.toml",
             f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/_internal/integration_env.py")
-# What a study reads a document, finds CalculiX and writes its result through, of the engine's and shared modules.
+# What a study reads a document, finds CalculiX and writes its results through, of the engine's and shared modules:
+# the pictures are the engine's stills of a GLB (its reader and the snapshot).
 FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.py",
               f"{LIBRARY_SRC}/engine/kernel/bounds.py", f"{LIBRARY_SRC}/engine/executables.py",
               f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/build.py",
+              f"{LIBRARY_SRC}/engine/formats/glb.py", f"{LIBRARY_SRC}/engine/snapshot.py",
               f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
               f"{SERVER_SRC}/_internal/cli_from_function.py")
 FEA_SUITE = "tests/python/packages/fea"

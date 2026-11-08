@@ -38,7 +38,7 @@ CLOSE_WITHIN = CONVERGED_WITHIN
 def as_check_finding(found: dict):
     """One finding as every check's result says it (``cad.results.CheckFinding``): its severity, its type as the
     code, its summary as the message, the refs (else the places) its items name as the location, and its
-    description as the hint. The result GLB keeps the finding as it is, the viewer's alert card's shape."""
+    description as the hint. The ``.fea`` result keeps the finding as it is, the viewer's alert card's shape."""
     from cad.results import CheckFinding
 
     def where(item: dict) -> str:

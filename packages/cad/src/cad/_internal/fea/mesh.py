@@ -36,8 +36,8 @@ __all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_cent
 def require_fea_stack() -> None:
     """Fail before anything is meshed when netgen or CalculiX is missing. netgen, which meshes, is the netgen
     integration's (``cad[netgen]``), installed only where it publishes wheels (``NETGEN_PLATFORMS``), and is looked
-    for, never imported, in this process (:mod:`cad.netgen._mesher`); CalculiX is the calculix integration's, the one
-    program the person installs, and its error says how."""
+    for, never imported, in this process (:mod:`cad.netgen._mesher`); CalculiX's ccx is the calculix integration's
+    (``cad[calculix]``, the ccx package), and its error says how to install it."""
     import importlib.util
     import platform
 

@@ -69,10 +69,10 @@ needs the middle three. A name alone is refused.
 
 At least one. Each entry lists faces and a type:
 
-| type | what the faces do | Viewer |
-| --- | --- | --- |
-| `fixed` (the default) | held still: every displacement component clamped | **Held at**, a grey cone into the face |
-| `roller` | slide freely in their own plane, but never move along their normal (a frictionless support: a part on a greased floor, or a symmetry plane) | **Slides on**, a grey cone on rollers |
+| type | what the faces do |
+| --- | --- |
+| `fixed` (the default) | held still: every displacement component clamped |
+| `roller` | slide freely in their own plane, but never move along their normal (a frictionless support: a part on a greased floor, or a symmetry plane) |
 
 ```json
 "fixtures": [
@@ -118,7 +118,7 @@ Face references are the engine's refs, the ones the Viewer copies and `cad inspe
 `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
 face the document names is named by its name (`bracket/f:plate.relief.3`). A reference the user
 selected arrives after its document's path (`/work/bracket.step#bracket/face 17`); both forms are
-accepted, and the path must name the document being solved. `cad step fea part.step` (no study: the setup) prints every face
+accepted, and the path must name the document being solved. `cad step solve part.step` (no study: the setup) prints every face
 with its area, centre, surface type and a hint. In a one-part study every face must belong to the
 same part occurrence (an assembly's may be on any part).
 
@@ -128,7 +128,7 @@ face's number can change (a face the document names keeps its name while its fea
 ## Assemblies
 
 A document of several parts is solved as an assembly, bonded where parts touch. Run
-`cad step fea assembly.step` (the setup) first to see the parts and the pairs.
+`cad step solve assembly.step` (the setup) first to see the parts and the pairs.
 
 ```json
 {
@@ -183,7 +183,7 @@ be slow. The finer solve is the one written; the result's `refined` records both
 
 ## `output`
 
-`deformation_scale` multiplies the displacement baked into the GLB so that a small deflection is
+`deformation_scale` multiplies the displacement baked into the result's positions so that a small deflection is
 visible. `"auto"` shows the largest displacement as 5 % of the part's size; a number fixes it (`1`
 shows the true deformed shape). The result's summary records the scale used.
 
@@ -201,9 +201,8 @@ What the result is judged by; pick them from what the user asked. Optional; left
 check alone. text-to-cad evaluates every check on the written solve and writes each result (`kind`,
 `label`, `value`, `limit`, `unit`, `ratio` = value over limit, `close_at`, `status` of `fails`,
 `close` or `passes`, and `where`, the face and point of the worst value) into the summary
-(`summary.checks`), the GLB (`extras.checks`) and the CLI lines. The Viewer's verdict says how many
-fail and how much of the load the weakest takes, then one row per check, worst first; its load
-slider scales them all (stress and displacement are linear in the load).
+(`summary.checks`), `result.json` and the CLI lines. Stress and displacement are linear in the load, so
+a check's `ratio` also says how far the load could go: a ratio of 0.5 holds at twice the load.
 
 | `kind` | judges | keys |
 | --- | --- | --- |
@@ -219,16 +218,24 @@ or key. A failing displacement check is an error finding ("'Tip sag' moves 2.1 m
 
 ## What comes out
 
-`cad step fea part.step --study study.json --out OUT` writes the GLB `OUT` names (which must end in
-`.glb`), and nothing else unless asked:
+`cad step solve part.step --study study.json --out DIR` writes into the folder `DIR` (made when missing;
+nothing else in it is touched):
 
-- `OUT`: the boundary surface, deformed and coloured by von Mises (blue low, red high); the value
-  itself rides along as the `_VON_MISES` vertex attribute, and the mesh `extras` carry the field,
-  units, range and deformation scale, the `findings` and `checks`; for an assembly also `parts`,
-  `connections` and a per-vertex `_PART` index beside `_FACE`.
+- `result.json`: the result, exactly what `--json` prints (below).
+- `result.glb`: a binary glTF of the boundary surface, deformed and coloured by von Mises (blue low,
+  red high, a ramp texture any glTF viewer draws). The raw fields ride along as vertex attributes
+  (`_VON_MISES`, `_DISPLACEMENT` in glTF metres, `_FACE`, an assembly's `_PART`) and the mesh `extras`
+  say what each is, with the deformation scale, the face refs, the study and its checks.
+- `result.vtu`: VTK's unstructured grid, binary: the linear tetrahedra (the corner nodes of the
+  solved ones) with `displacement` (mm) and `von_mises` (MPa) at each node, and an assembly's `part`
+  per element. meshio, PyVista and ParaView read it as it is.
+- `stress.png`, `displacement.png`: the engine's stills of the deformed part coloured by each field,
+  with a colour bar under each (the field, its units, 0 to its peak), where it can draw (not on a Linux machine with no display: then a `solver_note` says so).
+- `ccx.inp`, with `--deck`: the input CalculiX solved, the nodes, the C3D10 elements, the materials,
+  the supports and the nodal loads of the solve written.
 
 The result (`--json`) is a check's: `ok`, the document (`path`), `findings` (each with its
-`severity`, `code`, `message`, `location` and `hint`), `written` (the GLB, then the VTU) and
+`severity`, `code`, `message`, `location` and `hint`), `written` (the files in the folder) and
 `measurements`, the numbers: the study as given (`study`), the material, the resolved faces
 (`named_faces`), the summary's figures at its top level (max von Mises nodal and at the integration points, safety factor, max displacement and its
 location, applied and reaction forces; for an assembly also `parts`, one entry per part with its
@@ -241,19 +248,19 @@ an assembly it also records `connections` (each joint: parts, type, area, gap, `
 when the parts overlapped by no more than the tolerance and were bonded, interface faces) and
 `overlaps`.
 
-With `--vtu`, a `.vtu` beside `OUT`: the volume mesh with displacement and von Mises point data, for
-ParaView.
-
-Each file is written under a temporary name and moved into place only once every one is written: a
-run that fails writes nothing, and the previous result stays as it was. A solve whose reactions do
+Each file is written into a staging folder inside `DIR` and moved into place only once every one is
+written: a run that fails writes nothing, and the previous results stay as they were. A file of an
+earlier solve this one does not write (its pictures, its deck) is removed, so the folder never mixes
+two solves. A solve whose reactions do
 not balance the applied load is such a failure: it is refused, never written with a warning.
 
 `ok` (and the exit code) follow the validators' rule: an error blocks. A result with an error
-finding (it yields, a check fails) is `ok: false` and the command exits 1, with the GLB written all
+finding (it yields, a check fails) is `ok: false` and the command exits 1, with the result written all
 the same: the solve is right, and the part is unfit to use. A study stopped before the solve (a
-part nothing holds) is `ok: false` with no GLB (`written: []`). Warnings never block.
+part nothing holds) is `ok: false` with nothing written (`written: []`). Warnings never block.
 
-A note about the run itself (a finer solve that failed, a slow solve) is a `solver_note` warning.
+A note about the run itself (a finer solve that failed, a slow solve, pictures not drawn) is a
+`solver_note` warning.
 
 For an assembly the summary mixes two scopes. `yield_MPa` and `safety_factor` are the weakest
 part's (the part named by `weakest_part`, whose own peak is `weakest_part_peak_MPa` at

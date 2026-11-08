@@ -1,6 +1,7 @@
-"""``cad step fea`` and ``cad xbf fea`` are the library's operation, run where its integrations are: in the command's
-own process when its environment holds the kernel and netgen, else by the library's runner of one operation
-(``cad._internal.operation``) in the environment of ``cad[build123d,netgen]`` the engine makes. Here this Python
+"""``cad step solve``, ``cad xbf solve`` and ``cad model solve`` are the library's operation, run where its integrations
+are: in the command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner
+of one operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
+makes. Here this Python
 stands in for that environment, so the runner's real subprocess runs the study, and what comes back is the result
 the operation returned, as its own type; a study's options are refused before any environment is made."""
 
@@ -38,17 +39,18 @@ def elsewhere(made: list):
         yield
 
 
-class FeaElsewhereTest(unittest.TestCase):
+class SolveElsewhereTest(unittest.TestCase):
     def test_an_assemblys_setup_comes_back_through_the_runner_as_its_type(self):
         made: list = []
         out = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp, elsewhere(made), contextlib.redirect_stdout(out), \
                 contextlib.redirect_stderr(io.StringIO()):
-            code = step.main(["fea", str(_write_assembly(Path(tmp))), "--json"])
+            code = step.main(["solve", str(_write_assembly(Path(tmp))), "--json"])
         self.assertEqual(code, 0, out.getvalue())
-        # The netgen integration's environment, which holds the kernel beside it (the registry's ``alongside``).
-        self.assertEqual(made, ["netgen"])
-        self.assertEqual(integration_env._names("netgen"), ("build123d", "netgen"))
+        # The calculix integration's environment, which holds the kernel and netgen beside it (the registry's
+        # ``alongside``).
+        self.assertEqual(made, ["calculix"])
+        self.assertEqual(integration_env._names("calculix"), ("build123d", "calculix", "netgen"))
         result = FeaResult.from_data(json.loads(out.getvalue().strip().splitlines()[-1]))
         (pair,) = result.pairs
         self.assertEqual((pair.between, pair.type), (("post", "base"), "bonded"))
@@ -58,13 +60,15 @@ class FeaElsewhereTest(unittest.TestCase):
 
     def test_a_solves_options_are_refused_before_any_environment_is_made(self):
         made: list = []
-        for argv, said in ((["--out", "r.glb"], "--out is a solve's"),
-                           (["--study", "{}"], "give --out RESULT.glb"),
-                           (["--study", "{}", "--out", "r.stl"], "must end in .glb")):
+        for argv, said in ((["--out", "r"], "--out is a solve's"),
+                           (["--deck"], "--deck is a solve's"),
+                           (["--study", "{}"], "give --out DIR"),
+                           (["--study", "{}", "--out", "PART"], "is a file")):
             with self.subTest(argv=argv), tempfile.TemporaryDirectory() as tmp, elsewhere(made), \
                     contextlib.redirect_stderr(io.StringIO()) as err, contextlib.redirect_stdout(io.StringIO()):
                 part = _write_assembly(Path(tmp))
-                self.assertEqual(step.main(["fea", str(part), *argv]), 2)
+                argv = [str(part) if value == "PART" else value for value in argv]
+                self.assertEqual(step.main(["solve", str(part), *argv]), 2)
                 self.assertIn(said, err.getvalue())
         self.assertEqual(made, [])
 

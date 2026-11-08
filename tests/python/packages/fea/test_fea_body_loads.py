@@ -34,8 +34,8 @@ class SelfWeight(unittest.TestCase):
         directory = class_directory(cls)
         step = box_step(directory, "beam", (LENGTH, SIDE, SIDE), "x")
         base = {"material": STEEL_NUMBERS, "fixtures": [{"faces": [ends(step)[0]]}], "mesh": {"size_mm": 2.0}}
-        cls.gravity = solve(step, directory / "gravity.glb", {**base, "loads": [{"type": "gravity", "vector_g": [0, 0, -1]}]})
-        cls.lifted = solve(step, directory / "lifted.glb", {**base, "loads": [{"type": "acceleration", "vector_g": [0, 0, 1]}]})
+        cls.gravity = solve(step, directory / "gravity", {**base, "loads": [{"type": "gravity", "vector_g": [0, 0, -1]}]})
+        cls.lifted = solve(step, directory / "lifted", {**base, "loads": [{"type": "acceleration", "vector_g": [0, 0, 1]}]})
 
     def test_the_tip_sags_as_beam_theory_says(self):
         summary = self.gravity.measurements
@@ -53,7 +53,7 @@ class SelfWeight(unittest.TestCase):
         self.assertEqual(self.lifted.measurements["max_displacement_mm"], self.gravity.measurements["max_displacement_mm"])
         self.assertEqual(self.lifted.measurements["applied_force_N"], self.gravity.measurements["applied_force_N"])
 
-    def test_the_glb_echoes_the_body_load_without_faces(self):
+    def test_the_result_echoes_the_body_load_without_faces(self):
         extras = glb_extras(self.gravity.glb)
         self.assertEqual(extras["study"]["loads"], [{"type": "gravity", "vector_g": [0.0, 0.0, -1.0]}])
 
