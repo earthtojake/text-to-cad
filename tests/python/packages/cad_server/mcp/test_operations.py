@@ -165,6 +165,23 @@ class OperationsTest(unittest.TestCase):
         self.assertFalse(tools['cad_export']['annotations']['readOnlyHint'])
         self.assertTrue(all('_meta' not in tool for tool in tools.values()))
 
+    def test_a_snapshot_s_arguments_say_what_each_takes_in_the_snapshot_s_own_words(self):
+        # A host that loads no skill (Claude Desktop's chat) gives its agent the schema alone: each argument says its
+        # vocabulary, read from the snapshot's own (``cad.engine.snapshot``), and a value out of range says the range.
+        from cad.engine.snapshot import CAMERA_PRESETS, DISPLAY_MODES, MAX_SIDE, SIZE_PROFILES
+
+        arguments = {t['name']: t for t in catalog()}['cad_snapshot']['inputSchema']['properties']
+        for name in ('display', 'camera', 'grid', 'pose', 'width', 'height', 'size_profile', 'annotation', 'measurements'):
+            self.assertTrue(arguments[name].get('description'), name)
+        self.assertTrue(all(mode in arguments['display']['description'] for mode in DISPLAY_MODES))
+        self.assertTrue(all(preset in arguments['camera']['description'] for preset in CAMERA_PRESETS))
+        self.assertEqual((arguments['display']['type'], arguments['camera']['type']), (['string', 'object'], ['string', 'object']))
+        self.assertEqual(arguments['size_profile']['enum'], list(SIZE_PROFILES))
+        self.assertEqual((arguments['width']['minimum'], arguments['width']['maximum']), (16, MAX_SIDE))
+        answer = Operations().call('cad_snapshot', {'requestId': 'snapshot-request-01', 'source': str(Path('/tmp/part.xbf').resolve()),
+                                                    'output': str(Path('/tmp/part.png').resolve()), 'width': 9000})
+        self.assertEqual((answer['state'], answer['error']), ('rejected', 'width is from 16 to 8192, not 9000'))
+
     def test_snapshot_packet_checks_nested_paths_before_rendering(self):
         jobs = Operations()
         with patch('cad.engine.api.snapshot') as snapshot:

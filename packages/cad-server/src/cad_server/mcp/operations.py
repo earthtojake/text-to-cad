@@ -8,7 +8,6 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import math
 import re
 from pathlib import Path
 
@@ -34,14 +33,49 @@ COMMON = {
 # What follows an operation: status or cancel, by the id and epoch its start returned.
 FOLLOW = ("action", "operationId", "epoch", "afterSequence", "waitMs")
 FOLLOW_REQUIRED = ("action", "operationId", "epoch")
-SNAPSHOT = {"source": STRING,
-            "output": {**STRING, "description": "The PNG's absolute path; required with source unless a packet names the outputs."},
-            "packet": {**JSON_VALUE, "description": "A Quick Edit packet (its absolute path or object), which declares its outputs: "
-                                                    "give it in place of output; a source with it replaces its input."},
-            "display": JSON_VALUE, "camera": JSON_VALUE, "grid": BOOL,
-            "pose": {"type": ["object", "string"]}, "width": {"type": "integer", "minimum": 1},
-            "height": {"type": "integer", "minimum": 1}, "size_profile": STRING,
-            "annotation": JSON_VALUE, "measurements": JSON_VALUE}
+
+
+def _snapshot_arguments():
+    """``cad_snapshot``'s own arguments, each said in the snapshot's words (``cad.engine.snapshot``'s
+    vocabularies): an agent whose host loads no skill reads what each takes here, and nowhere else."""
+    from cad.engine.snapshot import CAMERA_PRESETS, DEFAULT_SIZE, DISPLAY_MODES, MAX_SIDE, SIZE_PROFILES
+
+    presets = ["iso", *sorted(CAMERA_PRESETS - {"iso"})]
+    side = {"type": "integer", "minimum": 16, "maximum": MAX_SIDE}
+    return {
+        "source": STRING,
+        "output": {**STRING, "description": "The PNG's absolute path; required with source unless a packet names the outputs."},
+        "packet": {**JSON_VALUE, "description": "A Quick Edit packet (its absolute path or object), which declares its outputs: "
+                                                "give it in place of output; a source with it replaces its input."},
+        "display": {"type": ["string", "object"], "description":
+                    f"A mode: {', '.join(DISPLAY_MODES)} (solid unless given; parts colours each part of an assembly its "
+                    "own); or exploded=0.6, an assembly's parts moved apart (0 to 1), alone or after a mode "
+                    "(hidden-line,exploded=0.6); or the display object: {mode, grid, camera: {projection: orthographic or "
+                    "perspective, focalLength}, clip: {axis: x, y or z, at, invert}, exploded: {amount}, hidden: "
+                    "[part refs], isolated: [part refs]}."},
+        "camera": {"type": ["string", "object"], "description":
+                   f"A preset: {', '.join(presets)} (iso unless given; the world's axes, Z up: front looks from -Y, top "
+                   "from +Z); an azimuth:elevation pair in degrees (45:30); or a camera object {preset, position, target, "
+                   "up, direction, zoom, orthographicHalfHeight}, its lengths in the viewer's scene units (a document's "
+                   "millimetres, a robot's metres)."},
+        "grid": {**BOOL, "description": "Draw the measuring grid under the model."},
+        "pose": {"type": ["object", "string"], "description":
+                 "A mechanism state's name, or joint and coupling values ({\"elbow\": 45}: a turn in degrees, a slide "
+                 "in the file's unit, a document's millimetres): the mechanism drawn posed. A mesh has none."},
+        "width": {**side, "description": "The picture's width in pixels (with height)."},
+        "height": {**side, "description": "The picture's height in pixels (with width)."},
+        "size_profile": {"type": "string", "enum": list(SIZE_PROFILES), "description":
+                         f"A named size, in place of width and height ({DEFAULT_SIZE[0]}x{DEFAULT_SIZE[1]} unless given)."},
+        "annotation": {"type": ["object", "string"], "description":
+                       "The viewer's annotation (its object, or the absolute path of its file or of a Quick Edit "
+                       "packet's .snapshot.json): its ink drawn over the model."},
+        "measurements": {"type": ["array", "string"], "description":
+                         "Measure's dimensions, [{start, end, label, color}] in the document's units, or the absolute "
+                         "path of a JSON file of them: drawn over the model."},
+    }
+
+
+SNAPSHOT = _snapshot_arguments()
 START = {
     "cad_export": obj({"source": STRING, "destinations": {"type": "array", "minItems": 1, "maxItems": 32, "items": STRING},
                        "tolerance": {"type": "number", "minimum": 0.001,
@@ -163,8 +197,11 @@ def checked(value, schema, label="arguments"):
         raise JobError(f"Invalid {label}: choose from {schema['enum']}")
     if isinstance(value, str) and not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", 1000000):
         raise JobError(f"Invalid length for {label}")
-    if type(value) in (int, float) and not schema.get("minimum", -math.inf) <= value <= schema.get("maximum", math.inf):
-        raise JobError(f"Invalid range for {label}")
+    low, high = schema.get("minimum"), schema.get("maximum")
+    if type(value) in (int, float) and ((low is not None and value < low) or (high is not None and value > high)):
+        bounds = (f"from {low:g} to {high:g}" if low is not None and high is not None else
+                  f"at least {low:g}" if low is not None else f"at most {high:g}")
+        raise JobError(f"{label} is {bounds}, not {value:g}")
     if isinstance(value, dict) and "properties" in schema:
         missing = set(schema.get("required", [])) - value.keys()
         unknown = value.keys() - schema["properties"].keys()
