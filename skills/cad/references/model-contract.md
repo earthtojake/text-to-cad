@@ -140,7 +140,8 @@ of the first one's result. Outside a run it is its function.
   once; marking one that returns `body` renames nothing.
 
 ```python
-from cad import memo, model
+from cad import model
+from cad.build123d import memo
 
 
 @memo
@@ -238,29 +239,29 @@ timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
 What a body reads is an input of its run, by the file's bytes, and a changed file
 re-runs the body that read it:
 
-- **`read_step(path)` and `read_xbf(path)`** copy a document's geometry into the model as
+- **`step.read(path)` and `xbf.read(path)`** copy a document's geometry into the model as
   a build123d compound tree: each assembly a `Compound`, each part named, coloured and
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
-  `cad export`: export it again from its CAD tool as one file.
-- **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
-  xbf of it, which `read_xbf` reads many times faster than `read_step` parses the STEP
+  `cad <type> export`: export it again from its CAD tool as one file.
+- **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
+  xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
-- **`read_mesh(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
+- **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and
   built from, never placed in a model.
 - **Every file the body's Python opens** for reading is an input too: `open`,
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's
-  bytes as the server's readers are. Prefer `read_step` (names, colours, materials, the
-  assembly tree) and `read_xbf` (fastest); `import_stl` makes a mesh, which no model
-  holds: measure it with `read_mesh`.
+  bytes as the server's readers are. Prefer `step.read` (names, colours, materials, the
+  assembly tree) and `xbf.read` (fastest); `import_stl` makes a mesh, which no model
+  holds: measure it with `stl.read`.
 - **A read past the server runs the body on every run**: OCCT's readers driven directly
   (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the server cannot hear
-  them. Use `read_step`, `read_xbf`, `read_mesh` or build123d's importers.
+  them. Use `step.read`, `xbf.read`, `stl.read` or build123d's importers.
 - **Compose project models by calling them.** A file the project exported is a
   deliverable, not an input: reading it ties a model to an export's moment.
 
@@ -270,16 +271,16 @@ Anchor paths on the script, so a run reads the same file from any working folder
 from pathlib import Path
 
 import build123d as bd
-from cad import model, read_mesh, read_xbf
+from cad import model, stl, xbf
 
 HERE = Path(__file__).resolve().parent
 
 
 @model
 def rig():
-    motor = read_xbf(HERE / "../vendor/motor.xbf")
+    motor = xbf.read(HERE / "../vendor/motor.xbf")
     motor.label = "motor"
-    pcb = read_mesh(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
+    pcb = stl.read(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
     tray = bd.Box(pcb.size.X + 6, pcb.size.Y + 6, 6)
     tray.label = "tray"
     return bd.Compound(children=[tray, bd.Pos(0, 0, 20) * motor], label="rig")
@@ -297,7 +298,7 @@ within its namespace, the function's name by default, `name=` gives it another. 
 is the script's folder, with no project detection. Moving a named model to another file of its folder
 keeps its id: run the file it left with `cad run` (or delete it) first, since until then the server
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
-`/<id>` on the server's address; `cad export`, `snapshot` and `inspect`, and the
+`/<id>` on the server's address; `cad <type> export`, `snapshot` and `inspect`, and the
 CAD app's tools, take the id and read the document as the server holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
 it again.
@@ -308,7 +309,7 @@ it again.
   machine's) that never drops a document a page watches.
 - **The server never reruns code.** A document it no longer holds (its file in the server's
   cache deleted, or never saved) is refused with the command that
-  brings it back, `cad run <the script that defines it>`, by the page, `cad inspect`
+  brings it back, `cad run <the script that defines it>`, by the page, `cad <type> inspect`
   and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:
@@ -325,7 +326,11 @@ it again.
   (`cad run /work/arm.py`) to update the document and its open pages.
   The cache keeps every document until you delete it (`cad delete <id>`, or a script's
   path for every document of it, or Delete in a card's menu on the home); nothing evicts
-  from it. Deleting removes the record and the cached document, never a file.
+  from it. Deleting removes the record and the cached document, never a file. It asks
+  first: at a terminal `Delete them? (y/N)`; where nothing can ask, it deletes nothing
+  without `--yes` (exit 2, `confirmation_required`, naming the command with it). Delete
+  only what the person asked to delete, with `--yes`; `cad delete <id> --dry-run` lists
+  what it would delete, and how many.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
   shape) is handed over: `model(shape, name="plate")` makes a document of it, held,
   cached, served on its page and exported like any other, and returns the same handle,

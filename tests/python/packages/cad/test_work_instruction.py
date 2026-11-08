@@ -730,7 +730,7 @@ class PartNameTests(unittest.TestCase):
 
 class FileTests(unittest.TestCase):
     """An assembly's .xbf or .step is read as a model's document is, and a face named by the engine
-    (``bracket/f:...``) is resolved through ``cad.inspect``. The names are a built model's own, so
+    (``bracket/f:...``) is resolved through the type's ``inspect``. The names are a built model's own, so
     this builds the template's model once and writes its files."""
 
     @classmethod
@@ -738,7 +738,7 @@ class FileTests(unittest.TestCase):
         import sys
         from unittest import mock
 
-        import cad
+        from cad import model
 
         temporary = generated_cad_directory(prefix="wi-files-")
         cls.addClassCleanup(temporary.cleanup)
@@ -749,7 +749,7 @@ class FileTests(unittest.TestCase):
         cls.addClassCleanup(sys.modules.pop, "bracket_assembly", None)
         cls.document = bracket_assembly()
         cls.xbf, cls.step_file = root / "assembly.xbf", root / "assembly.step"
-        cad.export(cls.document, cls.xbf, cls.step_file, log=lambda _line: None)
+        model.export(cls.document, cls.xbf, cls.step_file, log=lambda _line: None)
 
     def instruction(self, source):
         from cad.work_instruction import Instruction
@@ -766,9 +766,9 @@ class FileTests(unittest.TestCase):
                     None, surfaces=["bracket/face 5"]).ops[-1].surfaces, (("bracket/face 5", "bracket"),))
 
     def test_a_named_face_is_resolved_to_its_ordinal_through_the_engine(self) -> None:
-        import cad
+        from cad import model
 
-        name = cad.inspect(self.document.id, "bracket/face 5")["name"]
+        name = model.inspect(self.document.id, "bracket/face 5")["name"]
         self.assertTrue(name and name.startswith("f:"), name)
         for source in (self.document, self.xbf):
             with self.subTest(source=getattr(source, "name", source)):
@@ -1048,10 +1048,10 @@ class PlayerTests(_Assembly):
 
         wi = self._guide()
         wi.source_name = "cart v2.step"
-        with mock.patch("cad.export") as export, mock.patch("cad.model") as handed:
+        with mock.patch("cad.model") as handed:
             write_glb(wi, self.root / "named.glb")
         self.assertEqual(handed.call_args.kwargs["name"], "cart_v2_step_guide")
-        export.assert_called_once()
+        handed.export.assert_called_once()
 
     def test_animated_false_writes_only_the_pdf(self) -> None:
         from unittest import mock

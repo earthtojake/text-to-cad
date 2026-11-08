@@ -59,7 +59,7 @@ out), the blanks the floor fills in and a column per sign-off.
 The assembly is a model's document (what calling the model returns: the engine
 builds it, or replays it) or an ``.xbf`` or ``.step`` file. Its parts are named
 as the engine names them (``cad.engine.refs``), so a part or face ref copied
-from ``cad inspect`` or the viewer is one ``install=`` and ``surfaces=`` take,
+from ``cad <type> inspect`` or the viewer is one ``install=`` and ``surfaces=`` take,
 and the figures are the engine's snapshots of that document.
 
 Like ``@eng_drawing`` this is a document over a document, run in the script's
@@ -753,7 +753,7 @@ class _Occurrence:
 
 class _Scene:
     """The assembly's occurrence tree, read from the shape the document holds and named as the
-    engine names it (``cad.engine.refs``), so a ref here is a ref ``cad inspect``, the
+    engine names it (``cad.engine.refs``), so a ref here is a ref ``cad <type> inspect``, the
     viewer and a snapshot's ``hidden`` read the same way."""
 
     def __init__(self, shape: Any, source: str) -> None:
@@ -818,9 +818,7 @@ class _Scene:
         if len(selectors) != 1 or selectors[0].kind != "face":
             raise ValueError("surfaces takes face refs such as 'bracket/face 3'")
         if isinstance(selectors[0].element, str):
-            import cad
-
-            facts = cad.inspect(self.source, ref)
+            facts = document_type(self.source).inspect(self.source, ref)
             facts = facts[0] if isinstance(facts, list) else facts
             node = next((node for node in self.root.parts() if refs.path_text(self.root, node) == facts["path"]), None)
             if node is None:
@@ -853,6 +851,16 @@ def _faces(shape: Any) -> list[Any]:
     return [Face(found.FindKey(index)) for index in range(1, found.Extent() + 1)]
 
 
+def document_type(source: str) -> Any:
+    """``cad.<type>`` of the document an Instruction reads (``_assembly``): ``cad.xbf`` or ``cad.step`` of a
+    file, ``cad.model`` of a model's id."""
+    import cad
+    from cad.registry import type_of
+
+    found = type_of(source)
+    return getattr(cad, found.id) if found is not None else cad.model
+
+
 def _assembly(assembly: Any) -> tuple[Any, str, str]:
     """What an Instruction reads: (the assembly's shape, the document the engine knows it by --
     a model's id or the file's path -- and the name the pages print)."""
@@ -868,9 +876,9 @@ def _assembly(assembly: Any) -> tuple[Any, str, str]:
                              f"assembly's .xbf or .step, got {str(assembly)!r}")
         if not path.is_file():
             raise FileNotFoundError(f"no document at {path}")
-        from cad import read_step, read_xbf
+        from cad import step, xbf
 
-        return (read_xbf if suffix == ".xbf" else read_step)(path), str(path), path.name
+        return (xbf.read if suffix == ".xbf" else step.read)(path), str(path), path.name
     raise TypeError(f"Instruction takes a model's document (what calling the model returns) or an assembly's "
                     f".xbf or .step, got {type(assembly).__name__}")
 

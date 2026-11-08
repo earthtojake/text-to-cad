@@ -1,8 +1,9 @@
 # CAD app (MCP Apps)
 
 The page an agent host renders for CAD: the same `@cad/ui` FileViewer and
-renderers `apps/web` composes, behind a different host — an MCP Apps bridge
-instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
+renderers `apps/web` composes (`cadRenderers`: every format the viewer opens, a KiCad board and
+schematic among them, and the file handler's extensions with them: `cad_server/mcp/server.py`'s
+`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
 `cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
 engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
@@ -39,7 +40,7 @@ terminal UI show none and are served as text clients.
   (file name)", then Default app) — no Export, as this host has no downloads;
   then, at the right, only Full size where the host can show a view full size and, last, the update
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
-  in Projection, Display and Preview, the file sidebar, the view cube, and Quick Edit. In
+  in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The Claude app's Code tab draws the card too, but carries none of its calls
   back: there the card tries the engine directly, else links the CAD Viewer (**A card says
@@ -125,6 +126,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   It is the view's, in memory: another tab or card has its own, and a view opened
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
+- **What's new is a tab's.** After an update to a release with notes, a tab (the sidebar, a
+  thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
+  kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
+  chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
   and no explorer (the host's own file tree is its navigation), no Back or Forward,
@@ -142,14 +147,15 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   directly, with no file registry. `cad_show` targets the thread’s tab unless it names
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
-- **Two requests to the network: the version check, and analytics with consent.**
-  Both go to `api.texttocad.dev` (`apps/api`). At most once an hour, the server
+- **Two requests to the network of its own: the version check, and analytics with consent.**
+  Both go to `api.texttocad.dev` (`apps/api`); installing a release, the person's update or an automatic
+  patch update, downloads it from PyPI as `cad update` does. At most once an hour, the server
   reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CAD_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). A server of a newer release than the engine's -- an app whose plugin
   moved ahead -- says a release is out too, with no request (`updates.see`). While this
   install is behind, the navbar shows the shared blue `UpdateButton`
-  (`@cad/ui/update`), an icon and nothing else, first among its controls, over a
+  (`@cad/ui/update`), an icon and nothing else, last and outermost of its controls, over a
   file and over the home; the file handler, which has no navbar, shows it in its corner,
   under Full size. A launch carries the notice the server last read, so the button draws
   with the page; the page reads it again (`/api/v1/server`) when the person comes back to

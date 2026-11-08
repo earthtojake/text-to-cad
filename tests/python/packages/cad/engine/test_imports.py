@@ -22,7 +22,7 @@ from tests.python.support import engine_cache
 
 KIT = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import paint, step, xbf
 from bd_materials import metals
 
@@ -298,7 +298,7 @@ class ReadsTest(unittest.TestCase):
         self.assertEqual(tuple(mesh.bounding_box().size), (40.0, 30.0, 2.0))
         with self.assertRaises(ValueError):
             mesh.vertices[0, 0] = 1.0  # read-only: a later build's read of the same bytes is this object
-        with self.assertRaisesRegex(ValueError, "read a STEP with read_step"):
+        with self.assertRaisesRegex(ValueError, "read a STEP with step.read"):
             read_mesh(self.folder / "part.step")
         self.built("enclosure")
         self.assertEqual(self.size("enclosure"), (46.0, 36.0, 6.0))
@@ -351,7 +351,7 @@ class ReadsTest(unittest.TestCase):
                 if status == "loaded":
                     break
                 self.assertEqual(report["retention"]["fallbacks"], {f"reads.py::{name}": [
-                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use read_step/read_xbf/read_mesh"]})
+                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read"]})
                 # The report is the build's, its memo tally whole: `python model.py` prints it.
                 self.assertIn("misses", report["memo"], name)
                 self.assertTrue(said.describe(report, 1.0, None).startswith(f"built reads.py::{name} in"), name)
@@ -413,7 +413,7 @@ class ReadsTest(unittest.TestCase):
         (report,) = engine_build.build(self.folder / "reads.py", ["mesh_face"], cwd=self.folder)
         self.assertFalse(report["ok"])
         self.assertIn("kit/scan is a mesh, not B-rep: face 1 is a triangulation with no surface", report["error"])
-        self.assertIn("read_mesh(path)", report["error"])
+        self.assertIn("stl.read(path)", report["error"])
         self.assertFalse((self.folder / "XBF/mesh_face.xbf").exists())
         self.assertTrue(self.built("enclosure")["ok"])
 

@@ -1,4 +1,4 @@
-"""``cad snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
+"""``cad <type> snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
 drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 
 - ``.xbf``, ``.step``: a document, served by the engine (the daemon, so its meshes are the ones
@@ -11,19 +11,30 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.urdf``, ``.sdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
   kinematics (``formats/robot.py``), drawn as a document is; ``--pose`` poses it.
 - ``.dxf``: a drawing, from above, in its pens, in the viewer's 2D look (``render/drawing.py``).
+- ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
+  colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
+  mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
+  active, others, zones, tracks}`` (the active layer drawn on top, ``others`` the rest
+  ``shown``, ``dimmed`` or ``hidden`` -- the outline and the holes through an active copper layer kept at full
+  strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1).
+- ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
+  painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
+  ``{sheet, border}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
-the look the viewer's viewport resolves for the same display settings. The answer is PNG bytes,
-which this writes to OUT.
+the look the viewer's viewport resolves for the same display settings. Every picture is light: the
+studio backdrop, the drawing's white paper, KiCad's light colours, whatever theme the person's viewer
+is in: a snapshot is a tool for an agent, and dark is the harder to read, so no request, flag or
+packet names a theme. The answer is PNG bytes, which this writes to OUT.
 
 The request is the snapshot contract's where it applies (``--display`` mode or JSON, ``--grid``,
 ``--camera``, ``clip`` -- its ``at`` in the file's unit, as the viewer reads it: a
 document's millimetres, a robot's or a GLB's metres, a 3MF's declared unit (``render/clip.py``) --
 the sizes, ``--json``), and what a kind does not offer is
 refused by name before anything renders: ``parts`` and ``exploded`` for a file that places a single
-part, ``--pose`` for a mesh, and everything but ``appearance`` for a drawing. ``--display
+part, ``--pose`` for a mesh, and every display setting for a drawing. ``--display
 exploded=0.6`` (or ``display.exploded``) moves the parts apart as the viewer's Explode does, by its
 amount (0.5 unless one is given). ``--annotation FILE`` draws the viewer's annotation over the
 model (its ink on the parts it was drawn on, wherever they stand): an annotation file, or the Quick
@@ -47,7 +58,8 @@ refused by name before anything renders.
 ``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
 file in its words (``job_pictures``): every output of every job drawn, each job a view with its
 own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
-robot's, the visuals it hid (``selection.hide``), the packet's ink and dimensions over each, at
+robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
+(``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
 the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``,
 ``renderScale``, ``sizeProfile``). A view's own camera with the tight frame off is drawn exactly;
 any other camera is fitted with the job's padding. Every request is checked before anything
@@ -71,17 +83,16 @@ from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
            "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
-           "picture_path", "snapshot"]
+           "parse_references", "picture_path", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated", "tint"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "tint"})
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
 # ``display.tint``: parts drawn in one colour of the request's, which no viewer setting makes (a
 # picture's own emphasis, as a work instruction fills the parts its step installs).
 TINT_KEYS = frozenset({"parts", "color"})
-APPEARANCES = ("light", "dark")
 EXPLODED_KEYS = frozenset({"enabled", "amount"})
 # Explode's amount when a request names none: the viewer's own default.
 EXPLODED_AMOUNT = 0.5
@@ -109,9 +120,9 @@ DEFAULT_SIZE = SIZE_PROFILES["diagnostic"]
 MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
-PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated"})
+PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
 JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
-                      "output", "outputs"})
+                      "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
 SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale"})
 SELECTION_KEYS = {"hide": "hidden", "focus": "isolated"}  # a view's selection, as the display says it
@@ -122,6 +133,12 @@ RENDER_SCALE_RANGE = (1.0, 3.0)
 
 class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders."""
+
+
+class NoSuchFile(SnapshotRefused):
+    """A file a flag names (``--annotation``, ``--measurements``, ``--job``) that is not there: refused as every
+    request is, and told apart as the input that is not there it is (the server's ``cad`` command says it
+    ``not_found``)."""
 
 
 # --- the request ---------------------------------------------------------------------------
@@ -169,10 +186,19 @@ def exploded_amount(display: dict[str, Any]) -> float:
     return float(exploded["amount"]) if exploded and exploded.get("enabled") else 0.0
 
 
-def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, an appearance (``light``, ``dark``: all a drawing
-    takes), several by commas (``hidden-line,exploded=0.6``), or the viewer's display object (JSON,
-    or a JSON file)."""
+def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
+    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
+    the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
+    (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
+    ``render/schematic.py``)."""
+    if schematic:
+        from cad.engine.render.schematic import display_options as schematic_options
+
+        return schematic_options(value, grid)
+    if board:
+        from cad.engine.render.board import display_options
+
+        return display_options(value, grid)
     display: dict[str, Any] = {}
     if value:
         text = value.strip()
@@ -188,12 +214,9 @@ def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
-                elif token in APPEARANCES and "appearance" not in display:
-                    display["appearance"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "exploded=AMOUNT moves the parts apart, and light or dark is the appearance "
-                                          "(all a drawing takes; one of each, by commas)")
+                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
     unknown = sorted(set(display) - DISPLAY_KEYS)
@@ -339,7 +362,7 @@ def _load(value: Any, label: str) -> Any:
             raise SnapshotRefused(f"{label} is not JSON: {error}") from None
     path = Path(text).expanduser()
     if not path.is_file():
-        raise SnapshotRefused(f"{label} {text}: no such file")
+        raise NoSuchFile(f"{label} {text}: no such file")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -541,7 +564,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -567,24 +590,50 @@ class Still:
     tight: bool = True
     transparent: bool = False
     scale: float = 1.0
+    references: list[str] | None = None  # a board's: what its prompt named, lit (``parse_references``)
 
     def as_json(self) -> dict[str, Any]:
         return {"display": self.display, "camera": self.camera, "exact": self.exact, "preview": self.preview,
                 "size": list(self.size), "pose": self.pose, "annotation": self.annotation,
                 "measurements": self.measurements, "padding": self.padding, "tight": self.tight,
-                "transparent": self.transparent, "scale": self.scale}
+                "transparent": self.transparent, "scale": self.scale, "references": self.references}
 
     @staticmethod
     def from_json(found: dict[str, Any]) -> "Still":
         return Still(dict(found.get("display") or {}), found.get("camera"), bool(found.get("exact")),
                      bool(found.get("preview")), tuple(found.get("size") or DEFAULT_SIZE), found.get("pose"),
                      found.get("annotation"), found.get("measurements"), float(found.get("padding", PADDING)),
-                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0))
+                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0),
+                     found.get("references"))
 
     @property
     def drawn(self) -> tuple[int, int]:
         """The size the picture is drawn at: its size, times ``scale`` (brought down after)."""
         return (max(1, round(self.size[0] * self.scale)), max(1, round(self.size[1] * self.scale)))
+
+
+def parse_references(value: Any, document: Path) -> list[str] | None:
+    """A board's ``references`` (a packet's, or a job's): what its prompt named, each a board reference
+    (``#R1``, ``#track:<uuid>``, ``#F.Cu@x10y5..x20y15``), lit over the board; ``None`` for none. Each is
+    checked as the language says it (``cad.engine.formats.kicad.refs``) and kept canonical."""
+    if value is None:
+        return None
+    if Path(os.fspath(document)).suffix.lower() != ".kicad_pcb":
+        raise SnapshotRefused(f"references light what a board's prompt named; {Path(os.fspath(document)).name} is no board")
+    from cad.engine.formats.kicad.refs import parse_board_selector
+    from cad.engine.render.board_refs import MAX_REFERENCES
+
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise SnapshotRefused("references lists board references: #R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5..x20y15")
+    if len(value) > MAX_REFERENCES:
+        raise SnapshotRefused(f"references names at most {MAX_REFERENCES} things")
+    canonical = []
+    for item in value:
+        selector = parse_board_selector(item)
+        if selector is None:
+            raise SnapshotRefused(f"references: {item!r} is not a board reference (#R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5)")
+        canonical.append(selector.canonical)
+    return canonical
 
 
 def refusals(still: Still, structure: dict[str, Any], name: str) -> None:
@@ -652,12 +701,13 @@ def write_png(out: Path, data: bytes) -> None:
 
 
 def options(display: Any = None, camera: Any = None, grid: bool = False, width: int | None = None,
-            height: int | None = None, size_profile: str | None = None) -> tuple[dict[str, Any], Any, tuple[int, int]]:
+            height: int | None = None, size_profile: str | None = None, *,
+            board: bool = False, schematic: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
     """A snapshot's options as a function gives them -- ``display`` a mode, a
     JSON text or the display object -- checked as the verb checks its flags."""
     if isinstance(display, dict):
         display = json.dumps(display)
-    return (parse_display(display, bool(grid)), parse_camera(camera if camera is None or isinstance(camera, str)
+    return (parse_display(display, bool(grid), board=board, schematic=schematic), parse_camera(camera if camera is None or isinstance(camera, str)
                                                               else json.dumps(camera)),
             parse_size(width, height, size_profile))
 
@@ -929,7 +979,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                               "outputs, ...}) or a list of jobs")
     if not jobs:
         raise SnapshotRefused("--job names no job")
-    shown_flags = parse_display(display, grid) if display is not None else None
+    shown_flags = None  # parsed per file: each file family owns its Display vocabulary
     camera_flag = parse_camera(camera if camera is None or isinstance(camera, str) else json.dumps(camera))
     pose_flag = parse_pose(pose) if isinstance(pose, str) else pose
     ink_flag = parse_annotation(annotation)
@@ -952,7 +1002,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         document = Path(os.fspath(named))
         if not by_id(document):
             document = document.expanduser().resolve()
-        drawing = document.suffix.lower() == ".dxf"
+        board = document.suffix.lower() == ".kicad_pcb"
+        schematic = document.suffix.lower() == ".kicad_sch"
+        drawing = board or schematic or document.suffix.lower() == ".dxf"
+        shown_flags = parse_display(display, grid, board=board, schematic=schematic) if display is not None else None
         settings = _settings(view.get("output"), f"{where}.output", drawing)
         tight, padding = settings.get("tightFrame", True), float(settings.get("padding", PADDING))
         scale = float(settings.get("renderScale", 1.0))
@@ -961,8 +1014,8 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         else:
             if view.get("display") is not None and not isinstance(view["display"], dict):
                 raise SnapshotRefused(f"{where}.display is the view's display object")
-            shown = parse_display(json.dumps(view["display"]), grid) if view.get("display") else (
-                {"grid": True} if grid else {})
+            shown = (parse_display(json.dumps(view["display"]), grid, board=board, schematic=schematic)
+                     if view.get("display") else ({"grid": True} if grid else {}))
         selection = view.get("selection")
         if selection is not None:
             if not isinstance(selection, dict) or set(selection) - set(SELECTION_KEYS):
@@ -975,6 +1028,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         ink = ink_flag if annotation is not None else parse_annotation(view.get("annotation", shared.get("annotation")))
         dimensions = dimensions_flag if measurements is not None else parse_measurements(
             view.get("measurements", shared.get("measurements")))
+        lit = parse_references(view.get("references", shared.get("references")), document)
         posed = pose_flag if pose is not None else view.get("jointValues")
         if isinstance(posed, str):
             posed = parse_pose(posed)
@@ -1005,12 +1059,20 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
             pictures.append((document, out, Still(shown, framed, exact, False, size,
                                                   posed, ink, dimensions, padding, tight,
-                                                  bool(settings.get("transparent")), scale)))
+                                                  bool(settings.get("transparent")), scale, lit)))
     written = [out for _document, out, _still in pictures]
     twice = sorted({str(out) for out in written if written.count(out) > 1})
     if twice:
         raise SnapshotRefused(f"--job writes {', '.join(twice)} twice: give each output a path of its own")
     for document, _out, still in pictures:
+        if document.suffix.lower() == ".kicad_pcb":
+            from cad.engine.render.board import refusals as board_refusals
+
+            board_refusals(still, document.name)
+        if document.suffix.lower() == ".kicad_sch":
+            from cad.engine.render.schematic import refusals as schematic_refusals
+
+            schematic_refusals(still, document.name)
         if document.suffix.lower() == ".dxf":
             from cad.engine.render.drawing import refusals as drawing_refusals
 

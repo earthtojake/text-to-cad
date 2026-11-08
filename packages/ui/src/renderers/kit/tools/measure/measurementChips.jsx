@@ -4,7 +4,7 @@ import { measureLabelText, measureSeriesColor } from "@cad/core/lib/viewer/measu
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import ReferenceChips from "../quick-edit/ReferenceChips.jsx";
 import SubToolbar, { SubToolbarSeparator } from "../SubToolbar.jsx";
-import MeasurementCard from "./MeasurementCard.jsx";
+import { measurementFacts } from "./MeasurementCard.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
 
@@ -24,7 +24,8 @@ export function useMeasurementChips(measure) {
     const reading = measureLabelText(item.measurement);
     return { key: `measure-${item.id}`, label: t(item.measurement?.approximate ? "measure.chipApproximate" : "measure.chip", { n: index + 1, reading }), text: reading,
       glyph: "ruler", glyphColor: measureSeriesColor(item.colorIndex),
-      card: <MeasurementCard item={item} />,
+      detail: { id: `measure-${item.id}`, pick: "", kind: "ruler", title: t(item.measurement?.approximate ? "measure.chipApproximate" : "measure.chip", { n: index + 1, reading }),
+        facts: measurementFacts(item, t) },
       onRemove: () => onDelete(item.id), onHover: on => hover(on ? item.id : "") };
   }), [items, onDelete, hover, t]);
 }

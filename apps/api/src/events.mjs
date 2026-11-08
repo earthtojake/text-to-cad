@@ -84,7 +84,7 @@ const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
-const KINDS_8 = new Set([...KINDS_6, 'model']);
+const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'work_instruction',
   'quick_edit']);
@@ -119,7 +119,7 @@ export const CONTROLS = new Set([
   // A model's routines (the sidebar's Animation or Motion, Preview's playbar), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
-  // The file sidebar's sections, and its trees.
+  // The floating sidebar's sections (which older releases send), and the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
   // A part's menu, over the model or in its tree.
@@ -136,6 +136,7 @@ export const CONTROLS = new Set([
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
+  'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home.
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@cad/ui/consent';
+import { useWhatsNew } from '@cad/ui/whats-new';
 import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, useUpdate } from '@cad/ui/update';
+import { UpdateButton, useAutomaticUpdates, useUpdate } from '@cad/ui/update';
 import { viewerLinks } from '@cad/ui/links';
 import { Button } from '@cad/ui/primitives/button';
 import { TooltipHint } from '@cad/ui/primitives/tooltip';
@@ -49,6 +50,9 @@ export const LOST: Record<Presentation, string> = {
 export function lostNotice(say: (key: string, params?: Record<string, unknown>) => string, presentation: Presentation, hostName: string | null | undefined): string {
   return say(LOST[presentation], { host: hostDisplayName(hostName) ?? say('cad.lost.thisApp') });
 }
+
+// A card's What's new: none, and nothing read for it.
+const NO_WHATS_NEW = async () => null;
 
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.
 const INLINE_ASPECT = 0.62, INLINE_MIN_HEIGHT = 320, INLINE_MAX_HEIGHT = 560;
@@ -282,7 +286,15 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // view (`useLanguage`, the same as the browser viewer's).
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
-  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
+  // Automatic updates, after Telemetry: the person's, shared with the browser viewer and `cad update auto`.
+  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
+  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
+    [telemetry, automaticUpdates]);
+  // What's new, once after an update to a release with notes, where the view has the page (a tab):
+  // never in a card, whose few hundred pixels in a chat are no place for a dialog, nor while the
+  // card says its server is gone.
+  const whatsNew = useWhatsNew(presentation === 'tabs' ? client.whatsNew : NO_WHATS_NEW);
   // A newer text-to-cad (`cad_server/updates.py`), from the launch's notice at once, while this install is
   // behind: the update button, an icon last among the navbar's controls (in the file handler, which
   // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from
@@ -321,6 +333,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     overlay={lost ? <Banner message={typeof lost === 'string' ? lost : lostNotice(translator(locale), presentation, bridge.hostInfo.name)} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
+      whatsNew={presentation === 'tabs' && !lost && updater.phase.phase !== 'restarting' ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
       update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}

@@ -54,7 +54,7 @@ PLATFORM = context.platform()  # a row a platform draws apart has a golden of it
 # plate's back edge, to pose.
 BENCH = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import paint, xbf
 from bd_materials import FinishedMaterial, metals, plastics, glass
 from bd_materials.core import RangeMaterial
@@ -735,7 +735,7 @@ if __name__ == "__main__":
 
 
 class DaemonRenderTest(unittest.TestCase):
-    """`cad snapshot` drawn by OCCT through the daemon: a render process per served
+    """`cad <type> snapshot` drawn by OCCT through the daemon: a render process per served
     document, warm from its second picture, sent its file's new version by the next picture with
     only the parts it lacks, gone with the daemon; and in this process with ``daemon=False`` from Python. Nothing is written but
     the pictures, and the daemon's door, lock and clients' pipes."""

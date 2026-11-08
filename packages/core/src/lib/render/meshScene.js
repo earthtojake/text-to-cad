@@ -96,6 +96,11 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
     },
     /** Whether `path` (`o2.1`) is a 3MF object of this file. */
     hasPart: path => byPath.has(path),
+    /** A 3MF object's name alone, as its chip says it, counting nothing: the hover tip's. "" for none. */
+    nameOf(path) {
+      const records = byPath.get(path);
+      return records ? objectName(path, records[0].mesh.name) : "";
+    },
     /** A 3MF object, as Quick Edit's chip says it: its name, and its place in the build. */
     describePart(path) {
       const records = byPath.get(path);
@@ -106,6 +111,12 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
         { label: "Build item", key: "part.buildItem", value: places.length > 1 ? `${places[0]}, component ${places.slice(1).join(".")}` : places[0] },
         { label: "Triangles", key: "part.triangles", value: count.toLocaleString("en-US") }
       ] };
+    },
+    /** The box, where they stand now, of 3MF objects (their places): what Zoom to selection frames. */
+    selectionBounds(paths) {
+      const box = new THREE.Box3();
+      for (const path of paths) for (const { mesh } of byPath.get(path) || []) box.union(new THREE.Box3().setFromObject(mesh, true));
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
     },
     /** Light 3MF objects: `hovered` and `selected` are their places. */
     setHighlight({ hovered = [], selected = [] } = {}) {

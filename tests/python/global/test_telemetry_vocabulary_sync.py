@@ -3,7 +3,8 @@
 The page names what a person used (`@cad/ui`'s `usage/controls.js`), cadgen notes only names it
 knows (`cad_server/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
 `CONTROLS`). A name one of them lacks is a count lost without a word: the page's never noted, or a whole
-batch refused. Read as text, so this needs nothing installed.
+batch refused. The kinds a file is counted as are its document type's (the library's registry,
+`cad.registry`, kernel-free), as the schemas spell them. Read from source, so this needs nothing installed.
 """
 
 from __future__ import annotations
@@ -43,11 +44,18 @@ class TheControlsAreOneVocabulary(unittest.TestCase):
 
 class TheKindsAreOneVocabulary(unittest.TestCase):
     def test_current_sender_kinds_match_its_receiver_schema(self) -> None:
-        # File suffixes are local lookup keys; only their formats and the closed model word cross the wire.
+        # File suffixes are local lookup keys; only their formats and the closed model word cross the wire:
+        # each document type's wire spelling (the registry's), which the sender's FILE_KINDS is made of.
+        import sys
+
+        sys.path.insert(0, str(ROOT / "packages/cad/src"))
+        from cad.registry import DOCUMENT_TYPES
+
         tree = ast.parse(CADGEN.read_text(encoding="utf-8"))
         assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
                        for target in node.targets if isinstance(target, ast.Name)}
-        formats = set(ast.literal_eval(assignments["FILE_KINDS"]).values())
+        self.assertEqual("_file_kinds()", ast.unparse(assignments["FILE_KINDS"]))
+        formats = {entry.wire for entry in DOCUMENT_TYPES.values()}
         extra = names(CADGEN, "KINDS = frozenset({", "})")
         receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_6 = new Set([", "]);")

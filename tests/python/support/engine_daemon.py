@@ -37,7 +37,8 @@ TIMEOUT_SECONDS = 300.0
 STACK_LINES = 30  # a thread's innermost frames: where it waits
 # The version a test's interpreter is registered as (``register``): a name no release takes, which
 # ``cad.engine.places.registered`` passes over, so the engine and its workers go by the release
-# declared beside the code, as they would with no record.
+# declared beside the code, as they would with no record; and What's new
+# (``cad_server.whats_new``) too, so a test's fresh device is a new person's, shown no notes.
 TEST_INSTALLATION = "0.0.0+test"
 
 

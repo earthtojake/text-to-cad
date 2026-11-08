@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import { createTabStore, memoryTabRecord } from './tabStore.js';
+import { PAGE_FILE_LIMIT, createTabStore, memoryTabRecord } from './tabStore.js';
 import { TAB_FILE_LIMIT, TAB_RECORD_VERSION, defaultTabRecord, readTabRecord, tabFileKey, writeTabFile } from './tabRecord.js';
 import { useTabViewerState } from './useTabViewerState.js';
 import { readFileView, writeFileView } from '../renderers/kit/shell/fileView.js';
@@ -46,9 +46,9 @@ test('the files are the file on screen\'s, by absolute path: a write keeps the n
   expect(readTabRecord({ version: 2, settings: {}, files: over }).files).toEqual({ [tabFileKey('/models/49.step', 'step')]: view(49) });
 });
 
-test('leaving a file drops its view: retain keeps the file on screen\'s, whichever renderer wrote it, none for no file, and never a setting', () => {
-  const writes: unknown[] = [];
-  const store = createTabStore({ read: () => undefined, write: record => { writes.push(record); } });
+test('leaving a file sets its view aside for the page: retain keeps the file on screen\'s in the record, whichever renderer wrote it, and gives a file left its view back as it is shown again', () => {
+  const writes: Array<{ files: Record<string, unknown> }> = [];
+  const store = createTabStore({ read: () => undefined, write: record => { writes.push(JSON.parse(JSON.stringify(record))); } });
   store.settings.update({ appearance: 'dark', library: { layout: 'list' } });
   const settings = store.settings.getSnapshot();
   store.files.write('/models/a.step', 'mesh', view('a'));
@@ -56,16 +56,45 @@ test('leaving a file drops its view: retain keeps the file on screen\'s, whichev
   const written = writes.length;
   store.files.retain('/models/a.step');
   expect([store.files.read('/models/a.step', 'mesh'), writes.length]).toEqual([view('a'), written]);
-  // Another file, and no file at all, each drop it.
+  // Another file, and no file at all, each take it out of the record: the tab keeps the file on screen's alone.
   for (const path of ['/models/b.step', null]) {
-    store.files.write('/models/a.step', 'step', view('a'));
+    store.files.write('/models/a.step', 'step', view(`a for ${path}`));
     store.files.retain(path);
     expect(store.getSnapshot().files, String(path)).toEqual({});
+    // Shown again in the same page, it opens as it was left: its view, as its renderer last wrote it, is the record's again.
+    store.files.retain('/models/a.step');
+    expect(store.getSnapshot().files, String(path)).toEqual({
+      [tabFileKey('/models/a.step', 'mesh')]: view('a'), [tabFileKey('/models/a.step', 'step')]: view(`a for ${path}`) });
   }
-  store.files.write('/models/a.step', 'step', view('a'));
+  // A view the record's own limit takes out (another file written over it) is set aside the same way.
+  store.files.write('/models/c.step', 'step', view('c'));
+  expect(Object.keys(store.getSnapshot().files)).toEqual([tabFileKey('/models/c.step', 'step')]);
+  store.files.retain('/models/a.step');
+  expect(store.files.read('/models/a.step', 'step')).toEqual(view('a for null'));
+  // What is set aside is the page's: no write the storage ever saw holds two files' views.
+  expect(writes.every(record => new Set(Object.keys(record.files).map(key => JSON.parse(key)[0])).size <= 1)).toBe(true);
+  // A view removed is gone, from the page too.
   store.files.remove('/models/a.step', 'step');
+  store.files.remove('/models/a.step', 'mesh');
+  store.files.retain('/models/b.step');
+  store.files.retain('/models/a.step');
   expect(store.getSnapshot().files).toEqual({});
   expect(store.settings.getSnapshot()).toBe(settings);
+});
+
+test('the page keeps the newest views of the files it left, and no more', () => {
+  const store = createTabStore(memoryTabRecord());
+  for (let index = 0; index <= PAGE_FILE_LIMIT; index += 1) {
+    store.files.write(`/models/${index}.step`, 'step', view(index));
+    store.files.retain(`/models/${index + 1}.step`);
+  }
+  // The oldest of PAGE_FILE_LIMIT + 1 files left is gone; the rest come back.
+  store.files.retain('/models/0.step');
+  expect(store.getSnapshot().files).toEqual({});
+  store.files.retain('/models/1.step');
+  expect(store.files.read('/models/1.step', 'step')).toEqual(view(1));
+  store.files.retain(`/models/${PAGE_FILE_LIMIT}.step`);
+  expect(store.files.read(`/models/${PAGE_FILE_LIMIT}.step`, 'step')).toEqual(view(PAGE_FILE_LIMIT));
 });
 
 test('the store reads its storage once, writes every change through whole, and publishes a new snapshot per change', () => {

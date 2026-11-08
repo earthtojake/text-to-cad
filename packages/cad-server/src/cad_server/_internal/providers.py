@@ -29,8 +29,9 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 - **Grok Build**: ``grok plugin``, from the repository's ``latest``, where Claude Code does not feed it.
 - **Gemini CLI**: its extension, the folder linked (``gemini extensions link``): it reads it in place.
 
-Nothing installed this way updates by itself: an update is the person's (``cad update``, the install
-command, the update button), and the folder and the copies follow the release it makes current.
+No app updates what is installed this way itself: an update is the person's (``cad update``, the install
+command, the update button) or the engine's own, once idle (``cad_server/auto_updates.py``), and the
+folder and the copies follow the release it makes current.
 The copies an earlier release's installer made from the repository's ``latest`` branch on GitHub (the
 ``earthtojake`` catalog, a Cursor clone, a Gemini extension installed from it) are second copies now:
 taken out, the catalog with them.
@@ -45,9 +46,10 @@ An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
 install, the GitHub catalog), this repository's skills installed loose, a server someone added by hand
-that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted, and out of
-the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would put
-them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
+that runs text-to-cad. The plan removes it: a loose copy of a skill this release ships moved aside rather
+than deleted, one an earlier release shipped and this one does not (``RETIRED_SKILLS``) deleted, and each
+out of the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would
+put them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
 (``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
 earlier release's body). The one folder two kinds of agent share,
 ``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
@@ -108,8 +110,12 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("bambu-labs", "cad", "dfam-check", "dfm", "dxf", "engineering-drawing", "gcode", "sdf", "sendcutsend",
-          "srdf", "step-parts", "urdf", "work-instructions")
+SKILLS = ("cad", "engineering-drawing", "pcb", "print3d", "robot-simulation", "sendcutsend",
+          "work-instructions")
+# The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
+# written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
+RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
+                  "urdf")
 # Claude Desktop's server key, and the variable its server is told its install channel by.
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.
@@ -329,7 +335,8 @@ def shared_skills(machine: Optional[Machine] = None) -> Path:
     return _machine(machine).home / ".agents" / "skills"
 
 
-# The skill folders each app owns: a loose skill found in one is that app's to move aside, unless
+# The skill folders each app owns: a loose skill found in one is that app's to take out (one it ships moved
+# aside, a retired one deleted), unless
 # the folder is a Skills CLI agent's here (``_claimed``).
 def _own_skill_folders(host: str, machine: Machine) -> List[Path]:
     return {"claude": [claude_dir(machine) / "skills"], "codex": [codex_home(machine) / "skills", shared_skills(machine)],
@@ -623,9 +630,9 @@ def _skill_name(text: str) -> Optional[str]:
     return None
 
 
-def loose_skills(folders: Iterable[Path]) -> List[Path]:
+def loose_skills(folders: Iterable[Path], names: Sequence[str] = SKILLS) -> List[Path]:
     """This repository's skills installed loose in ``folders`` (by the Skills CLI, or copied or linked
-    by hand): a ``SKILL.md`` naming one of ``SKILLS`` and this repository."""
+    by hand): a ``SKILL.md`` naming one of ``names`` (``SKILLS``) and this repository."""
     found = []
     for folder in folders:
         for skill in sorted(Path(folder).glob("*/SKILL.md")) if Path(folder).is_dir() else []:
@@ -633,7 +640,7 @@ def loose_skills(folders: Iterable[Path]) -> List[Path]:
                 text = skill.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            if PROVENANCE in text and _skill_name(text) in SKILLS:
+            if PROVENANCE in text and _skill_name(text) in names:
                 found.append(skill.parent)
     return found
 
@@ -775,7 +782,8 @@ class App:
 
 @dataclass
 class Step:
-    """One thing the plan does for an app: ``install``, ``update``, ``remove duplicate`` or ``leave``
+    """One thing the plan does for an app: ``install``, ``update``, ``remove duplicate``, ``remove retired``
+    or ``leave``
     (``remove`` and the rest when uninstalling), with the commands it runs and the file it edits."""
 
     app: str
@@ -805,7 +813,8 @@ class Step:
 
 def _loose(app: App, machine: Machine) -> None:
     claimed = _claimed(machine)
-    for skill in loose_skills(folder for folder in _own_skill_folders(app.id, machine) if str(folder) not in claimed):
+    for skill in loose_skills((folder for folder in _own_skill_folders(app.id, machine) if str(folder) not in claimed),
+                              SKILLS + RETIRED_SKILLS):
         app.copies.append(Copy(app.id, "skills", str(skill), path=str(skill), detail="installed loose"))
 
 
@@ -1176,6 +1185,9 @@ def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove dupli
     """The step that takes ``copy`` out of ``app``, by the app's own command or as a file."""
     cli = app.command
     words = copy.words(machine)
+    if copy.kind == "skills" and Path(copy.path).name in RETIRED_SKILLS:
+        # Nothing ships it any more: deleted, and out of the Skills CLI's record.
+        return Step(app.id, action, words, edit={"op": "remove", "path": copy.path, "unlock": True})
     if copy.kind == "skills":
         return Step(app.id, action, words, edit={"op": "move", "path": copy.path})
     if copy.kind == "folder":
@@ -1460,10 +1472,11 @@ def feeds(apps: Mapping[str, App], selected: Iterable[str]) -> bool:
 
 
 def _once(steps: List[Step]) -> List[Step]:
-    """``steps`` with each loose skill moved once: two apps read ``~/.agents/skills``."""
+    """``steps`` with each loose skill moved or deleted once: two apps read ``~/.agents/skills``."""
     seen, kept = set(), []
     for step in steps:
-        path = (step.edit or {}).get("path") if (step.edit or {}).get("op") == "move" else None
+        edit = step.edit or {}
+        path = edit.get("path") if edit.get("op") == "move" or edit.get("unlock") else None
         if path in seen:
             continue
         if path:
@@ -1485,6 +1498,9 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str], record: 
             continue
         folder = found[agent]
         where, have = shown(folder, machine), ours_in(folder)
+        for skill in loose_skills([folder], RETIRED_SKILLS):
+            steps.append(Step(agent, "remove retired", f"{skill.name} in {where}: text-to-cad {release} no longer ships it",
+                              edit={"op": "remove", "path": str(skill), "unlock": True}))
         had = record.get(agent) if isinstance(record.get(agent), dict) else {}
         before = had.get("release")
         # Up to date: this release's, and every skill the CLI said it installed still there. A skill
@@ -1654,13 +1670,14 @@ def _unskill(agents: Sequence[str], machine: Machine, npx: Optional[str]) -> Lis
     claimed: set = set()
     for agent in agents:
         folder = skills_folder(agent, machine)
-        have = [] if str(folder) in claimed else ours_in(folder)
+        have = [] if str(folder) in claimed else ours_in(folder) + loose_skills([folder], RETIRED_SKILLS)
         claimed.add(str(folder))
         if have:
             steps.append(Step(agent, "remove", f"the skills in {shown(folder, machine)}",
                               edit={"op": "remove", "paths": [str(path) for path in have]}))
     if npx and steps:
-        names = sorted({Path(path).name for step in steps for path in step.edit["paths"]})
+        # A retired skill is not the folder's to name: it is removed directly, below the command.
+        names = sorted({Path(path).name for step in steps for path in step.edit["paths"]} & set(SKILLS))
         argv = [npx, *SKILLS_CLI[1:], "remove", "-g"]
         for step in steps:
             argv += ["-a", step.app]
@@ -1912,7 +1929,8 @@ def skills_lock(machine: Optional[Machine] = None) -> Path:
 
 def unlock_skill(name: str, machine: Optional[Machine] = None) -> bool:
     """The Skills CLI's entry for the skill ``name`` removed where it came from this repository on GitHub: a
-    loose copy, moved aside, which ``npx skills update`` would put back once the repository's skills change.
+    loose copy, moved aside or deleted, which ``npx skills update`` would put back once the repository's skills
+    change.
     One it installed from the plugin folder (this installer's, for an agent without a plugin) stays. Whether
     one was removed; a record that cannot be read is left as it is."""
     path = skills_lock(machine)
@@ -1944,10 +1962,14 @@ def stamp() -> str:
 
 
 def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str], None] = lambda _line: None,
-          aside: Optional[Path] = None, backed_up: Optional[set] = None) -> Tuple[bool, List[Dict[str, Any]]]:
+          aside: Optional[Path] = None, backed_up: Optional[set] = None,
+          done: Optional[Callable[[Step], Optional[str]]] = None) -> Tuple[bool, List[Dict[str, Any]]]:
     """Run ``step``: each command, said before it runs, stopping at the first that fails (its output
     said), then its file edit. ``(ok, records)``, a record per thing done, for the receipt. ``aside``
-    is where loose skills go; ``backed_up``, the files this run already kept a ``.bak`` of."""
+    is where loose skills go; ``backed_up``, the files this run already kept a ``.bak`` of. ``done``
+    reads the app again when a command fails: what it finds, the step's work there all the same, makes
+    the failure a warning, quoted beside it (``gemini extensions link`` links the extension, then exits
+    1 when its integrity store cannot be verified), and the step goes on; None, a failure."""
     machine = _machine(machine)
     records: List[Dict[str, Any]] = []
     base = {"app": step.app, "action": step.action, **({"store": step.store} if step.store else {})}
@@ -1955,6 +1977,14 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
         say(f"$ {command_text(argv, machine)}")
         ran = machine.run(argv)
         record = {**base, "kind": "command", "command": list(argv), "code": ran.code, "ok": ran.ok, "at": stamp()}
+        found = done(step) if not ran.ok and done is not None else None
+        if found:
+            warning = " ".join(line.strip() for line in ran.said(600).splitlines() if line.strip())
+            record.update({"ok": True, "warning": ran.said()})
+            said = f"exited {ran.code}" + (f', saying "{warning}"' if warning else "")
+            say(f"done all the same: {found} ({os.path.splitext(os.path.basename(str(argv[0])))[0]} {said})")
+            records.append(record)
+            continue
         if not ran.ok:
             record["output"] = ran.said()
             for line in (ran.said() or f"exit status {ran.code}").splitlines():
@@ -1986,6 +2016,10 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
             say(f"remove {shown(edit['path'], machine)}")
             remove_path(edit["path"])
             record.update({"kind": "remove", "path": edit["path"]})
+            # A retired skill deleted: the Skills CLI's record of it goes too, so its `update` does not put it back.
+            if edit.get("unlock") and unlock_skill(Path(edit["path"]).name, machine):
+                say(f"remove {Path(edit['path']).name} from {shown(skills_lock(machine), machine)}")
+                record["unlocked"] = str(skills_lock(machine))
         elif edit["op"] == "copy":
             say(f"copy {shown(edit['from'], machine)} to {shown(edit['path'], machine)}")
             mark = copy_plugin(edit["from"], edit["path"])

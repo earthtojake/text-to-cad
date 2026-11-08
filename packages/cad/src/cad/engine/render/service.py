@@ -414,9 +414,17 @@ class Held:
 
 def holder(path: Path) -> Any:
     """What holds the file at ``path`` that is no document, for ``open`` and ``draw``: a drawing's
-    (a DXF, ``drawing.Held``), else a document's."""
+    (a DXF, ``drawing.Held``), a board's (a ``.kicad_pcb``, ``board.Held``), else a document's."""
     from cad.engine import formats
 
+    if Path(path).suffix.lower() == ".kicad_pcb":
+        from cad.engine.render.board import Held as Board
+
+        return Board(Path(path))
+    if Path(path).suffix.lower() == ".kicad_sch":
+        from cad.engine.render.schematic import Held as Schematic
+
+        return Schematic(Path(path))
     if Path(path).suffix.lower() == formats.DRAWING:
         from cad.engine.render.drawing import Held as Drawing
 

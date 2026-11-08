@@ -115,7 +115,9 @@ def rerun(program: str | os.PathLike, python: str | os.PathLike | None = None,
 
     if python:
         return said([os.fspath(python), os.fspath(program)])
-    options = [word for requirement in given or () for word in ("--with", requirement)]
+    # An option ``cad run`` was given is said as one word (``--python=3.13``); a requirement after ``--with``.
+    options = [word for requirement in given or ()
+               for word in ((requirement,) if requirement.startswith("-") else ("--with", requirement))]
     return f"{COMMAND} run {said([*options, os.fspath(program)])}"
 
 

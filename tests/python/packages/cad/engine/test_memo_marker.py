@@ -436,7 +436,7 @@ class MemoNamesTest(MemoCase):
         self.assertEqual(self.measured(plain), replayed)
 
     def measured(self, names: dict) -> list:
-        """What `cad inspect` measures of each named face of stage two, by its ref."""
+        """What `cad <type> inspect` measures of each named face of stage two, by its ref."""
         from cad.engine import api
 
         xbf = self.folder / "XBF" / "staged.xbf"

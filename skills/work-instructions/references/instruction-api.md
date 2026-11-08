@@ -158,7 +158,7 @@ way the parts travel into place, drawn on a picture guide's picture: `down`
 figure of what is installed so far, and none while nothing is.
 
 `wi.tree()` returns every part and subassembly, indented, by its ref (the
-grammar `cad inspect` and the viewer use: a label, numbered among siblings
+grammar `cad <type> inspect` and the viewer use: a label, numbered among siblings
 that share it, `pin.2`, or a path where the label alone names several,
 `arm/pin`): what `install=` takes, beside a part's label. Print it before writing the steps.
 
@@ -213,7 +213,7 @@ Each returns the step, so they chain, and prints in the order called.
 `bond` and `cure` take `None` for a record nobody has stated yet; it prints
 NOT STATED. `surfaces` (on `bond`, `apply` and `fasten`, where it marks the
 faces hardware the model does not carry goes into) are face refs (`bracket/face 3`, or the `bracket/f:...` ref the viewer
-copies; `cad inspect "$ID" "bracket/face 3"` says which face it is), each resolved
+copies; `cad model inspect "$ID" "bracket/face 3"` says which face it is), each resolved
 to exactly one face when the step names it and drawn on the step's figure;
 each must be on a part installed by that step or before.
 

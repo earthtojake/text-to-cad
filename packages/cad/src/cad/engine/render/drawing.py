@@ -3,11 +3,11 @@ the whole drawing from above, fitted to the picture with the pane's margin, or t
 view names (a Quick Edit view's camera: ``plan_view``), its lines one pixel wide in their pens, its
 fills flat in theirs, its words in their pens, set in the platform's UI face at their cap height and
 painted over the frame (sRGB over, as a canvas paints), the default pen in the look's ink, on the
-look's paper (``look.DRAWING``: the light or the dark pair, ``display.appearance``); an
+look's paper (``look.DRAWING``: the light theme's, as every snapshot is); an
 annotation's ink over it, on the sheet, as the pane paints it (``paint_ink``), and Measure's
 dimensions over that (``overlay.paint_measurements``, through the view). A drawing has no
-scene: no lights, no modes, no camera to turn, no grid, clip, Explode or Preview, and those are
-refused by name before anything is drawn.
+scene: no lights, no modes, no camera to turn, no grid, clip, Explode or Preview, and no display at
+all: those are refused by name before anything is drawn.
 
 A drawing is held as a document is (``service.Held``): ``open`` reads it (``formats/dxf.py``) and
 makes its shapes -- one compound of polygon edges per pen, one triangulation per fill pen, crafted
@@ -72,11 +72,8 @@ def refusals(still: Any, name: str) -> None:
     if asked:
         named = ", ".join(REFUSED.get(key, key) for key in asked)
         raise SnapshotRefused(f"{name} is a drawing, drawn from above in its pens: {named} "
-                              f"{'do' if len(asked) > 1 else 'does'} not apply to it. Its display takes appearance "
-                              "(light or dark), its camera a plan view, and ink and dimensions lie on its sheet")
-    appearance = still.display.get("appearance", "light")
-    if appearance not in ("light", "dark"):
-        raise SnapshotRefused(f"display.appearance is light or dark, not {appearance!r}")
+                              f"{'do' if len(asked) > 1 else 'does'} not apply to it. It takes no display, its "
+                              "camera is a plan view, and ink and dimensions lie on its sheet")
 
 
 class Held:
@@ -155,8 +152,7 @@ class Held:
         started = time.perf_counter()
         timings: dict[str, int] = {}
         width, height = still.drawn  # supersampled (a job's renderScale), brought down after (``picture``)
-        appearance = still.display.get("appearance", "light")
-        paper, ink = DRAWING.paper(appearance)
+        paper, ink = DRAWING.paper, DRAWING.ink
         if self.canvas is None:
             clock = time.perf_counter()
             self.canvas = Canvas(width, height)
@@ -219,7 +215,7 @@ class Held:
         timings["renderMs"] = round((time.perf_counter() - started) * 1000)
         return data, {"width": still.size[0], "height": still.size[1], **finished(still),
                       "camera": "plan" if still.camera is not None else "top", "projection": "orthographic",
-                      "displayMode": "drawing", "appearance": appearance, "preview": False,
+                      "displayMode": "drawing", "preview": False,
                       "entities": self.drawing.entities, "layers": self.drawing.layers,
                       "lines": len(self.drawing.lines), "fills": len(self.drawing.fills),
                       "texts": len(self.drawing.texts), "pose": None,

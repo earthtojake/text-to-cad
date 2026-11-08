@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.python.support.paths import REPO_ROOT, add_repo_path
+from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
 add_repo_path("packages/cad/src")
@@ -775,6 +775,17 @@ class ApplyReadBackAndTakeBack(Fixture):
         undo = providers.uninstall_plan(home.detect(), None, machine=home.machine, folder=home.folder)
         self.assertEqual([(step.app, step.action) for step in undo], [("gemini", "remove")])
 
+    def test_a_retired_loose_skill_in_a_plugin_app_s_folder_is_deleted(self) -> None:
+        home = self.make(("gemini",))
+        retired = home.skill(home.home / ".gemini" / "skills", providers.RETIRED_SKILLS[0])
+        (step,) = [step for step in home.plan() if step.action == "remove duplicate"]
+        self.assertEqual(step.edit, {"op": "remove", "path": str(retired), "unlock": True})
+        ok, (record,) = providers.apply(step, home.machine, aside=self.root / "aside")
+        self.assertTrue(ok)
+        self.assertFalse(retired.exists())
+        self.assertFalse((self.root / "aside").exists(), "deleted, not moved aside")
+        self.assertEqual(record["kind"], "remove")
+
     def test_a_loose_skill_moved_aside_leaves_the_skills_cli_s_record_too(self) -> None:
         # `npx skills update` installs again what its record names once the repository's skills change: a loose
         # copy from GitHub, moved aside, goes from it; one it installed from the plugin folder stays.
@@ -803,9 +814,40 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         for name in names:
             (home.home / marks[name]).mkdir(parents=True)
 
-    def test_the_skills_are_this_repository_s(self) -> None:
-        self.assertEqual(list(providers.SKILLS),
-                         sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md")))
+    def test_a_retired_skill_of_ours_is_deleted_and_an_uninstall_removes_one_a_later_install_left(self) -> None:
+        # The Skills CLI adds skills and never removes one: what an earlier release shipped stays loaded. Nothing
+        # ships it any more, so it is deleted, not moved aside, and its record from GitHub goes with it.
+        home = self.make(("npx",))
+        self.agents(home, "windsurf")
+        home.machine.environ.pop("XDG_STATE_HOME", None)
+        folder = home.home / ".codeium" / "windsurf" / "skills"
+        retired = home.skill(folder, providers.RETIRED_SKILLS[0])
+        lock = providers.skills_lock(home.machine)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(json.dumps({"version": 3, "skills": {retired.name: {"source": providers.REPOSITORY,
+                                                                            "sourceType": "github"}}}), encoding="utf-8")
+        where = providers.shown(folder, home.machine)
+        steps = home.plan()
+        self.assertIn(("remove retired", f"{retired.name} in {where}: text-to-cad {RELEASE} no longer ships it"),
+                      [(step.action, step.subject) for step in steps])
+        (step,) = [step for step in steps if step.action == "remove retired"]
+        self.assertEqual(step.edit, {"op": "remove", "path": str(retired), "unlock": True})
+        ok, (record,) = providers.apply(step, home.machine, aside=self.root / "aside")
+        self.assertTrue(ok)
+        self.assertFalse(retired.exists())
+        self.assertFalse((self.root / "aside").exists(), "deleted, not moved aside")
+        self.assertEqual(json.loads(lock.read_text(encoding="utf-8"))["skills"], {})
+        self.assertEqual((record["kind"], record["unlocked"]), ("remove", str(lock)))
+        # Another's skill by that name is not ours to move.
+        home.skill(folder, providers.RETIRED_SKILLS[0], ours=False)
+        self.assertNotIn("remove retired", [step.action for step in home.plan()])
+        providers.remove_path(folder / providers.RETIRED_SKILLS[0])
+        # An uninstall takes one out directly; the Skills CLI's command names only the skills it ships.
+        retired = home.skill(folder, providers.RETIRED_SKILLS[0])
+        home.skill(folder, "cad")
+        (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": {"windsurf": {}}}, machine=home.machine)
+        self.assertEqual(step.commands[0][-3:], ["-s", "cad", "-y"])
+        self.assertIn(str(retired), step.edit["paths"])
 
     def test_installed_agents_get_the_folder_s_skills_in_one_command_and_the_plugin_apps_never(self) -> None:
         home = self.make(("claude", "codex", "npx"))
@@ -855,7 +897,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         home = self.make(("npx",))
         self.agents(home, "windsurf")
         # The CLI skips a skill (one its YAML parser refused): what it says it installed is recorded.
-        skipped = [name for name in providers.SKILLS if name != "step-parts"]
+        skipped = [name for name in providers.SKILLS if name != "print3d"]
         home.set(skills=skipped)
         (added,) = home.apply(home.plan())
         self.assertEqual(added["skills"], skipped)
@@ -865,9 +907,9 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
                          [("leave", f"the skills in {where}, from text-to-cad {RELEASE}: up to date")])
         # A recorded skill gone, or another release: added again, said why.
-        providers.remove_path(folder / "dxf")
+        providers.remove_path(folder / "pcb")
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
-                         [("update", f"the skills in {where}: dxf missing")])
+                         [("update", f"the skills in {where}: pcb missing")])
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record, release="1.2.4")],
                          [("update", f"the skills in {where}, from text-to-cad {RELEASE} -> 1.2.4")])
         # The switch's refresh adds them again for a release, for the agents the receipt names alone.
@@ -875,7 +917,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
                                                         machine=home.machine, skills=record)), [("windsurf", "update")])
         (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": record}, machine=home.machine)
         self.assertEqual(step.commands, [[home.machine.which("npx"), *NPX, "remove", "-g", "-a", "windsurf",
-                                          "-s", *sorted(name for name in skipped if name != "dxf"), "-y"]])
+                                          "-s", *sorted(name for name in skipped if name != "pcb"), "-y"]])
         home.apply([step])
         self.assertEqual(providers.ours_in(folder), [])
 

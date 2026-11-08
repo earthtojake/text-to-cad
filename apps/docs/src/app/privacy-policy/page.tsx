@@ -10,14 +10,13 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 31, 2026">
+    <LegalPage title="Privacy Policy" updated="November 3, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
           text-to-cad: the text-to-cad plugin and its skills, the text-to-cad software they run (the packages{" "}
           <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
-          before 0.10), the
-          step.parts part library they search, and this website, texttocad.dev. text-to-cad runs on
+          before 0.10), and this website, texttocad.dev. text-to-cad runs on
           your computer. Your prompts, models, drawings and files stay there, and we do not collect
           them.
         </p>
@@ -114,11 +113,6 @@ export default function PrivacyPolicyPage() {
             release from PyPI, as the install command does.
           </li>
           <li>
-            <strong>step.parts searches:</strong> when you ask your agent to find a part, the
-            step-parts skill sends your search terms and the parts you request to step.parts. Each
-            request includes standard metadata: your IP address, the time and the user agent.
-          </li>
-          <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
             and country, through Vercel Web Analytics, which sets no cookies. Each request also
             includes standard metadata: your IP address, the time and the user agent.
@@ -132,10 +126,9 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="2. How we use it">
         <ul>
-          <li>Search terms and part requests: only to return the parts and files you asked for.</li>
           <li>
-            Request metadata: only to deliver, secure and troubleshoot step.parts, api.texttocad.dev
-            and this website.
+            Request metadata: only to deliver, secure and troubleshoot api.texttocad.dev and this
+            website.
           </li>
           <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
           <li>Version checks: only to answer them; we keep nothing from them beyond our host’s request logs.</li>
@@ -158,7 +151,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="3. Who receives it">
         <ul>
           <li>
-            <strong>Vercel Inc.</strong>, which hosts step.parts, this website and api.texttocad.dev
+            <strong>Vercel Inc.</strong>, which hosts this website and api.texttocad.dev
             and processes their requests for us, and <strong>PostHog, Inc.</strong>, which stores and
             analyzes telemetry for us. PostHog never sees your IP address: only our server sends it
             telemetry, with the country it worked out and PostHog’s own location lookup turned off.
@@ -178,10 +171,9 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="4. How long we keep it">
         <ul>
           <li>
-            Vercel, our host, records each request to step.parts, api.texttocad.dev and this website
+            Vercel, our host, records each request to api.texttocad.dev and this website
             in its request logs, with the IP address, time and user agent it arrived with. We use those
-            logs only to run and secure the services, and they are deleted within 30 days. step.parts
-            searches are kept only there.
+            logs only to run and secure the services, and they are deleted within 30 days.
           </li>
           <li>
             Website analytics are kept as aggregate page-view statistics. The visitor identifier
@@ -204,13 +196,13 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us, apart from the hourly version check. step.parts
-            receives a request only when you ask your agent to search for or download a part.
+            The plugin works without contacting us, apart from the hourly version check.
           </li>
           <li>
             <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
             command you or your agent run says, once, in its output, that text-to-cad sends usage stats and
-            crash reports and how to turn them off, and nothing is sent before that. If we ever send more than this
+            crash reports and how to turn them off, and nothing is sent before that. A command&rsquo;s help, and a
+            command whose answer is JSON for a program to read, say nothing of it: the next one does. If we ever send more than this
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
@@ -222,13 +214,13 @@ export default function PrivacyPolicyPage() {
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.4 cad telemetry off</code>, use{" "}
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.0 cad telemetry off</code>, use{" "}
             <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.4 cad telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.4 cad telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.0 cad telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.11.0 cad telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
             Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}

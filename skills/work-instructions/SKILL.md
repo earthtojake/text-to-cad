@@ -35,17 +35,16 @@ placeholders, never defaults.
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
 
 ## Workflow
 
@@ -80,9 +79,11 @@ says what to do, and `cad doctor` explains the installation.
    the model's script, is built by text-to-cad's server (a replay when the server
    already holds it), and `Instruction` takes the document it returns (build
    or fix the model first). For an assembly with no model, give its
-   `.xbf` or `.step` path, anchored on `Path(__file__).parent`.
+   `.xbf` or `.step` path, anchored on `Path(__file__).parent`, and start the
+   script with a `# /// script` block whose `dependencies` are `["cad[build123d]"]`:
+   with no model imported, `cad run` cannot see that it needs the kernel.
    `Instruction(...).tree()` prints every part and subassembly by its ref
-   (`bracket`, `pin.2`, `arm/pin`: the refs `cad inspect` and the viewer
+   (`bracket`, `pin.2`, `arm/pin`: the refs `cad <type> inspect` and the viewer
    use); those, and a part's label, are what a step installs. Install a subassembly
    the model builds as one piece (a coilover, a wheel) by its ref or name: it
    is one line in the parts list, not its modelling fragments. Copies of one

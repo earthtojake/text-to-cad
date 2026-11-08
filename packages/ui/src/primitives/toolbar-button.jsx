@@ -19,9 +19,10 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
  * toolbar over a canvas, where a tooltip would cover what is being pointed at. A string is the
  * tooltip's text where it is shorter than the accessible name (Display's "Display"). `shortcut`, the
  * key that does what the button does ("V", "⇧L"), follows the name in the tooltip, muted, as a
- * design tool's tooltips show it, and is the button's `aria-keyshortcuts`.
- * @param {{ label: string, active?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left", className?: string,
- *   shortcut?: string, children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
+ * design tool's tooltips show it, and is the button's `aria-keyshortcuts`. `active`: the tool in hand,
+ * in the strip's pressed fill, with no tooltip (it is chosen already).
+ * @param {{ label: string, active?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left",
+ *   className?: string, shortcut?: string, children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
 export function ToolbarButton({
   label,

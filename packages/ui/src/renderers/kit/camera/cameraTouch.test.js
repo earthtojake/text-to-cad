@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CAMERA_TOUCH, boundsChanged, cameraUntouched, fitCamera, rebuildRefits, touchCamera } from "./cameraTouch.js";
+import { CAMERA_TOUCH, boundsChanged, cameraHands, cameraUntouched, fitCamera, rebuildRefits, touchCamera } from "./cameraTouch.js";
 
 const PLATE = { min: [-50, -30, 0], max: [50, 30, 4] };
 const BRACKET = { min: [-50, -30, 0], max: [50, 30, 60] };
@@ -20,6 +20,8 @@ test("every kind of touch ends the untouched state, and a fit re-arms it", () =>
     fitCamera(runtime);
     assert.equal(cameraUntouched(runtime), true, `a fit after ${kind} is untouched again`);
     assert.equal(rebuildRefits(runtime, PLATE, BRACKET), true, `and a rebuild after that fit re-fits`);
+    // Each hand on the camera is counted, the fit's too: untouched again is not the camera where it was.
+    assert.equal(cameraHands(runtime), 2, `${kind} and the fit after it are two hands`);
   }
 });
 
@@ -31,6 +33,7 @@ test("a touch stays until the fit, whatever follows it", () => {
   assert.equal(cameraUntouched(runtime), false);
   touchCamera(runtime, "resize");
   assert.equal(runtime.cameraTouch, "drag", "what is not a touch (a resize) changes nothing");
+  assert.equal(cameraHands(runtime), 2, "nor counts as a hand on the camera");
   // A flag the completion fit set on its own (a recovered runtime's) is a touch too.
   assert.equal(cameraUntouched({ userMovedCamera: true }), false);
 });

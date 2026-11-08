@@ -152,6 +152,7 @@ class ViewerTunnel:
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
                 app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
+                app.boards.hold_seconds, app.boards.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
                 app.engine_documents.hold_seconds, app.engine_documents.retry_ms = ENGINE_HOLD_SECONDS, ENGINE_RETRY_MS
                 self._app = app
             return self._app

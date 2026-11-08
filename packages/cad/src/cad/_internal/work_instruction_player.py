@@ -2,7 +2,7 @@
 
 The GLB is the assembly with one animation, ``assemble``: each step's parts appear at their
 turn and travel in along the step's arrow, so the clip run backward takes it apart. It is made
-the way a model makes one (``cad.gltf.animation``), on the instruction's own copy of the assembly
+the way a model makes one (``cad.build123d.animation``), on the instruction's own copy of the assembly
 handed over as its own document, so the model is untouched and any GLB viewer plays the file.
 
 The page holds that GLB and the steps, and needs no server: open it in a browser, turn the
@@ -50,12 +50,12 @@ def channels(wi) -> list[tuple[str, str, list, str]]:
 def write_glb(wi, target: Path) -> None:
     """The assembly with its ``assemble`` clip, at ``target``."""
     import cad
-    from cad.gltf import animation
+    from cad.build123d import animation
 
     show = animation(wi.shape, CLIP, duration=len(wi.steps) * TURN)
     for ref, path, keys, interpolation in channels(wi):
         show.channel(ref, path=path, keys=keys, interpolation=interpolation)
-    cad.export(cad.model(wi.shape, name=re.sub(r"\W+", "_", f"{wi.source_name}_guide")), target)
+    cad.model.export(cad.model(wi.shape, name=re.sub(r"\W+", "_", f"{wi.source_name}_guide")), target)
 
 
 def steps(wi) -> list[dict[str, Any]]:

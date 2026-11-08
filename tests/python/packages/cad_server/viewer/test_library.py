@@ -70,9 +70,19 @@ class LibraryTest(unittest.TestCase):
                                  "api": f"/api/v1/documents/stl/{ident}"})
         self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])
         self.assertFalse(self.change("unpin", str(self.model))[1]["documents"][0]["pinned"])
-        # The picture, by its document's id.
+        # The picture, by its document's id; in the dark theme the same one, as it has no dark one.
         status, png = self.request("GET", f"/api/v1/documents/{ident}/thumbnail")
         self.assertEqual((status, png), (200, PNG))
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail?scheme=dark"), (200, PNG))
+        # A view that draws its dark theme's too sends both; the dark theme's is served by its scheme.
+        dark = PNG + b"dark"
+        status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"),
+                                     dark=base64.b64encode(dark).decode("ascii"))
+        self.assertIsNotNone(answer["documents"][0]["thumbnailDark"])
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail?scheme=dark"), (200, dark))
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail"), (200, PNG))
+        status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
+        entry = answer["documents"][0]
         # Filtered by kind, searched by name or path, at most a number.
         for query, found in (("?kind=stl", 1), ("?kind=model", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
             with self.subTest(query=query):

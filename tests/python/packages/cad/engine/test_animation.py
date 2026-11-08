@@ -38,8 +38,8 @@ CHANNELS = '''
 import math
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import mechanism_state
-from cad.gltf import animation
+from cad.build123d import mechanism_state
+from cad.build123d import animation
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
@@ -79,7 +79,7 @@ def channels():
 MOTION = '''
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
@@ -104,8 +104,8 @@ def motion_box():
 FIDELITY = '''
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import configuration_sequence, mechanism_state
-from cad.gltf import animation
+from cad.build123d import configuration_sequence, mechanism_state
+from cad.build123d import animation
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
@@ -222,7 +222,7 @@ class AuthoringTest(unittest.TestCase):
     def test_a_builder_call_says_what_is_wrong_with_it(self) -> None:
         import build123d as bd
 
-        from cad.gltf import animation
+        from cad.build123d import animation
 
         box = bd.Box(1, 1, 1)
         show = animation(box, "show", duration=2)
@@ -269,7 +269,7 @@ class HarvestTest(_Folder):
                 self.assertRegex(report["error"], error)
 
     def test_an_animation_named_as_a_configuration_sequence_is_refused(self) -> None:
-        report = self.build(MOTION.replace('    return configuration_sequence(box', '    from cad.gltf import animation\n'
+        report = self.build(MOTION.replace('    return configuration_sequence(box', '    from cad.build123d import animation\n'
                                            '    animation(box, "open_close", duration=1).translation("lid", by=(0, 0, 1))\n'
                                            '    return configuration_sequence(box'), "motion_box", ok=False)
         self.assertIn("animation 'open_close' has the name of a configuration sequence of the mechanism", report["error"])
@@ -277,7 +277,7 @@ class HarvestTest(_Folder):
     def test_the_document_differs_by_its_animations_record_alone(self) -> None:
         import build123d as bd
 
-        from cad.gltf import animation
+        from cad.build123d import animation
 
         def shape(animated: bool) -> Any:
             base, arm = bd.Box(10, 10, 10), bd.Pos(20, 0, 0) * bd.Box(5, 5, 5)
@@ -386,7 +386,7 @@ class GlbTest(_Folder):
         source = """
             import build123d as bd
             from cad import glb, xbf
-            from cad.gltf import animation
+            from cad.build123d import animation
 
 
             @xbf("XBF/pair.xbf")
@@ -484,7 +484,7 @@ class GlbTest(_Folder):
         self.build("""
             import build123d as bd
             from cad import glb
-            from cad.gltf import animation
+            from cad.build123d import animation
 
 
             @glb("arm.glb")
@@ -580,7 +580,7 @@ class GlbTest(_Folder):
     def test_a_glb_from_the_xbf_is_the_declared_one_and_an_edit_of_an_animation_rewrites_both(self) -> None:
         from cad.engine.export import translate
 
-        self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.gltf import animation\n"
+        self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.build123d import animation\n"
                                   "    animation(box, 'drop', duration=1).translation('lid', by=(0, 0, 5))\n"
                                   "    return configuration_sequence(box"), "motion_box")
         declared, _read = _glb(self.folder / "motion.glb")
@@ -590,7 +590,7 @@ class GlbTest(_Folder):
         self.assertEqual(again.read_bytes(), (self.folder / "motion.glb").read_bytes(),
                          "the sequence and the animation, from the xbf's record")
         before = (self.folder / "motion.glb").read_bytes()
-        report = self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.gltf import animation\n"
+        report = self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.build123d import animation\n"
                                            "    animation(box, 'drop', duration=1).translation('lid', by=(0, 0, 9))\n"
                                            "    return configuration_sequence(box"), "motion_box")
         self.assertTrue(report["files"][str(self.folder / "motion.glb")]["written"])
@@ -598,19 +598,19 @@ class GlbTest(_Folder):
         self.assertNotEqual((self.folder / "motion.glb").read_bytes(), before)
 
     def test_a_parent_that_reads_a_childs_xbf_has_none_of_its_animations(self) -> None:
-        self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.gltf import animation\n"
+        self.build(MOTION.replace("    return configuration_sequence(box", "    from cad.build123d import animation\n"
                                   "    animation(box, 'drop', duration=1).translation('lid', by=(0, 0, 5))\n"
                                   "    return configuration_sequence(box"), "motion_box")
         self.assertEqual(sorted(document.Loaded(self.folder / "XBF/motion.xbf").animations), ["drop"])
         self.build(f"""
             import build123d as bd
-            from cad import glb, read_xbf
-            from cad.gltf import animation
+            from cad import glb, xbf
+            from cad.build123d import animation
 
 
             @glb("shelf.glb")
             def shelf():
-                box = read_xbf({str(self.folder / "XBF/motion.xbf")!r})
+                box = xbf.read({str(self.folder / "XBF/motion.xbf")!r})
                 box.label = "box"
                 board = bd.Box(200, 100, 5)
                 board.label = "board"

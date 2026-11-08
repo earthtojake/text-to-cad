@@ -9,6 +9,7 @@ export {
   DRAWING_FIT_MARGIN,
   DRAWING_ZOOM_IN_LIMIT,
   DRAWING_ZOOM_OUT_LIMIT,
+  carryTransform,
   clampScale,
   fitTransform,
   modelToScreen,

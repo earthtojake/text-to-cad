@@ -14,7 +14,7 @@ a model like any other: its body returns 2D geometry (a sketch, a face, wires or
 declares its DXF.
 
 ```python
-from cad.engine import xbf, step
+from cad import step, xbf
 import build123d as bd
 
 @xbf("XBF/arm.xbf")                      # XBF/arm.xbf beside the script; @xbf(out="path.xbf") to choose
@@ -32,7 +32,7 @@ returns a `Document` (`api.Document`) -- `.id`, `.url` (its page), `.name`, `.sh
 result, transferred into the caller and the kernel loaded on first access, never before),
 `.export(*paths)` and `.snapshot(out, **picture_options)`, which are `export(handle, ...)` and
 `snapshot(handle, ...)`; an export the program's own code makes says each file it wrote, a line each,
-as `cad export` does. The decorated function stays the function and its id (`arm.id`);
+as `cad <type> export` does. The decorated function stays the function and its id (`arm.id`);
 `arm.build(verify=, profile=)` is the debug seam, a `Report`. Inside another model's body a call
 builds the child document as before and returns its handle too, whose `.shape` is the result in
 that process: a body composes `peg().shape`, and a child called for its files alone stays a bare
@@ -71,7 +71,8 @@ assembly's parts, a stage of a long derivation. It writes no file; the model tha
 it does.
 
 ```python
-from cad.engine import memo, xbf
+from cad import xbf
+from cad.build123d import memo
 
 @memo
 def wheel(radius, spokes=5):     # replayed, not run, while what it is made of is unchanged
@@ -95,20 +96,20 @@ An assembly's mechanism is build123d's joints: `RevoluteJoint`,
 `LinearJoint`, `CylindricalJoint`, `BallJoint` and `RigidJoint` on its parts, placed with
 `connect_to(..., angle=, position=, angles=)`. The values they are connected at are the
 as-built state, the pose every file of the model shows. The functions that say more are named
-after the AP242 entities they write, and are `cad.ap242`'s (the root holds none of them):
+after the AP242 entities they write, and are the build123d integration's, `cad.build123d` (the root holds none of them):
 `mechanism_state(assembly, name, **values)` names another
 state (`mechanism_state_representation`), by joint label, and never moves the build;
 `gear_pair`, `rack_and_pinion_pair` and `screw_pair(assembly, name, **joints)` constrain joints to
 move together by ratio (**Kinematics**); `configuration_sequence(assembly, name, ...)` names a
 sequence of states over time (`interpolated_configuration_sequence`, **Configuration
-sequences**), and `cad.gltf`'s `animation(assembly, name, duration=)` a GLB's own animation
+sequences**), and `cad.build123d`'s `animation(assembly, name, duration=)` a GLB's own animation
 (**Animations**). Connect parts before putting them in the compound that holds
 them; where `connect_to` cannot place them (a nested assembly), give the two joints one label
 where the parts stand.
 
 ```python
-from cad.ap242 import mechanism_state
-from cad.engine import xbf
+from cad.build123d import mechanism_state
+from cad import xbf
 
 @xbf("XBF/hinge.xbf")
 def hinge():
@@ -121,7 +122,7 @@ def hinge():
 ```
 
 A posed or partial file is a function, never an option (law 22): `export` writes the document
-as its code built it. `posed(assembly, state)` (`cad.ap242`, beside `mechanism_state`) is a
+as its code built it. `posed(assembly, state)` (`cad.build123d`, beside `mechanism_state`) is a
 copy of the assembly, sharing its geometry, with every part where a mechanism state, or
 `{joint label or coupling name: value}`, puts it -- each link moved by its placement at those
 values over its placement as built, the forward kinematics the viewer and the snapshot pose
@@ -151,10 +152,11 @@ A model's worker is a separate process, holding its memo and live kernel objects
 structures and buffers, never live kernel objects (law 20).
 The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
-no application module. Beside OCP, build123d, bd_materials,
-threejs_materials and numpy it imports Pillow
-(the renderer's rasteriser) and ezdxf (build123d's own DXF library, which the DXF export writes and
-checks a drawing with), and a test holds that list (law 3). The application serves the built
+no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
+extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and
+ezdxf (build123d's own DXF library, which the DXF export writes and checks a drawing with) -- in the
+base its workers run in, and an integration's extra only in that integration's environment; a test
+holds each extra's list (law 3). The application serves the built
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
 process, with no network relay. Kernel reads, topology, poses and meshes run in
 reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. The daemon's own
@@ -260,11 +262,13 @@ client starts its own release's engine beside the device's, and none stops an en
 another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
-An update moves the device to another release in one step, and only when the person asks: the update
-button in the CAD Viewer and the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad
-update`, or the install command run again (both `cad setup`). Each installs the release in a folder
+An update moves the device to another release in one step: the update button in the CAD Viewer and
+the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad update`, or the install
+command run again (both `cad setup`), or the engine itself, when automatic updates are on (below). Each
+installs the release in a folder
 of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
-where it holds it), makes that release's base (**Running a model**), writes the plugin folder every
+where it holds it) -- and makes no environment for it: that release's base, and every environment a
+script's run asks for, is made on first need, from uv's cache (**Running a model**) --, writes the plugin folder every
 agent app is pointed at, `<state>/plugin`, from that release (`cad_server._internal.plugin`: in place,
 each file renamed over), brings the apps' copies of it along (`cad_server._internal.providers`; an app
 that reads the folder in place needs nothing), and then switches (`cad_server._internal.switch`):
@@ -280,12 +284,46 @@ that reads the folder in place needs nothing), and then switches (`cad_server._i
 
 Every page and card keeps its link through it, and reloads once its engine answers with the new
 release. The release before's folder stays -- a process of it may still run, and it is the way back
---; the others go at the next switch, once nothing runs from them (`releases.collect`). After the
+--; the others go at the next switch, once nothing runs from them (`releases.collect`). A switch that
+went back leaves the release it failed to move to for nothing: its folder goes once the release
+before's engine answers again and nothing runs from it (`releases.discard`: by the switch, else by that
+engine as it tends itself, after a `cad update` run from that folder has ended), its failure kept in
+`update.json` and an automatic update's attempt, so it is not tried again by itself any sooner; `cad
+doctor --prune` removes every release folder but the current one and the one before (`releases.kept`:
+the release the last switch to it came from, else the newest older one). After the
 switch, held or gone back, the release left current writes the plugin folder again (its own `cad
 plugin --refresh`, `switch.follow`): nothing changes when that release's setup already wrote it, and a
 switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
 did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
 lines `update.log`.
+
+**An automatic update never interrupts.** With automatic updates on -- the person's setting, on by
+default (`cad_server.auto_updates`: the `updates` section of `settings.json`, `cad update auto`, the app
+menu's Automatic updates) -- the engine asks as it tends itself (`Daemon.tend`,
+`Update.automatic`) whether a release newer than its own is known: the feed as last read, read again
+in the background once an hour, or an agent app's newer server. **It takes a release that breaks
+nothing, as Semantic Versioning numbers it** (`auto_updates.takes`): a breaking change bumps the major
+from 1.0 and the minor below it, so the engine takes a patch or minor release from 1.0 (1.4.2 to 1.4.3
+or 1.5.0) and a patch release below it (0.11.0 to 0.11.1). Such a release carries nothing a person or
+an agent must change for, so it may land under a running agent thread unannounced; one that bumps the
+breaking part (1.9.3 to 2.0.0; 0.11.3 to 0.12.0 or 1.0.0) may rename a command or need a migration
+guide, so it waits for a click, the update button offering it as ever, and `cad status` says it is out.
+The release process holds a release to that: one the engine takes may add, and may move a library name
+whose earlier spelling stays its alias, but renames or removes nothing else, and never comes with a
+migration guide. Such a release is installed at once, in the
+background -- its folder, and its own `cad setup --engine-update` with `CAD_UPDATE_PREPARE=1`, which
+registers it and makes its base and stops there, so nothing of the apps or the engine changes -- and
+the rest, its setup whole (the apps' plugins) and the switch above, waits until the engine is idle:
+nothing in flight (`Daemon.working`) and none ended (`Daemon.worked`) for a minute
+(`auto_updates.IDLE_SECONDS`), no drain, no `cad setup` holding the install lock. Until then the
+update's state stays `idle`, so no page shows it; from then it is `working` and `restarting` as a
+click's is, and every page and card follows it to the new release as they follow a click. A click
+meanwhile makes it the click's, done at once; `cad update` or the install command drains the engine,
+and the automatic update is given up. Nothing is ready to switch while a person's update runs, none
+starts within ten minutes of a failed one (`RECALL_SECONDS`), and a release whose automatic attempt
+did not hold is not tried again by itself for a day (`auto_updates.RETRY_SECONDS`, the attempt kept
+as `update-automatic.json` in the state folder); a newer one is tried at the next tend. Offline, or
+with the setting off, nothing is read and nothing happens.
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below, and `cad setup` stops
@@ -311,8 +349,8 @@ stop`, a crash, a reboot and an update until the token is rotated, the session i
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, with no
-engine running (it refuses while one runs), and every link and session
-made before stops working. `cad status` says the
+engine running (it refuses while one runs) and once the person says yes (**Consent**, `--yes`), and
+every link and session made before stops working. `cad status` says the
 port and where it came from: the default, `--port`, `CAD_ENGINE_PORT`, or `rolled from 3245
 because <name> (pid N) holds it`.
 
@@ -375,80 +413,144 @@ command, the viewer's server, and the numpy, ezdxf and Pillow they read meshes, 
 pictures with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
 build123d and the rest) is the library's `build123d` extra. The library's layer over it (the model
 API, `kernel/`'s memo, naming and determinism settings) is the build123d integration, named for its
-technology as its extra is. So the installation the install command and the `cad` command run (the
-server, as uvx installs it) runs no model itself: it makes one
-environment, **the base**, and every process that loads the kernel starts from it
-(`cad_server._internal.base`).
+technology as its extra is; each of cad's integrations is an extra, listed with the modules, the
+distributions and the decorators that are it in one table (`cad._internal.integrations`). So the
+installation the install command and the `cad` command run (the server, as uvx installs it) runs no
+model itself: it makes environments with uv, and every process that loads the kernel starts from one.
 
-The base is `cad[build123d]` at the engine's own release -- or the source tree, or the wheel, the
-installation was made from -- on the engine's own Python, made by uv at `base/<key>` in the cache
-folder, its files hard links into uv's cache; uv is asked `--offline` first and goes to the network
-only for what its cache lacks, saying so first. One per installation, keyed by it (its environment,
-the version it runs as, its release and source), its Python and the architecture, so an update
-makes a base of its own -- before it switches (**Starting and updating**), so the first build after
-it waits on nothing. Its marker, `cad-env.json`, written last, makes it complete, so a later
-use reads the marker and resolves nothing; a lock beside it makes one process make it while another
-waits. An installation whose own environment carries the kernel (installed with the extra, `pip
-install 'cad[build123d]==<release>'`) is its own base, and none is made.
+**The base** is the environment of the build123d integration alone: `cad[build123d]` at the engine's
+own release -- or the source tree, or the wheel, the installation was made from -- on the engine's own
+Python, made by uv at `base/<key>` in the cache folder, its files hard links into uv's cache; uv is
+asked `--offline` first and goes to the network only for what its cache lacks, saying so first
+(`cad_server._internal.base`). One per installation, keyed by it (its environment, the version it
+runs as, its release and source), its Python and the architecture, so an update has a base of its
+own. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
+resolves nothing; a lock beside it makes one process make it while another waits. An installation
+whose own environment carries the kernel (installed with the extra, `pip install
+'cad[build123d]==<release>'`) is its own base, and none is made. **Nothing is made ahead of need**:
+not at install time, not by `cad doctor`, not after an update, and not at the engine's start (below).
 
-`cad run SCRIPT.py` (`-m`, `-c`) makes the base the first time it is asked for -- a line says so
-while uv works -- and runs the arguments with the base's Python, in the caller's folder and
-environment. The marker names the installation the base belongs to, which the distribution hands
-the engine as `places.HOME`: a process there reaches the device's one engine, and starts the current
-installation's when none runs (`client._start`), so the script, its worker and every other client
-share one engine. The project's own files and `.venv` are not read: the base, and the packages the
-model names (below), is what the script imports. `cad run` is the way that needs nothing set up, and
-the one way an agent builds.
+**`cad run` is `uv run`, with cad pinned** (`cad_server.cli.run`). It takes `uv run`'s options and
+behaves as it does: a script's PEP 723 header (a `# /// script` block's `dependencies` and
+`requires-python`), `--with REQ` (repeated, or a comma-separated list), `--with-editable`,
+`--with-requirements`, `-m MODULE`, `-c CODE`, `python ARGS` as `uv run python ARGS` takes it, a
+command of the environment's, `--python`, the indexes and find-links, `--project`, `--no-project`,
+`--directory`, `--env-file`. An option it does not read itself is handed, as given, to the uv the
+server ships (`uv pip install`, where the engine makes the environment), which judges it, so `cad
+run` never drifts from uv; those only the making reads (`--upgrade`, `--refresh`, `--offline`, the
+verbosity) key nothing. What it adds is two things:
 
-**A model's own packages.** A model that needs a package the base lacks names it in its script's
-inline metadata (PEP 723), a `# /// script` block whose `dependencies` lists requirements:
+- **The pin.** The environment holds `cad[<integrations>]==<device release>` (or the installation's
+  source tree or wheel), never PyPI's unrelated `cad` 1.x. Its integrations are chosen in one place
+  (`extras.integrations`): a header that names `cad[...]` decides them outright (`"cad"` alone, the
+  core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
+  folder, its package, its project, following absolute and relative imports and the imports inside
+  function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
+  build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
+  name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
+  it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
+  build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
+  runs, an `export`, none; a type's edit its integration, `kicad_pcb.edit` kicad; a type alone, `from cad
+  import step`, none) (`cad_server._internal.scan`); with what a
+  project's requirement of cad names, and a requirement that is an integration's own distribution
+  (`--with build123d`); and for a bare command, the integration that declares it (`kicad-cli`: the
+  kicad integration's, the registry's `commands`). `--with cad[...]` adds to either. None found: the
+  core alone. A header or
+  project that pins cad to another release is refused before anything is made, in one line naming
+  the device's release (`extras.pinned`: `plate.py's header pins cad to ==0.9.0, and this device runs
+  cad 0.10.0: drop the pin, ...`); a pin of the device's own release is as none, and an unpinned
+  `cad` gets the device's pin.
+- **The environment.** The device's engine makes it, outside any sandbox, over its door (`{"op":
+  "base", "key", "spec"}`: `extras.Making`), each line said as it comes, offline first from uv's
+  cache, with the base's link mode, find-links and index settings; with no engine of its installation
+  answering, `cad run` makes it itself. Then `cad run`, which may run in an agent's sandbox, runs the
+  program with that environment's Python, in the caller's folder and environment, its folder last on
+  its module search path (`cad._internal.program`). A command is the environment's own file, never
+  one on PATH; one an integration declares runs through that integration's `_command` module in the
+  environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
+  script), headless in private homes
+  (`cad.kicad._program.private_run`, a typed command's, KiCad's library variables naming KiCad's own
+  libraries: the first 3D library a board's 3D view reads, the others an installation of KiCad's; none of
+  the person's), its arguments, stdio and exit code kicad-cli's, and never the one
+  `CAD_KICAD_CLI` names. The environment of the build123d integration
+  alone, with nothing else, is the base.
 
-```python
-# /// script
-# dependencies = ["pandas>=2", "./vendor/gears"]
-# ///
-```
+**What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.
+A script with a header runs in an environment of its header's `dependencies`, and any project around
+it is not read, as `uv run` reads none. Without one, inside a uv project -- a `pyproject.toml` with a
+`[project]` table, found from the working folder up as uv finds one, or named by `--project` --
+the project's dependencies are installed with it. Where the project has a `uv.lock`, exactly its
+locked set: the engine exports it with uv (`uv export --format requirements-txt --no-hashes`, the
+project's extras and groups as given), its path, git and other sources as uv writes them, and installs
+that beside cad's pin, cad's own line taken out -- `--frozen` takes the lock as it is, `--locked`
+refuses one out of date with its project in uv's words, and neither makes it current first, as `uv
+run` does; a lock that pins cad to another release is refused in one line, as a header is
+(`extras.locked_cad`). With no lock, the project itself, editable, when it is packaged (a
+`[build-system]`, `--extra` naming its extras), else its dependencies (`-r pyproject.toml`), and
+`--locked` or `--frozen` is refused, there being no lock to read. `--with`, `--with-editable` and
+`--with-requirements` add on top in either case. Then uv's options; **uv's settings** as the caller's
+shell has them, an allowlist of the variables that say how uv resolves (`base.UV_SETTINGS`: its
+indexes and find-links, index strategy, keyring provider, TLS, pre-releases, HTTP timeout, build
+settings, its configuration file), which the making is run with in place of the engine's own (the
+settings the engine owns -- its cache, its link mode, where it installs Pythons -- stay its); the uv
+configuration of the run's folder, read as uv reads it, uv running in the project's folder (else the
+run's), so a project's `[tool.uv]` or `uv.toml` -- a private index -- is used (`extras.uv_config`);
+and the Python: `--python` as uv reads it (a version, a path, an implementation; uv may fetch a
+managed one), by default the engine's own. A run that differs from the base's only in how uv reaches
+an index (TLS, a timeout, a keyring) still runs in the base (`extras.HOW`). **After uv installs it**, the distributions
+it holds are read: one of an integration it was not given (`build123d`, `cadquery-ocp-novtk`,
+pulled in by a package that depends on it) adds that integration's extra, and uv resolves again,
+saying so (`build123d came in through another package: resolving again with cad[build123d] 0.10.0,
+so cad's pins decide it`); its marker names the integrations it was made with (`integrations`).
 
-or, for a one-off, with `cad run --with REQ` (repeated, or a comma-separated list, as `uv run --with`
-takes it: a name, a pin, extras, a local folder or wheel). `cad run` reads both
-(`cad_server._internal.extras`) and runs the script in **an environment of its packages**:
-`cad[build123d]` as the base has it (the installation's release, source tree or wheel) and those
-requirements, resolved together by uv on the engine's Python with the base's link mode, find-links and
-index settings. It is made once, as the base is -- by the device's engine when one runs (`{"op": "base",
-"key", "with"}`, `extras.Making`), its lines said as they come, else by `cad run` itself -- at
-`base/<key>` beside the base: its key digests the base's inputs, the release among them, the
-requirements normalized, each once and sorted (`extras.normalized`: a local path made absolute, against
-the working folder for `--with` and the script's folder for the header, and so a `file:` URL and a
-name's direct reference to a local one, `gears @ ./vendor/gears`, as a path; a name as PEP 503 spells it,
-its extras sorted, its specifier without spaces), so `--with pandas` and a header's `Pandas` share one --
-and what each local package is now (`extras.fingerprint`: a wheel's size and modification time, a
-folder's files' paths, sizes and modification times, but for `.git`, `__pycache__`, `build`, `dist`, the
-environments in it and `*.egg-info`). An edit to a local package is so another environment: the next run
-makes it, saying `making the environment of the model's packages again, as <path> changed: ...`, and
-builds in a fresh worker of its Python, which imports the package as it is now; the run before's goes
-(below). Its marker names the installation, the requirements (`with`) and the local packages'
-fingerprints (`local`): a process there reaches the device's engine as one in the base does, and names
-its Python in its orders, with how `cad run` named the packages (`places.RUN_WITH`: the requirements
-its `--with` was given, and the script whose header named the rest, with them); the engine builds the
-script in a warm worker of that Python, as for **a Python of the script's own** below, of one release
-with the engine, so no update notice is said. A header's `requires-python` the server's Python does not
-meet is refused in one line, before anything is made (read as PEP 440 reads it, `>=3.11.0rc1` too).
-Making one removes the environments of models' packages of other releases, and the one an edit to its
-local packages superseded, but one a process runs from (`releases.running`: named on a process's
-command line, as written or by a link to it), which a later making removes (`extras._collect`; the
-bases are their releases', `releases.collect`). The environments of other requirements stay, one per
-set a model named, through the release: `cad doctor` reports those unused for a week (each use marks
-its marker), `cad doctor --prune` removes them (`leftovers.package_environments`), and a release change
-removes them all. What uv cannot do is said in one line (`base.failure`): requirements it cannot
-resolve beside the kernel's pins, with its reason -- `build123d<0.1 cannot be resolved beside
-cad[build123d] 0.10.0: Because ...` -- and a package its cache lacks where the network cannot be
-reached, by name -- `the environment of the model's packages needs the network once, for pandas, which
-uv's cache does not hold: ...`. The record of a document a `cad run --with` built names the
-requirements it was given (`with`), and the command that builds it again gives them again (**The
-rebuild command**); a header's are its script's, so `cad run` and the script build it again -- but the
-header of a program that calls a model another script defines (a check script's), which the record
-names too, so its rebuild command gives them with `--with` (`models._given`). With no
-package named, `cad run` runs the base, as ever.
+**One per distinct set, never changed once made.** It lives in the cache folder beside the base
+(`base/<key>`): its key digests the installation's base's inputs, the release among them, the spec
+(`Spec.keyed`: the integrations, the requirements normalized, each once and sorted -- a local path
+made absolute, against the working folder for `--with` and the script's folder for the header, a
+name as PEP 503 spells it, its extras sorted, its specifier without spaces -- the editable folders,
+the requirements files, uv's options and settings, the uv configuration, the lock and its export's
+options, the Python), and what each local thing is now -- a lock, its project's `pyproject.toml` and
+a uv configuration by their bytes --
+(`extras.fingerprints`: a wheel's or a file's size and modification time; a folder's files' paths,
+sizes and modification times, but for `.git`, `__pycache__`, `build`, `dist`, environments and
+`*.egg-info`; an editable folder's metadata files alone, its code read as it is). An edit to a local
+package is so another environment: the next run makes it, saying `making the environment of the
+model's packages again, as <path> changed: ...`, and builds in a fresh worker of its Python. Its
+marker, written last, names the installation, the requirements (`with`), the spec, the
+integrations, its Python's version and the local fingerprints (`local`); a lock makes one maker. A
+process there reaches the device's engine as one in the base does, and -- the environment not being
+the base (`places.SEPARATE`) -- names its Python in its orders, with how `cad run` named its
+environment (`places.RUN_WITH`: the options and requirements its command line was given, one word
+an option, and the script whose header named the rest); the engine builds the script in a warm
+worker of that Python, as for **a Python of the script's own** below, of one release with the
+engine, so no update notice is said. A header's `requires-python` the Python does not meet is refused
+in one line (read as PEP 440 reads it, `>=3.11.0rc1` too): before anything is made for the engine's
+Python, once the environment is made for one `--python` named.
+
+**Its releases.** Environments are tied to their release, cad being pinned in each. Making one
+removes the environments of releases older than the one before the current -- the current
+release's and the one before's stay, the way back, as `releases/` keeps the release before
+(`extras.kept`: the release the last switch came from, else the newest older one) -- and the one an
+edit to its local packages superseded, but one a process runs from (`releases.running`: named on a
+process's command line, as written or by a link to it), which a later making removes
+(`extras._collect`; the bases are their releases', `releases.collect`). The environments of other
+sets stay, one per set a program named: `cad doctor` reports those unused for a week (each use marks
+its marker), `cad doctor --prune` removes them (`leftovers.package_environments`). After an update,
+a new release's environments are made as its runs ask for them, from uv's cache.
+
+**What cannot be done is said in one line** (`base.failure`): requirements uv cannot resolve beside
+cad's pins, with its reason -- `build123d<0.1 cannot be resolved beside cad[build123d] 0.10.0:
+Because ...` -- and a package its cache lacks where the network cannot be reached, by name -- `the
+environment of the model's packages needs the network once, for pandas, which uv's cache does not
+hold: ...`. A program that stops importing a module of an integration its environment lacks -- one
+the scan could not see, imported by name at run time -- is said as Python says it, then in one line
+naming the extra (`cad._internal.program`, `integrations.missing`): `kicode comes with cad's kicad
+integration: add `cad[kicad]` to the script's header`; nothing runs again. The record of a document a
+`cad run` built names the options and requirements its command line was given (`with`), and the
+command that builds it again gives them again (**The rebuild command**); a header's are its
+script's, so `cad run` and the script build it again -- but the header of a program that calls a
+model another script defines (a check script's), which the record names too, so its rebuild command
+gives them with `--with` (`models._given`).
 
 **A Python of the script's own.** A script run by any other Python that has the library -- a venv's
 `python model.py`, `uv run`, a person's own interpreter with `cad[build123d]` -- names that Python in
@@ -495,19 +597,25 @@ no Python and hears neither.
 
 Every other process of the engine's that loads the kernel runs the base's Python (`places.kernel`,
 which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
-the documents worker, the standby, the render processes, and the meshing and reading pools, whose
-spawned processes start on the base's own import path, which the marker records (`serve._spawn_in`).
-The engine starts and serves with no base
-made -- pages, the home, documents held in the cache, `status` -- and makes it then, in the background
-(`base.Making`, its lines in the engine's log and its state in `status`): an engine a host's CAD app
-started runs outside any sandbox, where an agent's command may not write the cache folder. The standby
-stands once it is made, and a kernel process asked for meanwhile waits for it (the base's lock). A
-`cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`, its key naming
-the installation's base) and follows its making, each line said as it comes; it makes the base itself
-only when no engine of its installation answers. `cad setup` and `cad doctor` make it at install time,
-so the first build waits on nothing. A base that cannot be made fails the request that needed it in one
-line (`serve.KernelProcessesUnavailable`), and nothing remembers the failure: the next asker makes it
-again.
+the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
+processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
+made on first need**, never ahead of it: nothing makes it at install time (`cad setup`, `cad doctor` and an
+update the person asks for leave it alone; an automatic update makes its release's before it switches, so the
+first build after a switch nobody asked for waits on nothing: **An automatic update never
+interrupts**, under **Architecture**), and the engine starts and serves with none made -- pages, the home, documents
+held in the cache, `status`. The first thing that needs it makes it: a `cad run` of a script whose
+environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
+an operation that opens or draws a STEP or an xbf, or meshes one (`places.kernel`, `base.kernel`) --, by
+the engine's one making (`base.Making`, its lines in the engine's log and its state in `status`), and
+every kernel process asked for meanwhile waits on it; those processes start only once it exists. The
+standby stands only once the base exists -- at the engine's start where it is made already, else the
+moment its making is done -- and until then none stands and nothing waits on one. An
+engine a host's CAD app started runs outside any sandbox, where an agent's command may not write the
+cache folder: a `cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`,
+its key naming the installation's base) and follows its making, each line said as it comes; it makes the
+base itself only when no engine of its installation answers. A base that cannot be made fails the
+request that needed it in one line (`serve.KernelProcessesUnavailable`), and nothing remembers the
+failure: the next asker makes it again.
 
 ## Layout
 
@@ -529,10 +637,10 @@ again.
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
-| `snapshot.py` | `cad snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
+| `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
-| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
+| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
@@ -544,44 +652,90 @@ again.
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
-| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
+| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
-| `cli.py` | the verbs as commands, the server's: `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
+| `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
 
 ## CLI
 
 ```
-cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
-                                             in an environment of the library's, with its kernel)
-cad export SRC DST [DST ...] [--tolerance MM] [--json]
-                                             SRC an .xbf, a .step, a document id, or a mesh
-                                             (.glb, .stl, .3mf: to the other two mesh kinds);
-                                             --tolerance meshes an .stl or a .3mf at MM (Mesh)
-cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
+cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
+                                             uv run, cad pinned at this release with the integrations
+                                             the program's imports use: the models the script
+                                             explicitly calls (and python SCRIPT.py in an environment
+                                             of the library's, with its kernel); a command an
+                                             integration declares (kicad-cli) with that integration,
+                                             headless
+cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
+                                             this release's cad by: cad[build123d]==<release>
+cad model export ID DST [DST ...] [--tolerance MM] [--json]
+                                             a model, by its document id: the document the engine holds
+cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--json]
+                                             SRC an .xbf or a .step; --tolerance (a model's, an xbf's, a
+                                             STEP's) meshes an .stl or a .3mf at MM (Mesh)
+cad glb|stl|threemf export SRC DST [DST ...] [--json]
+                                             a mesh to the other two mesh kinds
+cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad snapshot --job PACKET [SRC] [the same flags, each over every job]
+cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
 cad serve DOC [--port N]
-cad inspect DOC [REF] [--query Q] [--json]  what the document holds, then its build closure; with REF (**References**): an element's facts and
+cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF] [...]
+                                             what the document holds, then its build closure; with REF
+                                             (**References**): an element's facts and
                                              what made it, or a part's or an assembly's volume, mass and
                                              world bounds (a part's placement too); of a GLB, its nodes,
                                              meshes and animations (an STL or a 3MF, and a ref into any
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
-cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
+cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
+                                             its findings, each a severity, a code and a location
+cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
+                [--zero-tol DEG] [--units U] [--candidates] [--json]
+cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG] [--samples N]
+                [--units U] [--candidates] [--json]
+                                             the manufacturing check, the trimesh integration's: SRC a
+                                             file of the type, or a model's id; its findings and every
+                                             measurement
+cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
+                                             KiCad's DRC and fabrication outputs, by kicad-cli; the board
+                                             in one look, by the library's reader
+cad kicad_sch erc SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
+                                             KiCad's ERC and the schematic's outputs, by kicad-cli, run on
+                                             the project's root sheet whichever sheet is named
+cad kicad_sch inspect SCHEMATIC [REF] [--json]
+                                             its sheets, parts and nets; with REF (#U3, #U3.7, #net:VBUS,
+                                             #sheet:/Power/, #wire:<uuid>), what that names
+cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
+                                             one sheet drawn flat (the root unless --sheet names another)
+cad status [--json] | stop [--json] | server [--port N] [--rotate-token [--yes]]
+cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]
+                                             each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
-                                             file of yours
+                                             file of yours. Asked first; --dry-run says what and how many
 ```
 
-`python -m cad_server.engine VERB ...` takes the same verbs, the engine's own entry.
+The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
+(`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
+has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
+type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
+before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
+file of no type (`robot.xml is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
+there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
+names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
+schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
+is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
+one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
+the same way. The commands are the server's
+(`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.xbf export ...`);
+`python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
-Every `SRC` and `DOC` is an on-disk CAD file's path or a document's id (`ids`): a model's id is
-what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
+Every `SRC` and `DOC` is an on-disk CAD file's path, for the file's type, or a model's document id
+(`ids`), for `cad model`: a model's id is what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
 id is read as the engine holds it, never built: one it does not hold is refused with the command
 that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`
 and `x.py::fn` are refused as any other file that is no document is.
@@ -594,13 +748,48 @@ one, nor does an MCP host closing its session.
 and debugging only: it runs in this process, cold, and no document is served: no page, and
 nothing for `inspect` to read by its id.
 
-A verb's `--json` (`export`, `snapshot`, `status`, `stop`, `delete`) prints its answer as one JSON object
-on stdout, and a failure as `{"ok": false, "error": ...}` there too, exit status 1, so a caller
-reading stdout always finds an answer (`cli.answered`); without `--json` a failure is its words
-on stderr, exit 2 for a request refused by name before anything ran and 1 for one that failed.
-A refusal keeps its type across the daemon: the worker answers its kind beside its words
-(`worker.refusal`) and the caller raises it as that type (`api._failed`), so a pose a document
-lacks is refused the same, exit 2, whether a worker or the caller's own process refused it.
+**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help step export`) -- prints
+the help on stdout and exits 0, and does nothing else: it moves no earlier release's state, writes nothing
+and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
+person reads, and nothing is sent by default until it is said.
+
+**Consent.** A command that destroys -- `cad uninstall` (and `--purge`), `cad delete`, `cad doctor --prune`,
+`cad server --rotate-token` -- says its plan first, what it removes and how many (`cad delete --dry-run`
+says it alone), and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
+nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
+without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
+(`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
+installing is what was asked, and the install command passes `--yes` to an uninstall, which a person asked
+for by `--uninstall`.
+
+**The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
+sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
+command or an option it does not take, an argument missing or out of range, a file of another type, an
+input that is not there, a destructive command where no one can be asked and no `--yes` -- which fails
+the same way until the call changes; 1 for a failure of the work (a build, a render, an export, a tool,
+the engine out of reach, a mistake of ours, a destructive command the person said no to); 130 for an
+interrupt (Ctrl-C). A command's `--json` prints
+its answer as one JSON object on stdout, and every failure as one JSON document there too, so a caller
+reading stdout always finds an answer, with nothing else on stdout and no traceback (`--verbose`, where
+a command takes it, puts one on stderr):
+
+```
+{"ok": false, "error": "part.glb is a glb, not a stl: use cad glb snapshot", "reason": "wrong_type"}
+```
+
+`reason` is one of a fixed set, added to and never renamed (`cli_errors.REASONS`): `usage` (a command,
+option or argument the command line got wrong), `invalid_argument` (a value refused by name before
+anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
+there, a document the engine has no record of or does not hold), `confirmation_required` (with
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`,
+`engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
+failure is its words on stderr. A
+command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are
+read by the one parser, which takes no abbreviation of an option -- `--js` is no `--json` -- and suggests
+at most one option, choice or command it is closest to, never running it). A refusal keeps its type
+across the daemon: the worker answers its kind beside its words (`worker.refusal`) and the caller raises
+it as that type (`api._failed`), so a pose a document lacks is refused the same, exit 2, whether a worker
+or the caller's own process refused it.
 
 `python SCRIPT.py` executes normal Python. Decoration only registers a model;
 imports and definitions build nothing. A call such as `arm()` asks the daemon to
@@ -663,12 +852,13 @@ start compiled build123d and the pure-Python libraries it loads: measured on a f
 environment of the wheel, a fresh daemon's first build of a one-body model took 5.2-6.2 s with
 none cached and 2.4-2.9 s cached. A folder no daemon started in 30 days goes
 (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
-The daemon's standby (**The engine server and its workers**) loads the kernel at the daemon's
-start: the first load of a fresh installation on macOS also waits on the system's first look at
-each native library, 43 s measured, which the standby pays while nobody waits. A build that waits
+The daemon's standby (**The engine server and its workers**) loads the kernel once the base exists:
+the first load of a fresh installation on macOS also waits on the system's first look at each native
+library, 43 s measured, which the standby pays while nobody waits. A build that waits
 on such a load -- one arriving before the standby is ready, or the first of a worker whose kernel is
 not loaded -- says so once, on stderr, when it has waited `worker.KERNEL_PATIENCE` (5 s): `loading
-the CAD kernel for the first time in this environment, up to a minute`. A warm worker says nothing.
+the CAD kernel for the first time in this environment, up to a minute`. A warm worker says nothing. An
+environment without the build123d integration (**Running a model**) loads none.
 A warm build does not make the document again: the worker holds the XCAF
 document it last wrote and patches it (`document.Kept`). A prototype whose label
 holds what a cold build would make of it keeps that label untouched; one that
@@ -682,7 +872,16 @@ Nor does the day: the creation date the BinXCAF driver writes in the file's
 header is always `01/01/2000` (`document.WRITTEN_DATE`, put over the driver's in
 place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
-previous files stay: the program's own call prints those frames once on stderr, then `failed
+previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
+`build._raised`: its type and every frame, the library's included), and the daemon decides
+from them whether the failure is a mistake in cadgen's own code (`reportable`,
+`daemon._reportable`) by the rule telemetry counts a build's crash by
+(`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
+raised in cadgen's code at a line that is no `raise`, past the memo's and the history's wrappers
+of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
+cadgen refusing what it was given are the model's to correct. The page's record of the failed
+build carries `reportable`, and the card offers Report Issue only where it is not `false`; a
+worker that died under the build is reportable. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
 it, and left uncaught it ends the program with status 1 without its traceback again
 (`model._told`). A call the engine never served -- none runs and this shell's sandbox cannot
@@ -715,7 +914,14 @@ A served STEP is read in a reader process of the server's, never in the daemon
 (the XCAF reader's working memory is many times its result's, and its allocator
 keeps it): one read per process, the next process started and warm meanwhile,
 answering the structure and each part's shape bytes, which are all the daemon
-keeps. The read is held by the file's bytes, so the same bytes served again --
+keeps. Reads that come while one is under way (a board's part models: 22 files at once on
+KiCad's "video" demo) are read beside it by up to three helper processes (`serve.READERS`: four
+reads at once at most, and never every core), each reading up to 16 files before it goes: only
+files of at most 8 MB (what such a parse leaves in a process is about 100 MB), never under memory
+pressure, and the helpers go once no read has been under way for 10 seconds, so with no page
+reading the daemon's children are what they were. A larger file waits for the one reader. Measured
+on a 10-core Mac, that board's 22 models: 19.0 s to read one at a time in fresh processes, 3.0 s
+so. The read is held by the file's bytes, so the same bytes served again --
 the file touched, copied, or put back -- are not parsed again while the daemon
 lives, and a part's key is made from those bytes and its label, so its mesh is
 not made again either. A STEP is read outside the server's lock (every other
@@ -723,6 +929,98 @@ document is served meanwhile), and one rewritten while it is served is read
 again in the background: the page keeps the old version until the new one is
 in. Its structure says how long the parse took and which process made it
 (`read`: `{seconds, process}`).
+
+## Document types and integrations
+
+The words are the library README's (**Definitions**, laws 24 to 29); this is how they work.
+
+**The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
+`DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
+`Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
+an `Integration`: `name`, `extra`, `process`, and for an external program its `Probe`: the program,
+the minimum version, the install hint and the variable that names it outright). `by_extension` and
+`type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
+file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
+answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
+runtime bundled at build time, which are generated from it (`python -m cad.registry --js`) and checked
+against it. `wire` is the one other spelling, the frozen
+protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas.
+
+**A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
+(`cad._internal.document_type.bind`), the module class of every type (`ModelType` for `cad.model`, whose
+`__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
+with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
+behind a check that the source is the type's (`refuse_other`: no file of another type; for `model`, a
+handle or an id and no file; for a file's type, no handle or id); a mesh's `export` takes no `tolerance`.
+`dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
+is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
+`cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
+meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
+warning once per process from the lookup, at the caller's line (`skip_file_prefixes` skips the
+library's and the import system's frames).
+
+**Producers.** A producer is `(type, matcher, writer, integration)` with what it accepts and provides
+(`cad.registry.Producer`), registered by its integration (`cad/build123d/_producers.py`) and gathered
+by `cad.registry.producers_for`. A model's result is checked against them before anything is made of
+it (`model.check_result`): for the document and each file the model declares, exactly one producer
+must take the value (`registry.producer_for`), else the build fails, naming what the type is made of
+and the integration that would take the value. Today the build123d integration's producers take a
+build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
+(`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
+
+**Edits.** A KiCad board or schematic is no producer's: it is changed in place by its type's edit
+(`cad.registry.Edit`), `with kicad_pcb.edit(path) as board:` and `with kicad_sch.edit(path) as
+schematic:`, run in the caller's process, never in a worker or the daemon (`cad.kicad._session.edit`): a
+private headless `kicad-cli api-server` on the file (kicode's, in private KiCad homes), KiPy connected to
+it and the open document handed to the block -- a schematic's project symbol libraries loaded first; a file
+not there yet made by KiCad (`CreateDocument`) -- and saved at the block's end when the block changed it
+or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
+inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
+declared, and nothing is written from the edited file but what explicit calls after the block write
+(`kicad_pcb.export`, `kicad_pcb.drc`, `kicad_sch.export`, `kicad_sch.erc`).
+
+**The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
+`OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
+runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
+without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
+function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
+repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
+choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
+parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
+`ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
+(`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
+reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
+its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
+
+**The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`: the
+registry's `dfm` operation of the `trimesh` integration) is one function the library makes for each
+(`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`): its options belong to a process,
+`molding` or `printing`, and are resolved there, the standard library alone -- an option of the other
+process, a pull beside `--candidates` and a unit for a type that declares its own are refused before
+anything is read. The measuring is `cad.trimesh._check`'s: an STL is read as it is; a 3MF or a GLB is
+written as one STL in a temporary folder by the library's mesh readers (millimetres, Z up, as the viewer
+reads it; no kernel); a STEP, an xbf or a model is exported to that STL by the engine. The report
+(`_molding`, `_printing`: injection molding's draft, undercuts and projection along a pull, or the pulls
+ranked; 3D printing's mesh, overhangs, walls and support, or the orientations ranked) is the result's
+`measurements`; a family that failed, a mesh that did not read and a figure that is no finite number are
+errors, and what the figures show (zero-draft walls, undercut candidates, overhangs, suspect units) are
+warnings, at the place they were measured. The command runs it in its own process when its environment
+holds trimesh (`cad_server._internal.integration_env.carries`: a checkout's, one installed with the
+extra); else in the environment of `cad[trimesh]` at the installation's release, made once by the engine
+as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
+(`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
+
+**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
+`cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
+way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
+names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
+installation's release, made once by the engine (some 100 MB of kicode from PyPI, the first time). kicad-cli
+is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
+`PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
+for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
+schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
+run the same way.
 
 ## Profiling
 
@@ -785,7 +1083,9 @@ tessellations, is under one memory budget: **Document lifetime**.)
 - **The cap never retires a watched worker.** When every idle worker has a document a page
   watches, the new worker starts past the cap. The memory cap may still retire a watched one.
 - **A standby.** One worker stands by with the kernel loaded and no script (`Supervisor.stand`): started
-  with the daemon once the base is made (a start with none makes it first: **Running a model**), and again each
+  once the base exists -- with the daemon where it is made already, else the moment its making on first
+  need is done (`Daemon.made_base`); a start with none makes none, and no standby stands or is waited
+  on before it (**Running a model**) -- and again each
   time a build takes it or starts a worker of its own, while the pool has a slot for it under the cap
   and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the
@@ -845,8 +1145,8 @@ answers in frames; today's children keep their bulk in frames as they always hav
 document's xbf, a version's meshes sent to a render process, a picture). Not services: the build's
 STEP reader (the worker's own child for one build), the meshing and reading pools (the library's,
 which run with no daemon too) and the processes that outlive the engine (the telemetry sender, an
-update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's,
-count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
+update's switch helper). A known limit: the meshing and reading pools' memory, and the STEP reader's
+and its helpers', count toward neither cap (12 processes and 3.2 GB measured with the meshing pool started on a 10-core
 machine, below; 2.3 GB parsing a 354 MB STEP).
 
 **The protocol** (`cad.engine.frames`), every service's: requests are one JSON object per line on the
@@ -1070,7 +1370,7 @@ wrote, are no model's code. A document's state (`models.STATES`, what `cad statu
   cache**), or both (`Models.where`). In memory the daemon holds it whole: its served structure and shape bytes,
   and the document as the xbf bytes `@xbf` would write of it, mechanism and every assembly's
   placement included, and its build records with it -- the closure and the compiled animations
-  (**Animations**) -- so a GLB of it is the build's own. A page and `cad inspect` read the
+  (**Animations**) -- so a GLB of it is the build's own. A page and `cad <type> inspect` read the
   served structure; an export or a
   snapshot by its id, and the viewer's export, go to the documents worker with the xbf bytes
   (`Daemon.document`), which reads them as it reads an xbf on disk, so no worker of its script
@@ -1196,7 +1496,10 @@ file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its h
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
-author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's
+author's, never used as the cache nor pointed at by it. A file's document has no bytes there, but the views
+derived from its bytes go under it, keyed by them: a KiCad board's plot, refilled pours, DRC and kept exports,
+`documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), regenerable, and removed with the document
+(`Registry.delete` removes `documents/<id>` whole). The folder is shared with any 0.7 install's
 store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
 bytecode is under `pycache/`), and lists, counts and removes nothing else there (`cad doctor
 --prune` removes 0.7's store once nothing has written it for seven days). It is written never on the run path:
@@ -1325,8 +1628,9 @@ Where none can be read, the budget alone applies. `Pressure.simulate` is the tes
 **The rebuild command.** A document that is not held -- `unsaved` -- names the exact
 command that builds it again: `cad run` and the script that defines its model -- never a
 program that imported it and called it, a check script, whose next run may do something else -- the engine that says it is the one `cad run` reaches, and its
-python has the kernel a bare `python` may lack -- with `--with` and each requirement its last run's
-`cad run --with` was given (its record's `with`; a header's are its script's, which `cad run` reads
+python has the kernel a bare `python` may lack -- with the options its last run's command line was
+given, one word each (`--python=3.13`, `--project=/work/gearbox`, `--index-url=...`), and `--with` and
+each requirement it was given (its record's `with`; a header's are its script's, which `cad run` reads
 again); for one its last run built in a Python of its own (its record's `python`: a venv's, with
 packages the base lacks), that Python and the script, which `cad run` could not build -- from the
 daemon's record of it, or after a restart the registry's. Each word is quoted for the shell a person
@@ -1338,11 +1642,11 @@ the path; a word holding a `%` is quoted between each one, `"C:\my"%"20dir"`, si
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
 reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of
 its kind's, `{"error", "state", "rebuild", "hint"}`),
-`cad inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
+`cad <type> inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
 and no restart runs code to bring a document back.
 Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`): the server answers
 its type, state and command with its words (`daemon.refused`) and the caller raises it as that
-type (`api._failed`), so `cad inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
+type (`api._failed`), so `cad <type> inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
 
 `cad stop` stops the engine, whatever release runs it (`places.endpoints()`: its one door).
 Both `stop` and `status` remove the door and lock of a dead server (nothing reads the door and nobody
@@ -1453,8 +1757,8 @@ destination. A snapshot's are three: `scene` while the document is served, meshe
 model's document, by the daemon as it draws a file through a render process (`Daemon.draw`,
 `renders.Renders.draw`) and by the verb's own process for the write, or wholly in that process
 with `daemon=False` (`render.service.draw_here_each`). A measurement's are `inspect`'s summary
-measuring a volume per part, in the process that asks (`api._summary`). `cad export`, `cad
-snapshot` and `cad inspect` draw them as `python model.py` draws a build's: the one bar, on a
+measuring a volume per part, in the process that asks (`api._summary`). `cad <type> export`, `cad
+snapshot` and `cad <type> inspect` draw them as `python model.py` draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
 `api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). An MCP
 operation (`cad_export`, `cad_snapshot`, `cad_inspect`) keeps the latest as its status's `progress`
@@ -1525,18 +1829,21 @@ document's scene brings them as its own lighting and surface rule (the bundled
 `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
 up in place of the theme's. Preview is drawn as any file's is.
 
-`cad snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
+`cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
 browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
 
-`cad snapshot` draws a document as the viewer does. The engine serves and meshes it (the
+`cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
-(`render/`, below), in the look the viewer resolves for the same display settings. A mesh file
+(`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
+light -- the studio backdrop, a drawing's white paper, a board's and a schematic's light colours --
+whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
+and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
 feature edges and file units; its export source holds no B-rep to mesh. `--display` takes
 a mode (`solid`, `shaded`, `parts`, `xray`, `hidden-line`, `wireframe`), `exploded=A` (the parts
 moved apart as the viewer's Explode moves them, by an amount from 0 to 1; with a mode,
-`hidden-line,exploded=0.6`), `light` or `dark` (the appearance, all a drawing takes), or the display
-object (`mode`, `grid`, `appearance`, `camera`, `clip`: `{"enabled", "axis", "at", "invert", "partColors"}`,
+`hidden-line,exploded=0.6`), or the display object (a drawing takes none: `mode`, `grid`, `camera`,
+`clip`: `{"enabled", "axis", "at", "invert", "partColors"}`,
 its `at` in the file's unit as the viewer reads it -- a document's millimetres, a robot's or a GLB's
 metres, a 3MF's declared unit (`render/clip.py`); `exploded`: `{"enabled", "amount"}`, 0.5
 unless given; `hidden` and `isolated`: lists of part refs, an occurrence's path in the refs
@@ -1601,6 +1908,29 @@ output and moved into place only when all are drawn, and a failed snapshot leave
 of the file's warm render process; `daemon=False` serves each file once for all its pictures.
 `--json` prints `{"ok": true, "pictures": [what each drew]}`.
 
+**Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
+`formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's
+refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the
+environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the engine's memory
+(`viewer/plots.py`) and gzipped in the document cache beside the board's document,
+`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`; a
+`cad delete` of the board deletes them with it), which a board's snapshot is drawn from too
+(`renders.py` keeps it before the render process reads it; a payload drawn as saved says why in
+`pours` and in the snapshot's warnings). `render/board.py` paints the same layer primitives
+with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
+plan cameras, annotation and measurements. Its render-service handle holds only a path; no
+board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
+Viewing a board needs no KiCad installed: its first plot fetches kicode, the `kicad` integration's, for the
+refill (`_internal/boards.refills`: `CAD_KICAD_REFILL=0` plots the pours as saved, fetching nothing), and
+KiCad's own CLI (kicode's) performs DRC and exports.
+A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
+the hierarchy from its project's root and builds the page the display names (`{sheet, border}`: the
+root, `/`, unless it names another; the page's edge off unless asked), and `render/schematic.py`
+paints it in KiCad's light schematic colours, framed on what the page draws
+(the whole page with its border on) or through a plan camera. Its handle watches every sheet file of
+the hierarchy, so an edit to any sheet draws anew. It refuses Preview, pose, transparent output and
+references; KiCad's own CLI (kicode's) performs ERC and the exports.
+
 **The OCCT stills.** A document is drawn by OCCT's own OpenGL renderer from the engine's meshes
 (`render/`): one presentation per part and look, each
 instance a connected object of it; the modes, the camera fit, clip, grid and Preview are the
@@ -1648,7 +1978,7 @@ per file (read again when a file it read changes) or with `daemon=False` in this
 - **A drawing** (`.dxf`) is drawn as the viewer's DXF pane draws it: from above, fitted with its
   16 px margin, lines, arcs, polylines, splines, ellipses, solids, solid hatches, blocks and
   dimensions one pixel wide in their pens (ACI 7 the look's ink), words set in the platform's UI
-  face, on the light or dark paper (`display.appearance`, `render/look.py`'s `DRAWING`). Its
+  face, on the light theme's white paper (`render/look.py`'s `DRAWING`); it takes no display. Its
   camera is a plan view, the window a Quick Edit view of it names (`render/drawing.py`'s
   `plan_view`: `{position, target, up, orthographicHalfHeight}` looking straight down at the sheet,
   +Y up), drawn as that window -- given as `--camera`, as `authored` (the view the ink was last
@@ -1671,7 +2001,7 @@ decorator and no build flag draws one.
 ### Viewer exports
 
 The browser's Export action writes the displayed document as its code built it (law 22),
-through `export/viewer.py` and the same worker writer as `cad export`. Its source is the
+through `export/viewer.py` and the same worker writer as `cad <type> export`. Its source is the
 displayed document and revision, nothing else (`viewer.exports.specification`: `{doc,
 revision}`); no part, no pose, and nothing of the view -- selection, visibility, Clip, Explode,
 Preview -- is an input. A posed or partial file is a function in the model's code.
@@ -1688,9 +2018,13 @@ The page offers what the file's kind writes, and nothing is inspected first: an 
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
 download returns its original bytes (`original`), including an `xbf/8` file converted in
 memory for viewing. Use
-`cad export old.xbf upgraded.xbf` to save that conversion to a different path
+`cad xbf export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
-file offers the other two mesh kinds and nothing else. A job the writer refuses (a DXF
+file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, each `cad kicad_pcb export
+--to <kind>` (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
+own thread in the environment of `cad[kicad]` (made on first need), from the board at the bytes shown
+(the catalog's hash, checked before; its `mtime_ns-size`, after): one file downloads as it is, a folder
+of them (the Gerbers, the drill files, the PDF's two pages) as `<board>-<kind>.zip`. A job the writer refuses (a DXF
 whose drawing checks fail) fails with its reason. A changed source is refused, saying to open Export again. There is no source bundle in
 this interface.
 
@@ -1704,10 +2038,10 @@ result without killing a worker shared with another caller.
 
 The xbf is the model's result; STEP, GLB, STL, 3MF and DXF are exports of a document, and an
 xbf can be one too. One writer, `export.translate(document, kind, path)`,
-writes every one, whether a decorator declares the file or `cad export` asks for it: the
+writes every one, whether a decorator declares the file or `cad <type> export` asks for it: the
 same document writes the same bytes. The file holds what the code built (law 22). Every file is written beside its
 target and moved over it, and only when its bytes change (`atomic_replace.put`): a target that
-holds them already is left as it is (`cad export` says `unchanged`). In a folder that takes no
+holds them already is left as it is (`cad <type> export` says `unchanged`). In a folder that takes no
 new file (read-only), the bytes are made aside and compared, so an unchanged file passes, and a
 changed or new one fails in one line naming the folder and its mode.
 
@@ -1724,7 +2058,7 @@ changed or new one fails in one line naming the folder and its mode.
   once, and every destination is checked before any is written; an export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
-- **A mesh file is a source of the other mesh kinds**: `cad export part.stl part.3mf`, any
+- **A mesh file is a source of the other mesh kinds**: `cad stl export part.stl part.3mf`, any
   pair of GLB, STL and 3MF either way. It is read as a document of its own kind
   (`export/mesh_file.py`): triangles, with the parts, names, colours and placements its format
   carries, each part's mesh the file's own (never meshed again, never cached); the GLB, STL and
@@ -1797,14 +2131,14 @@ changed or new one fails in one line naming the folder and its mode.
   off z=0, by its element name. Layers are written in name order and edges in an order of
   their content (curve kind, sampled points, length), never the kernel's traversal, and
   ezdxf's provenance is pinned and its classes sorted: the same geometry is the same bytes in
-  any process on any day, so a declared DXF is the bytes `cad export flat.xbf flat.dxf`
+  any process on any day, so a declared DXF is the bytes `cad xbf export flat.xbf flat.dxf`
   writes. The drawing checks run on the document before it is written -- units set, no
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
   error refuses the file, saying which. `export.dxf.validate_dxf_file` runs them on any DXF.
 - **No option selects a part or a state** (law 22): a file of one part is that part's own
   model (a function returning it), and a posed file a model returning the assembly posed
-  (`posed(arm(), "folded")`, `cad.ap242`). Snapshot's `--pose` is the picture's: ad
+  (`posed(arm(), "folded")`, `cad.build123d`). Snapshot's `--pose` is the picture's: ad
   hoc, never cached, never declared.
 
 **Motions in a GLB.** Each motion (**Configuration sequences**) is baked into a glTF animation of its name:
@@ -1863,7 +2197,7 @@ keeps its document as any (a later build of it takes that, **Build closure**); a
 unchanged is kept. A declared file is an export appended to the run: translated from the document
 every time the model runs or is taken -- an xbf from the document's own bytes, serialised before any
 export meshes its shapes -- compared with the file, and written only where it differs or is missing
-(`atomic_replace.put`, the one writer `cad export` writes its files with too), nothing remembered
+(`atomic_replace.put`, the one writer `cad <type> export` writes its files with too), nothing remembered
 of what was written: a declared file is what the code that last ran makes, whichever model ran it. A child called
 twice is one model, written once; a child that is also a target of the build writes as the
 target; a child run inside a replayed body writes as one its caller ran; one that ran before its
@@ -1878,14 +2212,15 @@ make a child's part, placed in its caller's assembly, other bytes than its own b
 The xbf is saved first, then each derived file. Nothing of them is sent to a page: one serving
 a declared file follows that file's bytes (**Document lifetime**).
 
-**Functions** (`api`, also `cad.export`, `cad.snapshot` and `cad.inspect`; `serve`,
+**Functions** (`api`, behind each type's `cad.<type>.export`, `.snapshot` and `.inspect`; `serve`,
 `status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
 a shape made elsewhere is handed over, never built (`model(shape, name=...)`, **Shapes handed over**).
 `export(source, *destinations)` a list of `Written`; `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
-building it first. A handle exports and draws its document the same way (`.export()`,
+building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id or a
+decorated function, every other type's a file of it (`cad.xbf.export("arm.xbf", ...)`). A handle exports and draws its document the same way (`.export()`,
 `.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
 and its children, as declared.
 
@@ -1973,8 +2308,8 @@ configuration sequence says it.
 
 ```python
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state, screw_pair
-from cad.engine import xbf
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state, screw_pair
+from cad import xbf
 
 CURL = {"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}  # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
@@ -2018,7 +2353,7 @@ def hypercar():
     return mechanism_state(car, "open", **SWEEP)                      # shut is as built
 ```
 
-`cad snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
+`cad xbf snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
 knuckles at 54, 60 and 42 degrees: the picture of the same finger with no coupling at
 `--pose '{"index_mcp_flexion": 54, "index_pip": 60, "index_dip": 42}'`; its range, `[0, 1]`, is
 where every knuckle stays within its own. A model returning `posed(car().shape, {"left": -35,
@@ -2043,7 +2378,7 @@ segment's `discontinuous_interpolation_type`), and a coupling is its couplers un
 range null where nothing bounds it. **STEP carries none of it**: OCCT reads AP242
 kinematics but cannot write them, so every STEP, posed or not, is placements only.
 
-`--pose` on `cad snapshot` poses the mechanism at a
+`--pose` on `cad <type> snapshot` poses the mechanism at a
 mechanism state (its name, among the structure's `configurations`) or at joint and coupling values (`'{"elbow": 45}'`, `'{"curl": 0.6}'`:
 a turn in degrees, a slide in millimetres, the rest as built): the engine places each link by composing its pairs from the ground down,
 exact forward kinematics, and draws that. No flag is as built. An unknown configuration, joint or
@@ -2063,7 +2398,7 @@ A configuration sequence -- AP242's `interpolated_configuration_sequence`, a **m
 structure and the viewer -- is a definition in the model's code, beside its mechanism states:
 
 ```python
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 mechanism_state(arm, "folded", shoulder=0, elbow=0)
 mechanism_state(arm, "reach", shoulder=45, elbow=90)
@@ -2124,10 +2459,10 @@ parts, what it says beyond its keys, its label and its order), the build's JSON
 (`animations.to_json`), no code. A document with no animation holds no record. It is no part of the
 mechanism subtree, which stays AP242's alone (law 13), and only a GLB reads it:
 `document.Loaded.animations`, and so `Source.read`, give the tracks back as the harvest made them,
-so a GLB exported from the xbf (`cad export model.xbf model.glb`), from a held document by its
+so a GLB exported from the xbf (`cad xbf export model.xbf model.glb`), from a held document by its
 id (**Document lifetime**) and by the build's own worker are byte for byte one GLB, and a model
 taken from the cache after a restart (**Build closure**) writes that GLB too. Every other reader
-ignores it: `read_xbf` imports a part, never a child's record (a parent's GLB bakes its own
+ignores it: `xbf.read` imports a part, never a child's record (a parent's GLB bakes its own
 animations alone), the viewer's page shows the document's structure, and STEP is AP242 with nothing
 of ours. For now a model with an animation declares its GLB beside its xbf, the two decorators
 stacked on one function: the xbf records the animation, the GLB bakes it.
@@ -2135,8 +2470,8 @@ stacked on one function: the xbf records the animation, the GLB bakes it.
 ```python
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import configuration_sequence, mechanism_state
-from cad.gltf import animation
+from cad.build123d import configuration_sequence, mechanism_state
+from cad.build123d import animation
 
 @xbf("XBF/box.xbf")
 @glb("XBF/box.glb")
@@ -2201,7 +2536,7 @@ and does not replace `Shape.material`.
 
 ```python
 from bd_materials import metals
-from cad import paint
+from cad.build123d import paint
 
 housing.material = metals.aluminum(metals.Alu.G6061_T6)
 housing.material.pbr = housing.material.pbr.override(
@@ -2226,7 +2561,7 @@ read can retain that cached value, so assign assembly materials before reading c
 `Range` values with bounds, rather than the library choosing a single typical number: modulus of elasticity is GPa, tensile and yield
 strengths are MPa. `bd_materials.core.PROPERTY_UNITS` defines the other units. A native
 physical material's `mass(volume_mm3)` and build123d's default `shape.mass()` return grams;
-`cad inspect` continues to report kilograms. `None` is unknown; the native
+`cad <type> inspect` continues to report kilograms. `None` is unknown; the native
 `NOT_SUITABLE` range is distinct and survives XBF serialization.
 
 **Appearance.** Use `material.pbr.override(...)` to return an edited native look, then
@@ -2235,8 +2570,9 @@ assign it to `material.pbr`. The existing controls use their native PBR names:
 `transmission`, `attenuation_color`, `attenuation_distance` (metres), `clearcoat`,
 `clearcoat_roughness`, `emissive`, `emissive_intensity`, and `opacity`. Base `color` floats
 are sRGB ratios; emission and attenuation floats are linear RGB. Hex strings are converted
-by the upstream library. Shape colours and plain face paints keep their sRGB hex,
-0–255 integer and build123d `Color` inputs; documents and glTF base factors use linear RGB.
+by the upstream library. Shape colours keep build123d's sRGB inputs (a hex string, a name, a
+`Color`, 0–1 floats: its setter refuses 0–255 integers), and plain face paints take sRGB hex, 0–255
+integers and a build123d `Color`; documents and glTF base factors use linear RGB.
 
 XBF stores the native physical dataclass and the complete resolved PBR data, including
 embedded textures and texture transforms, on the XCAF material label. Native texture maps
@@ -2251,12 +2587,12 @@ named by `type`; no flattened material fields of the library's own remain.
 A material edit changes document content without changing geometry keys. Warm document
 patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,
 anisotropy, transmission, attenuation and emission. OCCT stills use the documented
-approximations in **The look**. A part's chip card and `cad inspect` weigh it from its
+approximations in **The look**. A part's chip card and `cad <type> inspect` weigh it from its
 volume and native density, summed over an assembly.
 
 ## Imports
 
-`read_step(path)` reads a `.step`/`.stp`, `read_xbf(path)` an engine document; both copy the
+`step.read(path)` reads a `.step`/`.stp`, `xbf.read(path)` an engine document; both copy the
 file's geometry into the model's document (`reader.py`). The result is a compound tree of the
 file's assembly: an assembly a `Compound` of its components, a part a handle of its own on its
 product's geometry (a move places that occurrence, never its siblings), every node named as the
@@ -2267,7 +2603,7 @@ not imported: a part is a part. Linking between models is done by importing code
 file reference. Both are file reads the memo keys by the file's bytes, so a later build's read
 of the same bytes is the same objects, and both are the build closure's inputs.
 
-`read_mesh(path)` reads an `.stl` as data, never a shape: a `Mesh` of `vertices` (N x 3, the
+`stl.read(path)` reads an `.stl` as data, never a shape: a `Mesh` of `vertices` (N x 3, the
 file's numbers as millimetres; a point the triangles share is one vertex), `triangles` (M x 3
 rows of indices into them), `name` (an ASCII STL's solid's, else the file's stem) and
 `bounding_box()` (build123d's `BoundBox`), its arrays read-only. A mesh has no B-rep -- no
@@ -2278,15 +2614,15 @@ the same object again for the same bytes, and the file is one of the closure's i
 ```python
 @xbf("XBF/enclosure.xbf")
 def enclosure():
-    pcb = read_mesh(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
+    pcb = stl.read(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
 ```
 
 A result holding a mesh face -- a triangulation with no surface, as build123d's `import_stl`
-makes, or a face a model builds of `read_mesh`'s triangles -- is refused by the occurrence's
+makes, or a face a model builds of `stl.read`'s triangles -- is refused by the occurrence's
 path before its document is made (`document.mesh_faces`), and the worker builds on: `kit/scan
 is a mesh, not B-rep: face 1 is a triangulation with no surface (as build123d's import_stl
-makes), and a document holds B-rep alone. Read the mesh as data with read_mesh(path) ...`. The
+makes), and a document holds B-rep alone. Read the mesh as data with stl.read(path) ...`. The
 kernel's face modifier, which every part passes through (`document.direct`), crashed the
 process on one.
 
@@ -2300,11 +2636,11 @@ geometry (tom-sized: seconds against most of a minute) and keeps the engine's na
 Convert a vendor STEP once, keep the xbf beside it, and read the xbf:
 
 ```
-cad export vendor.step vendor.xbf
+cad step export vendor.step vendor.xbf
 ```
 
 The conversion is the author's: the engine writes no derived file beside an input of its own.
-`read_xbf` of a converted STEP is `read_step` of the STEP: the same geometry, names, colours and
+`xbf.read` of a converted STEP is `step.read` of the STEP: the same geometry, names, colours and
 materials.
 
 **A STEP is parsed in a reader process.** OCCT's XCAF reader works in many times the memory of
@@ -2320,7 +2656,7 @@ document's own retrieval driver.
 **A STEP is the file it is.** A STEP can name other files as its parts (an external document
 reference, `DOCUMENT_FILE`), which the XCAF reader's transfer would open -- beside it, above it or
 anywhere by an absolute path -- and add to the document as the STEP's own. Every STEP read
-(`read_step`'s reader process, and the read behind the viewer, an export and a snapshot) checks
+(`step.read`'s reader process, and the read behind the viewer, an export and a snapshot) checks
 the parsed file before it transfers it and refuses one that names another file
 (`document.refuse_external_files`).
 
@@ -2387,7 +2723,7 @@ A part is meshed from its binary shape bytes read into a fresh shape, so its
 mesh is a function of those bytes alone. Those are its read-back bytes, the
 bytes its document holds of it. A build's live part is written and read once to
 get them, as saving its document does. A part read from a document (the served
-document, `cad export`) is written as it was read. So a worker, the
+document, `cad <type> export`) is written as it was read. So a worker, the
 server and an export all mesh one geometry key from the same bytes.
 The geometry key is the digest of those bytes (`document.geometry_key`), so a
 reader makes a part's key again from the part it read, and takes the key the file
@@ -2397,7 +2733,7 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-An STL or a 3MF export may give its own tolerance instead: `cad export ID part.stl --tolerance
+An STL or a 3MF export may give its own tolerance instead: `cad model export ID part.stl --tolerance
 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
 absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
@@ -2432,7 +2768,7 @@ shapes without faces still use `AddOptimal`. A failed distance measurement is an
 
 What the kernel measures of an element is asked for, never extracted ahead:
 `GET /api/v1/documents/<kind>/<id>/parts/<key>/faces/<ordinal>` (`serve.py`'s
-`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad inspect` asks it through the door) is its
+`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad <type> inspect` asks it through the door) is its
 area, centroid, surface type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and
 whether the part's tessellation has it (`meshed`: null while the part is not meshed --
 an inspection meshes nothing);
@@ -2451,7 +2787,7 @@ worker that built it (for example, after a daemon restart), answers
 that worker's last build. The line is the call's in the run that named the part. A file's
 element -- a model's declared xbf among them -- answers no `made_by`: a file names no model,
 whichever run wrote it.
-`cad inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
+`cad xbf inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
 an element answers its facts and, of a model's document, `made_by`, with its canonical `ref`, its occurrence's `path`
 (`hand/finger.2`), its part, key, kind, ordinal and name, its points (centroid, position,
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it
@@ -2471,7 +2807,8 @@ measures nothing: the lists alone.
 **What an inspection costs.** It meshes nothing: it reads the structure through the engine's door
 (`Server.read`), which sends no part to the mesher, where a page's read sends every part not held
 yet, as it is about to ask for them all. What it measures of a part as a whole -- its volume, its
-solids and its box in its own frame (`mesh.measured`) -- are the part's facts, kept by its geometry
+solids, how many of them are inside out (`inverted`) and its box in its own frame (`mesh.measured`)
+-- are the part's facts, kept by its geometry
 key beside its tessellation (`serve.FactCache`), under the same memory budget and evicted after the
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
 in the cache folder would be a derived file (law 2), and the cache holds a document's bytes alone.
@@ -2516,7 +2853,7 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | Route | What it answers |
 | --- | --- |
 | `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
-| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}, "updates": {"automatic", "reason"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change; `updates` whether the engine updates by itself, `cad_server.auto_updates`), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored; `updates` put back as read changes nothing), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
@@ -2532,11 +2869,15 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
-`POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `urdf`, `srdf`, `sdf` --
+`POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
+board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
+`source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
+`?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
+revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf`, `sdf` --
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
-too (`cad inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
+too (`cad <type> inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
 API's own paths (`/api/v1/look`, `/api/v1/look/environment`), the ones its record names, which the
 daemon's listener serves as they are.
 
@@ -2648,7 +2989,7 @@ placements of one shape labelled apart name their occurrences and pin none of th
 labels on the shape they share, where one placement's label would rename what is made of
 every other.
 
-An element of a shape read from a file (`read_step`, `read_xbf`) is named within its own product,
+An element of a shape read from a file (`step.read`, `xbf.read`) is named within its own product,
 the part of the file it belongs to, however often the file places it: by the name the
 file gives it (`read.stepcaf.subshapes.name`; a STEP this engine wrote names every face,
 and those names come back as they were; `NONE`, the schema's empty name, is none),
@@ -2695,7 +3036,7 @@ below holds it, so a document of one part takes its elements by the document's n
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
 JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
-path, or a document's id (a model's, which `python SCRIPT.py` prints, or a file's), and must be the
+path, or a document's id (a model's, which `cad run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds
 it. A canonical ref -- what `inspect` answers --
@@ -2708,18 +3049,18 @@ of this grammar (`cadRefs` in the bundled runtime) are held to this module's, ca
 fixture both suites assert.
 
 A ref resolves inside the engine, for `inspect` and the viewer, never in a model:
-`cad inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
+`cad xbf inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
 occurrence stands -- an element's kind, ordinal, name and canonical ref, the kernel's facts of it,
 and, of a model's document, `made_by`, the feature and the function, file and line of the call that made it; a part's or
 an assembly's volume and mass, and its world `bounds` (each part's measured box placed where it
 stands), with a part's `placement`: the origin and the x, y and z axes of its instance's matrix.
 Nothing is built or measured again for them. A model that changes what a person picked reads that answer and
 edits the code `made_by` names, or selects the element from the live shape with build123d
-(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `read_xbf` and walks its
+(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `xbf.read` and walks its
 tree by labels.
 
 **A model never reads a file its own build writes**: its own xbf or export, a child's, a
-sibling's (`reader.refuse_written`: `read_xbf` and `read_step` ask as they read the file). Read,
+sibling's (`reader.refuse_written`: `xbf.read` and `step.read` ask as they read the file). Read,
 the file would be an input the build rewrites -- its key moving on every build, so the model would
 never be taken by its key -- or, kept out of the key, a model depending on its own past. A
 model takes what it makes from the live shape instead: so its own output never invalidates it.
@@ -2746,7 +3087,7 @@ arguments -- is one coarse entry above its calls, kept in the worker's memory
   (`trace._library_roots`), never its whole prefix: a project inside its own
   virtual environment's folder is first-party, and a model script that does lie
   in a library folder is said on the build's log, since its edits rebuild nothing;
-- every file it reads through the engine, by its bytes: `read_step`, `read_xbf`, `read_mesh`,
+- every file it reads through the engine, by its bytes: `step.read`, `xbf.read`, `stl.read`,
   and build123d's importers (`import_step`, `import_brep`, `import_stl`), which the memo keys
   as it keys the engine's readers;
 - every file it reads itself, observed, by its bytes: an audit hook on `open`
@@ -2772,7 +3113,7 @@ readers, `RWStl.ReadFile_s`, `StlAPI`, `BRepTools.Read_s` and `BinTools.Read_s` 
 path, `RWMesh_CafReader.Perform`: glTF's and OBJ's; `kernel/memo.py`, `_READER_TARGETS`).
 A body that calls one is never retained, so any edit runs it whole, and `retention.fallbacks`
 names the call: `reads ../part.brep through OCCT's BRepTools.Read_s: its body is never retained
-(any edit runs it whole); use read_step/read_xbf/read_mesh`. (build123d's `import_step`,
+(any edit runs it whole); use step.read/xbf.read/stl.read`. (build123d's `import_step`,
 `import_brep` and `import_stl` are not on that list: the memo wraps them as operations keyed by
 the file's bytes, as the engine's readers are, so a body that calls one is kept.) The file it named is one of its
 inputs all the same, held to its bytes (a read of what is no regular file leaves its closure with no
@@ -2967,20 +3308,20 @@ Why that holds, checked:
 - **Nothing keys on a document's bytes.** The restart key is digests of the model's code
   and inputs and the toolchain (**Build closure**); a derived file is translated from the
   document, and the write compares bytes only to leave an identical file untouched. The one
-  place a document's bytes count is a document *read as an input* (`read_xbf`, `read_step`
+  place a document's bytes count is a document *read as an input* (`xbf.read`, `step.read`
   of another model's file), which is keyed by its bytes like any input: an order-only rewrite
   of that file builds the reading model once more, to the same result.
 - **Names and refs resolve alike.** On the moonwatch's case (its tachymeter one of these),
   a cold build, a body re-run whose 2,673 kernel calls all replayed, and a second cold build
   in a new daemon wrote three different files of one size; their 15,646 element names are the
   same set, each on the same geometry (a face's area and centre, an edge's length and
-  centre, a vertex's point), and refs resolve to the same elements through `cad inspect`.
+  centre, a vertex's point), and refs resolve to the same elements through `cad <type> inspect`.
   `test_memo_marker.py` holds the same for a cold build, a replay and a second cold build.
 - **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
-The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf` and `read_step`
-(a document's tree) and `cad inspect DOC REF` (what a ref names) are the facts route.
+The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read` and `step.read`
+(a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
 
 ## Build closure
 
@@ -3019,10 +3360,10 @@ functions' code objects with no line tables or docstrings, its classes, the valu
 hold (a path value inside the script's folder relative to it), and, for a module that falls back
 to its bytes (**Body retention**), each file of its import closure by its bytes. A comment or a
 blank line changes no digest; a module the model loads and does not reach holds the empty one.
-`inputs` lists every file a body read -- through the engine (`file`: `read_step`, `read_xbf`,
-`read_mesh`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
+`inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
+`stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
-null (**Body retention**). `cad inspect DOC` prints the closure, `cad.inspect(doc)` and
+null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
@@ -3065,7 +3406,7 @@ An unsupported or failed conversion preserves the original bytes and cache recor
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cad export saved-v8.xbf upgraded-v9.xbf
+cad xbf export saved-v8.xbf upgraded-v9.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,
@@ -3099,7 +3440,7 @@ under a second), and the declared files' translation and compare. Its bodies' me
 used by that build, as a replay's do, so an edit after any number of them still replays what it
 leaves alone. The key alone decides: a declared file, the model's xbf among them, is never read to
 take the model, and one moved, deleted or edited by hand changes nothing of it -- a model taken writes
-its declared files after, exactly as `cad export` would (**Exports**), so that file is written
+its declared files after, exactly as `cad <type> export` would (**Exports**), so that file is written
 again from the document, and every file `written: false` where each holds its bytes already.
 Anything else builds as before, and `cache.reason` says why: the cache holds none of it, written
 by another engine or program, a cache file that does not read, no key in it, or what changed, by
@@ -3145,8 +3486,8 @@ script again with changed code updates the same document and open viewers; `pyth
 prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url` is the page. No list
 of ids is saved.
 
-`cad serve ID`, `cad snapshot ID view.png`, `cad export ID part.step`, and `cad
-inspect ID 'face 1'` take the id; `cad inspect 'ID#face 1'` uses the same reference syntax.
+`cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
+inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document the engine holds, as it is: editing the script changes nothing until
 Python runs it again, and no verb imports, runs or builds a script. An id the engine no longer
 holds (unsaved, detached) is refused with its state and the command that builds it again
