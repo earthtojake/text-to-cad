@@ -36,13 +36,16 @@ from typing import Any
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CONTRACT", "KERNEL", "PROTOCOL", "interpreter", "notice", "refusal", "release", "spelled"]
+__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "PROTOCOL", "answers_checks", "interpreter", "notice", "refusal",
+           "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
-# 2: an export may carry a manufacturing check (``check``), answered ``checked``, and a worker answers
-# ``cancel``; a worker of 1 would answer such an export with no files and no check.
-PROTOCOL = 2
+PROTOCOL = 1
+# The first release whose worker measures a manufacturing check (an ``export`` carrying ``check``) and
+# answers ``cancel``: additions to protocol 1, which the server sends only to a worker of this release or
+# later (``answers_checks``), never to an older one, which would answer such an export with nothing.
+CHECKS_SINCE = "0.11.3"
 # OCP's major.minor: the CAD kernel the library pins (``cadquery-ocp-novtk>=8.0,<8.1``), whose shapes
 # and documents cross between a worker and the server's own kernel processes.
 KERNEL = "8.0"
@@ -75,6 +78,16 @@ def interpreter() -> dict[str, Any] | None:
         if run["script"] and run["header"]:
             named["header"] = {"script": run["script"], "with": run["header"]}
     return named
+
+
+def answers_checks(worker: Any) -> bool:
+    """Whether a worker of release ``worker`` measures a manufacturing check and answers ``cancel``
+    (``CHECKS_SINCE`` or later, a development build of it included); False for one that is no release."""
+    found, since = _order(worker), _order(CHECKS_SINCE)
+    if found is None or since is None:
+        return False
+    # A development or pre-release build of CHECKS_SINCE has them: compare by the release numbers alone there.
+    return found >= since or found[:2] == since[:2]
 
 
 def spelled(contract: Any) -> str:

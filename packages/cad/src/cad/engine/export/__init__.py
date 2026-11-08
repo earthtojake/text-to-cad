@@ -214,7 +214,11 @@ class Source:
 
         if not path.is_file():
             raise ExportRefused(f"no document {path}")
-        loaded = document.load(path)
+        return cls.from_loaded(document.load(path))
+
+    @classmethod
+    def from_loaded(cls, loaded: Any) -> "Source":
+        """A document its reader read (``document.Loaded``), as a source."""
         return cls(loaded.structure(), {p.key: p.shape for p in loaded.prototypes}, live=False, xcaf=loaded.doc,
                    world=lambda occurrence: loaded.worlds.get(occurrence),
                    local=lambda occurrence: loaded.locals.get(occurrence), mechanism=loaded.mechanism,
