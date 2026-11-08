@@ -16,8 +16,8 @@ current installation's
    uvx's environment, as the install command runs it --, it makes that folder with uv, from uv's cache
    where it holds it, and runs the same command from there. A development install or a source tree
    sets itself up where it is.
-2. **Plan.** Under a lock in the state folder, every agent app is read (``cad_server._internal.providers``),
-   and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
+2. **Plan.** Under a lock in the state folder, every agent app is read from its own files, no app's command run
+   (``cad_server._internal.providers``), and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
    3245); and build123d, the CAD kernel, and whether it is made. ``--dry-run`` stops there and writes
    nothing. Nothing is asked.
@@ -47,9 +47,9 @@ current installation's
    this release's, written atomically with a ``.bak`` beside it; every second copy goes, an earlier
    release's from the repository on GitHub among them, and a plugin directory's, which this run replaces
    with ours, unless no command here removes it (``providers``). The agents with no plugin that
-   the Skills CLI knows get the skills, copied from the folder into their own skills folders by one ``npx
-   skills add`` (Node needed); an app with a plugin never does. A command that fails is said with its output, and
-   the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
+   the Skills CLI knows get the skills, copied from the folder into the skills folder that CLI keeps for each
+   (``~/.agents/skills`` for most) by one ``npx skills add`` (Node needed); an app with a plugin never does.
+   A command that fails is said with its output, and the other apps go on; the exit status is then 1. A folder that cannot be written changes no app that
    would point at it.
 7. **Receipt.** What was done, in ``<state>/install-receipt.json``, for ``cad uninstall`` to take
    back; and which agents got which skills (those the Skills CLI's ``--json`` says it installed) from
@@ -60,10 +60,11 @@ current installation's
    the same token, or the release before's comes back should it fail, and with it its plugin folder and
    the apps' copies of it (its own ``cad plugin --refresh``); with none running, ``current`` points at
    this release and the next client starts its engine.
-9. **Report.** Each app's copy as it is now, the engine on the port, the telemetry notice
+9. **Report.** Each app's copy as it is now, the Skills CLI agents' among them, the engine, the telemetry notice
    (``--no-telemetry`` turns it off, as ``cad telemetry off`` does), and the apps to restart to
    load what this run installed or updated; ``already up to date`` when a run found nothing to do
-   and changed nothing.
+   and changed nothing. An agent whose folder lacks a skill the receipt says it got is a failure of
+   the run, said on its line: the exit status is then 1.
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
 steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
@@ -97,8 +98,8 @@ finds it, and the first install is the one that may make uv install its Python t
 installation current already -- its Python installed outside --, runs there as anywhere. ``--dry-run``
 says it before the plan.
 
-Exit status: 0 done, or nothing to do; 1 a step failed, or nothing was installed inside an app package; 2 bad
-arguments.
+Exit status: 0 done, or nothing to do; 1 a step failed, an agent lacks its skills, or nothing was installed
+inside an app package; 2 bad arguments.
 """
 
 from __future__ import annotations
@@ -125,6 +126,8 @@ STATE_OURS = frozenset({"installations", "engines", "documents", "recents", "rel
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
 ASIDE = "install-aside"
+# The distribution 0.8's server was: no ``cad-server`` was published before 0.10.
+EARLIER_SERVER = "cadgen"
 # How long 0.8's own ``cadgen stop`` may take.
 STOP_SECONDS = 60.0
 # How long setup waits for the device's engine to say what it serves: a wedged engine never wedges setup.
@@ -224,9 +227,10 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 # --- the engine on the port, as the engine says it of itself -----------------------------------------
 
 
-def engine_on(port: int) -> dict[str, Any] | None:
-    """The device's engine's ``status`` when its HTTP server is on ``port``, asked read-only through its door
-    and bounded (``ASK_SECONDS``), or None when none runs or it serves elsewhere."""
+def running_engine() -> dict[str, Any] | None:
+    """The device's engine's ``status``, asked read-only through its door and bounded (``ASK_SECONDS``), or
+    None when none runs: one with no HTTP port yet (``serving`` empty: a command started it, and no page has
+    asked for one) runs all the same."""
     import threading
 
     from cad.engine import client
@@ -242,9 +246,14 @@ def engine_on(port: int) -> dict[str, Any] | None:
     asking = threading.Thread(target=ask, daemon=True)
     asking.start()
     asking.join(ASK_SECONDS)
-    status = answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
-    serving = (status or {}).get("serving")
-    return status if isinstance(serving, dict) and serving.get("port") == port else None
+    return answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
+
+
+def serving_words(status: dict[str, Any]) -> str:
+    """Where an engine that runs serves HTTP, in words: its port, or none yet."""
+    serving = status.get("serving")
+    port = serving.get("port") if isinstance(serving, dict) else None
+    return f"on port {port}" if port else "with no HTTP port yet (the first CAD view opens one)"
 
 
 def port_held(port: int) -> str | None:
@@ -314,6 +323,8 @@ class Installer:
         self.stopped: list[dict[str, Any]] = []
         # Whether Claude Code has the plugin after this run, so Cursor and Grok Build load it.
         self.fed = False
+        # Whether this run asked Claude Code's listing (``providers.read_for``), so reads it again the same way.
+        self.listed = False
 
     # --- saying -----------------------------------------------------------------------------
 
@@ -372,9 +383,9 @@ class Installer:
             from cad_server.updates import command
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
-            return self._failed(f"text-to-cad {self.release}'s release folder was not made: {refused}")
+            return self._failed(f"cad-server {self.release}'s release folder was not made: {refused}")
         run = [made["cad"], "setup", *self.argv]
-        self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
+        self.say(f"release  cad-server {self.release} in {self.providers.shown(str(home), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
         # person's, holding a uvx and a `cad` of its own. The release's run is given the person's PATH
         # (``providers.lasting``), so what it writes into the apps' configs and says of the `cad` command is theirs.
@@ -502,15 +513,16 @@ class Installer:
         from cad_server._internal import installations
 
         rows: list[dict[str, Any]] = []
-        for label, records, key in (("0.8", installations.earlier(), installations.EARLIER_CONSOLE),
-                                    ("0.10", installations.appdata(), "cad")):
+        for label, records, key, name in (("0.8", installations.earlier(), installations.EARLIER_CONSOLE, EARLIER_SERVER),
+                                          ("0.10", installations.appdata(), "cad", "cad-server")):
             for record in records:
                 console = record[key]
                 if not (os.path.isfile(record["python"]) and os.path.isfile(console)):
                     continue
                 rows.append({"app": label, "label": label, "action": "stop", "release": record["version"],
-                             "record": record, "subject": f"text-to-cad {record['version']}'s server, if it runs: "
-                                                          f"`{self.providers.shown(console, self.machine)} stop`"})
+                             "record": record, "server": name,
+                             "subject": f"{name} {record['version']}'s server, if it runs: "
+                                        f"`{self.providers.shown(console, self.machine)} stop`"})
         return rows
 
     def _engine(self, earlier: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -521,7 +533,7 @@ class Installer:
         row: dict[str, Any] = {"app": "engine", "label": "engine", "action": "leave"}
         if not port:
             return {**row, "subject": "CAD_ENGINE_PORT=0: the engine takes any free port"}
-        status = engine_on(port)
+        status = running_engine()
         if status is None:
             held = port_held(port)
             if held is None:
@@ -532,12 +544,12 @@ class Installer:
                 then = f"if the stop above does not free it, {then}"
             return {**row, "subject": f"port {port} is held by {held}: {then}"}
         name = status.get("installation") or status.get("version") or "?"
-        who = f"text-to-cad {name}'s engine (pid {status.get('pid')}) on port {port}"
+        who = f"cad-server {name}'s engine (pid {status.get('pid')}) {serving_words(status)}"
         prefix = status.get("prefix")
         if isinstance(prefix, str) and os.path.normcase(os.path.realpath(prefix)) == \
                 os.path.normcase(os.path.realpath(sys.prefix)):
             return {**row, "subject": f"{who}: this installation's"}
-        return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
+        return {**row, "action": "switch", "subject": f"{who}: drains, then cad-server {self.release}'s takes its place"}
 
     def _kernel(self) -> dict[str, Any] | None:
         """The CAD kernel environment, the base the engine's own kernel processes start from
@@ -547,7 +559,7 @@ class Installer:
 
         row: dict[str, Any] = {"app": "build123d", "label": "build123d", "action": "leave"}
         try:
-            installation = base.Installation.here()
+            installation = self._as_set_up(base.Installation.here())
             if installation.kernel:
                 return None
             found = base.ensure(installation, make=False)
@@ -558,6 +570,20 @@ class Installer:
         if found is not None:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
         return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
+
+    def _as_set_up(self, installation: Any) -> Any:
+        """``installation`` as the run that sets it up will be: a dry run stops short of step 1, so run from
+        anywhere but its release's folder (uvx's environment) it says what it would do from there. The base's
+        folder is keyed by the environment it belongs to (``base.where``) and by that environment's Python."""
+        import dataclasses
+
+        from cad_server._internal import releases
+
+        home = self._home()
+        if home is None or os.path.normcase(os.path.realpath(home)) == os.path.normcase(os.path.realpath(sys.prefix)):
+            return installation
+        return dataclasses.replace(installation, prefix=str(home),
+                                   python=releases.python_version(home) or installation.python)
 
     def _prepare_kernel(self) -> bool:
         """An automatic update's first half only (``PREPARE_ENV``): this release's CAD kernel environment
@@ -586,34 +612,33 @@ class Installer:
         try:
             done = switch.handover(version, told=lambda line: self.say(f"engine   {line}"))
         except (OSError, ValueError, ConnectionError) as error:
-            self.say(f"engine   the switch to text-to-cad {version} could not run: {error}")
+            self.say(f"engine   the switch to cad-server {version} could not run: {error}")
             return True, None
         if done is None:
             return False, None
         if done.get("ok"):
-            gap = f" ({done['gapMs']} ms without an engine)" if done.get("gapMs") is not None else ""
-            self.say(f"engine   text-to-cad {version} is the current installation{gap}")
+            self.say(f"engine   {switch.moved(done)}")
             return False, done
-        self.say(f"engine   the switch to text-to-cad {version} failed: {done.get('error')}"
+        self.say(f"engine   the switch to cad-server {version} failed: {done.get('error')}"
                  + ("; the release before runs again" if done.get("restored") else ""))
         return True, done
 
     def _stop_earlier(self, row: dict[str, Any]) -> None:
         """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what
         it did said; a stop that fails is said, and the run goes on."""
-        release, label = row["release"], row["label"].ljust(8)
+        release, label, name = row["release"], row["label"].ljust(8), row["server"]
         verb = "cadgen stop" if row["label"] == "0.8" else "cad stop"
         ok, stopped, said = stop_earlier(row["record"])
         last = f": {said.splitlines()[-1]}" if said else ""
         if not ok:
-            self.say(f"{label} text-to-cad {release}'s `{verb}` failed{last}; its server may still run")
+            self.say(f"{label} {name} {release}'s `{verb}` failed{last}; its server may still run")
         elif stopped is None:
-            self.say(f"{label} ran text-to-cad {release}'s `{verb}`{last}")
+            self.say(f"{label} ran {name} {release}'s `{verb}`{last}")
         elif not stopped:
-            self.say(f"{label} text-to-cad {release}'s server was not running")
+            self.say(f"{label} {name} {release}'s server was not running")
         else:
             self.stopped.append({"release": release, "servers": stopped, "at": self.providers.stamp()})
-            self.say(f"{label} stopped text-to-cad {release}'s server (its own `{verb}`)")
+            self.say(f"{label} stopped {name} {release}'s server (its own `{verb}`)")
 
     # --- the cad command -------------------------------------------------------------------
 
@@ -659,7 +684,7 @@ class Installer:
         if step.action not in ("install", "update") or step.app not in providers.APPS:
             return None
         try:
-            app = providers.detect(self.machine, [step.app], folder=self.folder)[step.app]
+            app = providers.detect(self.machine, [step.app], folder=self.folder, listed=self.listed)[step.app]
         except Exception:  # noqa: BLE001 - a check that cannot read the app finds nothing: the failure stands
             return None
         ours = app.ours()
@@ -674,7 +699,7 @@ class Installer:
         """Each selected app's copy as the apps say it now, read again, and the engine on the port."""
         providers = self.providers
         try:
-            apps = providers.detect(self.machine, folder=self.folder)
+            apps = providers.detect(self.machine, folder=self.folder, listed=self.listed)
         except Exception as error:  # noqa: BLE001 - a report line, never a failure of the setup
             self.say(f"verify   unknown ({type(error).__name__}: {error})")
             return {"apps": {}, "engine": None}
@@ -699,18 +724,39 @@ class Installer:
                 said = "no copy of text-to-cad"
             verdicts[name] = found
             self.say(f"verify   {app.label}: {said}")
+        verdicts.update(self._verify_skills())
         engine: dict[str, Any] | None = None
         if self.port:
             try:
-                status = engine_on(self.port)
+                status = running_engine()
             except Exception as error:  # noqa: BLE001 - a report line, never a failure of the setup
                 self.say(f"verify   engine port {self.port}: unknown ({type(error).__name__}: {error})")
             else:
                 name = (status or {}).get("installation") or (status or {}).get("version")
                 engine = {"port": self.port, "release": name}
-                self.say(f"verify   engine port {self.port}: " + (f"text-to-cad {name} running" if status is not None
-                                                                   else "not running; the next CAD session starts one"))
+                self.say(f"verify   engine port {self.port}: not running; the next CAD session starts one"
+                         if status is None else f"verify   engine: cad-server {name} running, {serving_words(status)}")
         return {"apps": verdicts, "engine": engine}
+
+    def _verify_skills(self) -> dict[str, Any]:
+        """The Skills CLI agents the receipt says got the skills, each read again: its folder holds them, in
+        the words of ``cad doctor`` (``providers.skills_words``), or the line says it failed and which it
+        lacks: verdict ``missing``, which fails the run."""
+        providers = self.providers
+        verdicts: dict[str, Any] = {}
+        for agent, got in ((self._receipt() or {}).get("skills") or {}).items():
+            if agent not in providers.SKILLS_AGENTS or not isinstance(got, dict) or (self.only and agent not in self.only):
+                continue
+            missing = providers.skills_lost(agent, got, self.machine)
+            verdicts[agent] = {"verdict": "missing" if missing else "ok", "release": got.get("release"),
+                               **({"missing": missing} if missing else {})}
+            if missing:
+                where = providers.shown(providers.skills_folder(agent, self.machine), self.machine)
+                self.say(f"verify   {providers.label(agent)}: failed: {', '.join(missing)} not in {where}, where the "
+                         f"Skills CLI was to copy the skills of text-to-cad {got.get('release') or '?'}")
+            else:
+                self.say(f"verify   {providers.label(agent)}: {providers.skills_words(agent, got, self.machine)}")
+        return verdicts
 
     def _telemetry(self) -> str:
         """The telemetry line: the notice the first time, else what is sent and why; ``--no-telemetry``
@@ -730,9 +776,10 @@ class Installer:
         self.say(f"telemetry {said}" + ("; turn it off with `cad telemetry off`" if said.startswith("on") else ""))
         return said
 
-    def _restart(self, apps: dict[str, Any], changed: set[str]) -> list[str]:
-        """What to restart to load what this run did (``changed``: the apps it installed or updated
-        the plugin in, a config it edited, and the agents that got the skills)."""
+    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Restart to load it:") -> list[str]:
+        """What to restart for what this run did to take hold (``changed``: the apps it installed or updated
+        the plugin in, a config it edited, and the agents that got the skills, or lost them to an uninstall),
+        under ``heading``."""
         providers = self.providers
         names = [name for name in providers.APPS if name in changed]
         if "claude" in changed:  # Cursor and Grok Build load the Claude Code plugin
@@ -742,7 +789,7 @@ class Installer:
         if agents:
             lines.append(f"{', '.join(agents)}: start a new session for the skills")
         if lines:
-            self.say("Restart to load it:")
+            self.say(heading)
             for line in lines:
                 self.say(f"  {line}")
         return lines
@@ -824,9 +871,10 @@ class Installer:
         failed, changed = False, set()
         with exclusive(state / LOCK, waiting=lambda: told("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
-            apps = providers.detect(self.machine, folder=self.folder)
-            steps = providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
-                                           skills=receipt.get("skills"), desktop_entry=self._desktop_entry())
+            apps, steps, self.listed = providers.read_for(
+                lambda apps: providers.refresh_plan(apps, release=self.release, folder=self.folder, machine=self.machine,
+                                                    skills=receipt.get("skills"), desktop_entry=self._desktop_entry()),
+                self.machine, folder=self.folder)
             backed_up = self._backed_up(receipt)
             for step in steps:
                 told(f"{step.label}: {step.action} {step.subject}")
@@ -869,7 +917,7 @@ class Installer:
             kernel = self._kernel()
             home = self._home()
             release = ([{"app": "release", "label": "release", "action": "make",
-                         "subject": f"text-to-cad {self.release} in {providers.shown(str(home), self.machine)}, once"}]
+                         "subject": f"cad-server {self.release} in {providers.shown(str(home), self.machine)}, once"}]
                        if home is not None and not os.path.isdir(home) else [])
             earlier = self._earlier()
             extra = [*release, self._plugin_row(), *map(self._public, earlier), self._public(self._engine(earlier)),
@@ -887,9 +935,11 @@ class Installer:
         state.mkdir(parents=True, exist_ok=True)
         with exclusive(state / LOCK, waiting=lambda: self.say("waiting for another cad setup or uninstall to finish")):
             receipt = self._receipt() or {"schema": SCHEMA, "created": providers.stamp(), "actions": [], "stopped": []}
-            apps = providers.detect(self.machine, folder=self.folder)
-            steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
-                                   only=self.only, machine=self.machine, skills=receipt.get("skills"))
+            apps, steps, self.listed = providers.read_for(
+                lambda apps: providers.plan(apps, release=self.release, folder=self.folder,
+                                            desktop_entry=self._desktop_entry(), only=self.only, machine=self.machine,
+                                            skills=receipt.get("skills")),
+                self.machine, folder=self.folder)
             self.fed = providers.feeds(apps, self.only or providers.APPS)
             earlier = self._earlier() if not self.engine_update else []
             engine = self._engine(earlier) if not self.engine_update else {
@@ -943,7 +993,9 @@ class Installer:
             if not self.engine_update:
                 switch_failed, switched = self._switch()
                 failed = failed or switch_failed
-            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched):
+            # An agent left without the skills for want of Node is not up to date, though nothing was done.
+            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched
+                    or any(step.subject == providers.NEED_NODE for step in steps)):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
         if switched is not None and switched.get("restored"):
             # The release before runs again: its plugin folder, and the apps' copies of it, come back with
@@ -956,6 +1008,8 @@ class Installer:
         verified = self._verify()
         self._telemetry_into(verified)
         restart = self._restart(apps, changed)
+        # An agent whose folder lacks a skill the Skills CLI said it copied has not got them: the run failed.
+        failed = failed or any(found.get("verdict") == "missing" for found in verified["apps"].values())
         if failed:
             from cad_server.updates import command
 
@@ -1012,8 +1066,10 @@ class Installer:
         if self.args.purge:
             extra.append({"app": "folders", "label": "folders", "action": "remove",
                           "subject": f"{providers.shown(state, self.machine)} and {providers.shown(cache, self.machine)}"})
-        where = "what earlier runs did, newest first" if receipt else "no receipt: every copy of text-to-cad found"
-        self._plan_lines(f"text-to-cad: cad uninstall takes back {where}:", apps, steps, extra)
+        title = ("text-to-cad: cad uninstall takes back what earlier runs did, newest first:" if receipt else
+                 "text-to-cad: cad uninstall finds no record of an earlier run, so it takes out every copy of "
+                 "text-to-cad here:")
+        self._plan_lines(title, apps, steps, extra)
         if self.args.dry_run:
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -1065,7 +1121,7 @@ class Installer:
                     self._keep(receipt)
         if self.args.purge:
             self._purge(state, cache)
-        restart = self._restart(apps, changed)
+        restart = self._restart(apps, changed, "Restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
     def _remove_command(self, proxy: str) -> bool:

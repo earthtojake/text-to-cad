@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -60,7 +61,7 @@ class SwitchTest(Fixture):
 
         def started(version: str, port, told) -> tuple[bool, str]:
             tried.append(version)
-            return (True, "") if version in works else (False, f"text-to-cad {version}'s engine did not start")
+            return (True, "") if version in works else (False, f"cad-server {version}'s engine did not start")
 
         return tried, mock.patch.object(switch, "_started", side_effect=started)
 
@@ -101,7 +102,7 @@ class SwitchTest(Fixture):
             done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
         self.assertFalse(done["ok"])
         self.assertTrue(done["restored"])
-        self.assertEqual(done["error"], "text-to-cad 1.2.0's engine did not start")
+        self.assertEqual(done["error"], "cad-server 1.2.0's engine did not start")
         self.assertEqual((tried, installations.current_version()), (["1.2.0", "1.1.0"], "1.1.0"))
         self.assertEqual((kept[1]["ok"], kept[1]["to"], kept[1]["error"]), (False, "1.2.0", done["error"]),
                          "the failure is kept before the release before's engine starts again")
@@ -178,12 +179,15 @@ class SwitchTest(Fixture):
         for held, current in ((True, "1.2.0"), (False, "1.1.0")):
             with self.subTest(held=held), \
                     mock.patch.object(switch, "switch", side_effect=lambda *a, **k: (installations.point(current),
-                                                                                     {"ok": held})[1]), \
+                                                                                     {"ok": held, "from": "1.1.0",
+                                                                                      "to": "1.2.0", "gapMs": 640})[1]), \
                     mock.patch.object(subprocess, "run", return_value=ran) as run, \
                     mock.patch.object(sys, "stderr", io.StringIO()) as log, \
                     mock.patch.dict(os.environ, {"PYTHONPATH": "/checkout/src"}):
                 self.assertEqual(switch.helper("1.2.0", port=4567, previous="1.1.0"), 0 if held else 1)
             self.assertIn("cad update: Codex: update text-to-cad@text-to-cad", log.getvalue(), "its lines go to the log")
+            said = "cad-server 1.1.0 -> 1.2.0 is the current installation (640 ms without an engine)"
+            self.assertEqual(said in log.getvalue(), held, "a switch that held says so, in setup's one line")
             (call,) = run.call_args_list
             self.assertEqual(call.args[0], [installations.current()["cad"], "plugin", "--refresh"])
             self.assertNotIn("PYTHONPATH", call.kwargs["env"], "the release runs its own code")
@@ -289,6 +293,45 @@ class DrainTest(unittest.TestCase):
         self.assertTrue(engine.stopping.wait(30))
         self.assertEqual((closed, started.is_set()), (["door"], True))
 
+    def test_its_port_closed_by_the_drain_the_accept_loop_stays_until_the_switch_has_started(self) -> None:
+        # Windows' loop (``_accept``), on every system: were it to end at the closed port, the process
+        # would exit and take the drain's thread with it, before the switch helper started.
+        from cad_server.engine import daemon
+
+        engine = daemon.Daemon(cap=1)
+        self.addCleanup(engine.supervisor.stop)
+        settled, exited, release = threading.Event(), threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        class Stopping(threading.Event):
+            def wait(self, timeout: float | None = None) -> bool:
+                if threading.current_thread() is loop:
+                    settled.set()  # the loop saw the closed port and waits for the drain
+                return super().wait(timeout)
+
+        engine.stopping = Stopping()
+        port = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(port.close)
+        port.settimeout(0.5)
+        engine.listener = port
+
+        def accept() -> None:
+            try:
+                daemon._accept(engine, port)
+            finally:
+                exited.set()
+                settled.set()
+
+        loop = threading.Thread(target=accept, daemon=True)
+        loop.start()
+        engine.drain(release.wait)  # the switch helper's start, held
+        self.assertTrue(settled.wait(30))
+        self.assertFalse(exited.is_set(), "the port closed, the loop waits while the switch starts")
+        release.set()
+        loop.join(30)
+        self.assertFalse(loop.is_alive())
+        self.assertTrue(engine.stopping.is_set())
+
     def test_an_agent_s_tool_call_holds_it_and_an_open_session_does_not(self) -> None:
         from cad_server.mcp.http import PAGE_TOOLS, Session, Sessions
 
@@ -372,7 +415,7 @@ class UpdateJobTest(Fixture):
         self.assertEqual((state["state"], state["error"]),
                          ("failed", "the CAD kernel environment needs the network once: dns error"))
         self.assertEqual(server.retired, [], "the engine stays as it was")
-        refused = releases.base.Refused("text-to-cad 1.2.0 needs the network once: dns error")
+        refused = releases.base.Refused("cad-server 1.2.0 needs the network once: dns error")
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), mock.patch.object(releases, "make", side_effect=refused):
             job.start(server)
             self.assertEqual(self.wait(job, "failed", "restarting")["error"], str(refused))
@@ -380,7 +423,7 @@ class UpdateJobTest(Fixture):
     def test_the_engine_a_failed_switch_starts_again_says_the_update_failed(self) -> None:
         # The release before's engine, started again by the switch that failed, reads that failure as it
         # starts serving: the page that followed the update through the restart reads it failed, and why.
-        error = "text-to-cad 1.2.0's engine did not start: it exited with code 3"
+        error = "cad-server 1.2.0's engine did not start: it exited with code 3"
         switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": False, "error": error})
         job = update.Update()
         job.recall()

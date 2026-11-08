@@ -1078,8 +1078,11 @@ class PictureTest(FixtureTest):
                  annotation_source=packet, measurements=packet["measurements"])
         self.assertLessEqual(mismatch(pixels(authored.read_bytes()), found), 0.001)
         tilted = {**plan, "position": [cx + 10, cy, 100]}
-        for camera in ("top", tilted, {**plan, "orthographicHalfHeight": 0}):
-            with self.subTest(camera=camera), self.assertRaisesRegex(SnapshotRefused, "its camera is a plan view"):
+        # A camera that is no plan view is the drawing's to refuse; one that is no camera at all (a window of no
+        # height), the camera's own check's, as the viewer's camera.js refuses it.
+        for camera, said in (("top", "its camera is a plan view"), (tilted, "its camera is a plan view"),
+                             ({**plan, "orthographicHalfHeight": 0}, "camera.orthographicHalfHeight is a number above 0")):
+            with self.subTest(camera=camera), self.assertRaisesRegex(SnapshotRefused, said):
                 job_pictures({**packet, "jobs": [{**packet["jobs"][0], "camera": camera}]})
 
     def test_what_a_kind_does_not_offer_is_refused_by_name_and_keeps_the_earlier_picture(self) -> None:

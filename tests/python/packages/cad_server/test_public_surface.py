@@ -22,6 +22,7 @@ import inspect
 import subprocess
 import sys
 import unittest
+import warnings
 
 from cad_server import cli
 from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable, cli_from_function, function_parameters, parser_dests)
@@ -47,6 +48,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # program's mesh rendered first).
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "scad")},
+    # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
+    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -184,7 +187,8 @@ class Manifest(unittest.TestCase):
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
                        "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
                        "cad_server.cli.srdf_validate", "cad_server.kicad.schematic"):
-            with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
+            with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)
 
     def _dispatch(self, *argv: str) -> tuple[int, str, str]:

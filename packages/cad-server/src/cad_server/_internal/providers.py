@@ -37,11 +37,12 @@ The copies an earlier release's installer made from the repository's ``latest`` 
 taken out, the catalog with them.
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
-alone, copied from the folder's ``skills/`` into that agent's own skills folder by one ``npx skills
-add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that CLI reads
-them). The CLI keeps no versions, so the receipt says which agents got which skills (those its
-``--json`` says it installed) from which release; a later run adds them again for an agent when that
-release is not this one or one of those skills is missing from its folder.
+alone, copied from the folder's ``skills/`` into the skills folder the CLI keeps for that agent by one
+``npx skills add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that
+CLI reads them; for most, ``~/.agents/skills``). The CLI keeps no versions, so the receipt says which
+agents got which skills (those its ``--json`` says it installed) from which release; a later run adds
+them again for an agent when that release is not this one or one of those skills is missing from its
+folder, and the report after a run fails it for an agent whose folder lacks one.
 An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
@@ -52,9 +53,10 @@ out of the Skills CLI's record where it installed them from GitHub (``unlock_ski
 put them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
 (``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
 earlier release's body). The one folder two kinds of agent share,
-``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
-agent's while one that uses it is here: Codex and Gemini CLI then list those skills beside their
-plugin's, which the plan says.
+``~/.agents/skills`` (Codex and Gemini CLI read it; the Skills CLI copies the skills of GitHub Copilot,
+Amp, Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed there), is the Skills CLI agents' while one
+that uses it is here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan
+says.
 
 A store's copy (claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is a
 second copy too: the install command, and ``cad setup`` with it, is the person's ask for this release,
@@ -69,6 +71,15 @@ uninstall and keeps in its own app data by the Marketplace's id, so a folder rem
 back. The refresh after a switch (``refresh_plan``) removes nothing and leaves an app with a store's
 copy alone: one that comes back is removed at the next ``cad setup`` (the install command, ``cad
 update``, the update button).
+
+Reading what an app has never runs the app (``detect``): each app's command writes its own files as it
+starts -- ``claude`` its ``~/.claude.json`` and backups, ``grok`` its ``~/.grok/docs`` and logs, ``gemini`` its
+``~/.gemini``, ``codex`` its ``~/.codex/tmp`` -- and creates its folder where there was none, so a dry run, or
+a plan that leaves an app alone, would change a person's home. Each app's own files say what it has. An app's
+command runs where a step installs, updates or removes with it (``apply``), and two questions alone are asked of
+one, neither in a home: Claude Code's listing, once a real run is about to change it (``read_for``), for what
+only that says (a copy claude.ai syncs); and Codex's version, between two ``codex`` commands neither of whose
+files says it, in a folder that is thrown away (``codex_cli``).
 
 Nothing here imports the packages, and the file parses on any Python 3 the development installer may
 run on. Every path comes from a :class:`Machine` -- its home, its environment, its platform and how it
@@ -110,7 +121,7 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("cad", "engineering-drawing", "pcb", "print3d", "robot-simulation", "sendcutsend")
+SKILLS = ("cad", "engineering-drawing", "fea", "pcb", "print3d", "robot-simulation", "sendcutsend")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
@@ -227,8 +238,9 @@ class Machine:
     def which(self, name: str) -> Optional[str]:
         return shutil.which(name, path=self.environ.get("PATH", os.defpath))
 
-    def run(self, argv: Sequence[str], timeout: float = COMMAND_SECONDS) -> Ran:
-        return self._runner([str(part) for part in argv], dict(self.environ), timeout)
+    def run(self, argv: Sequence[str], timeout: float = COMMAND_SECONDS,
+            environ: Optional[Mapping[str, str]] = None) -> Ran:
+        return self._runner([str(part) for part in argv], {**self.environ, **(environ or {})}, timeout)
 
     def listing(self, argv: Sequence[str]) -> str:
         """What a listing command prints; ``CommandFailed`` when it fails."""
@@ -379,28 +391,30 @@ def _zed(machine: Machine) -> List[Path]:
 
 
 # The agents the Skills CLI knows that have no plugin of ours, as its agent table has them (skills
-# 1.7.4, dist/cli.mjs): its id, its display name, its global skills folder (``globalSkillsDir``),
-# and the paths any one of which, existing, is the agent installed (``detectInstalled``). Never
-# Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
+# 1.7.6, dist/cli.mjs): its id, its display name, the folder ``npx skills add -g`` copies its skills
+# into, and the paths any one of which, existing, is the agent installed (``detectInstalled``). That
+# folder is where the CLI writes (``getAgentBaseDir``), not the agent's ``globalSkillsDir``: an agent
+# whose project folder is ``.agents/skills`` (the CLI's universal agents) gets ``~/.agents/skills``
+# whatever its own global folder, so GitHub Copilot, Amp, Antigravity, Droid, Kilo Code and OpenCode
+# share it with Cline and Zed (each reads it, but Antigravity, whose documentation names only its own
+# folders). Never Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
 SKILLS_AGENTS: Dict[str, Tuple[str, Callable[[Machine], Path], Callable[[Machine], List[Path]]]] = {
-    # VS Code's agent is GitHub Copilot: it reads ~/.copilot/skills as well.
-    "github-copilot": ("GitHub Copilot", lambda m: m.home / ".copilot" / "skills", lambda m: [m.home / ".copilot"]),
+    # VS Code's agent is GitHub Copilot.
+    "github-copilot": ("GitHub Copilot", shared_skills, lambda m: [m.home / ".copilot"]),
     "windsurf": ("Windsurf", lambda m: m.home / ".codeium" / "windsurf" / "skills",
                  lambda m: [m.home / ".codeium" / "windsurf"]),
     "cline": ("Cline", shared_skills, lambda m: [m.home / ".cline"]),
-    "amp": ("Amp", lambda m: _config_home(m) / "agents" / "skills", lambda m: [_config_home(m) / "amp"]),
-    "antigravity": ("Antigravity", lambda m: m.home / ".gemini" / "antigravity" / "skills",
-                    lambda m: [m.home / ".gemini" / "antigravity"]),
-    "antigravity-cli": ("Antigravity CLI", lambda m: m.home / ".gemini" / "antigravity-cli" / "skills",
-                        lambda m: [m.home / ".gemini" / "antigravity-cli"]),
+    "amp": ("Amp", shared_skills, lambda m: [_config_home(m) / "amp"]),
+    "antigravity": ("Antigravity", shared_skills, lambda m: [m.home / ".gemini" / "antigravity"]),
+    "antigravity-cli": ("Antigravity CLI", shared_skills, lambda m: [m.home / ".gemini" / "antigravity-cli"]),
     "openclaw": ("OpenClaw", lambda m: _openclaw(m) / "skills",
                  lambda m: [m.home / name for name in (".openclaw", ".clawdbot", ".moltbot")]),
-    "droid": ("Droid", lambda m: m.home / ".factory" / "skills", lambda m: [m.home / ".factory"]),
+    "droid": ("Droid", shared_skills, lambda m: [m.home / ".factory"]),
     "goose": ("Goose", lambda m: _config_home(m) / "goose" / "skills", lambda m: [_config_home(m) / "goose"]),
-    "kilo": ("Kilo Code", lambda m: m.home / ".kilo" / "skills", lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
+    "kilo": ("Kilo Code", shared_skills, lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
     "kiro-cli": ("Kiro CLI", lambda m: m.home / ".kiro" / "skills", lambda m: [m.home / ".kiro"]),
     "hermes-agent": ("Hermes Agent", lambda m: _hermes_home(m) / "skills", lambda m: [_hermes_home(m)]),
-    "opencode": ("OpenCode", lambda m: _config_home(m) / "opencode" / "skills", lambda m: [_config_home(m) / "opencode"]),
+    "opencode": ("OpenCode", shared_skills, lambda m: [_config_home(m) / "opencode"]),
     "roo": ("Roo Code", lambda m: m.home / ".roo" / "skills", lambda m: [m.home / ".roo"]),
     "trae": ("Trae", lambda m: m.home / ".trae" / "skills", lambda m: [m.home / ".trae"]),
     "zed": ("Zed", shared_skills, _zed),
@@ -432,6 +446,21 @@ def ours_in(folder: Path) -> List[Path]:
     """This repository's skills in ``folder``, in ``SKILLS`` order."""
     found = set(loose_skills([folder]))
     return [path for path in (Path(folder) / name for name in SKILLS) if path in found]
+
+
+def skills_words(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
+    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it: in the
+    folder the Skills CLI copies the agent's skills into (``skills_folder``), which an earlier release's
+    receipt may name otherwise."""
+    at = f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""
+    return (f"the skills of text-to-cad {got.get('release') or '?'}, copied into "
+            f"{shown(skills_folder(agent, machine), machine)} by the Skills CLI{at}")
+
+
+def skills_lost(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> List[str]:
+    """The skills the receipt says the Skills CLI installed for ``agent`` (``got``) that its folder lacks."""
+    have = {path.name for path in ours_in(skills_folder(agent, machine))}
+    return [name for name in got.get("skills") or () if name not in have]
 
 
 def skills_installed(printed: str) -> Optional[List[str]]:
@@ -526,21 +555,39 @@ def codex_cli(machine: Optional[Machine] = None) -> Optional[str]:
     """``CODEX_CLI``, else the newer of the ``codex`` on PATH and the one the app bundles.
 
     Both write the same ``~/.codex``, which the app, the terminal CLI and the IDE extension share,
-    so an install must come from a CLI at least as new as the app that reads it.
+    so an install must come from a CLI at least as new as the app that reads it. A command with no other to
+    compare it with is taken as it is, nothing run: one that does not work says so when a step runs it.
     """
     machine = _machine(machine)
-    if machine.environ.get("CODEX_CLI"):
-        candidates = [machine.environ["CODEX_CLI"]]
-    else:
-        candidates = [path for path in (machine.which("codex"), *machine.bundled.get("codex", ()))
-                      if path and os.access(path, os.X_OK)]
-    versions = {}
-    for path in candidates:
-        ran = machine.run([path, "--version"], LIST_SECONDS)
-        words = ran.out.split()
-        if ran.ok and words and version_key(words[-1]):
-            versions[path] = version_key(words[-1])
+    named = machine.environ.get("CODEX_CLI")
+    if named:
+        return named if machine.which(named) else None
+    candidates = list(dict.fromkeys(path for path in (machine.which("codex"), *machine.bundled.get("codex", ()))
+                                    if path and os.access(path, os.X_OK)))
+    if len(candidates) < 2:
+        return candidates[0] if candidates else None
+    versions = {path: version for path in candidates for version in [_codex_version(path, machine)] if version}
     return max(versions, key=versions.get) if versions else None
+
+
+def _codex_version(path: str, machine: Machine) -> Tuple[int, ...]:
+    """A ``codex`` command's version: from the metadata its package keeps beside it (the app's bundle, the npm
+    package), else, as no file says it (a Homebrew or standalone binary), asked of the command. Codex writes
+    into ``CODEX_HOME`` as it starts, even for ``--version``, and creates the folder: it is pointed at one
+    thrown away after, and the person's is not touched."""
+    real = Path(os.path.realpath(path))
+    for manifest, kind in ((Path(path).parent.parent / "codex-package.json", ("variant", "codex")),
+                           (real.parent.parent / "package.json", ("name", "@openai/codex"))):
+        data, _problem = _json(manifest)
+        if isinstance(data, dict) and data.get(kind[0]) == kind[1] and version_key(data.get("version")):
+            return version_key(data["version"])
+    thrown_away = tempfile.mkdtemp(prefix="cad-codex-home-")
+    try:
+        ran = machine.run([path, "--version"], LIST_SECONDS, environ={"CODEX_HOME": thrown_away})
+    finally:
+        shutil.rmtree(thrown_away, ignore_errors=True)
+    words = ran.out.split()
+    return version_key(words[-1]) if ran.ok and words else ()
 
 
 # --- reading files ------------------------------------------------------------------------------
@@ -855,7 +902,10 @@ def _stamp(path: Path) -> Optional[str]:
         return None
 
 
-def _detect_claude(machine: Machine, folder: Optional[Path] = None) -> App:
+def _detect_claude(machine: Machine, folder: Optional[Path] = None, listed: bool = False) -> App:
+    """Claude Code's copies, from the records it keeps (``installed_plugins.json``, ``known_marketplaces.json``),
+    no command run; with ``listed``, from its own listing, which also knows the copies claude.ai syncs and only
+    runs where a command of it runs anyway (``read_for``)."""
     app = App("claude", command=find_cli("claude", machine))
     config = claude_dir(machine)
     if app.command:
@@ -866,7 +916,7 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None) -> App:
     if not app.present:
         return app
     plugins: Any = None
-    if app.command:
+    if listed and app.command:
         try:
             plugins = json.loads(machine.listing([app.command, "plugin", "list", "--json"]) or "[]")
             markets = json.loads(machine.listing([app.command, "plugin", "marketplace", "list", "--json"]) or "[]")
@@ -879,11 +929,11 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None) -> App:
         except (CommandFailed, ValueError) as error:
             app.notes.append(f"could not list its plugins: {_failure(error)}")
             plugins = None
-    if plugins is None:  # no command: the records Claude Code keeps
+    if plugins is None:
         recorded, _problem = _json(config / "plugins" / "installed_plugins.json")
         table = recorded.get("plugins") if isinstance(recorded, dict) else None
         plugins = [{"id": key, **entry} for key, entries in (table.items() if isinstance(table, dict) else ())
-                   for entry in (entries if isinstance(entries, list) else []) if isinstance(entry, dict)]
+                   for entry in (entries if isinstance(entries, list) else [entries]) if isinstance(entry, dict)]
         known, _problem = _json(config / "plugins" / "known_marketplaces.json")
         for name, entry in (known.items() if isinstance(known, dict) else ()):
             source = entry.get("source") if isinstance(entry, dict) else None
@@ -909,7 +959,9 @@ def _detect_claude(machine: Machine, folder: Optional[Path] = None) -> App:
             # It reads the folder in place: the folder's version is the one its sessions load, and the one
             # it recorded at install is its cached copy's (`claude plugin update` brings that along).
             read = plugin.get("readFromFolder") or (app.marketplaces.get(MARKETPLACE) or {}).get("path")
-            app.copies.append(Copy("claude", "plugin", identifier, version=plugin.get("folderVersion") or plugin.get("version"),
+            version = plugin.get("folderVersion") or (_manifest_version(Path(read), ".claude-plugin/plugin.json")
+                                                      if read else None) or plugin.get("version")
+            app.copies.append(Copy("claude", "plugin", identifier, version=version,
                                    path=read or plugin.get("installPath"), ours=True, source=read,
                                    via="in place" if read else "", recorded=plugin.get("version")))
             continue
@@ -1025,15 +1077,24 @@ def _detect_cursor(machine: Machine, folder: Optional[Path] = None) -> App:
     return app
 
 
-def _grok_refs(folder: Path) -> Dict[str, str]:
-    """Each Grok Build install's folder and the git ref it follows, from its registry."""
+def _grok_plugins(folder: Path) -> List[Dict[str, Any]]:
+    """Each plugin Grok Build has installed, from its registry (``plugin list`` reads the same): its name and
+    version, its folder, where it came from and the git ref it follows."""
     registry, _problem = _json(folder / "installed-plugins" / "registry.json")
-    refs = {}
+    found = []
     for entry in ((registry or {}).get("repos") or {}).values() if isinstance(registry, dict) else ():
         kind = entry.get("kind") if isinstance(entry, dict) else None
-        if isinstance(kind, dict) and isinstance(entry.get("path"), str):
-            refs[entry["path"]] = kind.get("git_ref") or ""
-    return refs
+        path = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(kind, dict) or not isinstance(path, str):
+            continue
+        named = entry.get("plugins")
+        # A registry that names none says where its one plugin's manifests are.
+        plugins = named if isinstance(named, dict) else {
+            _manifest_name(Path(path)): {"version": _manifest_version(Path(path), ".cursor-plugin/plugin.json", "plugin.json")}}
+        for name, plugin in plugins.items():
+            found.append({"name": name, "version": plugin.get("version") if isinstance(plugin, dict) else None, "path": path,
+                          "source": kind.get("url") or kind.get("path") or "", "ref": kind.get("git_ref") or ""})
+    return found
 
 
 def _detect_grok(machine: Machine, folder: Optional[Path] = None) -> App:
@@ -1046,24 +1107,15 @@ def _detect_grok(machine: Machine, folder: Optional[Path] = None) -> App:
     if folder.is_dir():
         app.seen.append(shown(folder, machine))
     app.present = bool(app.seen)
-    if not app.present or not app.command:
-        if app.present:
-            _loose(app, machine)
+    if not app.present:
         return app
-    try:
-        plugins = json.loads(machine.listing([app.command, "plugin", "list", "--json"]) or "[]")
-    except (CommandFailed, ValueError) as error:
-        app.notes.append(f"could not list its plugins: {_failure(error)}")
-        plugins = []
-    refs = _grok_refs(folder)
-    for plugin in plugins if isinstance(plugins, list) else []:
-        if not isinstance(plugin, dict) or plugin.get("name") != PLUGIN:
+    for plugin in _grok_plugins(folder):
+        if plugin["name"] != PLUGIN:
             continue
-        source, path = plugin.get("source") or "", plugin.get("path") or ""
-        ours = _same_repository(source) and refs.get(path) == BRANCH
-        detail = "" if ours else f"from {shown(source, machine)}" if source else ""
-        app.copies.append(Copy("grok", "plugin", PLUGIN, version=plugin.get("version"), path=path or None,
-                               detail=detail, ours=ours))
+        ours = _same_repository(plugin["source"]) and plugin["ref"] == BRANCH
+        detail = "" if ours else f"from {shown(plugin['source'], machine)}" if plugin["source"] else ""
+        app.copies.append(Copy("grok", "plugin", PLUGIN, version=plugin["version"], path=plugin["path"], detail=detail,
+                               ours=ours))
     _loose(app, machine)
     return app
 
@@ -1141,9 +1193,11 @@ DETECTORS: Dict[str, Callable[..., App]] = {
 }
 
 
-def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, folder: Any = None) -> Dict[str, App]:
-    """Every app in ``apps``: whether it is here, and every copy of the plugin it loads. Ours is the one
-    from the plugin ``folder`` (``cad_server._internal.plugin``): Claude Code's and Codex's plugin from its
+def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, folder: Any = None,
+           listed: bool = False) -> Dict[str, App]:
+    """Every app in ``apps``: whether it is here, and every copy of the plugin it loads, from each app's own
+    files, no app's command run (the module; ``listed``: Claude Code's listing too, ``read_for``). Ours is the
+    one from the plugin ``folder`` (``cad_server._internal.plugin``): Claude Code's and Codex's plugin from its
     catalog (``MARKETPLACE``, wherever that points: the plan points it at ``folder``), Gemini CLI's
     extension linked to it, Cursor's copy of it; Claude Desktop's server; Grok Build's install of
     ``latest``. An app whose folders cannot be read is here, and left alone (``unreadable``)."""
@@ -1152,11 +1206,27 @@ def detect(machine: Optional[Machine] = None, apps: Sequence[str] = APPS, *, fol
     found = {}
     for name in apps:
         try:
-            found[name] = DETECTORS[name](machine, folder)
+            found[name] = (_detect_claude(machine, folder, listed=True) if listed and name == "claude"
+                           else DETECTORS[name](machine, folder))
         except OSError as error:
             found[name] = App(name, present=True, unreadable=f"its files could not be read ({type(error).__name__}: "
                                                              f"{error.strerror or error})")
     return found
+
+
+def read_for(make: Callable[[Mapping[str, App]], List[Step]], machine: Optional[Machine] = None, *,
+             folder: Any = None) -> Tuple[Dict[str, App], List[Step], bool]:
+    """A real run's read of the apps and ``make``'s plan of them: ``(apps, steps, whether Claude Code was
+    listed)``. Read from their files (``detect``); where that plan changes Claude Code, whose command is about to
+    run anyway, its listing is asked as well, for the copies only that knows of (a copy claude.ai syncs keeps
+    ours out), and the plan made again."""
+    machine = _machine(machine)
+    apps = detect(machine, folder=folder)
+    steps = make(apps)
+    if not apps["claude"].command or not any(step.app == "claude" and step.changes for step in steps):
+        return apps, steps, False
+    apps.update(detect(machine, ["claude"], folder=folder, listed=True))
+    return apps, make(apps), True
 
 
 def _failure(error: BaseException) -> str:
@@ -1535,15 +1605,15 @@ def _shared_note(apps: Mapping[str, App], steps: List[Step], machine: Machine) -
     """A line for Codex and Gemini CLI, which read ``~/.agents/skills``, when a Skills CLI agent here
     keeps the skills there and the app has the plugin or is getting it: both copies show in it."""
     shared = shared_skills(machine)
-    owners = [step.app for step in steps if step.app in SKILLS_AGENTS and skills_folder(step.app, machine) == shared
-              and step.subject != NEED_NODE]
+    owners = list(dict.fromkeys(label(step.app) for step in steps if step.app in SKILLS_AGENTS
+                                and skills_folder(step.app, machine) == shared and step.subject != NEED_NODE))
+    whose = " and ".join([", ".join(owners[:-1]), owners[-1]] if len(owners) > 1 else owners)
     notes = []
     for name, kind in (("codex", "plugin"), ("gemini", "extension")):
         app = apps.get(name)
         getting = any(step.app == name and step.action in ("install", "update") for step in steps)
         if owners and app is not None and app.present and (app.ours() is not None or getting):
-            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, "
-                                             f"{' and '.join(label(owner) for owner in owners)}'s folder: "
+            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, {whose}'s folder: "
                                              f"{app.label} lists them beside its {kind}'s"))
     return notes
 

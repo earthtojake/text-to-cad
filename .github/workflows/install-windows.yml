@@ -10,6 +10,8 @@ name: Windows installer rehearsal
 # uninstall; then the same again into a state folder named with accents and a non-Latin script.
 # A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
 # installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
+# Dispatched with `published`, the same steps run against what people install today: the docs site's
+# install.ps1 and the newest release on PyPI, no wheel built.
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +19,11 @@ on:
         description: "The ref to rehearse (default: the branch dispatched)"
         required: false
         default: ""
+      published:
+        description: "Rehearse the published release (the site's install.ps1, PyPI), not this tree's wheel"
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [main]
     paths:
@@ -35,6 +42,7 @@ permissions:
 jobs:
   wheel:
     name: wheel
+    if: ${{ !inputs.published }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -71,10 +79,14 @@ jobs:
   windows:
     name: install.ps1 (Windows PowerShell 5.1)
     needs: wheel
+    if: ${{ !cancelled() && needs.wheel.result != 'failure' }}
     runs-on: windows-latest
     timeout-minutes: 50
     env:
       UV_NO_MODIFY_PATH: "1"
+      CAD_PUBLISHED: ${{ inputs.published }}
+      # The installer read and handed to Invoke-Expression, as the docs say.
+      CAD_PIPED: ${{ inputs.published && 'irm https://www.texttocad.dev/install.ps1' || 'Get-Content -Raw scripts\install\install.ps1' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -82,19 +94,32 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Take the wheel
+        if: ${{ !inputs.published }}
         uses: actions/download-artifact@v8
         with:
           name: wheels
           path: ${{ runner.temp }}\wheel
 
       # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
-      # the release the server pins, which no index has before it is released.
+      # the release the server pins, which no index has before it is released. Published: the site's installer
+      # and the release the version feed names, from PyPI; the folder holds only the test's own wheel, later.
       - name: The wheel to install from, and the release it is
         shell: pwsh
         run: |
-          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\cad_server-*.whl" | Select-Object -First 1).FullName
-          if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
-          $release = (Get-Content VERSION -Raw).Trim()
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\wheel" | Out-Null
+          if ($env:CAD_PUBLISHED -eq 'true') {
+            Invoke-WebRequest https://www.texttocad.dev/install.ps1 -OutFile "$env:RUNNER_TEMP\install.ps1" -UseBasicParsing
+            "CAD_SCRIPT=$env:RUNNER_TEMP\install.ps1" >> $env:GITHUB_ENV
+            $wheel = ''
+            $release = (Invoke-RestMethod https://api.texttocad.dev/v1/versions).latest
+            if (-not $release) { throw "the version feed names no release" }
+          } else {
+            "CAD_SCRIPT=scripts\install\install.ps1" >> $env:GITHUB_ENV
+            $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\cad_server-*.whl" | Select-Object -First 1).FullName
+            if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
+            "CAD_FROM=--from `"$wheel`"" >> $env:GITHUB_ENV
+            $release = (Get-Content VERSION -Raw).Trim()
+          }
           "CAD_WHEEL=$wheel" >> $env:GITHUB_ENV
           "UV_FIND_LINKS=$env:RUNNER_TEMP\wheel" >> $env:GITHUB_ENV
           "CAD_RELEASE=$release" >> $env:GITHUB_ENV
@@ -120,14 +145,14 @@ jobs:
       - name: Usage, under PowerShell 7
         shell: pwsh
         run: |
-          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --help
-          pwsh -NoProfile -File scripts\install\install.ps1 --help
+          & powershell -NoProfile -ExecutionPolicy Bypass -File $env:CAD_SCRIPT --help
+          pwsh -NoProfile -File $env:CAD_SCRIPT --help
 
       # cmd redirects the streams, so Windows PowerShell 5.1 sees a console as a person does: no
       # stderr line of uv's becomes a PowerShell error record.
       - name: Dry run, as a script with options (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
 
       - name: The dry run's plan
         shell: pwsh
@@ -145,7 +170,7 @@ jobs:
         shell: cmd
         env:
           CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "%CAD_PIPED% | Invoke-Expression" > "%RUNNER_TEMP%\install.txt" 2>&1
 
       - name: What the install did
         shell: pwsh
@@ -491,7 +516,7 @@ jobs:
       # whose release folder it runs from.
       - name: Uninstall, through the installer (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
 
       - name: What the uninstall did
         shell: pwsh
@@ -514,7 +539,7 @@ jobs:
         env:
           CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
           CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
-        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install-accented.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "%CAD_PIPED% | Invoke-Expression" > "%RUNNER_TEMP%\install-accented.txt" 2>&1
 
       - name: cad doctor and cad run, with that state folder (5.1)
         shell: powershell
@@ -559,4 +584,4 @@ jobs:
         shell: cmd
         env:
           CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall-accented.txt" 2>&1 & type "%RUNNER_TEMP%\uninstall-accented.txt"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File "%CAD_SCRIPT%" %CAD_FROM% --uninstall > "%RUNNER_TEMP%\uninstall-accented.txt" 2>&1 & type "%RUNNER_TEMP%\uninstall-accented.txt"

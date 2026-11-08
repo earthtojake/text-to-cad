@@ -29,7 +29,7 @@ export const ENTRY_ACTIONS = Object.freeze(["copy-path", "copy-link", "reveal", 
  *   target?: string, app?: string }} OpenInEntry  One place Open in opens the document in: an app's
  *   (`action: "app"`) names the file (`target`) and the app (`app`, or `"default"`, the OS's own).
  * @typedef {{ targets: readonly { target: string, kind: string, name: string, present: boolean,
- *   apps: readonly { id: string, name: string }[], default?: boolean }[], fileManager?: string }} OpenInFiles
+ *   apps: readonly { id: string, name: string, refuses?: "newer" }[], default?: boolean }[], fileManager?: string }} OpenInFiles
  */
 
 /** A home card's item that shows the file in the OS's file browser. */
@@ -72,6 +72,13 @@ export function entryMenu(platform, capabilities, t = english) {
     .filter((item) => capabilities.has(item.action));
 }
 
+/** Whether an app opens a file of `kind` that is there: not one that refuses it (the answer's `refuses`), saying why. */
+function appOpens(app, kind, t) {
+  if (!app.refuses) return { enabled: true };
+  const reason = kind === "kicad_sch" ? "file.kicadSchematicTooNew" : "file.kicadBoardTooNew";
+  return { enabled: false, reason: t(reason, { app: app.name }) };
+}
+
 /**
  * The navbar's Open in, as one list of entries in groups, in this order (a group with no entry is
  * left out, and the drawing parts groups with a separator):
@@ -79,15 +86,16 @@ export function entryMenu(platform, capabilities, t = english) {
  *  - `places`: the document's page in the person's browser (the CAD app's), then the desktop's file
  *    manager, by its name -- each where the host can do it (`capabilities`);
  *  - `source`: the apps that take the document's source (a model's script, a file's own file), by
- *    their product names;
+ *    their product names (a KiCad's says its version);
  *  - `exports`: each file a model's last build wrote that is on disk, its apps as "App (file name)";
  *  - `default`: Default app, the OS's own handler for the source.
  *
  * The apps come from the host (`files`, its answer for the document; null until and unless it
  * answers, when the menu is the places alone). Each entry says whether it opens now: what opens the
  * source -- the file manager, the source's apps, Default app -- is disabled, with the reason, while the
- * source was moved or deleted (`sourceMissing`, or the answer's `present: false`); the browser needs
- * none, and an export whose file is gone is left out.
+ * source was moved or deleted (`sourceMissing`, or the answer's `present: false`); an app that cannot
+ * read its file (the answer's `refuses`: a KiCad older than the file's format) is disabled, with why;
+ * the browser needs none, and an export whose file is gone is left out.
  *
  * @param {Platform} platform
  * @param {ReadonlySet<EntryAction>} capabilities What this host can perform on the document on screen.
@@ -105,14 +113,14 @@ export function openInMenu(platform, capabilities, t = english, { sourceMissing 
     { action: "reveal", label: fileManagerName(platform, t), group: "places", ...opens },
   ].filter((item) => capabilities.has(/** @type {EntryAction} */ (item.action)));
   if (!files) return entries;
-  for (const app of source?.apps ?? []) entries.push({ action: "app", label: app.name, group: "source", target: "source", app: app.id, ...opens });
+  for (const app of source?.apps ?? []) entries.push({ action: "app", label: app.name, group: "source", target: "source", app: app.id, ...(missing ? opens : appOpens(app, source.kind, t)) });
   for (const exported of files.targets ?? []) {
     if (!exported.target.startsWith("export:") || !exported.present) continue;
     for (const app of exported.apps ?? []) {
-      entries.push({ action: "app", label: `${app.name} (${exported.name})`, group: "exports", target: exported.target, app: app.id, enabled: true });
+      entries.push({ action: "app", label: `${app.name} (${exported.name})`, group: "exports", target: exported.target, app: app.id, ...appOpens(app, exported.kind, t) });
     }
   }
-  // Default app is offered unless the server says no app is ever started on the file (a KiCad file's).
+  // Default app is offered unless the server says the OS's handler is never started on the file (a KiCad file's).
   if (source && source.default !== false) entries.push({ action: "app", label: t("file.defaultApp"), group: "default", target: "source", app: "default", ...opens });
   return entries;
 }

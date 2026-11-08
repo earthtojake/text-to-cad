@@ -49,7 +49,7 @@ its Version Check vets the bump (a branch of this repository only, a version pas
 `main`'s and the latest tag, every stamp in step). `Publish Release`
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
 and the wheel and sdist of each of the release's four projects on PyPI (`cad`,
-`cad-server`, `cad-mcp`, and the alias `cadgen`), uploads
+`cad-server`, `cad-mcp`, and the deprecated alias `cadgen`), uploads
 them one project at a time, the library first, waiting until PyPI lists each,
 and only then writes the install branches (`latest`, `claude-plugin`), deploys
 the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
@@ -69,11 +69,13 @@ asking nothing, and, run again, updates them; the update button in the CAD Viewe
 and `cad update`, take the same steps.
 
 text-to-cad is three distributions from this repository at one `VERSION`: the library `cad`
-(import `cad`, the CAD kernel as its `build123d` extra; `cadgen` is an import alias of it), the server
+(import `cad`, the CAD kernel as its `build123d` extra), the server
 `cad-server` (import `cad_server`, command `cad`: the engine and its daemon, the commands, the
 CAD Viewer's server) and the shim `cad-mcp` (import `cad_mcp`, command `cad-mcp`: the stdio
-transport an agent app starts, the standard library alone). The alias distributions `cadgen` and
-`text-to-cad` install the library at the same release. A file's place: imported by a model or run in
+transport an agent app starts, the standard library alone). `cadgen` is the library's deprecated
+alias, still published at every release for backwards compatibility: the distribution installs `cad`
+at the same release, and the import `cadgen` is `cad` under that name and warns that it is
+deprecated. New text and examples name `cad`. A file's place: imported by a model or run in
 a worker, the library; run in the daemon or a command, the server; run inside the host's process,
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the
@@ -126,14 +128,14 @@ which points both at the checkout.
   packages. `packages/cad` ([README](packages/cad/README.md)) is the library: the
   engine's library half (`cad/engine`: models built into documents, and the XBF, STEP, GLB, STL,
   3MF and DXF files written from them; the worker every build runs in; exports; the OCCT stills;
-  the client every command reaches the server by), the formats and validators, and the `cadgen`
-  alias. `packages/cad-server` ([README](packages/cad-server/README.md)) is the server:
+  the client every command reaches the server by), and the formats and validators.
+  `packages/cad-server` ([README](packages/cad-server/README.md)) is the server:
   the daemon, the supervisor of the processes it declares and its registry (`cad_server/engine`),
   the `cad` command line (`cad_server/cli`), the CAD Viewer server (`cad_server/viewer`), the CAD
   app's server half (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built
   by `scripts/bundle/cadgen-runtime.sh`).
   `packages/cad-mcp` ([README](packages/cad-mcp/README.md)) is the shim, and
-  `packages/aliases/` the `cadgen` alias. Skills consume the server as an
+  `packages/aliases/` the deprecated `cadgen` alias. Skills consume the server as an
   installed distribution.
   `packages/core` ([README](packages/core/README.md)) is `@cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))

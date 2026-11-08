@@ -53,14 +53,15 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertIn(integration.process, registry.PROCESS_KINDS)
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
-                if integration.extra:
+                if integration.extra is None:
+                    # A program the person installs, which ships no package: found by its probe alone, run as a
+                    # program of its own, with nothing for cad run to install and nothing it downloads.
+                    self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
+                    self.assertFalse(integration.modules or integration.distributions)
+                    self.assertEqual((integration.process, integration.holds, integration.download_mb), ("separate", "", 0))
+                else:
                     # An extra installs packages: the modules a script imports them by, and the distributions.
                     self.assertTrue(integration.modules and integration.distributions)
-                else:
-                    # No extra: a program the person installs, found by its probe, with nothing for cad run.
-                    self.assertIsNotNone(integration.probe)
-                    self.assertEqual((integration.modules, integration.distributions, integration.process),
-                                     ((), (), "separate"))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         # An OpenSCAD program is read and operated on by the openscad integration, which has no extra: a script
         # that calls its reader or operations needs nothing installed beside OpenSCAD itself.
@@ -81,6 +82,16 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        # A stress study is the calculix integration's, ccx from its extra (the cad-ccx package), which cad run runs as
+        # a command of its own; its environment holds the kernel, which reads the B-rep, and netgen, which meshes it.
+        self.assertEqual("calculix", integrations.for_name("cad.step.solve"))
+        self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
+                                           if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
+        self.assertEqual("calculix", integrations.for_command("ccx"))
+        self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
+        self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
+        for integration in registry.INTEGRATIONS.values():
+            self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         for name in ("cad.scad.read", "cad.scad.export", "cad.scad.inspect"):
             self.assertIsNone(integrations.for_name(name), f"{name}: OpenSCAD is no extra")
         self.assertEqual("trimesh", integrations.for_name("cad.scad.dfm"))

@@ -2,7 +2,8 @@
 
 Every top-level name of ``cadgen`` is ``cad``'s own, and every module ``cadgen.<x>`` is the module object
 ``cad.<x>``: imported once, under its own name, and handed out as it is -- never a second copy whose
-classes and memo would be strangers to the first. Nothing is said when it is used.
+classes and memo would be strangers to the first. It is deprecated, and importing it says so once per
+process, as any alias of the library does (``cad._internal.aliases.warn``).
 
 Run in a fresh interpreter each: this one has imported ``cad`` already, and the alias must hold whichever
 name a process imports first.
@@ -22,9 +23,13 @@ from pathlib import Path
 from tests.python.support.paths import SOURCE_PATH
 
 
+SAID = "cadgen is deprecated; use cad"
+
+
 def run(code: str) -> dict:
-    done = subprocess.run([sys.executable, "-W", "error", "-c", textwrap.dedent(code)], capture_output=True, text=True,
-                          env={**os.environ, "PYTHONPATH": SOURCE_PATH}, timeout=120)
+    """``code``'s last line as JSON, every warning an error but the one this file expects."""
+    done = subprocess.run([sys.executable, "-W", "error", "-W", f"ignore:{SAID}", "-c", textwrap.dedent(code)],
+                          capture_output=True, text=True, env={**os.environ, "PYTHONPATH": SOURCE_PATH}, timeout=120)
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout.strip().splitlines()[-1])
 
@@ -85,6 +90,38 @@ class AliasTest(unittest.TestCase):
             print(json.dumps({"missing": missing}))
         """)
         self.assertEqual(found, {"missing": "cadgen.no_such_module_here"})
+
+
+class WarningTest(unittest.TestCase):
+    def run_script(self, source: str, *options: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "old.py").write_text(source, encoding="utf-8")
+            return subprocess.run([sys.executable, *options, "old.py"], capture_output=True, text=True, cwd=folder,
+                                  env={**os.environ, "PYTHONPATH": SOURCE_PATH}, timeout=120)
+
+    def test_it_warns_once_a_process_naming_cad_at_the_line_that_imported_it(self) -> None:
+        for source, line in (("import cadgen\nimport cadgen.step\nfrom cadgen import model\nimport cadgen\n", 1),
+                             ("from cadgen import model\nimport cadgen\n", 1),
+                             ("import cad\nimport cadgen.build123d\n", 2),
+                             ("import cad\n\nfrom cadgen.step import read\n", 3)):
+            with self.subTest(source=source):
+                done = self.run_script(source)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout, "")
+                self.assertEqual([line_ for line_ in done.stderr.splitlines() if "CadDeprecationWarning" in line_],
+                                 [f"old.py:{line}: CadDeprecationWarning: {SAID}"])
+
+    def test_it_is_an_error_where_the_warning_is_as_any_alias_s_is(self) -> None:
+        done = self.run_script("import cadgen\n", "-W", "error::cad.CadDeprecationWarning")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertEqual(done.stderr.splitlines()[-1], f"cad._internal.aliases.CadDeprecationWarning: {SAID}")
+
+    def test_the_library_says_nothing_of_it_and_does_not_load_it(self) -> None:
+        found = subprocess.run([sys.executable, "-W", "error", "-c",
+                                "import sys, cad, cad.engine.api, cad.engine.build, cad.step, cad.build123d\n"
+                                "print('cadgen' in sys.modules)\n"], capture_output=True, text=True,
+                               env={**os.environ, "PYTHONPATH": SOURCE_PATH}, timeout=120)
+        self.assertEqual((found.returncode, found.stdout.strip()), (0, "False"), found.stderr)
 
 
 class EarlierProgramTest(unittest.TestCase):

@@ -82,7 +82,8 @@ class Discovery(unittest.TestCase):
             self.assertEqual([str(path) for path in install.installed()],
                              [str(Path(r"C:\PF") / "OpenSCAD" / "openscad.exe"), str(Path(r"C:\PF86") / "OpenSCAD" / "openscad.exe")])
         with mock.patch.object(install.sys, "platform", "linux"):
-            self.assertEqual([str(path) for path in install.installed()], ["/usr/bin/openscad", "/usr/local/bin/openscad"])
+            self.assertEqual([str(path) for path in install.installed()],
+                             [str(Path("/usr/bin/openscad")), str(Path("/usr/local/bin/openscad"))])
 
 
 class Version(unittest.TestCase):

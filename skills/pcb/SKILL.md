@@ -26,7 +26,7 @@ its snapshot, need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
 kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
 (`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
-time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
+time a board command needs it (about 100 MB to download and 340 MB on disk, once; nothing for you to install), and `cad run` gives a
 script that edits a board its environment. Showing a board or taking its snapshot needs it too: KiCad
 refills the board's copper pours on a copy before they are drawn, so the first board shown starts that
 download. `CAD_KICAD_REFILL=0` in the server's environment turns the refill off (no download; set
@@ -44,7 +44,8 @@ each such library was not found and DRC `lib_footprint_issues` that it is not en
 carries its libraries (`${KIPRJMOD}`) needs no KiCad.
 
 kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
-stable KiCad app refuses; viewing and snapshots still work.
+stable KiCad app refuses; viewing and snapshots still work, and the CAD Viewer's Open in says which KiCad on
+this computer can open the file.
 
 ## Native files are the source
 

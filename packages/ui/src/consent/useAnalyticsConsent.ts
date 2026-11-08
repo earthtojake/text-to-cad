@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppSetting } from "../file-viewer/types.js";
 import { translator } from "../i18n/core.js";
 
-/** What a CAD app's server says about the usage stats cadgen sends (its telemetry). */
+/** What a CAD app's server says about the usage stats text-to-cad sends (its telemetry). */
 export interface AnalyticsConsent {
   /** Whether usage stats are shared: the settings' `telemetry.share`, the key a change names too. */
   share: boolean;
@@ -16,7 +16,7 @@ export interface AnalyticsConsent {
 /**
  * The app menu's Telemetry toggle, from the host's server (`consent()` reads, `consent(share)`
  * answers): read once, read again whenever the person comes back to the page (another view, the agent or
- * the CLI may have changed it meanwhile), and changed by a click. Nothing asks: cadgen's telemetry is on
+ * the CLI may have changed it meanwhile), and changed by a click. Nothing asks: text-to-cad's telemetry is on
  * by default once a `cad` command has said so. Each read and answer takes a number and only the latest
  * one's reply is kept, so a read sent just before a click (the click's own focus) can never undo it. An
  * answer that did not arrive is read back rather than shown as kept. A choice the environment made shows

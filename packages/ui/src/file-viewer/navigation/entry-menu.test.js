@@ -52,3 +52,31 @@ test("Open in's apps come in groups after the places: the source's, each present
   const board = { targets: [{ target: "source", kind: "kicad_pcb", name: "blinky.kicad_pcb", present: true, apps: [], default: false }] };
   assert.deepEqual(rows({ files: board }).map(([group]) => group), ["places", "places"]);
 });
+
+test("a KiCad that refuses a file is drawn disabled with the reason, the source's and an export's, the others as they are", () => {
+  const stable = { id: "kicad", name: "KiCad 9.0.6", refuses: "newer" };
+  const nightly = { id: "kicad-nightly", name: "KiCad 10.99 nightly" };
+  const rows = (kind, name, state = {}) => {
+    const files = { targets: [{ target: "source", kind, name, present: true, apps: [stable, nightly], default: false }] };
+    return openInMenu("darwin", new Set(), undefined, { files, ...state }).map(({ label, enabled, reason, app }) => ({ label, enabled, reason, app }));
+  };
+  assert.deepEqual(rows("kicad_pcb", "a.kicad_pcb"), [
+    { label: "KiCad 9.0.6", enabled: false, reason: "KiCad 9.0.6 can't open this board: it was saved by a newer KiCad.", app: "kicad" },
+    { label: "KiCad 10.99 nightly", enabled: true, reason: undefined, app: "kicad-nightly" }]);
+  assert.equal(rows("kicad_sch", "a.kicad_sch")[0].reason, "KiCad 9.0.6 can't open this schematic: it was saved by a newer KiCad.");
+  // A source gone says so first, for every app.
+  assert.deepEqual(rows("kicad_pcb", "a.kicad_pcb", { sourceMissing: true }).map(({ enabled, reason }) => [enabled, reason]),
+    [[false, "The source was moved or deleted."], [false, "The source was moved or deleted."]]);
+  // An export's: its file's kind picks the words, and the label stays "App (file)".
+  for (const [kind, noun] of [["kicad_pcb", "board"], ["kicad_sch", "schematic"]]) {
+    const files = { targets: [{ target: "source", kind: "script", name: "a.py", present: false, apps: [] },
+      { target: `export:${kind}`, kind, name: `a.${kind}`, present: true, apps: [stable, nightly] }] };
+    assert.deepEqual(openInMenu("darwin", new Set(), undefined, { files }).filter(item => item.group === "exports").map(({ label, enabled, reason }) => [label, enabled, reason]), [
+      [`KiCad 9.0.6 (a.${kind})`, false, `KiCad 9.0.6 can't open this ${noun}: it was saved by a newer KiCad.`],
+      [`KiCad 10.99 nightly (a.${kind})`, true, undefined]]);
+  }
+  // The words are the view's, with the app's name.
+  const t = (key, params) => `<${key}:${params?.app ?? ""}>`;
+  const files = { targets: [{ target: "source", kind: "kicad_sch", name: "a.kicad_sch", present: true, apps: [stable], default: false }] };
+  assert.equal(openInMenu("darwin", new Set(), t, { files })[0].reason, "<file.kicadSchematicTooNew:KiCad 9.0.6>");
+});

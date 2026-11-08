@@ -82,7 +82,8 @@ HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYR
 
 Refused = base.Refused
 WINDOWS = os.name == "nt"
-# What the environment is called in the lines said of it (``base.Recipe.what``).
+# What an environment with packages of its program's is called in the lines said of it (``base.Recipe.what``);
+# one with none is its integrations' (``_called``).
 WHAT = "the environment of the model's packages"
 # The inline metadata block (PEP 723's reference expression): ``# /// TYPE`` to ``# ///``, each line between
 # a comment.
@@ -731,10 +732,29 @@ def _options(spec: Spec, extras: Iterable[str]) -> tuple[str, ...]:
 
 
 def _named(spec: Spec) -> str:
-    """The spec's own packages in words, for the lines said of its making."""
+    """The spec's own packages in words, for the lines said of its making: empty when it has none."""
     every = [*spec.requirements, *(f"-e {each}" for each in spec.editable), *(f"-r {each}" for each in spec.files),
              *([f"the locked set of {spec.lock}"] if spec.lock else [])]
-    return ", ".join(every) or "nothing more"
+    return ", ".join(every)
+
+
+def _called(spec: Spec, kernel: str) -> tuple[str, str, str]:
+    """An environment with no packages of its program's, in words: what it is called, the line that makes it and
+    the line that downloads it -- its integrations' (``cad.registry``: what each extra brings, and about how much
+    of it is downloaded), or the library alone."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    known = [REGISTERED[name] for name in spec.integrations if name in REGISTERED]
+    if not known:
+        called = f"the environment of {kernel}"
+        return called, f"making {called}, once: {kernel}", f"downloading {kernel}, once"
+    names = " and ".join(spec.integrations)
+    called = f"the {names} integration's environment" if len(spec.integrations) == 1 else \
+        f"the environment of the {names} integrations"
+    holds = ", ".join(each.holds for each in known)
+    size = sum(each.download_mb for each in known)
+    return (called, f"making {called}, once: {kernel} ({holds}, about {size} MB to download)",
+            f"downloading {kernel} ({holds}, about {size} MB), once")
 
 
 def _distributions(path: list[str], prefix: Path) -> set[str]:
@@ -775,8 +795,14 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
     named = _named(spec)
     extras = ",".join(spec.integrations)
     kernel = f"{base.LIBRARY}[{extras}] {installation.release}" if extras else f"{base.LIBRARY} {installation.release}"
-    making = (f"making {WHAT} again, as {', '.join(changed)} changed: {named} beside {kernel}" if changed
-              else f"making {WHAT}, once: {named} beside {kernel}")
+    if named:
+        what = WHAT
+        making = (f"making {WHAT} again, as {', '.join(changed)} changed: {named} beside {kernel}" if changed
+                  else f"making {WHAT}, once: {named} beside {kernel}")
+        downloading, unsatisfiable = f"downloading what {named} needs, once", f"{named} cannot be resolved beside {kernel}"
+    else:
+        what, making, downloading = _called(spec, kernel)
+        unsatisfiable = f"{kernel} cannot be resolved here"
     rest = (*spec.requirements, *(word for each in spec.editable for word in ("-e", each)),
             *(word for each in spec.files for word in ("-r", each)))
 
@@ -791,10 +817,10 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
                 f"{', '.join(pulled)} came in through another package: resolving again with "
                 f"{base.LIBRARY}[{','.join(every)}] {installation.release}, so cad's pins decide it")
 
-    return base.Recipe(what=WHAT, python=spec.python or installation.executable,
+    return base.Recipe(what=what, python=spec.python or installation.executable,
                        requirement=(*_cad(installation, spec.integrations), *rest), release=installation.release,
-                       source=installation.source, making=making, downloading=f"downloading what {named} needs, once",
-                       unsatisfiable=f"{named} cannot be resolved beside {kernel}",
+                       source=installation.source, making=making, downloading=downloading,
+                       unsatisfiable=unsatisfiable,
                        options=_options(spec, spec.integrations), venv_options=spec.python_options, revise=revise,
                        environment=spec.settings(), folder=spec.folder,
                        before=(lambda env: _export(env, spec, installation.release)) if spec.lock else None)

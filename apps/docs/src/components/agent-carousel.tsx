@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef } from "react";
 import { agents } from "@/lib/content";
 
@@ -11,10 +10,12 @@ import { agents } from "@/lib/content";
  * finger is on it or focus is in it, and while it is off screen. A vertical wheel over it scrolls the
  * page, never the strip: a trackpad's sideways swipe or Shift with the wheel moves it, as the browser
  * scrolls any sideways list, a mouse drags it, a finger swipes it, and the arrow keys move it once
- * focused. Anyone who asks for less motion gets one still copy that scrolls the same ways. Each tile
- * is a black square: it takes the page's own colour, lightened into the dark theme and, inverted,
- * darkened into the light one. The logos are not links: Install, below, covers them all; their names
- * are the captions under them, so the pictures themselves say nothing to a screen reader.
+ * focused. Anyone who asks for less motion gets one still copy that scrolls the same ways. Each logo
+ * is a light glyph on a black square, drawn as a luminance mask over the text colour: the square
+ * vanishes into the page and the glyph takes the theme's foreground. Not a blend mode: Safari on iOS
+ * paints a scroller's contents in a layer of their own, so a blend there never meets the page's
+ * colour and the black squares show. The logos are not links: Install, below, covers them all; their
+ * names are the captions under them, so the pictures themselves say nothing to a screen reader.
  */
 const DRIFT_SECONDS = 110;
 
@@ -121,15 +122,17 @@ export function AgentCarousel() {
     <ul className={copy ? "flex shrink-0 motion-reduce:hidden" : "flex shrink-0"} aria-hidden={copy ? true : undefined}>
       {agents.map((agent) => (
         <li key={agent.logo} title={agent.name} className="flex select-none flex-col items-center gap-1 px-1">
-          <Image
-            src={`/agents/${agent.logo}.svg`}
-            alt=""
-            width={100}
-            height={100}
-            unoptimized
-            draggable={false}
-            className="h-[72px] w-auto invert mix-blend-darken [@media(min-width:64rem)_and_(min-height:44rem)]:h-[88px] dark:invert-0 dark:mix-blend-lighten"
-          />
+          {/* Mask ids are per copy, so the second copy never points at the first's. */}
+          <svg
+            viewBox="0 0 100 100"
+            aria-hidden="true"
+            className="size-[72px] text-foreground [@media(min-width:64rem)_and_(min-height:44rem)]:size-[88px]"
+          >
+            <mask id={`agent-logo-${copy}-${agent.logo}`}>
+              <image href={`/agents/${agent.logo}.svg`} width="100" height="100" />
+            </mask>
+            <rect width="100" height="100" fill="currentColor" mask={`url(#agent-logo-${copy}-${agent.logo})`} />
+          </svg>
           <span className="whitespace-nowrap text-center text-xs leading-4 text-muted-foreground">{agent.name}</span>
         </li>
       ))}

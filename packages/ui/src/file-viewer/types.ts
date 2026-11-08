@@ -42,8 +42,11 @@ export interface RecentDocument {
   updated?: number | null;
   missing?: boolean;
 }
-/** One app Open in offers for a file: its id (what `openApp` names) and its product name, as drawn. */
-export interface OpenInApp { id: string; name: string }
+/**
+ * One app Open in offers for a file: its id (what `openApp` names) and its name, as drawn (a KiCad's says its
+ * version). `refuses: "newer"`: it cannot open this file, which a newer version saved (a KiCad's), so it is drawn disabled.
+ */
+export interface OpenInApp { id: string; name: string; refuses?: 'newer' }
 /**
  * One of a document's files Open in lists: `source` (a model's script, a file document's file) or
  * `export:<format>` (a file a model's last build wrote), its kind, its file's name, whether it is on
