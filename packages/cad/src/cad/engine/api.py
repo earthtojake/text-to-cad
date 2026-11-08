@@ -46,7 +46,11 @@ __all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Wri
            "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
-    """A request the engine refused or could not run: its words."""
+    """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
+    (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
+    tell its observers (``_error``)."""
+
+    raised: str | None = None
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -316,7 +320,12 @@ def _failed(answer: dict[str, Any]) -> Exception:
         except ImportError:
             kind = None
     if not (isinstance(kind, type) and issubclass(kind, ValueError)):
-        return EngineError(text) if not module else ValueError(text)
+        if module:
+            return ValueError(text)
+        failed = EngineError(text)
+        if isinstance(answer.get("type"), str):
+            failed.raised = answer["type"]  # what the engine failed with: the facts' type (``_error``)
+        return failed
     try:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
@@ -1262,6 +1271,8 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
             return {**_read(text), **told}
+        if error.raised:  # a failure the engine named by its type: what it is, never a refusal
+            return {"type": error.raised, "frames": [], **told}
         return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)

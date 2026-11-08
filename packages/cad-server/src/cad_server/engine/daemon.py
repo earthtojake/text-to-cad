@@ -1440,7 +1440,8 @@ class Daemon:
                 send({"refused": str(error), **({"part": error.part} if error.part else {})})
                 return
             except Exception as error:  # noqa: BLE001 - a picture that could not be drawn is the answer
-                send({"failed": f"{type(error).__name__}: {error}"})
+                raised = getattr(error, "raised", None)  # a render process's failure: the type it failed with
+                send({"failed": f"{type(error).__name__}: {error}", **({"type": raised} if isinstance(raised, str) else {})})
                 return
             send({"ok": True, "report": report, "png": answer_png(data)})
         finally:

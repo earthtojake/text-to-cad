@@ -204,10 +204,15 @@ def _refused_part(error: dict[str, Any] | None) -> str:
     return _PARTS_BY_TYPE.get(str(error.get("type") or "").rpartition(".")[2], "other")
 
 
+# No OpenGL context to draw in, as the library raises it wherever the picture was drawn: in this process, a worker
+# (its traceback's type) or a render process (the type its answer names, ``api.EngineError.raised``).
+NO_GL = "cad.engine.render.context.Unavailable"
+
+
 def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outcome: str) -> str:
-    """Why a snapshot failed (``analytics.SNAPSHOT_FAILURES``), as ``analytics.snapshot_failure`` decides it of an
-    error caught there: the model it draws did not build (``input_error``); a request refused, or a file not
-    there (``bad_request``, ``no_file``); cadgen's mistake (``bug``); a time, a memory or a file run out; else the
+    """Why a snapshot failed (``analytics.SNAPSHOT_FAILURES``), decided of the error the verb told: the model it
+    draws did not build (``input_error``); a request refused, or a file not there (``bad_request``, ``no_file``); no
+    OpenGL context to draw in (``no_gl``); cadgen's mistake (``bug``); a time, a memory or a file run out; else the
     picture was not drawn (``render_error``)."""
     from cad_server import analytics
 
@@ -218,9 +223,11 @@ def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outco
         return "input_error"
     if error.get("refused"):
         return "no_file" if facts.get("found") is False else "bad_request"
+    name = str(error.get("type") or "")
+    if name == NO_GL:
+        return "no_gl"
     if analytics.told_signature(error, "build") is not None:
         return "bug"
-    name = str(error.get("type") or "")
     kind = analytics._builtin(name)
     if kind is not None and issubclass(kind, FileNotFoundError):
         return "no_file"

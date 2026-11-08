@@ -37,7 +37,8 @@ exits, each batch under an id of its own and stamped with the time it was made:
   raised it -- the model's, the CAD kernel's under it, cadgen's -- never from its message;
 - ``snapshot`` (the command that rendered it): for each source kind (``model`` or a file format), how many renders, how many failed,
   and how long they took;
-- ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
+- ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``: a refusal, a file not
+  there, no OpenGL context to draw in, a picture not drawn...), decided as
   the snapshot failed (``cad_server._internal.engine_telemetry``), and for a refused request which part
   of it the refusal named (``SNAPSHOT_PARTS``: the display's mode or its clip, the camera, the size, the
   source...), a word cadgen chose where it refused, never the value given (``none`` for any other
@@ -373,10 +374,12 @@ BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_er
                             "other"})
 # Why a snapshot failed (``engine_telemetry``), decided as it failed: its request was refused (``bad_request``), a
 # file it names is not there (``no_file``), its input could not be read or built (``input_error``), the headless
-# browser did not start (``browser``), out of time (``timeout``) or memory (``memory``), the page did not render it
-# (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
-SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "render_error",
-                               "bug", "other"})
+# browser did not start (``browser``, earlier releases'), out of time (``timeout``) or memory (``memory``), no OpenGL
+# context to draw in (``no_gl``: no X display on Linux, no GLX, a GPU-less Windows' GDI 1.1 --
+# ``render.context.Unavailable``), the picture was not drawn (``render_error``), a mistake in cadgen's code (``bug``),
+# or none of these (``other``).
+SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "no_gl",
+                               "render_error", "bug", "other"})
 # Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
 # where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
 # grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's

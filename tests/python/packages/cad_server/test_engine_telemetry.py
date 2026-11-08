@@ -158,8 +158,28 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual(why(error(), models=[{"ok": False, "cached": False, "children": 0, "parts": 0, "files": []}]),
                          "input_error")
         self.assertEqual(why(error("TimeoutError", here=True)), "timeout")
-        # No OpenGL to draw with: the picture was not drawn.
+        # A picture that was not drawn.
         self.assertEqual(why(error("RuntimeError", engine=True, here=True)), "render_error")
+        # No OpenGL context to draw in, wherever it was to be drawn: in this process, in a model's worker (its
+        # traceback), or in a file's render process (the type the daemon's answer names).
+        from cad.engine import api
+        from cad.engine.render.context import Unavailable
+
+        no_display = "no X display for OpenGL: secret"
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+        try:
+            raise Unavailable(no_display)
+        except Unavailable as raised:
+            here = raised
+        worker = api.EngineError("Traceback (most recent call last):\n  File \"/x/context.py\", line 9, in driver\n"
+                                 f"cad.engine.render.context.Unavailable: {no_display}")
+        render = api._failed({"failed": f"RuntimeError: cad.engine.render.context.Unavailable: {no_display}",
+                              "type": "cad.engine.render.context.Unavailable"})
+        for failed in (here, worker, render):
+            told = api._facts("snapshot", source, {}, {}, None, failed, 0.5)
+            self.assertEqual(engine_telemetry.counts(told, "command")["snapshots"][0]["reason"], "no_gl", failed)
+        self.assertIn("no_gl", analytics.SNAPSHOT_FAILURES)
 
     def test_snapshot_sources_and_failures_keep_model_and_file_kinds_through_the_spool(self) -> None:
         from cad.engine import api

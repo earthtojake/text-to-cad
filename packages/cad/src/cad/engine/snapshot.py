@@ -943,7 +943,11 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
             if "refused" in answer:
                 raise SnapshotRefused(answer["refused"], part=answer.get("part"))
             if "failed" in answer:
-                raise RuntimeError(answer["failed"])
+                if "type" not in answer:
+                    raise RuntimeError(answer["failed"])
+                from cad.engine import api
+
+                raise api._failed(answer)  # an EngineError: the type the render process failed with in it
             data, report = base64.b64decode(answer["png"]), answer["report"]
         else:
             from cad.engine.formats import FormatError
