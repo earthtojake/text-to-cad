@@ -58,7 +58,8 @@ RESTARTS = ("PYTHONPATH", "PYTHONHOME", "PYTHONSAFEPATH", "PYTHONNOUSERSITE", "P
 BYTECODE = ("PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE")
 # The X display the engine gives each process that draws (``cad_server.engine.display``: its own, or an Xvfb
 # it started), which a still is drawn on where its request names none (``render.context.display``); a run's
-# never replaces it (``worker.kept``); and the X authority file that admits a client to it, where it takes one.
+# never replaces it (``worker.told_display``); and the X authority file that admits a client to it, where it
+# takes one.
 DISPLAY = "CAD_ENGINE_DISPLAY"
 XAUTHORITY = "CAD_ENGINE_XAUTHORITY"
 # The folder of the engine's bytecode in the cache folder: one folder per installation in it

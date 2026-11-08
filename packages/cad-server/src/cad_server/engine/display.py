@@ -3,10 +3,12 @@ draw for names no ``DISPLAY`` of its own (``render.context.display``).
 
 OCP's Linux wheels draw through GLX alone (``render/context.py``), so a still needs an X server, and an
 agent's shell often has none to name: a server over SSH, a container, a sandbox, or an agent app that
-does not pass its ``DISPLAY`` on. Every process a declaration says draws (``Service.draws``: a model's
-worker, a document's render process) is started with ``places.DISPLAY`` (``CAD_ENGINE_DISPLAY``) naming
-the engine's own display, and ``places.XAUTHORITY`` (``CAD_ENGINE_XAUTHORITY``) the file that admits a
-client to it, where it takes one (``environment``) -- first of:
+does not pass its ``DISPLAY`` on. A process a declaration says draws (``Service.draws``: a document's
+render process, started for its first picture) is started with ``places.DISPLAY`` (``CAD_ENGINE_DISPLAY``)
+naming the engine's own display, and ``places.XAUTHORITY`` (``CAD_ENGINE_XAUTHORITY``) the file that
+admits a client to it, where it takes one (``environment``); a model's worker, started for a build, is told
+them with each export that draws (``worker.told_display``). So the display is found, or started, with the
+first picture, never for a build. It is, first of:
 
 1. the daemon's own ``DISPLAY`` (and ``XAUTHORITY``), where it has one: started from a desktop session,
    or by an app that has one;
@@ -19,7 +21,7 @@ client to it, where it takes one (``environment``) -- first of:
 
 macOS and Windows draw on a window of their own and are given nothing here, and a Linux daemon with a
 ``DISPLAY`` starts nothing. An Xvfb that did not start is said in the daemon's log once and not started
-again by this daemon; one that is not on ``PATH`` is looked for again at the next process, so one
+again by this daemon; one that is not on ``PATH`` is looked for again at the next picture, so one
 installed meanwhile is found.
 """
 

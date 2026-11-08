@@ -904,7 +904,7 @@ class EngineDisplayTest(unittest.TestCase):
             if here is not None:
                 self.assertLessEqual(mismatch(picture, here), 0.015, name)
         # The Xvfb is the daemon's: gone with it.
-        xvfb = _xvfb_pids()
+        xvfb = _xvfb_pids(self.state)
         self.assertTrue(xvfb, "the engine started no Xvfb")
         self.run_in(self.bare, "-m", "cad_server.engine", "stop")
         deadline = time.monotonic() + 30
@@ -925,27 +925,31 @@ class EngineDisplayTest(unittest.TestCase):
         here = self.drawn_here()
         for name, picture in found.items():
             self.assertLessEqual(mismatch(picture, here), 0.015, name)
-        self.assertEqual(_xvfb_pids(), [], "the engine had a display: it starts no Xvfb")
+        self.assertEqual(_xvfb_pids(self.state), [], "the engine had a display: it starts no Xvfb")
 
 
-def _xvfb_pids() -> list[int]:
-    """The Xvfb processes an engine started (``display.py``): each under the shell that stops it with its
-    daemon, by /proc."""
-    def argv(pid: str) -> list[bytes]:
+def _xvfb_pids(engine: Path) -> list[int]:
+    """The Xvfb processes the engine in the folder ``engine`` started (``display.py``): each under the shell
+    that stops it with its daemon, whose environment names that folder; by /proc."""
+    def read(pid: str, name: str) -> list[bytes]:
         try:
-            return Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+            return Path(f"/proc/{pid}/{name}").read_bytes().split(b"\0")
         except OSError:
             return [b""]
 
+    def parent(pid: str) -> str:
+        try:
+            return Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()[1]
+        except (OSError, IndexError):
+            return "0"
+
     found = []
     for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit() or Path(argv(entry.name)[0].decode(errors="replace")).name != "Xvfb":
+        if not entry.name.isdigit() or Path(read(entry.name, "cmdline")[0].decode(errors="replace")).name != "Xvfb":
             continue
-        try:
-            parent = Path(f"/proc/{entry.name}/stat").read_text().rpartition(")")[2].split()[1]
-        except (OSError, IndexError):
-            continue
-        if any(b"read -r _ <&3" in part for part in argv(parent)):
+        shell = parent(entry.name)
+        if any(b"read -r _ <&3" in part for part in read(shell, "cmdline")) and \
+                f"CAD_ENGINE_DIR={engine}".encode() in read(parent(shell), "environ"):
             found.append(int(entry.name))
     return found
 

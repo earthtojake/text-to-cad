@@ -99,6 +99,7 @@ from cad.engine.door import DOOR_PROTOCOL
 from cad.engine.frames import failed_type
 from cad.engine.ids import canonical, file_id, is_id
 from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache)
+from cad_server.engine import display
 from cad_server.engine.services import SERVICES
 from cad_server.engine.supervisor import Gone, Process, Supervisor
 
@@ -1226,11 +1227,15 @@ class Daemon:
             send(refused(ValueError("an export reads a document: call the model, then export its handle or id")))
             return
         if op == "export":
+            # A model's picture is drawn in its worker: told the engine's X display with it (``display.py``), started
+            # now where it is an Xvfb of the engine's own, never for a build that draws nothing.
+            shown = display.environment() if request.get("draw") or request.get("draw_still") else {}
             order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
                      "cwd": request.get("cwd"),
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
                      "expected": request.get("expected"), "original": request.get("original"),
-                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {})}
+                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
@@ -1577,8 +1582,6 @@ class Daemon:
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
-        from cad_server.engine import display
-
         display.stop()  # the Xvfb it started for their stills, if it did
         if self.server is not None:
             self.server.stop()

@@ -3,7 +3,8 @@
 The daemon starts one per script and talks to it over the worker's stdin and its
 original stdout. A request is one JSON object per line: ``{"id", "op": "build", "script",
 "functions", "cwd", "run", "env"}`` (``run``: the calling process's run, ``build.build``; ``env``: its
-environment, ``adopt``). The answers are frames: a JSON object on one line and, when it has
+environment, ``adopt``); an export that draws carries the engine's X display too (``display``,
+``told_display``). The answers are frames: a JSON object on one line and, when it has
 ``bytes``, exactly that many bytes after it. A build is answered by ``{"id", "log"}`` frames while it
 builds and ``{"id", "progress"}`` frames saying where it is (``progress.py``: each stage, and each
 body a build runs), then one ``{"id", "done", "rssMb"}`` (the build's reports, and the worker's
@@ -273,12 +274,25 @@ def _has_kernel() -> bool:
 def kept() -> dict[str, str]:
     """What of this worker's environment no run's replaces (``adopt``): what started its
     interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH), what it
-    set for itself, and the engine's X display and its authority (``places.DISPLAY``,
-    ``places.XAUTHORITY``), which a run with no ``DISPLAY`` of its own draws its stills on."""
-    from cad.engine.places import BYTECODE, DISPLAY, RESTARTS, XAUTHORITY
+    set for itself; and, once an export that draws has told it (``told_display``), the engine's X display
+    and its authority."""
+    from cad.engine.places import BYTECODE, RESTARTS
 
-    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER", DISPLAY, XAUTHORITY)
-            if name in os.environ}
+    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER") if name in os.environ}
+
+
+def told_display(told: Any, own: dict[str, str]) -> None:
+    """The engine's X display and its authority (``places.DISPLAY``, ``places.XAUTHORITY``), as an export that
+    draws tells them (``display``), kept with what no run's environment replaces (``own``, ``kept``) and set
+    now: a still for a run with no ``DISPLAY`` of its own is drawn there (``render.context.display``). Told
+    with the first picture, never at the worker's start, so an engine that draws nothing starts no display."""
+    from cad.engine.places import DISPLAY, XAUTHORITY
+
+    if not isinstance(told, dict):
+        return
+    found = {name: told[name] for name in (DISPLAY, XAUTHORITY) if isinstance(told.get(name), str) and told[name]}
+    own.update(found)
+    os.environ.update(found)
 
 
 def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
@@ -615,6 +629,7 @@ def main() -> int:
             continue
         if op in ("export", "result"):
             try:
+                told_display(request.get("display"), own)
                 adopt(request.get("env"), own)
                 cwd = request.get("cwd")
                 os.chdir(cwd or home)

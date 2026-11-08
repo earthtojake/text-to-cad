@@ -7,8 +7,9 @@ worker built, keyed ``documents``), in the installation's base -- or in the Pyth
 with, which its build names (``contract.interpreter``) when its environment is not the base: one of the
 caller's own, with its packages, and no standby (``interpreter="lease"``) -- with the caller's
 environment adopted at each request (``worker.adopt``) but for what binds it to its interpreter
-(``places.RESTARTS``), the daemon's bytecode, ``CAD_ENGINE_WORKER`` and the engine's X display
-(``places.DISPLAY``, ``display.py``: a model's still is drawn there where its caller names no ``DISPLAY``); started in its script's folder,
+(``places.RESTARTS``), the daemon's bytecode, ``CAD_ENGINE_WORKER`` and the engine's X display, which an
+export that draws tells it (``worker.told_display``, ``display.py``: a model's still is drawn there where its
+caller names no ``DISPLAY``); started in its script's folder,
 its stderr the model's log. It counts toward the count cap, is drained of its documents before it stops
 (``models.Models.drain``), and keeps a standby with the kernel loaded in the base (``worker.load_kernel``).
 
@@ -38,7 +39,6 @@ WORKER = Service(
     interpreter="lease",  # a build in its caller's own Python: that Python's worker (``Daemon.caller``)
     env="lease",
     set_env=(("CAD_ENGINE_WORKER", "1"),),
-    draws=True,  # a model's still, from its worker's memory
     bytecode="daemon",
     cwd="lease",
     key="path",
