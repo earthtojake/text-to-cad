@@ -23,9 +23,9 @@ base colour the part's colour too so a reader of colours alone agrees; on each p
 the element names the memo's history gave them (``kernel.trace``), so a face's name
 survives into the file and into a STEP; and on each part the key of its geometry
 (``KEY_GUID``), which a reader caches the part's tessellation by only once the part it
-read makes that key again (``Loaded``); and on a part that declares them, its collision and
-its named frames (``declarations``: ``DECLARATIONS_GUID``), what a robot description is made of
-beside the material. Saved with the
+read makes that key again (``Loaded``); and on a part that declares them, its collision, its
+named frames, its body, its exclusions and its joints' drive limits (``declarations``:
+``DECLARATIONS_GUID``), what a robot description is made of beside the material. Saved with the
 BinXCAF driver as ``.xbf``, atomically, and only when its bytes changed -- every
 sub-shape's ``Checked`` flag written cleared (``unchecked``), so a cold build and a
 warm one of the same sources write the same bytes.
@@ -76,8 +76,8 @@ CLOSURE_GUID = "2f6c9d1e-8a43-4b7e-b5d0-7e1a3c9f4b62"
 # The build's animations, a build record on its main label after the closure (``animations.record``):
 # the compiled tracks a GLB of the document bakes; every other reader ignores them.
 ANIMATIONS_GUID = "196117b9-7763-467d-8c37-7f838602e8a5"
-# What a part declares for a simulator (``declarations``), on its label: its collision and its named
-# frames, as ``declarations_key`` writes them; none on a part that declares neither.
+# What a part declares for a simulator (``declarations``), on its label: its collision, its named
+# frames and the rest (``DECLARED``), as ``declarations_key`` writes them; none on a part that declares nothing.
 DECLARATIONS_GUID = "8d3b6f2a-4c71-4e9b-a5d8-1f0c7e2b9a64"
 _XCAF_LOCK = threading.RLock()
 # The last document ``to_xcaf`` made and its tree; per path, the tree last saved there.
@@ -109,6 +109,8 @@ class Part:
     # its named frames, each 16 floats, column-major, millimetres, in its own frame.
     collision: str | None = None
     frames: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    # And the rest of it, as JSON holds it (``DECLARED``): its body, its exclusions, its joints' drives.
+    declared: dict[str, Any] = field(default_factory=dict)
 
 
 # The base colour of a part with a material and no colour: the exports' default grey.
@@ -280,13 +282,15 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     parts: list[Part] = []
 
     def visit(obj: Any, topods: Any, inherited: tuple | None, inherited_material: Any,
-              path: str, inherited_collision: str | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
+              path: str, inherited_collision: str | None = None,
+              inherited_exclude: tuple[str, ...] = ()) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
         own_material = _material(state.get("_material"))
         material = own_material or inherited_material
         collision = _collision(state.get(declarations.COLLISION), path) or inherited_collision
+        excluded = tuple(sorted({*inherited_exclude, *(state.get(declarations.EXCLUDE) or ())}))
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
         held = _children(topods) if children and int(topods.ShapeType()) == int(TopAbs_COMPOUND) else []
@@ -297,7 +301,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             for at, (child, child_topods) in enumerate(zip(children, held), 1):
                 child_label = child.__dict__.get("label") or ""
                 prototype, signature, child_color = visit(child, child_topods.Located(_identity()), color, material,
-                                                          path + "/" + (child_label or f"{own}.{at}"), collision)
+                                                          path + "/" + (child_label or f"{own}.{at}"), collision,
+                                                          excluded)
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -323,16 +328,18 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
         frames = _frames(state.get(declarations.FRAMES), path)
+        declared = _declared(state, excluded, path)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
                      tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
-                     declarations_key(collision, frames))
+                     declarations_key(collision, frames, declared))
         found = prototypes.get(signature)
         if found is None:
             meshes = mesh_faces(topods)
             if meshes:
                 raise ValueError(_mesh_refused(path, meshes))
             found = Part(topods, label or f"part{len(parts) + 1}", color, dict(painted), origin=obj,
-                         material=material, face_materials=face_materials, collision=collision, frames=frames)
+                         material=material, face_materials=face_materials, collision=collision, frames=frames,
+                         declared=declared)
             prototypes[signature] = found
             order.append(found)
             parts.append(found)
@@ -385,7 +392,7 @@ def merge(tree: Tree) -> None:
         signature = (part.key, *(tuple(names.get(kind) or ()) for kind in ("faces", "edges", "vertices")),
                      part.color, tuple(sorted(part.face_colors.items())), material_key(part.material),
                      tuple((o, material_key(m)) for o, m in sorted(part.face_materials.items())),
-                     declarations_key(part.collision, part.frames))
+                     declarations_key(part.collision, part.frames, part.declared))
         found = first.setdefault(signature, part)
         if found is not part:
             replaced[id(part)] = found
@@ -665,7 +672,7 @@ def _records(tree: Tree) -> list[_Record]:
             base = prototype.color or DEFAULT_COLOR
             found.append(_Record(
                 ("part", apart, prototype.name, prototype.color, material, painted, given, prototype.key,
-                 declarations_key(prototype.collision, prototype.frames)),
+                 declarations_key(prototype.collision, prototype.frames, prototype.declared)),
                 shape=prototype.shape, names=prototype.names,
                 colours=((prototype.color,) if prototype.color is not None else ())
                 + tuple(rgba for _, rgba in painted),
@@ -811,7 +818,7 @@ class _Converter:
             materials.set(label, prototype.material, prototype.color or DEFAULT_COLOR)
         if prototype.key:
             TDataStd_AsciiString.Set_s(label, self.key_guid, TCollection_AsciiString(prototype.key))
-        declared = declarations_key(prototype.collision, prototype.frames)
+        declared = declarations_key(prototype.collision, prototype.frames, prototype.declared)
         if declared is not None:
             TDataStd_AsciiString.Set_s(label, self.declarations_guid, TCollection_AsciiString(declared))
         faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
@@ -1362,6 +1369,7 @@ class Prototype:
     vertex_names: dict[int, str] = field(default_factory=dict)
     collision: str | None = None  # what it declares for a simulator (``declarations``)
     frames: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    declared: dict[str, Any] = field(default_factory=dict)  # and the rest of it (``DECLARED``)
 
 
 @dataclass
@@ -1529,6 +1537,7 @@ class Loaded:
                 "faceMaterials": {str(k): material_json(v) for k, v in sorted(p.face_materials.items())},
                 "collision": p.collision,
                 "frames": {name: list(values) for name, values in sorted(p.frames.items())},
+                **p.declared,
             } for p in self.prototypes],
             "instances": [{"prototype": i.prototype, "path": "/".join(i.path), "matrix": i.matrix, "color": i.color}
                           for i in self.instances],
@@ -1616,7 +1625,8 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
                 "material": material_json(material),
                 "faceMaterials": {str(k): material_json(v) for k, v in sorted(face_materials.items())},
                 "collision": part.collision,
-                "frames": {name: list(values) for name, values in sorted(part.frames.items())}}
+                "frames": {name: list(values) for name, values in sorted(part.frames.items())},
+                **part.declared}
 
     paths: list[tuple[int, ...]] = []
 
@@ -2019,22 +2029,49 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
     return found
 
 
-def declarations_key(collision: str | None, frames: dict[str, Any]) -> str | None:
+#: What a part declares beside its collision and its frames, by the key the structure and the label hold it
+#: under: its body's name ("" for the part's own), the labels it does not collide with, and its joints'
+#: drive limits (``{label: [effort, velocity]}``, None where unbounded).
+DECLARED = ("body", "exclude", "drives")
+
+
+def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str) -> dict[str, Any]:
+    """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``) as JSON holds them: a key
+    only where it declares one."""
+    from cad.engine import declarations
+
+    found: dict[str, Any] = {}
+    body = state.get(declarations.BODY)
+    if body is not None:
+        if not isinstance(body, str):
+            raise ValueError(f"{path}: a body's name is a string, not {body!r}")
+        found["body"] = body
+    if excluded:
+        found["exclude"] = list(excluded)
+    drives = state.get(declarations.DRIVES)
+    if drives:
+        found["drives"] = {str(label): [None if value is None else float(value) for value in bounds]
+                           for label, bounds in sorted(drives.items())}
+    return found
+
+
+def declarations_key(collision: str | None, frames: dict[str, Any], declared: dict[str, Any] | None = None) -> str | None:
     """What a part declares for a simulator as its label holds it (``DECLARATIONS_GUID``): JSON,
     ASCII alone, keys sorted; None for a part that declares nothing."""
-    if collision is None and not frames:
+    if collision is None and not frames and not declared:
         return None
-    return json.dumps({"collision": collision, "frames": {name: list(values) for name, values in frames.items()}},
-                      sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=True)
+    return json.dumps({"collision": collision, "frames": {name: list(values) for name, values in frames.items()},
+                       **(declared or {})}, sort_keys=True, separators=(",", ":"), allow_nan=False, ensure_ascii=True)
 
 
-def declarations_from(text: str | None) -> tuple[str | None, dict[str, tuple[float, ...]]]:
-    """``declarations_key`` read back: the collision and the frames."""
+def declarations_from(text: str | None) -> tuple[str | None, dict[str, tuple[float, ...]], dict[str, Any]]:
+    """``declarations_key`` read back: the collision, the frames and the rest (``DECLARED``)."""
     if not text:
-        return None, {}
+        return None, {}, {}
     value = json.loads(text)
-    return value.get("collision"), {name: tuple(float(item) for item in values)
-                                    for name, values in (value.get("frames") or {}).items()}
+    return (value.get("collision"), {name: tuple(float(item) for item in values)
+                                     for name, values in (value.get("frames") or {}).items()},
+            {key: value[key] for key in DECLARED if key in value})
 
 
 def _label_material(label: Any) -> Any:
@@ -2159,10 +2196,10 @@ def _prototype(index: int, label: Any, shape: Any, entry: str, loaded: Loaded) -
         if held_materials:
             part_material = _held_materials(faces, held_materials, part_material, face_materials)
     name = step_name(_label_name(label)) if loaded.step else _label_name(label)
-    collision, frames = declarations_from(_label_text(label, DECLARATIONS_GUID))
+    collision, frames, declared = declarations_from(_label_text(label, DECLARATIONS_GUID))
     return Prototype(index, local, name or f"part{index + 1}", part_color, found_key,
                      face_names, edge_names, face_colors, entry, part_material, face_materials,
-                     vertex_names=vertex_names, collision=collision, frames=frames)
+                     vertex_names=vertex_names, collision=collision, frames=frames, declared=declared)
 
 
 

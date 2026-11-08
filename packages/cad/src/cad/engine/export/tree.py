@@ -75,7 +75,8 @@ def tree_of(view: Any) -> Any:
                                 for ordinal, given in (prototype.get("faceMaterials") or {}).items() if given},
                 collision=prototype.get("collision"),
                 frames={name: tuple(float(value) for value in values)
-                        for name, values in (prototype.get("frames") or {}).items()})
+                        for name, values in (prototype.get("frames") or {}).items()},
+                declared={key: prototype[key] for key in document.DECLARED if key in prototype})
             order.append(found)
         return found
 

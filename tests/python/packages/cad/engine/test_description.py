@@ -3,7 +3,8 @@ limits, as-built value and pose in SI, each box's mass, centre and inertia from 
 description's frames composed at zero and at a state placing every part where the mechanism's
 forward kinematics does, a pair followed backwards and a chain with a slide too; a coupling written
 on the joints that follow; a part's collision and named frames, declared on the part and round-tripped
-through the xbf and through a warm build; a model with no mechanism a link per top-level part; a loop described and refused;
+through the xbf and through a warm build; a part kept a body of its own, an exclusion and a joint's drive
+limits, declared, described and round-tripped through the xbf, and refused where they are wrong; a model with no mechanism a link per top-level part; a loop described and refused;
 a part with no density warned, one whose density is not positive refused."""
 
 from __future__ import annotations
@@ -386,6 +387,94 @@ class DeclarationsTest(_Folder):
             frame(bd.Box(1, 1, 1), "tip", (1, 2, 3))
         with self.assertRaisesRegex(ValueError, "collision_default 'hull'"):
             describe(Source.read(self.folder / "XBF/hinge.xbf").view(), collision_default="hull")
+
+
+# A camera fastened to the arm's tip, kept a body of its own, excluded from the base; the elbow named as
+# its arm is, with its drive's limits.
+BODIES = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import body, exclude, limits
+from cad.engine import xbf
+
+
+@xbf("XBF/bodies.xbf")
+def bodies():
+    base = bd.Box(100, 60, 20)
+    base.label = "base"
+    arm = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm.label = "arm"
+    cam = bd.Box(10, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    cam.label = "cam"
+    for part in (base, arm, cam):
+        part.material = metals.aluminum()
+    bd.RevoluteJoint("arm", base, axis=bd.Axis((40, 0, 20), (0, 1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("arm", arm, bd.Location())
+    base.joints["arm"].connect_to(arm.joints["arm"], angle=30)
+    bd.RigidJoint("tip", arm, bd.Location((120, 0, 0)))
+    bd.RigidJoint("seat", cam, bd.Location())
+    arm.joints["tip"].connect_to(cam.joints["seat"])
+    body(cam, "camera")
+    exclude(cam, "base")
+    root = bd.Compound(children=[base, arm, cam], label="bodies")
+    return limits(root, "arm", effort=27, velocity=6.28)
+"""
+
+
+class BodiesTest(_Folder):
+    def test_a_body_an_exclusion_and_drive_limits_are_described_and_round_trip_through_the_xbf(self) -> None:
+        description, structure = self.described("bodies", BODIES)
+        self.assertEqual([link.name for link in description.links], ["world", "base", "arm", "camera"])
+        self.assertEqual([(joint.name, joint.kind, joint.parent, joint.child) for joint in description.joints],
+                         [("bodies", "fixed", "world", "base"), ("arm", "revolute", "base", "arm"),
+                          ("camera", "fixed", "arm", "camera")])
+        arm, camera = description.link("arm"), description.link("camera")
+        # The camera is a body of its own where the part stands, with its own mass; the arm's is its own alone.
+        index = next(at for at, instance in enumerate(structure["instances"]) if instance["path"].endswith("/cam"))
+        np.testing.assert_allclose(camera.frame, _metres(np.array(structure["instances"][index]["matrix"]).reshape(4, 4).T),
+                                   atol=1e-12)
+        self.assertEqual(([v.name for v in arm.visuals], [v.name for v in camera.visuals]), (["arm"], ["cam"]))
+        self.assertAlmostEqual(camera.inertial.mass, 1e-6 * _aluminium(), delta=1e-12)
+        self.assertAlmostEqual(arm.inertial.mass, 0.12 * 0.02 * 0.01 * _aluminium(), delta=1e-9)
+        elbow = description.joints[1]
+        self.assertEqual((elbow.effort, elbow.velocity), (27.0, 6.28))
+        self.assertEqual(description.excludes, (("base", "camera"),))
+        self.assertEqual(description.warnings, ())
+        # The structure carries them, the same from the file as from the build's tree, and a shape rebuilt from
+        # the document carries them as the model gave them.
+        path = self.folder / "XBF/bodies.xbf"
+        loaded = document.Loaded(path).structure()
+        self.assertEqual(loaded["prototypes"], document.tree_structure(document.saved(path), path)["prototypes"])
+        by_name = {prototype["name"]: prototype for prototype in loaded["prototypes"]}
+        self.assertEqual((by_name["cam"]["body"], by_name["cam"]["exclude"]), ("camera", ["base"]))
+        self.assertEqual(by_name["base"]["drives"], {"arm": [27.0, 6.28]})
+        self.assertNotIn("body", by_name["arm"])
+        rebuilt = {child.label: child for child in Source.read(path).shape().children}
+        self.assertEqual((rebuilt["cam"].__dict__["_body"], rebuilt["cam"].__dict__["_exclude"]), ("camera", ("base",)))
+        self.assertEqual(rebuilt["base"].__dict__["_drives"], {"arm": (27.0, 6.28)})
+
+    def test_a_wrong_body_exclusion_or_limit_is_refused_by_name(self) -> None:
+        import build123d as bd
+
+        from cad.build123d import body, exclude, limits
+
+        part = bd.Box(1, 1, 1)
+        part.label = "part"
+        assembly = bd.Compound(children=[part], label="assembly")
+        with self.assertRaisesRegex(ValueError, "body: assembly is an assembly"):
+            body(assembly)
+        with self.assertRaisesRegex(ValueError, "'part' with itself"):
+            exclude(part, "part")
+        with self.assertRaisesRegex(ValueError, "no revolute or linear joint 'elbow' on assembly"):
+            limits(assembly, "elbow", effort=1)
+        bd.BallJoint("wrist", part)
+        with self.assertRaisesRegex(ValueError, "a BallJoint moves two values or three"):
+            limits(assembly, "wrist", effort=1)
+        bd.RevoluteJoint("elbow", part)
+        with self.assertRaisesRegex(ValueError, "effort is a positive number, not 0"):
+            limits(assembly, "elbow", effort=0)
+        with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
+            self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
 
 
 # A declared part moved after its declarations: an edit of one rebuilds what the memo hands back.

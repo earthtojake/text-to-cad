@@ -3826,6 +3826,9 @@ def _shape_key(shape: Any, state: _Run) -> int:
         # first run's result held, so they are its input, as its material is.
         state_dict.get("_collision"),
         _normalize(state_dict.get("_frames") or {}, state),
+        state_dict.get("_body"),
+        _normalize(state_dict.get("_exclude") or (), state),
+        _normalize(state_dict.get("_drives") or {}, state),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
     return _intern((placed, attrs, children))

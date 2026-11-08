@@ -38,11 +38,16 @@ Every file is written to a temporary file beside its target and moved over it; a
 when its bytes change, and an MJCF, a URDF, an SDF and each of their meshes alike (each writer stages
 them itself).
 
+What a writer must say about a file it writes -- a robot writer's renamed link or joint -- it says with
+``note(text)``: a line ``translate`` hands its ``told`` (the build's and the export's log), or, written
+outside a translation, an ``ExportWarning``.
+
 Importing this package imports no kernel: a kind's writer loads on its first use.
 """
 
 from __future__ import annotations
 
+import contextvars
 import importlib
 import threading
 from dataclasses import dataclass
@@ -51,12 +56,32 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "Kind", "Source", "View", "kind_of", "refused",
+__all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "ExportWarning", "Kind", "Source", "View", "kind_of",
+           "note", "refused",
            "tolerance_of", "translate"]
 
 
 class ExportRefused(ValueError):
     """An export the engine will not write, said by name before anything is written."""
+
+
+class ExportWarning(UserWarning):
+    """What a writer says of a file it wrote, outside a translation (``note``)."""
+
+
+# The lines the translation running in this context hears (``note``), or None outside one.
+_NOTES: "contextvars.ContextVar[list[str] | None]" = contextvars.ContextVar("cad_export_notes", default=None)
+
+
+def note(text: str) -> None:
+    """Say ``text`` of the file being written: to the translation's ``told``, else as an ``ExportWarning``."""
+    heard = _NOTES.get()
+    if heard is None:
+        import warnings
+
+        warnings.warn(text, ExportWarning, stacklevel=2)
+    elif text not in heard:
+        heard.append(text)
 
 
 @dataclass(frozen=True)
@@ -356,6 +381,12 @@ class Source:
                     trsf.SetValues(*(float(value) for value in rows[:3, :].reshape(-1)))
                     frames[frame_name] = Location(TopLoc_Location(trsf))
                 made.__dict__["_frames"] = frames
+            if prototype.get("body") is not None:
+                made.__dict__["_body"] = prototype["body"]
+            if prototype.get("exclude"):
+                made.__dict__["_exclude"] = tuple(prototype["exclude"])
+            if prototype.get("drives"):
+                made.__dict__["_drives"] = {label: tuple(bounds) for label, bounds in prototype["drives"].items()}
             # A part stands where its instance does: at its own placement in its assembly, unless the
             # document places it elsewhere (a posed structure), where it stands in its assembly's frame.
             world = matrix_of(instance["matrix"])
@@ -482,10 +513,23 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     view.tolerance = tolerance
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
-    if not spec.atomic:
-        spec.write(view, path)
-        return path.stat().st_size
-    _written, size = put(path, lambda temporary: spec.write(view, temporary))
+    heard: list[str] = []
+    token = _NOTES.set(heard)
+    try:
+        if not spec.atomic:
+            spec.write(view, path)
+            size = path.stat().st_size
+        else:
+            _written, size = put(path, lambda temporary: spec.write(view, temporary))
+    finally:
+        _NOTES.reset(token)
+    for text in heard:
+        if told is not None:
+            told(f"{path.name}: {text}")
+        else:
+            import warnings
+
+            warnings.warn(f"{path.name}: {text}", ExportWarning, stacklevel=2)
     if told is not None:
         for name, faces in (view.unmeshed or {}).items():
             told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "

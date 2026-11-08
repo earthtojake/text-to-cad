@@ -12,7 +12,19 @@ its pair reaches it from, the pairs followed from the ground as ``mechanism.link
 them. With none (a STEP, a model without joints), each top-level node of the document's tree is a
 link hung from ``world`` by a ``fixed`` joint named for it, so a scene can make any of them free; an
 assembly at the top is one link, all its parts together. A link's name is its mechanism link's (its
-first part's), or its node's, made unique with ``_2``, ``_3``.
+first part's), or its node's, made unique with ``_2``, ``_3``; a joint's is unique among joints alone.
+
+**Bodies.** A part declared a body (``declarations.body``) leaves the link it was made part of: it is a
+link of its own, named for the declaration (its name, else the part's), framed at the part's own
+placement, hung from that link by a ``fixed`` joint of the same name, after it in link order. A link
+every part of which is declared a body keeps its first, and says so.
+
+**Drives and exclusions.** A pair's joint takes the drive limits (``declarations.limits``) its moving
+joint's part declares for its label: the part in the pair's link 1 that holds it (the one at the
+qualifier's path, for a label two pairs share). A declared exclusion (``declarations.exclude``) is
+each link holding the part that declares it, with each link holding a part at or below a node of
+the label it names (a part's own label names it); a label that names no node is refused by name,
+and two links' pair is kept once.
 
 **Frames** (``description.py``'s **Units and frames**). For a pair from link 1 (the part holding the
 moving joint) to link 2 (the rigid joint's), with ``W1``/``W2`` the links as built, ``item_1``/``item_2``
@@ -144,17 +156,91 @@ class _Describer:
             loops = tuple((kinematics.get("loop") or ()))
             closing = self._mechanism(kinematics, links, joints)
             poses = self._poses(kinematics, joints)
+            self._drives(kinematics)
         else:
             self._unjointed(links, joints)
+        self._bodies(links, joints)
+        excludes = self._excludes(links)
         meshes = self._meshes()
         for link in links[1:]:
             self._geometry(link)
-        found = Description(self.structure["name"], links, joints, meshes, poses, loops)
+        found = Description(self.structure["name"], links, joints, meshes, poses, loops, excludes=excludes)
         checked = found if not loops else Description(found.name, links, [j for j in joints if j.name not in closing],
-                                                      meshes, poses)
+                                                      meshes, poses, excludes=excludes)
         checked.check()
         found.warnings = tuple(self.warnings)
         return found
+
+    def _declared(self, index: int) -> dict[str, Any]:
+        """What instance ``index``'s prototype declares beside its collision and frames (``document.DECLARED``)."""
+        return self.prototypes[self.instances[index]["prototype"]]
+
+    def _name(self, index: int) -> str:
+        return self.instances[index]["path"].rsplit("/", 1)[-1]
+
+    def _bodies(self, links: list[Link], joints: list[Joint]) -> None:
+        """Each part declared a body a link of its own, fixed to the link it was made part of (the module's
+        **Bodies**)."""
+        for link in list(links[1:]):
+            bodies = [index for index in link.parts if self._declared(index).get("body") is not None]
+            if not bodies:
+                continue
+            kept = tuple(index for index in link.parts if index not in bodies)
+            if not kept:
+                kept = (bodies.pop(0),)
+                self.warn(f"part {self._name(kept[0])!r} is declared a body and is all of link {link.name!r}: it "
+                          "is that link, a body already")
+            link.parts = kept
+            at = links.index(link)
+            for index in bodies:
+                wanted = self._declared(index)["body"] or self._name(index)
+                child = Link(_unique(wanted, self.link_names), self.worlds[index].copy(), parts=(index,))
+                at += 1
+                links.insert(at, child)
+                joints.append(self._fixed(child.name, link, child))
+
+    def _excludes(self, links: list[Link]) -> tuple[tuple[str, str], ...]:
+        """The link pairs the parts' declarations say never collide (the module's **Drives and exclusions**)."""
+        owner = {index: at for at, link in enumerate(links) for index in link.parts}
+        found: set[tuple[int, int]] = set()
+        for index, at in sorted(owner.items()):
+            for label in self._declared(index).get("exclude") or ():
+                others = {owner[other] for other in owner if label in self.instances[other]["path"].split("/")}
+                if not others:
+                    raise DescriptionError(f"part {self._name(index)!r} excludes {label!r}, which names no part or "
+                                           "assembly of the document")
+                for other in sorted(others):
+                    if other == at:
+                        self.warn(f"part {self._name(index)!r} excludes {label!r}, which link {links[at].name!r} "
+                                  "holds too: a body never collides with itself")
+                        continue
+                    found.add((min(at, other), max(at, other)))
+        return tuple((links[a].name, links[b].name) for a, b in sorted(found))
+
+    def _drives(self, kinematics: dict[str, Any]) -> None:
+        """Each pair's joint given the drive limits its moving joint's part declares (the module's **Drives and
+        exclusions**); a declaration no joint takes is warned."""
+        blocks = kinematics["links"]
+        declared = {(index, label) for block in blocks for index in block.get("instances") or ()
+                    for label in self._declared(index).get("drives") or {}}
+        for pair in kinematics.get("pairs") or ():
+            joint = getattr(self, "pair_joints", {}).get(pair["label"])
+            if joint is None:
+                continue
+            qualifier, _sep, label = pair["label"].rpartition(":")
+            for index in blocks[pair["links"][0]].get("instances") or ():
+                path = self.instances[index]["path"]
+                if qualifier and path != qualifier and not path.endswith("/" + qualifier):
+                    continue
+                bounds = (self._declared(index).get("drives") or {}).get(label)
+                if bounds is None:
+                    continue
+                declared.discard((index, label))
+                if joint.effort is None and joint.velocity is None:
+                    joint.effort, joint.velocity = (None if value is None else float(value) for value in bounds)
+        for index, label in sorted(declared):
+            self.warn(f"part {self._name(index)!r} limits joint {label!r}, which is no joint of the description: "
+                      "the limits are left out")
 
     def _fixed(self, name: str, parent: Link, child: Link) -> Joint:
         return Joint(_unique(name, self.joint_names), "fixed", parent.name, child.name,

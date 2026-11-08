@@ -40,7 +40,9 @@ its colour; a collision is what the part's ``collision`` declaration asked for
 (``cad.build123d.collision``): the mesh itself (a simulator hulls it; the default), a ``box``, a
 ``sphere``, a ``cylinder`` or a ``capsule`` fitted to the part by the kernel (an oriented bounding
 box, its axis the longest side), or none. Named frames (``cad.build123d.frame``) are kept on their
-link, in the link's frame, for a writer's sites or fixed frames.
+link, in the link's frame, for a writer's sites or fixed frames. A part declared a body
+(``cad.build123d.body``) is a link of its own, at its own placement, hung by a ``fixed`` joint of its
+name from the link it would have merged into, with its own mass, geometry and frames.
 
 **Joints.** A pair becomes a joint of ``kind`` ``revolute`` (a range) or ``continuous`` (none),
 ``prismatic`` (a slide, ranged or not), ``cylindrical`` (a turn and a slide on one axis: two
@@ -49,8 +51,13 @@ link it is below in the tree, by a ``fixed`` joint. The ground is the first link
 unless the model names it. A coupling is written on the joint that follows: ``follows =
 (leader, ratio, offset)`` meaning ``value = ratio * leader + offset`` around zero, which is what
 URDF's ``<mimic>`` and MuJoCo's ``<equality><joint>`` say; a coupling of more than two joints is
-a chain of followers from its first. A mechanism with a loop is described with its pairs and
+a chain of followers from its first. A joint's ``effort`` and ``velocity`` are its drive's bounds
+(``cad.build123d.limits``): N*m and rad/s for a turn, N and m/s for a slide, None where the model
+gives none. A mechanism with a loop is described with its pairs and
 ``loops`` naming them, and every writer refuses it (no format here solves a loop).
+
+**Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
+each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
 
 **Poses.** The mechanism's named states, each as ``{joint: value}`` around zero, in radians or
 metres (a cylindrical or spherical joint's value is a tuple). Configuration sequences are not
@@ -149,6 +156,8 @@ class Joint:
     limits: tuple[tuple[float | None, float | None], ...] = ()
     as_built: tuple[float, ...] = ()  # the authored value(s) that zero stands for, radians or metres
     follows: tuple[str, float, float] | None = None  # (leader joint, ratio, offset): value = ratio * leader + offset
+    effort: float | None = None  # the drive's bound: N*m for a turn, N for a slide; None where unbounded
+    velocity: float | None = None  # rad/s for a turn, m/s for a slide; None where unbounded
 
     def __post_init__(self) -> None:
         if self.kind not in JOINT_KINDS:
@@ -177,7 +186,8 @@ class Pose:
 @dataclass
 class Description:
     """A document as a robot: links in tree order (the ground first), joints parents-first, the meshes the
-    links' geometry names, the poses, and the mechanism's loops (every writer refuses a description with one)."""
+    links' geometry names, the poses, the link pairs that never collide, and the mechanism's loops (every
+    writer refuses a description with one)."""
 
     name: str
     links: list[Link]
@@ -185,7 +195,8 @@ class Description:
     meshes: dict[str, Mesh] = field(default_factory=dict)
     poses: list[Pose] = field(default_factory=list)
     loops: tuple[str, ...] = ()
-    warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
+    warnings: tuple[str, ...] = ()
+    excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)  # what the description could not carry, said once each
 
     @property
     def root(self) -> Link:
@@ -233,6 +244,10 @@ class Description:
             for geometry in [v.geometry for v in link.visuals] + [c.geometry for c in link.collisions]:
                 if geometry.kind == "mesh" and geometry.mesh not in self.meshes:
                     raise DescriptionError(f"link {link.name!r} names mesh {geometry.mesh!r}, which there is not")
+        for pair in self.excludes:
+            for end in pair:
+                if end not in known:
+                    raise DescriptionError(f"an exclusion names link {end!r}, which there is not")
 
 
 def srgb(linear: tuple[float, ...] | None, default: tuple[float, float, float, float] = (0.8, 0.8, 0.8, 1.0)) -> tuple[float, float, float, float]:
