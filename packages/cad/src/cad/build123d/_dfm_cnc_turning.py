@@ -8,7 +8,8 @@ planes square to it whose every edge is a circle about it (a square plate's face
 ``cross_hole`` (a hole on another axis: ``radial`` where its axis is square to the turning axis and meets it,
 ``perpendicular`` where it is square to it beside it, ``off_axis`` otherwise -- the hole itself is marked
 so), a ``flat`` (one plane along the axis), a ``slot`` (planes along the axis facing each other: a keyway), or a
-``feature``.
+``feature``. A live tool mills these, so their pockets and internal corners are measured as a mill's are
+(``_dfm_cnc._pockets`` over their faces alone).
 
 **Diameters** are the convex coaxial cylinders (diameter, length along the axis); **bores** the holes on the
 axis; **grooves** the coaxial cylinders whose both ends meet planes square to the axis by concave edges: an
@@ -167,7 +168,7 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
         live.append({"kind": kind, "relation": hole.get("relation") if hole else None,
                      "area_mm2": round(sum(model.mesh_area(f) for f in group), 4), "face_count": len(group),
                      "location": model.ref(main), "faces": [model.ref(f) for f in sorted(group)][:20],
-                     "xyz": model.center(main)})
+                     "xyz": model.center(main), "_faces": sorted(group)})
     return {"turning": [turning], "turned_diameters": diameters, "bores": bores, "grooves": grooves,
             "live_tooling": live}
 

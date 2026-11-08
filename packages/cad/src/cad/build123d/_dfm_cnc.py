@@ -1,10 +1,15 @@
 """cnc's measurements of exact geometry (``cad._internal.dfm.cnc`` says what they are for).
 
 Each part of the document is measured on its own B-rep (``_dfm_cnc_model.Model``), and every family's items
-say which part and face they are at (``plate/face 7``). The families, and how each is measured:
+say which part and face they are at (``plate/face 7``). Each part is machined in its own frame
+(``_dfm_cnc_model.machine_frame``: the axes its faces' normals and its holes' axes square, never the world's), so
+a part turned in its model reads as drawn: it is measured turned into that frame, every place and direction
+it reports turned back to its own coordinates (``machine.frames`` says each part's). "World axis" below is
+the machine frame's. The families, and how each is measured:
 
-- ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth, blind or
-  through by an exact ray along the axis, the floor (drill point and its angle, or flat), counterbores,
+- ``holes`` (``_dfm_cnc_holes``): concave cylinders and their coaxial neighbours; diameter, depth (the drilled
+  length below any counterbore; ``overall_depth_mm`` the whole), blind or through by an exact ray along the
+  axis, the floor (drill point and its angle, or flat), counterbores (each with its own depth to diameter),
   countersinks, the standard drill each diameter is.
 - ``pockets``: every planar face that meets, by a concave edge (or through a concave root fillet), a face
   lying along its normal is a pocket's floor; its walls are those faces and the faces along the normal joined
@@ -43,7 +48,9 @@ say which part and face they are at (``plate/face 7``). The families, and how ea
   (``BRepExtrema_DistShapeShape``), kept where that segment runs through the material near square to the
   face. A face across that meets the face at a knife edge is no wall: ``knife_edges`` reports it.
 - ``gaps``: the width of the void in front of each face (the same ray outward), the narrowest per face under
-  10 mm: the slots and channels a tool must fit in; refined like walls, through the void.
+  10 mm: the slots and channels a tool must fit in; refined like walls, through the void. One pocket's or
+  cavity's gaps are one item, its narrowest (``pocket``, ``also_at``); a recess's floor-to-ceiling height, where a
+  slot cutter makes the recess, is that cutter's (``made_by`` ``slot_cutter``), else an end mill's.
 - ``knife_edges``: convex edges whose material angle is under ``KNIFE_DEG`` (printing's notion): the
   material thins to nothing there, whatever a sampled wall would read.
 - ``access`` and ``setups``: which sampled points of each face a straight tool reaches from each of the
@@ -57,7 +64,12 @@ say which part and face they are at (``plate/face 7``). The families, and how ea
 - ``stock``: the part's box or ``--stock``, the material removed, the part's size sorted.
 - ``small_features``: the shortest edge, the smallest face, and the faces narrower than half a millimetre.
 - with ``turning`` (``_dfm_cnc_turning``): the axis, how much of the part turns about it, its diameters,
-  bores, grooves and the features a lathe's live tooling makes.
+  bores, grooves and the features a lathe's live tooling makes; ``pockets`` and ``internal_corners`` are then
+  those features' alone (a keyway's), measured as a mill's.
+
+One cause is one judged item (``_one_cause``): the faces a special cutter's recess leaves unreached, and those
+of an inclined hole on three or four axes, are kept as ``access`` items naming it (``part_of``), judged once
+as that recess (``special_cutter``) or that hole (``inclined_feature``).
 
 A figure the geometry does not give is None, never a guess. Lengths are millimetres.
 """
@@ -76,7 +88,7 @@ from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_holes import holes as find_holes
 from cad.build123d._dfm_cnc_holes import threads as find_threads
 from cad.build123d._dfm_cnc_model import (LIFT, SAME, WORLD, Model, about, directions_for, edge_normals,
-                                          fibonacci, unit)
+                                          fibonacci, framed, machine_frame, turned, unit)
 
 __all__ = ["measure"]
 
@@ -119,21 +131,34 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     scalars: dict[str, dict[str, Any]] = {}
     failed: dict[str, str] = {}
     models: list[Model] = []
+    frames: list[np.ndarray] = []
+    framing: list[dict[str, Any]] = []
     for part in document.parts:
         checkpoint()
         try:
             model = Model(part)
+            # the part is machined in its own frame (``machine_frame``): measured turned into it, every place
+            # and direction it reports turned back
+            rotation, share = machine_frame(model.faces, model.surfaces)
+            if not np.array_equal(rotation, np.eye(3)):
+                model = Model(framed(part, rotation), [turned(surface, rotation) for surface in model.surfaces])
         except Exception as error:  # noqa: BLE001 - a part that does not read is the report's to say
             failed.setdefault("model", f"{part.name}: {error}")
             continue
         models.append(model)
+        frames.append(rotation)
+        framing.append({"part": part.name, "location": model.ref(1), "axes": [brep.rounded(row, 6) for row in rotation],
+                        "turned": not np.array_equal(rotation, np.eye(3)), "aligned_area_fraction": round(share, 4)})
+        before = {name: len(items) for name, items in families.items()}
         _measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed)
+        for name, items in families.items():
+            for item in items[before.get(name, 0):]:
+                item.setdefault("_model", len(models) - 1)
     report: dict[str, Any] = {"machine": {"axes": axes, "turning": turning,
                                           "tools_mm": list(tools) if tools else None,
-                                          "stock_mm": list(stock) if stock else None}}
-    # a turned part is not searched for milled pockets: those families are absent, not empty
-    names = ([name for name in _FAMILIES if name not in ("pockets", "internal_corners")]
-             + ["turning", "turned_diameters", "bores", "grooves", "live_tooling"]) if turning else list(_FAMILIES)
+                                          "stock_mm": list(stock) if stock else None, "frames": framing}}
+    # a turned part's pockets and corners are its live tooling's milled features alone (``_pockets``'s ``only``)
+    names = list(_FAMILIES) + (["turning", "turned_diameters", "bores", "grooves", "live_tooling"] if turning else [])
     for name in names:
         if name in failed:
             report[name] = {"error": failed[name]}
@@ -157,7 +182,24 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                     pairs.add(key)
                     folded.append(item)
             items = folded
-        family = {"items": [_public(item) for item in items[:CAP]], "count": len(items), **scalars.get(name, {})}
+        if name == "gaps":
+            # one cavity's width is one item: its narrowest gap, the others named beside it
+            narrowest: dict[tuple[int, str], dict[str, Any]] = {}
+            kept = []
+            for item in items:
+                cavity = item.get("pocket")
+                if cavity is None:
+                    kept.append(item)
+                    continue
+                key = (item["_model"], cavity)
+                if key in narrowest:
+                    narrowest[key].setdefault("also_at", []).append(item["location"])
+                    continue
+                narrowest[key] = item
+                kept.append(item)
+            items = kept
+        family = {"items": [_public(_to_part(item, frames[item["_model"]]) if "_model" in item else item)
+                            for item in items[:CAP]], "count": len(items), **scalars.get(name, {})}
         report[name] = family
     if "model" in failed:
         report["model"] = {"error": failed["model"]}
@@ -166,8 +208,95 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     return report
 
 
+def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[str, list[dict[str, Any]]],
+               holes: list[dict[str, Any]], pockets: list[dict[str, Any]], turning: bool) -> None:
+    """One cause, one item a rule judges; the others it explains name it (``part_of``) and are kept as facts:
+
+    - the faces a special cutter's recess leaves unreached (``undercut``, ``no_line_of_sight``) are that
+      recess's, its ``special_cutter`` item listing them (``unreached_faces``);
+    - a hole along no direction the machine has is ``inclined_feature``'s: the faces of it no direction reaches
+      are its own, not an undercut of their own;
+    - a gap between two faces of one pocket or cavity is that cavity's width: its narrowest is the item, the
+      others it folds (``measure``), and a gap whose two faces are a floor and a ceiling of a recess a slot
+      cutter makes (planes square to one direction) is the cutter's thickness to cut, not an end mill's
+      diameter (``made_by`` ``slot_cutter``).
+
+    Only this part's items (``index``'s: those with no ``_model`` yet, its gaps that model's)."""
+    access = [item for item in families.get("access", []) if "_model" not in item]
+    specials = [item for item in access if item.get("kind") == "special_cutter"]
+    for special in specials:
+        faces = special.get("_faces") or set()
+        folded: dict[str, list[str]] = {"undercut": [], "no_line_of_sight": []}
+        for item in access:
+            if item.get("kind") in folded and item.get("part_of") is None and _ordinal(item["location"]) in faces:
+                item["part_of"] = special["location"]
+                folded[item["kind"]].append(item["location"])
+        if folded["undercut"] or folded["no_line_of_sight"]:
+            special["unreached_faces"] = folded["undercut"] + folded["no_line_of_sight"]
+            said = [", ".join(folded["undercut"]) + " (from no machine direction)"] if folded["undercut"] else []
+            if folded["no_line_of_sight"]:
+                said.append(", ".join(folded["no_line_of_sight"]) + " (by no straight line from outside at all: "
+                            "the cutter needs a way in, or a keyseat cutter or EDM)")
+            special["also"] = "; ".join(said)
+    if not turning and state["axes"] in (3, 4):
+        for hole in holes:
+            if hole.get("reachable") is False:
+                own = set(hole.get("_faces") or ())
+                for item in access:
+                    if item.get("hole") and item.get("part_of") is None and _ordinal(item["location"]) in own:
+                        item["part_of"] = hole["location"]
+    for item in [item for item in families.get("gaps", []) if item.get("_model") == index]:
+        pair = {item["_face"], item["_opposite"]}
+        for special in specials:
+            if pair <= (special.get("_faces") or set()) and _floor_and_ceiling(model, *pair):
+                item["made_by"] = "slot_cutter"
+                item["cutter_recess"] = special["location"]
+        for pocket in pockets:
+            faces = set(pocket.get("_walls") or ()) | set(pocket.get("_fillets") or ()) | (
+                {pocket["_floor"]} if pocket.get("_floor") else set())
+            if pair <= faces:
+                item["pocket"] = pocket["floor"] or pocket["location"]
+                break
+
+
+def _ordinal(ref: str) -> int:
+    """The face ordinal of a face ref (``plate/face 7``)."""
+    return int(str(ref).rsplit(" ", 1)[-1])
+
+
+def _floor_and_ceiling(model: Model, a: int, b: int) -> bool:
+    """Whether two faces are planes facing each other square to one direction (a recess's floor and ceiling)."""
+    sa, sb = model.surface(a), model.surface(b)
+    return sa.kind == sb.kind == "plane" and float(np.asarray(sa.normal) @ np.asarray(sb.normal)) < -SAME
+
+
 def _public(item: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in item.items() if not key.startswith("_")}
+
+
+#: The fields that hold a place, and those that hold a direction, of an item measured in its part's frame.
+_PLACES = frozenset({"xyz", "axis_origin"})
+_DIRECTIONS = frozenset({"axis", "opening", "direction", "tangent", "rotary_axis"})
+
+
+def _to_part(value: Any, rotation: np.ndarray, key: str | None = None) -> Any:
+    """``value`` (an item, or what it holds) measured in a part's machine frame (``rotation`` turned the part
+    into it), as it lies in the part's own coordinates: places and directions turned back, the rest as it is."""
+    if rotation is None or np.array_equal(rotation, np.eye(3)):
+        return value
+    if isinstance(value, dict):
+        return {name: _to_part(found, rotation, name) for name, found in value.items()}
+    if key == "inclined_directions" and isinstance(value, list):
+        return [_to_part(found, rotation, "direction") for found in value]
+    if key == "hole_axis" and isinstance(value, str):
+        return ", ".join(f"{v:g}" for v in _to_part([float(part) for part in value.split(",")], rotation, "axis"))
+    if key in _PLACES | _DIRECTIONS and isinstance(value, (list, tuple)) and len(value) == 3 and \
+            all(isinstance(v, (int, float)) for v in value):
+        back = rotation.T @ np.asarray(value, dtype=float)
+        return brep.rounded(back, 4 if key in _PLACES else 6)
+    if isinstance(value, list):
+        return [_to_part(found, rotation, key) for found in value]
+    return value
 
 
 def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tuple[float, ...] | None,
@@ -266,9 +395,25 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
         if result is not None:
             for name, items in result.items():
                 families.setdefault(name, []).extend(items)
+            # the live tooling's features are milled: their pockets and corners are a mill's, judged as such
+            live = {face for item in result["live_tooling"] for face in item["_faces"]}
+            # and the planes they meet at a concave edge: a keyway's ends are square to the axis, but milled
+            live |= {other for face in live for edge, other in model.neighbours(face)
+                     if edge.concave and model.surface(other).kind == "plane"}
+            pockets = run("pockets", lambda: _pockets(model, state, live))
+            if pockets is not None:
+                found_pockets = pockets["pockets"]
+                families.setdefault("pockets", []).extend(pockets["pockets"])
+                families.setdefault("internal_corners", []).extend(pockets["corners"])
+                reported = {corner["_edge"] for corner in pockets["corners"] if corner.get("_edge")}
+                families["sharp_edges"] = [item for item in families.get("sharp_edges", [])
+                                           if item.get("_model") is not None or item["_edge"] not in reported]
+            else:
+                failed.setdefault("internal_corners", failed["pockets"])
         else:
-            for name in ("turned_diameters", "bores", "grooves", "live_tooling"):
+            for name in ("turned_diameters", "bores", "grooves", "live_tooling", "pockets", "internal_corners"):
                 failed.setdefault(name, failed["turning"])
+    _one_cause(model, index, state, families, holes, found_pockets, turning)
 
 
 # --- voids -----------------------------------------------------------------------------------------------
@@ -407,7 +552,7 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             continue
         nowhere = float(areas[mask & ~anywhere].sum()) / total
         where = points[np.flatnonzero(mask & unreached)[0]]
-        items.append({"unreached_fraction": round(missed, 4), "unreached_any_direction_fraction": round(nowhere, 4),
+        items.append({"unreached_fraction": round(missed, 9), "unreached_any_direction_fraction": round(nowhere, 9),
                       "kind": "no_line_of_sight" if nowhere > 0 else "undercut",
                       "hole": i in state.get("hole_axis", {}), "hole_axis": state.get("hole_axis", {}).get(i),
                       "surface": model.surface(i).kind, "location": model.ref(i), "xyz": brep.rounded(where)})
@@ -650,7 +795,8 @@ def _across(model: Model, state: dict[str, Any], outward: bool, cap: float) -> l
 def _gaps(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
     items = []
     for item in _across(model, state, True, GAP_CAP_MM):
-        item["width_mm"] = round(item.pop("distance"), 4)
+        item["width_mm"] = round(item.pop("distance"), 9)
+        item["made_by"] = "end_mill"  # a slot cutter's where it bounds a recess only such a cutter makes (later)
         item["surface"] = model.surface(item["_face"]).kind
         items.append(item)
     return items
@@ -662,7 +808,7 @@ def _walls(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
         i = item["_face"]
         thickness = item.pop("distance")
         height = _height(model, i)
-        item.update(thickness_mm=round(thickness, 4), height_mm=round(height, 4) if height else None,
+        item.update(thickness_mm=round(thickness, 9), height_mm=round(height, 4) if height else None,
                     height_to_thickness=round(height / thickness, 4) if height and thickness > 0 else None,
                     surface=model.surface(i).kind)
         items.append(item)
@@ -745,7 +891,7 @@ def _refine(model: Model, item: dict[str, Any], outward: bool) -> None:
         best = (length, pa)
     if best is None or best[0] >= float(item[key]):
         return
-    item[key] = round(best[0], 4)
+    item[key] = round(best[0], 9)
     item["xyz"] = brep.rounded(best[1])
     item["refined"] = True
     if not outward and item.get("height_mm"):
@@ -901,7 +1047,8 @@ def _special(model: Model, found: list[tuple[Any, str]]) -> list[dict[str, Any]]
                       "edge_count": len(edges), "edges": [model.part.ref("edge", e.ordinal) for e, _ in edges][:20],
                       "unreached_fraction": 0.0, "unreached_any_direction_fraction": 0.0, "hole": False,
                       "hole_axis": None, "surface": model.surface(face).kind, "location": model.ref(face),
-                      "faces": [model.ref(f) for f in sorted(faces)][:20], "xyz": brep.rounded(edges[0][0].midpoint)})
+                      "faces": [model.ref(f) for f in sorted(faces)][:20], "xyz": brep.rounded(edges[0][0].midpoint),
+                      "also": "no face beyond its own edges' (_one_cause lists them)", "_faces": set(faces)})
     return items
 
 
@@ -1018,8 +1165,12 @@ def _fold(model: Model, items: list[dict[str, Any]], corners: list[dict[str, Any
 # --- pockets and their corners ---------------------------------------------------------------------------
 
 
-def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
+def _pockets(model: Model, state: dict[str, Any], only: set[int] | None = None) -> dict[str, Any]:
+    """The pockets, through cavities and their internal corners (the module); ``only``: the faces they may be
+    made of (a turned part's live-tooling features), else every face."""
     hole_faces = state["hole_faces"]
+    if only is not None:
+        hole_faces = hole_faces | {i for i in range(1, model.n + 1) if i not in only}
     tools = state["tools"]
     unmakeable = state["unmakeable"]
     gaps = state.get("gaps_per_face", {})
@@ -1085,7 +1236,7 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         pocket = {"_floor": floor, "_walls": walls, "_fillets": fillets, "kind": kind, "depth_mm": round(depth, 4),
                   "depth_from_top_mm": round(top - level, 4),
                   "width_mm": round(width, 4) if width is not None else None,
-                  "depth_to_width": round(depth / width, 4) if width else None,
+                  "depth_to_width": round(depth / width, 9) if width else None,
                   "open_boundary_fraction": round(open_length / total, 4),
                   "floor_radius_mm": round(root, 4) if root is not None else None,
                   "axis": brep.rounded(d, 4), "aligned": _allowed({"axes": 3}, d),
@@ -1135,6 +1286,8 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
     refs = {model.ref(floor) for floor in dropped}
     corners = [corner for corner in corners if corner["pocket"] not in refs]
     claimed = {face for pocket in pockets for face in pocket["_walls"] | pocket["_fillets"] | {pocket["_floor"]}}
+    if only is not None:
+        claimed |= {i for i in range(1, model.n + 1) if i not in only}
     through, through_corners = _through(model, state, claimed, gaps)
     return {"pockets": kept + through, "corners": corners + through_corners}
 
@@ -1223,7 +1376,7 @@ def _through(model: Model, state: dict[str, Any], claimed: set[int],
             pockets.append({"_floor": None, "_walls": group, "kind": "through", "depth_mm": round(depth, 4),
                             "depth_from_top_mm": round(reach, 4),
                             "width_mm": round(width, 4) if width is not None else None,
-                            "depth_to_width": round(depth / width, 4) if width else None,
+                            "depth_to_width": round(depth / width, 9) if width else None,
                             "open_boundary_fraction": None, "floor_radius_mm": None,
                             "axis": brep.rounded(way, 4), "aligned": True, "wall_count": len(group), "floor": None,
                             "location": ref, "width_faces": [model.ref(f) for f in pair] if pair else None,
@@ -1271,9 +1424,12 @@ def _corner(model: Model, radius: float, height: float, depth: float, tools: tup
         tool = 2 * radius if radius > 0 else None
     corner = {"radius_mm": round(radius, 4), "sharp": sharp, "height_mm": round(height, 4),
               "depth_mm": round(depth, 4),
-              "radius_to_depth": round(radius / height, 4) if height > 1e-9 else None,
+              # a figure a rule reads is compared as measured (to a nanometre); the message rounds it to show it
+              "radius_to_depth": round(radius / height, 9) if height > 1e-9 else None,
+              # the radius a third of the cavity's depth asks for: the millimetres the hint gives
+              "third_of_depth_mm": round(max(height, 0.0) / 3.0, 4),
               "tool_mm": round(tool, 4) if tool else None,
-              "reach_ratio": round(depth / tool, 4) if tool else None,
+              "reach_ratio": round(depth / tool, 9) if tool else None,
               "axis": brep.rounded(axis, 4), "pocket": pocket, "location": location, "faces": faces,
               "xyz": xyz, "_edge": edge}
     if edge is not None:

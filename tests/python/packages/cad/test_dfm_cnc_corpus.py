@@ -369,8 +369,9 @@ CASES = [
                  ("cnc.hole_depth_limit", None, box(39.5, -0.5, -21, 40.5, 0.5, 25))]),
     # the T open at both ends is in line of sight along x, but only a T-slot cutter makes it: an undercut too
     Case("tslots", tslots, {"material": "aluminum"},
-         expect=[("cnc.no_line_of_sight", None, box(-25, 5, 3, 25, 25, 9)),
-                 ("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15)),
+         # the closed T's faces no straight line reaches are its slot cutter's recess: one finding, which names
+         # them (special_cutter's message), not a no_line_of_sight of their own
+         expect=[("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15)),
                  ("cnc.special_cutter", None, box(-45, -25, 3, 45, -5, 15)),
                  ("cnc.special_cutter", None, box(-25, 5, 3, 25, 25, 15))],
          allow=[("cnc.undercut", None, box(-25, 5, 3, 25, 25, 15))]),
@@ -397,9 +398,9 @@ CASES = [
     Case("six_sides", six_sides, {"material": "aluminum"}, expect=[("cnc.setups", None, None)]),
     Case("two_sides", two_sides, {"material": "aluminum"}),
     # the hole runs 30 / cos 30 = 34.6 mm at 8 mm: 4.3 diameters, over Hubs' recommended 4
+    # one cause, one finding: the inclined hole's faces no direction reaches are the inclined hole's
     Case("inclined", inclined, {"material": "aluminum"},
-         expect=[("cnc.undercut", None, box(-30, -4, -15, 30, 4, 15)),
-                 ("cnc.inclined_feature", None, box(-30, -4, -15, 30, 4, 15)),
+         expect=[("cnc.inclined_feature", None, box(-30, -4, -15, 30, 4, 15)),
                  ("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),
     Case("inclined-4axis", inclined, {"material": "aluminum", "axes": 4},
          expect=[("cnc.hole_depth", None, box(-30, -4, -15, 30, 4, 15))]),

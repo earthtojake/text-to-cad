@@ -39,13 +39,23 @@ HUBS = Source("hubs-cnc", "Protolabs Network (Hubs)", "How to design parts for C
 ACCESS_TOLERANCE = 0.02
 
 _MILLING = {"turning": False}
+#: Pockets and their corners are judged on a milled part, and on a turned one for its live tooling's features
+#: (the pockets a turned part reports are those alone).
+_POCKETS: dict[str, Any] = {}
 _NO_TOOLS = {"tools_given": False}
 _TOOLS = {"tools_given": True}
 
 
-#: Without ``--tools``, the radius a sharp corner or edge is told to take: a 2.5 mm end mill's, the smallest
-#: standard tool (Hubs: features under 2.5 mm are micro-machining).
+#: Without ``--tools``, the radius a sharp corner or edge is told it is recommended to take: a 2.5 mm end mill's,
+#: the smallest standard tool (Hubs: "Most machine shops can accurately machine cavities and holes using tools
+#: down to 2.5 mm (0.1 inches) in diameter."). A recommendation: the hints say it, no error's limit is it.
 _SMALL_TOOL_RADIUS = 1.25
+#: The least radius any round tool leaves, without ``--tools``: half of Hubs' feasible smallest feature, "Feasible:
+#: 0.05 mm (0.005 inches)" -- derived (a 0.05 mm tool's radius), the guide states no radius itself.
+_MICRO_TOOL_RADIUS = 0.025
+_MICRO_NOTE = ('derived from Hubs\' small features: "Feasible: 0.05 mm (0.005 inches)" (a 0.05 mm tool; the guide '
+               'states the feature, not this figure); "Anything below this limit [2.5 mm] is considered '
+               'micro-machining."')
 #: What a failing item says of itself, appended to the message (``Rule.detail``).
 _CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top"
 _EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}"
@@ -76,28 +86,41 @@ _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
 
 
 def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
-    """A sharp vertical corner and a sharp concave edge, judged against the radius they must be given: half
-    the smallest tool with ``--tools``, else the smallest standard tool's (``_SMALL_TOOL_RADIUS``). An edge's
-    message and fix follow its ``reason``; a sharp edge a tool along a direction the machine lacks would make
-    is a warning (more axes make it), every other one an error."""
-    corner_fix = ("sharp vertical corner: give it a radius of at least {limit:g} mm (a third of the cavity's "
-                  "depth or more is better), or a dog-bone relief, or plan EDM")
+    """A sharp vertical corner and a sharp concave edge: no round tool makes either (the error); judged against
+    half the smallest tool with ``--tools``, else the least radius a micro tool leaves (``_MICRO_TOOL_RADIUS``),
+    the hint giving the radius recommended (``_SMALL_TOOL_RADIUS``, a 2.5 mm end mill's). An edge's message and
+    fix follow its ``reason``; a sharp edge a tool along a direction the machine lacks would make is a warning
+    (more axes make it), every other one an error. A corner is judged on a milled part and on a turned part's
+    live-tooling features; a sharp edge on a milled part."""
+    corner_fix = {
+        "min_tool_mm": ("sharp vertical corner: no round tool makes it. Give it a radius of at least {limit:g} mm, "
+                        "half the smallest tool (a third of the cavity's depth, {third_of_depth_mm:g} mm, or more "
+                        "is recommended), or a dog-bone relief, or plan EDM"),
+        None: ("sharp vertical corner: no round tool makes it. Give it a radius of 1.25 mm or more (recommended: a "
+               "2.5 mm end mill's; a third of the cavity's depth, {third_of_depth_mm:g} mm, or more), or a "
+               "dog-bone relief, or plan EDM"),
+    }
+    recommended = "1.25 mm or more (recommended: a 2.5 mm end mill's)"
     found: list[Rule] = []
-    for when, scale, limit in (({**_MILLING, **_TOOLS}, "min_tool_mm", 0.5),
-                               ({**_MILLING, **_NO_TOOLS}, None, _SMALL_TOOL_RADIUS)):
+    for when, scale, limit, note in (({**_TOOLS}, "min_tool_mm", 0.5,
+                                      sharp_note + "; a tool cuts no radius under its own: half the smallest given"),
+                                     ({**_NO_TOOLS}, None, _MICRO_TOOL_RADIUS, sharp_note + "; " + _MICRO_NOTE)):
         found.append(Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
-                          "sharp vertical corner radius", source, scale_by=scale, when=when,
-                          item_when={"sharp": True}, fix=corner_fix, note=sharp_note, detail=_CORNER_DETAIL))
+                          "sharp vertical corner (no round tool makes it): radius", source, scale_by=scale, when={**_POCKETS, **when},
+                          item_when={"sharp": True}, fix=corner_fix[scale], note=note, detail=_CORNER_DETAIL))
         for reason, (what, fix) in _EDGE_REASONS.items():
+            fix = fix.replace("at least {limit:g} mm", "at least {limit:g} mm" if scale else recommended)
             found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
-                              what + " radius", source, scale_by=scale, when=when, item_when={"reason": reason},
-                              fix=fix, note=sharp_note, detail=_EDGE_DETAIL))
+                              what + " radius", source, scale_by=scale, when={**_MILLING, **when},
+                              item_when={"reason": reason}, fix=fix, note=note, detail=_EDGE_DETAIL))
         found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
-                          _OTHER_AXES[0] + " radius", source, severity="warning", scale_by=scale, when=when,
-                          item_when={"reason": "other_axes"}, fix=_OTHER_AXES[1], note=sharp_note,
-                          detail=_EDGE_DETAIL))
+                          _OTHER_AXES[0] + " radius", source, severity="warning", scale_by=scale,
+                          when={**_MILLING, **when}, item_when={"reason": "other_axes"},
+                          fix=_OTHER_AXES[1].replace("at least {limit:g} mm",
+                                                     "at least {limit:g} mm" if scale else recommended),
+                          note=note, detail=_EDGE_DETAIL))
     found.append(Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm",
-                      "internal corner radius", source, scale_by="min_tool_mm", when={**_MILLING, **_TOOLS},
+                      "internal corner radius", source, scale_by="min_tool_mm", when={**_POCKETS, **_TOOLS},
                       item_when={"sharp": False},
                       fix="radius the corner to at least {limit:g} mm, the smallest tool's radius, or add a smaller "
                           "tool", note="a corner tighter than the smallest end mill's radius is not cut by it"))
@@ -110,8 +133,9 @@ def _inclined_rules(source: str, note: str) -> tuple[Rule, ...]:
     return tuple(Rule("cnc.inclined_feature", family, "inclination_deg", "max", 0.0, "deg",
                       f"{noun} axis off the machine's directions", source, severity="warning",
                       when={**_MILLING, "axes": (3, 4)}, item_when={"reachable": False},
-                      fix=f"an inclined {noun}: an angled fixture (its own setup), or 4 or 5 axes, or square it to "
-                          "a side of the part", note=note)
+                      fix=f"an inclined {noun}: its axis is along none of the machine's directions in the part's own "
+                          "frame (the one its faces and holes square: machine.frames) -- an angled fixture (its own "
+                          f"setup), or 4 or 5 axes, or align the {noun} with the part's faces", note=note)
                  for family, noun in (("pockets", "pocket"), ("holes", "hole")))
 
 
@@ -124,28 +148,30 @@ def _knife_rule(source: str, limit: Any, by: str | None, note: str) -> Rule:
 
 _RULES: tuple[Rule, ...] = (
     *_corner_rules("hubs-cnc", "every CNC tool is round, so an internal vertical edge always has a radius"),
-    Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.025, "mm",
-         "internal corner radius", "hubs-cnc", when={**_MILLING, **_NO_TOOLS}, item_when={"sharp": False},
-         fix="radius the corner to at least {limit:g} mm (no micro-tool cuts tighter)",
-         note="micro-machining tools go down to 0.05 mm in diameter"),
+    Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", _MICRO_TOOL_RADIUS, "mm",
+         "internal corner radius", "hubs-cnc", when={**_POCKETS, **_NO_TOOLS}, item_when={"sharp": False},
+         fix="radius the corner to at least {limit:g} mm (half the 0.05 mm smallest feature: no micro tool cuts "
+             "tighter); 1.25 mm or more is recommended", note=_MICRO_NOTE),
     Rule("cnc.internal_corner_small", "internal_corners", "radius_mm", "min", 1.25, "mm",
-         "internal corner radius", "hubs-cnc", severity="warning", when={**_MILLING, **_NO_TOOLS},
+         "internal corner radius", "hubs-cnc", severity="warning", when={**_POCKETS, **_NO_TOOLS},
          item_when={"sharp": False}, fix="radius the corner to {limit:g} mm or more, so a 2.5 mm end mill cuts it",
-         note="features under 2.5 mm are micro-machining"),
-    Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 0.3333, "ratio",
-         "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_MILLING,
-         item_when={"sharp": False}, fix="make the corner radius at least a third of the cavity's depth",
-         note="recommended: an internal vertical corner radius of a third of the cavity depth or more"),
+         note='"Most machine shops can accurately machine cavities and holes using tools down to 2.5 mm (0.1 '
+              'inches) in diameter. Anything below this limit is considered micro-machining."'),
+    Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 1.0 / 3.0, "ratio",
+         "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_POCKETS,
+         item_when={"sharp": False},
+         fix="make the corner radius {third_of_depth_mm:g} mm or more, a third of the cavity's {height_mm:g} mm depth",
+         note='vertical corner radius "Recommended: ⅓ times cavity depth (or larger)"'),
     Rule("cnc.corner_reach", "internal_corners", "reach_ratio", "max", 4.0, "ratio",
          "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", severity="warning",
-         when=_MILLING, fix="a larger corner radius or a shallower cavity: end mills cut 3 to 4 diameters deep",
+         when=_POCKETS, fix="a larger corner radius or a shallower cavity: end mills cut 3 to 4 diameters deep",
          note="end mills typically cut to 3-4 times their diameter"),
     Rule("cnc.corner_reach_limit", "internal_corners", "reach_ratio", "max", 30.0, "ratio",
-         "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", when=_MILLING,
+         "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", when=_POCKETS,
          fix="a larger corner radius or a shallower cavity: 30 diameters is the deepest even special tooling reaches",
          note="up to 30:1 depth to tool diameter with specialized tooling"),
     Rule("cnc.pocket_depth_to_width", "pockets", "depth_to_width", "max", 4.0, "ratio",
-         "cavity depth to width", "hubs-cnc", severity="warning", when=_MILLING,
+         "cavity depth to width", "hubs-cnc", severity="warning", when=_POCKETS,
          fix="make the cavity no deeper than {limit:g} times its width", note="recommended cavity depth: 4x width"),
     Rule("cnc.wall_thickness", "walls", "thickness_mm", "min", {"metal": 0.5, "plastic": 1.0}, "mm",
          "wall thickness", "hubs-cnc", by="wall_class",
@@ -181,33 +207,39 @@ _RULES: tuple[Rule, ...] = (
          "thread length to diameter", "hubs-cnc", severity="warning", fix="thread at least 1.5 diameters",
          note="minimum thread length 1.5x the nominal diameter"),
     Rule("cnc.gap_width", "gaps", "width_mm", "min", 0.05, "mm", "gap width", "hubs-cnc",
-         when={**_MILLING, **_NO_TOOLS}, fix="widen the gap to at least {limit:g} mm",
-         note="no micro-tool is under 0.05 mm"),
+         when={**_MILLING, **_NO_TOOLS}, fix="widen the gap to at least {limit:g} mm; 2.5 mm or more is recommended",
+         note=_MICRO_NOTE),
     Rule("cnc.gap_width", "gaps", "width_mm", "min", 1.0, "mm", "gap width", "hubs-cnc", scale_by="min_tool_mm",
-         when={**_MILLING, **_TOOLS}, fix="widen the gap to at least {limit:g} mm, the smallest tool's diameter",
+         when={**_MILLING, **_TOOLS}, item_when={"made_by": "end_mill"},
+         fix="widen the gap to at least {limit:g} mm, the smallest tool's diameter",
          note="a tool cuts no gap narrower than itself"),
+    # a recess's floor-to-ceiling height is a slot cutter's thickness to cut, not an end mill's diameter
+    Rule("cnc.gap_width", "gaps", "width_mm", "min", 0.05, "mm", "recess height (a slot cutter's)", "hubs-cnc",
+         when={**_MILLING, **_TOOLS}, item_when={"made_by": "slot_cutter"},
+         fix="open the recess to at least {limit:g} mm; a standard slot cutter's width (3 to 40 mm) is cheaper",
+         note=_MICRO_NOTE + "; a slot cutter, not an end mill given, cuts a recess's height"),
     Rule("cnc.gap_width_small", "gaps", "width_mm", "min", 2.5, "mm", "gap width", "hubs-cnc", severity="warning",
          when={**_MILLING, **_NO_TOOLS}, fix="widen the gap to {limit:g} mm or more",
          note="features under 2.5 mm are micro-machining"),
     Rule("cnc.undercut", "access", "unreached_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the face no straight tool reaches from the machine's directions", "hubs-cnc",
-         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": False},
+         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": False, "part_of": None},
          fix="open the face to a setup direction, or plan a T-slot or dovetail cutter, or more axes",
          note="undercuts need special cutters (T-slot, dovetail) and cost more"),
     Rule("cnc.undercut", "access", "unreached_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the hole's face no straight tool reaches from the machine's directions", "hubs-cnc",
-         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": True},
-         fix="the hole's axis ({hole_axis}) is along no machine direction: drill it in an angled setup or on "
-             "more axes, or square it to a side", note="a drill comes in along the hole's axis"),
+         severity="warning", when=_MILLING, item_when={"kind": "undercut", "hole": True, "part_of": None},
+         fix="the hole (axis {hole_axis}) is not reached along its axis from outside: open its way, drill it from "
+             "the other end, or plan an angled setup or more axes", note="a drill comes in along the hole's axis"),
     Rule("cnc.special_cutter", "access", "edge_count", "max", 0, "edges", "edges only a special cutter makes",
          "hubs-cnc", severity="warning", when=_MILLING, item_when={"kind": "special_cutter"},
          fix="a {cutter} cuts it: keep the undercut 3 to 40 mm wide in a standard size (a dovetail 45 or 60 "
-             "degrees), or open it to a setup direction",
+             "degrees), or open it to a setup direction", detail="the recess's faces no straight tool reaches: {also}",
          note="undercuts (T-slots and dovetails) are machined using special tools; their width can vary between "
               "3 mm and 40 mm"),
     Rule("cnc.no_line_of_sight", "access", "unreached_any_direction_fraction", "max", ACCESS_TOLERANCE, "share",
          "share of the face no straight line from outside reaches", "hubs-cnc", severity="warning", when=_MILLING,
-         item_when={"kind": "no_line_of_sight"},
+         item_when={"kind": "no_line_of_sight", "part_of": None},
          fix="redesign so the face opens to the outside, or plan a lollipop/keyseat cutter or EDM",
          note="undercuts need special cutters"),
     Rule("cnc.enclosed_void", "voids", "volume_mm3", "max", 0.0, "mm3", "enclosed void", "hubs-cnc",

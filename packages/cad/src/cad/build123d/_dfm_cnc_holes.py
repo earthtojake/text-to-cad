@@ -225,7 +225,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
     for other in sorted({round(float(model.surface(i).radius), 6) for i in cylinders} - {radius}):
         faces = [i for i in cylinders if abs(float(model.surface(i).radius) - other) < 1e-6]
         el, eh = zip(*(model.extent(i, a) for i in faces))
-        counterbores.append({"diameter_mm": round(2 * other, 4), "depth_mm": round(max(eh) - min(el), 4)})
+        bore_depth = max(eh) - min(el)
+        counterbores.append({"diameter_mm": round(2 * other, 4), "depth_mm": round(bore_depth, 4),
+                             "depth_to_diameter": round(bore_depth / (2 * other), 9) if other > 0 else None})
     countersinks = []
     for i in group:
         cs = model.surface(i)
@@ -236,19 +238,22 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         countersinks.append({"diameter_mm": round(2 * float(np.linalg.norm(radial, axis=1).max()), 4),
                              "angle_deg": round(2 * float(cs.half_angle_deg), 4), "face": model.ref(i)})
     diameter = 2 * radius
-    depth = high - low
+    # the drilled length: the narrowest cylinder's run along the axis, below any counterbore (a counterbore
+    # is its own feature, listed in ``counterbores`` with its own depth); ``overall_depth_mm`` is the whole
+    depth = max(n_high) - min(n_low)
     label, deviation = standard_drill(diameter)
     drilled = diameter <= LARGEST_DRILL + MATCH_MM
     aligned = any(abs(float(a @ w)) > 0.9999 for w in WORLD[::2])
     hole = {
-        "diameter_mm": round(diameter, 4), "depth_mm": round(depth, 4),
-        "depth_to_diameter": round(depth / diameter, 4) if diameter > 0 else None,
+        "diameter_mm": round(diameter, 9), "depth_mm": round(depth, 4), "overall_depth_mm": round(high - low, 4),
+        # a figure a rule reads is compared as measured (to a nanometre): rounding to display it is the message's
+        "depth_to_diameter": round(depth / diameter, 9) if diameter > 0 else None,
         "through": through, "bottom": bottom, "point_angle_deg": round(point_angle, 4) if point_angle else None,
         "axis": brep.rounded(a), "aligned": aligned,
         "opening": brep.rounded(opening) if opening is not None else None,
         "counterbores": counterbores, "countersinks": countersinks,
         "drilled": drilled, "standard_drill": label if drilled else None,
-        "drill_deviation_mm": round(deviation, 4) if drilled else None,
+        "drill_deviation_mm": round(deviation, 9) if drilled else None,
         "tap_candidate": _tap(diameter),
         # the candidate thread's nominal diameter: what a shop's thread range is read against
         "tap_drill": _tap(diameter) is not None,
@@ -343,9 +348,9 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
             continue  # no flank edge winds half a turn: no thread
         length = float(along.max() - along.min())
         claimed |= set(faces)
-        found.append({"internal": internal, "major_diameter_mm": round(major, 4), "minor_diameter_mm": round(minor, 4),
+        found.append({"internal": internal, "major_diameter_mm": round(major, 9), "minor_diameter_mm": round(minor, 4),
                       "pitch_mm": round(pitch, 4) if pitch else None, "length_mm": round(length, 4),
-                      "length_to_diameter": round(length / major, 4) if major > 0 else None, "modelled": 1,
+                      "length_to_diameter": round(length / major, 9) if major > 0 else None, "modelled": 1,
                       "axis": brep.rounded(a), "location": model.ref(faces[0]),
                       "faces": [model.ref(f) for f in faces], "xyz": model.center(faces[0])})
     return found, claimed

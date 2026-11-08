@@ -19,7 +19,8 @@ import numpy as np
 from cad._internal.dfm import checkpoint
 from cad.build123d import _dfm_brep as brep
 
-__all__ = ["Hit", "Model", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "unit"]
+__all__ = ["Hit", "Model", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed", "machine_frame",
+           "unit"]
 
 #: The six directions a three-axis machine approaches from.
 WORLD = tuple(np.array(axis, dtype=float) for axis in
@@ -84,6 +85,114 @@ def directions_for(axes: int, rotary: np.ndarray | None = None) -> list[np.ndarr
 
 def _xyz(value: Any) -> tuple[float, float, float]:
     return (float(value.X()), float(value.Y()), float(value.Z()))
+
+
+#: Two directions within this of square (|cos|) are square to each other: a frame's second axis.
+SQUARE = 2e-3
+#: The heaviest directions a frame is tried about.
+FRAME_SEEDS = 6
+
+
+def _signed_permutations() -> list[np.ndarray]:
+    import itertools
+
+    found = []
+    for order in itertools.permutations(range(3)):
+        for signs in itertools.product((1.0, -1.0), repeat=3):
+            m = np.zeros((3, 3))
+            for row, (column, sign) in enumerate(zip(order, signs)):
+                m[row, column] = sign
+            if np.linalg.det(m) > 0:
+                found.append(m)
+    return found
+
+
+_PERMUTATIONS = _signed_permutations()
+
+
+def machine_frame(faces: list[Any], surfaces: list[brep.Surface]) -> tuple[np.ndarray, float]:
+    """The frame a part is machined in, read from its own geometry -- never the world's, so a part turned in
+    its model is machined as it is drawn: the rotation (rows: the machine's X, Y and Z in the part's
+    coordinates) whose axes the most of the part's area lies along -- each plane's normal and each cylinder's,
+    cone's or torus's axis, weighted by its face's area --, and the share of that area it aligns.
+
+    Candidates: the world's own frame, and about each of the ``FRAME_SEEDS`` heaviest directions a frame whose
+    second axis is the heaviest direction square to it (else the world axis most nearly square). Ranked by the
+    area they align, as printing ranks orientations by its figures; the world's frame wins a tie, and of the 24
+    rotations that are one frame, the one nearest the world's is taken (a part drawn square stays as drawn)."""
+    vectors, weights = [], []
+    for face, s in zip(faces, surfaces):
+        v = s.normal if s.kind == "plane" else s.axis if s.kind in ("cylinder", "cone", "torus") else None
+        if v is None:
+            continue
+        try:
+            area = float(face.area)
+        except Exception:  # noqa: BLE001 - a face with no area weighs nothing
+            continue
+        if area > 0.0:
+            vectors.append(unit(v))
+            weights.append(area)
+    identity = np.eye(3)
+    if not vectors:
+        return identity, 0.0
+    d, w = np.array(vectors), np.array(weights)
+    total = float(w.sum())
+
+    def aligned(frame: np.ndarray) -> float:
+        return float(w[np.abs(d @ frame.T).max(axis=1) > SAME].sum())
+
+    clusters: list[list[Any]] = []  # [direction, weight], sign free
+    for i in np.argsort(-w):
+        for cluster in clusters:
+            if abs(float(d[i] @ cluster[0])) > SAME:
+                cluster[1] += float(w[i])
+                break
+        else:
+            clusters.append([d[i], float(w[i])])
+    clusters.sort(key=lambda cluster: -cluster[1])
+    candidates = [identity]
+    for a, _ in clusters[:FRAME_SEEDS]:
+        square = [b for b, _ in clusters if abs(float(a @ b)) < SQUARE]
+        seconds = square[:2] or [min(identity, key=lambda axis: abs(float(axis @ a)))]
+        for b in seconds:
+            b = unit(b - a * float(b @ a))
+            candidates.append(np.array([a, b, np.cross(a, b)]))
+    best = identity
+    best_score = aligned(identity)
+    for frame in candidates[1:]:
+        score = aligned(frame)
+        if score > best_score + 1e-9 * total:
+            best, best_score = frame, score
+    if best is not identity:
+        best = max((p @ best for p in _PERMUTATIONS), key=lambda m: float(np.trace(m)))
+        if np.allclose(best, identity, atol=1e-12):
+            best = identity
+    return best, best_score / total
+
+
+def framed(part: brep.Part, rotation: np.ndarray) -> brep.Part:
+    """``part`` turned by ``rotation`` (about the origin) into its machine frame: the same faces and edges in
+    the same ordinals, so every ref is the part's own."""
+    import dataclasses
+
+    import build123d as bd
+    from OCP.gp import gp_Trsf
+    from OCP.TopLoc import TopLoc_Location
+
+    r = rotation
+    trsf = gp_Trsf()
+    trsf.SetValues(r[0, 0], r[0, 1], r[0, 2], 0.0, r[1, 0], r[1, 1], r[1, 2], 0.0, r[2, 0], r[2, 1], r[2, 2], 0.0)
+    moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
+    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None)
+
+
+def turned(surface: brep.Surface, rotation: np.ndarray) -> brep.Surface:
+    """``surface`` as it lies once its part is ``framed`` by ``rotation``."""
+    import dataclasses
+
+    changes = {key: tuple(float(v) for v in rotation @ np.asarray(getattr(surface, key)))
+               for key in ("normal", "origin", "axis") if getattr(surface, key) is not None}
+    return dataclasses.replace(surface, **changes) if changes else surface
 
 
 def _spread(count: int) -> list[tuple[float, float]]:
@@ -173,11 +282,11 @@ class Hit:
 class Model:
     """A part's faces, surfaces, edges, samples and rays, each computed once."""
 
-    def __init__(self, part: brep.Part) -> None:
+    def __init__(self, part: brep.Part, surfaces: list[brep.Surface] | None = None) -> None:
         self.part = part
         self.faces = part.faces()
         self.n = len(self.faces)
-        self.surfaces = [brep.surface(face) for face in self.faces]
+        self.surfaces = surfaces if surfaces is not None else [brep.surface(face) for face in self.faces]
         self.edges = brep.edges(part)
         self.adjacent: dict[int, list[brep.Edge]] = {i: [] for i in range(1, self.n + 1)}
         for edge in self.edges:

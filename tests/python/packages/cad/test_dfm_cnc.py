@@ -77,8 +77,12 @@ class HolesTest(unittest.TestCase):
 
     def test_counterbores_and_countersinks_belong_to_their_hole(self) -> None:
         bored, sunk = self.holes[-20], self.holes[-5]
-        self.assertEqual((bored["diameter_mm"], bored["through"], bored["depth_mm"]), (6.6, True, 40.0))
-        self.assertEqual(bored["counterbores"], [{"diameter_mm": 11.0, "depth_mm": 6.0}])
+        # the hole's depth is its drilled length below the counterbore, which is its own feature
+        self.assertEqual((bored["diameter_mm"], bored["through"], bored["depth_mm"], bored["overall_depth_mm"]),
+                         (6.6, True, 34.0, 40.0))
+        self.assertAlmostEqual(bored["depth_to_diameter"], 34.0 / 6.6, places=6)
+        self.assertEqual(bored["counterbores"], [{"diameter_mm": 11.0, "depth_mm": 6.0,
+                                                  "depth_to_diameter": round(6.0 / 11.0, 9)}])
         self.assertEqual(sunk["diameter_mm"], 4.5)
         self.assertEqual(len(sunk["countersinks"]), 1)
         self.assertAlmostEqual(sunk["countersinks"][0]["angle_deg"], 90.0, places=6)
@@ -142,9 +146,11 @@ class PocketsTest(unittest.TestCase):
                        if o["rule"] == "cnc.internal_corner_sharp" and o["status"] == "failed")
         self.assertEqual(len(outcome["failures"]), 4)
         found = [f for f in result.findings if f.code == "cnc.internal_corner_sharp"]
-        self.assertIn("sharp vertical corner radius 0 mm is under the 1.25 mm minimum", found[0].message)
+        # sharp is the error (no round tool makes it); 1.25 mm is the radius recommended, said in the hint
+        self.assertIn("sharp vertical corner (no round tool makes it): radius 0 mm is under the 0.025 mm minimum",
+                      found[0].message)
         self.assertIn("4 mm tall", found[0].message)
-        self.assertIn("give it a radius of at least 1.25 mm", found[0].hint)
+        self.assertIn("radius of 1.25 mm or more (recommended", found[0].hint)
         # two corners share a face ref: the fold names the worst one's edge and counts the other
         named = {c["edge"] for c in corners if any(f"{c['edge']}," in f.message for f in found)}
         self.assertEqual(len(named), len(found))
@@ -335,7 +341,11 @@ class AccessTest(unittest.TestCase):
 
     def test_five_axes_reach_an_inclined_hole_three_do_not(self) -> None:
         part = _part(bd.Box(60, 40, 30) - bd.Rot(0, 30, 0) * bd.Cylinder(4, 100))
-        self.assertIn("cnc.undercut", _codes(_check(part)))
+        three = _check(part)
+        # one cause, one finding: the hole's unreached faces are the inclined hole's, not undercuts of their own
+        self.assertIn("cnc.inclined_feature", _codes(three))
+        self.assertNotIn("cnc.undercut", _codes(three))
+        self.assertTrue(all(item.get("part_of") for item in three.measurements["access"]["items"] if item["hole"]))
         five = _check(part, axes=5)
         self.assertNotIn("cnc.undercut", _codes(five))
         self.assertEqual(five.measurements["setups"]["items"][0]["unreached_area_fraction"], 0.0)
@@ -408,8 +418,8 @@ class ThreadsTest(unittest.TestCase):
         result = _check(_part(part))
         found = result.measurements["threads"]["items"]
         self.assertEqual(len(found), 1)
-        self.assertEqual((found[0]["internal"], found[0]["major_diameter_mm"], found[0]["minor_diameter_mm"]),
-                         (True, 6.0, 5.0))
+        self.assertEqual((found[0]["internal"], found[0]["minor_diameter_mm"]), (True, 5.0))
+        self.assertAlmostEqual(found[0]["major_diameter_mm"], 6.0, places=3)  # read from the flanks' points
         self.assertAlmostEqual(found[0]["pitch_mm"], 1.0, places=3)
         self.assertEqual(result.measurements["access"]["items"], [])
         self.assertEqual(result.measurements["sharp_edges"]["items"], [])
@@ -427,6 +437,76 @@ class ThreadsTest(unittest.TestCase):
         self.assertIn(bd.GeomType.REVOLUTION, {face.geom_type for face in pulley.part.faces()})
         result = _check(_part(pulley.part))
         self.assertEqual(result.measurements["threads"]["items"], [])
+
+
+class OneCauseTest(unittest.TestCase):
+    """What one feature causes is one finding: the rest are its facts, naming it."""
+
+    def test_a_recess_is_its_cutter_s_and_its_height_is_no_end_mill_s(self) -> None:
+        part = bd.Box(60, 40, 20) - _pocket(30, 20, 10, 4, 10)
+        part -= bd.Pos(0, 12, 1.5) * bd.Box(16, 4, 3)  # a 3 mm recess under the pocket's rim
+        part -= bd.Pos(22, 0, 0) * bd.Box(3, 16, 30)  # a 3 mm through slot
+        result = cnc(_part(part), tools="6", material="aluminum")
+        codes = [f.code for f in result.findings]
+        self.assertEqual(codes.count("cnc.special_cutter"), 1)
+        self.assertNotIn("cnc.undercut", codes)
+        self.assertNotIn("cnc.no_line_of_sight", codes)
+        special = next(i for i in result.measurements["access"]["items"] if i["kind"] == "special_cutter")
+        self.assertTrue(special["unreached_faces"])
+        # the recess's floor-to-ceiling is a slot cutter's to cut; the slot's walls an end mill's: one finding
+        gaps = result.measurements["gaps"]["items"]
+        self.assertIn("slot_cutter", {gap["made_by"] for gap in gaps})
+        found = [f for f in result.findings if f.code == "cnc.gap_width"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("3 mm is under the 6 mm minimum", found[0].message)
+
+
+class FrameTest(unittest.TestCase):
+    """A part is machined in its own frame: turned in its model, its verdicts and figures stay."""
+
+    def test_a_turned_part_reads_as_drawn(self) -> None:
+        plate = bd.Box(60, 40, 16) - _pocket(30, 20, 6, 3, 8)
+        plate -= bd.Pos(22, 12, 0) * bd.Cylinder(2.5, 30)
+        plate -= bd.Pos(-22, -12, 8) * _drill(4.2, 10)
+
+        def read(shape: Any) -> tuple[Any, ...]:
+            result = cnc(_part(shape), material="aluminum")
+            report = result.measurements
+            verdicts = sorted((f.severity, f.code) for f in result.findings if f.severity != "info")
+            return (result, verdicts, report["setups"]["items"][0]["setup_count"],
+                    sorted(round(h["depth_to_diameter"], 3) for h in report["holes"]["items"]),
+                    sorted(round(c["radius_mm"], 3) for c in report["internal_corners"]["items"]))
+
+        drawn = read(plate)
+        self.assertFalse(drawn[0].measurements["machine"]["frames"][0]["turned"])
+        # a quarter turn is still square to the world: no frame of its own is needed
+        for turn, own in ((bd.Rot(0, 0, 30), True), (bd.Rot(17, 23, 41), True), (bd.Rot(90, 0, 0), False)):
+            turned = read(turn * plate)
+            self.assertEqual(turned[1:], drawn[1:])
+            frame = turned[0].measurements["machine"]["frames"][0]
+            self.assertEqual(frame["turned"], own)
+            # places are the part's own: the hole's centre is where the turn put it
+            hole = min(turned[0].measurements["holes"]["items"], key=lambda h: h["diameter_mm"])
+            expected = (turn * bd.Pos(-22, -12, 3)).position
+            self.assertLess((bd.Vector(*hole["xyz"]) - expected).length, 0.05)
+
+
+class TurnedLiveToolingTest(unittest.TestCase):
+    def test_a_square_keyway_end_is_a_sharp_corner_a_round_one_is_not(self) -> None:
+        shaft = bd.Rot(0, 90, 0) * bd.Cylinder(12, 80)
+        square = shaft - bd.Pos(0, 0, 12) * bd.Box(30, 6, 6)
+        result = cnc(_part(square, "shaft"), turning=True, material="aluminum")
+        self.assertIn("cnc.internal_corner_sharp", _codes(result))
+        self.assertEqual(result.measurements["pockets"]["count"], 1)
+        rounded = shaft - bd.Pos(0, 0, 12) * bd.extrude(bd.SlotCenterToCenter(24, 6), 3, both=True)
+        self.assertNotIn("cnc.internal_corner_sharp", _codes(cnc(_part(rounded, "shaft"), turning=True)))
+
+
+class UnroundedTest(unittest.TestCase):
+    def test_a_ratio_a_hair_over_its_limit_fails(self) -> None:
+        # 20.0002 / 5 = 4.00004: four decimals would read 4.0 and pass the 4 D recommendation
+        result = cnc(_part(bd.Box(20, 20, 20.0002) - bd.Cylinder(2.5, 30)))
+        self.assertIn("cnc.hole_depth", _codes(result))
 
 
 class RulesTest(unittest.TestCase):
