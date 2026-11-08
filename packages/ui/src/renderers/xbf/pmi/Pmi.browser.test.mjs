@@ -31,8 +31,12 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 // PMI's tab in the view's panel, where the panel has others to pick it from: alone it has no tab.
+// The panel opened from its pill first, as `XbfView.browser.test.mjs` opens it (the 800px view
+// starts it collapsed), so a tab that is there is never passed over for being out of sight.
 async function showPmi(pane) {
-  const tab = pane.getByRole('tab', { name: 'PMI', exact: true });
+  await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
+  if (await pane.locator('[data-flat-panel-pill] button').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+  const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'PMI', exact: true });
   if (await tab.count()) await tab.click();
 }
 
@@ -108,15 +112,18 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   assert.ok(after.x > canvasBox.x && after.x < canvasBox.x + canvasBox.width && after.y > canvasBox.y && after.y < canvasBox.y + canvasBox.height, 'on screen');
 
   // A pick of the flatness lights the top it is of; Escape lets go, and the view is as it was.
+  // PMI's tab is open first, so the view's size is the same in every picture, and the pointer is
+  // off the model for each: a face under it is lit by the hover alone.
+  await showPmi(pane);
   await view({ position: [60, -80, 70], target: [0, 0, 2], up: [0, 0, 1], orthographicHalfHeight: 30 });
-  await settle();
+  const away = async () => { await page.mouse.move(2, 2); await settle(); };
+  await away();
   const still = await capture();
   await label('top-flat').click();
   await page.waitForFunction(() => document.querySelector('[data-pmi-label="top-flat"]')?.getAttribute('aria-pressed') === 'true');
-  await settle();
+  await away();
   assert.ok(!(await capture()).equals(still), 'its face is lit');
   // Its values read in the PMI tab, with their units and where each came from.
-  await showPmi(pane);
   const details = pane.locator('[data-pmi-details="top-flat"]');
   await details.waitFor();
   assert.match(await details.innerText(), /Kind\s*Flatness/);
@@ -124,7 +131,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   assert.match(await details.innerText(), /Placed\s*Beside its feature/);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelector('[data-pmi-label="top-flat"]')?.getAttribute('aria-pressed') === 'false');
-  await settle();
+  await away();
   assert.ok((await capture()).equals(still), 'nothing is lit once it is let go');
 
   // One hidden by its row's eye, then all of them by the section's.
@@ -142,7 +149,7 @@ test('PMI is drawn on the model and stays legible as the camera moves; a pick li
   await drawn();
   assert.deepEqual(await labels(), ['A', 'thickness']);
   // Its part hidden in the Model tree, its callouts go with it; shown again, they come back.
-  await pane.getByRole('button', { name: 'Model tree', exact: true }).click();
+  await pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model', exact: true }).click();
   await pane.getByRole('button', { name: 'Hide plate', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('[data-pmi-label]'));
   await pane.getByRole('button', { name: 'Reveal plate', exact: true }).click();
