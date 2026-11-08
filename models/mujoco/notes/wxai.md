@@ -288,19 +288,22 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
      child stays where the STEP has it.
    - The engine did not catch it: a turned child would simply have been "as built". kinematics.md
      could say that the RigidJoint must share the hinge's X.
-4. **No contact exclusion** can be declared, so a hull pair that touches at rest (base_link/link_1
+4. **No contact exclusion.** Fixed: the MJCF writer excludes jointed pairs touching at rest; `exclude(a, b)`
+   declares others. No exclusion could be declared, so a hull pair that touches at rest (base_link/link_1
    across a coaxial bearing) can only be excluded in the scene. Menagerie hand-writes the same
    `<exclude>`s.
-5. **A part fixed to a link cannot stay a body of its own.** Menagerie and the URDF keep
+5. **A part fixed to a link cannot stay a body of its own.** Fixed: `body(part, name)`. Menagerie and the URDF keep
    camera_mount_d405 and gripper_left/right as fixed child bodies. Here they merge into link_6 and the
    carriages. A jointless part in a sub-assembly beside a jointed part goes to the ground link, not to
    its sibling (`tmp/wxai/fixed_test.py`: `cam` landed in `base`), so fastening by RigidJoint pairs is
    the only way, and it merges. A comparison has to merge Menagerie's fixed bodies.
-6. **URDF joint limits are written with `effort="0" velocity="0"`.** The spec gives both (27/7 N*m;
+6. **URDF joint limits are written with `effort="0" velocity="0"`.** Fixed: `limits(assembly, joint, effort=,
+   velocity=)`, and `cad urdf validate` warns of a 0. The spec gives both (27/7 N*m;
    6.28 and 9.42 rad/s), but there is no declaration for them, and a ROS controller reads 0 velocity
    literally.
 7. **One collision hull per part, no decomposition**: link_6 and link_2 (above).
-8. **URDF renames a joint that shares a link's name** (`pinion_racks`: joints `left`, `pinion` written
+8. **URDF renames a joint that shares a link's name.** Fixed: links and joints are named in their own kinds.
+   (`pinion_racks`: joints `left`, `pinion` written
    as `left_2`, `pinion_2`, and the `<mimic>` names follow). URDF keeps joints and links in separate
    namespaces, so a mimic or a controller config that names the joint breaks. The WXAI's names are
    distinct, so it is not affected.

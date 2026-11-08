@@ -27,7 +27,7 @@ other simulators, and an MJCF for MuJoCo. There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A robot description from a CAD model** (MJCF, URDF or SDF) | The model's mechanism, materials, `collision()` and `frame()`, then `cad model export <id> robot.xml` (or `.urdf`, `.sdf`). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-three-writers) |
+| **A robot description from a CAD model** (MJCF, URDF or SDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()` and `limits()`, then `cad model export <id> robot.xml` (or `.urdf`, `.sdf`). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-three-writers) |
 | **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each CAD piece, composed with MuJoCo's own `MjSpec` in a script, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
 | **Describe a robot's links and joints by hand** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
@@ -85,12 +85,22 @@ mechanism):
   On an assembly it applies to every part below it that declares none.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
+- **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a
+  camera mount, a fingertip the simulator addresses), with its own mass and geoms.
+- **`exclude(a, b)`** says two parts (or an assembly, or a label) never collide. The MJCF excludes every
+  jointed pair whose collisions touch at rest by itself, the first joint's on a world-welded base too.
+- **`limits(assembly, joint, effort=, velocity=)`**: a joint's drive limits, N*m or N and rad/s or m/s,
+  the URDF's and SDF's `<limit>` and MJCF's `actuatorfrcrange`. Without one a URDF says `effort="0"
+  velocity="0"`, which a ROS controller reads literally.
 
 ```python
-from cad.build123d import collision, frame
+from cad.build123d import body, collision, exclude, frame, limits
 
 collision(palm, "box")
 frame(palm, "tcp", bd.Pos(0, 0, 65))   # mm, in the palm's own frame
+body(camera, "camera")                 # fixed to the palm, a body of its own
+exclude(left, right)                   # the fingers touch when closed
+limits(root, "left", effort=2, velocity=1.5)   # N*m, rad/s
 ```
 
 Then run the model and write the file from the document the run left in the server (`$ID` is the
@@ -304,7 +314,7 @@ so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism, materials, `collision()` or `frame()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
+| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()` or `limits()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
 | A scene script | Run it, then `cad mjcf validate` on the scene it wrote with `--compile required`: every model-health warning cleared or explained; `--pose home` in a snapshot. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |

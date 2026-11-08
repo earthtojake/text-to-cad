@@ -112,18 +112,22 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
 
 1. **Mass from a STEP that does not carry it.** No way to give a link a measured mass (scale its
    parts' densities to a target) or a mass budget for parts the CAD omits (motors in a dummy link).
-2. **A fixed part cannot stay its own body.** Every rigidly joined part merges into its link, so a
-   camera mount or a fingertip cannot be addressed in the simulator as Menagerie's can.
+2. **Fixed: a fixed part cannot stay its own body.** Every rigidly joined part merged into its link,
+   so a camera mount or a fingertip could not be addressed as Menagerie's can; `body(part, name)` now
+   keeps it a body fixed to its link.
 3. **No coupling between two slides.** `rack_and_pinion_pair` and `gear_pair` refuse two prismatic
    joints, so a parallel gripper's mirrored fingers cannot be one control.
-4. **No contact exclusion.** Hulls of adjacent links that overlap at rest need `<exclude>`, which a model
-   cannot declare.
+4. **Fixed: no contact exclusion.** Hulls of adjacent links that overlap at rest needed `<exclude>`; the
+   MJCF writer now excludes every jointed pair touching at rest (the world-welded first joint's too),
+   and `exclude(a, b)` declares any other pair.
 5. **One convex hull per part.** A concave part (a link with a pocket, a gripper body) collides as its
    hull; a convex decomposition or per-face primitives would be closer.
 6. **The joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip build123d's
    default plane X, turning a link 90 deg at angle 0; build the rigid joint from the hinge's own frame.
-7. **URDF details:** joint limits written with effort and velocity 0, and a joint silently renamed when it
-   shares a link's name (`gripper` became `gripper_2`), which breaks a mimic and the pairing.
+7. **Fixed: URDF details.** Joint limits were written with effort and velocity 0, and a joint was silently
+   renamed when it shared a link's name (`gripper` became `gripper_2`). `limits(assembly, joint,
+   effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and
+   joints are named in their own kinds (the SDF, whose frame graph names both, renames and says so).
 8. **No joint limits from geometry.** The STEP has no stops; a self-collision sweep found them for SO-101
    in 41 s. That belongs in text-to-cad, not in each model script.
 9. **Reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf deep-copies

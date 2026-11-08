@@ -94,8 +94,9 @@ if __name__ == "__main__":
   where it was built, and its limits are its range less that value: a finger built at 30 degrees in
   a range of 0 to 40 is a hinge of range -30 to 10 degrees, in radians. Build open, straight or
   homed, and the MuJoCo values are the CAD's.
-- **Declare on finished parts**, after the last operation, as a material is set: `collision()` and
-  `frame()` travel with the part as build123d moves it, and a copy keeps them. `collision()` on an
+- **Declare on finished parts**, after the last operation, as a material is set: `collision()`,
+  `frame()`, `body()` and `exclude()` travel with the part as build123d moves it, and a copy keeps
+  them; `limits()` after the joint it bounds is made. `collision()` on an
   assembly is every part's below it that declares none. A frame is a part's, never an assembly's.
 - **Collision kinds.** `box`, `sphere`, `cylinder` and `capsule` are fitted by the kernel to the
   part's oriented bounding box (a cylinder's and a capsule's axis its longest side): fast and stable,
@@ -173,7 +174,11 @@ What to read in it:
   (`inertia_from_visuals`): give the parts materials.
 - **Geoms.** Each part is a `visual` geom of its mesh and a `collision` geom named `<part>_collision`
   in MuJoCo's half sizes; the classes keep visuals out of contacts and out of group 3.
-- **Sites** are the `frame()`s, in their link's frame, in metres.
+- **Sites** are the `frame()`s, in their link's frame, in metres. A `body()` part is a child body
+  with no joint.
+- **Contacts.** `<contact>` excludes each pair of bodies across a moving joint whose collisions touch
+  at rest (MuJoCo's `filterparent` misses the first joint's, whose parent is welded to the world),
+  then each `exclude()` pair.
 - **The coupling** is an equality: `right = 0 + -1 * left`.
 - **Keys** are the mechanism states, each joint's value in radians or metres from the as-built
   zero, a follower where its leader puts it. No `ctrl`: the file has no actuators.

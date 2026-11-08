@@ -50,8 +50,8 @@ OUT = ROOT / "out/so101"
 
 # The human input: which printed parts (top-level occurrences of the STEP) make which link, named as
 # the maker's URDF names its links (read for which meshes each link holds, not for its numbers).
-# Menagerie names its bodies without "_link", but a URDF holds links and joints in one namespace, and
-# the gripper's link and the jaw's joint would both be "gripper": the joints keep the official names.
+# Menagerie names its bodies without "_link"; the maker's names are kept, so the URDF compares link for
+# link (the URDF and MJCF writers name links and joints apart now, so a link "gripper" would also do).
 PRINTED = {
     "base_link": ("Base_SO101 v12:1", "Base_08p v18:1", "WaveShare_Mounting_Plate_SO101 v4:1"),
     "shoulder_link": ("Rotation_Pitch_SO101 v8:1", "Motor_holder_SO101_Base v6:1"),

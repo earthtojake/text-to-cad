@@ -248,15 +248,18 @@ screw_pair(assembly, "feed", lead_screw=2.0)                        # its value:
 
 A mechanism exported as a robot description (an MJCF, a URDF or an SDF:
 [exports](exports.md#robot-descriptions)) takes its links, joints, couplings and states from the
-mechanism and each link's mass from its parts' materials. Two declarations from `cad.build123d` say
+mechanism and each link's mass from its parts' materials. Declarations from `cad.build123d` say
 the rest, on finished parts, after the last operation, as a material is set:
 
 ```python
-from cad.build123d import collision, frame
+from cad.build123d import body, collision, exclude, frame, limits
 
 collision(arm, "capsule")                   # what a simulator collides it as
 collision(cover, "none")                    # shown, never collides
 frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
+body(camera, "camera_mount")                # its own body, fixed to the link it is fastened to
+exclude(camera, "wrist")                    # never collides with the wrist (a part, assembly or label)
+limits(root, "elbow", effort=27, velocity=6.28)  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
 ```
 
 - **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
@@ -270,8 +273,16 @@ frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own fr
   geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the
   frame moves with the part however a joint or a placement moves it. A frame is a part's, never an
   assembly's; a second frame of one name on a part replaces the first.
+- **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF and SDF a link
+  on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
+- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>`; URDF has no word for it,
+  SDF a comment). The MJCF excludes each jointed pair touching at rest on its own; declare the rest.
+- **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
+  label on the assembly or below it, in SI: URDF's and SDF's `<limit>`, MJCF's `actuatorfrcrange`
+  (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written
+  `effort="0" velocity="0"` in a URDF, which `cad urdf validate` warns a ROS controller reads literally.
 
-Both travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
+They travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
 cost nothing until a robot description is exported. A part that declares other ones is a
 prototype of its own in the document.
 

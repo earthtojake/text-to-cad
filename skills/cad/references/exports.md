@@ -226,8 +226,10 @@ contributes:
   follower on its leader; mechanism states as MuJoCo keys (URDF and SDF have no named poses);
 - **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
   densities; a part with no material weighs nothing;
-- **`collision()` and `frame()`** ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)):
-  what each part collides as, and the named frames (an MJCF site, a URDF frame link, an SDF frame).
+- **`collision()`, `frame()`, `body()`, `exclude()` and `limits()`**
+  ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): what each part collides as,
+  the named frames (an MJCF site, a URDF frame link, an SDF frame), the parts kept bodies of their own,
+  the pairs that never collide, and each joint's drive limits.
 
 A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
 top-level part is a body fixed to the world. A mechanism with a closed loop, and a ball joint in a

@@ -28,8 +28,10 @@ suffix: `cad model export <id> robot.xml` (MJCF), `robot.urdf`, `robot.sdf` (SDF
 writes its meshes as binary STL in metres beside the file: in `assets/` for an MJCF (its
 `meshdir`), in `meshes/` for a URDF and an SDF, named by relative path. The three files of one
 model name every link and joint alike, so a controller, an SRDF and a policy read the same names in
-each (URDF and SDF names keep `[A-Za-z0-9_]`, every other character `_`). What each drops is what
-its format cannot say:
+each (URDF and SDF names keep `[A-Za-z0-9_]`, every other character `_`). MJCF and URDF keep links
+and joints apart, so a link and a joint may share a name; SDFormat names both in one frame graph, so
+the SDF renames such a joint (`<name>_2`) and the export says so. What each drops is what its
+format cannot say:
 
 | | MJCF | URDF | SDF |
 | --- | --- | --- | --- |
@@ -40,7 +42,9 @@ its format cannot say:
 | Capsule collisions | `capsule` | a cylinder and a sphere at each end | `capsule` |
 | Named frames | sites | an empty link on a fixed joint `<frame>_joint`, as a ROS `tool0` | `<frame>` |
 | A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) | no `<inertial>`: SDFormat assumes 1 kg |
-| Joint effort and velocity | not written (actuators are the scene's) | `effort="0" velocity="0"`: a consumer that drives the joint sets them | not written |
+| Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of | `<limit><effort><velocity>` where declared |
+| A part kept a body (`body()`) | a child body with no joint | a link on a fixed joint | as the URDF |
+| Contact exclusions (`exclude()`) | `<contact><exclude>`, and every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) | a comment on the model |
 
 The URDF's root is the first part hung from the ground (a ROS `base_link`); the SDF fixes that root
 to `world` by one joint, which a scene drops to free the model. Never edit a generated file, and
