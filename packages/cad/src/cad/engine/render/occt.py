@@ -64,6 +64,13 @@ DEFAULT_FILL = LOOK.fill
 PARTS = LOOK.palette
 REFERENCE_HEIGHT = 900  # an annotation's ink is as heavy against the picture as on a viewer this tall
 PADDING = 0.04
+# A face's step in the depth test (``Aspect_POM_Fill``'s factor and units). One that writes depth steps back a
+# hair, so the edges on it win; a see-through one, which writes none, a hair forward, so where it lies on an
+# opaque face (a diffuser on its baffle) it is in front of it at every pixel, where at one depth the two would be
+# decided pixel by pixel by how each one's triangles round their depth, in shards. The viewer's rule (the bundled
+# ``@cad/core``'s ``lib/viewer/surfaceLook.js``, ``SEE_THROUGH_OFFSET``).
+EDGES_WIN_OFFSET = (1.0, 1.0)
+SEE_THROUGH_OFFSET = (0.0, -4.0)
 FOCAL_LENGTH = 50.0  # the view's default camera.focalLength (viewSettings.js), on three's 35 mm film gauge
 # The studio environment's horizon grey (sRGB, as its cube map holds it), which lights the model.
 HORIZON = (0.70, 0.71, 0.73)
@@ -312,7 +319,9 @@ class Scene:
         source.SetMaterial(material)
         source.SetColor(color)
         aspect = source.Attributes().ShadingAspect().Aspect()
-        aspect.SetPolygonOffsets(Aspect_PolygonOffsetMode.Aspect_POM_Fill, 1.0, 1.0)
+        see_through = look == "xray" or (look != "hidden" and material.Alpha() < 1)
+        aspect.SetPolygonOffsets(Aspect_PolygonOffsetMode.Aspect_POM_Fill,
+                                 *(SEE_THROUGH_OFFSET if see_through else EDGES_WIN_OFFSET))
         texture = self.parts[index].textures.get(group) if look in ("lit", "pbr") and not fill else None
         if texture is not None:  # a GLB's base colour texture, over its material's colour
             aspect.SetTextureSet(texture)

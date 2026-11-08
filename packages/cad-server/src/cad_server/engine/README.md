@@ -1823,11 +1823,15 @@ approximates (`render/finish.py`): a clear coat eases the base's roughness towar
 OCCT drops anisotropy, and transmission is opacity over the colour tinted
 by the transmission colour.
 Edges are unlit in their class's ink, 1 px; X-ray's faces are lit at 0.22 opacity, Hidden line's
-are the backdrop's colour. The engine serves the record as `GET /api/v1/look` and its image as
-`GET /api/v1/look/environment`; the page reads both once per engine, beside the document, and the
-document's scene brings them as its own lighting and surface rule (the bundled
-`@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
-up in place of the theme's. Preview is drawn as any file's is.
+are the backdrop's colour. A face that writes depth steps back a hair in the depth test, so the
+edges on it win; a see-through one (a translucent part's, X-ray's), which writes none, steps a
+hair forward (`render/occt.py`'s `SEE_THROUGH_OFFSET`), so lying on an opaque face it is in front
+of it at every pixel, never in shards along the two faces' triangles: the viewer's rule (the
+bundled `@cad/core`'s `lib/viewer/surfaceLook.js`). The engine serves the record as
+`GET /api/v1/look` and its image as `GET /api/v1/look/environment`; the page reads both once per
+engine, beside the document, and the document's scene brings them as its own lighting and surface
+rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
+page put up in place of the theme's. Preview is drawn as any file's is.
 
 `cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
 browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.

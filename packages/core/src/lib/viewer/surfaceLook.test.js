@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { createSurfaceLook } from "./surfaceLook.js";
+import { SEE_THROUGH_OFFSET, createSurfaceLook, surfaceOffset } from "./surfaceLook.js";
 
 const INSPECT = Object.freeze({
   defaultColor: "#8fa3b5", fillColors: ["#8fa3b5"], cycleColors: false, overrideSourceColors: false,
@@ -110,6 +110,35 @@ test("opacity scales the authored opacity; Flat swaps in an unlit stand-in and S
   look.apply({ materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 } });
   assert.equal(a.material, lit);
   assert.deepEqual([lit.opacity, lit.transparent, lit.depthWrite], [1, false, true]);
+});
+
+test("a see-through surface steps a hair forward in the depth test, and one that writes depth keeps its family's step, in every look", () => {
+  // An engine document's surfaces step back so the edges on them win (polygon offset 1, 1); a translucent one
+  // lying on an opaque one (a diffuser on its baffle) must be in front of it at every pixel, never decided by
+  // how each one's triangles round their depth.
+  const opaque = new THREE.MeshStandardMaterial({ color: "#1b1c1f", polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const glass = new THREE.MeshStandardMaterial({ color: "#f2f0ea", transparent: true, opacity: 0.8, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const root = new THREE.Group();
+  const baffle = new THREE.Mesh(new THREE.BoxGeometry(), opaque);
+  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(), glass);
+  root.add(baffle, diffuser);
+  const look = createSurfaceLook(THREE, root);
+  const step = (mesh) => [mesh.material.depthWrite, mesh.material.polygonOffset, mesh.material.polygonOffsetFactor, mesh.material.polygonOffsetUnits];
+  const solid = { materialSettings: INSPECT, authored: false, surface: { style: "shaded", opacity: 1 } };
+  look.apply(solid);
+  assert.deepEqual([step(baffle), step(diffuser)], [[true, true, 1, 1], [false, true, 0, -4]]);
+  assert.deepEqual(SEE_THROUGH_OFFSET, { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: -4 });
+  // X-ray: every surface see-through, every surface a hair forward.
+  look.apply({ ...solid, surface: { style: "shaded", opacity: 0.22 } });
+  assert.deepEqual([step(baffle), step(diffuser)], [[false, true, 0, -4], [false, true, 0, -4]]);
+  // Solid again, and the file as authored: the opaque surface's own step back, the translucent one forward.
+  for (const again of [solid, null]) {
+    look.apply(again);
+    assert.deepEqual([step(baffle), step(diffuser)], [[true, true, 1, 1], [false, true, 0, -4]], JSON.stringify(again));
+  }
+  // A family whose surfaces take no step keeps none where they write depth.
+  assert.deepEqual(surfaceOffset(true, new THREE.MeshStandardMaterial()), { polygonOffset: false, polygonOffsetFactor: 0, polygonOffsetUnits: 0 });
 });
 
 test("dispose restores the authored scene and releases only what the look created", () => {
