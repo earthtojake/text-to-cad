@@ -13,7 +13,6 @@ import { modelUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
 import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
 import { viewportZoom, zoomViewControl } from "./ZoomControl.jsx";
-import { ViewHome } from "./ViewCorner.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
@@ -66,8 +65,8 @@ const DOUBLE_PRESS_MS = 600;
  * A 3D view's frame: every view's one frame (`ViewFrame.jsx`: the root, the docked panel, the strip
  * at the centre of the whole view, the top-right, the corner, the cards) with what a 3D view puts in
  * it — its viewport (`ShellViewport`) as the canvas, Preview's view over it and Preview's cover, the
- * strip's view controls (Projection, Display, then Preview), the tool stack, Home at the cube's
- * upper-left in the corner, the playbar at the bottom centre and Preview's own chrome. The same
+ * strip's view controls (Projection, Display, then Preview), the tool stack, the playbar at the
+ * bottom centre and Preview's own chrome; its corner is the viewport's cube alone. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. The toolbar is for using tools, the sidebar for reading the file: a tool's own controls are
  * panels in the tool stack, shown by the tool they belong to; what there is to read of the file (a
@@ -396,8 +395,6 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const quickEdit = references ? <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden} docked={mobile}
     resource={frame.resource} references={references} chips={referenceChips} nameReference={nameReference} annotation={annotation} requests={requests} prompt={frame.quickEditPrompt}
     onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} /> : null;
-  // The corner (`ViewCorner.jsx`): the cube, the viewport's, and Home, a ghost button at its upper-left.
-  const corner = failed || !shell.previewable ? null : <ViewHome onHome={() => frame.viewerRef.current?.goHome?.()} disabled={shell.idle} />;
   // The view's own controls end the strip, after its rule: Projection (the state button), Display (its menu),
   // then Preview. A phone has no room for them on its strip: they are rows of its More, with the zoom.
   const views = shell.previewable && !previewing ? [
@@ -480,7 +477,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
       preview={preview} tools={tools} views={views} toolRow={toolRow} status={updateStatus}
       toolStack={<ToolStack hidden={previewing} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{toolPanels}</ToolStack>}
       panel={panel} panelControl={frame.panelControl} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}
-      corner={corner} notice={view.notice} quickEdit={quickEdit}
+      notice={view.notice} quickEdit={quickEdit}
       // Preview: a view of its own over the editor's, mounted while it is open.
       underlay={previewing && previewView ? <div className="pointer-events-auto absolute inset-0 z-[1]" data-preview-view="">
         <PreviewView view={previewView} desired={frame.previewDesiredScene} modelKey={frame.modelKey}

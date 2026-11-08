@@ -44,7 +44,7 @@ import { scheduleRuntimeRaycastBvh } from "../viewer/raycastBvh.js";
 import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSceneExplode } from "../viewer/sceneExplode.js";
 import { createSceneHighlight } from "../viewer/sceneHighlight.js";
-import { createSurfaceLook } from "../viewer/surfaceLook.js";
+import { createSurfaceLook, surfaceOffset } from "../viewer/surfaceLook.js";
 import { releaseGeometry, shareGeometry } from "../render/sharedGeometry.js";
 import { xbfLookRig, xbfLookSurface, xbfLookXray, xbfLookXrayRig, xbfLookXraySurface } from "./xbfLook.js";
 import { placeXbfPoint, placeXbfSurface, xbfEdgePolyline, xbfFaceNodes, xbfFaceSurface, xbfVertexPoint } from "./xbfEntities.js";
@@ -67,6 +67,9 @@ const EDGE_REACH_MIN = 0.65;
 const EDGE_OCCLUSION_FACTOR = 0.75;
 const EDGE_OCCLUSION_MIN = 0.08;
 const DEFAULT_SURFACE = 0xb8bcc4;
+// The edges lie on the surfaces: a surface that writes depth steps back a hair so the edges on it win the depth
+// test; a see-through one, which writes none, a hair forward instead (`surfaceLook.js`'s `surfaceOffset`).
+const EDGES_WIN = Object.freeze({ polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 const HIGHLIGHT_ORDER = 30;
 // A STEP's reference highlight (`cadInk.js`): one colour, opaque, its lines this many
 // drawing-buffer pixels wide, whether the element is picked or under the pointer.
@@ -378,11 +381,8 @@ export function createXbfScene(THREE, document) {
     const name = lookKey(rgba, look, thickness);
     let found = materials.get(name);
     if (!found) {
-      found = new THREE.MeshPhysicalMaterial({
-        ...xbfLookParameters(THREE, rgba, look, thickness), side: THREE.DoubleSide,
-        // The edges lie on the surfaces: the surfaces step back a hair so the edges win the depth test.
-        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-      });
+      const parameters = xbfLookParameters(THREE, rgba, look, thickness);
+      found = new THREE.MeshPhysicalMaterial({ ...parameters, side: THREE.DoubleSide, ...surfaceOffset(parameters.depthWrite, EDGES_WIN) });
       found.userData.cadSourceColor = Boolean(rgba);
       // A finish the document authored: the shaded modes keep it (`surfaceLook.js`).
       if (look) found.userData.cadAuthoredFinish = true;
@@ -393,7 +393,7 @@ export function createXbfScene(THREE, document) {
   // Edges draw after the surfaces, in the transparent pass (a see-through X-ray surface would
   // otherwise wash out the edges under it), as a STEP's edge pass does.
   const lineMaterials = Object.fromEntries(XBF_EDGE_LINES.map(line => [line, new THREE.LineBasicMaterial({ color: 0x253443, transparent: true })]));
-  const hiddenDepth = new THREE.MeshBasicMaterial({ colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const hiddenDepth = new THREE.MeshBasicMaterial({ colorWrite: false, ...EDGES_WIN });
 
   // A prototype's surface geometry: the part's, or for painted faces one over its buffers with
   // a group per face and a material per paint (its colour, and its material where it has one).
@@ -558,6 +558,7 @@ export function createXbfScene(THREE, document) {
         if (!dimmed(entry.index)) continue;
         for (const paint of Array.isArray(entry.mesh.material) ? entry.mesh.material : [entry.mesh.material]) {
           if (!paint.transparent || paint.depthWrite) { paint.transparent = true; paint.depthWrite = false; paint.needsUpdate = true; }
+          Object.assign(paint, surfaceOffset(false));
           paint.opacity = Math.min(paint.opacity, FOCUSED_DIMMED_SURFACE_OPACITY);
         }
       }

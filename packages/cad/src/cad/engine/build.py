@@ -51,8 +51,9 @@ from cad.engine.ids import canonical, file_id
 
 __all__ = ["BuildError", "build", "load_script"]
 
-# What the library's aliases say of an earlier spelling (``cad.read_step is deprecated; use cad.step.read``).
-_DEPRECATED = r"cad(gen)?\.[\w.]+ is deprecated; use "
+# What the library's aliases say of an earlier spelling (``cad.read_step is deprecated; use cad.step.read``,
+# ``cadgen is deprecated; use cad``).
+_DEPRECATED = r"cad(gen)?(\.[\w.]+)? is deprecated; use "
 
 # The library's import names: its own, and ``cadgen``, its earlier one (an alias of it). A model's module
 # is never named so (``load_script``).

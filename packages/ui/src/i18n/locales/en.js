@@ -245,6 +245,8 @@ export default {
   "file.fileExplorer": "File Explorer",
   "file.fileManager": "File manager",
   "file.sourceMissing": "The source was moved or deleted.",
+  "file.kicadBoardTooNew": "{app} can't open this board: it was saved by a newer KiCad.",
+  "file.kicadSchematicTooNew": "{app} can't open this schematic: it was saved by a newer KiCad.",
   "file.defaultApp": "Default app",
 
   // The app's menu, from the navbar's logo.
@@ -806,7 +808,6 @@ export default {
   "selection.padOf": "Pad of {part}",
   "selection.pinOf": "Pin of {part}",
   "selection.connectedTo": "Connected to {name}",
-  "view.home": "Home",
   "zoom.current": "Zoom {percent}",
   "zoom.in": "Zoom in",
   "zoom.out": "Zoom out",

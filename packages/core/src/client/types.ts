@@ -21,8 +21,11 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
-/** One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its product name. */
-export interface CadOpenInApp { id: string; name: string }
+/**
+ * One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its name (a KiCad's says its
+ * version). `refuses: 'newer'`: it cannot open this file, which a newer version saved, and an open with it is a 400.
+ */
+export interface CadOpenInApp { id: string; name: string; refuses?: 'newer' }
 /**
  * One of a document's files, as Open in lists it: `source` (a model's script, a file document's file)
  * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
@@ -88,7 +91,7 @@ export interface CadWhatsNew { seen: string[]; release: string | null }
 /** Whether the engine updates by itself (`/api/v1/settings`' `updates`: `cad_server/auto_updates.py`), and why:
  * the default, the person's choice, or the environment (`CAD_UPDATE_CHECK=0`, CI), which no click changes. */
 export interface CadAutomaticUpdates { automatic: boolean; reason: 'default' | 'choice' | 'environment' }
-/** A newer text-to-cad, as cadgen's version check says it (`/api/v1/server`'s `notice`): the release offered, and this install's. */
+/** A newer text-to-cad, as the server's version check says it (`/api/v1/server`'s `notice`): the release offered, and this install's. */
 export interface CadUpdateNotice { latest: string; version: string }
 /** Where an update the update button started is (`cad_server/_internal/update.py`). */
 export interface CadUpdateState {
@@ -163,7 +166,7 @@ export interface CadDrawingPayload {
   [key: string]: unknown;
 }
 /**
- * Where a page reads a document the cadgen engine serves (an `.xbf`, a STEP, a model): its id, its
+ * Where a page reads a document the engine serves (an `.xbf`, a STEP, a model): its id, its
  * kind, its kind's API URL (`/api/v1/documents/<kind>/<id>`, on the client's origin), and the fetch
  * every read of it is made with (the client's own: the CAD app's travels over its tunnel).
  */
@@ -174,7 +177,7 @@ export interface CadEngineDocument {
   fetch: typeof fetch;
 }
 /**
- * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
+ * What `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure` answers: a URDF, SDF or SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
  * links and joints, as written. See `packages/cad-server/src/cad_server/robot_payload.py`.
@@ -282,7 +285,7 @@ export interface CadWorkspaceService {
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
   robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   /**
-   * `POST /api/v1/documents`: where the page reads a document the cadgen engine serves (an `.xbf`, a STEP, a model),
+   * `POST /api/v1/documents`: where the page reads a document the engine serves (an `.xbf`, a STEP, a model),
    * through this server (`lib/xbf/xbfDocument.js`), once the engine holds it. A host without an
    * engine leaves it out, and the xbf renderer says it cannot open the file.
    */
