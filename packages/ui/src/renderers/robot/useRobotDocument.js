@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { english } from "../../i18n/core.js";
 import { entryUrdfAssetHash } from "@cad/core/lib/entryAssets.js";
+import { entrySourceFormat } from "@cad/core/lib/fileFormats.js";
 import { isAbortError, loadRenderRobot, peekRenderRobot } from "@cad/core/lib/renderAssetClient.js";
 import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@cad/core/lib/urdf/loadRobot.js";
 
@@ -9,7 +10,14 @@ import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@ca
 // worker still parses serially.
 const MESH_LOAD_CONCURRENCY = 8;
 const KINDS = new Set(["urdf", "srdf", "sdf", "mjcf"]);
-const kindOf = entry => String(entry?.kind || "").trim().toLowerCase();
+// A catalog row's kind is the file's extension; the robot kinds are the registry's ids, which differ from
+// it for an MJCF (``.xml`` or ``.mjcf``: both ``mjcf``), so the row is read through the format table.
+const kindOf = entry => {
+  const raw = String(entry?.kind || "").trim().toLowerCase();
+  if (KINDS.has(raw)) return raw;
+  const format = raw ? entrySourceFormat(entry) : "";
+  return KINDS.has(format) ? format : raw;
+};
 
 function meshConcurrency() {
   const cores = typeof navigator !== "undefined" ? Number(navigator.hardwareConcurrency) : 0;

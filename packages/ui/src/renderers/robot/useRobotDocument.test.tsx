@@ -34,6 +34,21 @@ it('reads the payload, then every mesh it names, counting them, and publishes th
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+it('an MJCF row, whose catalog kind is its extension (.xml or .mjcf), is read as the mjcf kind', async () => {
+  // A catalog row's kind is the file's extension; a robot kind is the registry's id. They agree for a
+  // URDF and differ for an MJCF, which the hook reads through the format table rather than refusing.
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(glb(url))));
+  const resources = createHttpCadResourceProvider();
+  for (const name of ['scene.xml', 'hand.mjcf']) {
+    const robot = client(() => swing());
+    const hook = renderHook(() => useRobotDocument({ entry: entry(name), client: robot, resources }));
+    expect(hook.result.current.progress).toMatchObject({ label: 'Loading MJCF' });
+    await waitFor(() => expect(hook.result.current.robot).not.toBeNull());
+    expect(hook.result.current.robot).toMatchObject({ file: `/models/${name}`, kind: 'mjcf' });
+    expect(robot.robot).toHaveBeenCalledWith(`/models/${name}`, expect.anything());
+  }
+});
+
 it('restores a complete cached robot on the first render, before any loading effect runs', async () => {
   const fetch = vi.fn(async (url: string) => new Response(glb(url)));
   vi.stubGlobal('fetch', fetch);
