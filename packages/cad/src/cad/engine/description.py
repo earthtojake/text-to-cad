@@ -205,7 +205,11 @@ class Description:
 
     def check(self) -> None:
         """The tree's invariants, raised by name: one root, every joint between known links, every child
-        placed by one joint, meshes the geometry names present, no loop."""
+        placed by one joint, meshes the geometry names present, no loop. A loop is said first: its
+        closing joint places a link a second time."""
+        if self.loops:
+            raise DescriptionError(f"the mechanism has a loop through {', '.join(self.loops)}: no robot format "
+                                   f"writes one")
         names = [link.name for link in self.links]
         if len(set(names)) != len(names):
             raise DescriptionError(f"link names repeat: {sorted({n for n in names if names.count(n) > 1})}")
@@ -228,9 +232,6 @@ class Description:
             for geometry in [v.geometry for v in link.visuals] + [c.geometry for c in link.collisions]:
                 if geometry.kind == "mesh" and geometry.mesh not in self.meshes:
                     raise DescriptionError(f"link {link.name!r} names mesh {geometry.mesh!r}, which there is not")
-        if self.loops:
-            raise DescriptionError(f"the mechanism has a loop through {', '.join(self.loops)}: no robot format "
-                                   f"writes one")
 
 
 def srgb(linear: tuple[float, ...] | None, default: tuple[float, float, float, float] = (0.8, 0.8, 0.8, 1.0)) -> tuple[float, float, float, float]:
