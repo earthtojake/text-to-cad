@@ -33,7 +33,7 @@ test("the viewer's mixer plays a baked animation's STEP and LINEAR channels as t
   const clip = document.clips.find((candidate) => candidate.name === "showcase");
   assert.ok(clip, document.clips.map((candidate) => candidate.name).join(", "));
   assert.equal(clip.duration, 2, "every sampler runs the whole animation");
-  assert.deepEqual(clip.userData, { cadgen: { duration: 2 } });
+  assert.deepEqual(clip.userData, { cad: { duration: 2, kind: "animation" } });
   // three.js names a node as glTF does, less the characters a property path reserves (`feet/foot_1`: `feetfoot_1`).
   const node = (name) => document.scene.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(name));
   const runtime = createGlbAnimationRuntime(THREE, document.scene, clip);

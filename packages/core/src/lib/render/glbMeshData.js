@@ -70,10 +70,19 @@ function colorFromMaterial(material, useSourceColors, { rawMaterial = null } = {
   };
 }
 
+// What a transmissive material at alpha 1 previews at where a look draws no transmission, or null: as
+// build123d's material setter infers (`threejs_materials.PbrProperties.interpolate_color`), which the
+// engine's GLB does not repeat in the file. An alpha below 1 is kept: an earlier release's GLB's, or an
+// authored `opacity`. The engine's is `formats/gltf.py`'s `preview_alpha`.
+function previewOpacity(material) {
+  const transmission = Number(material?.transmission);
+  return transmission > 0 && Number(material?.opacity) >= 1 ? Math.max(0.15, 1 - 0.7 * transmission) : null;
+}
+
 function materialOpacity(material, rawMaterial = null) {
   const materialValue = Number(material?.opacity);
   if (Number.isFinite(materialValue)) {
-    return Math.min(Math.max(materialValue, 0), 1);
+    return previewOpacity(material) ?? Math.min(Math.max(materialValue, 0), 1);
   }
   const rawAlpha = rawBaseColorFactor(rawMaterial)?.[3];
   const rawValue = Number(rawAlpha);
@@ -646,7 +655,9 @@ function sampledAnimatedBounds(scene, clips, cadRootMatrix) {
  * a viewer paints those with its own surface colour, exactly as the flattened mesh
  * path drops them. `cadSourceColor` records that shared rule. An explicit lit
  * glTF material also marks `cadAuthoredFinish`, so regular shaded views keep its
- * PBR channels; the loader's implicit material remains the viewer's fallback.
+ * PBR channels; the loader's implicit material remains the viewer's fallback. A transmissive one
+ * marks `cadPreviewOpacity`, what a look wears that draws no transmission (`surfaceLook.js`): its
+ * opacity stays the file's, so the looks that do draw it are not faded as well.
  */
 function markGlbMaterials(gltf) {
   const json = gltf?.parser?.json;
@@ -660,6 +671,8 @@ function markGlbMaterials(gltf) {
       // An explicit glTF material owns its PBR finish, including Standard materials.
       // GLTFLoader's implicit no-material default still takes the viewer's finish.
       material.userData.cadAuthoredFinish = Boolean(rawMaterial && material.isMeshStandardMaterial);
+      const preview = previewOpacity(material);
+      if (preview !== null) material.userData.cadPreviewOpacity = preview;
     }
   });
 }

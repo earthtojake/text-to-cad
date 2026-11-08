@@ -422,8 +422,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 22. **A verb's option is about the picture or the path, never the model.** *Every document.* `export` takes a
     document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state; its one option, an
-    STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, not what it holds. `snapshot`'s
+    motion, is what the code built, so no option selects a part or a state; its options, a GLB's, an
+    STL's or a 3MF's mesh tolerance and angle, are how finely the file's triangles follow that, not what it holds. `snapshot`'s
     options describe the picture (the camera, the display, the size, the state the mechanism
     is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
     is, is a function in the model's code: a part's own model, or a model returning the
@@ -677,7 +677,8 @@ kicad_pcb drc`) and the fabrication, assembly and 3D exports (`cad.kicad_pcb.exp
 `cad kicad_pcb export --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`), the `kicad`
 integration's, run by kicode's `kicad-cli` (`cad[kicad]`; a person's own KiCad is never run). A script
 run with `cad run` that calls them gets the extra; the command runs them in the extra's environment. An
-exported STEP enters the ordinary foreign-file path.
+exported STEP enters the ordinary foreign-file path. A board's GLB holds its copper, mask and silkscreen
+as well as the board and its parts, each KiCad's own mesh; its STEP the board and its parts alone.
 
 A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read` reads the whole
 hierarchy from its project's root sheet (whichever of its sheets it is given): its sheets, symbols and

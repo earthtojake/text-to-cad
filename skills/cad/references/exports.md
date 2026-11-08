@@ -167,7 +167,9 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
   ([animation](animation.md)). A GLB exported from the model, by its id, by
   `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
-  animations, byte for byte the same file.
+  animations, byte for byte the same file. A transmissive material (`transmission` above zero) is
+  written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade
+  one too, give its PBR `opacity` below 1 (a translucent `part.color` is not read as a fade).
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
   and materials through the materials extension.
 - **STL**: binary, every placed triangle, in millimetres.
@@ -199,13 +201,28 @@ at the finer of the tolerance and its own, for that file alone, so a small part 
 coarser; the viewer, snapshots and every other export keep the viewer's mesh. The tolerance
 holds on every face, an imported STEP's faces whose edges carry a looser tolerance too (those
 cost the most triangles). The file says
-what it was meshed to (the STL's header, the 3MF's description). It is
-for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
-one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
+what it was meshed to (the STL's header, the 3MF's description, the GLB's `asset.extras.cad`). A STEP
+has no mesh and takes no tolerance (send a STEP when the person's slicer or shop takes one), and a
+mesh file's triangles are its own, so a conversion takes none. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
 three times the segments round a curve and ten times the triangles of a doubly curved face (a
 600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or
 above 0.001 (the floor) and say the file's size when it is large. If the export
 names faces left without triangles, try a slightly different tolerance or repair the face.
+
+## A GLB for another renderer
+
+A GLB is the viewer's mesh unless the export says otherwise, and in a path tracer or at a close
+camera the viewer's mesh shows its facets. Give a GLB for rendering a finer one, in the same two
+options, either alone:
+
+```bash
+cad model export "$ID" GLB/hero.glb --tolerance 0.05 --angle 5
+```
+
+`--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's, so a file is never coarser than its
+mesh): it draws small radii in more segments, where a tolerance does not reach them. The same is
+`model.export(x, path, tolerance=0.05, angle=5)` and `@glb("hero.glb", tolerance=0.05, angle=5)`, and
+an STL and a 3MF take it too. The cost is triangles: say the file's size when it is large.
 
 ## Other tools
 

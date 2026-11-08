@@ -117,7 +117,7 @@ test("posed by the page's forward kinematics, every motion is the engine's GLB b
   const report = {};
   for (const animation of gltf.animations) {
     const timeline = xbfMotionTimeline(KINEMATICS, animation.name);
-    assert.equal(animation.extras.cadgen.duration, timeline.duration);
+    assert.equal(animation.extras.cad.duration, timeline.duration);
     const times = read(animation.samplers[0].input).map(([t]) => t);
     const posed = new Map();
     const at = (t) => { if (!posed.has(t)) posed.set(t, xbfPosedMatrices(STRUCTURE, timeline.values(t))); return posed.get(t); };

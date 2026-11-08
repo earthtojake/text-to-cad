@@ -191,7 +191,8 @@ and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a
 model that returns 2D geometry, a profile or a flat pattern, and a solid is refused
 ([2D profiles and DXF](references/2d-profiles-and-dxf.md)). An STL or 3MF for printing a part with fits takes
-`--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)).
+`--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)); a
+GLB for another renderer takes `--tolerance MM --angle DEG` ([a GLB for another renderer](references/exports.md#a-glb-for-another-renderer)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `xbf.read`. A restart needs none: the

@@ -418,7 +418,7 @@ class GlbTest(_Folder):
         gltf, read = _glb(out)
         names = [node["name"] for node in gltf["nodes"]]
         [showcase] = [animation for animation in gltf["animations"] if animation["name"] == "showcase"]
-        self.assertEqual(showcase["extras"], {"cadgen": {"duration": 2.0}})
+        self.assertEqual(showcase["extras"], {"cad": {"duration": 2.0, "kind": "animation"}})
         found = {}
         for channel in showcase["channels"]:
             sampler = showcase["samplers"][channel["sampler"]]

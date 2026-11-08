@@ -2,7 +2,7 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
+    cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--json]   (the options: a model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
@@ -55,7 +55,7 @@ def _source_help(document_type: str | None, generic: str) -> str:
 
 
 def _meshes(document_type: str | None) -> bool:
-    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance: nothing is meshed)."""
+    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance or angle: nothing is meshed)."""
     if document_type is None:
         return False
     from cad.registry import DOCUMENT_TYPES
@@ -75,12 +75,15 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
                              "document as its code built it")
-    from cad.engine.export import MIN_TOLERANCE
+    from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
-                        help=f"mesh an .stl or a .3mf to within this absolute tolerance, in mm (at least "
+                        help=f"mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
-                             "for a print whose fits are finer")
+                             "for a print whose fits are finer, or a picture whose curves are")
+    export.add_argument("--angle", type=float, metavar="DEG",
+                        help=f"mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees ("
+                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments")
     export.add_argument("--json", action="store_true", help="print what was written as JSON")
 
 
@@ -297,7 +300,7 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 def parser_for(verb: str, prog: str | None = None, *, document_type: str | None = None) -> argparse.ArgumentParser:
     """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...): for
     ``document_type``, its source said as that type's (a model's id, or a file of its kind), and a mesh's
-    export without ``--tolerance``."""
+    export without ``--tolerance`` or ``--angle``."""
     help_text, arguments, _runner = VERBS[verb]
     if document_type is not None and verb in ("export", "snapshot", "inspect"):
         from cad.registry import DOCUMENT_TYPES
@@ -413,7 +416,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
 
     try:
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
-                             log=lambda text: print(text, file=sys.stderr))
+                             angle=getattr(args, "angle", None), log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:

@@ -5,13 +5,15 @@ import base64
 import copy
 import io
 import json
+import re
 import tempfile
 import textwrap
 import unittest
+import zipfile
 from pathlib import Path
 
 import build123d as bd
-from bd_materials import FinishedMaterial, metals
+from bd_materials import FinishedMaterial, glass, metals, plastics
 from bd_materials.core import Range
 from threejs_materials import PbrProperties
 from PIL import Image
@@ -142,6 +144,62 @@ class MaterialsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "texture maps requires UV mapping"):
             export.translate(export.Source.read(self.folder / "test.xbf"), "glb", self.folder / "test.glb")
         self.assertFalse((self.folder / "test.glb").exists())
+
+    def test_a_glb_writes_a_transmissive_look_opaque_unless_its_opacity_fades_it(self):
+        from cad.engine.export.glb import _material
+
+        def written(rgba, material):
+            entry = _material(rgba, document.material_json(material), 2.0)
+            return entry["alphaMode"], entry["pbrMetallicRoughness"]["baseColorFactor"][3]
+
+        clear = glass.borosilicate()
+        self.assertEqual(written((0.9, 0.9, 0.9, 0.3), clear), ("OPAQUE", 1.0), "the alpha build123d's setter inferred")
+        faded = plastics.pmma()
+        faded.pbr = faded.pbr.override(opacity=0.5)
+        self.assertEqual(written((1.0, 1.0, 1.0, 0.3), faded), ("BLEND", 0.5), "the author's fade, whatever the colour says")
+        self.assertEqual(written((0.5, 0.5, 0.5, 0.4), metals.brass()), ("BLEND", 0.4), "no transmission: the colour's own")
+
+    def test_a_transmissive_material_at_alpha_1_previews_as_build123d_infers_and_a_lower_alpha_is_its_own(self):
+        from cad.engine.formats.gltf import preview_alpha
+
+        self.assertEqual([preview_alpha(1.0, 0.6), preview_alpha(1.0, 1.0), preview_alpha(0.5, 0.6), preview_alpha(1.0, 0.0)],
+                         [0.58, 0.3, 0.5, 1.0])
+        for opacity in (0.0, 0.4, 0.75):
+            look = plastics.pmma(opacity=opacity).pbr
+            self.assertEqual(preview_alpha(1.0, look.values.transmission), look.interpolate_color()[3], "the setter's own")
+
+    def test_a_glb_s_transmissive_part_reads_as_the_xbf_s_in_a_still_and_a_3mf(self):
+        from cad.engine import formats
+        from cad.engine.render.finish import finish
+
+        script = self.folder / "pane.py"
+        script.write_text(textwrap.dedent('''
+            import build123d as bd
+            from bd_materials import plastics
+            from cad import glb, xbf
+
+            @xbf("pane.xbf")
+            @glb("pane.glb")
+            def pane():
+                part = bd.Box(20, 10, 2)
+                part.material = plastics.pmma(opacity=0.4)
+                return part
+        '''), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["pane"], cwd=self.folder)[0]["ok"])
+        (prototype,) = formats.read(self.folder / "pane.glb").structure["prototypes"]
+        material = prototype["material"] or next(iter(prototype["faceMaterials"].values()))
+        self.assertEqual(material["pbr"]["values"]["transmission"], 0.6, "matched by name and factors at alpha 1")
+        rgba = prototype["color"] or next(iter(prototype["faceColors"].values()))
+        self.assertAlmostEqual(finish(rgba, material)["alpha"], 0.232, places=5)
+        (own,) = document.Loaded(self.folder / "pane.xbf").structure()["prototypes"]
+        self.assertAlmostEqual(finish(own["color"], own["material"])["alpha"], 0.232, places=5, msg="the xbf's still")
+        direct, converted = self.folder / "direct.3mf", self.folder / "converted.3mf"
+        export.translate(self.folder / "pane.xbf", None, direct)
+        export.translate(self.folder / "pane.glb", None, converted)
+        colours = [re.findall(r'displaycolor="([^"]+)"', zipfile.ZipFile(path).read("3D/3dmodel.model").decode())
+                   for path in (direct, converted)]
+        self.assertEqual(colours[0], colours[1])
+        self.assertEqual(colours[0][0][-2:], "94", "alpha 0.58")
 
     def test_future_material_document_format_is_refused_and_current_format_reloads(self):
         from OCP.Standard import Standard_GUID

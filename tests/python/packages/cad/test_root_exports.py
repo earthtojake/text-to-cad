@@ -132,10 +132,11 @@ class RootExports(unittest.TestCase):
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
                 self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
-                                 ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
-                # The type's decorator passes an STL's or a 3MF's mesh tolerance to the engine's; any other
-                # type's engine decorator refuses it, as Python refuses an unknown keyword.
-                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name", "tolerance"])
+                                 ["out", "name", *(["tolerance", "angle"] if kind in ("glb", "stl", "threemf") else [])])
+                # The type's decorator passes a GLB's, an STL's or a 3MF's mesh tolerance and angle to the engine's;
+                # any other type's engine decorator refuses them, as Python refuses an unknown keyword.
+                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters),
+                                 ["out", "name", "tolerance", "angle"])
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either

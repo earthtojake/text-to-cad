@@ -634,7 +634,7 @@ failure: the next asker makes it again.
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
-| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
+| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or a GLB's, an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
@@ -671,11 +671,12 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              headless
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad model export ID DST [DST ...] [--tolerance MM] [--json]
+cad model export ID DST [DST ...] [--tolerance MM] [--angle DEG] [--json]
                                              a model, by its document id: the document the engine holds
-cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--json]
-                                             SRC an .xbf or a .step; --tolerance (a model's, an xbf's, a
-                                             STEP's) meshes an .stl or a .3mf at MM (Mesh)
+cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--json]
+                                             SRC an .xbf or a .step; --tolerance and --angle (a model's, an
+                                             xbf's, a STEP's) mesh a .glb, an .stl or a .3mf to MM and
+                                             DEG (Mesh)
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
@@ -960,7 +961,7 @@ protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the ana
 `__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
 with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
 behind a check that the source is the type's (`refuse_other`: no file of another type; for `model`, a
-handle or an id and no file; for a file's type, no handle or id); a mesh's `export` takes no `tolerance`.
+handle or an id and no file; for a file's type, no handle or id); a mesh's `export` takes no `tolerance` or `angle`.
 `dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
 is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
@@ -992,7 +993,7 @@ declared, and nothing is written from the edited file but what explicit calls af
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
 runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
-without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
+without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
 choices (`sdf.validate`'s `gz_check`, `dfm`'s `process` and `units`), so a value outside them is the
@@ -1047,6 +1048,9 @@ installation's release, made once by the engine (about 100 MB to download from P
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
 for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
+board's `--to glb` holds its copper, mask and silkscreen too, each KiCad's own mesh named by its layer
+(`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`); its `--to step` holds the board
+and its parts alone. A
 schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
 run the same way.
 
@@ -2155,16 +2159,20 @@ changed or new one fails in one line naming the folder and its mode.
   node per placement named by its path, a PBR material per
   look (a paint is a primitive of its own) with an extension for each part of the look past
   metallic-roughness (`KHR_materials_ior`, `_transmission`, `_volume`, `_clearcoat`,
-  `_anisotropy`, `_emissive_strength`; **Materials**), every motion of the document an
+  `_anisotropy`, `_emissive_strength`; a transmissive look `OPAQUE` at alpha 1 unless its PBR
+  `opacity` fades it; **Materials**), every motion of the document an
   animation of the same name (below), and every `animation()` of its code, from a build or from
   the record an xbf carries (**Animations**); **3MF**: an object per prototype, a build item per
   placement, looks through the materials extension (base materials, `pbmetallic` display
   properties, painted triangles naming their own); **STL**: binary, every placed triangle.
   Their meshes are the process's one mesh cache's (`serve.MESHES`), the viewer's: a part the
-  build meshed for the viewer is not meshed again for a GLB, nor the other way round. An STL or a
-  3MF at an export's own tolerance (**Mesh**) is meshed again for that file and says so: the STL's
-  header ends `(meshed within 0.01 mm)`, the 3MF's `Description` metadata reads `Meshed to
-  within 0.01 mm`.
+  build meshed for the viewer is not meshed again for a GLB, nor the other way round. A GLB, an STL
+  or a 3MF at an export's own tolerance or angle (**Mesh**) is meshed again for that file and says
+  so: the GLB's `asset.extras.cad` holds `meshedWithin` (mm) and `angle` (degrees), each only where
+  the export gave it, the STL's header ends `(meshed within 0.01 mm and 5 degrees)`, the 3MF's
+  `Description` metadata reads `Meshed to within 0.01 mm and 5 degrees`. A GLB's `asset.generator`
+  is `cad`. The file holds no document id or revision: those differ by source, and a GLB is the same
+  bytes from an xbf, a held document or the build's worker.
 - **DXF** (`export/dxf.py`): a planar document -- a model whose body returns a sketch, a face,
   wires or edges -- drawn by build123d's own `ExportDXF` (ezdxf), in millimetres, each edge
   where the document places it one entity, so a curve stays an ARC, CIRCLE, ELLIPSE or SPLINE.
@@ -2197,7 +2205,9 @@ placement's origin or 1e-3 radian in its rotation, at most 4,097 keys. A moved p
 stands by translation and rotation, every other by its matrix; placements whose keys are the
 same bytes (the parts of one link, each its own node) share one sampler, so a link's motion is
 written once however many parts it carries; the animation's
-`extras.cadgen` holds the duration. A clip is the motion once, and a player repeats it. STEP,
+`extras.cad` holds the duration and `"kind": "motion"` (an earlier release's file calls it
+`extras.cadgen`, the duration alone; nothing the engine or the viewer runs reads either, a player
+taking a clip's length from its keys). A clip is the motion once, and a player repeats it. STEP,
 STL and 3MF ignore motions, and neither `export` nor `@glb` takes an argument for them. On the
 corpus's motorbike (2,053 mm across, so a 2.05 mm tolerance), `steer` (a ±20° sweep of the head
 tube and back over 4 s) bakes to 5 keys on 15 placements, within 1.26 mm and 2.1e-4 rad of
@@ -2545,7 +2555,7 @@ direction by its rank, or away from a point), `.stagger(parts, by=, step=)` one 
 turn, `.hide(parts, at=)` a `STEP` scale to 0 (glTF has no visibility channel), and
 `.pose(at={t: mechanism state or values})` translations and rotations of every part the mechanism
 moves, its joint values eased between the keys. The duration is the animation's length, in its
-`extras.cadgen.duration` as a motion's is (glTF has no field for it).
+`extras.cad.duration` as a motion's is (glTF has no field for it), beside `"kind": "animation"`.
 
 Parts are named as a ref's owner names them (**References**: a label, `feet/foot_1`, a path from
 the assembly the animation is on) or by a glob (`feet/*`, `wheel?`), its outermost matches each a
@@ -2596,8 +2606,17 @@ For a project's own material, use a native factory such as `metals.custom_metal`
 "Coating", color="#202830", roughness=0.7))`. Unknown density remains unknown in
 inspection. Assign materials and paints after geometric operations. Native material
 assignment infers a preview alpha for transmission (`transmission=1` gives `0.3`), even
-when its PBR `opacity=1`. For an opaque base colour with physical transmission, assign
-an opaque shape colour after the material. Native assignments,
+when its PBR `opacity=1`. The viewer's scene and an xbf's still draw that alpha; for an opaque base
+colour with physical transmission there, assign an opaque shape colour after the material. A GLB writes
+a transmissive look (`transmission` above zero) `OPAQUE` at alpha 1, so a path tracer refracts the part
+and does not also fade it, unless its PBR `opacity` is below 1: that is an author's fade, written `BLEND`
+at that alpha. A translucent shape colour on a transmissive look is not one: the document holds only
+the colour's value, and an inferred preview cannot be told from it (the same value by hand, or a preview
+left from the transmission before a later `pbr.override`). What reads a GLB and draws no transmission puts
+the preview back: a transmissive material at alpha 1 previews at the same inference, `max(0.15, 1 - 0.7 *
+transmission)` (`formats/gltf.py`'s `preview_alpha`, `glbMeshData.js`'s `previewOpacity`), in the viewer's
+Flat and an Inspect without finishes, a still's alpha, and the colour of a 3MF converted from it; one below 1
+keeps its alpha. Native assignments,
 inheritance and copying follow build123d; a child whose inherited value has already been
 read can retain that cached value, so assign assembly materials before reading children.
 
@@ -2777,21 +2796,26 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-An STL or a 3MF export may give its own tolerance instead: `cad model export ID part.stl --tolerance
-0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
-absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
+A GLB, an STL or a 3MF export may give its own tolerance instead: `cad model export ID part.stl
+--tolerance 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@glb("part.glb", tolerance=0.01)`. It is
+an absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
 tube is 47 segments round at the engine's tolerance, its facets 0.095 mm deep; 205 and 0.005 mm at
-0.01). Each part is meshed at the finer of its own deflection and the ceiling, so a tolerance never
+0.01), or a picture whose curves are. Each part is meshed at the finer of its own deflection and the ceiling, so a tolerance never
 makes a part coarser than the viewer draws it -- most of a robot's parts are under 60 mm across,
 where a quarter per cent is already finer than 0.05 mm, and meshed coarser their faces were seen to
 lose triangles. An explicit tolerance also sets `ForceFaceDeflection`, so loose edge tolerances do
 not override the requested face deflection. It is meshed for that file alone and never cached, so the
 viewer, the snapshot and every other export keep the engine's mesh; the file says what it was meshed to
-(**Translation formats**). It is refused by name for any other kind (a GLB is the viewer's own
-mesh) and for a mesh file's source, whose triangles are the file's. Since which faces the mesher
-leaves without triangles changes with the tolerance, the export names each part it left faces of,
-and how many. The cost is the triangles: a tenth of the deflection is about three times the
+(**Translation formats**). The same export may give an angle beside it or alone (`--angle 5`, `angle=5`,
+on the decorators too): a ceiling on the angular deflection in degrees, from 1 to 28.5
+(`export.MIN_ANGLE`, `export.MAX_ANGLE`), so a file is never coarser than the viewer's mesh, for small
+radii a linear deflection never reaches (a cylinder of 10 mm radius and 40 long is 152 triangles at
+the engine's pair and 572 at 5 degrees). It is the mesher's own angle, set on each edge's polygon: a doubly curved face's
+triangles can stand a little further apart (a sphere's normals up to 7 degrees at 5). Each is
+refused by name for any other kind and for a mesh file's source, whose triangles are the file's. Since
+which faces the mesher leaves without triangles changes with either, the export names each part it
+left faces of, and how many. The cost is the triangles: a tenth of the deflection is about three times the
 segments round a curve and ten times the triangles of a doubly curved face, on the large parts
 alone. Measured on 2026-11-03 on a 600-part robot arm (a 439 MB STEP), a whole-assembly STL at
 0.01 mm was 1.33 million triangles against 1.02 million, 66 MB against 51, in about the same 30 s

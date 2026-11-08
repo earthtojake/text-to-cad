@@ -12,8 +12,9 @@ materials its primitives wear, in the viewer's frame. What a conversion reads a 
   them, and indices; primitives on the same attributes share their vertices. A primitive is a
   face of its mesh (from 1, in the file's order).
 - **Materials**: a primitive's material is the structure's: its base colour (linear; its alpha a
-  ``BLEND`` material's, else opaque), metallic, roughness, emission and name, and the engine's KHR
-  extensions (``look_extensions``). Textures are not read.
+  ``BLEND`` material's, else opaque, a transmissive one's preview: ``preview_alpha``), metallic,
+  roughness, emission and name, and the engine's KHR extensions (``look_extensions``). Textures are
+  not read.
 
 Accessors are read as the spec has them -- any component type, normalized, strided, sparse.
 Compressed geometry (``KHR_draco_mesh_compression``, ``EXT_meshopt_compression``) and buffers
@@ -34,7 +35,7 @@ import numpy as np
 # The container's constants as the engine's GLB writer declares them.
 from cad.engine.export.glb import BIN_CHUNK, JSON_CHUNK, MAGIC
 
-__all__ = ["GltfError", "Part", "Read", "look_extensions", "material_of", "read_gltf"]
+__all__ = ["GltfError", "Part", "Read", "look_extensions", "material_of", "preview_alpha", "read_gltf"]
 
 _COMPONENTS = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
 _WIDTHS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT2": 4, "MAT3": 9, "MAT4": 16}
@@ -214,8 +215,18 @@ def look_extensions(extensions: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
+def preview_alpha(alpha: float, transmission: float) -> float:
+    """A GLB material's alpha for what draws no transmission (a 3MF's colour, a still): at alpha 1 a
+    transmissive one previews as build123d's material setter infers
+    (``threejs_materials.PbrProperties.interpolate_color``), which the engine's GLB does not repeat in
+    the file (``export/glb.py``, ``_alpha``); an alpha below 1 is kept, an earlier release's GLB's or an
+    authored ``opacity``. The viewer's is ``glbMeshData.js``'s ``previewOpacity``."""
+    return round(max(0.15, 1.0 - 0.7 * transmission), 4) if alpha >= 1.0 and transmission > 0 else alpha
+
+
 def material_of(entry: dict[str, Any]) -> dict[str, Any]:
-    """A glTF material as the structure's material, glTF's defaults where it says nothing."""
+    """A glTF material as the structure's material, glTF's defaults where it says nothing, its
+    opacity its preview (``preview_alpha``)."""
     pbr = entry.get("pbrMetallicRoughness") or {}
     color = [float(value) for value in pbr.get("baseColorFactor", (1.0, 1.0, 1.0, 1.0))]
     if str(entry.get("alphaMode") or "OPAQUE") != "BLEND":
@@ -235,7 +246,7 @@ def material_of(entry: dict[str, Any]) -> dict[str, Any]:
     name = found.pop("name")
     rgba = found.pop("color")
     found["color"] = [linear_to_srgb(c) for c in rgba[:3]]
-    found["opacity"] = rgba[3]
+    found["opacity"] = preview_alpha(rgba[3], found.get("transmission") or 0.0)
     found["metalness"] = found.pop("metallic")
     return material_json(FinishedMaterial(RangeMaterial(name=name, density=None),
         pbr=PbrProperties.from_dict({"id": name, "name": name, "source": "glTF", "values": found})))

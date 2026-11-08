@@ -1,5 +1,6 @@
 """Real exports of a board by kicode's kicad-cli, run where the ``cad`` command runs them: in the environment
 of ``cad[kicad]`` (``tests/python/support/kicode.py``). No samples, IPC server or user state."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -115,7 +116,12 @@ class SharedTestBoard(unittest.TestCase):
     def test_glb(self):
         (glb,), _ = self.exported("glb")
         self.assertEqual("blinky.glb", glb.name)
-        self.assertEqual(b"glTF", glb.read_bytes()[:4])
+        data = glb.read_bytes()
+        self.assertEqual(b"glTF", data[:4])
+        gltf = json.loads(data[20:20 + int.from_bytes(data[12:16], "little")])
+        # The board's copper, mask and silkscreen, each KiCad's own mesh named by its layer.
+        self.assertLessEqual({f"blinky_{layer}" for layer in ("copper", "pad", "silkscreen", "soldermask", "PCB")},
+                             {mesh.get("name") for mesh in gltf["meshes"]})
 
     def test_odb(self):
         import zipfile

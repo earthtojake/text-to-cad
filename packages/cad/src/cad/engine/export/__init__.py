@@ -8,14 +8,14 @@ file's triangles (``.glb``, ``.stl``, ``.3mf``: ``export/mesh_file.py``). A
 derived file a decorator declares and a file ``cad <type> export`` asks for are the same
 call, so the same document writes the same bytes.
 
-An STL or a 3MF is meshed at the engine's one tolerance, the viewer's, from the one mesh cache,
-unless the export gives its own (``tolerance``: a ceiling on the linear deflection in millimetres,
-for a print file whose fits are finer than a quarter per cent of the part): then each part is meshed
+A GLB, an STL or a 3MF is meshed at the engine's one tolerance, the viewer's, from the one mesh
+cache, unless the export gives its own (``tolerance``: a ceiling on the linear deflection in
+millimetres, for a print whose fits are finer than a quarter per cent of the part, or a picture whose
+curves are; ``angle``: a ceiling on the angular deflection in degrees): then each part is meshed
 again, at the finer of its own and the ceiling (``engine/mesh.py``), for that file alone, never
-cached, and the file says it (``tolerance_of``, ``export/mesh.py``); a face the mesher leaves
-without triangles is told by name (``told``), since which faces it leaves changes with the
-deflection. No other kind is
-meshed by the export (a GLB is the viewer's own mesh), so no other takes one.
+cached, and the file says it (``tolerance_of``, ``angle_of``, ``within``, ``export/mesh.py``); a face
+the mesher leaves without triangles is told by name (``told``), since which faces it leaves changes
+with the deflection. No other kind is meshed by the export, so no other takes either.
 
 The file holds the document as its code built it: every part, placed where the document
 places it, in its colours, with its motion. No translation selects a part or a state: a
@@ -45,8 +45,8 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "Kind", "Source", "View", "kind_of", "refused",
-           "tolerance_of", "translate"]
+__all__ = ["KINDS", "MAX_ANGLE", "MIN_ANGLE", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "Kind", "Source", "View",
+           "angle_of", "kind_of", "refused", "tolerance_of", "translate", "within"]
 
 
 class ExportRefused(ValueError):
@@ -90,10 +90,15 @@ LABELS = {"xbf": "xbf", "step": "STEP", "glb": "GLB", "stl": "STL", "threemf": "
 # The date of every entry of a zip the package writes (a 3MF): a file is a function of
 # what it holds, never of the clock it was written by (zipfile stamps each entry with the time).
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
-# The kinds an export's own tolerance meshes, and the finest it takes, in millimetres: a micron,
-# finer than any printer resolves, past which a part's triangles run to millions.
-TOLERANT = ("stl", "threemf")
+# The kinds an export's own tolerance or angle meshes, and the finest tolerance it takes, in
+# millimetres: a micron, finer than any printer resolves, past which a part's triangles run to millions.
+TOLERANT = ("glb", "stl", "threemf")
 MIN_TOLERANCE = 0.001
+# The angles an export takes, in degrees: at most the viewer's own (``mesh_format.ANGULAR``, which this
+# module does not import: a test holds them equal), so a file is never coarser than the viewer's mesh,
+# and at least one, past which a small round part's triangles run to millions.
+MAX_ANGLE = 28.5
+MIN_ANGLE = 1.0
 
 
 def refused(source: Any, destination: Any) -> str | None:
@@ -115,8 +120,8 @@ def refused(source: Any, destination: Any) -> str | None:
 
 def tolerance_of(tolerance: Any, destinations: Any = ()) -> float | None:
     """An export's own tolerance checked, in millimetres, or None for the engine's: a number of at
-    least ``MIN_TOLERANCE``, and every destination an STL or a 3MF, refused by name before anything is
-    written."""
+    least ``MIN_TOLERANCE``, and every destination a GLB, an STL or a 3MF, refused by name before anything
+    is written."""
     if tolerance is None:
         return None
     if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)):
@@ -124,11 +129,38 @@ def tolerance_of(tolerance: Any, destinations: Any = ()) -> float | None:
     value = float(tolerance)
     if not value >= MIN_TOLERANCE or value == float("inf"):
         raise ExportRefused(f"tolerance is at least {MIN_TOLERANCE:g} mm, not {tolerance!r}")
+    _meshed(destinations, "a tolerance")
+    return value
+
+
+def angle_of(angle: Any, destinations: Any = ()) -> float | None:
+    """An export's own angle checked, in degrees, or None for the engine's: a number from ``MIN_ANGLE`` to
+    ``MAX_ANGLE``, and every destination a GLB, an STL or a 3MF, refused by name before anything is
+    written."""
+    if angle is None:
+        return None
+    if isinstance(angle, bool) or not isinstance(angle, (int, float)):
+        raise ExportRefused(f"angle is a number of degrees, not {angle!r}")
+    value = float(angle)
+    if not MIN_ANGLE <= value <= MAX_ANGLE:
+        raise ExportRefused(f"angle is from {MIN_ANGLE:g} to {MAX_ANGLE:g} degrees (the viewer's own: a file is never "
+                            f"coarser than its mesh), not {angle!r}")
+    _meshed(destinations, "an angle")
+    return value
+
+
+def _meshed(destinations: Any, option: str) -> None:
     for destination in destinations:
         if kind_of(destination) not in TOLERANT:
-            raise ExportRefused(f"{Path(destination).name}: a tolerance meshes an STL or a 3MF; export the "
+            raise ExportRefused(f"{Path(destination).name}: {option} meshes a GLB, an STL or a 3MF; export the "
                                 f"{LABELS[kind_of(destination)]} without one")
-    return value
+
+
+def within(tolerance: float | None, angle: float | None) -> str:
+    """What an export's own tolerance and angle meshed a file to within, as the file and its told lines
+    say it: ``0.01 mm``, ``5 degrees``, ``0.01 mm and 5 degrees``."""
+    return " and ".join(([] if tolerance is None else [f"{tolerance:g} mm"])
+                        + ([] if angle is None else [f"{angle:g} degree{'' if angle == 1 else 's'}"]))
 
 
 def kind_of(path: Any) -> str:
@@ -386,7 +418,8 @@ class View:
     tree: dict[str, Any]
     matrices: list[Any]  # every instance's world matrix, by instance index
     tolerance: float | None = None  # the export's own, in mm; None meshes at the engine's (``export/mesh.py``)
-    unmeshed: dict[str, int] | None = None  # at the export's own tolerance: faces left without triangles, by part
+    angle: float | None = None  # the export's own, in degrees; None meshes at the engine's
+    unmeshed: dict[str, int] | None = None  # at the export's own mesh: faces left without triangles, by part
 
     @property
     def prototypes(self) -> list[dict[str, Any]]:
@@ -425,10 +458,11 @@ def _instances(node: dict[str, Any]) -> list[int]:
 
 
 def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
-              told: Callable[[str], None] | None = None) -> int:
+              told: Callable[[str], None] | None = None, angle: float | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
-    as ``kind`` (from the suffix when None), an STL or a 3MF meshed to within ``tolerance`` (mm) when
-    one is given (``told`` hears each part it left faces of without triangles); returns the file's size. The
+    as ``kind`` (from the suffix when None), a GLB, an STL or a 3MF meshed to within ``tolerance`` (mm)
+    and ``angle`` (degrees) when either is given (``told`` hears each part it left faces of without
+    triangles); returns the file's size. The
     translation lands only where the file does not hold its bytes already (``put``): a file written
     again the same is left as it is. Every declared file is written this way too, after the build or
     the take-up that made its document (``build``)."""
@@ -439,6 +473,7 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     if path.suffix.lower() not in KINDS[kind].suffixes:
         raise ExportRefused(f"{path.name}: a {kind} export ends in {' or '.join(KINDS[kind].suffixes)}")
     tolerance = tolerance_of(tolerance, [path])
+    angle = angle_of(angle, [path])
     if not isinstance(document, Source):
         why = refused(document, path)
         if why:
@@ -452,10 +487,11 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
             raise ExportRefused("an xbf is not written from another xbf: the document already is one")
         if path.resolve() == source.path.resolve():
             raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
-    if tolerance is not None and source.mesh:
-        raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance meshes it again")
+    if (tolerance is not None or angle is not None) and source.mesh:
+        raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance or angle "
+                            "meshes it again")
     view = source.view()
-    view.tolerance = tolerance
+    view.tolerance, view.angle = tolerance, angle
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     if not spec.atomic:
@@ -465,5 +501,5 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     if told is not None:
         for name, faces in (view.unmeshed or {}).items():
             told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
-                 f"meshing to within {tolerance:g} mm")
+                 f"meshing to within {within(tolerance, angle)}")
     return size

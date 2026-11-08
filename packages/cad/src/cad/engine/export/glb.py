@@ -6,7 +6,8 @@ primitive per look (a painted face's colour or material is a primitive of its ow
 a node per placement, named by the placement's path, under one root node named by the
 document. A material per look: PBR metallic-roughness, its base colour the part's (or
 the paint's), metallic, roughness and emissive from the part's material, ``BLEND`` where
-the colour is not opaque, and the rest of the material's look through glTF's material
+the colour is not opaque (a transmissive look's fade is its PBR ``opacity`` alone: ``_alpha``), and
+the rest of the material's look through glTF's material
 extensions: ``KHR_materials_ior``, ``_transmission`` with ``_volume`` (its thickness the part's,
 the smallest extent of its box; its attenuation the material's transmission colour and depth),
 ``_clearcoat``, ``_anisotropy`` (along a tangent the mesh carries for it: ``tangents``) and
@@ -14,16 +15,18 @@ the smallest extent of its box; its attenuation the material's transmission colo
 is a matte one of its colour. A
 placement whose own colour is not its part's is drawn by a second mesh of the same
 accessors in that colour. The placements are in the document's millimetres, Z up; the
-root node shows them in glTF's frame, Y up and metres, as cadgen's other GLBs do. A mesh of a
-format that carries no normals (an STL's, a 3MF's) is given the viewer's (``mesh.shaded``).
+root node shows them in glTF's frame, Y up and metres. A mesh of a
+format that carries no normals (an STL's, a 3MF's) is given the viewer's (``mesh.shaded``). An
+export's own tolerance and angle are said in ``asset.extras.cad`` (``meshedWithin`` in millimetres,
+``angle`` in degrees), each only where the export gave it.
 
 Every configuration sequence of the document is an animation of the same name (``export/motion.py``):
-translation and rotation channels for each placement it moves, its duration in the animation's
-``extras`` (``{"cadgen": {"duration": seconds}}``). A clip is the sequence once; a player repeats
-it. After them, the source's animations (``animation()``, ``export/animation.py``), each one glTF
-animation of its name: translation, rotation and scale channels on the nodes its references
-place, their duration in ``extras`` as a configuration sequence's: a build's, or the record of them an
-xbf carries (``animations.record``). Every channel is written LINEAR -- the fewest keys within a
+translation and rotation channels for each placement it moves, its duration and its kind in the
+animation's ``extras`` (``{"cad": {"duration": seconds, "kind": "motion"}}``). A clip is the sequence
+once; a player repeats it. After them, the source's animations (``animation()``, ``export/animation.py``),
+each one glTF animation of its name: translation, rotation and scale channels on the nodes its
+references place, ``extras`` as a configuration sequence's (``"kind": "animation"``): a build's, or the
+record of them an xbf carries (``animations.record``). Every channel is written LINEAR -- the fewest keys within a
 tenth of a millimetre and of a degree of its bake (``export/keys.py``) -- but a STEP one (a hide),
 which is written as baked. A placement anything moves stands by translation and
 rotation, as glTF asks of an animated node; every other one by its matrix. Channels whose keys
@@ -153,7 +156,10 @@ def write(view: Any, path: Path) -> None:
         node_of[placed.instance] = len(nodes) - 1
         shown.append(placed)
     animations = _animations(view, held, shown, node_of, nodes, add, accessors)
-    document = {"asset": {"version": "2.0", "generator": "cadgen engine"}, "scene": 0,
+    asked = {**({} if view.tolerance is None else {"meshedWithin": view.tolerance}),
+             **({} if view.angle is None else {"angle": view.angle})}
+    document = {"asset": {"version": "2.0", "generator": "cad", **({"extras": {"cad": asked}} if asked else {})},
+                "scene": 0,
                 "scenes": [{"name": view.name, "nodes": [0]}], "nodes": nodes, "meshes": gltf_meshes,
                 "materials": materials, "accessors": accessors, "bufferViews": views,
                 "buffers": [{"byteLength": len(blob)}]}
@@ -189,12 +195,24 @@ def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> di
                        roughness=0.5 if pbr.values.roughness is None else pbr.values.roughness)
     entry = json.loads(pbr.to_gltf().to_json())["materials"][0]
     entry["name"] = given["material"]["name"]
-    entry["pbrMetallicRoughness"]["baseColorFactor"] = list(rgba)
-    entry["alphaMode"] = "BLEND" if rgba[3] < 1.0 else "OPAQUE"
+    alpha = _alpha(rgba, pbr.values)
+    entry["pbrMetallicRoughness"]["baseColorFactor"] = [*rgba[:3], alpha]
+    entry["alphaMode"] = "BLEND" if alpha < 1.0 else "OPAQUE"
     if pbr.values.transmission:
         volume = entry.setdefault("extensions", {}).setdefault("KHR_materials_volume", {})
         volume["thicknessFactor"] = thickness
     return entry
+
+
+def _alpha(rgba: tuple, values: Any) -> float:
+    """A look's alpha: its colour's, but for a transmissive look, which is see-through by its transmission
+    and fades only by its PBR ``opacity``. Its colour's alpha there says nothing the file should repeat:
+    build123d's material setter infers a preview from the transmission when the material is assigned
+    (``PbrProperties.interpolate_color``: ``transmission=1`` gives 0.3), a renderer applying both would draw
+    the part refractive and most of it absent, and nothing tells that value from a colour set by hand."""
+    if not values.transmission:
+        return float(rgba[3])
+    return 1.0 if values.opacity is None else min(float(values.opacity), 1.0)
 
 
 def _thickness(mesh: Any) -> float:
@@ -301,7 +319,8 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
 
     found = []
 
-    def animation(name: str, duration: float, tracks: list[tuple[int, str, str, np.ndarray, np.ndarray]]) -> None:
+    def animation(name: str, duration: float, clip_kind: str,
+                  tracks: list[tuple[int, str, str, np.ndarray, np.ndarray]]) -> None:
         samplers: list[dict] = []
         channels: list[dict] = []
         shared: dict[tuple, int] = {}
@@ -316,17 +335,17 @@ def _animations(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict
                 samplers.append(entry)
             channels.append({"sampler": shared[key], "target": {"node": node_of[index], "path": path}})
         found.append({"name": name, "channels": channels, "samplers": samplers,
-                      "extras": {"cadgen": {"duration": duration}}})
+                      "extras": {"cad": {"duration": duration, "kind": clip_kind}}})
 
     for clip in baked:
         if clip.instances:
-            animation(clip.name, clip.duration, [
+            animation(clip.name, clip.duration, "motion", [
                 (index, path, "CUBICSPLINE", clip.times, rows)
                 for index, translations, rotations in zip(clip.instances, clip.translations, clip.rotations)
                 for path, rows in (("translation", translations), ("rotation", rotations))])
     for baked_animation in animations:
         if baked_animation.channels:
-            animation(baked_animation.name, baked_animation.duration, [
+            animation(baked_animation.name, baked_animation.duration, "animation", [
                 (channel.instance, channel.path, channel.interpolation, channel.times, channel.values)
                 for channel in baked_animation.channels])
     return found
