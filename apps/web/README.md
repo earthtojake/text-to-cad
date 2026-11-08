@@ -317,8 +317,8 @@ file's name in the navbar opens its name menu: Models and Files (the explorer).
 Every file's tools are on a strip at the top centre (each format's are the
 [design system's table](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
 Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
-Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube with
-Home at its upper-left, or a flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
+Preview, a board's in Flip, 2D/3D and Display; the bottom-right corner holds the view cube, or a
+flat view's zoom pill, and Quick Edit is at the top-right. DXF is a
 2D canvas with pan, zoom, snapshot and Quick Edit, with no view controls on its strip; one with
 layers and blocks to read has the view's panel, its Layers tab.
 

@@ -593,7 +593,9 @@ class ProtocolTest(unittest.TestCase):
         sent: list = []
         engine.handle({"op": "build", "script": "/w/a.py", "env": {}}, sent.append)
         self.assertEqual(launched, ["a.py"], "asked once")
-        self.assertEqual(sent, [{"failed": "the worker for a.py did not start: it never said it was ready in 300 s"}])
+        # In that line, and as what it is: a process that did not start, which its caller counts as such.
+        self.assertEqual(sent, [{"failed": "the worker for a.py did not start: it never said it was ready in 300 s",
+                                 "type": "cad_server.engine.supervisor.Gone"}])
 
     def test_with_no_ready_seconds_a_silent_child_holds_its_lease_while_it_lives(self) -> None:
         import signal

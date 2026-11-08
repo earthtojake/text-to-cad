@@ -53,16 +53,16 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertIn(integration.process, registry.PROCESS_KINDS)
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
-                self.assertTrue(integration.modules and integration.distributions)
-                # What one needs beside it is registered, is not itself, and has an extra cad run can add.
-                self.assertNotIn(integration.name, integration.needs)
-                for needed in integration.needs:
-                    self.assertIn(needed, registry.INTEGRATIONS)
-                    self.assertTrue(registry.INTEGRATIONS[needed].extra)
+                if integration.extra is None:
+                    # A program the person installs, which ships no package: found by its probe alone.
+                    self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
+                    self.assertFalse(integration.modules or integration.distributions)
+                else:
+                    self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         self.assertEqual(("cadjoint",), registry.integrations_of(["cadjoint.construction"]))
         # cadjoint's solids are build123d's: a program of its fields needs the kernel beside it.
-        self.assertEqual(("build123d",), registry.INTEGRATIONS["cadjoint"].needs)
+        self.assertEqual(("build123d",), registry.INTEGRATIONS["cadjoint"].alongside)
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -77,9 +77,19 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        # A stress study is the calculix integration's, ccx from its extra (the cad-ccx package), which cad run runs as
+        # a command of its own; its environment holds the kernel, which reads the B-rep, and netgen, which meshes it.
+        self.assertEqual("calculix", integrations.for_name("cad.step.solve"))
+        self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
+                                           if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
+        self.assertEqual("calculix", integrations.for_command("ccx"))
+        self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
+        self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
+        for integration in registry.INTEGRATIONS.values():
+            self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
-        self.assertEqual(("build123d",), integrations.INTEGRATIONS["cadjoint"].needs)
+        self.assertEqual(("build123d",), integrations.alongside("cadjoint"))
         self.assertEqual(("build123d", "cadjoint"), integrations.closed(["cadjoint"]))
         self.assertEqual(("build123d", "cadjoint", "kicad"), integrations.closed(["kicad", "cadjoint", "build123d"]))
         self.assertEqual((), integrations.closed([]))

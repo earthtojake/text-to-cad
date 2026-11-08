@@ -22,7 +22,7 @@ import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
 import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
 
-// A STEP: read by the cadgen engine, at a length its size decides (the home's pictures ask first, as
+// A STEP: read by the engine, at a length its size decides (the home's pictures ask first, as
 // they do for a model's document, by its id).
 const STEP_FILE = /\.(?:step|stp)$/i;
 // The title of a model's document the engine does not hold, by the state it names (any other: not held).
@@ -109,7 +109,7 @@ const reportError = (error: Error) => console.error(error);
 
 /**
  * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
- * with its five renderers (a cadgen engine document, which a STEP opens as; DXF; GLB; STL/3MF; URDF/SRDF/SDF), the host's home (the model
+ * with its five renderers (an engine document, which a STEP opens as; DXF; GLB; STL/3MF; URDF/SRDF/SDF), the host's home (the model
  * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown
  * again. It keeps a picture of each model it shows for the library (`onThumbnail`), and on the home
@@ -209,7 +209,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
 
   // The home's pictures for cards without a current one, drawn out of sight one at a time and kept as
-  // the file on screen's are. A STEP or a model's document the cadgen engine does not hold is left to
+  // the file on screen's are. A STEP or a model's document the engine does not hold is left to
   // its placeholder: the home never starts the engine's read of a STEP (a large one's is long) nor a
   // model's build, it only asks; a model that is `unsaved` or `detached` is held by none.
   const [drawing, setDrawing] = useState<{ source: ModelPictureSource; done(kept: boolean): void } | null>(null);

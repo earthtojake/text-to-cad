@@ -249,7 +249,7 @@ release, and what it runs a program in follows the program:
   release's library in its environment is refused by this release's server before any worker starts,
   in one line naming the package to update (`update the cad package in this environment to ...`):
   install what `cad requirement build123d` prints there. A script `cad run` runs is not affected, and
-  the analytics schema moving to 9 (an implicit document's kind) changes nothing for you.
+  the analytics schema moving to 10 (an implicit document's kind) changes nothing for you.
 - **The CAD kernel environment is made on first need** (tier 1). The install command (`cad setup`),
   `cad update` and `cad doctor` no longer make it: the first build, or the first view or operation
   that needs the kernel, makes it, from uv's cache where it holds it, else the network. An automatic

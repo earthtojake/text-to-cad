@@ -6,7 +6,7 @@ import { fixturePayload } from './__tests__/robotFixtures.js';
 
 afterEach(cleanup);
 
-// What an SDF says of itself beyond its links and joints, from cadgen's answer for `swing.sdf` (the
+// What an SDF says of itself beyond its links and joints, from the server's answer for `swing.sdf` (the
 // robot renderer shows it as the sidebar's SDF section). The ground plane under its base is a
 // collision the viewer cannot draw: counted, never refused.
 it("an SDF's section says its document, its counts and its lights, and counts the geometry the viewer cannot draw", () => {

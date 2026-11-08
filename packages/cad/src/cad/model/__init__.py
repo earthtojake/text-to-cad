@@ -7,7 +7,9 @@ a shape over), with no file of its own; the files it declares are the other type
 (``@xbf("XBF/arm.xbf")``, ``@step("arm.step")``). Its operations are the ``cad model <operation>`` commands':
 ``model.export(handle_or_id, *destinations, tolerance=None)``, ``model.snapshot(...)``,
 ``model.inspect(...)`` and ``model.dfm(handle_or_id, process="molding")`` (or ``"printing"``), which
-measures it for manufacturing with the trimesh integration (``cad._internal.manufacturing``). A file is
+measures it for manufacturing with the trimesh integration (``cad._internal.manufacturing``), and
+``model.solve(handle_or_id, study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``),
+which reads an ``.xbf`` the engine writes of it in a temporary folder. A file is
 refused by name: ``arm.xbf`` is an xbf's (``cad.xbf``). Everything loads on first use: ``import cad.model``
 imports no CAD kernel (``cad._internal.document_type``).
 """

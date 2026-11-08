@@ -54,6 +54,10 @@ test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per r
   const urdf = { kind: 'workspace-file', path: '/work/arm.urdf' };
   assert.deepEqual(parsePromptReference('/work/arm.urdf#upper_arm'), { resource: urdf, target: { kind: 'cad-selector', selectors: ['upper_arm'] } });
   assert.throws(() => referencePart({ resource: urdf, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }), /invalid CAD/);
+  // A 3MF's component, by its place in the build, as its scene picks it and the cad skill writes it.
+  const plate = { kind: 'workspace-file', path: '/work/out/plate.3mf' };
+  assert.equal(formatPromptReference({ resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } }), '/work/out/plate.3mf#o2.1');
+  assert.deepEqual(parsePromptReference('/work/out/plate.3mf#o2.1'), { resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } });
 });
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };

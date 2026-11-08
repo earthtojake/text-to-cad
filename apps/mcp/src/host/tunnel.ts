@@ -97,7 +97,7 @@ function wholeOfParts(first: TunnelReply, ask: (range: string, etag: string) => 
  * host's or the transport's own text (`host/channel.ts`).
  */
 export function tunnelFailure(error: unknown): string {
-  if (isHostRefusal(error)) return 'This chat cannot connect the CAD viewer to its engine.';
+  if (isHostRefusal(error)) return 'This chat cannot connect to CAD\'s engine.';
   if (error instanceof HostError && error.kind === 'timeout') return 'The CAD plugin did not answer in time.';
   if (error instanceof ServerError) return error.message;
   return 'The CAD plugin could not be reached.';

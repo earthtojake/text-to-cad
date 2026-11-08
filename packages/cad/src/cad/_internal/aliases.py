@@ -5,6 +5,8 @@ this table alone. Each warns with ``CadDeprecationWarning`` once per name per pr
 naming the new path: ``cad.read_step is deprecated; use cad.step.read``. A module alias
 (``cad.ap242``) is the module it names now, imported under its old name too. Aliases are kept out of
 every ``__all__`` and every document but this table and the migration guide; a test pins the table.
+``cadgen``, the library's earlier import name, is no entry of the table: its own module says so through
+``warn`` when it is imported (``cadgen/__init__.py``).
 
 A build's stderr is the model's log, and a model's own process imports its script first, so the
 warning reaches the person or the agent who ran it: in their terminal, before the worker's build. That
@@ -85,7 +87,8 @@ _OWN_SPECS: dict[str, Any] = {}
 
 # The frames a warning never points at: the library's own and the import system's, so it names the
 # line of the program that spelled the old name.
-_SKIPPED = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "<frozen importlib")
+_LIBRARY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SKIPPED = (_LIBRARY + os.sep, os.path.join(os.path.dirname(_LIBRARY), "cadgen") + os.sep, "<frozen importlib")
 
 
 def warn(old: str, new: str) -> None:

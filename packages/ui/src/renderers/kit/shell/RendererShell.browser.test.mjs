@@ -471,7 +471,7 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
     `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);
 
-  // Home resets the complete view; cube faces keep the current zoom and target.
+  // Zoom to fit frames the model again; cube faces keep the current zoom and target.
   const canvas = pane.locator('[aria-busy] > div > canvas').first();
   // The share of the drawn frame that is the model: read the middle/upper canvas region,
   // clear of the bottom prompt action and the viewport controls at the right edge, with the strip
@@ -514,9 +514,8 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  // The cube draws no Home of its own: Home is the corner's ghost button at its upper-left.
-  assert.equal(await pane.getByLabel('View cube', { exact: true }).getByRole('button', { name: 'Home', exact: true }).count(), 0);
-  assert.equal(await pane.locator('[data-view-home]').getAttribute('aria-label'), 'Home');
+  // There is no Home, in the cube or beside it: Zoom to fit brings a view back.
+  assert.equal(await pane.getByRole('button', { name: 'Home', exact: true }).count(), 0, 'no Home in the view');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
@@ -712,20 +711,16 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
   assert.deepEqual(await pane.locator('[data-cad-toolbar] [data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'Projection, Display then Preview at the strip\'s end');
-  // Home, the corner's one button: a 24px ghost tile at the cube's upper-left, over its box's corner by 16px across
-  // and 10px down, with no surface of its own (no fill, border or shadow) until the pointer is on it.
-  const homeButton = await pane.locator('[data-view-home]').elementHandle();
-  const home = await homeButton.evaluate(button => {
-    const style = getComputedStyle(button);
-    const shadowed = (style.boxShadow.match(/rgba?\([^)]*\)/g) || []).some(color => !/rgba\([^)]*,\s*0\)$/.test(color));
-    return { ...button.getBoundingClientRect().toJSON(), fill: style.backgroundColor, border: style.borderTopWidth, shadowed };
-  });
-  assert.deepEqual([home.width, home.height], [24, 24], 'Home is a 24px tile');
-  assert.ok(Math.abs(home.x + 24 - (cubeBox.x + 16)) < 0.5 && Math.abs(home.y + 24 - (cubeBox.y + 10)) < 0.5, `Home at the cube's upper-left: ${JSON.stringify([home, cubeBox])}`);
-  assert.deepEqual([home.fill, home.border, home.shadowed], ['rgba(0, 0, 0, 0)', '0px', false], 'Home has no surface at rest');
-  await homeButton.hover();
-  await page.waitForFunction(button => getComputedStyle(button).backgroundColor !== 'rgba(0, 0, 0, 0)', homeButton);
-  await page.mouse.move(frameBox.x + 40, frameBox.y + frameBox.height / 2);
+  // The corner is the cube's alone: where a ViewCube's house would stand, over its box's top-left corner, a press
+  // reaches what it reaches over the bare canvas.
+  const hitAt = (x, y) => page.evaluate(([x, y]) => {
+    const hit = document.elementFromPoint(x, y);
+    return hit ? `${hit.tagName}${hit.closest('button, [role=button]') ? ' (a control)' : ''}` : null;
+  }, [x, y]);
+  const bare = await hitAt(frameBox.x + 40, frameBox.y + frameBox.height / 2);
+  for (const [x, y] of [[cubeBox.x - 4, cubeBox.y - 4], [cubeBox.x - 4, cubeBox.y + 6], [cubeBox.x + 6, cubeBox.y - 10]]) {
+    assert.equal(await hitAt(x, y), bare, `nothing stands at the cube's upper-left: (${x}, ${y})`);
+  }
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
 

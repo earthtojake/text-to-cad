@@ -17,7 +17,7 @@ from tests.python.support.paths import add_sources
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad.engine.snapshot import Still  # noqa: E402
-from cad_server.engine.renders import Renders  # noqa: E402
+from cad_server.engine.renders import Renders, _failed as renders_failed  # noqa: E402
 from cad_server.engine.services import RENDER  # noqa: E402
 from cad_server.engine.supervisor import Process, Supervisor  # noqa: E402
 from tests.python.packages.cad.engine.test_render import BENCH, SIZE, build, drawn, gl, served, shapes  # noqa: E402
@@ -56,6 +56,11 @@ class RenderProcessTest(unittest.TestCase):
         self.assertNotIn("sceneMs", second["done"]["timings"], "the second picture is drawn on the first's scene")
         refused = process.request({"op": "frame", "still": {**still, "pose": "shut"}})
         self.assertIn("no mechanism state 'shut'", refused["refused"])
+        self.assertEqual(refused["part"], "pose", "what it refused, which telemetry counts it by")
+        # A frame that failed says the type it failed with, which the daemon answers beside its words.
+        failed = process.request({"op": "frame", "still": {**still, "padding": "wide"}})
+        self.assertEqual(failed["type"], "ValueError", failed)
+        self.assertEqual(renders_failed(failed, "drew nothing").raised, "ValueError")
         capped = self.start("1")
         answer = capped.request({"op": "frame", "still": still})
         self.assertIn("CAD_ENGINE_WORKER_RSS_MB", answer["done"]["retired"])

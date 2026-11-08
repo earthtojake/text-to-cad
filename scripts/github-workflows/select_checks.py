@@ -22,6 +22,7 @@ module's code would.
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
+    fea                           fea (the stress study's suite, with netgen and CalculiX installed)
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -61,7 +62,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "cadjoint")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea",
+         "cadjoint")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -210,8 +212,28 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/boards.py",
               f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/cli/run.py",
               f"{LIBRARY_SRC}/_internal/integrations.py",
-              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
+              f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py",
+              # The library's project pins kicode, the integration itself. Selection is by path: any
+              # change to the file runs the job.
+              "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
+# The stress study (cad <type> solve): its operation and orchestration, the netgen and calculix integrations, its
+# result type, the library's extras (netgen's and ccx's pins among them), and the server's command and the environment
+# of cad[build123d,calculix,netgen] it runs a study in. Each also reaches what its package reaches; the fea job, which
+# installs netgen and ccx, runs on these, its own suite and runner, and a full run.
+FEA_CODE = (f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**",
+            f"{LIBRARY_SRC}/results.py", f"{LIBRARY_SRC}/_internal/document_type.py",
+            f"{LIBRARY_SRC}/_internal/operation.py", "packages/cad/pyproject.toml",
+            f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/_internal/integration_env.py")
+# What a study reads a document, finds CalculiX and writes its results through, of the engine's and shared modules:
+# the pictures are the engine's stills of a GLB (its reader and the snapshot).
+FEA_SHARED = (f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.py",
+              f"{LIBRARY_SRC}/engine/kernel/bounds.py", f"{LIBRARY_SRC}/engine/executables.py",
+              f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/engine/build.py",
+              f"{LIBRARY_SRC}/engine/formats/glb.py", f"{LIBRARY_SRC}/engine/snapshot.py",
+              f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/programs.py",
+              f"{SERVER_SRC}/_internal/cli_from_function.py")
+FEA_SUITE = "tests/python/packages/fea"
 # The cadjoint integration: its helpers (cad.cadjoint), the faceted solid they build, and the extra in the
 # library's pyproject reach the cadjoint job beside what their package reaches; the job installs
 # cad[cadjoint] (cadjoint and JAX, ~130 MB), which no other job does.
@@ -257,9 +279,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
-    # The Windows installer rehearsal: a workflow of its own, dispatched by hand or by a push to main
-    # that changes the installer; no test reads it and no test.yml job runs it.
-    Rule((".github/workflows/install-windows.yml",), NOTHING, final=True),
+    # The installer rehearsals: workflows of their own, dispatched by hand or by a push to main that
+    # changes the installer; a light contract reads their triggers and no test.yml job runs them.
+    Rule((".github/workflows/install-windows.yml", ".github/workflows/install-linux.yml"), NOTHING, final=True),
 
     # Shared by every job, or the selection itself: everything runs.
     Rule((
@@ -284,9 +306,16 @@ RULES: tuple[Rule, ...] = (
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(SHIM_CODE, _shim_change, final=True),
+    # The engine and shared modules a stress study reads a document, finds CalculiX and writes its result through:
+    # a change there runs the solves too. Before the engine's final rule, which adds the rest.
+    Rule(FEA_SHARED, select(flags=["fea"])),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
          CADGEN_CONSUMERS),
+    # The stress study's code runs what its package runs, and the fea job, which installs netgen and CalculiX.
+    Rule(FEA_CODE, select(flags=["fea"])),
+    Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
+         select(skills=[f"{SKILL_SUITES}/fea"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
@@ -310,6 +339,8 @@ RULES: tuple[Rule, ...] = (
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
     # installed), never the package jobs'.
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
+    Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
+         final=True),
     Rule((f"{CADJOINT_SUITE}/**", "scripts/test/test-cadjoint.sh"), select(flags=["cadjoint"]), final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
@@ -318,6 +349,7 @@ RULES: tuple[Rule, ...] = (
     # Skills. Their prose and metadata are read by the policy contracts (light, always): the
     # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
+    Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
 
     # The test runners and the gates each one feeds.
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
