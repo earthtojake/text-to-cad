@@ -644,6 +644,7 @@ failure: the next asker makes it again.
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
+| `display.py` | the engine's X display on Linux, which every process that draws is started with (`Service.draws`): the daemon's own `DISPLAY`, else an Xvfb it starts once and stops with it, else none |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
 | `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model** |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
@@ -1957,9 +1958,12 @@ it that version first, with the buffers of the parts it lacks: the parts it shar
 keep their shapes, the new ones are made, and its scene is made again. It goes
 with the daemon, and after a picture that leaves it over the workers' memory cap it says so
 (`retired`) and exits. `daemon=False`, and a model's own document in its worker, draw in that
-process. The context is a hidden window: Cocoa on macOS, an X server's (Xvfb on a machine with no
-screen) or OCCT's EGL on Linux, a hidden window on Windows; where none can be made the snapshot
-fails saying so. Nothing is written but OUT.
+process. The context is a hidden window: Cocoa on macOS, a hidden window on Windows, and on Linux an
+X server's -- the OCP wheels draw through GLX alone, so there is no context without one. A Linux
+still draws on its request's `DISPLAY`, else on the engine's ([display.py](display.py)): every
+process that draws (a worker, a render process: `Service.draws`) is started with the daemon's own
+`DISPLAY`, else with an Xvfb's the daemon starts once where `Xvfb` is on PATH and stops with it;
+where none can be made the snapshot fails, naming what to install. Nothing is written but OUT.
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own

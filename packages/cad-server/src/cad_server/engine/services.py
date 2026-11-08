@@ -7,13 +7,14 @@ worker built, keyed ``documents``), in the installation's base -- or in the Pyth
 with, which its build names (``contract.interpreter``) when its environment is not the base: one of the
 caller's own, with its packages, and no standby (``interpreter="lease"``) -- with the caller's
 environment adopted at each request (``worker.adopt``) but for what binds it to its interpreter
-(``places.RESTARTS``), the daemon's bytecode and ``CAD_ENGINE_WORKER``; started in its script's folder,
+(``places.RESTARTS``), the daemon's bytecode, ``CAD_ENGINE_WORKER`` and the engine's X display
+(``places.DISPLAY``, ``display.py``: a model's still is drawn there where its caller names no ``DISPLAY``); started in its script's folder,
 its stderr the model's log. It counts toward the count cap, is drained of its documents before it stops
 (``models.Models.drain``), and keeps a standby with the kernel loaded in the base (``worker.load_kernel``).
 
 ``RENDER``: a served document's render process (``cad.engine.render.service``), one per document by
 its id on the server (and per file no document, ``file:`` and its path: ``renders``), in the base,
-with the daemon's environment and no bytecode written, standing where the daemon does; its stderr
+with the daemon's environment and the engine's X display, and no bytecode written, standing where the daemon does; its stderr
 kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
 memory before any worker, and its retirements are listed in ``status`` by its document.
 
@@ -37,6 +38,7 @@ WORKER = Service(
     interpreter="lease",  # a build in its caller's own Python: that Python's worker (``Daemon.caller``)
     env="lease",
     set_env=(("CAD_ENGINE_WORKER", "1"),),
+    draws=True,  # a model's still, from its worker's memory
     bytecode="daemon",
     cwd="lease",
     key="path",
@@ -63,6 +65,7 @@ RENDER = Service(
     command=("{python}", "-P", "-m", "cad.engine.render.service"),
     environment="kernel",
     env="daemon",
+    draws=True,
     bytecode="read-only",
     cwd="inherit",
     key="id",

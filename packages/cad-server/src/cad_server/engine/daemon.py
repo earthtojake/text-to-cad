@@ -1571,6 +1571,9 @@ class Daemon:
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
+        from cad_server.engine import display
+
+        display.stop()  # the Xvfb it started for their stills, if it did
         if self.server is not None:
             self.server.stop()
 

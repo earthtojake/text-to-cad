@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
+__all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
            "folder_refusal", "home", "installation", "kernel", "lock", "lock_path", "port_path", "registered",
@@ -56,6 +56,10 @@ INSTALLATION_ENV = "CAD_INSTALLATION_VERSION"
 RESTARTS = ("PYTHONPATH", "PYTHONHOME", "PYTHONSAFEPATH", "PYTHONNOUSERSITE", "PYTHONUSERBASE", "PYTHONPLATLIBDIR")
 # How the engine's processes treat bytecode (``bytecode``): one of the two, never a run's to change.
 BYTECODE = ("PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE")
+# The X display the engine gives each process that draws (``cad_server.engine.display``: its own, or an Xvfb
+# it started), which a still is drawn on where its request names none (``render.context.display``); a run's
+# never replaces it (``worker.kept``).
+DISPLAY = "CAD_ENGINE_DISPLAY"
 # The folder of the engine's bytecode in the cache folder: one folder per installation in it
 # (``bytecode_tag``).
 PYCACHE = "pycache"

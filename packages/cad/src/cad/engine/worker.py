@@ -271,11 +271,13 @@ def _has_kernel() -> bool:
 
 def kept() -> dict[str, str]:
     """What of this worker's environment no run's replaces (``adopt``): what started its
-    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH) and what it
-    set for itself."""
-    from cad.engine.places import BYTECODE, RESTARTS
+    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH), what it
+    set for itself, and the engine's X display (``places.DISPLAY``), which a run with no
+    ``DISPLAY`` of its own draws its stills on."""
+    from cad.engine.places import BYTECODE, DISPLAY, RESTARTS
 
-    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER") if name in os.environ}
+    return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER", DISPLAY)
+            if name in os.environ}
 
 
 def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
