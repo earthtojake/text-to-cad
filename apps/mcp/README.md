@@ -268,7 +268,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   its build (`ui://cad/<release>/<build>/app.html`). It loads the app from the engine that
   answers it (`GET /app`, `dist/app.js`): through `cad_http` where the host
   carries the card's calls, else straight from the engine with the launch's link,
-  never a cookie. So a card a host kept runs the engine's release, and an update needs no
+  never a cookie; where neither reaches the engine it shows the app's own notice that this chat
+  cannot connect (**A card says why it cannot work**, below), in words taken from `@cad/ui`'s
+  dictionaries as it is built (`scripts/shell-words.mjs`), so it carries no dictionary of its own.
+  So a card a host kept runs the engine's release, and an update needs no
   new resource. The app is one module, with its styles, scripts and workers (as blobs)
   inside it, and the build fails if anything would be left outside the two: the host
   serves one resource and nothing beside it. Its scripts are still split where
@@ -287,8 +290,9 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
     text-to-cad:cad cad_show", with an expand control of its own, and answers every
     `tools/call` the card makes with its own error, "IPC not available for MCP tool call";
-    the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it
-    has not opened. The card knows its channel: at `ui/initialize` a host that declares
+    the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it has
+    not reached CAD's server: not drawn yet, or drawn by a chat that carries none of its calls,
+    with the page the card links for the person and `cad_snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
     that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
@@ -298,7 +302,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     home's says "Open the CAD Viewer instead."), and **Open in CAD Viewer**, the launch's
     `browser` page, through `ui/open-link` where the host declares `openLinks`, else as a
     plain link to a new window. With no page in the launch it says "Ask your agent to open
-    the model in the CAD Viewer instead." and links nothing.
+    the model in the CAD Viewer instead." and links nothing. Where that same chat keeps the card off
+    this machine's loopback too (the Code tab on Windows: `ERR_BLOCKED_BY_CLIENT`), the app
+    itself cannot be loaded, and the shell says the same notice in its place (`host/shell.ts`'s
+    `unconnected`, the line and its words `host/unreachable.js`'s), never the fetch's own "Failed to fetch".
   - **The plugin stopped.** Calls came back, then four syncs in a row failed: the banner over
     the view says what to do in that host, naming it as it named itself at `ui/initialize`
     (`hostInfo.name`, mapped in `host/hostName.ts`: Codex, Claude, Cursor, Gemini...; "this app" for
@@ -380,7 +387,8 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`); where neither way reaches the engine, the no-channel notice (`unconnected`) |
+| `unreachable.js` | the no-channel notice's words, which the app's notice (`Notice.tsx`) and the shell both say: the line by whether there is a page and a model, the button, the card's height, and the launch's page |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 

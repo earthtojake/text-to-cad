@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import { APP_ROUTE, viaEngine, viaTunnel } from './shell';
+import { HostError } from './bridge';
+import { APP_ROUTE, Unconnected, loadApp, unconnected, viaEngine, viaTunnel } from './shell';
 
 const encode = (text: string) => btoa(text);
 
@@ -39,5 +40,40 @@ it('where the host carries no call, the shell reads the app from the engine with
   expect(fetch).toHaveBeenCalledWith(`http://127.0.0.1:3245${APP_ROUTE}`, expect.objectContaining({
     headers: { authorization: 'Bearer day-link' }, credentials: 'omit' }));
   await expect(viaEngine({ browser: 'http://elsewhere/?token=x', engine: 'http://127.0.0.1:3245' }, fetch as any))
-    .rejects.toThrow('This chat cannot reach the CAD engine.');
+    .rejects.toBeInstanceOf(Unconnected);
+});
+
+it('a card its host carries no call for, and that cannot read the engine either, says so and links the page (#797)', async () => {
+  // The Claude app's Code tab on Windows refuses the card's cad_http and blocks its fetch of the loopback engine
+  // (ERR_BLOCKED_BY_CLIENT): the card once showed the fetch's own "Failed to fetch" and nothing else.
+  const launch = { protocol: 9, page: 'viewer' as const, model: 'd5e6', browser: 'http://127.0.0.1:3245/d5e6?token=day-link',
+    engine: 'http://127.0.0.1:3245' };
+  const refused = { callTool: async () => { throw new HostError('IPC not available for MCP tool call'); } };
+  const blocked = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+  for (const fetch of [blocked, vi.fn(async () => new Response('', { status: 401 }))]) {
+    await expect(viaEngine(launch, fetch as any)).rejects.toBeInstanceOf(Unconnected);
+  }
+  await expect(loadApp({ bridge: refused as any, launch, result: {} }, { engine: launch => viaEngine(launch, blocked as any) }))
+    .rejects.toBeInstanceOf(Unconnected);
+  // A call the host did not refuse (it timed out) is no proof of a chat without a channel: not this notice.
+  const slow = { callTool: async () => { throw new HostError('tools/call timed out', undefined, 'timeout'); } };
+  await expect(loadApp({ bridge: slow as any, launch, result: {} })).rejects.toThrow('tools/call timed out');
+
+  const root = document.createElement('div');
+  const request = vi.fn(async () => ({}));
+  const notify = vi.fn();
+  const bridge = { hostContext: { locale: 'ja-JP' }, hostCapabilities: { openLinks: {} }, request, notify };
+  unconnected(bridge as any, launch, 'inline', root);
+  expect(root.querySelector('[data-cad-unreachable] p')?.textContent).toBe(
+    'このチャットでは CAD ビューアーをエンジンに接続できません。代わりに CAD ビューアーでモデルを開いてください。');
+  const open = root.querySelector('a')!;
+  expect(open.getAttribute('href')).toBe(launch.browser);
+  open.click();
+  expect(request).toHaveBeenCalledWith('ui/open-link', { url: launch.browser });
+  expect(notify).toHaveBeenCalledWith('ui/notifications/size-changed', { height: 180 });
+  // No page in the launch: the agent is asked to open one, and nothing is linked.
+  unconnected({ ...bridge, hostContext: {}, hostCapabilities: {} } as any, { ...launch, browser: undefined }, 'tabs', root);
+  expect(root.textContent).toBe("This chat can't connect the CAD viewer to its engine. Ask your agent to open the model in the CAD "
+    + 'Viewer instead.');
+  expect(root.querySelector('a')).toBeNull();
 });

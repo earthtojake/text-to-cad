@@ -53,6 +53,10 @@
       "types": "./dist/i18n/index.d.ts",
       "import": "./dist/i18n/index.js"
     },
+    "./i18n/locale": {
+      "types": "./dist/i18n/locale.d.ts",
+      "import": "./dist/i18n/locale.js"
+    },
     "./consent": {
       "types": "./dist/consent/index.d.ts",
       "import": "./dist/consent/index.js"

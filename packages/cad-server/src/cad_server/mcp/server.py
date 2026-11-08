@@ -233,6 +233,19 @@ def _text(text: str, structured: dict[str, Any] | None = None, *, error: bool = 
     return result
 
 
+def _unreached(page: str | None) -> str:
+    """What ``cad_view`` and ``cad_screenshot`` say of an inline view that never reached this server: the chat
+    has not drawn it yet, or drew it and carries none of its calls back (the Claude app's Code tab draws cards
+    and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
+    What the person can open instead, and the picture the agent can draw itself."""
+    instead = f"give them the CAD Viewer's page instead: {page}" if page else "ask them to open it in the CAD Viewer instead"
+    return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
+            "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
+            "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
+            f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
+            "use cad_snapshot.")
+
+
 def _unavailable(error: BaseException) -> str:
     """The text for a call that failed because the engine could not start its kernel processes: the
     engine's words, then, on Windows when the loader refused a native module, the hint naming it
@@ -319,7 +332,7 @@ class Server:
         self._update_told = False
         # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab,
         # and a model cad_show sent it before it opened, shown once it does.
-        self._mounting: dict[str, None] = {}
+        self._mounting: dict[str, str | None] = {}  # the inline views launched and not yet seen, each its page
         self._opened: float | None = None
         self._pending: str | None = None
 
@@ -722,6 +735,8 @@ class Server:
             LOG.info("the launch carries no page: %s", failure)
             return
         launch["browser"] = link
+        if launch.get("view") in self._mounting:
+            self._mounting[launch["view"]] = link  # the page a view that never reaches this server is told to offer
         if not self.tabs:
             parts = urlparse(link)
             launch["engine"] = f"{parts.scheme}://{parts.netloc}"
@@ -1013,8 +1028,7 @@ class Server:
         if view is None and view_id in self._mounting:
             view = self.views.wait(found, timeout=OPENING_SECONDS)
             if view is None:
-                raise ToolFailed("That viewer has not opened yet: the chat has not drawn it (it may be waiting for the person "
-                                 "to allow it, or be collapsed or scrolled away). Ask the person to look at it, then try again.", "no_view")
+                raise ToolFailed(_unreached(self._mounting.get(view_id)), "no_view")
         if view is None:
             raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again "
                              "with cad_show.", "no_view")
