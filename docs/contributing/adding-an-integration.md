@@ -59,8 +59,10 @@ an integration.
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
-      accepts and which parts of the type's content it provides; it regenerates a file from what a model
-      returns. A tool that changes a native file in place is no producer but the type's edit
+      accepts and which parts of the type's content it provides; it regenerates a document from what a
+      model returns: build123d's take a `Shape` for every type with a decorator, and cadjoint's takes a
+      `cad.cadjoint.Field` for `implicit` alone (`cad/cadjoint/_producers.py`, its writer `_document`).
+      A tool that changes a native file in place is no producer but the type's edit
       (`cad.registry.Edit`, `<type>.edit`, a `with` block: KiCad's `kicad_pcb.edit`). A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).

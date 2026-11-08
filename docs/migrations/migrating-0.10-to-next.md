@@ -24,7 +24,8 @@ names its new one.
 | `step-parts` and its `scripts/download_step_part.py` | gone: step.parts stays a service of its own |
 | (new) | `pcb`: KiCad boards and schematics |
 
-`cad`, `engineering-drawing` and `sendcutsend` keep their names. The install command and `cad
+`cad`, `engineering-drawing` and `sendcutsend` keep their names; `cad` also teaches implicit fields now
+(`@implicit`, `cad.cadjoint`), an addition that renames nothing. The install command and `cad
 update` delete a loose copy of a retired skill -- one the Skills CLI installed, which never removes
 a skill -- and the Skills CLI's record of it, so `npx skills update` does not bring it back; 0.10
 moved such a copy aside. A loose copy of a skill that still ships is moved aside, as before.
@@ -63,6 +64,7 @@ reader and its operations -- and our helpers that take build123d's objects are `
 | `cad.findings`, `cad.xml_common`, `cad.check_fonts`, `cad.urdf_source`, `cad.sdf_source`, `cad.sdf_validation`, `cad.sdf_external`, `cad.srdf_source`, `cad.srdf_validation` | private now (`cad._internal.*`, `cad.<type>._*`): the aliases keep working, and nothing of a model's needs them |
 | `cad.pcb` (the KiCad pull request's, never released) | `cad.kicad_pcb`: `read` (was `read_board`), `inside`, `inspect` (was `inspect_board`), `drc`, `export`; a schematic's, `cad.kicad_sch`: `read`, `inspect`, `erc`, `export`; no alias, as they never shipped |
 | `cad.eng_drawing` | unchanged |
+| (new) | `from cad import implicit` / `@implicit` on a function returning `cad.cadjoint.field(scene, cell=...)`: a model whose document is the mesh sampled from a signed-distance field, with `implicit.export`, `.snapshot`, `.inspect` and `.dfm`; and `cad.cadjoint` (`field`, `solid`, `section`), the cadjoint integration (`cad[cadjoint]`). Additions: nothing is renamed |
 
 `import build123d as bd` is unchanged: `cad.build123d` holds only our helpers, never build123d's own
 names.
@@ -100,6 +102,7 @@ The shape is `cad <document_type> <operation> <file>`, the type the file's (`cad
 | `cad snapshot --display dark` (or `light`, or `{"appearance": ...}`), and `cad_snapshot`'s `display` the same | gone: every snapshot is light, whatever the viewer's theme. The word is no display mode, the key no display key, and a drawing takes no `--display` |
 | `cad inspect <file or id> [REF]` | `cad model inspect <id> [REF]`, `cad step inspect <file>`, `cad glb inspect <file>` |
 | `cad urdf validate robot.urdf`, `cad sdf validate world.sdf`, `cad srdf validate robot.srdf` | unchanged (`--urdf robot.urdf` names an SRDF's URDF) |
+| (new) | `cad implicit export <id> part.stl`, and its `snapshot`, `inspect` and `dfm`: an `@implicit` model's document, by its id |
 | `cad pcb drc board.kicad_pcb` (the KiCad pull request's) | `cad kicad_pcb drc board.kicad_pcb`; a schematic's ERC, `cad kicad_sch erc board.kicad_sch` |
 | `python -m cad_server.cli.export ...`, `.snapshot`, `.inspect` | `python -m cad_server.cli.<type> <operation> ...` |
 | `python -m cad_server.cli.urdf_validate ...` (and `sdf_`, `srdf_`) | `python -m cad_server.cli.urdf validate ...` |
@@ -240,6 +243,13 @@ release, and what it runs a program in follows the program:
   under CAD's logo, turns them off, and `cad update auto` says whether they are on.
   `CAD_UPDATE_CHECK=0` in the server's environment turns them off too, as it turns off the version
   check. A release that may break something, this one among them, still waits for you.
+- **A Python of your own needs this release's library** (tier 4). The worker contract, by which the
+  server builds a script run with a Python of your own, is at protocol 2: a build now says its
+  document's format, since an implicit model's is a mesh. A script run that way with the previous
+  release's library in its environment is refused by this release's server before any worker starts,
+  in one line naming the package to update (`update the cad package in this environment to ...`):
+  install what `cad requirement build123d` prints there. A script `cad run` runs is not affected, and
+  the analytics schema moving to 9 (an implicit document's kind) changes nothing for you.
 - **The CAD kernel environment is made on first need** (tier 1). The install command (`cad setup`),
   `cad update` and `cad doctor` no longer make it: the first build, or the first view or operation
   that needs the kernel, makes it, from uv's cache where it holds it, else the network. An automatic

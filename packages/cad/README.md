@@ -49,12 +49,14 @@ and `step.read("vendor.step")` reads a file into a model.
 These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
-  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
-  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
-  because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
-  and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
-  engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
-  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
+  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`,
+  `implicit`, `step`, `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`.
+  3MF's id is `threemf` because an id must be a valid Python name. The registry (`cad.registry`) maps file
+  extensions to ids (`.step` and `.stp` are `step`). `model` and `implicit` are the two types with no file:
+  a model built from code and held in the engine's memory, addressed by its document id or the handle its
+  call returns -- `@model` declares one whose document is the XCAF document of the build123d shape it
+  returns, `@implicit` one whose document is the mesh sampled from the implicit field it returns
+  (`cad.cadjoint.field`); `xbf` is the `.xbf` file the engine writes of a model, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
   `kicad`, `trimesh`, `cadjoint`),
@@ -84,7 +86,8 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); a cadjoint field made a solid a model returns (`cad.cadjoint.solid`); and engineering
+trimesh); a cadjoint field made a model's document, the mesh sampled from it (`@implicit`), or a solid a
+model returns (`cad.cadjoint.solid`); and engineering
 drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
@@ -161,7 +164,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
    deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, an
+   beside a library or a model; under `jax/` the programs JAX compiled to sample an implicit field
+   (the cadjoint integration's), regenerable as well; and under `base/` the environment the engine's kernel processes run in, an
    installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
    beside it each environment a program's run made (`cad run`: the library pinned with the integrations
    its imports use, and the packages it names), regenerable as well, those of the release before the
@@ -192,7 +196,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    prototypes and instances with placements, a name on every part and instance, colours and
    materials per part and per painted face, element names on face, edge and vertex labels, and
    an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
-   of it; `cad <type> export` writes any of them from the xbf alone. A file document -- a board, a
+   of it; `cad <type> export` writes any of them from the xbf alone. An implicit model's document is
+   no XCAF: it is the mesh sampled from its field, a GLB the engine holds, whose translations are the
+   mesh kinds alone (STL, 3MF, GLB). A file document -- a board, a
    schematic, a robot description, a mesh -- is its file, read by its type (law 25).
 5. **The memo is the only build cache, and it lives in the worker.** *Models.* Every kernel operation a model
    runs is keyed by its inputs, and so is every question it asks of what they made: a validity
@@ -216,8 +222,9 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
    refused, naming both declaration locations, until that file is gone or runs again without it. Unnamed functions in different files keep their script/function ids. A
    function in a file is a model (the registry points at its script), and a shape is handed over
    (`model(shape, name=...)`: held and kept, never rebuilt); every one is recorded and kept in
-   the engine's document cache alike. A function is declared by `@model` (no file) or by its file
-   decorators (those files), never both; file decorators write only their named outputs. No xbf,
+   the engine's document cache alike. A function is declared by `@model` (no file), by `@implicit` (no
+   file, a field's mesh) or by its file decorators (those files), never two; file decorators write only
+   their named outputs. No xbf,
    mesh, memo, provenance or derived file is written for a document beyond what it declares. A
    document lives until a person deletes it (`cad delete`, the home's Delete); its worker
    retiring does not end it, nor does memory, which reads it again from the cache. A document
@@ -455,7 +462,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     process kind and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
-    either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
+    either has files (its extensions) or has none (`model`, `implicit`, a document in memory, named by its id): a
     document is known by its id either way, and nothing in the engine assumes a file behind a
     document. It is kernel-free, the standard library alone, because the server imports it; the
     server's, the viewer's and the JavaScript's lists of formats are read from it, the JavaScript's
@@ -524,8 +531,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     rename one.
 
 31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
-    A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
-    `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
+    A producer is the engine's (law 27): a decorator (`@model`, `@implicit`, `@xbf`, `@step`, `@glb`,
+    `@stl`, `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
     and the file is written again from the model whenever it runs. An edit is a native file's own: the file
     is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
     hands the block the tool's live document, and saves it where it is at the block's end only when the
@@ -596,8 +603,11 @@ src/cad/
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
-  model/                 # the model, the type with no file: @model and a model's operations, by
+  model/                 # the model, a type with no file: @model and a model's operations, by
                          #   its handle or document id (a ModelType)
+  implicit/              # the implicit, the other type with no file: @implicit (a function
+                         #   returning cad.cadjoint.field) and its operations, by its handle or
+                         #   document id (an ImplicitType); its GLB is engine/implicit_document.py
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
@@ -626,9 +636,11 @@ src/cad/
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
                          #   a faceted solid from a mesh's arrays (_faceted), and the producers it
                          #   registers (_producers)
-  cadjoint/              # the cadjoint integration: a field of cadjoint's made a build123d solid
-                         #   of planar faces, through its own mesher and simplifier (_solid), and
-                         #   a section of the field drawn (_section)
+  cadjoint/              # the cadjoint integration: a field declared with its sampling and the
+                         #   one sampling, with its refusals (_field: field, Field), its producer of
+                         #   implicit (_producers) and the writer that samples a field into the
+                         #   document (_document), a field made a build123d solid of planar faces
+                         #   through cadjoint's simplifier (_solid), and a section drawn (_section)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
@@ -701,9 +713,9 @@ made is removed. Exports and checks of the edited file are explicit calls after 
 ## Manufacturing checks
 
 A 3D document's `dfm` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
+(`cad[trimesh]`): `cad.model.dfm`, `cad.implicit.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
 `cad.glb.dfm`, one to one with `cad <type> dfm --process molding|printing`. The source is a file of
-the type or, for `model`, a document the engine holds (its id, or the handle a model's call returns), so a
+the type or, for `model` and `implicit`, a document the engine holds (its id, or the handle a model's call returns), so a
 check script measures the model it builds:
 
 ```python
@@ -740,13 +752,16 @@ or a `.ply` among them) and never changing it. A script run with `cad run` that 
 ## Implicit fields
 
 A cadjoint field -- a signed-distance function of cadjoint's, built of blended booleans, shells,
-offsets, patterns and sketches -- becomes a solid a model returns, with the `cadjoint` integration
-(`cad[cadjoint]`): `cad.cadjoint.solid(scene, cell=..., bounds=None)`, `cell` the sampling cell in
-millimetres, `bounds` a box of the caller's in place of cadjoint's own fit:
+offsets, patterns and sketches -- is a model's document with the `cadjoint` integration
+(`cad[cadjoint]`): a function declared `@implicit` returns `cad.cadjoint.field(scene, cell=...,
+bounds=None)`, `cell` the sampling cell in millimetres, `bounds` a box of the caller's in place of
+cadjoint's own fit, and the engine samples it in the worker and holds the mesh as the `implicit`
+document -- a GLB in its memory and its cache, with no file behind it, addressed by its id as a
+model is:
 
 ```python
-from cad import model
-from cad.cadjoint import solid
+from cad import implicit
+from cad.cadjoint import field
 from cadjoint.construction import Solid
 from cadjoint.sdf.boolean import Union
 
@@ -755,21 +770,47 @@ scene = Union(Solid.sphere(radius=15.0, name="hub"),
               smoothness=3.0)
 
 
-@model
+@implicit
 def node():
-    return solid(scene, cell=1.0)
+    return field(scene, cell=1.0)
+
+
+if __name__ == "__main__":
+    node()
 ```
 
-The field is meshed by cadjoint's dual contouring, sharp creases kept, and simplified by its
-error-bounded, feature-preserving collapse to within a twentieth of the cell; what comes back is a
-build123d `Solid` of planar triangular faces (`cad.build123d.faceted_solid`, which makes one of any
-closed triangle mesh's arrays), so the document, its views, exports, inspection and checks are any
-solid's, and a STEP of it is faceted too. Nothing plausible-wrong comes back (law 17): a scene that is
-no field, a cell that is no positive number, more than 512 cells on an axis, a field with no closed
-part in reach, bounds that cut the part or hold no surface, a mesh that is not watertight and a mesh of
-several bodies are each refused, naming the fix, and no solid is made. The solids are build123d's, so
-the integration needs the build123d integration (the registry's `needs`): a script run with `cad run` that imports
-`cadjoint` or `cad.cadjoint` gets both, and one whose header names `cad[cadjoint]` gets build123d with
-it. `cad.cadjoint.section(scene, out, axis="z", at=0.0)` draws one plane of the field as a PNG --
-inside and outside by colour, contours of distance, the surface as a line -- and answers what it shows
-(`Section`: its plane, its extent, the field's range on it), without meshing.
+```bash
+cad run node.py                                # samples the field; the line says triangles and bounds
+cad implicit export <id> node.stl node.3mf     # the mesh kinds alone: no STEP, no --tolerance
+cad implicit snapshot <id> node.png            # the mesh view, as the viewer draws it
+cad implicit inspect <id>                      # triangles, bounds, volume, cell
+cad implicit dfm <id> --process printing       # measured as a mesh
+```
+
+The field is meshed by cadjoint's dual contouring, sharp creases kept, its slivers welded and nothing
+simplified; the viewer shows it in its mesh view, shaded by the field's own normals, with no B-rep edge
+or face to pick. A body that runs again to the same field (its digest: the lowered scene, the cell and
+the bounds) samples nothing. `cad.implicit.export`, `snapshot`, `inspect` and `dfm` are the same
+operations from Python, on the handle or the id; a model's handle is refused by `cad.implicit`, and an
+implicit's by `cad.model`, each naming the other. Its handle has no `.shape`, and an implicit model is
+a leaf: a `@model` body that calls one is refused.
+
+Where a field must be B-rep -- placed in an assembly of build123d parts, cut or joined with them, or
+written as a STEP -- a `@model` returns `cad.cadjoint.solid(scene, cell=..., bounds=None)` instead: the
+same sampling, simplified by cadjoint's error-bounded, feature-preserving collapse to within a twentieth
+of the cell, and built into a build123d `Solid` of planar triangular faces (`cad.build123d.faceted_solid`,
+which makes one of any closed triangle mesh's arrays), so its document, views, exports, inspection and
+checks are any solid's, and a STEP of it is faceted too; it costs a B-rep build on every run.
+
+Nothing plausible-wrong comes back (law 17). `field` and `solid` refuse alike, naming the fix, and no
+document or solid is made: a scene that is no field, a cell that is no positive number, more than 512
+cells on an axis, a field with no closed part in reach, bounds that cut the part or hold no surface, a
+mesh that is not watertight and a mesh of several bodies. Each document type refuses what its producers
+do not take (law 27): an `@implicit` function that returns anything but a `field(...)` (`an implicit
+document is made of cad.cadjoint.field(scene, cell=...), not ...`), and a `@model` that returns one
+(no producer of `model` from a `Field`). The fields are cadjoint's and the solids build123d's, so the
+integration needs the build123d integration (the registry's `needs`): a script run with `cad run` that
+imports `cadjoint` or `cad.cadjoint` gets both, and one whose header names `cad[cadjoint]` gets
+build123d with it. `cad.cadjoint.section(scene, out, axis="z", at=0.0)` draws one plane of the field as
+a PNG -- inside and outside by colour, contours of distance, the surface as a line -- and answers what it
+shows (`Section`: its plane, its extent, the field's range on it), without meshing.

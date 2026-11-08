@@ -3537,7 +3537,10 @@ says the sample, not a tree: `triangles 5,232 (was 7,568) · bounds 40 × 20 × 
 again to the same field -- `Field.digest`, blake2b of the lowered scene, its cell and bounds -- samples
 nothing: the bytes stand under the new closure (`report["document"]["sampled"]` false, the page's
 version unchanged, so no viewer fetches them again), from the worker's memo or from the cache file a
-fresh worker reads. The report's `type` is `implicit`; `cad implicit export|snapshot|inspect|dfm <id>`
+fresh worker reads. The programs JAX compiles to sample a field are kept in JAX's persistent compilation cache
+under the engine's cache folder (`cache_dir()/jax`, `cad.cadjoint._field`), so a fresh worker pays the
+compile once per machine, not per worker (the clevis fixture at a 1 mm cell: 13.6 s cold against 7.6 s
+with the cache warm). The report's `type` is `implicit`; `cad implicit export|snapshot|inspect|dfm <id>`
 take the id, as `cad model snapshot|export|inspect <id>` do: an id is opaque to every verb and routes to
 its document whatever the format (Quick Edit's prompt names `cad model snapshot <id>` for any
 document), only a *handle* is refused by its type (`cad.model.export(implicit_handle, ...)` says to use

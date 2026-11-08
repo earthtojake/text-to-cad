@@ -89,7 +89,9 @@ src/cad_server/
 A document type's commands are `cad <document_type> <operation> <file>`, one id per type as the
 library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf export`, `cad step snapshot`,
 `cad glb inspect`, `cad urdf validate`, and the rest `cad --help` lists, grouped by type. `model` is a model
-the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
+the engine holds, by its document id, with no file, and so is `implicit`, a model whose document is the mesh
+sampled from a field (`cad implicit export|snapshot|inspect|dfm <id>`, its exports the mesh kinds alone);
+every other type takes a file of its own. `export`,
 `snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
 file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
 `dfm`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
@@ -105,7 +107,7 @@ run by kicode's `kicad-cli`: in this process where it runs KiCad itself (`CAD_KI
 as it makes the trimesh integration's. It runs headless with no display and private homes; a person's own
 KiCad is never run, the server never starts KiCad's app, Open in never opens a `.kicad_*` file, and
 viewing a board needs no KiCad installed: its first plot fetches kicode, the `kicad` integration's, to refill its pours on a copy, unless `CAD_KICAD_REFILL=0` in the server's environment, which draws them as the file saved them, as a failed fetch does. A KiCad schematic's are the same integration's, run the same way, on its project's root sheet whichever sheet is named: `cad kicad_sch erc` is KiCad's electrical rules check (it fails on errors and says the warnings, each with its sheet and where; the library checks a headless `kicad-cli` cannot make, the person's global libraries being out of its reach, are one note) and `cad kicad_sch export SCHEMATIC --to pdf|svg|netlist|bom -o DIR` its outputs; `cad kicad_sch snapshot --sheet /Power/` draws one sheet, and `cad kicad_sch inspect SCHEMATIC [REF]` says what it holds and what a reference names, the library's, with no KiCad.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
+A 3D type's `dfm` (`cad model|implicit|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
 in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the

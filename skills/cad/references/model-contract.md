@@ -50,7 +50,8 @@ if __name__ == "__main__":
   parts, not the joints.
 - **One declaration per function**: bare `@model` (a document with no file) or its file
   decorators (`@xbf`, `@step`, ...: a document with those files), never both; stacking
-  `@model` on a file decorator is refused. The function's name is the model's name:
+  `@model` on a file decorator is refused (`@implicit`, a field's mesh, is a third, stacked with
+  neither: [implicit fields](implicit-fields.md)). The function's name is the model's name:
   rename the function to rename it.
 - **A model takes no parameters and returns a build123d shape**: a part, or a
   `Compound` of labelled children (an assembly). A 2D drawing returns 2D geometry
