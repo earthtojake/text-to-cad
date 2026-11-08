@@ -939,7 +939,7 @@ def _xvfb_pids(engine: Path) -> list[int]:
 
     def parent(pid: str) -> str:
         try:
-            return Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()[1]
+            return Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").rpartition(")")[2].split()[1]
         except (OSError, IndexError):
             return "0"
 

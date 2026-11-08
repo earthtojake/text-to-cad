@@ -61,7 +61,7 @@ class EngineDisplayTest(unittest.TestCase):
         path.chmod(0o755)
 
     def started(self) -> list[int]:
-        return [int(line) for line in self.log.read_text().split()] if self.log.exists() else []
+        return [int(line) for line in self.log.read_text(encoding="utf-8").split()] if self.log.exists() else []
 
     def gone(self, pid: int) -> None:
         deadline = time.monotonic() + 30
@@ -100,7 +100,7 @@ class EngineDisplayTest(unittest.TestCase):
         data = cookie.read_bytes()
         self.assertEqual(struct.unpack(">HHHH", data[:8]), (0xFFFF, 0, 0, 18))
         self.assertEqual((data[8:26], struct.unpack(">H", data[26:28])[0], len(data)), (b"MIT-MAGIC-COOKIE-1", 16, 44))
-        self.assertIn(f"-auth {cookie}", (self.folder / "argv").read_text())
+        self.assertIn(f"-auth {cookie}", (self.folder / "argv").read_text(encoding="utf-8"))
         display.stop()
         self.gone(pid)
         self.assertFalse(cookie.parent.exists(), "its cookie goes with it")
