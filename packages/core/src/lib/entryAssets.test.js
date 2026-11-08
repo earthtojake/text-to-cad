@@ -35,6 +35,13 @@ test("a mesh file's asset is its own", () => {
   assert.equal(entryMeshAssetHash({ kind: "stl", url: "/mesh.stl", hash: "stl-hash" }), "stl-hash");
 });
 
+test("an implicit's asset is its source, the GLB the engine serves of it", () => {
+  const id = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab";
+  const entry = { id, file: id, kind: "implicit", url: `/api/v1/documents/implicit/${id}/source?v=3`, hash: "3" };
+  assert.equal(entryMeshAssetUrl(entry), `/api/v1/documents/implicit/${id}/source?v=3`);
+  assert.equal(entryMeshAssetHash(entry), "3");
+});
+
 test("a robot's signature is its description's, and an SRDF's its URDF's too", () => {
   assert.equal(entryUrdfAssetHash({
     kind: "srdf",

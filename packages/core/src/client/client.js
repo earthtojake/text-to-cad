@@ -5,6 +5,7 @@ import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
 import { applyViewerOriginToEntries, normalizeViewerOrigin, viewerOriginUrl } from './origin.js';
 import { isDocumentId } from '../lib/cadRefs.js';
+import { filelessDocumentFormat } from '../lib/fileFormats.js';
 import { createHttpCadResourceProvider, scopeCadResources } from './resources.js';
 export * from './origin.js';
 
@@ -30,6 +31,8 @@ function abortError() {
 const DRAWING_RETRY_MAX_MS = 5000;
 // The longest an engine document's 202 (the engine still reading it) may have the client wait.
 const ENGINE_RETRY_MAX_MS = 5000;
+// How long a version request waits on the engine for a new version, in seconds (the engine caps it at 60).
+const DOCUMENT_VERSION_WAIT_SECONDS = 25;
 
 /** `ms` of waiting that `signal` ends early, as an AbortError. */
 function pause(ms, signal) {
@@ -67,13 +70,25 @@ export const API = '/api/v1';
  */
 const scriptOf = (envelope) => (envelope?.source?.type === 'script' && typeof envelope.source.path === 'string' && envelope.source.path
   ? envelope.source.path : null);
+/**
+ * A document with no file of its own whose bytes are a file format's (an implicit's, a GLB:
+ * `filelessDocumentFormat`) is its envelope's kind, read from its kind's `source` at its version
+ * (`<api>/source?v=<version>`) where its row names no URL: each build is a new URL, so a new read.
+ */
+const servedRowOf = (envelope, entry) => {
+  if (!filelessDocumentFormat(envelope.kind) || typeof envelope.api !== 'string' || !envelope.api) return entry;
+  const version = String(envelope.version ?? entry.hash ?? '');
+  return { ...entry, kind: envelope.kind,
+    url: entry.url || `${envelope.api}/source${version ? `?v=${encodeURIComponent(version)}` : ''}` };
+};
 const rowOfEnvelope = (envelope) => {
   if (!envelope?.entry) return envelope?.entry;
+  const entry = servedRowOf(envelope, envelope.entry);
   const script = scriptOf(envelope);
   const present = envelope.source?.present;
   return script || typeof present === 'boolean'
-    ? { ...envelope.entry, ...(script ? { script } : {}), ...(typeof present === 'boolean' ? { sourcePresent: present } : {}) }
-    : envelope.entry;
+    ? { ...entry, ...(script ? { script } : {}), ...(typeof present === 'boolean' ? { sourcePresent: present } : {}) }
+    : entry;
 };
 const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter(Boolean),
   revision: envelopes.length === 1 ? envelopes[0]?.revision ?? '' : '' });
@@ -496,6 +511,15 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         ? await request(`${API}/documents/${encodeURIComponent(file)}`, { signal, timeoutMs: 10_000, operation: 'engine-document' })
         : (await request(`${API}/documents`, { params: { path: file }, signal, timeoutMs: 10_000, operation: 'engine-document' }))?.documents?.[0];
       return envelope?.held === true;
+    },
+    async documentVersion(file, after = '', { signal, wait = DOCUMENT_VERSION_WAIT_SECONDS } = {}) {
+      // A document's version (`GET /api/v1/documents/<id>/version`): answered at once when it is not
+      // `after`, else when a build of it lands, else after `wait` seconds with `after` again. The
+      // server's own wait bounds the request, so it carries no timeout of its own.
+      if (!isDocumentId(file)) throw new Error(`a document's version is asked by its id, not ${JSON.stringify(file)}`);
+      const reply = await request(`${API}/documents/${encodeURIComponent(file)}/version`,
+        { params: { after: after || '', wait }, signal, operation: 'document-version' });
+      return { version: String(reply?.version || '') };
     },
     createRenderSession({ file = '' } = {}) {
       if (disposed) throw new Error('This CAD client has been disposed.');

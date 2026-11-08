@@ -23,7 +23,7 @@ for every other kind.
 | `step` (`stp`), `xbf` | `step` |
 | `stl` | `stl-mesh` |
 | `3mf` | `3mf-mesh` |
-| `glb` (`gltf`) | `glb-mesh` |
+| `glb` (`gltf`), `implicit` | `glb-mesh` |
 | `dxf` | `dxf` |
 | `kicad_pcb` | `kicad_pcb` |
 | `urdf`, `srdf`, `sdf` | `robot` |
@@ -33,7 +33,10 @@ An entry names its format twice, the catalog's `kind` and the resolved source fo
 disagree, `entryIconKind` takes the first of `dxf`, `robot`, `stl-mesh`, `3mf-mesh`, `glb-mesh`
 and `step` that either one names (an `.srdf` kind names `robot` itself), and a file still loading
 is `loading` whatever its format. A new format adds its `RENDER_FORMAT` value, a row here and a
-renderer slice; no shared component learns its name.
+renderer slice; no shared component learns its name. A mesh with no file of its own (`implicit`, held
+by its id) has no format of its own either: it is the format its bytes are served in, by the
+registry's MIME type (`filelessDocumentFormat` in `fileFormats.js`: an implicit's is a GLB), and takes
+that format's icon, asset key and renderer.
 
 ## Enforcement
 

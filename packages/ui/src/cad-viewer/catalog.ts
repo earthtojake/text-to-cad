@@ -1,5 +1,6 @@
 import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
+import { documentMime, filelessDocumentFormat } from '@cad/core/lib/fileFormats.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
@@ -59,9 +60,14 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
       const file = byId ? entry.file : normalizePath(entry.file);
       const name = entry.name || baseName(file);
       const script = byId && typeof entry.script === 'string' && entry.script ? normalizePath(entry.script) : null;
+      // A document by its id is the engine's (`cad-document`, read as an `.xbf` is), but for one whose
+      // bytes are a file format's (an implicit's, a GLB): that format, and its MIME type, which its
+      // renderer matches (`cad.registry`).
+      const served = byId ? filelessDocumentFormat(entry.kind) : '';
       return { path: file, name, ...(byId ? { navigationPath: null } : {}), ...(script ? { sourceFile: script } : {}),
         ...(entry.sourcePresent === false ? { sourceMissing: true } : {}), kind: 'file', size: Number(entry.bytes || 0),
-        extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
+        extension: served || (byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || ''),
+        mediaType: byId && !served ? 'cad-document' : 'cad', ...(served ? { mime: documentMime(entry.kind) } : {}),
         revision: contentRevision(entry) };
     },
     async list(directory, { signal }) {

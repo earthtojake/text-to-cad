@@ -23,7 +23,7 @@ if (!HTMLElement.prototype.setPointerCapture) Object.assign(HTMLElement.prototyp
 beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { toast.dismiss(); cleanup(); vi.unstubAllGlobals(); });
 const part = { doc: 'doc', revision: 'v1', file: '/part.xbf', name: 'part.xbf' };
-type Shown = typeof part & { planar?: boolean };
+type Shown = typeof part & { planar?: boolean; kind?: string };
 function Document({ view }: { view: Shown }) { useExportView(view); return <div>Model</div>; }
 const host = { environment: { colorScheme: 'light' } } as any;
 // The file's ⋯ menu as the navbar draws it, holding Export's submenu where there is one.
@@ -90,10 +90,13 @@ it('the menu is the formats the file\'s kind writes and nothing else, there at o
   ];
   // A document the view draws flat on z=0 writes a DXF too; a mesh file never does.
   kinds.push(['/plate.xbf#planar', ['STEP', 'STL', '3MF', 'GLB', 'DXF', 'XBF']], ['/scene.glb#planar', ['STL', '3MF']]);
+  // A mesh held by its id, with no file to copy (an implicit's, by its kind): each of the three mesh kinds.
+  kinds.push(['0f8e2a7c-3b1d-5e4f-9a6b-7c8d9e0f1a2b#implicit', ['STL', '3MF', 'GLB']]);
   for (const [shownFile, labels] of kinds) {
-    const [file, planar] = [shownFile.replace('#planar', ''), shownFile.endsWith('#planar')];
+    const [file, planar] = [shownFile.replace(/#.*$/, ''), shownFile.endsWith('#planar')];
+    const kind = shownFile.endsWith('#implicit') ? 'implicit' : '';
     const { service } = server();
-    const { unmount } = mount(service, { save: vi.fn() }, { view: { ...part, file, name: file.split('/').pop()!, ...(planar ? { planar } : {}) } });
+    const { unmount } = mount(service, { save: vi.fn() }, { view: { ...part, file, name: file.split('/').pop()!, ...(planar ? { planar } : {}), ...(kind ? { kind } : {}) } });
     const user = userEvent.setup({ skipHover: true });
     await openExport(user);
     const items = within(menu()!).getAllByRole('menuitem');

@@ -536,3 +536,35 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'unsaved']);
   client.dispose();
 });
+
+test('a document held by its id is waited on for its next version, by its id alone', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const asked = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    asked.push(String(url));
+    return json({ version: '3', building: null, failed: null, progress: 0 });
+  } });
+  assert.deepEqual(await client.documentVersion(id), { version: '3' });
+  assert.deepEqual(await client.documentVersion(id, '3', { wait: 5 }), { version: '3' });
+  assert.deepEqual(asked, [`http://one.test/api/v1/documents/${id}/version?wait=25`,
+    `http://one.test/api/v1/documents/${id}/version?after=3&wait=5`]);
+  await assert.rejects(client.documentVersion('/models/scene.glb'), /by its id/);
+  client.dispose();
+});
+
+test('an implicit\'s row is its envelope\'s kind, read from its source at its version', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  let version = '4';
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => json({
+    id, kind: 'implicit', version, api: `/api/v1/documents/implicit/${id}`, exports: ['stl', 'threemf', 'glb'],
+    source: { type: 'script', path: '/m/gyroid.py', function: 'gyroid', present: true },
+    entry: { id, file: id, name: 'gyroid', sourcePath: null, kind: 'glb', sourceFormat: 'implicit', url: '', hash: `model:${version}`, bytes: 0 },
+    revision: 'r1' }) });
+  const row = await client.resolveEntry(id);
+  assert.deepEqual([row.kind, row.url, row.script], ['implicit', `http://one.test/api/v1/documents/implicit/${id}/source?v=4`, '/m/gyroid.py']);
+  // A new build is a new version, so a new URL to read.
+  version = '5';
+  await client.refresh({ file: id });
+  assert.equal(client.entryOf(id).url, `http://one.test/api/v1/documents/implicit/${id}/source?v=5`);
+  client.dispose();
+});

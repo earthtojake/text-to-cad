@@ -290,6 +290,11 @@ export interface CadWorkspaceService {
   engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
   /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
   engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
+  /**
+   * A document's version, by its id (`GET /api/v1/documents/<id>/version?after=`): answered at once when
+   * it is not `after`, else when a build of it lands, else after `wait` seconds (25) with `after`.
+   */
+  documentVersion?(file: string, after?: string, options?: CadRequestOptions & { wait?: number }): Promise<{ version: string }>;
   readonly resources: CadResourceProvider;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
