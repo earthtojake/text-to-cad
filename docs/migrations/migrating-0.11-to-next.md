@@ -65,8 +65,9 @@ and read back there. The `cad` command, which holds no kernel, runs that in the 
 
 A model's, a STEP's and an xbf's check is measured by the engine where it holds the document (the model's
 warm worker; a file read once, in a process of the engine's), and the same check of an unchanged document
-answers the result it kept, so a check run again is immediate. A `cad run` of a model's script cancels a
-check of it still running, which says so: run the check again.
+answers the result it kept, so a check run again is immediate. A check outlives its caller, as a build does: cut
+off by a shell's time limit it runs on, and the same command again answers with its result, waiting for it if it
+still runs. A `cad run` of a model's script cancels a check of it still running, which says so: run the check again.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for

@@ -1054,10 +1054,17 @@ parts, families, faces and rays). The build says it is asking, at once, waits fo
 was cancelled only if it was. A stop takes effect when the kernel call in progress returns: on a part of 1606
 faces the longest stretch between two checkpoints was the whole part's one mesh, 7 to 21 s across the processes
 with four running at once, every other a few seconds at most, so that is how long a build can wait on a check of a
-part that size. A check's caller going cancels it the same way (`Daemon.abandon`), and stops the checks process
-outright, which holds nothing of anyone's. A process over the workers' memory cap after a check is retired (a
-worker drained first) and the check's caller told so, on stderr. A process that exits in a check is not asked
-again: the check fails saying so, in words of the process it was.
+part that size. A check waiting for a busy process says so to its caller on stderr at once, as a build behind a
+build does: what it waits for and since when (`Daemon._behind_check`).
+
+A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, in its
+worker or the checks process, and its clean result kept. The same check asked again answers from the store, or,
+while it still runs, waits for it (`Daemon.running`, by document, version and check), says so ("waiting for the same
+manufacturing check, started 21 s ago") and answers with its answer -- its result, or its failure, a cancel too --
+so it is measured once. No timer bounds it, and only a build of a model's script cancels a check; a file's check is
+never cancelled, and a changed file is another digest's check. A process over the workers' memory cap after a check
+is retired (a worker drained first) and the check's caller told so, on stderr. A process that exits in a check is
+not asked again: the check fails saying so, in words of the process it was.
 
 **The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
 token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
@@ -1067,9 +1074,9 @@ store, with no process asked and no bytes asked of a worker (`reused`); a versio
 keeps nothing, and only a clean result is kept: never a document that did not read, a refused check or a family not
 measured. A document holds one version's results, so none outlives the document it describes; the store is the
 daemon's memory, 128 results and 64 MB at most, least recently used first, and `cad status --json` counts it
-(`checks`: held, bytes, measured, reused, read: the files the checks process read; asked: those waiting or running;
-process: the checks process). A part an edit left untouched is measured again with its document: a check is the
-document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
+(`checks`: held, bytes, measured, reused, read: the files the checks process read; waited: those that waited for the
+same check; asked: those waiting or running; process: the checks process). A part an edit left untouched is measured
+again with its document: a check is the document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
 practice, each rule cited, no shop's limits), and the result is

@@ -39,10 +39,12 @@ digest -- with the check's type, process, options and the measuring library's re
 most, in the engine's memory), so the same check of an unchanged document measures nothing; a document holds one
 version's results. A document that did not read, a refused check or a family not measured is not kept.
 
-A build of a model's script cancels a check of it, and so does its caller going: a check waiting for its process
-leaves the queue at once, and a running one stops at its next checkpoint (`checkpoint`, between parts, families,
-faces and rays) and answers that it was cancelled; the checks process is stopped outright when a check's caller
-goes. A stop takes effect when the kernel call in progress returns. On a part of 1606 faces the longest stretch
+A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, its
+result kept, so the same check asked again finds it; asked while it still runs, it waits for that check and
+answers with its result, measuring nothing. A check waiting for a busy process says what it waits for. Only a build
+of a model's script cancels a check of it: a check waiting for its process leaves the queue at once, and a running
+one stops at its next checkpoint (`checkpoint`, between parts, families, faces and rays) and answers that it was
+cancelled. A stop takes effect when the kernel call in progress returns. On a part of 1606 faces the longest stretch
 between two checkpoints was the whole part's one mesh, 7 to 21 s across the processes with four running at once;
 every other was at most a few seconds (a large face's own mesh, the file's read). A process killed in a check says
 so, and is not asked again.
