@@ -38,7 +38,7 @@ from typing import Any, Callable
 import numpy as np
 
 from cad._internal import meshops_sheet as plane
-from cad._internal.dfm import Unmeasured
+from cad._internal.dfm import Unmeasured, checkpoint
 from cad._internal.dfm import sheet as rules_side
 from cad.build123d import _dfm_brep as brep
 
@@ -1863,6 +1863,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         raise Unmeasured("empty_document", "the document holds no part to measure")
     results = []
     for part in document.parts:
+        checkpoint()
         try:
             results.append(_part(part, options))
         except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone

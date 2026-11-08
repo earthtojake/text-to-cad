@@ -69,7 +69,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from cad._internal.dfm import Unmeasured
+from cad._internal.dfm import Unmeasured, checkpoint
 from cad._internal.dfm import cnc as rules_side
 from cad._internal.meshops_printing import KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
@@ -120,6 +120,7 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     failed: dict[str, str] = {}
     models: list[Model] = []
     for part in document.parts:
+        checkpoint()
         try:
             model = Model(part)
         except Exception as error:  # noqa: BLE001 - a part that does not read is the report's to say

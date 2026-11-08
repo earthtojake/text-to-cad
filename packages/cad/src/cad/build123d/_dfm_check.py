@@ -24,10 +24,11 @@ __all__ = ["checked", "held", "measure", "measure_declared"]
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
               candidates: bool) -> dict[str, Any]:
-    from cad._internal.dfm import Unmeasured
+    from cad._internal.dfm import Unmeasured, checkpoint
 
     if not document.parts:
         raise Unmeasured("document_empty", "the document holds no part with a face to measure")
+    checkpoint()
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     report = module.measure(document, options, candidates)
     found = list(report.pop("findings", None) or ())
@@ -75,7 +76,7 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
 
 def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
     """The check an engine's kernel process runs of a document it holds (``source``, an ``export.Source``:
-    a model's in its worker, a file's or a held document's in the documents worker), as ``check`` asks it
+    a model's in its worker, a file's or a held document's in the checks process), as ``check`` asks it
     (``{"type", "process", "resolved", "candidates", "given"}``, its options resolved by the caller,
     ``manufacturing.options``), measured in memory (``_dfm_brep.of_source``). Plain data, which the caller
     finishes (``manufacturing.finish``): ``{"measured": {"process", "resolved", "report"}}``; ``{"unmeasured":

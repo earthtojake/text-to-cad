@@ -37,6 +37,7 @@ from typing import Any, Callable
 import numpy as np
 
 from cad._internal import meshops_printing as mo
+from cad._internal.dfm import checkpoint
 from cad._internal.dfm import printing as rules
 from cad.build123d import _dfm_brep as brep
 
@@ -88,6 +89,7 @@ def _xyz(point: Any) -> list[float]:
 
 
 def _safe(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    checkpoint()  # between families
     try:
         return fn()
     except Exception as error:  # noqa: BLE001 - one family failing never loses the rest

@@ -41,6 +41,7 @@ from typing import Any
 import numpy as np
 
 from cad._internal import meshops_molding as ops
+from cad._internal.dfm import checkpoint
 from cad._internal.dfm.molding import pull_doubtful
 from cad.build123d import _dfm_brep
 
@@ -77,6 +78,7 @@ def _xyz(point: Any) -> list[float]:
 
 
 def _safe(fn: Any, *args: Any) -> Any:
+    checkpoint()  # between families
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - a family that fails is reported, never raised
@@ -352,6 +354,7 @@ class _Geometry:
                     grid_of[key] = self._grid(d_all[members[0]])
 
         for key, members in groups.items():
+            checkpoint()  # a batch of rays at a time
             members = np.asarray(members)
             grid = grid_of.get(key)
             # Every (ray, face) pair whose box the ray might cross: the faces over each ray's grid cell, or every
@@ -397,6 +400,7 @@ class _Geometry:
                 if begin >= stop:
                     continue
                 index = int(ray[begin])
+                checkpoint()
                 line = gp_Lin(gp_Pnt(*o_all[index]), gp_Dir(*d_all[index]))
                 best, which = math.inf, 0
                 for k in range(begin, stop):

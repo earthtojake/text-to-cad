@@ -22,17 +22,25 @@ Every process module has:
   measured thickness, the technology);
 - ``findings(report, resolved, candidates)``: the findings its facts call for, verdicts apart;
 - ``summary(report, resolved, candidates)``: one line of what was measured.
+
+**Stopping a check.** A check the engine runs can be asked to stop (its worker's ``cancel``): the request
+only sets a flag (``stop``), and the measurement stops at its next ``checkpoint`` -- between parts, families,
+faces and ray batches, each in the integration's own Python loops -- raising ``Cancelled`` from its own
+frame, so nothing is interrupted halfway through a kernel call or while it holds a lock. A stop asked
+during one kernel call (an exact intersection, a face's mesh) takes effect when that call returns. A check
+in a process no one stops (the caller's own) never stops.
 """
 
 from __future__ import annotations
 
 import importlib
+import threading
 from types import ModuleType
 from typing import Any
 
 from cad._internal.refused import ArgumentRefused
 
-__all__ = ["COMMON", "PROCESSES", "Unmeasured", "module"]
+__all__ = ["COMMON", "PROCESSES", "Cancelled", "Unmeasured", "checkpoint", "module", "stop"]
 
 #: The processes a check measures for, in the order the help lists them.
 PROCESSES = ("cnc", "sheet", "molding", "printing")
@@ -48,6 +56,29 @@ class Unmeasured(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class Cancelled(BaseException):
+    """A check asked to stop (``stop``), raised at its next ``checkpoint``: a ``BaseException``, so no
+    family's ``except Exception`` takes it for a measurement that failed."""
+
+
+_STOPPING = threading.Event()
+
+
+def stop(asked: bool = True) -> None:
+    """The check running in this process asked to stop at its next ``checkpoint`` (``asked``), or let run
+    (``False``: a check starting clears what an earlier one was asked)."""
+    if asked:
+        _STOPPING.set()
+    else:
+        _STOPPING.clear()
+
+
+def checkpoint() -> None:
+    """``Cancelled`` when the check running here was asked to stop (``stop``); else nothing, at once."""
+    if _STOPPING.is_set():
+        raise Cancelled
 
 
 def module(process: str) -> ModuleType:

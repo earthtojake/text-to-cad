@@ -6,8 +6,8 @@ part, its faces and their ordinals are the ones ``cad <type> inspect`` names: a 
 in its grammar (``plate/face 7``; ``bracket/face 3`` in a document of one part, under its name), which
 ``cad xbf inspect DOC REF`` resolves to the very face. A document the engine holds (its id, a model's
 handle) is measured where the engine holds it, in the kernel process that holds it (``of_source``): a
-model's document in its script's warm worker, a file's or a held document's in the documents worker, each
-as its reader read it -- nothing exported, written or read again. A live shape
+model's document in its script's warm worker, a file's or a document's no warm worker holds in the engine's
+checks process, each as its reader read it -- nothing exported, written or read again. A live shape
 (``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document. Each part is
 measured once, placed where its first occurrence stands; its other occurrences are counted.
 
@@ -36,7 +36,7 @@ from typing import Any, Iterable, Iterator
 
 import numpy as np
 
-from cad._internal.dfm import Unmeasured
+from cad._internal.dfm import Unmeasured, checkpoint
 
 __all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "inside", "of_source", "parts_of", "read",
            "samples", "surface"]
@@ -179,6 +179,7 @@ def _loaded(loaded: Any, copy: bool = False) -> Document:
     first: dict[int, Part] = {}
     order: list[Part] = []
     for node in root.parts():
+        checkpoint()
         payload = node.payload
         prototype = int(payload["prototype"])
         path = refs.path_text(root, node)
@@ -232,6 +233,7 @@ def of_source(source: Any) -> Document:
     first: dict[int, Part] = {}
     order: list[Part] = []
     for node in root.parts():
+        checkpoint()
         payload = node.payload
         prototype = int(payload["prototype"])
         path = refs.path_text(root, node)
@@ -653,6 +655,8 @@ class Rays:
                    nearest: bool) -> list[tuple[float, int]]:
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
 
+        checkpoint()  # a ray at a time: a check asked to stop stops between rays
+
         o = np.asarray(list(origin), dtype=float)
         d = np.asarray(list(direction), dtype=float)
         d = d / (np.linalg.norm(d) or 1.0)
@@ -745,6 +749,7 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     triangulation (made with ``deflection``, a fiftieth of the face's size by default) cut into triangles
     of about equal area, each sample the surface at one's middle, with its outward normal and its share
     of the face's area."""
+    checkpoint()
     from OCP.BRep import BRep_Tool
     from OCP.TopLoc import TopLoc_Location
 
@@ -837,6 +842,7 @@ def walk_faces(document: Document) -> Iterator[tuple[Part, int, Any]]:
     """Every face of every part: its part, its ordinal and the face."""
     for part in document.parts:
         for ordinal, face in enumerate(part.faces(), start=1):
+            checkpoint()
             yield part, ordinal, face
 
 
