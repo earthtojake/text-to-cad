@@ -50,7 +50,7 @@ describe('the channel to CAD\'s server', () => {
     const tunnel = createTunnelFetch(createServer(bridge, 'app-capability', never));
     // The fetch fails as fetch does, in words of ours: never the host's.
     const failed = await tunnel(`${TUNNEL_ORIGIN}/api/v1/documents`).catch(error => error);
-    expect([failed instanceof TypeError, failed.message]).toEqual([true, 'This chat cannot connect the CAD viewer to its engine.']);
+    expect([failed instanceof TypeError, failed.message]).toEqual([true, 'This chat cannot connect to CAD\'s engine.']);
     expect(never.state).toBe('none');
     // A chat whose calls came back: a later refusal is the plugin stopping, which the sync says.
     refuse = false;

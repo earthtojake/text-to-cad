@@ -52,6 +52,18 @@ class PluginZipTests(unittest.TestCase):
             pointed_at.add("./.mcp.json")
         self.assertEqual(names, roots | {path[2:] for path in pointed_at})
 
+    def test_every_skill_description_fits_the_hosts_limit(self):
+        # Hosts refuse a skill whose description is over 1024 characters; fea's is a short router.
+        checked = {}
+        for path in sorted((REPO_ROOT / "skills").glob("*/SKILL.md")):
+            fields, _ = plugin_zip.front_matter(path.read_bytes())
+            checked[path.parent.name] = len(fields.get("description", ""))
+        self.assertIn("fea", checked)
+        for name, length in checked.items():
+            with self.subTest(skill=name):
+                self.assertTrue(0 < length <= 1024, f"{name}'s description is {length} characters")
+        self.assertLess(checked["fea"], 600)
+
     def test_mcp_config_moves_to_the_root_and_refused_values_fail(self):
         manifest = {
             "name": "demo", "version": "1.0.0", "description": "Demo plugin.", "author": {"name": "Demo"},

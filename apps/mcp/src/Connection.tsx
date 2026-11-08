@@ -5,6 +5,7 @@ import { declaresOpenLinks, type Channel } from './host/channel';
 import { createDirectFetch, engineReach, probeEngine } from './host/direct';
 import type { Presentation } from './host/presentation';
 import { TUNNEL_ORIGIN } from './host/tunnel';
+import { NOTICE_HEIGHT, viewerPage } from './host/unreachable.js';
 import type { Launch, Server } from './host/server';
 import { Unreachable, noticeTranslator } from './Notice';
 
@@ -21,23 +22,11 @@ import { Unreachable, noticeTranslator } from './Notice';
  */
 type Route = { kind: 'checking' | 'tunnel' | 'probing' | 'none' } | { kind: 'direct'; fetch: typeof fetch };
 
-// A card that only says it cannot connect is as tall as its words, not a viewer's height.
-const NOTICE_HEIGHT = 180;
-
 /** Inline, the card's height, which the host is told: a viewer's while nothing is drawn yet (most often
  * the viewer comes next), the notice's for the notice. A tab is the page's full height. */
 function Card({ bridge, inline, height, children }: { bridge: Bridge; inline: boolean; height: number; children?: ReactNode }) {
   useEffect(() => { if (inline) bridge.notify('ui/notifications/size-changed', { height }); }, [bridge, inline, height]);
   return <div className={inline ? 'overflow-hidden' : 'h-svh'} style={inline ? { height } : undefined}>{children}</div>;
-}
-
-/** The launch's page of the CAD Viewer, where the engine gave one. */
-function pageOf(launch: Launch): string | null {
-  try {
-    return typeof launch.browser === 'string' ? new URL(launch.browser).href : null;
-  } catch {
-    return null;
-  }
 }
 
 function Unconnected({ bridge, launch, inline }: { bridge: Bridge; launch: Launch; inline: boolean }) {
@@ -46,7 +35,7 @@ function Unconnected({ bridge, launch, inline }: { bridge: Bridge; launch: Launc
     ? (url: string) => { void bridge.request('ui/open-link', { url }).catch(() => { window.open(url, '_blank', 'noopener,noreferrer'); }); return true; }
     : undefined;
   return <Card bridge={bridge} inline={inline} height={NOTICE_HEIGHT}>
-    <Unreachable page={pageOf(launch)} model={launch.page === 'viewer'} open={open} t={noticeTranslator(bridge.hostContext.locale)} />
+    <Unreachable page={viewerPage(launch)} model={launch.page === 'viewer'} open={open} t={noticeTranslator(bridge.hostContext.locale)} />
   </Card>;
 }
 

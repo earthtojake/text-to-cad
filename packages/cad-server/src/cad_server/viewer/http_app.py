@@ -444,7 +444,7 @@ class CadApp:
                     f"Host header '{hostname_only(host_header)}' is not a local name; "
                     "refusing (DNS-rebinding defense)"
                 ),
-                "hint": "open the CAD Viewer at 127.0.0.1 or localhost",
+                "hint": "open this page at 127.0.0.1 or localhost",
             },
         )
         return True
@@ -659,7 +659,7 @@ class CadApp:
                     or not set(telemetry) <= {"share", "reason", "policy", "saved"}:
                 raise ValueError("a telemetry change is {\"share\": true or false}")
             if self.analytics is None:
-                raise ApiError(409, "this server keeps no usage stats", "change it in the CAD Viewer's app menu")
+                raise ApiError(409, "this server keeps no usage stats", "change it in the app menu of CAD's page in your browser")
             share = telemetry["share"]
         return self.settings(share)
 

@@ -253,7 +253,7 @@ class PromptFilesRouteTest(unittest.TestCase):
             (self.request(views=[{"label": "a", "camera": "iso", "width": 0}]), "views[0].width"),
             (self.request(annotation={"marks": {}}), "annotation is null or an object"),
             # snapshot's own parsers: a camera key it does not take, a display it does not draw
-            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera has no projection"),
+            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera projection belongs to display.camera"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"mode": "sketch"}}]), "no display mode"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"hidden": "lid"}}]), "display.hidden is a list of part refs"),
             (self.request(views=[{"label": "a", "camera": "authored"}]), "the view's own camera"),

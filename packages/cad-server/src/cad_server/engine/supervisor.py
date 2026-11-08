@@ -6,7 +6,8 @@
 by its absolute path), whether a lease may name the Python its process runs instead, its caller's
 (``interpreter``: ``"lease"``; ``"environment"``, the default, never), the environment a process starts
 with (``env``: the caller's, ``"lease"``,
-or the daemon's own, ``"daemon"``; then ``set_env``, and the bytecode rule: the daemon's folder of
+or the daemon's own, ``"daemon"``; then ``set_env``, the engine's X display where it draws its stills
+(``draws``: ``display.environment``), and the bytecode rule: the daemon's folder of
 it, ``"daemon"``, or none written, ``"read-only"``), the folder it starts in (``cwd``: the lease's,
 else the key's folder; or the daemon's, ``"inherit"``), what one process serves (``key``: a
 script's path, normcased, or an id as given), what binds a process to its caller's interpreter
@@ -164,6 +165,7 @@ class Service:
     env: str  # ``"lease"`` (the caller's environment) or ``"daemon"`` (the daemon's ``os.environ``)
     words: Words
     set_env: tuple[tuple[str, str], ...] = ()
+    draws: bool = False  # it draws stills: started with the engine's X display (``display.environment``)
     bytecode: str = "daemon"  # ``"daemon"`` (the daemon's folder, ``places.bytecode``) or ``"read-only"``
     cwd: str = "lease"  # ``"lease"`` (the lease's folder, else its key's) or ``"inherit"`` (the daemon's)
     key: str = "path"  # ``"path"`` (normcased) or ``"id"`` (as given)
@@ -312,6 +314,10 @@ class Process:
         else:
             env["PYTHONDONTWRITEBYTECODE"] = "1"
         env.update(service.set_env)
+        if service.draws:
+            from cad_server.engine import display
+
+            env.update(display.environment())
         argv = [python if part == "{python}" else part for part in service.command]
         if standby and service.standby is not None:
             argv.extend(service.standby.args)
