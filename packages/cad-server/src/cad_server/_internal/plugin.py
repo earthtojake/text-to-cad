@@ -10,7 +10,7 @@ of them (``source``: ``_runtime/plugin`` in its wheel, which ``scripts/bundle`` 
 root in a source tree). Three things change on the way (``tree``): every version is this
 distribution's, the catalog is a local one of its own (``MARKETPLACE``), and each host's CAD server
 is the line the installer gives that host: ``uvx ... --from cad-mcp==<version> cad-mcp``, told
-the install channel it always was (``CHANNELS``). There is no root ``.mcp.json``: Claude Code reads
+the install channel of the install command (``CHANNELS``). There is no root ``.mcp.json``: Claude Code reads
 one in place of the server config its manifest names.
 
 It is a stable path, regenerated in place (``write``): a file that differs is written to a hidden
@@ -69,13 +69,14 @@ FILES = (
 MANIFESTS = (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json",
              "gemini-extension.json", "plugin.json")
 # Each file that starts CAD's server, and the install channel the server is told there
-# (``cad_server._internal.channel``): the ones the installer gave each host before the folder, the
-# `latest` branch's. None is auto-updated: an update is the person's.
+# (``cad_server._internal.channel``): what happened, the install command, for each host it points at this
+# folder, never the `latest` branch's `-github` (an install by hand from GitHub). The standard's has no host of
+# its own. None is auto-updated: an update is the person's.
 CHANNELS = {
-    "claude.mcp.json": "claude-github",
-    "codex.mcp.json": "codex-github",
-    "cursor.mcp.json": "cursor-github",
-    "gemini-extension.json": "gemini-github",
+    "claude.mcp.json": "claude-install",
+    "codex.mcp.json": "codex-install",
+    "cursor.mcp.json": "cursor-install",
+    "gemini-extension.json": "gemini-install",
     "mcp.json": "agent-plugins",
 }
 CHANNEL_ENV = "CAD_INSTALL_CHANNEL"
