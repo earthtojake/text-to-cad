@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`), never for a capability. It is three
+(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`, `cadquery`), never for a capability. It is three
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -27,6 +27,23 @@ ships no package, packaging it, its own binary unmodified in a wheel per platfor
 where it is, is usually better than asking a person to install it (`earthtojake/ccx` is that for CalculiX). `cad doctor` says, for each integration with an extra but build123d (the
 kernel's own line), whether this installation carries it or where its environment is and whether it is
 made (`integration_env.found`, read and never made); a new integration gets its line from the registry.
+
+## A tool on a kernel build of its own
+
+The engine's kernel is one OCP build (the `build123d` extra's), and a Python CAD library that pins another
+build of the same module -- CadQuery, on `cadquery-ocp` 7.9 where the kernel is 8.0 -- can never share a
+process with a worker, whatever its version says: two builds of `OCP` do not coexist in one environment. Such
+a tool is a `separate` integration whose extra holds the library's core and the tool, never the kernel; its
+values cross through a **portable producer** of the `model` type (`cad.registry.Producer.portable`): the
+producer's writer describes the value as the engine's STEP reader describes a file and packs the shapes
+with the tool's own OCP (`cad.cadquery._bridge` is the example), and the engine's kernel process makes the
+document of it (the server's `engine/portable.py`). A kernel worker never runs such a tool's code: its
+`@model` functions run in a worker of the integration's own in that environment, warm, under a memo at the
+tool's topology layer (`cad.cadquery._worker`, `_memo`; the server's `services.CADQUERY`, routed by the
+contract's kernel), or a program hands a value over (`model(value, name=...)`). No file decorator takes one:
+a file of its document is an export. The tests that need the tool run in a job of their own that makes its
+environment as the server does (`test-cadquery.sh`), and the bridge, the memo's keying and the worker's build
+run on stand-ins in the package suites.
 
 ## Is it really an integration?
 
@@ -60,7 +77,8 @@ an integration.
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
       command makes for it holds too.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
-      tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
+      tool's objects; producers in `_producers.py`, named in `cad.registry._PRODUCER_MODULES` and loaded on
+      the first value of the tool's modules a model returns), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).

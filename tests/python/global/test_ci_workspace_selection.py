@@ -71,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
+            r"^tests/python/packages/cadquery/(.*/)?test_[^/]*\.py$",    # test-cadquery.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
@@ -252,7 +253,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
+                self.assertEqual(jobs_for(path),
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "cadquery"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -333,7 +335,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea", "cadquery"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -343,8 +345,25 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
 
+    def test_cadquery_code_reaches_the_cadquery_job_beside_its_package_and_its_suite_that_job_alone(self):
+        # CadQuery's code runs what its package runs, and the CadQuery job, which makes CadQuery's environment.
+        bridge = "packages/cad/src/cad/cadquery/_bridge.py"
+        self.assertEqual(jobs_for(bridge), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"})
+        self.assertEqual(tests_for(bridge)["cadgen_tests"], [CADGEN])
+        self.assertIn("cadquery", jobs_for("packages/cad/src/cad/engine/portable.py"))
+        # The integrations table and the environment maker are both jobs': KiCad's and CadQuery's.
+        self.assertEqual(jobs_for("packages/cad/src/cad/_internal/integrations.py"),
+                         GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        for path in ("tests/python/packages/cadquery/test_hand_over.py", "scripts/test/test-cadquery.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"cadquery", "skills"})
+        # The daemon's hand-over and the registry run the package suites, whose stand-ins cover the path.
+        for path in ("packages/cad/src/cad/engine/api.py", "packages/cad-server/src/cad_server/engine/models.py"):
+            self.assertNotIn("cadquery", jobs_for(path))
+
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
-        # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
+        # A change that only moves the pin moves the integration itself, and the job that installs it runs on it:
+        # kicode's, ccx's and CadQuery's pins are all in the library's project.
         self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
         self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
 
@@ -420,7 +439,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "cadquery"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

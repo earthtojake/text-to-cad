@@ -112,7 +112,14 @@ class Producer:
     the values it takes (``accepts``, in words), the code that writes the file (``writer``), and the parts
     of the type's content it provides. A producer regenerates its file from code: the type's decorator is
     the engine's (``cad.engine.model``), the function a model, and its result is checked against the matchers
-    when it is built."""
+    when it is built.
+
+    A ``portable`` producer takes a value of another kernel's build than the engine's (a CadQuery value,
+    whose OCP is not the kernel's): its ``writer`` is the function that describes the value portably,
+    ``(value, name) -> (header, bytes)`` (``cad.engine.portable``), which the integration's own worker (a
+    ``@model`` function's result, ``cad.cadquery._worker``) or ``model(value, name=...)`` hands the engine,
+    whose kernel process makes the document of it. Such a value is never a kernel worker's result: a kernel
+    worker runs the engine's kernel alone."""
 
     document_type: str
     integration: str
@@ -120,6 +127,7 @@ class Producer:
     matcher: Callable[[Any], bool] = field(compare=False, repr=False)
     writer: str
     provides: tuple[str, ...]
+    portable: bool = False
 
 
 @dataclass(frozen=True)
@@ -348,6 +356,22 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
         alongside=("build123d", "netgen"),
         holds="CalculiX's ccx solver", download_mb=13),
+    # CadQuery pins an OCP build of its own (7.9) and the kernel another (8.0), both the one `OCP` module: a
+    # CadQuery program runs in the environment of cad[cadquery], never in a worker, and hands its result over
+    # (model(value, name=...)) as a portable description the engine's kernel process makes the document of.
+    # `OCP` stays the build123d integration's module: a CadQuery script that imports it directly asks for
+    # both, and uv refuses the resolution in one line. CadQuery's OCP build (cadquery-ocp, with its proxy) is
+    # CadQuery's identity as much as the kernel's: in an environment made for cadquery it is CadQuery's own,
+    # never the kernel pulled in (``cad_server._internal.extras.pulled``).
+    "cadquery": Integration(
+        "cadquery", "CadQuery, a Python CAD library on an OCP build of its own: a Workplane, Shape, Sketch or "
+                    "Assembly a CadQuery program holds is handed over to the engine as a document, "
+                    "model(value, name=...), from the environment of cad[cadquery]",
+        extra="cadquery", process="separate",
+        modules=("cadquery",), distributions=("cadquery",),
+        identity=("cadquery", "cadquery-ocp", "cadquery-ocp-proxy"),
+        # cadquery-ocp 7.9 carries VTK: some 300 MB of wheels beside the library.
+        holds="CadQuery and its OCP build", download_mb=300),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
@@ -374,12 +398,22 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
     return by_extension(name[dot:]) if dot > 0 else None
 
 
-@cache
-def _producers() -> tuple[Producer, ...]:
-    # Each integration registers the producers it has; this is the one place they are gathered.
-    from cad.build123d._producers import PRODUCERS as build123d
+# Each integration that registers producers, and the module that holds them (its ``_producers``): this is the one
+# place they are gathered. A producer takes values of its own integration's tool, a class of one of its modules
+# (``Integration.modules``) in the value's ancestry, so a value is matched against the producers of the
+# integrations its classes come from alone, and a build of a build123d shape imports no other integration's code.
+_PRODUCER_MODULES = {"build123d": "cad.build123d._producers", "cadquery": "cad.cadquery._producers"}
 
-    return build123d
+
+@cache
+def _producers_of(integration: str) -> tuple[Producer, ...]:
+    from importlib import import_module
+
+    return tuple(import_module(_PRODUCER_MODULES[integration]).PRODUCERS)
+
+
+def _producers() -> tuple[Producer, ...]:
+    return tuple(producer for name in _PRODUCER_MODULES for producer in _producers_of(name))
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -387,11 +421,20 @@ def producers_for(document_type: str) -> tuple[Producer, ...]:
     return tuple(producer for producer in _producers() if producer.document_type == document_type)
 
 
+def _candidates(document_type: str, value: Any) -> tuple[Producer, ...]:
+    """The producers of ``document_type`` that may take ``value``: those of the integrations whose modules hold a
+    class of its ancestry, read by name (no import of any tool), each integration's producers loaded on its
+    first such value."""
+    roots = {str(cls.__module__).split(".")[0] for cls in type(value).__mro__}
+    return tuple(producer for name in _PRODUCER_MODULES if roots & set(INTEGRATIONS[name].modules)
+                 for producer in _producers_of(name) if producer.document_type == document_type)
+
+
 def producer_for(document_type: str, value: Any, *, where: str = "a model") -> Producer:
     """The one producer that makes ``document_type`` of ``value``; a ``TypeError`` naming what the type
     takes, and the integration that would take more, for a value none takes. Two producers taking one
     value is the registry's error, said as one."""
-    found = [producer for producer in producers_for(document_type) if producer.matcher(value)]
+    found = [producer for producer in _candidates(document_type, value) if producer.matcher(value)]
     if len(found) == 1:
         return found[0]
     if len(found) > 1:
@@ -432,6 +475,10 @@ def help_text(document_type: str) -> str:
     elif producers and not entry.has_file:
         lines.append("made by:")
         for producer in producers:
+            if producer.portable:
+                lines.append(f"  {entry.id}(value, name=...) handing over {producer.accepts} "
+                             f"({producer.integration}: {', '.join(producer.provides)})")
+                continue
             lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "
                          f"({producer.integration}: {', '.join(producer.provides)})")
     elif producers:

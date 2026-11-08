@@ -298,7 +298,8 @@ class Cache:
         if row is None or self.current(ident, row["revision"]):
             return
         worker = row["worker"]
-        if worker is not None and self.models._working(worker):
+        # A CadQuery worker holds no document: what the daemon holds whole of it is saved, below.
+        if worker is not None and not self.models.daemon.kernel_less(worker) and self.models._working(worker):
             with self.lock:
                 self.saving[ident] = worker
             try:
