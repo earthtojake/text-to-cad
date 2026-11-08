@@ -43,7 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Unreached", "Written", "check", "export",
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Unanswered", "Unreached", "Written", "check",
+           "export",
            "hand_over", "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
@@ -630,13 +631,20 @@ class Unreached(ConnectionError):
     (``client.connect``: none registered, a sandbox that cannot start one, the system's refusal)."""
 
 
+class Unanswered(EngineError):
+    """An engine that measures no check in memory answered one (a server of a release before it): its
+    answer carried no ``checked``."""
+
+
 def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     """A manufacturing check of a document, measured where the engine holds it (``worker._check``): a
     document's handle or id in the worker that holds it -- a model's in its script's warm worker, nothing
-    exported or read again -- a STEP's or an xbf's path in the documents worker, read once and held while
-    the file stays as it was. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its
+    exported or read again -- a STEP's or an xbf's path, or a document no warm worker holds, in the engine's
+    checks process, a file read once while its bytes stay as they were. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its
     options resolved by the caller (``manufacturing.options``). The same check of an unchanged document is
-    answered from the results the engine keeps (``reused``: true), measuring nothing.
+    answered from the results the engine keeps (``reused``: true), measuring nothing. The answer says the
+    release whose library measured it (``release``); a worker retired for its memory after the check is said
+    on stderr (``retired``). ``Unanswered`` from a server of a release before checks in memory.
 
     Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
     "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. ``Unreached`` when no
@@ -660,8 +668,9 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):
         # A server of a release before the check in memory exports nothing and says no check.
-        raise EngineError("the CAD server running checks nothing in memory: it is older than this library. "
-                          "Update it (cad update) and check again")
+        raise Unanswered("the CAD server running measures no check in memory: it is older than this library")
+    if checked.get("retired"):
+        print(f"cad: {checked['retired']}", file=sys.stderr, flush=True)
     return {**checked, **({"reused": True} if done.get("reused") else {})}
 
 

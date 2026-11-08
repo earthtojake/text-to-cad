@@ -2,8 +2,8 @@
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
 command: its options, its one result shape, its refusals before anything is read, a STEP measured
-on its exact geometry, and the run in the environment of the trimesh integration when the
-command's own environment lacks it.
+on its exact geometry through the engine (with no engine and no kernel here, in the base's environment),
+and the run in the environment of the trimesh integration when the command's own environment lacks it.
 """
 
 from __future__ import annotations
@@ -165,6 +165,24 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertIn("--samples is not molding's", json.loads(said)["error"])
         self.assertEqual((unasked, json.loads(kept)["reason"]), (2, "invalid_argument"))
         self.assertIn("a STEP keeps no process: give --process cnc", json.loads(kept)["error"])
+
+    def test_a_breps_check_is_the_engines_and_with_no_engine_the_bases(self) -> None:
+        """A B-rep's check is asked of the engine from this process, whatever it holds. With no engine to reach
+        (a sandbox) and no kernel here, it runs in the base's environment, as it did (this interpreter stands
+        in for it), and answers the same."""
+        from build123d import Box, export_step
+
+        step = self.folder / "box.step"
+        export_step(Box(20, 20, 15), str(step))
+        argv = (str(step), "--process", "printing", "--json")
+        with mock.patch.object(integration_env, "carries", return_value=False), \
+                mock.patch.object(integration_env, "environment", return_value=sys.executable) as made:
+            code, asked, _ = _run("step", *argv)
+            self.assertEqual((code, made.call_count), (0, 0), "the engine measured it: no environment started")
+            with mock.patch("cad.engine.client.connect", side_effect=ConnectionError("no engine here")):
+                code, there, _ = _run("step", *argv)
+            self.assertEqual((code, made.call_count), (0, 1))
+        self.assertEqual(json.loads(there), json.loads(asked))
 
     def test_each_type_offers_its_processes_and_their_flags(self) -> None:
         from cad_server.cli.document_types import build_parser

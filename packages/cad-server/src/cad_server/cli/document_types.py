@@ -150,10 +150,10 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
     type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF.
     A B-rep's (a model, an xbf, a STEP) is asked of the engine from this process, which measures it in the
-    kernel process that holds the document (``cad.engine.api.check``); a DXF's and a mesh's run here when this
-    environment holds the type's integration (build123d for a DXF, trimesh for a mesh), else in the
-    environment that holds it (``cad_server._internal.integration_env``), its options refused here first,
-    before one is made. An xbf or a model given no ``--process`` is checked for the one
+    kernel process that holds the document (``cad.engine.api.check``); where no engine can be reached, and
+    for a DXF and a mesh, it runs here when this environment holds the type's integration (build123d for a
+    B-rep and a DXF, trimesh for a mesh), else in the environment that holds it
+    (``cad_server._internal.integration_env``), its options refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
     its parts declare: the options every process shares are refused here, the rest in the integration once
     it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
     keeps no process, so one given none is refused here."""
@@ -165,12 +165,28 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
         argv = pull_value(argv)
         target = (f"cad.{document_type}", "dfm")
         integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
-        if document_type in BREP_TYPES or integration_env.carries(integration):
-            # A B-rep's check is the engine's, measured where it holds the document: asked from here.
+        if integration_env.carries(integration) or (document_type in BREP_TYPES and _reached()):
+            # A B-rep's check is the engine's, measured where it holds the document: asked from here. With no
+            # engine to reach, this environment cannot measure one (it holds no kernel): the base's does.
             return _checked(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
     return run
+
+
+def _reached() -> bool:
+    """Whether the engine answers, started where none runs (``client.connect``); False where none can be
+    reached -- no installation registered, a sandbox that cannot start one."""
+    from cad.engine import client
+
+    try:
+        connection = client.connect()
+    except ConnectionError:
+        return False
+    if connection is None:
+        return False
+    connection.close()
+    return True
 
 
 def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],

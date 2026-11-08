@@ -354,7 +354,8 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
 
 def measure(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
             candidates: bool, given: dict[str, Any] | None = None) -> CheckResult:
-    """Measure ``source`` with its integration, then ``finish`` it. With no ``process`` (a B-rep type's, its
+    """Measure ``source`` with its integration, then ``finish`` it: a B-rep's through the engine, where the
+    document is held (``_held``), else in this process (``_here``). With no ``process`` (a B-rep type's, its
     options ``given`` unresolved) the integration reads the document, takes the process its parts declare and
     resolves the options for it (``declared``) before it measures."""
     label = _label(source)
@@ -364,6 +365,12 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
         found = _held(document_type, source, process, resolved, candidates, given, label)
         if found is not None:
             return found
+    return _here(document_type, source, process, resolved, candidates, given, label)
+
+
+def _here(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
+          given: dict[str, Any] | None, label: Path) -> CheckResult:
+    """``source`` (a path) measured in this process by its integration, and finished."""
     if process is None:
         from cad.build123d._dfm_check import measure_declared
 
@@ -388,27 +395,38 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
           given: dict[str, Any] | None, label: Path) -> CheckResult | None:
-    """A B-rep's check through the engine (``cad.engine.api.check``): measured in the kernel process that
-    holds the document -- a model's in its warm worker, a STEP's or an xbf's in the documents worker, read
-    once -- or answered from the engine's kept results for an unchanged document, then finished here. None
-    for a file when no engine can be reached: it is measured in this process, as it always could be. A model
-    with no engine fails to read, as it did; an id the engine does not hold is refused as its type."""
+    """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory where the document
+    is held -- a model's in its warm worker, a STEP's or an xbf's in the engine's checks process, read once --
+    or answered from the result the engine kept for an unchanged document, then finished here.
+
+    None -- measured in this process instead, as before the engine measured checks -- for a file when no
+    engine can be reached, when the engine is of a release that measures no check in memory, or when another
+    release of the library measured it (its report could differ from what this release finishes). A model's,
+    then, is exported by the engine and read back here (``_exported``), as before; with no engine at all it
+    fails to read, as it did. An id the engine does not hold is refused as its type."""
     from cad.engine import api
+    from cad.engine.contract import release
 
     check = {"type": document_type, "process": process, "resolved": resolved, "candidates": bool(candidates),
              **({"given": {name: value for name, value in (given or {}).items() if value is not None and value is not False}}
                 if process is None else {})}
     is_file = isinstance(source, (str, os.PathLike)) and label.is_absolute()
     try:
-        found = api.check(source, check)
+        found: dict[str, Any] | None = api.check(source, check)
     except api.Unreached as error:
         if is_file:
             return None
         return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+    except api.Unanswered:
+        found = None
     except ValueError as error:
         if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
             raise  # the caller's mistake (the command's not_found), not the check's failure
+        if is_file:
+            return None  # an engine that refused the check: measured here, as before
         return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+    if found is None or found.get("release") != release():
+        return None if is_file else _exported(document_type, source, process, resolved, candidates, given, label)
     if "refused" in found:
         raise ArgumentRefused(found["refused"])
     if "unmeasured" in found:
@@ -416,6 +434,26 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     measured = found["measured"]
     return finish(label, {"process": measured["process"], **measured["report"]}, measured["process"],
                   measured["resolved"], candidates)
+
+
+def _exported(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
+              candidates: bool, given: dict[str, Any] | None, label: Path) -> CheckResult:
+    """A model's document checked as before the engine measured checks: exported by the engine to an xbf in a
+    temporary folder, read back and measured here (``_here``). An id the engine does not hold is refused as
+    its type; any other failure to export it is the check's ``document_unreadable``."""
+    import tempfile
+
+    from cad.engine import api
+
+    with tempfile.TemporaryDirectory(prefix="cad-check-") as folder:
+        written = Path(folder) / "document.xbf"
+        try:
+            api.export(source, written, progress=False)
+        except Exception as error:  # noqa: BLE001 - a document that does not export is the check's answer
+            if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
+                raise
+            return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+        return _here(document_type, written, process, resolved, candidates, given, label)
 
 
 def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
