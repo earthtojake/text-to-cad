@@ -127,7 +127,7 @@ ROBOTS: dict[str, Robot] = {
         vendor_urdf=GitSource(
             url="https://github.com/TrossenRobotics/trossen_arm_description",
             commit="1f36d47d104ad9370eb9a30ac255f682c42449c5",
-            paths=("urdf/generated/wxai/", "meshes/wxai/", "LICENSE"),
+            paths=("urdf/generated/wxai/", "meshes/wxai/", "meshes/peripherals/", "LICENSE"),
             license="BSD-3-Clause",
         ),
         vendor_urdf_path="urdf/generated/wxai/wxai_follower.urdf",
