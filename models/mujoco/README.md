@@ -35,7 +35,7 @@ yet):
 | `tetheria_aero_hand_open` | left and right STEP in TetherIA/aero-hand-open | CC BY-NC-SA 4.0 | a second hand; non-commercial |
 | `robotis_op3`, `seeed_rebot_devarm` | one assembly STEP / per-part STEPs | none stated / CERN-OHL-W | a humanoid; an arm without its actuators |
 
-Not benchmarkable: Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
+Not benchmarkable: Pollen Robotics' Microduck (not in Menagerie; its CAD is an Onshape document that needs an account to export, its public meshes are CC BY-NC-SA, and its MJCF in microduck_rl was made from that same document by onshape-to-robot, so there is no independent hand-made reference), Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
 Onshape-sourced models (an export needs an account, and Menagerie's model was made from the same
 document), and most others (no raw CAD published).
 
