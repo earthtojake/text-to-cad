@@ -4,7 +4,8 @@ The registry (``cad.registry.INTEGRATIONS``) is the one place each integration's
 extra are listed, and its document types say which of their functions need which integration. This module is the
 view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
 scan, no code run), and a command's from its name (``kicad-cli`` is the kicad integration's), to add one a
-resolution pulled in through another package, and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
+resolution pulled in through another package, to add those one needs beside it (``alongside``, ``closed``:
+cadjoint's solids are build123d's; a stress study's kernel and mesher), and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
 
 The standard library alone: the server's command and a model's process both read it, and neither loads
 any integration to do so.
@@ -12,10 +13,11 @@ any integration to do so.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "alongside", "for_command", "for_distribution", "for_module", "for_name",
-           "missing", "needs"]
+__all__ = ["INTEGRATIONS", "Integration", "alongside", "closed", "for_command", "for_distribution", "for_module",
+           "for_name", "missing", "needs"]
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,23 @@ def needs(name: str) -> tuple[str, ...]:
     operation = (parts[0] in _LIBRARY and len(parts) >= 3 and parts[1] in DOCUMENT_TYPES
                  and parts[2] not in ("read", "edit"))
     return tuple(sorted({key, *(alongside(key) if operation else ())}))
+
+
+def closed(keys: Iterable[str]) -> tuple[str, ...]:
+    """The extras ``keys`` and, for each whose code runs in the program's own process (``in-process``: its
+    helpers hand the program another integration's objects), those it needs beside it (the registry's
+    ``alongside``), transitively, sorted: ``closed(["cadjoint"])`` is ``("build123d", "cadjoint")``. A tool run as
+    a process of its own (calculix's ``ccx``) brings nothing beside it here: its companions are its operations'
+    (``needs``). A key of no integration is kept as it is."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    by_extra = {integration.extra: integration for integration in REGISTERED.values() if integration.extra}
+    found = set(keys)
+    for key in list(found):
+        registered = by_extra.get(key)
+        if registered is not None and registered.process == "in-process":
+            found.update(alongside(key))
+    return tuple(sorted(found))
 
 
 def for_distribution(name: str) -> str | None:

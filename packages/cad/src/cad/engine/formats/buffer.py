@@ -8,7 +8,10 @@ units: ``weld`` is that step in the buffer's millimetres); an edge two triangles
 opposite directions is drawn where their normals part by more than ``edge_angle``; any other
 edge -- one triangle's, a pair wound alike, three or more -- is drawn once. A triangle whose
 points weld together draws no edge, and a sliver (three points in a line: no normal) folds
-nowhere (three would draw its every edge: a mesher's sliver is no fold of the surface).
+nowhere (three would draw its every edge: a mesher's sliver is no fold of the surface). A mesh
+whose edges are known elsewhere (an implicit document's: its field states its creases, and a
+sample's points settle either side of one from cell to cell, so the rule would draw stubs along
+it) is built with ``edges=False``: an empty edge table, nothing guessed.
 
 Normals are the viewer's for a mesh that brings none (``meshNormals.js``): up to 10,000
 triangles, creased at 30 degrees (three's ``toCreasedNormals``: a corner's normal the sum of the
@@ -124,11 +127,13 @@ def feature_edges(positions: np.ndarray, triangles: np.ndarray, *, edge_angle: f
 
 
 def buffer(positions: Any, triangles: Any, *, faces: Any = None, normals: Any = None, uvs: Any = None,
-           edge_angle: float = EDGE_ANGLE, weld: float = 1e-4, hashed: float = 1e-2) -> tuple[Mesh, Any]:
+           edges: bool = True, edge_angle: float = EDGE_ANGLE, weld: float = 1e-4,
+           hashed: float = 1e-2) -> tuple[Mesh, Any]:
     """The part buffer of a mesh: ``positions`` (V, 3) in millimetres, ``triangles`` (M, 3)
     indices into them, ``faces`` each triangle's face ordinal (from 1; all 1 when None),
     ``normals`` (V, 3) to keep (else the viewer's, the corners drawn apart), ``uvs`` (V, 2)
-    carried beside. ``weld`` and ``hashed`` are three's rounding steps in the buffer's
+    carried beside, its feature edges (``feature_edges``) unless ``edges`` is False (an empty
+    edge table). ``weld`` and ``hashed`` are three's rounding steps in the buffer's
     millimetres (``1e-4`` and ``1e-2`` of the mesh's own units). Returns the buffer and the
     UVs in its vertex order (None without)."""
     positions = np.asarray(positions, np.float64).reshape(-1, 3)
@@ -136,7 +141,8 @@ def buffer(positions: Any, triangles: Any, *, faces: Any = None, normals: Any = 
     ordinals = np.ones(len(triangles), np.int64) if faces is None else np.asarray(faces, np.int64).reshape(-1)
     order = np.argsort(ordinals, kind="stable")
     triangles, ordinals = triangles[order], ordinals[order]
-    segments, kinds = feature_edges(positions, triangles, edge_angle=edge_angle, weld=weld)
+    segments, kinds = feature_edges(positions, triangles, edge_angle=edge_angle, weld=weld) if edges \
+        else (np.zeros((0, 2, 3)), np.zeros(0, np.uint32))
     covering = np.abs(_unit_normals(positions[triangles])).sum(1) > 0
     triangles, ordinals = triangles[covering], ordinals[covering]
     if normals is None:

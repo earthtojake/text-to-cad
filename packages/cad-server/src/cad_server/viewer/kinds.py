@@ -16,6 +16,8 @@ a document of that kind, and the same id under another kind is a 404 that names 
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
+* ``implicit``: ``source`` too -- the GLB the engine holds of a model built from a field (the mesh sampled from
+  it, ``cad.engine.implicit_document``), read as a ``glb``'s is; a document with no file of the author's.
 """
 from __future__ import annotations
 
@@ -32,6 +34,8 @@ FILE_KINDS = {extension: entry.wire for entry in DOCUMENT_TYPES.values() for ext
 KINDS = tuple(entry.wire for entry in DOCUMENT_TYPES.values())
 # The documents the engine itself serves: their structure, parts and version are its reads.
 ENGINE_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")
+# The kinds whose source the page parses itself: a mesh file's, and an implicit document's GLB.
+MESH_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "mesh")
 ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
@@ -39,7 +43,7 @@ ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry
 # (``cad kicad_pcb export --to``, ``exports.BOARD``).
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
-           "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
+           "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"], "implicit": ["stl", "threemf", "glb"],
            "dxf": [], "urdf": [], "srdf": [], "sdf": [],
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 # A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).

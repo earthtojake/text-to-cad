@@ -19,7 +19,8 @@ where a command or a program first needs it.
 - [ ] **The id.** Lowercase, a valid Python name, the tool's own word for the format where it has one
       (`kicad_pcb`, not `pcb`; `threemf`, because `3mf` is no Python name). It never changes.
 - [ ] **The registry entry**, in `packages/cad/src/cad/registry.py` (`_TYPES`): the id, its title, a
-      one-line summary, its extensions (the first the one a written file takes), its MIME type, how it
+      one-line summary, its extensions (the first the one a written file takes; a type with no file,
+      as `model` and `implicit` are, has none and is addressed by its document id), its MIME type, how it
       is viewed (`document`, `mesh`, `drawing`, `robot`, `plot`), the content it carries, its
       operations (`export` and `snapshot`, shared by every type that has them; `inspect`; or one named
       for what it does: `dfm`, `drc`, `erc`, `validate`; each with the integration it needs),

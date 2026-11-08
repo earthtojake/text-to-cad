@@ -52,6 +52,8 @@
  * that was no refusal), and two more reasons a snapshot or a build failed, the machine's: no OpenGL context
  * (`no_gl`, a snapshot's) and no kernel process the engine could start (`no_kernel`). A schema before it sends
  * none of them, and its rows are read, and keyed, as ever.
+ * Schema 10 is schema 9 with one more kind, `implicit`: a model built from a signed-distance field, held as
+ * the mesh sampled from it, with no file. A schema before it names none.
  */
 
 import { createHash } from 'node:crypto';
@@ -92,6 +94,7 @@ const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
+const KINDS_10 = new Set([...KINDS_8, 'implicit']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
@@ -374,6 +377,10 @@ const SCHEMAS = new Map([
   // Which part of a snapshot's request a refusal named, and the machine's two reasons more: no OpenGL context, no
   // kernel process.
   [9, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_8,
+    origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
+  // An implicit's document (`implicit`), a model with no file. Older schemas keep their own vocabulary.
+  [10, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control']), kinds: KINDS_10,
     origin: byProcess(PROCESSES_6), named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_9 }],
 ]);

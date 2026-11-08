@@ -104,3 +104,11 @@ test('a document the engine holds by its id alone keeps its id, is named by its 
   // No live-document collection: the home is Recents.
   expect('collections' in source).toBe(false);
 });
+
+test('a document held by its id whose bytes are a GLB (an implicit\'s) is a GLB by its MIME type, never the engine\'s document', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const client = cadClient([{ id, file: id, name: 'gyroid', sourcePath: null, kind: 'implicit',
+    url: `/api/v1/documents/implicit/${id}/source?v=2`, hash: '2', bytes: 0 }]);
+  const stat = await createCadFileSource(client as never).stat(id, { signal: new AbortController().signal });
+  expect(stat).toMatchObject({ path: id, name: 'gyroid', navigationPath: null, extension: 'glb', mediaType: 'cad', mime: 'model/gltf-binary' });
+});

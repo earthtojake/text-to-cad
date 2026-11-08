@@ -165,13 +165,14 @@ LOG = logging.getLogger("cad_server.analytics")
 OWN = frozenset({"cad", "cadgen", "cad_server"})
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
+# 10: an implicit's document (kind ``implicit``: a model built from a field, the mesh sampled from it);
 # 9: the part of a snapshot's request a refusal named (``snapshot_failure``'s ``part``);
 # 8: live models have their own kind (``model``), distinct from files, including exported/opened xbfs;
 # 7: the controls a person used in a CAD view (``control``), and room for one event each (``MAX_EVENTS``); 6: the
 # engine's documents (kind ``xbf``) and a command's sender (process ``cli``); 5: why builds and snapshots
 # failed, and each batch's id and time; 4: why tool calls failed; 3: the old build daemon's counts, and files as
 # numbers; 2: the install's channel replaced `source`
-SCHEMA = 9
+SCHEMA = 10
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install. Neither schema 4, 5 nor 6 raised it
@@ -182,7 +183,8 @@ SCHEMA = 9
 # (``view``, ``feature``'s Quick Edit) told apart by control, under the same install and process ids.
 # Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
 # Nor schema 9: a refused snapshot told apart by which part of its request was refused -- a word of ours, as its
-# reason is, never the value given.
+# reason is, never the value given. Nor schema 10: the same builds, views and snapshots told apart as an implicit's;
+# no new field or identity.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.

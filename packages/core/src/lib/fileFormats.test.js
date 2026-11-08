@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  documentMime,
   entrySourceFormat,
+  filelessDocumentFormat,
   fileExtensionFromPath,
   isMeshRenderFormat,
   isPlotRenderFormat,
   meshAssetKeyForEntry,
+  renderFormatFromMime,
   renderFormatFromPath,
   RENDER_FORMAT
 } from "./fileFormats.js";
@@ -74,4 +77,20 @@ test("file extension parsing handles URLs, queries, and supported render formats
   assert.equal(renderFormatFromPath("/assets/bracket.stp"), RENDER_FORMAT.STEP);
   assert.equal(renderFormatFromPath("/assets/bracket.gltf"), RENDER_FORMAT.GLB);
   assert.equal(renderFormatFromPath("/assets/unknown"), "");
+});
+
+test("a document with no file of its own reads as the format its bytes are served in, by MIME type", () => {
+  // An implicit's source is a GLB (`model/gltf-binary`): it is read, keyed and parsed as one.
+  assert.equal(filelessDocumentFormat("implicit"), RENDER_FORMAT.GLB);
+  assert.equal(entrySourceFormat({ kind: "implicit" }), RENDER_FORMAT.GLB);
+  assert.equal(meshAssetKeyForEntry({ kind: "implicit" }), RENDER_FORMAT.GLB);
+  assert.equal(isMeshRenderFormat("implicit"), true);
+  assert.equal(documentMime("implicit"), "model/gltf-binary");
+  assert.equal(renderFormatFromMime(documentMime("implicit")), RENDER_FORMAT.GLB);
+  // A model's names no MIME type: the engine serves it as its document. A file's kind has a format of its own.
+  assert.equal(filelessDocumentFormat("model"), "");
+  assert.equal(filelessDocumentFormat("glb"), "");
+  assert.equal(entrySourceFormat({ kind: "xbf" }), RENDER_FORMAT.STEP);
+  assert.equal(renderFormatFromMime("model/stl"), RENDER_FORMAT.STL);
+  assert.equal(renderFormatFromMime(""), "");
 });

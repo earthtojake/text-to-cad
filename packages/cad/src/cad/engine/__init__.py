@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["dxf", "glb", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
+__all__ = ["dxf", "glb", "implicit", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
            "stl", "threemf", "xbf"]
 
 

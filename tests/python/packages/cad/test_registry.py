@@ -60,6 +60,9 @@ class TheTableIsTheSource(unittest.TestCase):
                 else:
                     self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        self.assertEqual(("cadjoint",), registry.integrations_of(["cadjoint.construction"]))
+        # cadjoint's solids are build123d's: a program of its fields needs the kernel beside it.
+        self.assertEqual(("build123d",), registry.INTEGRATIONS["cadjoint"].alongside)
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -86,6 +89,10 @@ class TheTableIsTheSource(unittest.TestCase):
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
+        self.assertEqual(("build123d",), integrations.alongside("cadjoint"))
+        self.assertEqual(("build123d", "cadjoint"), integrations.closed(["cadjoint"]))
+        self.assertEqual(("build123d", "cadjoint", "kicad"), integrations.closed(["kicad", "cadjoint", "build123d"]))
+        self.assertEqual((), integrations.closed([]))
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone
@@ -103,6 +110,28 @@ class TheTableIsTheSource(unittest.TestCase):
                     self.assertIn(producer.integration, registry.INTEGRATIONS)
                 if any(producer.integration == "build123d" for producer in producers):
                     self.assertEqual("build123d", registry.producer_for(entry.id, Box()).integration)
+
+    def test_an_implicit_document_is_made_of_a_field_by_the_cadjoint_integration(self) -> None:
+        class Field:  # cad.cadjoint.field(scene, cell=...), by its class's name and module alone
+            __module__ = "cad.cadjoint._field"
+
+        entry = registry.DOCUMENT_TYPES["implicit"]
+        self.assertFalse(entry.has_file, "an implicit document is held in memory, as a model's is")
+        self.assertEqual(("mesh", True), (entry.view, entry.decorator))
+        self.assertEqual("cadjoint", registry.producer_for("implicit", Field()).integration)
+        self.assertEqual("cad.cadjoint._document:document", registry.producer_for("implicit", Field()).writer)
+        # A field makes no model document, and a shape no implicit one: each refusal names the other's producer.
+        with self.assertRaises(TypeError) as caught:
+            registry.producer_for("model", Field(), where="model m.py::m")
+        self.assertIn("the cadjoint integration has no producer of model from Field", str(caught.exception))
+
+        class Shape:
+            __module__ = "build123d.topology"
+
+        with self.assertRaises(TypeError) as caught:
+            registry.producer_for("implicit", Shape(), where="implicit m.py::m")
+        self.assertIn("a cad.cadjoint.field(scene, cell=...) a model returns", str(caught.exception))
+        self.assertIn('@implicit on a function returning a cad.cadjoint.field(scene, cell=...)', registry.help_text("implicit"))
 
     def test_an_unsupported_return_names_what_the_type_takes_and_the_integration(self) -> None:
         class Frame:

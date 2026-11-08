@@ -45,7 +45,10 @@ from cad.engine.kernel.bounds import box_limits, optimal_box
 # Per part geometry key, what is known of its box in its own frame (``_Box``), or None for no geometry.
 _BOXES: "OrderedDict[str, _Box | None]" = OrderedDict()
 _BOXES_HELD = 1 << 16
-FACTS = ("parts", "bounds", "joints", "sequences", "warnings")
+# ``triangles``, ``volume`` and the thinnest wall (``wall_mm``, ``wall_cells``) are an implicit document's
+# (``cad.engine.implicit_document.facts_of``): a model's facts hold none of them, and the line under its run says none.
+FACTS = ("parts", "bounds", "joints", "sequences", "warnings", "triangles", "volume", "wall_mm", "wall_cells")
+_IMPLICIT = ("triangles", "volume", "wall_mm", "wall_cells")
 _KEY = 12  # the hex digits of a part's geometry key the facts keep: enough to tell two builds' parts apart
 # A placement's rotation term smaller than this decides nothing: the part side it multiplies is
 # not measured for it.
@@ -445,6 +448,8 @@ def delta(now: dict[str, Any], before: dict[str, Any] | None) -> dict[str, Any]:
     changed on a geometry both builds have."""
     found: dict[str, Any] = {"first": before is None}
     for name in FACTS:
+        if name in _IMPLICIT and name not in now and (before is None or name not in before):
+            continue  # a model's delta says nothing of a sample's facts: its shape is as it was
         row: dict[str, Any] = {"now": now.get(name)}
         if before is not None and before.get(name) != row["now"]:
             row["was"] = before.get(name)

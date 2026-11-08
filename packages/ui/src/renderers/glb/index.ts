@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { RENDER_FORMAT, renderFormatFromMime } from '@cad/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { FileRendererProps } from '../../file-viewer/types.js';
 import type { LiveViewBinding } from '../kit/shell/liveBinding.js';
@@ -19,13 +20,17 @@ export interface PreparedGlbDocument extends PreparedWorkspaceEntry {
   services: Omit<GlbRendererOptions, 'client'> & { preferences: CadPreferenceSource };
 }
 
-/** A `.glb` is shown as its native glTF scene. Registers without loading three.js, a viewport or a backend connection. */
+/**
+ * A `.glb` is shown as its native glTF scene, and so is a document whose bytes are a GLB by its MIME
+ * type (`model/gltf-binary`, `cad.registry`): an implicit's, which has no file and is served by its id.
+ * Registers without loading three.js, a viewport or a backend connection.
+ */
 export function createGlbRenderer({ client, ...options }: GlbRendererOptions) {
   const services = { ...options, preferences: options.preferences || createCadPreferences() };
   return defineFileRenderer<PreparedGlbDocument>({
     id: 'glb',
     priority: 100,
-    matches: (file) => /\.glb$/i.test(file.path),
+    matches: (file) => /\.glb$/i.test(file.path) || renderFormatFromMime(file.mime) === RENDER_FORMAT.GLB,
     // A GLB has no settings of its own: only Display, which never opens by itself, so the
     // model gets the room.
     async prepare(context) {

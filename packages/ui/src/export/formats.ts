@@ -1,4 +1,5 @@
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
+import { isMeshRenderFormat } from '@cad/core/lib/fileFormats.js';
 import type { ExportFormat } from '@cad/core/client';
 import type { ExportView } from './context.js';
 
@@ -50,13 +51,15 @@ const SCHEMATIC: ExportChoice[] = [
 /**
  * What the file on screen saves as, from its kind and what the view already holds, so the menu has
  * nothing to wait for: an engine document (a STEP, an xbf, a model held by its id) as STEP, STL,
- * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`); a mesh file as the other two
+ * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`); a mesh held by its id (an
+ * implicit's, by its `kind`) as each of the three mesh kinds; a mesh file as the other two
  * mesh kinds; a KiCad board as each of KiCad's fabrication, assembly and 3D files; a KiCad schematic as
  * KiCad's PDF, SVGs, netlist and BOM. A format a document
  * cannot be written in is its job's to refuse, saying why. Any other file has none.
  */
-export function exportChoices({ file, planar }: Pick<ExportView, 'file' | 'planar'>): ExportChoice[] {
+export function exportChoices({ file, planar, kind }: Pick<ExportView, 'file' | 'planar' | 'kind'>): ExportChoice[] {
   const drawing = planar ? [DXF] : [];
+  if (isDocumentId(file) && kind && isMeshRenderFormat(kind)) return [STL, THREEMF, GLB];
   if (isDocumentId(file) || /\.(?:step|stp)$/i.test(file)) return [STEP, STL, THREEMF, ANIMATED_GLB, ...drawing, XBF];
   if (/\.xbf$/i.test(file)) return [STEP, STL, THREEMF, ANIMATED_GLB, ...drawing, ORIGINAL];
   if (/\.glb$/i.test(file)) return [STL, THREEMF];

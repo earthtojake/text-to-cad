@@ -50,6 +50,17 @@ describe("viewer renderer registrations", () => {
     }
   });
 
+  it("opens a document held by its id whose bytes are a GLB (an implicit's) in the GLB renderer, by its MIME type", () => {
+    const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
+    const id = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab";
+    const held = (mediaType: string, mime?: string): FileMetadata => ({ path: id, name: "gyroid", kind: "file", size: 0,
+      extension: mime ? "glb" : "xbf", mediaType, mime });
+    expect(selectRenderer(renderers, held("cad", "model/gltf-binary"))?.id).toBe("glb");
+    // A model's document, by its id, is the engine's.
+    expect(selectRenderer(renderers, held("cad-document"))?.id).toBe("xbf");
+  });
+
   it("prepares every workspace file from its catalog entry alone, and its document releases the render session it opened", async () => {
     let disposed = 0;
     // What opening a file reads: its catalog entry, and a render session.

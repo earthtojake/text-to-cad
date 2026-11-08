@@ -15,9 +15,11 @@ shared by every type that has them, ``inspect`` where a type has it, and the res
 ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
 description's conformance check.
 
-``model`` is the one type with no file: a model built from code and held in the engine's memory,
-addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
-``.xbf`` file the engine writes of one.
+``model`` and ``implicit`` are the two types with no file: a model built from code and held in the engine's
+memory, addressed by its document id or the handle its call returns -- ``@model`` declares one whose document
+is the XCAF document of the build123d shape it returns, ``@implicit`` one whose document is the mesh sampled
+from the implicit field it returns (``cad.cadjoint.field``); ``xbf`` is the ``.xbf`` file the engine writes
+of a model.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -230,6 +232,14 @@ _TYPES = (
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True),
     DocumentTypeEntry(
+        "implicit", "implicit",
+        "a model built from an implicit (signed-distance) field and held in the engine's memory as the mesh "
+        "sampled from it, with no file behind it: addressed by its document id (cad run SCRIPT.py prints it) or "
+        "the handle its call returns",
+        (), "model/gltf-binary", "mesh", ("triangles",),
+        (_EXPORT_MESH, _SNAPSHOT, Operation("inspect", "what the document holds: its bounds, triangles and volume",
+                                             _KERNEL, engine=True), _DFM), decorator=True),
+    DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
@@ -306,6 +316,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                        "ezdxf", "pillow", "scipy"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
         holds="the CAD kernel", download_mb=240),
+    "cadjoint": Integration(
+        "cadjoint", "cadjoint, the implicit signed-distance CAD kernel on JAX: a scene of its fields -- blended "
+                    "booleans, shells, patterns, sketches extruded, revolved or lofted -- becomes a build123d solid "
+                    "of planar faces, cad.cadjoint.solid, which a model returns as any other shape, or a model's "
+                    "own document, the mesh sampled from it (@implicit)",
+        extra="cadjoint", process="in-process",
+        modules=("cadjoint",), distributions=("cadjoint",), identity=("cadjoint",),
+        # Its solids are the kernel's objects, so a program that uses it holds the kernel beside it.
+        alongside=("build123d",), holds="cadjoint and JAX", download_mb=130),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
                  "its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes "
@@ -378,8 +397,9 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
+    from cad.cadjoint._producers import PRODUCERS as cadjoint
 
-    return build123d
+    return (*build123d, *cadjoint)
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -398,7 +418,9 @@ def producer_for(document_type: str, value: Any, *, where: str = "a model") -> P
         raise RuntimeError(f"{document_type}: {len(found)} producers take {type(value).__name__} "
                            f"({', '.join(producer.integration for producer in found)}): exactly one may")
     accepted = sorted({producer.accepts for producer in producers_for(document_type)})
-    origin = str(type(value).__module__).split(".")[0]
+    parts = str(type(value).__module__).split(".")
+    # A value of one of the library's own integration namespaces (``cad.cadjoint``'s Field) is that integration's.
+    origin = parts[1] if parts[0] in ("cad", "cadgen") and len(parts) > 1 and parts[1] in INTEGRATIONS else parts[0]
     if origin in INTEGRATIONS:
         more = f"the {origin} integration has no producer of {document_type} from {type(value).__name__}"
     elif origin in ("builtins", "", "__main__", "cad"):

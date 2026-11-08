@@ -115,7 +115,7 @@ makes no base for it (`cad_server/_internal/base.py`), and nothing makes an envi
 (not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
 <type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
-cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
+cad's integrations than build123d alone (none, kicad or cadjoint), or that names packages of its own, runs in an
 environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
 uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
@@ -128,6 +128,8 @@ editable-install metadata: `cad.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
+
+The cadjoint integration's extra is not in `requirements-dev.txt`: its JAX is some 130 MB that no other suite reads. To work on `cad.cadjoint` or run its suite, `uv pip install --python .venv --editable "./packages/cad[cadjoint]"`, and the suite is `scripts/test/test-cadjoint.sh`.
 
 Skills run the server as `cad` through `~/.local/bin/cad`, the proxy
 that runs the device's current installation (`<state>/installations/current`): the release `cad setup` or an update made current, from its folder
@@ -384,6 +386,7 @@ diff content: a comment in a module selects what the module's code would.
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 | KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
 | fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
+| cadjoint integration | the integration's code (the library's `cadjoint/` and `build123d/_faceted.py`), the library's `pyproject.toml` (the extra's pin), `tests/python/packages/cadjoint`, `test-cadjoint.sh` | `cad[cadjoint]` installed into the job's interpreter (cadjoint and JAX, ~130 MB, Linux only), then `test-cadjoint.sh`: fields made solids, their refusals, a section drawn and one model built |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,

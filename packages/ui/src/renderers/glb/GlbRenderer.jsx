@@ -12,6 +12,7 @@ import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import { sceneCopyText, useSceneDescribe, useSceneInspect, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import { useDocumentVersion } from "../workspace/useDocumentVersion.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
@@ -28,6 +29,8 @@ function GlbSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
   const loaded = useGlbScene({ entry: document.entry, resources: document.client.resources });
+  // A GLB the engine holds by its id (an implicit's) is built again in place: its next version reads its row again.
+  useDocumentVersion({ client: document.client, file: view.file.path });
   const scene = loaded.scene;
   const loadAlert = useMemo(() => workspaceLoadAlert({
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene), t
@@ -110,12 +113,15 @@ function GlbSurface({ view, data }) {
   const previewAnimation = useGlbAnimation(previewScene?.document || null, () => shell.frame.previewViewRef.current?.requestRender?.());
   const previewView = useMemo(() => ({ scene: previewScene, animation: previewAnimation }), [previewScene, previewAnimation]);
 
-  // Export converts the file shown to the other two mesh kinds: its path names it and the bytes on
-  // screen (their catalog hash) are its revision; the server refuses a file that has changed since.
+  // Export converts the file shown to the other two mesh kinds, and writes a document held by its id
+  // (an implicit's, its `kind`) as each of the three: its path names it and the bytes on screen (their
+  // catalog hash) are its revision; the server refuses a document that has changed since.
   const host = useViewerHost();
+  // A document with no file of its own names its kind, which its file does not.
+  const kind = view.file.navigationPath === null ? document.entry?.kind || "" : "";
   const exportView = useMemo(() => scene && loaded.revision && document.modelKey && !host.environment.compact ? {
-    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name
-  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name]);
+    doc: document.modelKey, revision: loaded.revision, file: view.file.path, name: view.file.name, ...(kind ? { kind } : {})
+  } : null, [scene, loaded.revision, document.modelKey, host.environment.compact, view.file.path, view.file.name, kind]);
   useExportView(exportView);
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: true, clearParts: selection.clear });
   const selectActive = !previewing && Boolean(scene) && shell.toolMode === GLB_TOOL.SELECT;

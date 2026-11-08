@@ -37,7 +37,7 @@ an integration.
 
 | Kind | What it is | Examples | An integration? |
 | --- | --- | --- | --- |
-| A | Python libraries model code imports | build123d, pandas | yes, where we write helpers that take its objects or producers of its values |
+| A | Python libraries model code imports | build123d, cadjoint, pandas | yes, where we write helpers that take its objects or producers of its values |
 | B | Python libraries our producers call | ezdxf, Pillow, netgen | yes, where the code that calls it is ours for that tool |
 | C | External programs our code runs | kicad-cli, ccx, freecadcmd | yes: a probe, headless runs, one missing-tool result |
 | D | Tools only the agent runs | a slicer's CLI the agent calls | no: the skill teaches it, cad's code never calls it |
@@ -57,16 +57,19 @@ an integration.
       extra, process kind (`in-process`, `separate`, `both`) and, for an external program, its `Probe`
       (the program, its minimum version, its install hint, the variable that names it outright); and
       `alongside`, the integrations its operations need in the same environment (calculix's: the kernel,
-      which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
-      command makes for it holds too.
+      which reads the B-rep a study solves, and netgen, which meshes it; cadjoint's: the kernel, whose
+      solids its helpers hand back), which the environment the `cad` command makes for it holds too, and
+      `cad run` closes a program's integrations over.
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
-      accepts and which parts of the type's content it provides; it regenerates a file from what a model
-      returns. A tool that changes a native file in place is no producer but the type's edit
+      accepts and which parts of the type's content it provides; it regenerates a document from what a
+      model returns: build123d's take a `Shape` for every type with a decorator, and cadjoint's takes a
+      `cad.cadjoint.Field` for `implicit` alone (`cad/cadjoint/_producers.py`, its writer `_document`).
+      A tool that changes a native file in place is no producer but the type's edit
       (`cad.registry.Edit`, `<type>.edit`, a `with` block: KiCad's `kicad_pcb.edit`). A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).

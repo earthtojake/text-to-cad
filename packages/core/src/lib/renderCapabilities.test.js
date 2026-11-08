@@ -20,6 +20,8 @@ test("each format's file-list glyph comes from its row", () => {
   }
   assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.XBF), ENTRY_ICON_KIND.STEP, "a STEP opens as an engine document");
   assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.SRDF), ENTRY_ICON_KIND.ROBOT);
+  // A mesh with no file of its own is drawn from the GLB it is served as: its icon is a GLB's.
+  assert.equal(entryIconKindForRenderFormat("implicit"), ENTRY_ICON_KIND.GLB_MESH);
 });
 
 test("aliases resolve to their real format", () => {

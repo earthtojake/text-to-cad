@@ -73,6 +73,13 @@ def number(value: float) -> str:
     return f"{value:.4g}" if abs(value) < 1000 else f"{value:,.0f}"
 
 
+def wall(mm: float, cells: float) -> str:
+    """A sampled field's thinnest wall at a glance: its cells to a tenth below ten, whole above, and its
+    millimetres to three figures: ``4.2 cells (2 mm)``."""
+    across = f"{cells:.1f}".rstrip("0").rstrip(".") if cells < 10 else f"{cells:,.0f}"
+    return f"{across} cells ({mm:.3g} mm)" if mm < 100 else f"{across} cells ({mm:,.0f} mm)"
+
+
 def files(report: dict[str, Any]) -> list[str]:
     found = []
     for path, row in (report.get("files") or {}).items():
@@ -105,8 +112,8 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
     else:
         counted = {status: bodies.count(status) for status in ("run", "replayed") if bodies.count(status)}
         ran = ", ".join(f"{count} {status}" for status, count in counted.items()) or "none"
-        stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "names", "document", "xbf", "step",
-                                                                        "glb", "stl", "threemf", "dxf")
+        stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "sample", "names", "document", "xbf",
+                                                                        "step", "glb", "stl", "threemf", "dxf")
                            if timings.get(name))
         misses, hits = memo.get("misses", 0), memo.get("hits", 0)
         line = (f"built {report['model']}{worker} in {wall:.2f}s: bodies {ran}; {misses} miss{'' if misses == 1 else 'es'}, "
@@ -150,7 +157,17 @@ def _delta(found: dict[str, Any] | None) -> str:
         return times.join(number(axis) for axis in value) if value else "none"
 
     said = []
-    for name in ("parts", "bounds", "joints", "sequences", "warnings"):
+    # An implicit document's line: its triangles, its thinnest wall and its bounds
+    # (``cad.engine.implicit_document.facts_of``), never the parts, joints and sequences that mean nothing for a
+    # mesh sampled from a field.
+    implicit = (found.get("triangles") or {}).get("now") is not None
+    names = ("triangles", "wall", "bounds") if implicit else ("parts", "bounds", "joints", "sequences", "warnings")
+    for name in names:
+        if name == "wall":
+            text = _wall(found)
+            if text:
+                said.append(text)
+            continue
         row = found.get(name) or {}
         now, changed = row.get("now"), "was" in row
         if name == "warnings" and not now and not row.get("was"):
@@ -159,6 +176,8 @@ def _delta(found: dict[str, Any] | None) -> str:
             text = f"bounds {axes(now)}" + (" mm" if now else "") + (f" (was {axes(row['was'])})" if changed else "")
         elif name == "warnings":
             text = f"warnings {now}" + (f" (was {row['was']})" if changed else "")
+        elif name == "triangles":
+            text = f"triangles {now:,}" + (f" (was {row['was']:,})" if changed and row["was"] is not None else "")
         else:
             text = f"{name} {now}" + (f" ({now - (row['was'] or 0):+d})" if changed else "")
         said.append(text)
@@ -168,6 +187,19 @@ def _delta(found: dict[str, Any] | None) -> str:
     elif changed.get("looks"):
         said.append("materials changed")
     return "\n  " + dot.join(said)
+
+
+def _wall(found: dict[str, Any]) -> str:
+    """The delta's thinnest wall, ``wall 4.2 cells (2 mm)``, with what it was where it read otherwise; nothing
+    where no wall was measured."""
+    mm, cells = found.get("wall_mm") or {}, found.get("wall_cells") or {}
+    if mm.get("now") is None or cells.get("now") is None:
+        return ""
+    text = wall(mm["now"], cells["now"])
+    was_mm, was_cells = mm.get("was", mm["now"]), cells.get("was", cells["now"])
+    if was_mm is not None and was_cells is not None and wall(was_mm, was_cells) != text:
+        return f"wall {text} (was {wall(was_mm, was_cells)})"
+    return f"wall {text}"
 
 
 def _verified(found: dict[str, Any] | None) -> str:

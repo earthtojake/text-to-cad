@@ -625,6 +625,38 @@ class GlbTest(FixtureTest):
         np.testing.assert_allclose(np.ptp(positions, 0).max(), 40 * math.sqrt(2), atol=1e-3)
         np.testing.assert_allclose(positions.mean(0), (0, -25, 0), atol=1e-3)
 
+    def test_an_implicit_document_s_glb_draws_no_feature_edges_and_a_plain_one_its_folds(self) -> None:
+        """An implicit document's GLB (``asset.extras.cad``, ``implicit_document.with_extras``) is read with an
+        empty edge table: its creases are its field's, and the 16-degree fold rule would draw stubs along them.
+        The same triangles without the marker read with the box's twelve folds."""
+        from cad.engine import implicit_document as implicit
+        from cad.engine.export.glb import JSON_CHUNK, MAGIC
+        from cad.engine.mesh import Mesh
+
+        soup = box_soup((10, 10, 10))
+        positions = soup.reshape(-1, 3)
+        normals = np.repeat(np.cross(soup[:, 1] - soup[:, 0], soup[:, 2] - soup[:, 0]), 3, axis=0)
+        normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+        marked, _facts = implicit.document_bytes("box", positions, normals, np.arange(36).reshape(-1, 3),
+                                                 closure=None, digest="0" * 16, cell=1.0)
+        gltf, rest = implicit._split(marked)
+        del gltf["asset"]["extras"]
+        body = json.dumps(gltf, separators=(",", ":")).encode()
+        body += b" " * (-len(body) % 4)
+        chunks = struct.pack("<II", len(body), JSON_CHUNK) + body + rest
+        plain = struct.pack("<III", MAGIC, 2, 12 + len(chunks)) + chunks
+        self.assertIsNotNone(implicit.read_extras(marked))
+        self.assertIsNone(implicit.read_extras(plain))
+        found = {}
+        for name, data in (("implicit", marked), ("plain", plain)):
+            (self.folder / f"{name}.glb").write_bytes(data)
+            (part,) = formats.read(self.folder / f"{name}.glb").buffers.values()
+            found[name] = Mesh.from_bytes(part)
+        self.assertEqual((found["implicit"].triangles, found["plain"].triangles), (12, 12))
+        self.assertEqual((len(found["implicit"].edges), len(found["plain"].edges)), (0, 12))
+        np.testing.assert_allclose(found["implicit"].normals, found["plain"].normals, atol=1e-6,
+                                   err_msg="the file's own normals, kept either way")
+
     def test_a_packet_s_camera_for_a_glb_is_in_the_millimetres_the_viewer_draws(self) -> None:
         """The viewer draws glTF's metres as millimetres, so a Quick Edit packet's camera for a GLB is in
         millimetres already (``millimetresPerSceneUnit`` 1, though ``clip.at`` is in the file's metres): the

@@ -8,7 +8,8 @@ installs them all.
 Models are written against the library, `cad`, which the server imports without
 its CAD kernel: the kernel lives in the environments the server makes, on first need, for models and
 its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
-`uv run` does, with cad pinned at the server's release and the integrations its imports use; a tool's
+`uv run` does, with cad pinned at the server's release and the integrations its imports use (and any
+an integration needs, as cadjoint's needs build123d's); a tool's
 own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
@@ -88,7 +89,9 @@ src/cad_server/
 A document type's commands are `cad <document_type> <operation> <file>`, one id per type as the
 library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf export`, `cad step snapshot`,
 `cad glb inspect`, `cad urdf validate`, and the rest `cad --help` lists, grouped by type. `model` is a model
-the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
+the engine holds, by its document id, with no file, and so is `implicit`, a model whose document is the mesh
+sampled from a field (`cad implicit export|snapshot|inspect|dfm <id>`, its exports the mesh kinds alone);
+every other type takes a file of its own. `export`,
 `snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
 file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
 `dfm`, `solve`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
@@ -113,7 +116,7 @@ meshed by the `netgen` integration and solved by the `calculix` integration's cc
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
+A 3D type's `dfm` (`cad model|implicit|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
 in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the

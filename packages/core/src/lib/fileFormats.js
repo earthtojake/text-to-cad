@@ -36,6 +36,28 @@ const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
   ["gltf", TYPES.glb.wire]
 ]));
 
+// A document type with no file of its own is read as the file type whose bytes it is served in, by
+// the registry's MIME type: an implicit's source is a GLB. A model's names none (the engine serves its
+// structure and parts, as a STEP's), so it has no format here and opens as the engine's document.
+const FORMAT_BY_FILELESS_KIND = Object.freeze(Object.fromEntries(
+  DOCUMENT_TYPE_REGISTRY.documentTypes
+    .filter((type) => type.extensions.length === 0 && type.mime)
+    .flatMap((type) => {
+      const file = DOCUMENT_TYPE_REGISTRY.documentTypes.find((other) => other.extensions.length && other.mime === type.mime);
+      return file ? [[type.wire, file.wire]] : [];
+    })
+));
+// The file format each MIME type names: the first type with a file that carries it.
+const FORMAT_BY_MIME = Object.freeze(Object.fromEntries(
+  DOCUMENT_TYPE_REGISTRY.documentTypes
+    .filter((type) => type.extensions.length && type.mime)
+    .reverse()
+    .map((type) => [type.mime, type.wire])
+));
+const MIME_BY_KIND = Object.freeze(Object.fromEntries(
+  DOCUMENT_TYPE_REGISTRY.documentTypes.map((type) => [type.wire, type.mime])
+));
+
 // Formats the viewer shows as a PLOT: a KiCad board or schematic drawn from its files, as geometry per layer,
 // by its document's `plot` (`GET /api/v1/documents/kicad_pcb/<id>/plot`). Like a DXF, the render asset is the file itself; nothing bakes a mesh
 // for it.
@@ -53,9 +75,29 @@ export function entryKind(entry) {
 
 export function entrySourceFormat(entry) {
   const kind = entryKind(entry);
-  // A catalog kind is a format of its own but for the engine's documents, which open as STEP's do.
-  const format = FORMAT_BY_EXTENSION[kind];
+  // A catalog kind is a format of its own but for the engine's documents, which open as STEP's do;
+  // a document with no file of its own is the format its bytes are served in (an implicit's, a GLB).
+  const format = FORMAT_BY_EXTENSION[kind] || FORMAT_BY_FILELESS_KIND[kind];
   return format && format !== RENDER_FORMAT.STEP ? format : RENDER_FORMAT.STEP;
+}
+
+/**
+ * The format a document with no file of its own is served in (`GET /api/v1/documents/<kind>/<id>/source`),
+ * by its kind: `glb` for an implicit's. "" for a kind with a file, and for a model's, which the engine
+ * serves as its document.
+ */
+export function filelessDocumentFormat(kind) {
+  return FORMAT_BY_FILELESS_KIND[normalizeFormat(kind)] || "";
+}
+
+/** The MIME type of a document kind's bytes (`cad.registry`), "" for one that names none. */
+export function documentMime(kind) {
+  return MIME_BY_KIND[normalizeFormat(kind)] || "";
+}
+
+/** The file format whose bytes a MIME type names (`model/gltf-binary`: `glb`), "" for any other. */
+export function renderFormatFromMime(mime) {
+  return FORMAT_BY_MIME[String(mime || "").trim().toLowerCase()] || "";
 }
 
 export function isMeshRenderFormat(format) {

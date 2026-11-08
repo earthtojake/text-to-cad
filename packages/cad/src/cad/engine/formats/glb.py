@@ -15,7 +15,10 @@ texture drawn on it.
   (``millimetresPerSceneUnit`` 1).
 - **Parts**: a mesh's triangulations (nodes, triangles, normals, texture coordinates), read from
   OCCT's binary shape format with numpy (``mesh.py``'s way); one face per primitive, with the
-  viewer's feature edges (``buffer.py``, three's rounding at 1e-4 of the file's metres).
+  viewer's feature edges (``buffer.py``, three's rounding at 1e-4 of the file's metres). An
+  implicit document's GLB (marked in its ``asset.extras.cad``, ``implicit_document.extras_of``)
+  has none: its creases are its field's to state, and the fold rule would draw stubs along them
+  where the sample's points settle either side of each from cell to cell.
 - **Materials**: each primitive's ``XCAFDoc_VisMaterial`` -- base colour (linear), metallic,
   roughness, emission, alpha (a ``BLEND`` material's; an opaque one is opaque) -- with what OCCT
   does not read of the file's material (the engine's KHR extensions: IOR, transmission, clear coat,
@@ -278,6 +281,9 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
                for node in gltf.get("nodes") or [] if isinstance(node, dict))
     document = _document(path, z_up)
     authored = _authored(gltf)
+    from cad.engine.implicit_document import extras_of
+
+    implicit = extras_of(gltf) is not None  # no feature edges: the field's creases are not guessed
     shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
 
     leaves: dict[str, int] = {}  # a leaf label's entry: its part
@@ -397,7 +403,8 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
             if has_uvs else None
         # three's rounding: 1e-4 of the file's numbers (metres), here 0.1 mm times the part's scale.
         mesh, uv_drawn = buffer(positions, triangles, faces=np.concatenate(ordinals) if ordinals else None,
-                                normals=shading, uvs=uv_all, weld=0.1 * scale, hashed=10.0 * scale)
+                                normals=shading, uvs=uv_all, edges=not implicit, weld=0.1 * scale,
+                                hashed=10.0 * scale)
         face_colors, face_materials, textures = {}, {}, {}
         colour = None
         for ordinal, material_label in enumerate(materials_of, 1):

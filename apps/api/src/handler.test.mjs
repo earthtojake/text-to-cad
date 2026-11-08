@@ -290,6 +290,21 @@ test("the install command's channels are stored as what happened, and the -githu
   assert.deepEqual(store.rows, []);
 });
 
+test('schema 10 counts an implicit as a kind of its own; schema 9 and before refuse it', async () => {
+  const events = [
+    { ...ENGINE.events[0], kind: 'implicit' },
+    { name: 'files', kind: 'implicit', count: 1 },
+  ];
+  const batch = { ...CONTROLS, schema: 10, events: [...events, CONTROLS.events[0]] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    batch.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  for (const schema of [7, 8, 9]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...batch, schema })).status, 400, `schema ${schema}`);
+  }
+});
+
 test('schema 8 separates live models from XBF files without reinterpreting older batches', async () => {
   const kinds = ['model', 'xbf'];
   const events = kinds.flatMap(kind => [

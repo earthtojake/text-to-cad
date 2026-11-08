@@ -89,6 +89,8 @@ class Recent:
     pictured: float | None = None
     # ``file``, ``model`` or ``shape`` (the record's ``kind``).
     kind: str = "file"
+    # A model's document type (``cad.registry``): ``implicit`` where its record's ``format`` is a GLB's, else ``model``.
+    type: str = "model"
     # A model's (and a shape's): its name, its script, and the command that builds it again.
     name: str | None = None
     namespace: str | None = None
@@ -118,8 +120,9 @@ class Recent:
                 return None
             ident = file_id(self.path)
         else:
-            # A model's document, or a shape a program handed over: either is the engine's, read as a model's.
-            kind, ident = "model", self.path
+            # A model's document, or a shape a program handed over: either is the engine's, read as a model's --
+            # an implicit document's as its own kind, its source the engine's file.
+            kind, ident = ("implicit" if self.type == "implicit" else "model"), self.path
         return {**self.public(), "id": ident, "kind": kind, "record": self.kind, "api": document_api(kind, ident)}
 
     def public(self) -> dict[str, Any]:
@@ -263,6 +266,7 @@ class RecentStore:
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
+                                      type="implicit" if record.get("format") == "glb" else "model",
                                       namespace=record.get("namespace") or record.get("root"),
                                       script=str(registering.home(self.registry, record)),
                                       rebuild=registering.command(self.registry, record),

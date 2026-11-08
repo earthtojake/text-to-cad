@@ -201,7 +201,8 @@ holds on every face, an imported STEP's faces whose edges carry a looser toleran
 cost the most triangles). The file says
 what it was meshed to (the STL's header, the 3MF's description). It is
 for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
-one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
+one), a GLB is the viewer's mesh, and an implicit model's triangles are its sample's (a finer
+cell refines them). Finer costs triangles on the large curved parts: a tenth of the tolerance is about
 three times the segments round a curve and ten times the triangles of a doubly curved face (a
 600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or
 above 0.001 (the floor) and say the file's size when it is large. If the export

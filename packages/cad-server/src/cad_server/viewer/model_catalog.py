@@ -30,8 +30,11 @@ def entry(value: str) -> dict | None:
 
 
 def row(value: str, model: dict) -> dict:
-    """The catalog row of the model document ``value`` the engine holds as ``model`` (``held``)."""
+    """The catalog row of the model document ``value`` the engine holds as ``model`` (``held``). An implicit
+    document's (``model_info``'s ``type``) reads as a GLB's: its ``kind`` ``glb`` and its ``sourceFormat``
+    ``implicit``, so a page draws it as it draws a mesh file."""
     built = model.get("version") or model.get("builtAt")
+    implicit = model.get("type") == "implicit"
     return {"id": value, "file": value, "name": model["source"]["name"], "sourcePath": None,
-            "kind": "xbf", "sourceFormat": "model", "url": "",
+            "kind": "glb" if implicit else "xbf", "sourceFormat": "implicit" if implicit else "model", "url": "",
             "hash": f"model:{built}" if built is not None else "model", "bytes": 0}
