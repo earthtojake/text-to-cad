@@ -16,8 +16,10 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``); an STL, a 3MF and a GLB by the trimesh
-integration (``cad.trimesh._check``), each finding at ``x, y, z``. The report is the result's
+finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in the kernel process
+that holds the document (``_held``, ``cad.engine.api.check``), a file in this process only where no engine can
+be reached; an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), in this process, each
+finding at ``x, y, z``. The report is the result's
 ``measurements``, facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
 practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
 failing one a finding whose code is the rule's id and whose hint says what to change; the record of every
@@ -358,6 +360,10 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
+    if document_type in BREP_TYPES:
+        found = _held(document_type, source, process, resolved, candidates, given, label)
+        if found is not None:
+            return found
     if process is None:
         from cad.build123d._dfm_check import measure_declared
 
@@ -378,6 +384,38 @@ def measure(document_type: str, source: Any, process: str | None, resolved: dict
     except dfm.Unmeasured as failure:
         return _failed(label, failure.message, failure.code)
     return finish(label, {"process": process, **report}, process, resolved, candidates)
+
+
+def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
+          given: dict[str, Any] | None, label: Path) -> CheckResult | None:
+    """A B-rep's check through the engine (``cad.engine.api.check``): measured in the kernel process that
+    holds the document -- a model's in its warm worker, a STEP's or an xbf's in the documents worker, read
+    once -- or answered from the engine's kept results for an unchanged document, then finished here. None
+    for a file when no engine can be reached: it is measured in this process, as it always could be. A model
+    with no engine fails to read, as it did; an id the engine does not hold is refused as its type."""
+    from cad.engine import api
+
+    check = {"type": document_type, "process": process, "resolved": resolved, "candidates": bool(candidates),
+             **({"given": {name: value for name, value in (given or {}).items() if value is not None and value is not False}}
+                if process is None else {})}
+    is_file = isinstance(source, (str, os.PathLike)) and label.is_absolute()
+    try:
+        found = api.check(source, check)
+    except api.Unreached as error:
+        if is_file:
+            return None
+        return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+    except ValueError as error:
+        if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
+            raise  # the caller's mistake (the command's not_found), not the check's failure
+        return _failed(label, f"failed to read the document: {error}", "document_unreadable")
+    if "refused" in found:
+        raise ArgumentRefused(found["refused"])
+    if "unmeasured" in found:
+        return _failed(label, found["unmeasured"]["message"], found["unmeasured"]["code"])
+    measured = found["measured"]
+    return finish(label, {"process": measured["process"], **measured["report"]}, measured["process"],
+                  measured["resolved"], candidates)
 
 
 def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:

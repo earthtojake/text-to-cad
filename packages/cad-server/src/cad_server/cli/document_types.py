@@ -12,7 +12,8 @@ A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``
 check, and a DXF's the check of a sheet's cut file: ``cad stl dfm part.stl --process molding --pull -z``,
 ``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
 a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
-mesh's (STL, 3MF, GLB) the trimesh integration's, for molding or printing. Each runs here when this
+mesh's (STL, 3MF, GLB) the trimesh integration's, for molding or printing. A B-rep's is the engine's: asked
+from here, measured in the kernel process that holds the document. A DXF's and a mesh's run here when this
 environment holds its integration, else in the environment that does -- for build123d the installation's
 base, for trimesh the one the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``) --
 and a call refused there is the command line's mistake as it is here (exit 2). A KiCad
@@ -147,21 +148,25 @@ def pull_value(argv: list[str]) -> list[str]:
 
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
-    type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF --
-    run here when this environment holds the type's integration (build123d for a B-rep and a DXF, trimesh for
-    a mesh), else in the environment that holds it (``cad_server._internal.integration_env``), its options
-    refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
+    type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF.
+    A B-rep's (a model, an xbf, a STEP) is asked of the engine from this process, which measures it in the
+    kernel process that holds the document (``cad.engine.api.check``); a DXF's and a mesh's run here when this
+    environment holds the type's integration (build123d for a DXF, trimesh for a mesh), else in the
+    environment that holds it (``cad_server._internal.integration_env``), its options refused here first,
+    before one is made. An xbf or a model given no ``--process`` is checked for the one
     its parts declare: the options every process shares are refused here, the rest in the integration once
     it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
     keeps no process, so one given none is refused here."""
 
     def run(argv: list[str], prog: str) -> int:
+        from cad._internal.manufacturing import BREP_TYPES
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
         target = (f"cad.{document_type}", "dfm")
         integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
-        if integration_env.carries(integration):
+        if document_type in BREP_TYPES or integration_env.carries(integration):
+            # A B-rep's check is the engine's, measured where it holds the document: asked from here.
             return _checked(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
