@@ -1824,11 +1824,15 @@ approximates (`render/finish.py`): a clear coat eases the base's roughness towar
 OCCT drops anisotropy, and transmission is opacity over the colour tinted
 by the transmission colour.
 Edges are unlit in their class's ink, 1 px; X-ray's faces are lit at 0.22 opacity, Hidden line's
-are the backdrop's colour. The engine serves the record as `GET /api/v1/look` and its image as
-`GET /api/v1/look/environment`; the page reads both once per engine, beside the document, and the
-document's scene brings them as its own lighting and surface rule (the bundled
-`@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
-up in place of the theme's. Preview is drawn as any file's is.
+are the backdrop's colour. A face that writes depth steps back a hair in the depth test, so the
+edges on it win; a see-through one (a translucent part's, X-ray's), which writes none, steps a
+hair forward (`render/occt.py`'s `SEE_THROUGH_OFFSET`), so lying on an opaque face it is in front
+of it at every pixel, never in shards along the two faces' triangles: the viewer's rule (the
+bundled `@cad/core`'s `lib/viewer/surfaceLook.js`). The engine serves the record as
+`GET /api/v1/look` and its image as `GET /api/v1/look/environment`; the page reads both once per
+engine, beside the document, and the document's scene brings them as its own lighting and surface
+rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
+page put up in place of the theme's. Preview is drawn as any file's is.
 
 `cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
 browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
@@ -1836,7 +1840,8 @@ browser viewer; snapshot has no Preview or video option. A packet requesting `pr
 `cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
-light -- the studio backdrop, a drawing's white paper, a board's and a schematic's light colours --
+light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
+which a snapshot refuses), a drawing's white paper, a board's and a schematic's light colours --
 whatever theme the viewer is in or the view it replays was seen in: a snapshot is a tool for an agent,
 and dark is the harder to read, so no flag, tool argument or packet names a theme. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,

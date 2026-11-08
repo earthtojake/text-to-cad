@@ -1069,7 +1069,7 @@ hold each one:
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
-| the plugin folder's configs, which the install command points every app at | each as `latest`'s: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `agent-plugins` | yes | `cad_server/_internal/plugin.py` |
+| the plugin folder's configs, which the install command points every app at | `claude-install`, `codex-install`, `cursor-install`, `gemini-install`, `agent-plugins` (through 0.11, as `latest`'s `-github`) | yes | `cad_server/_internal/plugin.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
