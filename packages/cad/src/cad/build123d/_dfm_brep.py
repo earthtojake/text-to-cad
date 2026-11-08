@@ -5,9 +5,18 @@ on the B-rep (OCP), never on a mesh.
 part, its faces and their ordinals are the ones ``cad <type> inspect`` names: a finding's location is a ref
 in its grammar (``plate/face 7``; ``bracket/face 3`` in a document of one part, under its name), which
 ``cad xbf inspect DOC REF`` resolves to the very face. A document the engine holds (its id, a model's
-handle) is exported by the engine to an xbf in a temporary folder first. A live shape
+handle) is measured where the engine holds it, in the kernel process that holds it (``of_source``): a
+model's document in its script's warm worker, a file's or a held document's in the documents worker, each
+as its reader read it -- nothing exported, written or read again. A live shape
 (``cad.build123d.cnc(shape)``) is read by its labels, as the engine would name its document. Each part is
 measured once, placed where its first occurrence stands; its other occurrences are counted.
+
+**Never the held shapes themselves.** A check meshes faces (``BRepMesh``), which writes a triangulation
+into the shape it meshes: on the document the engine holds, the next check would find the last one's
+mesh (a finer one is kept, not made again) and measure otherwise than a fresh read does. So each part is
+measured on a copy that shares nothing with the held document: a read document's part copied with its
+geometry and whatever mesh it was read with (``BRepBuilderAPI_Copy``), a build's part written and read
+once (``mesh.read_shape``), which is bit for bit the part its saved xbf reads back as (``mesh.shape_bytes``).
 
 **The measures.** A face's surface (``surface``: a plane's normal, a cylinder's or a cone's axis and
 radius, which way the material lies); an edge between two faces (``edges``: concave or convex, the angle
@@ -21,7 +30,6 @@ from __future__ import annotations
 
 import math
 import os
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -30,7 +38,7 @@ import numpy as np
 
 from cad._internal.dfm import Unmeasured
 
-__all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "inside", "parts_of", "read",
+__all__ = ["Document", "Edge", "Part", "Rays", "Sample", "Surface", "edges", "inside", "of_source", "parts_of", "read",
            "samples", "surface"]
 
 # Two faces meeting at an edge within this many degrees of each other are tangent: a fillet's join.
@@ -153,7 +161,15 @@ def _trsf(matrix: list[float]) -> Any:
     return TopLoc_Location(trsf)
 
 
-def _loaded(loaded: Any) -> Document:
+def _copied(shape: Any) -> Any:
+    """A read part's shape to measure: its geometry and the mesh it was read with, sharing nothing with
+    the document the engine holds (the module's **Never the held shapes themselves**)."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+
+    return BRepBuilderAPI_Copy(shape, True, True).Shape()
+
+
+def _loaded(loaded: Any, copy: bool = False) -> Document:
     import build123d as bd
 
     from cad.engine import refs
@@ -172,7 +188,7 @@ def _loaded(loaded: Any) -> Document:
             continue
         proto = loaded.prototypes[prototype]
         instance = loaded.instances[int(payload["instance"])]
-        placed = bd.Shape.cast(proto.shape.Moved(_trsf(instance.matrix)))
+        placed = bd.Shape.cast((_copied(proto.shape) if copy else proto.shape).Moved(_trsf(instance.matrix)))
         part = Part(name=proto.name, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
                     face_names=dict(proto.face_names), material=getattr(proto, "material", None))
         first[prototype] = part
@@ -183,29 +199,57 @@ def _loaded(loaded: Any) -> Document:
 
 
 def read(document_type: str, source: Any) -> Document:
-    """The parts of a STEP or an xbf (a path), or of a document the engine holds (its id or handle);
-    ``Unmeasured`` for one that does not read, and the engine's ``NotHeld`` as it is for an id it does not hold:
-    the caller's mistake (the command's ``not_found``), not the check's failure."""
+    """The parts of a STEP or an xbf read in this process (a path), as the engine's loader reads it --
+    a check's path where no engine can be reached; a check through the engine reads the document the
+    engine holds instead (``of_source``). ``Unmeasured`` for one that does not read."""
     from cad.engine.document import Loaded
-    from cad.engine.ids import is_id
 
-    if isinstance(source, (str, os.PathLike)) and not is_id(os.fspath(source)):
-        path = Path(os.fspath(source)).expanduser().resolve()
-        try:
-            return _loaded(Loaded(path))
-        except Exception as error:  # noqa: BLE001 - a file that does not read is the check's answer
-            raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
-    from cad.engine.api import export
+    path = Path(os.fspath(source)).expanduser().resolve()
+    try:
+        return _loaded(Loaded(path))
+    except Exception as error:  # noqa: BLE001 - a file that does not read is the check's answer
+        raise Unmeasured("document_unreadable", f"failed to read {path.name}: {error}") from None
 
-    with tempfile.TemporaryDirectory(prefix="cad-check-") as folder:
-        written = Path(folder) / "document.xbf"
-        try:
-            export(source, written, progress=False)  # the engine writes the document it holds
-            return _loaded(Loaded(written))
-        except Exception as error:  # noqa: BLE001
-            if any(kind.__module__ == "cad.engine.serve" and kind.__name__ == "NotHeld" for kind in type(error).__mro__):
-                raise
-            raise Unmeasured("document_unreadable", f"failed to read the document: {error}") from None
+
+def of_source(source: Any) -> Document:
+    """The parts of a document the engine holds in this process (an ``export.Source``): one its reader read
+    -- a STEP's or an xbf's file, a held document's bytes -- as that reader read it (``source.loaded``),
+    which is what ``read`` reads; a build's own, from the build's structure and shapes, each part written
+    and read once, as its saved xbf reads back. Never the held shapes themselves (the module's docstring).
+    ``Unmeasured`` for a mesh, which holds no B-rep."""
+    if source.loaded is not None:
+        return _loaded(source.loaded, copy=True)
+    if source.mesh is not None or not source.shapes:
+        raise Unmeasured("document_unreadable", f"{source.name} holds no B-rep to measure")
+    import build123d as bd
+
+    from cad.engine import refs
+    from cad.engine.document import material_from_json
+    from cad.engine.mesh import _write, read_shape
+
+    structure = source.structure
+    root = refs.structure_tree(structure)
+    first: dict[int, Part] = {}
+    order: list[Part] = []
+    for node in root.parts():
+        payload = node.payload
+        prototype = int(payload["prototype"])
+        path = refs.path_text(root, node)
+        if prototype in first:
+            first[prototype].occurrences += 1
+            first[prototype].paths += (path,)
+            continue
+        proto = structure["prototypes"][prototype]
+        instance = structure["instances"][int(payload["instance"])]
+        shape = read_shape(_write(source.shapes[proto["key"]]))
+        placed = bd.Shape.cast(shape.Moved(_trsf(instance["matrix"])))
+        part = Part(name=proto["name"], owner=refs.owner_text(root, node), shape=placed, paths=(path,),
+                    face_names={int(key): text for key, text in (proto.get("faceNames") or {}).items()},
+                    material=material_from_json(proto.get("material")))
+        first[prototype] = part
+        order.append(part)
+    empty = [part.owner or part.name for part in order if not part.faces()]
+    return Document(name=structure["name"], parts=[part for part in order if part.faces()], empty=empty)
 
 
 def parts_of(shape: Any, name: str | None = None) -> Document:

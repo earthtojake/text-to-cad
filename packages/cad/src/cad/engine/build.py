@@ -1005,7 +1005,7 @@ def _read_held(payload: bytes, name: str) -> Any:
                          xcaf=loaded.doc, world=lambda occurrence: loaded.worlds.get(occurrence),
                          local=lambda occurrence: loaded.locals.get(occurrence),
                          mechanism=loaded.mechanism, foreign=False, path=None, animations=loaded.animations,
-                         migration=loaded.migration)
+                         migration=loaded.migration, loaded=loaded)
 
 
 def _statuses(run: Any, name: str) -> dict[str, str]:

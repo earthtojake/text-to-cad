@@ -1,6 +1,7 @@
 """The manufacturing check of exact geometry: what ``cad.<type>.dfm(source, process=...)`` runs for a
-STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``),
-and what ``cad.build123d.cnc(shape)`` and its siblings run for a live shape.
+STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``)
+-- in the engine's kernel process that holds the document (``held``), or in this process where no engine
+can be reached (``measure``) -- and what ``cad.build123d.cnc(shape)`` and its siblings run for a live shape.
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
@@ -18,7 +19,7 @@ from typing import Any
 
 from cad.build123d import _dfm_brep
 
-__all__ = ["checked", "measure", "measure_declared"]
+__all__ = ["checked", "held", "measure", "measure_declared"]
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
@@ -40,8 +41,8 @@ def _measured(document: _dfm_brep.Document, document_type: str, process: str, op
 
 
 def measure(document_type: str, source: Any, process: str, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
-    """The report of ``source`` (a STEP's or an xbf's path, a document's id or handle) for ``process``, or
-    ``Unmeasured``; ``cad.engine.serve.NotHeld`` for a document id the engine does not hold."""
+    """The report of ``source`` (a STEP's or an xbf's path, read in this process) for ``process``, or
+    ``Unmeasured``."""
     return _measured(_dfm_brep.read(document_type, source), document_type, process, options, candidates)
 
 
@@ -68,8 +69,43 @@ def measure_declared(document_type: str, source: Any, given: dict[str, Any],
     declare, its options (``given``, unresolved) resolved for that process (``manufacturing.declared``).
     The process, the options and the report; ``Unmeasured``, or ``ArgumentRefused`` naming the fix for no
     process declared, one no check measures, parts that declare different ones, or an option the declared
-    process does not take; ``cad.engine.serve.NotHeld`` for a document id the engine does not hold."""
+    process does not take."""
     return _declared(_dfm_brep.read(document_type, source), document_type, given, candidates, document_type)
+
+
+def held(source: Any, check: dict[str, Any], read: Any = None) -> dict[str, Any]:
+    """The check an engine's kernel process runs of a document it holds (``source``, an ``export.Source``:
+    a model's in its worker, a file's or a held document's in the documents worker), as ``check`` asks it
+    (``{"type", "process", "resolved", "candidates", "given"}``, its options resolved by the caller,
+    ``manufacturing.options``), measured in memory (``_dfm_brep.of_source``). Plain data, which the caller
+    finishes (``manufacturing.finish``): ``{"measured": {"process", "resolved", "report"}}``; ``{"unmeasured":
+    {"code", "message"}}``; ``{"refused": words}`` for what ``manufacturing.declared`` refuses (the command
+    line's to fix). ``read``: what a reading failure is said as, ``failed to read ...``.
+
+    Its measurements equal ``measure``'s and ``measure_declared``'s of the same document read from a file."""
+    from cad._internal.dfm import Unmeasured
+    from cad._internal.refused import ArgumentRefused
+
+    document_type, process = check["type"], check.get("process")
+    candidates = bool(check.get("candidates"))
+    try:
+        try:
+            document = _dfm_brep.of_source(source)
+        except Unmeasured:
+            raise
+        except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
+            raise Unmeasured("document_unreadable", f"failed to read {read or 'the document'}: {error}") from None
+        if process is None:
+            process, resolved, report = _declared(document, document_type, dict(check.get("given") or {}),
+                                                  candidates, document_type)
+        else:
+            resolved = dict(check["resolved"])
+            report = _measured(document, document_type, process, resolved, candidates)
+    except Unmeasured as failure:
+        return {"unmeasured": {"code": failure.code, "message": failure.message}}
+    except ArgumentRefused as refused:
+        return {"refused": str(refused)}
+    return {"measured": {"process": process, "resolved": resolved, "report": report}}
 
 
 def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,

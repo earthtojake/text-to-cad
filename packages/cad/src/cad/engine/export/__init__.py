@@ -161,8 +161,12 @@ class Source:
                  local: Callable[[tuple[int, ...]], Any] | None = None,
                  local_placements: dict[tuple[int, ...], Any] | None = None,
                  migration: dict[str, Any] | None = None,
-                 origin: dict[str, Any] | None = None) -> None:
+                 origin: dict[str, Any] | None = None, loaded: Any = None) -> None:
         self.structure = structure
+        # The document as its reader read it (``document.Loaded``), where it was read -- a file's, a held
+        # document's bytes -- which a manufacturing check measures as it is (``_dfm_brep.of_source``);
+        # None for a build's own document, measured from its shapes.
+        self.loaded = loaded
         # Each occurrence's placement in its assembly's frame (``local``), and the same as a table of
         # column-major 4x4s where the document is not in this process to ask (``local_placements``,
         # what a document's ``result`` carries): what ``shape`` places each node of the tree by.
@@ -215,7 +219,7 @@ class Source:
                    world=lambda occurrence: loaded.worlds.get(occurrence),
                    local=lambda occurrence: loaded.locals.get(occurrence), mechanism=loaded.mechanism,
                    foreign=loaded.writer is None, path=loaded.path, animations=loaded.animations,
-                   migration=loaded.migration,
+                   migration=loaded.migration, loaded=loaded,
                    origin={"kind": "file", "path": str(loaded.path), "closure_base": str(loaded.path.parent)})
 
     @classmethod
