@@ -1868,7 +1868,9 @@ refusal says). `--camera` is a preset, an `azimuth:elevation` pair, a camera obj
 object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`, `zoom`,
 `orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
 `focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y
-up the picture, as `top` and `bottom` do. `--annotation FILE` draws the viewer's annotation over the
+up the picture, as `top` and `bottom` do. SRC is a whole document: one that names something inside a
+document (`ID#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
+(`display.isolated`). `--annotation FILE` draws the viewer's annotation over the
 model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
 annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
 and `--measurements FILE` Measure's dimensions (`[{start, end, label, color}]`). A camera object's
@@ -3045,7 +3047,9 @@ as another sibling's, is JSON-quoted. An element of an assembly resolves from it
 below holds it, so a document of one part takes its elements by the document's name
 (`plate/face 3`). A part's elements are numbered by their `TopExp.MapShapes` ordinals, the ones
 its names, `faceNames` and the XBM2 buffer use. `FILE` (everything before the first `#`,
-JSON-quoted where it holds one) is an absolute CAD file path, the last segments of the document's
+JSON-quoted where it holds one; a command's or a tool's source, `FILE#REF`, takes the longest part of
+itself that is a file, so a path that holds a `#` -- a folder named `project#1` -- is never cut there:
+`addresses.parts`) is an absolute CAD file path, the last segments of the document's
 path, or a document's id (a model's, which `cad run SCRIPT.py` prints, or a file's), and must be the
 document resolved in: the same file, the same path's last segments, or the same id. A script is
 never a `FILE`: `<uuid>#face 1` names face 1 of the model whose id it is, read as the engine holds

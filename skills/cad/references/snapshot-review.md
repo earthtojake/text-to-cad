@@ -22,7 +22,8 @@ screenshot the card to confirm your own work ([Check each change](../SKILL.md#ch
 into a PNG. SRC is a model's id (the `id:` line its run printed: drawn from the document
 the server holds, as it is, and nothing is built), a document file (`.xbf`, `.step`), a
 mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (`.dxf`). A
-script is never a source. Nothing is written but OUT.
+script is never a source, and SRC is a whole document, never a ref into one (`$ID#bracket`):
+`--display '{"isolated": ["bracket"]}'` draws one part alone. Nothing is written but OUT.
 
 ```bash
 cad model snapshot "$ID" tmp/review.png

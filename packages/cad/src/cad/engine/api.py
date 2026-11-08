@@ -693,6 +693,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
+    _whole(source)
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
                                           board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
                                           schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
@@ -703,6 +704,23 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
                              measurements=drawing.parse_measurements(measurements), annotation_source=annotation,
                              progress=progress)
     return Drawn(out, found["width"], found["height"], found)
+
+
+_ELEMENT = re.compile(r"(?:^|/)\s*(?:(?:face|edge|vertex)\s+\d+|[fev]:.*)\s*$")
+
+
+def _whole(source: Any) -> None:
+    """A snapshot draws a whole document: a source that names something inside one (``ID#bracket``,
+    ``arm.step#arm/face 3``, a ``FILE#REF`` that is no file) is refused, saying what to draw instead."""
+    from cad.engine.addresses import parts
+    from cad.engine.snapshot import SnapshotRefused
+
+    named, ref = parts(os.fspath(source))
+    if ref is None:
+        return
+    owner = _ELEMENT.sub("", ref).strip(" /")  # the part an element ref is on, or the part itself
+    alone = f'--display \'{{"isolated": {json.dumps([owner or "PART"])}}}\' draws {owner or "a part"} alone'
+    raise SnapshotRefused(f"a snapshot draws a whole document, so its source names no #{ref}: give {named}; {alone}")
 
 
 def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
@@ -789,9 +807,9 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     from cad.engine import refs
     from cad.engine.said import weighed
 
-    from cad.engine.addresses import key, split
+    from cad.engine.addresses import key, parts, split
 
-    named = os.fspath(source).partition("#")[0]
+    named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
         raise EngineError("source reference and ref disagree")
@@ -1194,7 +1212,9 @@ def _facts(verb: str, args: tuple, kwargs: dict[str, Any], heard: dict[str, Any]
             found["outputs"] = [{"kind": _SUFFIXES.get(Path(os.fspath(path)).suffix.lower(), "other"),
                                  "seconds": None} for path in args[1:]]
     if verb == "snapshot":
-        found["found"] = found["source"] == "model" or Path(os.fspath(source)).is_file()
+        from cad.engine.addresses import parts
+
+        found["found"] = found["source"] == "model" or Path(parts(os.fspath(source))[0]).is_file()
     return found
 
 
@@ -1203,9 +1223,10 @@ def _kind(source: Any) -> str:
 
     if isinstance(source, (Model, Document)):
         return "model"
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
 
-    text = os.fspath(source)
+    text = parts(os.fspath(source))[0]  # the document a FILE#REF or an ID#REF names
     if is_id(text):
         return "model"  # a document by its id
     return _SUFFIXES.get(Path(text).suffix.lower(), "other")

@@ -229,6 +229,23 @@ class SnapshotTest(unittest.TestCase):
                                                  "Use solid.")
         self.assertFalse((folder / "review.png").exists())
 
+    def test_a_snapshot_draws_a_whole_document_and_says_how_to_draw_a_part_alone(self) -> None:
+        # A source naming something inside a document (a ref, as inspect takes one) is refused before anything
+        # runs, saying what to give and how to draw one part; it once said "is neither a document nor a file".
+        from cad.engine import api
+
+        for source, said in (("0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7",
+                              "a snapshot draws a whole document, so its source names no #bracket/face 7: give "
+                              "0dc50a92-a21f-5895-a245-ebdeb5352f3b; --display '{\"isolated\": [\"bracket\"]}' draws "
+                              "bracket alone"),
+                             (f"{self.document}#plate", f"a snapshot draws a whole document, so its source names no "
+                                                        f"#plate: give {self.document}; --display '{{\"isolated\": "
+                                                        f"[\"plate\"]}}' draws plate alone")):
+            with self.subTest(source=source), self.assertRaises(SnapshotRefused) as refused:
+                api.snapshot(source, self.folder / "whole.png", daemon=False)
+            self.assertEqual(str(refused.exception), said)
+        self.assertFalse((self.folder / "whole.png").exists())
+
     def test_a_snapshot_says_its_stages_as_it_reaches_them_and_a_job_s_pictures_are_counted(self) -> None:
         from cad.engine import snapshot as drawing
 
