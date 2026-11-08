@@ -1862,7 +1862,9 @@ name, never left out of the picture; `--json` reports what was drawn
 and each stage's milliseconds (`serveMs`, `meshMs`, `sceneMs` when a scene is made, `presentMs`,
 `frameMs`, `drawMs`, `renderMs`, `totalMs`; a file no document: `readMs` its reader, `openMs` its
 render process opening it). `parts` and `exploded` for a document that places one
-part are refused by name before anything renders. `--camera` is a preset, an `azimuth:elevation` pair, a camera object or `authored`: an
+part are refused by name before anything renders, the document named as its file is, or a model's by
+its own name (the picture of a document no file holds is drawn under a name made from OUT, which no
+refusal says). `--camera` is a preset, an `azimuth:elevation` pair, a camera object or `authored`: an
 object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`, `zoom`,
 `orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
 `focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y

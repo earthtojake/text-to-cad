@@ -213,6 +213,22 @@ class SnapshotTest(unittest.TestCase):
             pictures[name] = out.read_bytes()
         self.assertNotEqual(pictures["pair"], pictures["iso"])
 
+    def test_what_a_model_does_not_offer_is_refused_by_the_model_s_own_name(self) -> None:
+        # A model's document no file holds is drawn under a name made from OUT; its refusals name the document as
+        # its code labels it, never that stand-in (they once said "review.xbf places 1 part").
+        from cad.engine import api
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        script = folder / "plate.py"
+        script.write_text("import build123d as bd\nfrom cad import model\n\n\n@model\ndef plate():\n"
+                          "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
+        with self.assertRaises(SnapshotRefused) as refused:
+            api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)
+        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 part. "
+                                                 "Use solid.")
+        self.assertFalse((folder / "review.png").exists())
+
     def test_a_snapshot_says_its_stages_as_it_reaches_them_and_a_job_s_pictures_are_counted(self) -> None:
         from cad.engine import snapshot as drawing
 

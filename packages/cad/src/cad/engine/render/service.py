@@ -245,8 +245,11 @@ def picture(canvas: Any, paint: Callable[[np.ndarray], None] | None, still: Any,
 class Held:
     """One document as a renderer holds it (see the module docstring)."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, name: str | None = None) -> None:
         self.path = Path(path)
+        # What a picture's refusals call the document: its file's name, or the model's own for a build's
+        # document that no file holds, drawn under a stand-in path (``snapshot._occt``).
+        self.name = name or self.path.name
         self.structure: dict[str, Any] | None = None
         self.version: str | None = None
         self.buffers: dict[str, bytes] = {}
@@ -349,14 +352,14 @@ class Held:
         shown, posed = self.structure, None
         if still.pose is not None:
             if self.kind is not None and self.poser is None:
-                raise SnapshotRefused(f"--pose poses a mechanism; {self.path.name} is a mesh and has none")
+                raise SnapshotRefused(f"--pose poses a mechanism; {self.name} is a mesh and has none")
             try:
                 shown = (self.poser or posed_structure)(self.structure, still.pose)
             except ValueError as error:  # mechanism.KinematicsError: what the pose names wrong, by name
                 raise SnapshotRefused(f"--pose: {error}") from None
             posed = shown["kinematics"]["pose"]
-        refusals(still, shown, self.path.name)
-        hidden = hidden_instances(shown, still.display, self.path.name)
+        refusals(still, shown, self.name)
+        hidden = hidden_instances(shown, still.display, self.name)
         clock = time.perf_counter()
         scene, fresh = self._scene(still.preview, still.drawn)
         if fresh:
@@ -500,7 +503,8 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
         buffers = {p["key"]: server.cache.get(p["key"]) for p in structure["prototypes"]}
     finally:
         server.stop()
-    held = Held(document)
+    stand_in = source is not None and getattr(source, "path", None) is None  # a build's document, no file of it
+    held = Held(document, name=structure.get("name") if stand_in else None)
     try:
         timings = {"serveMs": round((served - started) * 1000), "meshMs": round((time.perf_counter() - served) * 1000)}
         held.hold(structure, buffers)
