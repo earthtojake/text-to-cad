@@ -307,6 +307,13 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import memo\n", {"build123d"}),
                 ("from cad.ap242 import posed\n", {"build123d"}),
                 ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # A stress study is calculix's operation, and needs what its operations do beside it: the kernel
+                # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
+                # calculix's, as is its command.
+                ("import cad\ncad.step.solve('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
+                ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
+                ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
+                ("from cad.calculix import _program\n", {"calculix"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
@@ -322,6 +329,7 @@ class ChoosingTest(unittest.TestCase):
 
         self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
         self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("ccx", "-i", "job").integrations, ("calculix",), "ccx alone: no mesher, no kernel")
         self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
                          "an explicit --with still works")
         self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))

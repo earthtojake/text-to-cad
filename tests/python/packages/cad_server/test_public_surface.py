@@ -47,6 +47,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+    # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
+    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).

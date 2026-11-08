@@ -9,7 +9,8 @@ step`` is one object that is
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
-  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a board's ``.drc``, a
+  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
+  the stress study, ``cad._internal.fea.operation``; a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
@@ -76,6 +77,13 @@ class DocumentType(types.ModuleType):
             from cad._internal.manufacturing import dfm_for
 
             value = dfm_for(entry.id)
+            self.__dict__[name] = value
+            return value
+        if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":
+            # The stress study every B-rep type shares (``cad._internal.fea.operation``).
+            from cad._internal.fea.operation import solve_for
+
+            value = solve_for(entry.id)
             self.__dict__[name] = value
             return value
         if name.startswith("__"):
