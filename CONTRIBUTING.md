@@ -60,11 +60,14 @@ scripts/bundle/bundle.sh
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
-snapshot is painted with Pillow and needs no display. On Linux with no
-screen (a server, a container, CI) that context is an X server's: install Xvfb,
-Mesa's software GL and the font the stills set their text in, and run the package
-suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
-snapshot fails, saying so.
+snapshot is painted with Pillow and needs no display. On Linux that context is an X
+server's: the OCP wheels we pin draw through GLX alone (no EGL, no OSMesa), so there is no
+off-screen context without one. A snapshot draws on the request's `DISPLAY`, else on the
+engine's: the daemon's own, else an Xvfb the daemon starts itself where `Xvfb` is on PATH
+(`cad_server/engine/display.py`). With no screen (a server, a container, CI) install Xvfb,
+Mesa's software GL and the font the stills set their text in; the package suites draw in the
+test process too, so run them under `xvfb-run`, as CI's Linux job does. With neither a
+display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core

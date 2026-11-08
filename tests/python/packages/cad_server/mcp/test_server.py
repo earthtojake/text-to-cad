@@ -848,12 +848,19 @@ class InlineServerTest(_Session):
         view = self.launch("cad_show", {"source": self.bracket})["view"]
         self.opens_later(view, "inline", self.bracket)
         self.assertEqual(self.call("cad_screenshot", {"view": view})["content"][0]["data"], "iVBORw0KGgo=")
-        # A card the chat never draws (the person has not allowed it, or it is collapsed) is said so, not "closed".
+        # A card that never reaches this server -- the chat has not drawn it (the person has not allowed it, or it is
+        # collapsed), or drew it and carries none of its calls (the Claude app's Code tab, #797) -- is said so, not
+        # "closed": with the page its card links, which the person can open instead, and the picture the agent can draw.
+        self.server._viewer_url = lambda model=None: "http://127.0.0.1:3245/doc?token=t"
         unseen = self.launch("cad_show", {"source": self.loose})["view"]
         with mock.patch("cad_server.mcp.server.OPENING_SECONDS", 0.2):
-            shot = self.call("cad_screenshot", {"view": unseen})
-        self.assertTrue(shot["isError"])
-        self.assertIn("has not opened yet", shot["content"][0]["text"])
+            for tool in ("cad_screenshot", "cad_view"):
+                answer = self.call(tool, {"view": unseen})
+                self.assertTrue(answer["isError"])
+                said = answer["content"][0]["text"]
+                self.assertTrue(said.startswith("That viewer has not reached CAD's server."), said)
+                self.assertIn("give them the model's page to open in their browser instead: http://127.0.0.1:3245/doc?token=t.", said)
+                self.assertIn("use cad_snapshot", said)
         # A token no cad_show of this server named is not waited for.
         with mock.patch.object(self.server.views, "wait", side_effect=AssertionError("waited for an unknown view")):
             self.assertIn("not open", self.call("cad_screenshot", {"view": "cad-9-unknown"})["content"][0]["text"])

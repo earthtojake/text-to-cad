@@ -6,7 +6,8 @@ Every test that draws makes an OpenGL context (`render/context.py`) and is skipp
 where none can be made -- but fails on CI with an X display, which was set up to draw
 (`tests/python/support/opengl.py`). macOS draws on a hidden Cocoa window. Linux needs an X server
 with GLX -- under Xvfb: `xvfb-run -a scripts/test/test-python.sh tests/python/packages/cad/engine/test_render.py`
--- or an OCCT built with EGL; Windows draws on a hidden window.
+-- or an OCCT built with EGL; an engine with no display draws on an Xvfb it starts itself
+(`EngineDisplayTest`). Windows draws on a hidden window.
 
 The golden pictures (`render_golden/*.png`) are the material fixture (`test_materials.py`'s bench,
 its pane hinged on the plate for a pose) at 320x240, drawn on macOS: one per display mode, and Explode,
@@ -48,6 +49,8 @@ GOLDEN = Path(__file__).resolve().parent / "render_golden"
 WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 SIZE = (320, 240)
 PLATFORM = context.platform()  # a row a platform draws apart has a golden of its own there
+# What reaches an X display: taken from the engine's environment and its requests, where a test draws with none.
+X_VARIABLES = ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "CAD_ENGINE_DISPLAY", "CAD_ENGINE_XAUTHORITY")
 
 # The material fixture: a steel block, a brushed aluminium plate, a PLA part with a lacquered top,
 # a glass pane, and two placements of one bracket apart by a look alone. Its pane is hinged on the
@@ -272,13 +275,37 @@ def sample():
                 self.assertAlmostEqual(got, want, delta=1e-6)
 
 class ContextTest(unittest.TestCase):
-    def test_a_linux_with_no_display_is_refused_naming_xvfb(self) -> None:
-        environment = {key: value for key, value in os.environ.items() if key != "DISPLAY"}
+    def test_a_linux_with_no_display_is_refused_naming_what_to_install(self) -> None:
+        # Neither the request's DISPLAY nor the engine's (an Xvfb it starts where one is installed).
+        environment = {key: value for key, value in os.environ.items() if key not in X_VARIABLES}
         with mock.patch.object(context, "platform", return_value="linux"), \
                 mock.patch.object(context, "_has_xlib", return_value=True), mock.patch.dict(os.environ, environment, clear=True):
-            with self.assertRaisesRegex(context.Unavailable, "Xvfb"):
+            with self.assertRaisesRegex(context.Unavailable, "apt-get install xvfb libgl1 libgl1-mesa-dri"):
                 context.driver()
             self.assertIn("Xvfb", context.available())
+
+    def test_a_request_with_no_display_draws_on_the_engine_s(self) -> None:
+        # A worker adopts its request's environment; the engine's display is what it draws on where that has
+        # none, named to OCCT: never this process's DISPLAY, which the request did not give.
+        named = []
+
+        def connect(*given):  # the display named, and the authority Xlib reads as it connects
+            named.append(([str(arg.ToCString()) for arg in given], os.environ.get("XAUTHORITY")))
+            return object()
+
+        environment = {**{key: value for key, value in os.environ.items() if key not in X_VARIABLES},
+                       "CAD_ENGINE_DISPLAY": ":42", "CAD_ENGINE_XAUTHORITY": "/engine/cookie", "XAUTHORITY": "/mine"}
+        with mock.patch.object(context, "platform", return_value="linux"), \
+                mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch.object(context, "_CONNECTION", threading.local()), \
+                mock.patch("OCP.Aspect.Aspect_DisplayConnection", side_effect=connect):
+            self.assertEqual(context.display(), ":42")
+            context._connection()
+            context._connection()  # one connection a display, kept
+            self.assertEqual(os.environ["XAUTHORITY"], "/mine", "the request's own, put back")
+            os.environ["DISPLAY"] = ":5"
+            context._connection()  # the request's own, as OCCT reads it
+        self.assertEqual(named, [([":42"], "/engine/cookie"), ([], "/mine")])
 
     def test_a_refused_connection_is_asked_again_at_the_next_canvas(self) -> None:
         # One refused connection (an X server busy for a moment) fails that canvas, not the process's.
@@ -818,6 +845,113 @@ class DaemonRenderTest(unittest.TestCase):
         self.assertEqual((report["renderer"], report["exploded"]), ("occt", 0.5))
         self.assertNotIn("process", report)
         self.assertEqual([path for path in self.state.iterdir() if path.suffix == ".door"], [], "no daemon started")
+
+
+@unittest.skipUnless(PLATFORM == "linux", "Linux draws on an X display; macOS and Windows on a hidden window")
+class EngineDisplayTest(unittest.TestCase):
+    """A Linux engine draws a model's still and a file's where the request names no ``DISPLAY``
+    (``cad_server.engine.display``): on the daemon's own display where it has one, and on an Xvfb it
+    starts itself where it has none -- no X server of the test's, no ``xvfb-run``: the CI job installs
+    Xvfb and runs its suite under ``xvfb-run``, and this test takes that display away from the engine
+    and every request it sends. The pictures are the ones drawn on the test's own display. The wheels'
+    OpenGL is GLX alone (``render/context.py``), so this is the off-screen route there is."""
+
+    def setUp(self) -> None:
+        self.folder = Path(tempfile.mkdtemp(prefix="engine-display-")).resolve()
+        self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp")).resolve()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, self.state, ignore_errors=True)
+        self.bare = {**{key: value for key, value in os.environ.items() if key not in X_VARIABLES},
+                     "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state), "CAD_ENGINE_MESH": "inline"}
+        self.addCleanup(self.run_in, self.bare, "-m", "cad_server.engine", "stop")
+        (self.folder / "pair.py").write_text(textwrap.dedent(PAIR.format(size=10)), encoding="utf-8")
+
+    def run_in(self, env: dict[str, str], *argv: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, *argv], cwd=self.folder, env=env, capture_output=True, text=True,
+                              timeout=300)
+
+    def pictures(self, env: dict[str, str]) -> dict[str, np.ndarray]:
+        """The model and its file drawn through the engine, asked with ``env``: each picture's pixels."""
+        from cad.engine.ids import model_id
+
+        found = {}
+        for name, source in (("model", model_id(self.folder / "pair.py", "pair")), ("file", "XBF/pair.xbf")):
+            done = self.run_in(env, "-m", "cad_server.engine", "snapshot", source, f"{name}.png", "--width", "200",
+                               "--height", "150", "--json")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1])["renderer"], "occt")
+            found[name] = drawn((self.folder / f"{name}.png").read_bytes(), (200, 150))
+        return found
+
+    def drawn_here(self) -> np.ndarray | None:
+        """The file drawn in a process of its own on the test's display (``daemon=False``), where it has one."""
+        if not os.environ.get("DISPLAY") or context.available() is not None:
+            return None
+        code = ("from cad.engine import api; api.snapshot('XBF/pair.xbf', 'here.png', width=200, height=150, "
+                "daemon=False)")
+        done = self.run_in({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state)}, "-c", code)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return drawn((self.folder / "here.png").read_bytes(), (200, 150))
+
+    def test_an_engine_with_no_display_draws_on_an_xvfb_of_its_own(self) -> None:
+        if shutil.which("Xvfb") is None:
+            opengl.require("Xvfb is not on PATH (apt-get install xvfb libgl1-mesa-dri)", "no Xvfb for the engine")
+        done = self.run_in(self.bare, "pair.py")  # the daemon starts here, with no display
+        self.assertEqual(done.returncode, 0, done.stderr)
+        found = self.pictures(self.bare)
+        here = self.drawn_here()
+        for name, picture in found.items():
+            if here is not None:
+                self.assertLessEqual(mismatch(picture, here), 0.015, name)
+        # The Xvfb is the daemon's: gone with it.
+        xvfb = _xvfb_pids(self.state)
+        self.assertTrue(xvfb, "the engine started no Xvfb")
+        self.run_in(self.bare, "-m", "cad_server.engine", "stop")
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and any(_alive(pid) for pid in xvfb):
+            time.sleep(0.1)
+        self.assertFalse([pid for pid in xvfb if _alive(pid)], "the engine's Xvfb outlived it")
+
+    def test_a_request_with_no_display_draws_on_the_engine_s(self) -> None:
+        # The field's failure: a daemon started where there is a display, asked from a shell with none.
+        if not os.environ.get("DISPLAY"):
+            opengl.require("no DISPLAY to start the engine on", "no display")
+        gl()
+        done = self.run_in({**self.bare, "DISPLAY": os.environ["DISPLAY"],
+                            **({"XAUTHORITY": os.environ["XAUTHORITY"]} if "XAUTHORITY" in os.environ else {})},
+                           "pair.py")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        found = self.pictures(self.bare)
+        here = self.drawn_here()
+        for name, picture in found.items():
+            self.assertLessEqual(mismatch(picture, here), 0.015, name)
+        self.assertEqual(_xvfb_pids(self.state), [], "the engine had a display: it starts no Xvfb")
+
+
+def _xvfb_pids(engine: Path) -> list[int]:
+    """The Xvfb processes the engine in the folder ``engine`` started (``display.py``): each under the shell
+    that stops it with its daemon, whose environment names that folder; by /proc."""
+    def read(pid: str, name: str) -> list[bytes]:
+        try:
+            return Path(f"/proc/{pid}/{name}").read_bytes().split(b"\0")
+        except OSError:
+            return [b""]
+
+    def parent(pid: str) -> str:
+        try:
+            return Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").rpartition(")")[2].split()[1]
+        except (OSError, IndexError):
+            return "0"
+
+    found = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit() or Path(read(entry.name, "cmdline")[0].decode(errors="replace")).name != "Xvfb":
+            continue
+        shell = parent(entry.name)
+        if any(b"read -r _ <&3" in part for part in read(shell, "cmdline")) and \
+                f"CAD_ENGINE_DIR={engine}".encode() in read(parent(shell), "environ"):
+            found.append(int(entry.name))
+    return found
 
 
 def _alive(pid: int) -> bool:

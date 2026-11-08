@@ -115,13 +115,15 @@ def refuse_other(document_type: str, source: Any) -> None:
     entry = DOCUMENT_TYPES[document_type]
     if isinstance(source, (str, os.PathLike)):
         text = os.fspath(source)
+        from cad.engine.addresses import parts
         from cad.engine.ids import is_id
 
-        if is_id(str(text).partition("#")[0]):
+        named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
+        if is_id(named):
             if entry.has_file:
                 raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
             return
-        found = type_of(str(text).partition("#")[0])
+        found = type_of(named)
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:

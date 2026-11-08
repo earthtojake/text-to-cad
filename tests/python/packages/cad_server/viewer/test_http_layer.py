@@ -121,7 +121,7 @@ class HostGate(HttpLayerTestCase):
         self.assertEqual(
             body.decode("utf-8"),
             '{"error":"Host header \'attacker.example\' is not a local name; '
-            'refusing (DNS-rebinding defense)","hint":"open the CAD Viewer at 127.0.0.1 or localhost"}',
+            'refusing (DNS-rebinding defense)","hint":"open this page at 127.0.0.1 or localhost"}',
         )
         self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
         self.assertEqual(headers["cache-control"], "no-store")

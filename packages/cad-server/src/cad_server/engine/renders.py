@@ -23,7 +23,21 @@ __all__ = ["Refused", "Renders", "answer_png"]
 
 
 class Refused(ValueError):
-    """A request the document does not offer, refused by name before anything was drawn."""
+    """A request the document does not offer, refused by name before anything was drawn; ``part``: which part
+    of the request (``SnapshotRefused.part``), where the render process said."""
+
+    def __init__(self, text: str, part: str | None = None) -> None:
+        super().__init__(text)
+        self.part = part
+
+
+def _failed(answer: dict[str, Any], otherwise: str) -> RuntimeError:
+    """A render process's failure, in its words (``otherwise`` where it said none), with the type it failed with
+    (``raised``: ``cad.engine.render.context.Unavailable`` for no OpenGL context), which the daemon answers
+    beside them (``Daemon.draw``)."""
+    error = RuntimeError(answer.get("failed") or otherwise)
+    error.raised = answer.get("type") if isinstance(answer.get("type"), str) else None  # type: ignore[attr-defined]
+    return error
 
 
 class Renders:
@@ -57,7 +71,7 @@ class Renders:
                                  "meshes": [[key, len(data)] for key, data in zip(lacking, buffers)]},
                                 None, b"".join(buffers))
         if "held" not in answer:
-            raise RuntimeError(answer.get("failed") or "the renderer would not hold the document")
+            raise _failed(answer, "the renderer would not hold the document")
         state.update(version=doc.version, keys={p["key"] for p in structure["prototypes"]}, held=answer["held"])
         timings["holdMs"] = round((time.perf_counter() - clock) * 1000)
         state["meshed"] = {key: meshed.get(key) for key in ("parts", "meshed", "seconds", "triangles", "mode")}
@@ -74,9 +88,9 @@ class Renders:
             clock = time.perf_counter()
             answer = render.request({"op": "open", "path": str(path)})
             if "refused" in answer:
-                raise Refused(answer["refused"])
+                raise Refused(answer["refused"], answer.get("part"))
             if "opened" not in answer:
-                raise RuntimeError(answer.get("failed") or f"the renderer could not read {path.name}")
+                raise _failed(answer, f"the renderer could not read {path.name}")
             opened = answer["opened"]
             state.update(version="opened", files=opened["files"], held=opened)
             timings.update(openMs=round((time.perf_counter() - clock) * 1000), readMs=opened["readMs"])
@@ -104,9 +118,9 @@ class Renders:
     @staticmethod
     def _drawn(render: Any, answer: dict[str, Any], timings: dict[str, int]) -> tuple[bytes, dict[str, Any]]:
         if "refused" in answer:
-            raise Refused(answer["refused"])
+            raise Refused(answer["refused"], answer.get("part"))
         if "done" not in answer:
-            raise RuntimeError(answer.get("failed") or "the renderer drew nothing")
+            raise _failed(answer, "the renderer drew nothing")
         report = answer["done"]
         render.state["frames"] = render.state.get("frames", 0) + 1
         report["timings"] = {**timings, **report.get("timings", {})}
