@@ -101,6 +101,7 @@ CHECKS = replace(
     counted=False,
     rank=1,
     watched_rank=None,
+    noted=("process", "checks"),
     drain=False,
     standby=None,
 )

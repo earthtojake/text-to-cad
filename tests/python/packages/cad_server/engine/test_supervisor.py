@@ -66,6 +66,27 @@ class Fake:
 
 
 class SchedulingTest(unittest.TestCase):
+    def test_a_lease_that_gives_up_leaves_the_queue_and_the_next_is_granted(self) -> None:
+        supervisor = self.supervisor(1)
+        holding = supervisor.lease("worker", "a.py", {})
+        gave_up, raised = threading.Event(), []
+
+        def wait() -> None:
+            try:
+                supervisor.lease("worker", "a.py", {}, gave_up=gave_up.is_set)
+            except supervised.Withdrawn as error:
+                raised.append(error)
+
+        waiting = threading.Thread(target=wait, daemon=True)
+        waiting.start()
+        await_(lambda: supervisor.waiting("worker") == 1, "the lease waits its turn")
+        gave_up.set()
+        waiting.join(30)
+        self.assertFalse(waiting.is_alive())
+        self.assertEqual((len(raised), supervisor.waiting("worker")), (1, 0))
+        supervisor.release(holding)
+        self.assertIs(self.at_once(supervisor, lambda: supervisor.lease("worker", "a.py", {})), holding)
+
     def supervisor(self, cap: int, services=(WORKERS, RENDERS), memory: float | None = None,
                    watched: set | None = None, gate: threading.Event | None = None) -> Supervisor:
         self.said: list = []

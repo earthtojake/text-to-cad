@@ -898,7 +898,8 @@ def status_text(answer: dict[str, Any]) -> str:
         now = time.time()
         # A worker's retirement names its script; a render process's its document's renderer.
         lines.append("retired: " + " · ".join(
-            (f"{Path(str(row['script'])).name}" if "script" in row else f"{Path(str(row.get('document'))).name}'s renderer")
+            (f"{Path(str(row['script'])).name}" if "script" in row else "the checks process" if "process" in row
+             else f"{Path(str(row.get('document'))).name}'s renderer")
             + f" ({row['reason']}) {_span(now - row['at'])} ago" for row in retired))
     serving = answer.get("serving")
     if serving:

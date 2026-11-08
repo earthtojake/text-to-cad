@@ -199,8 +199,8 @@ class Service:
         _closed("stderr", self.stderr, ("relay", "keep"))
         _closed("interpreter", self.interpreter, ("environment", "lease"))
         if self.noted is not None:
-            _closed("noted's key", self.noted[0], ("script", "document"))
-            _closed("noted's count", self.noted[1], ("builds", "requests"))
+            _closed("noted's key", self.noted[0], ("script", "document", "process"))
+            _closed("noted's count", self.noted[1], ("builds", "requests", "checks"))
         for seconds in (self.ready_seconds, self.standby.ready_seconds if self.standby else None):
             if seconds is not None and not seconds > 0:
                 raise ValueError(f"ready_seconds is {seconds!r}: a positive number, or None")
