@@ -53,6 +53,11 @@ _TERM = 1e-12
 # A free-form face's bound narrowed a second time (``_narrowed``): its parameter range in this many
 # pieces each way.
 _PIECES = 4
+# A periodic B-spline's range is cut with its start this close to its first knot set on it, and one this
+# close to a whole period cut as the whole period (``_in_period``): OCCT 8.0's ``Segment`` of a
+# periodic surface from a start a hair below its first knot over a whole period crashes the process,
+# and over a hair less than one returns a surface with no poles, so the face keeps its coarser bound.
+_PERIODIC = 1e-9
 
 
 def _shown(value: float) -> float:
@@ -327,6 +332,11 @@ def _hull(surface: Any, low_u: float, high_u: float, low_v: float, high_v: float
 
     try:
         cut = GeomConvert.SurfaceToBSplineSurface_s(surface)
+        first_u, last_u, first_v, last_v = cut.Bounds()
+        if cut.IsUPeriodic():
+            low_u, high_u = _in_period(low_u, high_u, first_u, last_u)
+        if cut.IsVPeriodic():
+            low_v, high_v = _in_period(low_v, high_v, first_v, last_v)
         cut.CheckAndSegment(low_u, high_u, low_v, high_v)
         box = Bnd_Box()
         for row in range(1, cut.NbUPoles() + 1):
@@ -335,6 +345,21 @@ def _hull(surface: Any, low_u: float, high_u: float, low_v: float, high_v: float
     except Exception:  # noqa: BLE001 - a range the kernel will not cut keeps the bound it has
         return None
     return None if box.IsVoid() else _got(box)
+
+
+def _in_period(low: float, high: float, first: float, last: float) -> tuple[float, float]:
+    """A periodic direction's range from ``low`` to ``high`` as one the kernel cuts soundly (``_PERIODIC``):
+    a whole period or more, ``first`` to ``last``; else the same span, its start moved by whole periods
+    into ``first`` to ``last``, and set on ``first`` where it is that close to a knot at either end."""
+    period = last - first
+    if high - low >= period - _PERIODIC:
+        return first, last
+    start = first + math.fmod(low - first, period)
+    if start < first:
+        start += period
+    if start > last - _PERIODIC or start < first + _PERIODIC:
+        start = first
+    return start, start + (high - low)
 
 
 def _reach(box: _Box, row: tuple[float, ...], outward: float) -> tuple[float, list[int]]:
