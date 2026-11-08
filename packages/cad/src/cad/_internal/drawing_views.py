@@ -378,9 +378,35 @@ def _plane_cut(shape, point, look) -> tuple:
     beyond the plane, the faces the cut leaves in the plane)."""
     from build123d import Compound, GeomType, Keep, Plane
 
-    kept = shape.split(Plane(origin=point, z_dir=look), keep=Keep.BOTTOM)
-    if isinstance(kept, (list, tuple)):
-        kept = Compound(list(kept))
+    plane = Plane(origin=point, z_dir=look)
+    # OCCT's splitter can come back done and short: on a part of two solids read
+    # from STEP its first run in a process returned three pieces of four, one half
+    # of one solid missing, and the next run all four. Kept as it came, that part
+    # vanished from the section without a word. The pieces of a cut add up to the
+    # part, so a split that lost volume is run again. A plane that runs along a thin
+    # part (a wire lying in it) can lose slivers every time: the section is refused,
+    # never drawn short (law 17).
+    whole = sum(abs(s.volume) for s in shape.solids())
+    best, best_found = None, -1.0
+    for _attempt in range(3):
+        pieces = list(shape.split(plane, keep=Keep.ALL) or [])
+        found = sum(abs(s.volume) for piece in pieces for s in piece.solids())
+        if found > best_found:
+            best, best_found = pieces, found
+        # A lost piece is a whole region; cutting curved faces moves the sum by a few
+        # parts in 1e5 either way, which is not a loss.
+        if whole - found <= 1e-3 * whole:
+            break
+    else:
+        label = getattr(shape, "label", "") or "a part"
+        raise ValueError(
+            f"section through {_where(point)}: the cut of {label!r} kept {best_found:.1f} of its {whole:.1f} mm3 "
+            "after three tries (OCCT's splitter drops slivers where the plane runs along a thin part), so its "
+            "section would be missing pieces. A plane a little off the part's axis cuts it cleanly.")
+    pieces = best or []
+    # Below the plane, as build123d's Keep.BOTTOM sorts them: by each piece's centre.
+    below = [piece for piece in pieces if plane.to_local_coords(piece).center().Z < 0]
+    kept = None if not below else below[0] if len(below) == 1 else Compound(below)
     faces = []
     for face in (kept.faces() if kept is not None else []):
         if face.geom_type != GeomType.PLANE:

@@ -867,6 +867,12 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
     # The sheet's own furniture as (x0, x1, y0, y1), and the notes beside it: no
     # annotation lands on them.
     furnished = [*furniture, *_notes_box(sheet)]
+    # The material keys are placed already but drawn last: a callout searching for
+    # free paper (a thin layer's material, a balloon) has to see them now, or it
+    # lands where a key row prints later and the sheet refuses itself as crowded.
+    for table, (tx, ty) in zip(keyed, keyed_at):
+        tw, tall = table.size()
+        furnished.append((tx, tx + tw, ty - tall, ty))
 
     def blocked(x0, x1, y0, y1, own_box):
         """Whether a landing area [x0,x1]x[y0,y1] runs off the frame, into another view,
@@ -959,6 +965,13 @@ def _draw_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: l
                 msp.add_line(run[0], run[-1], dxfattribs={"layer": "CENTER"})
 
         def centre_circle(c, r) -> None:
+            # Two parts can carry one pattern (a boss's holes and the clearance holes
+            # of the plate screwed to it, coaxial): read off an assembly it is two bolt
+            # circles of one size on one centre, and drawn twice the sheet fails its
+            # duplicate check. One pitch circle is drawn once.
+            key = ("pitch", q(c[0]), q(c[1]), q(r))
+            if not once(key):
+                return
             if region is None:
                 msp.add_circle(c, r, dxfattribs={"layer": "CENTER"})
                 return
