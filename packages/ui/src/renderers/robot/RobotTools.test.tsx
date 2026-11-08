@@ -12,7 +12,7 @@ import { fixtureGlb, fixturePayload } from './__tests__/robotFixtures.js';
 
 
 // The robot renderer's tools and tool stack, mounted the way a host mounts it: the FileViewer over the
-// real robot registration, a real CAD client whose backend is a fetch answering what cadgen answers
+// real robot registration, a real CAD client whose backend is a fetch answering what the server answers
 // (the resolved robot payload and the stored meshes it names), the
 // real robot loader and the real robot scene graph (three.js objects need no WebGL). What is stood in
 // for is the WebGL viewport alone — `ShellViewport` is a box that hands the renderer's overlay its
@@ -22,7 +22,7 @@ import { fixtureGlb, fixturePayload } from './__tests__/robotFixtures.js';
 
 const FILE = '/models/arm.urdf';
 // The checked-in native payload, narrowed to the two links and one control this tool flow uses.
-// Its primitive GLBs are the exact objects cadgen wrote for the fixture description.
+// Its primitive GLBs are the exact objects the server wrote for the fixture description.
 const robotPayload = () => {
   const robot = fixturePayload('arm.urdf');
   robot.root = 'base';
@@ -85,7 +85,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 async function openRobot({ phone = false } = {}) {
   // The file as the catalog lists it now: a save is a new revision, under a new version of its URL,
-  // and the loader reads cadgen's resolved payload for that revision.
+  // and the loader reads the server's resolved payload for that revision.
   const id = ++nextRobot;
   const served = { revision: 1, robot: robotPayload() };
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -135,7 +135,7 @@ async function openRobot({ phone = false } = {}) {
   const tools = () => within(pane).getByRole('group', { name: 'Interaction tools' });
   const robot = {
     pane, client,
-    /** Save the file again, as cadgen now resolves it, and let the catalog say so: the robot on screen loads the new revision. */
+    /** Save the file again, as the server now resolves it, and let the catalog say so: the robot on screen loads the new revision. */
     async publish(next: ReturnType<typeof robotPayload>) {
       served.revision += 1;
       served.robot = next;
@@ -233,7 +233,7 @@ it('robot Select opens in hand, before Pencil, Shapes, Measure and Clip: it pick
   robot.client.dispose();
 });
 
-it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; Home is the cube's; the navbar holds none of them", async () => {
+it("a robot is a 3D view: Projection, Display and Preview end the strip, in the section of Clip's, one rule in all; the corner is the cube's alone; the navbar holds none of them", async () => {
   const robot = await openRobot();
   const strip = within(robot.pane).getByRole('group', { name: 'Interaction tools' });
   const actions = strip.querySelector<HTMLElement>('[data-view-controls]')!;
@@ -241,7 +241,7 @@ it("a robot is a 3D view: Projection, Display and Preview end the strip, in the 
   expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
   expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
   expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
-  expect(robot.pane.querySelector('[data-view-home]')?.getAttribute('aria-label')).toBe('Home');
+  expect(within(robot.pane).queryByRole('button', { name: 'Home' })).toBeNull();
   expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   robot.client.dispose();
 });

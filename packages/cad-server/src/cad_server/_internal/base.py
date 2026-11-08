@@ -486,12 +486,19 @@ def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
              *recipe.requirement]]
 
 
+def _kernel_download_mb() -> int:
+    """About how many megabytes the kernel's extra downloads: the registry's one figure for it."""
+    from cad.registry import INTEGRATIONS
+
+    return INTEGRATIONS[EXTRA].download_mb
+
+
 def recipe(installation: Installation) -> Recipe:
     """The base's recipe: ``cad[build123d]`` as the installation installs it, on its own Python."""
     return Recipe(what=WHAT, python=installation.executable, requirement=tuple(installation.requirement()),
                   release=installation.release, source=installation.source,
                   making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {installation.python}",
-                  downloading="downloading the CAD kernel (about 220 MB) and what it needs, once")
+                  downloading=f"downloading the CAD kernel (about {_kernel_download_mb()} MB) and what it needs, once")
 
 
 def _say(line: str) -> None:

@@ -1,4 +1,5 @@
 import { english, resolveLocale, translator } from '@cad/ui/i18n';
+import { OPEN_IN_VIEWER, unreachableKey } from './host/unreachable.js';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
@@ -38,14 +39,13 @@ export default function Notice({ title, message, details, t = english }: { title
  * an ordinary one, in a new window). Said in `t`'s language.
  */
 export function Unreachable({ page, model, open, t = english }: { page: string | null; model: boolean; open?: (url: string) => boolean; t?: Translate }) {
-  const message = t(page ? (model ? 'cad.unreachable.openModel' : 'cad.unreachable.openViewer')
-    : (model ? 'cad.unreachable.askModel' : 'cad.unreachable.askViewer'));
+  const message = t(unreachableKey(Boolean(page), model));
   return <div className="cad-notice text-ui" role="alert" data-cad-unreachable="">
     <div className="flex max-w-md flex-col items-start gap-3">
       <p className="text-foreground">{message}</p>
       {page ? <a href={page} target="_blank" rel="noopener noreferrer"
         className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-        onClick={event => { if (open?.(page)) event.preventDefault(); }}>{t('cad.openInViewer')}</a> : null}
+        onClick={event => { if (open?.(page)) event.preventDefault(); }}>{t(OPEN_IN_VIEWER)}</a> : null}
     </div>
   </div>;
 }

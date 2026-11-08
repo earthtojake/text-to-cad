@@ -107,6 +107,12 @@ class SidesTest(unittest.TestCase):
                         offenders.append(f"{name}:{line} -> {imported}")
         self.assertEqual(offenders, [])
 
+    def test_nothing_of_ours_imports_the_deprecated_alias(self) -> None:
+        offenders = [f"{name}:{line} -> {imported}" for top in ("cad", SERVER_PACKAGE, SHIM_PACKAGE)
+                     for name, path in modules(top).items() for line, imported in imports(name, path)
+                     if of("cadgen", imported)]
+        self.assertEqual(offenders, [], "it warns where it is imported: only a person's program may")
+
     def test_a_models_process_loads_no_module_of_the_server_or_the_shim(self) -> None:
         code = ("import importlib, json, sys\n"
                 f"for name in {MODEL_ENTRY_POINTS!r}:\n"
@@ -145,9 +151,11 @@ class SidesTest(unittest.TestCase):
 
 # Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
-                               "PIL"},
+                               "PIL", "scipy"},
                  "cadjoint": {"cadjoint"},
                  "kicad": {"kicode"},
+                 "netgen": {"netgen"},
+                 "calculix": {"cad_ccx"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
@@ -181,7 +189,7 @@ class IntegrationsTest(unittest.TestCase):
                          for requirement in extras.get(integration.extra or "", [])}
                 self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
                                  "an integration's distributions are its extra's")
-                self.assertTrue(set(integration.modules) <= EXTRA_MODULES[integration.extra or ""])
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))

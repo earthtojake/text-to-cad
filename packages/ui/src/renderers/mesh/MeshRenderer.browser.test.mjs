@@ -122,11 +122,11 @@ const meshTools = async (pane, expected) => {
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'the view\'s controls end the strip, Preview last');
-  assert.equal(await pane.locator('[data-view-home]').getAttribute('aria-label'), 'Home', 'Home is the cube\'s, in the corner');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
-  for (const name of ['Orbit', 'Draw', 'Explode', 'Position', 'Animation']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  // The corner is the cube's alone: no Home.
+  for (const name of ['Orbit', 'Draw', 'Explode', 'Position', 'Animation', 'Home']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
 };
 /** World point -> page coordinates, from the camera the viewport publishes. */
 function projector(camera, box) {

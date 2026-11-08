@@ -132,7 +132,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   const { locale, language } = useLanguage(client.language, { preferred: navigator.languages ?? [navigator.language], initial: chosenLanguage });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
-  // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
+  // The usage stats text-to-cad sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
   const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);

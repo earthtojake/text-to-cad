@@ -195,8 +195,6 @@ async function openDisplay(user: ReturnType<typeof userEvent.setup>, root?: HTML
 const named = (button: Element) => button.getAttribute('aria-label')!.split(':')[0];
 // The view's controls: the strip's last, after its tools and a rule.
 const barButtons = () => [...document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')?.querySelectorAll('button') ?? []].map(named);
-// The view's corner: the cube, and Home at its upper-left (`ViewCorner.jsx`).
-const home = () => document.querySelector<HTMLElement>('[data-view-home]');
 // Preview's own bar, over the view's top edge: its name, and its controls at its right.
 const previewBar = () => document.querySelector<HTMLElement>('[data-preview-bar]');
 const cornerButtons = () => [...previewBar()?.querySelectorAll('button') ?? []].map(named);
@@ -328,22 +326,18 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Projection, Display and Preview end the strip and the corner is the cube's, with Home; Render is no mode of Display's, Projection a button that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
+it("Projection, Display and Preview end the strip and the corner is the cube's alone; Render is no mode of Display's, Projection a button that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
   const user = userEvent.setup({ skipHover: true });
-  viewportHandle.current = { goHome: vi.fn() };
   const { remount } = frame();
   expect([strip(), barButtons()]).toEqual([['Select', 'Pencil', 'Shapes', 'Keep', 'Pose'], ['Projection', 'Display mode', 'Preview']]);
   // After the strip's rule.
   expect(document.querySelector('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]')).not.toBeNull();
-  // The corner is the cube's and Home's alone: Home a ghost tile, with none of the strip's surface until it is
-  // hovered or focused, at the cube's upper-left; a press goes home.
+  // The corner is the cube's alone, the viewport's: the frame stands no control of its own beside it, and the view
+  // has no Home (a view comes back by Zoom to fit, or the cube's corners).
   expect([...document.querySelectorAll('[data-preview-chrome] button')].filter(button => !button.closest('[data-cad-tool-groups], [data-viewport-top-right]'))
-    .map(button => button.getAttribute('aria-label'))).toEqual(['Home']);
-  expect(FLOATING_CHROME_SURFACE_CLASS.split(' ').filter(name => home()!.classList.contains(name))).toEqual([]);
-  expect([home()!.style.right, home()!.style.bottom]).toEqual(['calc(var(--cad-viewport-corner-right, 2px) + 6rem - 16px)',
-    'calc(calc(8px + var(--cad-viewport-corner-bottom, 0px)) + 6rem - 10px)']);
-  await user.click(home()!);
-  expect(viewportHandle.current.goHome).toHaveBeenCalledTimes(1);
+    .map(button => button.getAttribute('aria-label'))).toEqual([]);
+  expect(viewportProps.current.viewCube).toBe(true);
+  expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
   const solid = render(<SolidModeIcon />).container.querySelector('svg')!;
   expect(displayButton().querySelector('svg')!.innerHTML).toEqual(solid.innerHTML);
   await openDisplay(user);

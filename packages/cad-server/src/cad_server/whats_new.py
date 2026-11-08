@@ -11,7 +11,8 @@ A person who never used an earlier release is shown nothing new. The first time 
 section -- a new device, or settings an earlier release wrote, which had none -- it decides once which it
 is, and keeps the answer: a device with an installation of an earlier release on record
 (``installations/<version>.json``, 0.10.0's on Windows in the local application data, 0.8's where it left
-them) was updated, ``{"seen": []}``; any other is a new person's, who has seen everything up to this
+them), a record naming a release or a development build of one, was updated, ``{"seen": []}``; any other
+is a new person's, who has seen everything up to this
 release, ``{"seen": ["<this release>"]}``. ``cad setup`` decides it as it sets a release up, before the
 update collects the records of the releases before; a view's read decides it where setup never ran.
 Settings that cannot be read or written show nothing: a dismissal that could not be kept would ask again
@@ -68,6 +69,17 @@ def _installed() -> list[str]:
     return found
 
 
+def _release(version: Any) -> str | None:
+    """The release an installation on record is of, by its minor: a release's version
+    (``installations.RELEASE``) or a development build of one (``<release>-dev.<time>``), as
+    ``cad.engine.places.registered`` reads a record. None for any other name, such as a test's own
+    installation (``0.0.0+test``), which is no release's."""
+    from cad_server._internal.installations import RELEASE
+
+    named = version.split("-dev.", 1)[0] if isinstance(version, str) else ""
+    return minor(named) if RELEASE.fullmatch(named) else None
+
+
 def _seen(value: Any) -> list[str]:
     """The releases a section names as seen: minors only, once each, oldest first."""
     kept = {item for item in value if isinstance(item, str) and MINOR.fullmatch(item)} if isinstance(value, list) else set()
@@ -78,7 +90,7 @@ def _decided(kept: dict[str, Any], release: str, installed: Callable[[], Iterabl
     """The section as it stays: a kept one as it is, else the decision a release makes once."""
     if isinstance(kept.get("seen"), list):
         return kept
-    updated = any((found := minor(version)) and _order(found) < _order(release) for version in installed())
+    updated = any((found := _release(version)) and _order(found) < _order(release) for version in installed())
     return {**kept, "seen": [] if updated else [release]}
 
 

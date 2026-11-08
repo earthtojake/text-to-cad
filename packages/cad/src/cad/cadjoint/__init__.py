@@ -4,7 +4,7 @@ cadjoint is an implicit CAD kernel on JAX: a part is a signed distance field (``
 of blended booleans, shells, offsets, patterns and sketches extruded, revolved or lofted. Its extra is
 ``cad[cadjoint]``; its code runs in the process that calls it. The solids it hands back are build123d's,
 so a program that uses it needs the build123d integration beside it, and gets it
-(``cad.registry.INTEGRATIONS["cadjoint"].needs``). It re-exports nothing of cadjoint
+(``cad.registry.INTEGRATIONS["cadjoint"].alongside``). It re-exports nothing of cadjoint
 (``from cadjoint.sdf import Shell`` stays cadjoint's):
 
 - ``solid(scene, cell=)``: the field as one build123d ``Solid`` of planar triangles, which a model returns

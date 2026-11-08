@@ -61,7 +61,13 @@ The stages keep ownership narrow:
   The target is the drawing buffer's size and lives with the rig: about 60 bytes a pixel at 4×
   MSAA (some 360 MB at 3024 × 1964) while X-ray is on. Neither renderer orders see-through faces
   as the other: three sorts each object back to front and draws a two-sided one back faces first,
-  OCCT draws them as they were displayed, which is most of what still differs.
+  OCCT draws them as they were displayed, which is most of what still differs. Both step them alike
+  in the depth test: an engine document's surface that writes depth steps back a hair (polygon
+  offset 1, 1) so the edges on it win, and a see-through one, which writes none, a hair forward
+  (0, −4: `lib/viewer/surfaceLook.js`'s `SEE_THROUGH_OFFSET`, whatever the look, and OCCT's
+  stills' `render/occt.py`). A translucent part lying on an opaque one (a diffuser on its baffle)
+  is then in front of it at every pixel; stepped back alike, the two were decided pixel by pixel by
+  how each one's triangles rounded their depth, in shards.
 - `captureModel` draws the scene headless and returns its pictures, with no filesystem
   writes. The engine's stills are OCCT's (`cad <type> snapshot`); this headless scene is what the
   renderer parity measurement drives beside OCCT (`scripts/bench/occt_parity.py`).

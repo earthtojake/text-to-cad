@@ -18,7 +18,7 @@ import { createCadFileSource } from './catalog.js';
 
 /**
  * The CAD renderers over one client, reading the tab's preferences, bound to one live registry. A STEP
- * is drawn as an `.xbf` is, from what the cadgen engine serves of it (`renderers/xbf`).
+ * is drawn as an `.xbf` is, from what the engine serves of it (`renderers/xbf`).
  */
 export function cadRenderers(client: CadWorkspaceService, preferences: CadPreferenceSource, live: LiveRegistry['binding']) {
   return [
