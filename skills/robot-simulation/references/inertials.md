@@ -1,6 +1,15 @@
 # Inertials
 
-Inertials are the most-freehanded and least-checked part of LLM-authored URDFs and SDFs. The rule is absolute: **never type inertia numbers from intuition.** Every `mass`, inertial `origin`, and `inertia` value is either copied from source data (CAD mass properties, vendor datasheet, measurement) or computed by a formula or script in the same task. Record which, per link, in the design ledger ([urdf-ledger.md](urdf-ledger.md), [sdf-ledger.md](sdf-ledger.md)).
+Inertials are the most-freehanded and least-checked part of LLM-authored URDFs and SDFs. The rule is absolute: **never type inertia numbers from intuition.** Every `mass`, inertial `origin`, and `inertia` value is generated from the CAD model, copied from source data (vendor datasheet, measurement) or computed by a formula or script in the same task. A hand-written file records which, per link, in the design ledger ([urdf-ledger.md](urdf-ledger.md), [sdf-ledger.md](sdf-ledger.md)).
+
+## Generated From the CAD Model
+
+A description generated from a CAD model (`cad model export <id> robot.xml`, `.urdf`, `.sdf`, or `cad.mujoco.spec`) takes every link's inertial from the kernel: the exact solids at each part's material density, summed over the link's parts, the centre of mass in the link frame and the tensor about it in the link frame's axes, in kilograms and kg·m². It replaces everything below for that robot: no formula, no mesh integration, no ledger line. A number the kernel computed is regenerated, never edited.
+
+- **Give every part a material** (`part.material = metals.aluminum()`, from `bd_materials`): its density is what weighs it. Check the result before exporting: `cad model inspect <id> <assembly label>` weighs the assembly and names the parts with no material.
+- **A part with no material weighs nothing.** A link whose parts all lack one has no inertial, and each format reads that its own way: MuJoCo computes one from the link's geoms, visual and collision both, and says so as `inertia_from_visuals` ([mjcf-checks.md](mjcf-checks.md#model-health)); a URDF link without one is warned of by `cad urdf validate` when it moves; SDFormat assumes 1 kg and a unit tensor. Any of these on a moving link is wrong: set the materials and export again. A link that leaves out some of its parts says which in the export's warning.
+- **A density that is not a positive number** is refused by name.
+- **A part that is not what it is made of** (a hollow shell modelled solid, a motor modelled as its housing): give it the material with the density that gives the measured mass (`plastics.pla(density=...)`, kg/m³: measured mass over the part's volume), and say so to the person.
 
 ## When Inertials Are Required
 

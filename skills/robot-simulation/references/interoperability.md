@@ -13,10 +13,39 @@ Do not place geometry, inertials, joint origins, link poses, mesh references, ph
 
 ## Ownership
 
-- CAD or mesh workflows own mesh generation and per-link splitting/export ([meshes.md](meshes.md)).
+- A CAD model owns everything its writers generate: frames, limits, inertials, meshes, collision shapes, named frames and poses. Fix them there and export again.
+- CAD or mesh workflows own mesh generation and per-link splitting/export for a hand-written description ([meshes.md](meshes.md)).
 - The URDF owns its references, scales, placements, and structure.
 - SRDF/MoveIt workflows own semantic groups, named joint poses via `<group_state>`, and planning metadata. Renaming links or joints in the URDF breaks them; update both in the same task.
 - An SRDF pairs with its URDF by colocation and robot name alone ([srdf-authoring.md](srdf-authoring.md#urdf-pairing-non-negotiable)).
+
+## One description, three writers
+
+A CAD model with a mechanism is described once (links with their frames, exact inertials, visual
+meshes, collision shapes and named frames; joints with axes and limits around the as-built zero;
+couplings; mechanism states as named poses; all in SI units) and written by the destination's
+suffix: `cad model export <id> robot.xml` (MJCF), `robot.urdf`, `robot.sdf` (SDFormat 1.9). Each
+writes its meshes as binary STL in metres beside the file: in `assets/` for an MJCF (its
+`meshdir`), in `meshes/` for a URDF and an SDF, named by relative path. The three files of one
+model name every link and joint alike, so a controller, an SRDF and a policy read the same names in
+each (URDF and SDF names keep `[A-Za-z0-9_]`, every other character `_`). What each drops is what
+its format cannot say:
+
+| | MJCF | URDF | SDF |
+| --- | --- | --- | --- |
+| Named poses (mechanism states) | keys | not written: URDF has none (an SRDF's group states hold them for MoveIt) | not written |
+| Couplings | `<equality><joint>` | `<mimic>` on the follower | a comment on the follower, not enforced: SDFormat has no mimic |
+| Ball joints | `ball` | refused by name: URDF has no ball joint | `ball` |
+| Cylindrical joints | a hinge and a slide on one body | `<name>` and `<name>_slide` with a massless link `<name>_turn` between | as the URDF |
+| Capsule collisions | `capsule` | a cylinder and a sphere at each end | `capsule` |
+| Named frames | sites | an empty link on a fixed joint `<frame>_joint`, as a ROS `tool0` | `<frame>` |
+| A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) | no `<inertial>`: SDFormat assumes 1 kg |
+| Joint effort and velocity | not written (actuators are the scene's) | `effort="0" velocity="0"`: a consumer that drives the joint sets them | not written |
+
+The URDF's root is the first part hung from the ground (a ROS `base_link`); the SDF fixes that root
+to `world` by one joint, which a scene drops to free the model. Never edit a generated file, and
+never derive one format from another: export each from the model. An SRDF is always hand-written,
+over the generated URDF's names ([srdf-authoring.md](srdf-authoring.md)).
 
 ## When the URDF changes
 
@@ -26,7 +55,7 @@ Renamed links or joints, changed limits, or restructured chains invalidate the S
 
 Keep the simulator document aligned with the upstream robot-description source when one exists.
 
-**Derive, don't re-author.** When a robot already has a URDF, the SDF model for that robot is derived from it: same link/joint names, same tree, same limits, same inertials, same mesh assets. Translate mechanically — URDF joint `<origin>` becomes the SDF joint `<pose relative_to="parent_link">`, and each child link gets `<pose relative_to="joint_name">0 0 0 0 0 0</pose>` (the frame-graph pattern in [sdf-examples.md](sdf-examples.md#two-link-model-with-an-explicit-joint-frame)) — or use `gz sdf -p robot.urdf` as a starting point when Gazebo tooling is available, then review its output against this skill's contract. Independently re-authoring the same robot in SDF creates divergence that no validator catches. Record the source URDF (path and revision) in the SDF ledger comment.
+**Derive, don't re-author.** A robot with a CAD model here gets its SDF exported from the model, not derived from its URDF ([above](#one-description-three-writers)). When a robot has only a hand-written URDF, the SDF model for that robot is derived from it: same link/joint names, same tree, same limits, same inertials, same mesh assets. Translate mechanically — URDF joint `<origin>` becomes the SDF joint `<pose relative_to="parent_link">`, and each child link gets `<pose relative_to="joint_name">0 0 0 0 0 0</pose>` (the frame-graph pattern in [sdf-examples.md](sdf-examples.md#two-link-model-with-an-explicit-joint-frame)) — or use `gz sdf -p robot.urdf` as a starting point when Gazebo tooling is available, then review its output against this skill's contract. Independently re-authoring the same robot in SDF creates divergence that no validator catches. Record the source URDF (path and revision) in the SDF ledger comment.
 
 Joint names colliding with link names break URDF-to-SDF conversion; `cad urdf validate` warns about them.
 
@@ -50,7 +79,7 @@ Do not use SDF to paper over a wrong upstream frame tree unless the task explici
 
 ## MJCF
 
-MuJoCo loads a URDF directly (`MjModel.from_xml_path("robot.urdf")`, with a `<mujoco><compiler .../></mujoco>` extension element inside `<robot>` for its compiler settings), and its `compile` sample saves what it loaded as MJCF. That is the usual start for a robot that has a URDF; text-to-cad ships no converter in either direction. Keep the URDF the source of the structure and record it (path and revision) in the MJCF's ledger comment, as for an SDF ([above](#sdf-from-a-urdf)).
+A robot with a CAD model here gets its MJCF generated from the model ([above](#one-description-three-writers)), and its scene composed in code ([mujoco-environment.md](mujoco-environment.md)). For a robot that has only a hand-written URDF: MuJoCo loads a URDF directly (`MjModel.from_xml_path("robot.urdf")`, with a `<mujoco><compiler .../></mujoco>` extension element inside `<robot>` for its compiler settings), and its `compile` sample saves what it loaded as MJCF. That is the usual start for a robot that has a URDF; text-to-cad ships no converter in either direction. Keep the URDF the source of the structure and record it (path and revision) in the MJCF's ledger comment, as for an SDF ([above](#sdf-from-a-urdf)).
 
 A converted MJCF is a draft. Fix, then validate with `cad mjcf validate --compile required` ([mjcf-checks.md](mjcf-checks.md)):
 

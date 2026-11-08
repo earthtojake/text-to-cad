@@ -1,6 +1,6 @@
 # MJCF validation
 
-Every created or modified MJCF is validated with `cad mjcf validate <file.xml>` before the task is reported complete. Validate the file a consumer loads -- `scene.xml`, which includes the robot's -- and the robot's own file when it is used alone. The validator collects all findings in one pass (severity, code, XML path); `--strict` fails on warnings and `--json` emits a machine-readable document. It reads the model with the viewer's own reader, the Python standard library alone, and then compiles it with MuJoCo where MuJoCo is there: the compile is the one check that knows every rule of the format.
+Every created or modified MJCF is validated with `cad mjcf validate <file.xml>` before the task is reported complete. Validate the file a consumer loads -- `scene.xml`, which includes or attaches the robot's -- and the robot's own file when it is used alone. A generated MJCF (`cad model export`) and a scene a script saved are validated the same way. The validator collects all findings in one pass (severity, code, XML path); `--strict` fails on warnings and `--json` emits a machine-readable document. It reads the model with the viewer's own reader, the Python standard library alone, and then compiles it with MuJoCo where MuJoCo is there: the compile is the one check that knows every rule of the format.
 
 ## Validation model
 
@@ -59,21 +59,7 @@ Each finding has a code; the codes are stable.
 
 Each warning MuJoCo issues while compiling is a `compile_warning` warning, in MuJoCo's words. `cad[mujoco]` is MuJoCo's headless core and Studio's web viewer (`mujoco-core` and `mujoco-studio`, about 20 MB, no window system), fetched once the first time `required` needs it and reused after.
 
-Once compiled, the model is checked for what MuJoCo's modelling guide ("Model tuning") says to rule out before tuning anything, at `qpos0` and at the key named `home` where there is one (the message says which). The thresholds are heuristics, chosen to be sure rather than complete:
-
-| Code | Severity | What it means |
-|---|---|---|
-| `contacts_at_rest` | warning | geoms of two bodies intersect at rest, deeper than 0.1 mm (1 mm for a free-floating object resting on a static geom); the deepest pairs by name and depth in mm |
-| `visual_geoms_collide` | warning | a geom in groups 0-2 collides on a body that has group-3 collision geoms: give visuals `contype="0" conaffinity="0"` |
-| `inertia_from_visuals` | warning | a body with no `<inertial>` takes mass from visual and collision geoms both, so its mass counts twice: give visuals `density="0"` |
-| `scale_suspect` | warning | the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units after its `scale`: millimetres read as metres |
-| `joint_limits_at_rest` | warning | a limited hinge or slide sits outside its range at `qpos0` or at `home` |
-| `defaults_not_recommended` | info | Euler, a pyramidal cone, the default `solref 0.02 1`, `solref[0]` under 2 x timestep, or a timestep over 5 ms with contacts; the guide recommends `implicitfast`, `elliptic` with `impratio` 10, 0.5-2 ms for manipulation |
-| `home_key` | info | no key named `home`, the Menagerie convention |
-| `mass_summary` | info | moving mass, moving bodies, `nv`, `nu` and the extents, one line |
-| `check_unavailable` | info | a check failed inside and was skipped; it names the check |
-
-The warnings block under `--strict`.
+Once compiled, the model is checked for what MuJoCo's modelling guide says to rule out before tuning anything ([Model health](#model-health), below).
 
 Under `auto` a missing MuJoCo is a note and never blocks, even under `--strict`. Use `required` for handoff:
 
@@ -83,6 +69,24 @@ cad mjcf validate path/to/scene.xml --compile required --strict --json
 ```
 
 When the reader and the compiler disagree, the compiler is right about the model; the reader's findings say what the viewer will draw.
+
+## Model health
+
+After a compile passes, the validator checks the compiled model for what MuJoCo's modelling guide ("Model tuning") says to rule out before tuning anything, at `qpos0` and at the key named `home` where there is one (the message says which). The thresholds are heuristics, chosen to be sure rather than complete. A warning here is a modelling error: fix it before changing any solver setting ([mujoco-environment.md](mujoco-environment.md#tuning)).
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `contacts_at_rest` | warning | geoms of two bodies intersect at rest, deeper than 0.1 mm (1 mm for a free-floating object resting on a static geom); the deepest pairs by name and depth in mm | Move the parts apart where they stand (a generated model: in the CAD, or where the scene attaches it); for a pair that touches by design (a joint's two sides), exclude it, `<contact><exclude body1 body2>` (`scene.add_exclude`); a visual geom in the pair is the next row's error |
+| `visual_geoms_collide` | warning | a geom in groups 0-2 collides on a body that has group-3 collision geoms | Give visuals `contype="0" conaffinity="0"`, through the `visual` default class |
+| `inertia_from_visuals` | warning | a body with no `<inertial>` takes mass from visual and collision geoms both, so its mass counts twice | A generated model: give the link's parts materials, so the kernel writes its inertial. By hand: an explicit `<inertial>` ([inertials.md](inertials.md)), or `density="0"` on the visual class |
+| `scale_suspect` | warning | the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units after its `scale` | Millimetres read as metres: `scale="0.001 0.001 0.001"` on a millimetre mesh ([meshes.md](meshes.md)); a generated file is metres already, so look at what the scene added |
+| `joint_limits_at_rest` | warning | a limited hinge or slide sits outside its range at `qpos0` or at `home` | At `home`: fix the key. At `qpos0` only: start the simulation from `home` (Menagerie's Panda does this), or, where the model is yours, build it within its limits. Check `<compiler angle>` when a range looks like radians read as degrees |
+| `defaults_not_recommended` | info | Euler, a pyramidal cone, the default `solref 0.02 1`, `solref[0]` under 2 x timestep, or a timestep over 5 ms with contacts | Set them once in the scene: `implicitfast`; `elliptic` with `impratio` 10 for manipulation; a timestep of 0.5-2 ms; `solref[0]` 0.004-0.01 and at least twice the timestep. Expected on a robot file alone, whose scene sets them |
+| `home_key` | info | no key named `home`, the Menagerie convention | Add one of the model's length: a `mechanism_state(..., "home", ...)` in the CAD, or `add_key(name="home", ...)` in the scene |
+| `mass_summary` | info | moving mass, moving bodies, `nv`, `nu` and the extents, one line | Read it against the robot: a mass off by a power of ten is a unit or a density; a count off by one is a missing joint or actuator |
+| `check_unavailable` | info | a check failed inside and was skipped; it names the check | Report that check as skipped |
+
+The warnings block under `--strict`.
 
 ## Reading a snapshot
 
@@ -109,6 +113,7 @@ Stop and fix the model when:
 
 - bundled validation has errors;
 - the compile fails or warns under `--compile required`;
+- a model-health warning stands (tune nothing until it is cleared or explained);
 - a keyframe is the wrong length;
 - a joint moves opposite from the documented positive direction;
 - collision geoms are drawn, or visuals are missing, in the snapshot.

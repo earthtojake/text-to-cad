@@ -1,9 +1,10 @@
 # Kinematics: joints, mechanism states, couplings and configuration sequences
 
 Read this file when the user asks to articulate or pose a mechanism, or when designing
-or reviewing joints, couplings, named poses, posed files or the mechanism's own
-motions. An explode, a reveal, a showcase or any movement that is not the mechanism's
-is a GLB's `animation()`: read [Animation](animation.md) instead.
+or reviewing joints, couplings, named poses, posed files, the mechanism's own
+motions, or what its parts declare for a simulator. An explode, a reveal, a showcase
+or any movement that is not the mechanism's is a GLB's `animation()`: read
+[Animation](animation.md) instead.
 
 ## Contents
 
@@ -11,6 +12,7 @@ is a GLB's `animation()`: read [Animation](animation.md) instead.
 - [Joints place parts and make the mechanism](#joints-place-parts-and-make-the-mechanism)
 - [Mechanism states](#mechanism-states)
 - [Couplings](#couplings)
+- [Declaring for a simulator](#declaring-for-a-simulator)
 - [Configuration sequences](#configuration-sequences)
 - [Reviewing motion](#reviewing-motion)
 
@@ -241,6 +243,37 @@ gear_pair(assembly, "drive", sun=1.0, carrier=24 / 84, planet1=-0.952, planet2=-
 rack_and_pinion_pair(assembly, "traverse", pinion=1.0, rack=0.35)   # 0.35 mm of rack per degree
 screw_pair(assembly, "feed", lead_screw=2.0)                        # its value: the screw's turn
 ```
+
+## Declaring for a simulator
+
+A mechanism exported as a robot description (an MJCF, a URDF or an SDF:
+[exports](exports.md#robot-descriptions)) takes its links, joints, couplings and states from the
+mechanism and each link's mass from its parts' materials. Two declarations from `cad.build123d` say
+the rest, on finished parts, after the last operation, as a material is set:
+
+```python
+from cad.build123d import collision, frame
+
+collision(arm, "capsule")                   # what a simulator collides it as
+collision(cover, "none")                    # shown, never collides
+frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
+```
+
+- **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
+  declared; MuJoCo collides it as its convex hull), `box`, `sphere`, `cylinder` or `capsule` (fitted
+  by the kernel to the part's oriented bounding box, a cylinder's and a capsule's axis its longest
+  side), or `none`. On an assembly it is inherited by every part below it that declares none, as a
+  material is; a part's own declaration wins. A concave part that must collide as its shape is split
+  into convex parts in the model.
+- **`frame(part, name, location)`** names a frame on a part (a tool tip, a camera mount, a sensor):
+  `location` is a `Location` (`Pos`, `Rot`) or a `Plane` in the part's OWN frame, the one its
+  geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the
+  frame moves with the part however a joint or a placement moves it. A frame is a part's, never an
+  assembly's; a second frame of one name on a part replaces the first.
+
+Both travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
+cost nothing until a robot description is exported. A part that declares other ones is a
+prototype of its own in the document.
 
 ## Configuration sequences
 

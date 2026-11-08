@@ -2,18 +2,21 @@
 
 Use this reference when writing or editing a MuJoCo model: its compiler settings, default classes, assets, body tree, joints, geoms, actuators, equalities and keyframes. The deliverable is an MJCF document, MuJoCo's XML, with `<mujoco model="...">` at its root, as `.xml` (or `.mjcf`). It describes a model for MuJoCo; it is not a URDF in other words, and not a simulation run: nothing here steps the physics.
 
+A robot that has a CAD model here is not authored by hand: its MJCF is generated from the model (`cad model export <id> robot.xml`), and a scene around it is composed in code with `cad.mujoco.spec` and MuJoCo's own `MjSpec` ([mujoco-environment.md](mujoco-environment.md)). The generated file follows every convention below; edit the model, never the file. What follows is for a model written by hand, and for reading a generated one.
+
 The conventions below are MuJoCo Menagerie's (google-deepmind/mujoco_menagerie), the reference collection of MuJoCo robots; its Franka `panda.xml` is a good one to read beside this.
 
 ## Edit loop
 
-1. Locate the target `.xml`. It is the source of truth; author and edit the XML directly.
+1. Locate the target `.xml`. A hand-written one is the source of truth; author and edit the XML directly. A generated one is not: change its CAD model and export again.
 2. Identify the consumer (MuJoCo's version, a training or control stack) and whether the robot already has a URDF ([interoperability.md](interoperability.md#mjcf)).
 3. Keep a ledger as a comment block at the top of `robot.xml`: frames, joints and their positive motion, units, mesh sources and scale, assumptions ([urdf-ledger.md](urdf-ledger.md) has the shape).
 4. Write the compiler line, the default classes and the assets first, then the body tree, then actuators, equalities and keyframes.
 5. Compute inertials and unit conversions with formulas or a throwaway script, never freehand ([inertials.md](inertials.md)). Mesh files and scale: [meshes.md](meshes.md).
 6. Validate with `cad mjcf validate scene.xml --compile required` ([mjcf-checks.md](mjcf-checks.md)).
 7. Snapshot the `home` key and each joint moved; show the model ([Show the model](../SKILL.md#show-the-model)). To show it as MuJoCo compiles and simulates it: `cad run mujoco-studio --model path/to/scene.xml`, MuJoCo Studio's web viewer, which reloads the model as the file changes; the person opens the URL it prints.
-8. Report assumptions, skipped checks and risks ([guardrails.md](guardrails.md#the-report)).
+8. Clear every model-health warning the compile reports before tuning anything ([below](#tuning)).
+9. Report assumptions, skipped checks and risks ([guardrails.md](guardrails.md#the-report)).
 
 ## Units: the compiler line
 
@@ -107,6 +110,12 @@ Let the compiler compute each body's mass and inertia from its geoms where they 
 
 - One actuator per controlled joint, named `actuator1`.. in joint order: `<position joint="joint1" kp="..." ctrlrange="..."/>` or `<motor>`/`<general>`, values from the robot's data sheet.
 - `<option integrator="implicitfast"/>`: stable for damped, position-controlled robots and Menagerie's default.
+- Joint `armature` (the reflected rotor inertia, from the data sheet) and a light `damping` on every actuated joint, in the robot's class.
+- Solver settings for contact belong in the scene: `<option cone="elliptic" impratio="10" timestep="0.002"/>` for manipulation, and `solref` with `solref[0]` at least twice the timestep.
+
+## Tuning
+
+Check model health before tuning: `cad mjcf validate scene.xml --compile required` and clear each `contacts_at_rest`, `visual_geoms_collide`, `inertia_from_visuals`, `scale_suspect` and `joint_limits_at_rest` warning ([mjcf-checks.md](mjcf-checks.md#model-health)). Each is a modelling error, and no solver setting fixes it. Then tune by method: a baseline scenario from `home`, one parameter changed at a time, validated after every write and compared against the baseline in MuJoCo Studio (`cad run mujoco-studio --model scene.xml`), kept or reverted, and the reason written beside it. What to try and in which order is [mujoco-environment.md](mujoco-environment.md#tuning).
 
 ## Keyframes
 

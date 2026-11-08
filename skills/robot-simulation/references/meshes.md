@@ -2,6 +2,18 @@
 
 Bad mesh handling is a top URDF, SDF and MJCF failure mode, and it usually happens *before* any XML is written: source CAD is split into per-link assets incorrectly, exported in the wrong frame, or referenced at the wrong scale. Prepare assets first, then author XML that matches them. A description references geometry and mesh assets; it does not regenerate them.
 
+## Generated Descriptions
+
+A description generated from a CAD model (`cad model export <id> robot.xml`, `robot.urdf`, `robot.sdf`, or `cad.mujoco.spec`) writes its own meshes, and none of the steps below apply:
+
+- one binary STL per part prototype, in **metres** and in the part's own frame, written once however many links place it, named `<model>_<part>.stl`; the description places it in its link with an origin, so no `scale` is needed or written;
+- beside the file: in `assets/` for an MJCF (its `meshdir`), in `meshes/` for a URDF or an SDF, each named by relative path, so the file and its meshes move together as one folder;
+- with `cad.mujoco.spec(..., assets="dir")`, written in that folder (relative to the working directory), and without it in the engine's cache; either way the spec names every mesh by absolute path, as it does an MJCF's own (a Menagerie robot's), so a scene saved from it loads anywhere on this computer and nowhere else. A robot meant to travel as a folder is an export, its meshes relative beside it ([mujoco-environment.md](mujoco-environment.md#the-scene-in-code));
+- meshed at the viewer's tolerance unless the export or `spec` is given `tolerance=` (millimetres);
+- collision shapes as each part's `collision()` declares: its own mesh (which MuJoCo hulls), a fitted primitive, or none.
+
+A wrong mesh is fixed in the model and exported again; a mesh file in such a folder is never edited or replaced by hand. The rest of this file is for a description written by hand.
+
 ## Splitting Source CAD Into Link Assets
 
 The unit of export is the **link**, not the assembly and not the CAD feature tree:
