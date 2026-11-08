@@ -35,7 +35,7 @@ from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
-           "producer_for", "producers_for",
+           "manufacturing_check", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
@@ -355,6 +355,15 @@ def _producers() -> tuple[Producer, ...]:
     from cad.build123d._producers import PRODUCERS as build123d
 
     return build123d
+
+
+def manufacturing_check() -> Any:
+    """The integration module that measures a manufacturing check of a document the engine holds, for the
+    engine's worker: build123d's (``held``, and what stops one: ``Cancelled``, ``checkpoint``, ``stop``). As
+    with the producers, the one place the engine reaches an integration; imported only by a check."""
+    from cad.build123d import _dfm_check
+
+    return _dfm_check
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:

@@ -30,10 +30,10 @@ element never waits on a build.
 
 An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "given", "token"}``,
 ``api.check``) and no destinations is a manufacturing check of the document it names, measured where it is
-held (``_check``: ``cad.build123d._dfm_check.held``), answered ``{"id", "done": {"checked": ...}}``. A
+held (``_check``: the integration ``cad.registry.manufacturing_check`` names), answered ``{"id", "done": {"checked": ...}}``. A
 ``{"id", "op": "cancel", "token"}`` request, answered at once by the thread that reads the requests
 (``{"id", "cancelled"}``: whether one was), asks the check of that token to stop (``_cancel``): a check
-running stops at its next checkpoint (``cad._internal.dfm.checkpoint``: between parts, families, faces and
+running stops at its next checkpoint (the integration's ``checkpoint``: between parts, families, faces and
 rays, so after at most one kernel call), one still queued is dropped before it starts, and either is
 answered as cancelled. The daemon asks it when a build of the worker's script arrives, or the check's
 caller goes. A worker over its memory cap after a check is retired as after a build, and the check's
@@ -534,20 +534,20 @@ _DROPPED_KEPT = 16
 
 def _cancel(token: Any, queued: Callable[[str], bool]) -> bool:
     """The check of ``token`` asked to stop, by the thread that reads the requests: the one running is
-    flagged and stops at its next checkpoint (``cad._internal.dfm.checkpoint``, between parts, families,
+    flagged and stops at its next checkpoint (the integration's ``checkpoint``, between parts, families,
     faces and rays: never inside a kernel call or a lock); one still queued (``queued``) is dropped before
     it starts. Whether either was: a check that already answered, or another's, is left alone."""
     if not isinstance(token, str) or not token:
         return False
-    from cad._internal.dfm import stop
-
     found = queued(token)
     # Noted before the running one is looked at, as ``_check`` notes the running one before it looks here:
     # whichever comes second sees the other, so a check starting as its cancel comes is stopped either way.
     _DROPPED.append(token)
     del _DROPPED[:-_DROPPED_KEPT]
     if _RUNNING["token"] == token:
-        stop()
+        from cad.registry import manufacturing_check
+
+        manufacturing_check().stop()  # loaded already: the check running loaded it
         return True
     return found
 
@@ -568,8 +568,9 @@ _SEAM: tuple[Path, float] | None = None
 def _waited() -> None:
     if _SEAM is None:
         return
-    from cad._internal.dfm import checkpoint
+    from cad.registry import manufacturing_check
 
+    checkpoint = manufacturing_check().checkpoint
     named, seconds = _SEAM
     Path(f"{named}.reached").write_text(str(os.getpid()), encoding="utf-8")
     deadline = time.monotonic() + seconds
@@ -615,15 +616,17 @@ def _file(path: Path) -> tuple[Any, str | None]:
 def _check(request: dict[str, Any]) -> dict[str, Any]:
     """An ``export`` request with ``check``: the document it names -- a model this worker built (by ``script``
     and ``function``), a document's bytes (``document``: one no warm worker holds, or one an older worker
-    saved), or a STEP's or an xbf's file (``_file``) -- checked in memory (``_dfm_check.held``), stopping at a
+    saved), or a STEP's or an xbf's file (``_file``) -- checked in memory (its integration's ``held``), stopping at a
     checkpoint when cancelled (``_cancel``). Answers ``{"reports": [], "files": [], "checked"}``, the
     ``checked`` saying the release that measured it and, for a file, the digest of the bytes it measured;
-    ``cad._internal.dfm.Cancelled`` when stopped."""
-    from cad._internal.dfm import Cancelled, stop
-    from cad.build123d import _dfm_check
+    the integration's ``Cancelled`` when stopped."""
     from cad.engine import build as engine_build
     from cad.engine import export
     from cad.engine.contract import release
+    from cad.registry import manufacturing_check
+
+    measuring = manufacturing_check()
+    Cancelled, stop = measuring.Cancelled, measuring.stop
 
     spec = request["source"]
     check = request["check"]
@@ -655,7 +658,7 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
                                       "message": f"failed to read {read or 'the document'}: {error}"}}
         else:
             _waited()
-            checked = _dfm_check.held(source, check, read)
+            checked = measuring.held(source, check, read)
     finally:
         _RUNNING["token"] = None
         stop(False)
@@ -803,11 +806,11 @@ def main() -> int:
                 os.chdir(cwd or home)
                 if op == "export" and request.get("check"):
                     # A manufacturing check, measured in memory; over the cap after it, retired as a build is.
-                    from cad._internal.dfm import Cancelled
+                    from cad.registry import manufacturing_check
 
                     try:
                         done: dict[str, Any] | None = _check(request)
-                    except Cancelled:
+                    except manufacturing_check().Cancelled:
                         done = None
                     cap = request_cap(request)
                     resident = resident_after_build(cap)

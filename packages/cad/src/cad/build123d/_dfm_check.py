@@ -17,9 +17,10 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+from cad._internal.dfm import Cancelled, checkpoint, stop  # what the engine's worker stops a check by
 from cad.build123d import _dfm_brep
 
-__all__ = ["checked", "held", "measure", "measure_declared"]
+__all__ = ["Cancelled", "checked", "checkpoint", "held", "measure", "measure_declared", "stop"]
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
