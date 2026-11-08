@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "for_command", "for_distribution", "for_module", "for_name", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "alongside", "for_command", "for_distribution", "for_module", "for_name",
+           "missing", "needs"]
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,43 @@ def for_name(name: str) -> str | None:
         operation = entry.operation(parts[2])
         needed = operation.integration if operation is not None and not operation.engine else None
     return REGISTERED[needed].extra if needed is not None else None
+
+
+def alongside(extra: str) -> tuple[str, ...]:
+    """The extras the operations of the integration whose extra is ``extra`` need in the same process beside it,
+    transitively (the registry's ``alongside``: calculix's, the kernel's and netgen's), sorted; none for one that
+    names none."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    by_extra = {integration.extra: integration for integration in REGISTERED.values() if integration.extra}
+    found: set[str] = set()
+    pending = [extra]
+    while pending:
+        current = by_extra.get(pending.pop())
+        for name in current.alongside if current is not None else ():
+            other = REGISTERED[name].extra
+            if other and other != extra and other not in found:
+                found.add(other)
+                pending.append(other)
+    return tuple(sorted(found))
+
+
+def needs(name: str) -> tuple[str, ...]:
+    """Every extra a program that imports or uses ``name`` needs in its own process: ``for_module``'s, and where the
+    name is a document type's operation, those that operation's integration needs beside it (``alongside``:
+    ``cad.step.solve`` is calculix's, with the kernel that reads the part and netgen that meshes it). A tool's own
+    module or namespace (``cad_ccx``, ``cad.calculix``) is its integration alone. Sorted; none for a name that
+    needs none."""
+    from cad._internal.aliases import current
+    from cad.registry import DOCUMENT_TYPES
+
+    key = for_module(name)
+    if key is None:
+        return ()
+    parts = current(name).split(".")
+    operation = (parts[0] in _LIBRARY and len(parts) >= 3 and parts[1] in DOCUMENT_TYPES
+                 and parts[2] not in ("read", "edit"))
+    return tuple(sorted({key, *(alongside(key) if operation else ())}))
 
 
 def for_distribution(name: str) -> str | None:

@@ -28,6 +28,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Add datums, tolerances, GD&T, notes or named views** (a model-based definition) | `annotate` (`cad.build123d`) on the part, in the body. | [PMI](references/pmi.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the shop's rules. | [Can it be made?](#can-it-be-made) |
+| **Will it hold under a load, how far does it bend?** | The fea skill ($fea), on the model's id or its STEP or xbf. | Its study reference |
 
 ## Setup and paths
 

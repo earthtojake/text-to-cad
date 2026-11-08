@@ -11,7 +11,8 @@ an earlier spelling is read as the name it is now, by the alias table, and a nam
 says it does -- an integration's namespace that integration, a document type's reader its
 ``reader_integration`` (a STEP's: build123d), an operation the calling process runs its integration (a
 ``dfm``: trimesh), one the engine runs none, an edit its integration (``kicad_pcb.edit``: kicad;
-``for_name``). A type alone (``from cad import step``) needs
+``for_name``), and an operation also what its integration's operations need beside it (``cad.step.solve``:
+calculix, with build123d and netgen; ``needs``). A type alone (``from cad import step``) needs
 nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
 extra it lacks, in one line, and its header names it.
@@ -80,11 +81,11 @@ class _Reader:
 
     def module(self, dotted: str) -> None:
         """An absolute import: its integration, and each local file of it and of its parents."""
-        from cad._internal.integrations import for_module
+        from cad._internal.integrations import needs
 
-        key = for_module(dotted)
-        if key is not None:
-            self.found.add(key)
+        keys = needs(dotted)
+        if keys:
+            self.found.update(keys)
             return
         parts = dotted.split(".")
         if parts[0] in LIBRARY:
@@ -118,7 +119,7 @@ class _Reader:
     def read(self, source: str, path: Path) -> None:
         """One file's imports, its uses of cad's names and its decorators (see the module); a file that does
         not parse is passed over: Python says what is wrong with it when it runs."""
-        from cad._internal.integrations import for_name
+        from cad._internal.integrations import needs
 
         try:
             tree = ast.parse(source, filename=str(path))
@@ -144,9 +145,8 @@ class _Reader:
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute):  # ``step.read``, ``cad.read_step``, ``c.step.dfm``
                 dotted = _dotted(node, bound)
-                key = for_name(dotted) if dotted else None
-                if key is not None:
-                    self.found.add(key)
+                if dotted:
+                    self.found.update(needs(dotted))
 
     def drain(self) -> None:
         while self.queue:
