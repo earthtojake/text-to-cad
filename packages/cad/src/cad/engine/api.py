@@ -632,8 +632,9 @@ class Unreached(ConnectionError):
 
 
 class Unanswered(EngineError):
-    """An engine that measures no check in memory answered one (a server of a release before it): its
-    answer carried no ``checked``."""
+    """An engine that measured no check answered one: a server of a release before checks in memory, or one
+    whose library, and whose worker's, is another release than this (``Daemon.check``), so it measured nothing:
+    its answer carried no ``checked``."""
 
 
 def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
@@ -644,7 +645,8 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     options resolved by the caller (``manufacturing.options``). The same check of an unchanged document is
     answered from the results the engine keeps (``reused``: true), measuring nothing. The answer says the
     release whose library measured it (``release``); a worker retired for its memory after the check is said
-    on stderr (``retired``). ``Unanswered`` from a server of a release before checks in memory.
+    on stderr (``retired``). ``Unanswered`` from a server that measured nothing: of a release before checks in
+    memory, or of another than this library's, which the engine says before anything is measured.
 
     Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
     "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. ``Unreached`` when no
@@ -662,13 +664,15 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
         connection = client.connect()
     except ConnectionError as error:
         raise Unreached(str(error)) from None
-    order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd,
+    from cad.engine.contract import release
+
+    order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd, "caller": release(),
              "check": {**check, "token": os.urandom(8).hex()}}
     done = _ask(order, connection=connection)["done"]
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):
-        # A server of a release before the check in memory exports nothing and says no check.
-        raise Unanswered("the CAD server running measures no check in memory: it is older than this library")
+        # Another release's server, or one before the check in memory, answers with no check, having measured nothing.
+        raise Unanswered("the CAD server running measured no check: it is of another release than this library")
     if checked.get("retired"):
         print(f"cad: {checked['retired']}", file=sys.stderr, flush=True)
     return {**checked, **({"reused": True} if done.get("reused") else {})}

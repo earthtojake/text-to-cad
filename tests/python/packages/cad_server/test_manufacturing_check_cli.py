@@ -184,6 +184,31 @@ class ManufacturingCheckCommand(unittest.TestCase):
             self.assertEqual((code, made.call_count), (0, 1))
         self.assertEqual(json.loads(there), json.loads(asked))
 
+    def test_a_command_with_no_kernel_sends_another_releases_check_elsewhere_never_here(self) -> None:
+        """The engine measured nothing (another release's): a command with no kernel neither measures here nor
+        exports here, for a file and for a model's id alike. The base's environment answers."""
+        from build123d import Box, export_step
+
+        from cad._internal import manufacturing
+        from cad.engine import api
+
+        step = self.folder / "box.step"
+        export_step(Box(20, 20, 15), str(step))
+        ident = "01234567-89ab-5def-8123-456789abcdef"
+        answered = {"process": "x"}
+        for argv, document_type in (((str(step),), "step"), ((ident,), "model")):
+            with self.subTest(document_type), \
+                    mock.patch.object(integration_env, "carries", return_value=False), \
+                    mock.patch.object(integration_env, "environment", return_value=sys.executable), \
+                    mock.patch.object(integration_env, "call", return_value={
+                        "ok": True, "path": str(argv[0]), "findings": [], "summary": "there",
+                        "measurements": answered}) as there, \
+                    mock.patch.object(api, "check", side_effect=api.Unanswered("another release")), \
+                    mock.patch.object(manufacturing, "_here", side_effect=AssertionError("measured here")), \
+                    mock.patch.object(manufacturing, "_exported", side_effect=AssertionError("exported here")):
+                code, out, _ = _run(document_type, *argv, "--process", "printing", "--json")
+                self.assertEqual((code, json.loads(out)["summary"], there.call_count), (0, "there", 1), out)
+
     def test_each_type_offers_its_processes_and_their_flags(self) -> None:
         from cad_server.cli.document_types import build_parser
 

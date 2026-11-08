@@ -149,49 +149,31 @@ def pull_value(argv: list[str]) -> list[str]:
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
     type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF.
-    A B-rep's (a model, an xbf, a STEP) is asked of the engine from this process, which measures it in the
-    kernel process that holds the document (``cad.engine.api.check``); where no engine can be reached, and
-    for a DXF and a mesh, it runs here when this environment holds the type's integration (build123d for a
-    B-rep and a DXF, trimesh for a mesh), else in the environment that holds it
+    A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
+    holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
+    release's), and for a DXF and a mesh, it runs here when this environment holds the type's integration
+    (build123d for a B-rep and a DXF, trimesh for a mesh), else in the environment that holds it
     (``cad_server._internal.integration_env``), its options refused here first, before one is made. An xbf or a model given no ``--process`` is checked for the one
     its parts declare: the options every process shares are refused here, the rest in the integration once
     it has read the document, a refusal there said as one here (``integration_env.Refused``: exit 2). A STEP
     keeps no process, so one given none is refused here."""
 
     def run(argv: list[str], prog: str) -> int:
-        from cad._internal.manufacturing import BREP_TYPES
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
         target = (f"cad.{document_type}", "dfm")
         integration = DOCUMENT_TYPES[document_type].operation("dfm").integration
-        if integration_env.carries(integration) or (document_type in BREP_TYPES and _reached()):
-            # A B-rep's check is the engine's, measured where it holds the document: asked from here. With no
-            # engine to reach, this environment cannot measure one (it holds no kernel): the base's does.
+        if integration_env.carries(integration):
             return _checked(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
 
     return run
 
 
-def _reached() -> bool:
-    """Whether the engine answers, started where none runs (``client.connect``); False where none can be
-    reached -- no installation registered, a sandbox that cannot start one."""
-    from cad.engine import client
-
-    try:
-        connection = client.connect()
-    except ConnectionError:
-        return False
-    if connection is None:
-        return False
-    connection.close()
-    return True
-
-
 def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],
                        prog: str) -> int:
-    from cad._internal.manufacturing import options
+    from cad._internal.manufacturing import BREP_TYPES, options, through_engine
     from cad.results import CheckFinding, CheckResult
     from cad_server._internal import integration_env
     from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
@@ -210,6 +192,13 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
         # integration, which reads the document, takes its parts' declared process and resolves the rest for it;
         # what it refuses comes back with its reason (``integration_env.Refused``), the command line's mistake.
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
+        if document_type in BREP_TYPES:
+            # A B-rep's check is the engine's, measured where it holds the document. Only where it measured
+            # nothing -- none to reach, another release's -- is it this environment's to send elsewhere.
+            found = through_engine(document_type, positional[0], keywords.get("process"), given,
+                                   bool(keywords.get("candidates")))
+            if found is not None:
+                return found
         python = integration_env.environment(integration, said)
         found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)
         return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),

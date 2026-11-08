@@ -52,7 +52,7 @@ from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding, CheckResult
 
 __all__ = ["BREP_TYPES", "DEFAULTS", "KINDS", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for", "finish", "options",
-           "processes_for"]
+           "processes_for", "through_engine"]
 
 #: The enumerations ``process``, ``units`` and ``technology`` take, so the command's generated parser takes
 #: their values alone (each flag's choices); each is held to the modules that define it (below).
@@ -394,7 +394,7 @@ def _here(document_type: str, source: Any, process: str | None, resolved: dict[s
 
 
 def _held(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None, candidates: bool,
-          given: dict[str, Any] | None, label: Path) -> CheckResult | None:
+          given: dict[str, Any] | None, label: Path, *, local: bool = True) -> CheckResult | None:
     """A B-rep's check through the engine (``cad.engine.api.check``): measured in memory where the document
     is held -- a model's in its warm worker, a STEP's or an xbf's in the engine's checks process, read once --
     or answered from the result the engine kept for an unchanged document, then finished here.
@@ -403,7 +403,8 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     engine can be reached, when the engine is of a release that measures no check in memory, or when another
     release of the library measured it (its report could differ from what this release finishes). A model's,
     then, is exported by the engine and read back here (``_exported``), as before; with no engine at all it
-    fails to read, as it did. An id the engine does not hold is refused as its type."""
+    fails to read, as it did. An id the engine does not hold is refused as its type. ``local`` False, for a
+    command whose environment holds no kernel (``through_engine``): None for a model too, nothing measured here."""
     from cad.engine import api
     from cad.engine.contract import release
 
@@ -426,7 +427,8 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
             return None  # an engine that refused the check: measured here, as before
         return _failed(label, f"failed to read the document: {error}", "document_unreadable")
     if found is None or found.get("release") != release():
-        return None if is_file else _exported(document_type, source, process, resolved, candidates, given, label)
+        return (None if is_file or not local else
+                _exported(document_type, source, process, resolved, candidates, given, label))
     if "refused" in found:
         raise ArgumentRefused(found["refused"])
     if "unmeasured" in found:
@@ -434,6 +436,18 @@ def _held(document_type: str, source: Any, process: str | None, resolved: dict[s
     measured = found["measured"]
     return finish(label, {"process": measured["process"], **measured["report"]}, measured["process"],
                   measured["resolved"], candidates)
+
+
+def through_engine(document_type: str, source: Any, process: str | None, given: dict[str, Any],
+                   candidates: bool) -> CheckResult | None:
+    """A B-rep's check asked of the engine by a command that holds no kernel: its result, or None where the
+    engine measured nothing (none to reach, another release's), which the command runs in the environment of
+    the integration (``cad_server.cli.document_types``), never here."""
+    label = _label(source)
+    if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
+        return _failed(label, "file not found", "invalid_target")
+    resolved = options(document_type, process, given, candidates=candidates)
+    return _held(document_type, source, process, resolved, candidates, given, label, local=False)
 
 
 def _exported(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,

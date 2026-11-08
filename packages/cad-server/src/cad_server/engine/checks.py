@@ -6,7 +6,8 @@ id and its generation (``models.Models``' ``version``: a token of its build's ow
 changed nothing in the worker that holds it, new for anything else), a file by its path and the digest of
 its bytes. Beside that, the check itself: the document type, the process, the resolved options, the
 candidates flag and, with no process, the options given, and the release of the library that measured
-it (the server's own, or the release of the caller's Python a model was built in). A document holds the
+it, the caller's (``Daemon.check`` measures nothing in another's). Only a clean result is kept: never a
+document that did not read, a refusal, or a family not measured. A document holds the
 results of one version alone: a result of another version is dropped the moment one of the new version
 is kept or asked for, so none outlives the document it describes. Nothing is persisted: the store is
 process memory, bounded by ``LIMIT`` results and ``BYTES`` of them (their JSON), the least recently used
@@ -52,6 +53,7 @@ class Checks:
         self.bytes = 0
         self.measured = 0
         self.reused = 0
+        self.read = 0
 
     @staticmethod
     def key(check: dict[str, Any], release: str) -> str:
@@ -91,10 +93,11 @@ class Checks:
             while self.kept and (len(self.kept) > self.limit or self.bytes > self.budget):
                 self.bytes -= len(self.kept.popitem(last=False)[1][1])
 
-    def counted(self) -> None:
-        """One check measured in a worker, kept or not."""
+    def counted(self, read: bool = False) -> None:
+        """One check measured in a process, kept or not; ``read``: it read its file, none held."""
         with self.lock:
             self.measured += 1
+            self.read += int(read)
 
     def forget(self, document: str) -> None:
         """Every result of ``document`` dropped (it was deleted)."""
@@ -103,4 +106,5 @@ class Checks:
 
     def status(self) -> dict[str, Any]:
         with self.lock:
-            return {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused}
+            return {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,
+                    "read": self.read}

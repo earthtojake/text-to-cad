@@ -270,6 +270,29 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual(_counts()["measured"], before["measured"] + 4)
         self.assertAlmostEqual(changed.measurements["bodies"][0]["volume_mm3"], 5400.0, delta=1e-6)
 
+    def test_a_file_is_read_once_across_checks_and_only_a_clean_result_is_kept(self) -> None:
+        import build123d as bd
+
+        import cad
+        from cad_server.engine.daemon import _clean
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-read-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        step = folder / "part.step"
+        bd.export_step(bd.Box(30, 20, 6), str(step))
+        before = _counts()["read"]
+        for technology in ("fdm", "sls", "sla"):
+            cad.step.dfm(step, process="printing", technology=technology)
+        self.assertEqual(_counts()["read"], before + 1, "other options measure again and read nothing")
+        bd.export_step(bd.Box(30, 20, 9), str(step))
+        cad.step.dfm(step, process="printing", technology="fdm")
+        self.assertEqual(_counts()["read"], before + 2, "other bytes are read")
+        self.assertTrue(_clean({"measured": {"report": {"partial": False}}}))
+        for unkept in ({"unmeasured": {"code": "c", "message": "m"}}, {"refused": "no"},
+                       {"measured": {"report": {"partial": True}}},
+                       {"measured": {"report": {"partial_sections": ["holes"]}}}):
+            self.assertFalse(_clean(unkept), unkept)
+
     def test_the_store_is_bounded_and_holds_one_version_of_a_document(self) -> None:
         from cad_server.engine.checks import Checks
 
@@ -295,10 +318,57 @@ class ReleaseTest(unittest.TestCase):
         from cad_server.engine import daemon
 
         self.assertTrue(answers_checks(CHECKS_SINCE) and answers_checks("9.0.0"))
-        self.assertFalse(answers_checks("0.11.2") or answers_checks("0.10.0") or answers_checks("not a release"))
+        self.assertFalse(answers_checks("0.11.3") or answers_checks("0.10.0") or answers_checks("not a release"))
         self.assertTrue(daemon._answers_checks(None), "the server's own environment's worker")
         self.assertTrue(daemon._answers_checks(f"/env\0{version()}"), "a worker of the server's own release")
         self.assertFalse(daemon._answers_checks("/env\0" + "0.10.0"))
+
+    def test_who_measures_is_decided_before_anything_is_measured(self) -> None:
+        """The worker when its library is the caller's; the checks process, the server's library, when that is
+        the caller's (a command at the server's release, of a project built at another); otherwise no one."""
+        from cad_server.engine.daemon import CHECKS, _measurer
+
+        new, newer, old = "0.12.0", "0.12.1", "0.11.2"
+        for python_key, in_worker, caller, server, who in (
+                (None, True, new, new, "worker"),  # the server's own environment
+                (f"/env\0{new}", True, new, newer, "worker"),  # a project's script calling its own library
+                (f"/env\0{new}", True, newer, newer, CHECKS),  # N1: the command, its model built at another release
+                (f"/env\0{new}", True, old, newer, None),  # neither's library
+                (f"/env\0{old}", True, newer, newer, CHECKS),  # an older worker, never sent one
+                (None, False, newer, newer, CHECKS),  # a file: the server's library
+                (None, False, new, newer, None)):  # a file, from another release's Python: measured there
+            with self.subTest(python_key=python_key, caller=caller, server=server):
+                self.assertEqual(_measurer(python_key, in_worker, caller, server), who)
+
+    def test_another_releases_check_is_answered_at_once_and_measures_nothing(self) -> None:
+        import build123d as bd
+
+        import cad
+        from cad.engine import api
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-other-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        step = folder / "box.step"
+        bd.export_step(bd.Box(20, 20, 15), str(step))
+        cad.step.dfm(step, process="cnc")
+        before = _counts()
+        check = {"type": "step", "process": "cnc", "candidates": False,
+                 "resolved": cad._internal.manufacturing.options("step", "cnc", {}), "token": "t"}
+        done = api._ask({"op": "export", "source": {"path": str(step)}, "destinations": [], "caller": "0.0.1",
+                         "check": check})["done"]
+        self.assertNotIn("checked", done)
+        self.assertEqual(_counts()["measured"], before["measured"])
+
+    def test_the_process_lost_says_what_it_held(self) -> None:
+        from cad_server.engine.daemon import CHECKS, _check_lost
+
+        lost = _check_lost("the checks process exited (-9) during a manufacturing check", CHECKS)
+        self.assertIn("the checks process exited (-9)", lost)
+        self.assertIn("held nothing but the files it had read for checks", lost)
+        self.assertNotIn("warm memo", lost)
+        worker = _check_lost("the worker for m.py exited (-9) during the build", "/m.py")
+        self.assertIn("exited (-9) during a manufacturing check", worker)
+        self.assertIn("warm memo is gone", worker)
 
     def test_an_older_workers_document_is_the_bytes_its_result_gives(self) -> None:
         from cad_server.engine.daemon import Daemon
@@ -384,6 +454,7 @@ class WorkerTest(unittest.TestCase):
             self.assertIsInstance(answered, EngineError)
             self.assertIn("the manufacturing check was cancelled", str(answered))
         self.assertFalse(hold.exists(), "the build did not wait for a check to be let go")
+        self.assertIn("asking the manufacturing check", fixture.said, "said before the wait")
 
         # A cancel landing as a check ends: whichever wins, nothing hangs, and a build says it cancelled only
         # a check that was.
@@ -427,25 +498,81 @@ class WorkerTest(unittest.TestCase):
         bd.export_step(bd.Box(30, 20, 6), str(step))
         process, checks = caller(f"cad.step.dfm({str(step)!r}, process='printing')", fixture.env, reached)
         self.assertNotEqual(checks, worker)
+        self.assertEqual(_counts()["process"]["pid"], checks)
         process.kill()
         _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone stops")
+        _until(self, lambda: (_counts()["process"] or {}).get("pid") != checks, "the checks process is stopped")
+        self.assertIn(worker, [row["pid"] for row in api.status()["workers"] if row["alive"]], "and no warm worker with it")
         hold.write_text("", encoding="utf-8")
         self.assertAlmostEqual(cad.step.dfm(step, process="printing").measurements["bodies"][0]["volume_mm3"], 3600.0,
                                delta=1e-6)
         api.stop()  # the seam goes with its engine's processes
 
-    def test_a_retired_workers_caller_is_told(self) -> None:
+    def test_a_build_behind_a_build_is_not_silent_and_a_check_queued_there_goes_at_once(self) -> None:
+        """A check waiting for a worker a build holds: the next build of the script cancels it and it answers at
+        once, with that build still running, and the next build says what it waits for."""
+        import cad
+        from cad.engine.api import EngineError
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-behind-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        marker, go = folder / "building", folder / "go"
+        self.addCleanup(lambda: go.write_text("", encoding="utf-8"))
+        slow = MODELS.replace("    part.label = \"plate\"\n", f"""    part.label = "plate"
+    import pathlib, time
+    pathlib.Path({str(marker)!r}).write_text("", encoding="utf-8")
+    deadline = time.monotonic() + {JOIN_SECONDS}
+    while not pathlib.Path({str(go)!r}).exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+""")
+        fixture = Fixture(self, MODELS)
+        fixture.script.write_text(textwrap.dedent(slow), encoding="utf-8")
+        run = [sys.executable, str(fixture.script)]
+        first = subprocess.Popen(run, cwd=fixture.folder, env=fixture.env, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+        self.addCleanup(first.wait)
+        _until(self, marker.exists, "the first build runs")
+        queued = Checking(lambda: cad.model.dfm(fixture.ids[1], process="printing"))
+        queued.start()
+        _until(self, lambda: _counts()["asked"] >= 1, "the check waits for the worker")
+        second = subprocess.Popen(run, cwd=fixture.folder, env=fixture.env, stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.PIPE, text=True)
+        self.addCleanup(second.stderr.close)
+        self.addCleanup(second.wait)
+        answered = queued.result(self)
+        self.assertIsNone(first.poll(), "the check answered with the first build still running")
+        self.assertIsInstance(answered, EngineError)
+        self.assertIn("the manufacturing check was cancelled", str(answered))
+        go.write_text("", encoding="utf-8")
+        said = second.communicate(timeout=JOIN_SECONDS)[1]
+        self.assertIn("waiting for the build", said)
+        self.assertNotIn("cancelled the manufacturing check", said, "only one that ran is said cancelled")
+
+    def test_a_process_over_its_memory_cap_after_a_check_is_retired_and_says_so(self) -> None:
+        """A real cap: the checks process goes over it, its caller told on stderr, and the next check starts
+        another. The cap is the engine's, so an engine of this test's own."""
         from contextlib import redirect_stderr
         from io import StringIO
 
+        import build123d as bd
+
+        import cad
         from cad.engine import api
 
-        answer = {"done": {"checked": {"measured": {}, "release": "x", "retired": "the worker held 9 MB"}}}
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-cap-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        step = folder / "box.step"
+        bd.export_step(bd.Box(20, 20, 15), str(step))
+        api.stop()
+        self.addCleanup(api.stop)
         said = StringIO()
-        with mock.patch("cad.engine.client.connect"), mock.patch.object(api, "_ask", return_value=answer), \
-                redirect_stderr(said):
-            api.check("0" * 8 + "-0000-5000-8000-" + "0" * 12, {"type": "model"})
-        self.assertIn("the worker held 9 MB", said.getvalue())
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_RSS_MB": "1"}), redirect_stderr(said):
+            first = cad.step.dfm(step, process="printing")
+            second = cad.step.dfm(step, process="sheet")
+        self.assertIn("the checks process held", said.getvalue())
+        self.assertIn("it is retired, and the next check starts a fresh one", said.getvalue())
+        self.assertEqual(first.measurements["process"], "printing")
+        self.assertEqual(second.measurements["process"], "sheet")
 
     def test_a_worker_killed_in_a_check_says_so_and_the_next_build_starts_another(self) -> None:
         from cad.engine.api import EngineError

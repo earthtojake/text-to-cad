@@ -101,7 +101,7 @@ from cad.engine.ids import canonical, file_id, is_id
 from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache)
 from cad_server.engine import display
 from cad_server.engine.services import SERVICES
-from cad_server.engine.supervisor import Gone, Process, Supervisor
+from cad_server.engine.supervisor import Gone, Process, Supervisor, Withdrawn
 
 __all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "worker_cap"]
 
@@ -863,13 +863,15 @@ class Daemon:
 
     def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
               loading: Callable[[str], None] | None = None, python: str | None = None,
-              python_key: str | None = None) -> Process:
+              python_key: str | None = None, service: str = "worker",
+              gave_up: Callable[[], bool] | None = None) -> Process:
         """The warm worker of a script (by its path, and the caller's ``python`` and its environment's key
         where its build named one: ``caller``) or of the documents no worker built (``documents``), for one
         request: waiting its turn, started when none is alive (``Supervisor.lease``); ``loading`` as there.
-        ``release`` it after."""
-        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python,
-                                     python_key=python_key)
+        ``release`` it after. ``service``: the checks process (``services.CHECKS``) in place of a worker;
+        ``gave_up``, as ``Supervisor.lease`` takes it."""
+        return self.supervisor.lease(service, script, environment, cwd, loading, python=python,
+                                     python_key=python_key, gave_up=gave_up)
 
     def release(self, worker: Process) -> None:
         self.supervisor.release(worker)
@@ -1022,7 +1024,7 @@ class Daemon:
         if request.get("check") is not None and ("document" in source or "path" in source):
             # A check of a file or of a document no warm worker holds: the checks process, a kernel of its
             # own, so a long check, its cancel or its crash costs no other document anything.
-            return CHECKS, request.get("cwd"), None
+            return CHECKS, None, None
         if "document" in source:
             return "documents", request.get("cwd"), None  # a held document's bytes: no worker of its script
         if "path" in source:
@@ -1061,8 +1063,10 @@ class Daemon:
                 worker = None
                 try:
                     environment = request.get("env") or {}
-                    # An export runs in its caller's environment (``worker.adopt``), as a build does.
-                    ordered = {**order, "env": environment} if environment and order.get("op") == "export" else order
+                    # An export runs in its caller's environment (``worker.adopt``), as a build does; the checks
+                    # process in the daemon's, whoever asks.
+                    ordered = ({**order, "env": environment} if environment and order.get("op") == "export"
+                               and key != CHECKS else order)
                     if request.get("expected") or (request.get("source") or {}).get("held"):
                         # Viewer exports and a document named by its id borrow the held document's
                         # worker, including its environment: another caller's environment must not
@@ -1075,14 +1079,18 @@ class Daemon:
                             send(refused(self.models.not_held(named)) if isinstance(named, str) else
                                  {"failed": "The viewed model is no longer held. Reopen it before exporting."})
                             return
-                    worker = self.lease(key, environment, cwd, python=python, python_key=python_key)
+                    asked = None
                     if isinstance(order.get("check"), dict):
                         with self.asked_lock:
                             asked = self.asked.get(str(order["check"].get("token")))
-                            if asked is not None:
-                                asked.worker = worker
-                        if asked is not None and asked.stopped.is_set():
-                            send({"failed": CHECK_CANCELLED})  # cancelled while it waited: never started
+                    worker = self.lease(key, environment, cwd, python=python, python_key=python_key,
+                                        service="checks" if key == CHECKS else "worker",
+                                        gave_up=asked.stopped.is_set if asked is not None else None)
+                    if asked is not None:
+                        with self.asked_lock:
+                            asked.worker = worker
+                        if asked.stopped.is_set():
+                            send({"failed": CHECK_CANCELLED, "cancelled": True})  # cancelled as its turn came
                             return
                     expected = request.get("expected") or {}
                     if "modelRevision" in expected and "document" not in request["source"]:
@@ -1108,6 +1116,9 @@ class Daemon:
                     if not request.get("expected"):
                         self._built(worker, answer, verb=True)
                     send(answer)
+                    return
+                except Withdrawn:
+                    send({"failed": CHECK_CANCELLED, "cancelled": True})  # cancelled while it waited its turn
                     return
                 except Gone as error:
                     # One that exited mid-request is not asked again, nor one that never said it was ready.
@@ -1136,12 +1147,15 @@ class Daemon:
 
     def check(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """A manufacturing check (an ``export`` with ``check``, ``api.check``) of the document the request
-        names, measured in memory (``worker._check``) and kept by the version it measured (``checks``):
+        names, measured in memory (``worker._check``) and kept by the version it measured (``checks``). Who
+        measures it is decided first (``_measurer``), by the release of the library that asks (``caller``), so
+        the report is one that library can finish and nothing is measured to be thrown away:
 
-        - a model's, in the warm worker that holds it, when that worker's release measures checks
-          (``contract.answers_checks``); an older worker's document from the bytes it gives (``_whole``);
-        - a file's (a STEP's, an xbf's) and a document's no warm worker holds, in the checks process
-          (``CHECKS``), which reads a file once while its bytes stay as they were.
+        - a model's, in the warm worker that holds it, when that worker's library is the caller's;
+        - in the checks process (``CHECKS``), when the server's library is the caller's: a file's (a STEP's, an
+          xbf's), read once while its bytes stay as they were, a document's no warm worker holds, and a model's
+          built at another release, from the bytes it gives (``_whole``);
+        - otherwise no one: answered at once with no ``checked``.
 
         The same check of the same version is answered from what was kept (``reused``), with no process
         asked. A version is a model's generation, read before the check and after it, or the digest of the
@@ -1156,8 +1170,6 @@ class Daemon:
             ident = str(spec["id"])
             try:
                 source, payload = self.document(ident)
-                if "script" in source and not _answers_checks(source.get("python_key")):
-                    source, payload = self._whole(ident, source)
             except ValueError as error:
                 send(refused(error))
                 return
@@ -1165,6 +1177,14 @@ class Daemon:
             source = {"path": str(spec["path"])}
         else:
             send({"failed": "a check reads a document the engine holds, or a STEP's or an xbf's file"})
+            return
+        # Who measures it, decided before anything is measured.
+        measurer = _measurer(source.get("python_key") if "script" in source else None, "script" in source,
+                             request.get("caller"), version())
+        if measurer is None:
+            # Another release of the library asks: its report would be of a library it cannot finish. Answered
+            # at once, with no check, and it measures the document its own way (``manufacturing._held``).
+            send({"done": {"reports": [], "files": [], "release": version()}})
             return
         if "path" in source:
             document = f"file:{os.path.normcase(os.path.realpath(source['path']))}"
@@ -1181,13 +1201,18 @@ class Daemon:
                 return None if record is None else str(record["version"])
 
             before = now()
-        # Which library measures it: the server's own, or the release of the caller's Python a model's
-        # worker runs (its ``python_key`` names it).
-        key = Checks.key(request["check"], str(source.get("python_key") or version()))
+        # Which library measures it, in the key: the caller's, the same as the worker's or the server's.
+        key = Checks.key(request["check"], str(request.get("caller")))
         if before is not None:
             kept = self.checks.get(document, before, key)
             if kept is not None:
                 send({"done": {"reports": [], "files": [], "checked": kept, "reused": True}})
+                return
+        if measurer == CHECKS and "script" in source:
+            try:
+                source, payload = self._whole(ident, source)
+            except ValueError as error:
+                send(refused(error))
                 return
         token = str(request["check"].get("token") or secrets.token_hex(8))
         check = {**request["check"], "token": token}
@@ -1197,22 +1222,20 @@ class Daemon:
         with self.asked_lock:
             self.asked[token] = asked
         request["_gone"] = lambda: self.abandon(token)  # its caller gone (``_serve``): the check cancelled
-        order = {"id": 1, "op": "export", "source": source, "destinations": [], "cwd": request.get("cwd"),
-                 "check": check}
+        order = {"id": 1, "op": "export", "source": source, "destinations": [],
+                 "cwd": None if worker_key == CHECKS else request.get("cwd"), "check": check}
 
         def answered(message: dict[str, Any]) -> None:
             done = message.get("done")
             if "done" in message or "failed" in message:
                 asked.answered = True  # no cancel reaches it from now on
-                asked.cancelled = str(message.get("failed") or "").startswith(CHECK_CANCELLED[:40])
+                asked.cancelled = bool(message.get("cancelled"))
             if isinstance(done, dict) and isinstance(done.get("checked"), dict):
-                self.checks.counted()
                 measured = done["checked"]
-                kept = {name: value for name, value in measured.items() if name != "retired"}
-                if "path" in source:
-                    if before is not None and measured.get("digest") == before:
-                        self.checks.keep(document, before, key, kept)
-                elif before is not None and now() == before:
+                self.checks.counted(read=bool(measured.get("read")))
+                kept = {name: value for name, value in measured.items() if name not in ("retired", "read")}
+                current = measured.get("digest") == before if "path" in source else now() == before
+                if before is not None and current and _clean(measured):
                     self.checks.keep(document, before, key, kept)
             try:
                 send(message)
@@ -1262,15 +1285,18 @@ class Daemon:
         with self.asked_lock:
             mine = [asked for asked in self.asked.values()
                     if asked.key == key and asked.python_key == python_key and not asked.answered]
+        running = []
         for asked in mine:
-            self._stop(asked)
-        for asked in mine:
-            # Its answer awaited (the build waits for the worker it holds all the same): said only when the
-            # check was cancelled, never one that finished as its cancel came.
+            if self._stop(asked) and asked.worker is not None:
+                running.append(asked)
+                send({"log": f"asking the manufacturing check of {Path(key).name}'s model to stop: this build "
+                             "replaces the document it was measuring", "stream": "waiting"})
+        for asked in running:
+            # Its answer awaited, the build waiting for the worker it holds all the same. A check still waiting for
+            # the worker holds nothing to wait for: it leaves the queue on its own.
             asked.finished.wait(CANCEL_PATIENCE)
             if asked.cancelled:
-                send({"log": f"cancelled the manufacturing check of {Path(key).name}'s model: this build replaces "
-                             "the document it was measuring", "stream": "waiting"})
+                send({"log": f"cancelled the manufacturing check of {Path(key).name}'s model", "stream": "waiting"})
 
     def abandon(self, token: str) -> None:
         """A check whose caller went: cancelled -- in the checks process by stopping it, which holds nothing
@@ -1691,7 +1717,10 @@ class Daemon:
                                                              "memory": self.server.memory()},
                 "models": self.models.listing(),
                 "cache": self.models.cache.status(),
-                "checks": {**self.checks.status(), "asked": len(self.asked)},
+                "checks": {**self.checks.status(), "asked": len(self.asked),
+                           "process": next(({"pid": row.pid, "alive": row.alive() and not row.retired,
+                                             "rssMb": None if row.rss is None else round(row.rss)}
+                                            for row in supervisor.processes("checks")), None)},
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
                 "base": _making().status(),
@@ -1788,7 +1817,6 @@ def _check_lost(said: str, key: str) -> str:
     checks process held only what it read for checks; a model's worker held its warm memo."""
     head, tail, detail = said.partition(WORKER_STDERR)
     if key == CHECKS:
-        head = f"the checks process exited ({head.rpartition('(')[2].partition(')')[0]}) during a manufacturing check"
         words = ("the check is not run again; that process held nothing but the files it had read for checks, and "
                  "the next check starts a fresh one")
     else:
@@ -1797,6 +1825,25 @@ def _check_lost(said: str, key: str) -> str:
                  "as exited and says where each of its documents is held; the next build of its script starts a "
                  "fresh worker (an unchanged model is taken from the engine's cache)")
     return f"{head}: {words}{tail}{detail}"
+
+
+def _clean(checked: dict[str, Any]) -> bool:
+    """Whether a check's answer is a result to keep: one fully measured -- never a document that did not read,
+    a refusal, or a family not measured, which the next check may measure."""
+    report = (checked.get("measured") or {}).get("report")
+    return isinstance(report, dict) and not report.get("partial") and not report.get("partial_sections")
+
+
+def _measurer(python_key: Any, in_worker: bool, caller: Any, server: str) -> str | None:
+    """Who measures a check the library of release ``caller`` asks, decided before anything is measured: the
+    warm worker that holds the document (``in_worker``; ``python_key`` its Python and release, None the server's
+    own) when its library is the caller's, so its report is one the caller can finish (``"worker"``); else the
+    checks process, of the server's own library, when that is the caller's (``CHECKS``: of a worker's document,
+    from its bytes); else None: another release, which measures the document itself."""
+    held_by = python_key.partition("\0")[2] if isinstance(python_key, str) else server
+    if in_worker and held_by == caller and _answers_checks(python_key):
+        return "worker"
+    return CHECKS if caller == server else None
 
 
 def _answers_checks(python_key: Any) -> bool:
