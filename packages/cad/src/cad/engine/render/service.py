@@ -590,11 +590,8 @@ def main() -> int:
             part = getattr(error, "part", None) if isinstance(error, SnapshotRefused) else "source"
             frames.write(protocol, {"id": ident, "refused": str(error), **({"part": part} if part else {})})
         except Exception as error:  # noqa: BLE001 - the renderer answers every request
-            kind = type(error)
-            frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(kind, error)).strip(),
-                                    "type": kind.__qualname__ if kind.__module__ == "builtins"
-                                    else f"{kind.__module__}.{kind.__qualname__}",
-                                    "trace": traceback.format_exc()})
+            frames.write(protocol, {"id": ident, "failed": "".join(traceback.format_exception_only(type(error), error)).strip(),
+                                    **frames.failed_type(error), "trace": traceback.format_exc()})
     return 0
 
 

@@ -453,7 +453,9 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 if not streamed or WORKER_STDERR not in str(error):
                     raise
                 # A dead worker's stderr tail is what this log just showed: said once.
-                raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
+                again = EngineError(str(error).partition(WORKER_STDERR)[0])
+                again.raised = error.raised
+                raise again from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
             if named:
                 _heard_release(answer.get("release"))
@@ -1271,8 +1273,9 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
             return {**_read(text), **told}
-        if error.raised:  # a failure the engine named by its type: what it is, never a refusal
-            return {"type": error.raised, "frames": [], **told}
+        if error.raised:  # a failure the engine named by its type: what it is, a refusal only where that says so
+            refused = any(error.raised == f"{module}.{name}" for module, name in _REFUSALS)
+            return {"type": error.raised, "frames": [], **told, "refused": refused}
         return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)

@@ -34,11 +34,13 @@ exits, each batch under an id of its own and stamped with the time it was made:
   xbf whole without building, and how long they took;
 - ``build_failure`` (the engine's verbs): how many of those failed for each reason (``BUILD_FAILURES``),
   one word decided where the build failed (``build_failure``), from what the error is and whose code
-  raised it -- the model's, the CAD kernel's under it, cadgen's -- never from its message;
+  raised it -- the model's, the CAD kernel's under it, cadgen's, the machine's (no kernel process the
+  engine could start) -- never from its message; a failure the engine answered in words alone is told by
+  the type it answered with, a refusal only where that type is one;
 - ``snapshot`` (the command that rendered it): for each source kind (``model`` or a file format), how many renders, how many failed,
   and how long they took;
 - ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``: a refusal, a file not
-  there, no OpenGL context to draw in, a picture not drawn...), decided as
+  there, no OpenGL context to draw in, no kernel process to draw in, a picture not drawn...), decided as
   the snapshot failed (``cad_server._internal.engine_telemetry``), and for a refused request which part
   of it the refusal named (``SNAPSHOT_PARTS``: the display's mode or its clip, the camera, the size, the
   source...), a word cadgen chose where it refused, never the value given (``none`` for any other
@@ -366,20 +368,28 @@ FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view
 # given (``refused``: raised on purpose in cadgen's code); the script did not compile (``script_error``); its
 # arguments were refused (``arguments``). The machine's: a module
 # that is not installed (``missing_module``), a file that is not there (``missing_file``), another file error -- a
-# file locked or unwritable, a full disk (``io_error``) -- or out of time (``timeout``) or memory (``memory``).
+# file locked or unwritable, a full disk (``io_error``) -- out of time (``timeout``) or memory (``memory``), or no
+# kernel process the engine could start to build in (``no_kernel``: no kernel environment, a worker that never
+# started; ``FAILED_TYPES``).
 # cadgen's: the kernel failed under cadgen's own code, writing or meshing what the model made (``export_error``),
 # or a mistake in cadgen's code (``bug``, reported as an ``exception`` too). ``other``: none of these.
 BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments",
-                            "missing_module", "missing_file", "io_error", "timeout", "memory", "export_error", "bug",
-                            "other"})
+                            "missing_module", "missing_file", "io_error", "timeout", "memory", "no_kernel",
+                            "export_error", "bug", "other"})
 # Why a snapshot failed (``engine_telemetry``), decided as it failed: its request was refused (``bad_request``), a
 # file it names is not there (``no_file``), its input could not be read or built (``input_error``), the headless
 # browser did not start (``browser``, earlier releases'), out of time (``timeout``) or memory (``memory``), no OpenGL
 # context to draw in (``no_gl``: no X display on Linux, no GLX, a GPU-less Windows' GDI 1.1 --
-# ``render.context.Unavailable``), the picture was not drawn (``render_error``), a mistake in cadgen's code (``bug``),
-# or none of these (``other``).
+# ``render.context.Unavailable``), no kernel process the engine could start to draw in (``no_kernel``), the picture
+# was not drawn (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
 SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "no_gl",
-                               "render_error", "bug", "other"})
+                               "no_kernel", "render_error", "bug", "other"})
+# The failures that say why by their type alone, wherever they were raised: the library's and the server's, as the
+# engine answers them (``frames.failed_type``) or a traceback names them. A word a vocabulary lacks (``no_gl`` for a
+# build) is no reason of its.
+FAILED_TYPES = {"cad.engine.render.context.Unavailable": "no_gl",
+                "cad.engine.serve.KernelProcessesUnavailable": "no_kernel",
+                "cad_server.engine.supervisor.Gone": "no_kernel"}
 # Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
 # where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
 # grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's
@@ -1113,13 +1123,16 @@ _KERNEL = frozenset({"OCP", "build123d"})
 def told_failure(found: Mapping[str, Any]) -> str:
     """``build_failure`` of an error told as facts (``told_signature``'s, with ``engine``: the engine's own code
     raised it, and ``refused``: the engine refused the request by name), never from what it said: a refusal
-    (``refused``); cadgen's mistake (``bug``); one its class says (``_BUILD_ERRORS``, by a built-in's name); else
+    (``refused``); one its type names (``FAILED_TYPES``: the engine could start no kernel process); cadgen's mistake
+    (``bug``); one its class says (``_BUILD_ERRORS``, by a built-in's name); else
     the engine's (``export_error``: writing what the model made) or, for the model's own error, the class's
     module -- cadgen's (``refused``), the kernel's or a library's (``kernel_error``), anyone else's
     (``model_error``). Never raises."""
     try:
         if found.get("refused"):
             return "refused"
+        if FAILED_TYPES.get(str(found.get("type"))) in BUILD_FAILURES:
+            return FAILED_TYPES[str(found.get("type"))]
         if told_signature(found, "build") is not None:
             return "bug"
         kind = _builtin(found.get("type"))

@@ -8,7 +8,8 @@ environment, ``adopt``). The answers are frames: a JSON object on one line and, 
 builds and ``{"id", "progress"}`` frames saying where it is (``progress.py``: each stage, and each
 body a build runs), then one ``{"id", "done", "rssMb"}`` (the build's reports, and the worker's
 resident memory after it, in MiB; ``"retire": true`` too when it is over its cap, ``retirement``)
-or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``). A file the build writes
+or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``; with ``type`` where it is a
+failure said in words alone, a file not written: ``frames.failed_type``). A file the build writes
 is sent nowhere: a page serving it as a file reads it from the disk, as it reads any file another
 program wrote. What the model prints goes to the worker's stderr, which the daemon passes on. The
 worker exits when its stdin closes: the daemon's supervisor closes it to retire the worker
@@ -633,7 +634,8 @@ def main() -> int:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
-                send({"id": ident, "failed": str(error), **refusal(error)})
+                # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
+                send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})
@@ -672,7 +674,7 @@ def main() -> int:
             send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
                   **({"retire": True} if retire else {})})
         except BuildError as error:
-            send({"id": ident, "failed": str(error)})
+            send({"id": ident, "failed": str(error), **frames.failed_type(error)})
         except BaseException as error:  # noqa: BLE001 - the worker answers every request
             send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error, error.__traceback__))})
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

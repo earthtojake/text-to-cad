@@ -261,6 +261,44 @@ class EngineTelemetryTest(unittest.TestCase):
                                            for error, part in cases] + [("render_error", "none", 1)]))
         self.assertNotIn("secret", json.dumps(payload))
 
+    def test_a_failure_the_engine_answers_in_words_is_counted_by_its_type_never_as_a_refusal(self) -> None:
+        # The engine that could not start the kernel process the work runs in, a file the worker could not write:
+        # failures the daemon or the worker answers in words alone, with the type they failed with beside them
+        # (``frames.failed_type``). Each is what it is; only a type that is a refusal is one.
+        from cad.engine import api, frames
+        from cad.engine.build import BuildError
+        from cad.engine.serve import KernelProcessesUnavailable
+        from cad_server.engine.daemon import _unstarted
+        from cad_server.engine.supervisor import Gone
+
+        source = (self.tmp / "secret.xbf", self.tmp / "out.png")
+        (self.tmp / "secret.xbf").touch()
+
+        def counted(answer: dict) -> tuple[str, str]:
+            failed = api._failed(answer)
+            snapshot = api._facts("snapshot", source, {}, {}, None, failed, 0.5)
+            build = api._facts("build", (), {}, {}, None, failed, 0.5)
+            return (engine_telemetry.counts(snapshot, "command")["snapshots"][0]["reason"],
+                    engine_telemetry.counts(build, "command")["builds"][0]["reason"])
+
+        unavailable = KernelProcessesUnavailable("the server has no CAD kernel environment: secret")
+        unstarted = Gone("the worker for secret.py did not start", unready=True)
+        cases = [
+            ({"failed": str(unavailable), **frames.failed_type(unavailable)}, ("no_kernel", "no_kernel")),
+            ({"failed": str(unstarted), **_unstarted(unstarted)}, ("no_kernel", "no_kernel")),
+            ({"failed": "secret.png: permission denied", **frames.failed_type(PermissionError())}, ("render_error", "io_error")),
+            ({"failed": "no secret.step", **frames.failed_type(FileNotFoundError())}, ("no_file", "missing_file")),
+            ({"failed": "@xbf returned no shape", **frames.failed_type(BuildError("x"))}, ("bad_request", "refused")),
+            ({"failed": "unknown request 'secret'"}, ("bad_request", "refused")),  # in words alone: a refusal, as ever
+        ]
+        for answer, reasons in cases:
+            with self.subTest(answer=answer):
+                self.assertEqual(counted(answer), reasons)
+        # One that died under the work says so in its words (its exit status): no type to count it by.
+        self.assertEqual(_unstarted(Gone("the worker for secret.py exited (-9) during the build", during=True)), {})
+        self.assertLessEqual({"no_kernel", "no_gl"}, analytics.SNAPSHOT_FAILURES)
+        self.assertIn("no_kernel", analytics.BUILD_FAILURES)
+
     def test_nothing_is_counted_where_the_environment_or_the_asker_says_so(self) -> None:
         for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
             with mock.patch.dict(os.environ, switch):
