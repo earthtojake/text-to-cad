@@ -74,7 +74,8 @@ checksum. It:
     should it not start, the release before comes back. With none running, the next
     CAD session starts this release's.
 11. Says what each app has now, and lists the apps to restart to load what it
-    installed or updated.
+    installed or updated. An agent whose skills folder lacks one of the skills it
+    was given fails the run: its line says which, and the command exits 1.
 
 It asks nothing on the way: it carries out the plan it prints, so a dry run is how
 to see the plan before anything changes. Run it again to update: an app that is up
@@ -355,14 +356,17 @@ core CAD workflows and let you view CAD files in a localhost web app. The instal
 command gives them to the agents it knows when they are installed: GitHub Copilot
 (VS Code's agent too), Windsurf, Cline, Amp, Antigravity, OpenClaw, Droid, Goose,
 Kilo Code, Kiro CLI, Hermes Agent, OpenCode, Roo Code, Trae and Zed. It copies them
-from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) into each
-one's own skills folder with the [Skills CLI](https://skills.sh), which needs Node
-(`npx`), in one command:
+from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) with the
+[Skills CLI](https://skills.sh), which needs Node (`npx`), into the skills folder it
+keeps for each, in one command:
 `npx --prefer-offline -y skills@latest add <plugin folder>/skills -g -a <agent> ... -s '*' -y --copy --json`.
 It names each agent: it never does this for an app with a plugin, and moves a loose
-copy of the skills out of such an app's skills folder. Cline and Zed keep skills in
-`~/.agents/skills`, which Codex and Gemini CLI read too: there, those apps list the
-skills beside their plugin's. Its receipt records which skills each agent got, from which
+copy of the skills out of such an app's skills folder. For GitHub Copilot, Amp,
+Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed, the Skills CLI copies them
+into `~/.agents/skills`, never the agent's own folder (`~/.copilot/skills`,
+`~/.factory/skills` and so on). All of them but Antigravity, whose documentation
+names only its own folders, read it there, and so do Codex and Gemini CLI, which
+list the skills beside their plugin's. Its receipt records which skills each agent got, from which
 release; running it again, or an update, adds them again after a new release or when
 one of them is gone, and `--uninstall` removes them.
 
