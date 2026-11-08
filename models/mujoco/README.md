@@ -19,6 +19,26 @@ A robot is here only if its maker publishes the raw CAD. Of the four robots
 i2rt YAM and Unitree G1 publish a URDF and meshes but no STEP: there is nothing upstream of their
 descriptions to convert, so they are not benchmarked.
 
+### Candidates beyond Playground
+
+Other Menagerie robots whose makers publish raw CAD without a login, found by reading every
+Menagerie model's provenance and checking each maker's files (as of November 2026; none is wired in
+yet):
+
+| Menagerie model | Raw CAD | License | Why it is worth adding |
+| --- | --- | --- | --- |
+| `leap_hand` | full assembly STEP, left and right ([leaphand.com CAD page](https://v1.leaphand.com/leap_cad)) | CC BY-SA 4.0 | a dexterous hand: many joints, a real multi-body assembly |
+| `robotiq_2f85`, `robotiq_2f85_v4` | the assembly STEP Menagerie's v4 README names as its own source | not stated | a small, well-known gripper with a linkage: low risk |
+| `trs_so_arm100` | `SO_5DOF_ARM100_Assembly.step` in the same SO-ARM100 repository | Apache-2.0 | the SO-101's predecessor: almost free given SO-101 |
+| `low_cost_robot_arm` | `arm.step` and per-part STEPs in AlexanderKoch-Koch/low_cost_robot | MIT | printed parts and servos, as SO-101, from another maker |
+| `ufactory_xarm7`, `ufactory_lite6` | one STEP per arm on UFACTORY's downloads page | not stated | industrial arms, likely fused bodies: the link split must be recovered |
+| `tetheria_aero_hand_open` | left and right STEP in TetherIA/aero-hand-open | CC BY-NC-SA 4.0 | a second hand; non-commercial |
+| `robotis_op3`, `seeed_rebot_devarm` | one assembly STEP / per-part STEPs | none stated / CERN-OHL-W | a humanoid; an arm without its actuators |
+
+Not benchmarkable: Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
+Onshape-sourced models (an export needs an account, and Menagerie's model was made from the same
+document), and most others (no raw CAD published).
+
 ## Running it
 
 ```bash
