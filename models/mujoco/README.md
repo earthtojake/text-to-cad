@@ -2,7 +2,7 @@
 
 Takes a robot maker's raw CAD through text-to-cad's whole process -- the assembly STEP read into a
 model, its parts grouped into links, its joints found from the geometry, materials and collision
-declared, the mechanism exported as MJCF, URDF and SDF -- and compares the result with the
+declared, the mechanism exported as MJCF and URDF -- and compares the result with the
 description Google built by hand in [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
 and with the maker's own URDF. The comparison is what refines the method: every difference is
 either a fact the CAD cannot carry (actuators, gains, contact tuning), a decision the model
@@ -44,7 +44,7 @@ document), and most others (no raw CAD published).
 ```bash
 cd models/mujoco
 python3 src/fetch.py              # the STEPs, the makers' URDFs and Menagerie, pinned (src/sources.py)
-python src/so101.py               # the model: reads the STEP, exports out/so101/so101.{xml,urdf,sdf}
+python src/so101.py               # the model: reads the STEP, exports out/so101/so101.{xml,urdf}
 python src/wxai.py
 python src/compare.py             # reports/<robot>.md and .json
 cad run mujoco-studio --model out/so101/so101.xml   # look at it in MuJoCo Studio
@@ -130,7 +130,7 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
 7. **Fixed: URDF details.** Joint limits were written with effort and velocity 0, and a joint was silently
    renamed when it shared a link's name (`gripper` became `gripper_2`). `limits(assembly, joint,
    effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and
-   joints are named in their own kinds (the SDF, whose frame graph names both, renames and says so).
+   joints are named in their own kinds.
 8. **No joint limits from geometry.** The STEP has no stops; a self-collision sweep found them for SO-101
    in 41 s. That belongs in text-to-cad, not in each model script.
 9. **Reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf deep-copies

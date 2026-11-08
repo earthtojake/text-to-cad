@@ -288,5 +288,5 @@ if __name__ == "__main__":
     arm = so101()
     built = time.time()
     OUT.mkdir(parents=True, exist_ok=True)
-    arm.export(OUT / "so101.xml", OUT / "so101.urdf", OUT / "so101.sdf")
+    arm.export(OUT / "so101.xml", OUT / "so101.urdf")
     print(f"built in {built - started:.1f} s, exported in {time.time() - built:.1f} s")

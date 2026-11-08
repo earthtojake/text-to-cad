@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent  # models/mujoco
 UPSTREAM = ROOT / "upstream"  # each maker's files, by robot
 MENAGERIE = ROOT / "menagerie"  # MuJoCo Menagerie's models, by directory
-OUT = ROOT / "out"  # what text-to-cad writes, by robot: <robot>.xml, .urdf, .sdf and their meshes
+OUT = ROOT / "out"  # what text-to-cad writes, by robot: <robot>.xml, .urdf and their meshes
 REPORTS = ROOT / "reports"  # compare.py's reports, by robot
 
 

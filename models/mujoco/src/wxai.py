@@ -1,6 +1,6 @@
 """Trossen WidowX AI (follower), from Trossen's own STEP to a robot description.
 
-    python src/wxai.py      # builds the model, exports out/wxai/wxai.xml, wxai.urdf, wxai.sdf
+    python src/wxai.py      # builds the model, exports out/wxai/wxai.xml, wxai.urdf
 
 The model READS the maker's assembly STEP (``upstream/wxai/wxai_follower.step``, fetched by
 ``src/fetch.py wxai``) and adds only what a careful engineer would: which parts move together (the
@@ -279,5 +279,5 @@ if __name__ == "__main__":
     print(f"built in {time.perf_counter() - started:.1f} s")
     OUT.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
-    built.export(OUT / "wxai.xml", OUT / "wxai.urdf", OUT / "wxai.sdf")
+    built.export(OUT / "wxai.xml", OUT / "wxai.urdf")
     print(f"exported in {time.perf_counter() - started:.1f} s")

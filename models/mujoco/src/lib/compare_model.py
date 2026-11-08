@@ -41,8 +41,6 @@ def detect_kind(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".urdf":
         return "urdf"
-    if suffix == ".sdf":
-        raise LoadError(f"{path}: MuJoCo cannot load SDF; compare the .xml or .urdf instead")
     try:
         tag = ET.parse(path).getroot().tag
     except ET.ParseError as e:

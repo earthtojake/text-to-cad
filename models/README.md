@@ -18,7 +18,7 @@ before loading either URDF.
 
 [`mujoco`](mujoco/README.md) is a benchmark, not a robot of ours: it fetches two makers' raw
 CAD (The Robot Studio's SO-101 and Trossen's WidowX AI assembly STEPs, pinned in
-`src/sources.py`), turns each into an articulated model and exports it as MJCF, URDF and SDF,
+`src/sources.py`), turns each into an articulated model and exports it as MJCF and URDF,
 then compares the result with Google's hand-made MuJoCo Menagerie model and the maker's own URDF.
 Nothing it fetches or writes is committed: `python src/fetch.py` downloads the sources into
 ignored folders.

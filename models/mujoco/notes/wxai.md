@@ -1,7 +1,7 @@
 # WidowX AI (follower): Trossen's STEP to a MuJoCo description
 
 `src/wxai.py` reads `upstream/wxai/wxai_follower.step` and returns the articulated arm. Its `__main__`
-builds the arm and writes `out/wxai/wxai.xml`, `wxai.urdf` and `wxai.sdf`, with meshes beside them.
+builds the arm and writes `out/wxai/wxai.xml` and `wxai.urdf`, with meshes beside them.
 The axis and travel measurements are in `src/lib/step_axes.py`. Every number in the model comes from the
 STEP's geometry or from Trossen's published specification. The model uses only the official link and
 joint names and the sign conventions of Menagerie's `trossen_wxai` and Trossen's URDF.
@@ -242,8 +242,6 @@ gripping-force formula.
   - Info notes: pyramidal cone and default solref (the consumer's choice), and no `home` key.
 - `cad urdf validate out/wxai/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable), total
   mass 4 kg.
-- `cad sdf validate out/wxai/wxai.sdf`: OK. 9 links, 9 joints; `collision_reuses_visual_mesh`
-  warnings; `gz` is not installed.
 
 ## Snapshots
 
@@ -260,7 +258,7 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
 
 - `python src/wxai.py` through the daemon:
   - Cold build 7.5 s (the STEP read about 6 s of it).
-  - Export of the MJCF, URDF and SDF in 3.7 s.
+  - Export of the MJCF and URDF in under 3.7 s (3.7 s was measured with a third format written too).
   - Warm rebuild 0.03 s, with the export saying "unchanged" in 2.4 s.
 - In-process (`api.export(wxai.wxai, ..., daemon=False)`): 13 s.
 - `measure_gripper()`: 66 s.
