@@ -308,7 +308,7 @@ function ViewRow({ view, pmi, ofParts }) {
         {ofParts ? <TreeRowLabel className="shrink-0 text-micro text-muted-foreground">{view.partName}</TreeRowLabel> : null}
       </button>
     </TreeRowSurface>
-    {note ? <FileSheetStatusText className="pb-0.5 pl-8">{note}</FileSheetStatusText> : null}
+    {note ? <FileSheetStatusText className="pb-0.5 pl-6">{note}</FileSheetStatusText> : null}
   </li>;
 }
 

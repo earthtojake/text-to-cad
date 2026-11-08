@@ -262,9 +262,7 @@ const HOLE_FACE = { id: 'i0/face/7', part: 0, ref: V4_HOLE, surface: { type: 'cy
 const ADD = (...names: string[]) => `Add this PMI to the annotate(...) call of the model's part "plate" (from cad.build123d import ${['annotate', ...names].join(', ')})`;
 const requests = () => live.changeChips.map((chip: any) => chip.request);
 const form = () => document.querySelector<HTMLElement>('[data-pmi-new]')!;
-async function openNew(_user: ReturnType<typeof userEvent.setup>, edit?: (structure: any) => any, props: Record<string, unknown> = {}) {
-  openMbd(edit, { panel: true, ...props });
-}
+const openNew = (edit?: (structure: any) => any, props: Record<string, unknown> = {}) => openMbd(edit, { panel: true, ...props });
 async function choose(user: ReturnType<typeof userEvent.setup>, kind: string) {
   await user.click(screen.getByRole('button', { name: 'New PMI', exact: true }));
   await user.click(document.querySelector<HTMLElement>(`[data-pmi-new-kind="${kind}"]`)!);
@@ -272,9 +270,17 @@ async function choose(user: ReturnType<typeof userEvent.setup>, kind: string) {
 }
 const add = (user: ReturnType<typeof userEvent.setup>) => user.click(within(form()).getByRole('button', { name: 'Add to Quick Edit' }));
 
+it('a kind asked for from a face\'s menu brings PMI\'s tab up on its form', () => {
+  const onShowTab = vi.fn();
+  render(<FlatPanel mode="docked" open onClose={() => {}} label="Panel" searchLabel="Search" tab="pmi" onTabChange={() => {}} onShowTab={onShowTab}
+    width={216} maxWidth={400} onWidthChange={() => {}} focusSearch={0}
+    sections={<PmiSection pmi={section({ entries: [], editable: true }) as any} picked={[]} moving={false} request={{ kind: 'note', key: 1 }} />} />);
+  expect(onShowTab).toHaveBeenCalledWith('pmi');
+});
+
 it('New offers, with nothing picked on a part of its own, a note and a view from here; a profile needs faces, and the part has its general profile', async () => {
   const user = userEvent.setup();
-  await openNew(user);
+  openNew();
   await user.click(screen.getByRole('button', { name: 'New PMI', exact: true }));
   const item = (kind: string) => document.querySelector(`[data-pmi-new-kind="${kind}"]`)!;
   expect(['profile', 'note', 'general_profile', 'view'].map(kind => [item(kind).hasAttribute('data-disabled'), item(kind).textContent]))
@@ -283,7 +289,7 @@ it('New offers, with nothing picked on a part of its own, a note and a view from
 
 it('a surface profile on the faces picked, to its part\'s datums, and a general profile where its part has none', async () => {
   const user = userEvent.setup();
-  await openNew(user, structure => ({ ...structure, pmi: structure.pmi.filter((item: any) => item.id !== 'general') }), { picked: [HOLE_FACE] });
+  openNew(structure => ({ ...structure, pmi: structure.pmi.filter((item: any) => item.id !== 'general') }), { picked: [HOLE_FACE] });
   await choose(user, 'profile');
   // A value is the person's to give: until then, nothing to add.
   expect((within(form()).getByRole('button', { name: 'Add to Quick Edit' }) as HTMLButtonElement).disabled).toBe(true);
@@ -301,7 +307,7 @@ it('a surface profile on the faces picked, to its part\'s datums, and a general 
 
 it("a note's words are the person's own, typed, and none given asks for nothing", async () => {
   const user = userEvent.setup();
-  await openNew(user);
+  openNew();
   await choose(user, 'note');
   expect(within(form()).getByText('A general note, on no face.')).toBeTruthy();
   expect((within(form()).getByRole('button', { name: 'Add to Quick Edit' }) as HTMLButtonElement).disabled).toBe(true);
@@ -313,7 +319,7 @@ it("a note's words are the person's own, typed, and none given asks for nothing"
 it('a view from here is the camera and the Clip now, in its part\'s frame, showing what is drawn; its name the person\'s to give', async () => {
   const user = userEvent.setup();
   let clip: any = { axis: 'y', at: 0, invert: true };
-  await openNew(user, undefined, { here: () => ({ camera: { position: [0, -170, 0], target: [0, 0, 0], up: [0, 0, 1] }, clip }) });
+  openNew(undefined, { here: () => ({ camera: { position: [0, -170, 0], target: [0, 0, 0], up: [0, 0, 1] }, clip }) });
   await choose(user, 'view');
   const name = within(form()).getByRole('textbox', { name: 'View name' }) as HTMLInputElement;
   expect(name.value).toBe('view');
@@ -332,7 +338,7 @@ it('a view from here is the camera and the Clip now, in its part\'s frame, showi
 
 it("a view from here is refused where its part's placement turns the Clip off the part's axes", async () => {
   const user = userEvent.setup();
-  await openNew(user, structure => ({ ...structure, instances: structure.instances.map((instance: any) => ({ ...instance, matrix: EIGHTH_Z })) }),
+  openNew(structure => ({ ...structure, instances: structure.instances.map((instance: any) => ({ ...instance, matrix: EIGHTH_Z })) }),
     { here: () => ({ camera: { position: [0, -170, 0], target: [0, 0, 0], up: [0, 0, 1] }, clip: { axis: 'y', at: 0, invert: false } }) });
   await choose(user, 'view');
   expect(within(form()).getByText("Its section is not on this placement's axes")).toBeTruthy();
