@@ -108,8 +108,8 @@ A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf
 dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process sheet` of a cut file) is
 the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
 STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
-`trimesh` integration, and judged against a cited rule set (`--rules`), every measurement and every rule's
-outcome under `--json`; it runs in this process where its environment holds the type's integration, else in
+`trimesh` integration, and judged against general rules, each cited (no shop's limits), every measurement
+and every rule's outcome under `--json`; it runs in this process where its environment holds the type's integration, else in
 that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
 run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the

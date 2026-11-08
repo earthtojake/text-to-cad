@@ -705,14 +705,15 @@ cad model|xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pb
 cad stl|glb|threemf dfm FILE --process molding|printing [the process's options as above] [--units U]
 cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
-      ... [--rules generic|protolabs|hubs|xometry|sendcutsend|none] [--material M] [--json]
+      ... [--material M] [--json]
                                              the manufacturing check: SRC a file or a document id;
                                              --process, given none, the parts' declared one (a model,
                                              an xbf; a STEP keeps none) or a DXF's sheet; --units an
                                              STL's alone; exact geometry and a DXF the build123d
                                              integration's (findings at face refs, layers), a mesh the
-                                             trimesh integration's (at x, y, z); the rule set's
-                                             verdicts and every measurement
+                                             trimesh integration's (at x, y, z); the general
+                                             rules' verdicts (no shop's limits) and
+                                             every measurement
 cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
@@ -1012,17 +1013,18 @@ type's: its processes the `--process` choices (a mesh's `molding` and `printing`
 default), and their options alone; the operation names
 the integration that measures the type: `build123d` for `model`, `step`, `xbf` and `dxf`, `trimesh` for the meshes.
 Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a module of
-`cad._internal.dfm` with its options, rule sets, findings and summary -- or to all (`rules`, `material`,
+`cad._internal.dfm` with its options, its rules, findings and summary -- or to all (`material`,
 `units`), and are resolved there, the standard library alone: an option of another process, a process the
 type cannot be measured for (CNC or sheet of a mesh), a pull beside `--candidates`, a unit for a type that
-declares its own, a value of another kind and a rule set the process lacks are refused before anything is
+declares its own and a value of another kind are refused before anything is
 read, as a STEP given no process is (it keeps none). An xbf or a model given none is checked for the one
 its parts declare, its process's options refused once the document is read. A STEP or an xbf is
 read by `document.Loaded`, the engine's own loader, in the check's process; a document id or a handle is
 exported by the engine to an xbf in a temporary folder and read the same way, so every finding's location
 is a ref `inspect` resolves. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
-the type side judges the report against the rule set (`cad._internal.dfm.rules.evaluate`), and the result is
+the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
+practice, each rule cited, no shop's limits), and the result is
 a `CheckResult` whose `measurements` is the report with every rule's outcome (`measurements["rules"]`). The
 command runs it in its own process when its environment holds the type's integration
 (`cad_server._internal.integration_env.carries`: a checkout's, one installed with the extras); else in that

@@ -84,7 +84,7 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="cnc"|"sheet"|"molding"|"printing")`:
-exact geometry measured by the build123d integration, a mesh by trimesh, judged against cited rule sets); and
+exact geometry measured by the build123d integration, a mesh by trimesh, judged against general, cited rules); and
 engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
@@ -637,7 +637,7 @@ src/cad/
                          #   pdf document type)
   _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
                          #   signature and options, its integration's measuring imported when it
-                         #   runs (manufacturing), each process's options, rule sets and findings
+                         #   runs (manufacturing), each process's options, rules and findings
                          #   (dfm/, its README the mechanism), the numpy geometry both integrations'
                          #   checks share (meshops_*), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
@@ -713,7 +713,7 @@ from cad.build123d import cnc
 from part import part                                          # a model
 
 model.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
-step.dfm("bracket.step", process="sheet", rules="sendcutsend", material="5052")
+step.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
 step.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
 step.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
 cnc(shape, turning=True)                                       # a live build123d shape, the same result
@@ -738,11 +738,13 @@ cnc(shape, turning=True)                                       # a live build123
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
 `build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
 (`plate/face 7`); a mesh by the `trimesh` integration (`cad[trimesh]`), each at `x, y, z` in millimetres.
-The measurements are facts and always reported (`measurements`). The verdicts are a rule set's
-(`--rules`): `generic` by default, a starting point drawn from published guides that says in every verdict
-it is no shop's; a shop's own (`protolabs`, `hubs`, `xometry`, `sendcutsend`, where the process has one);
-or `none`. A failing rule is a finding coded by its id, at its place, naming its limit and source, with a
-hint saying what to change; an error is a limit the part breaks, a warning a recommendation; every rule's
+The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
+one table of rules, general practice from published design guides, each rule citing its guide as the
+evidence -- no rule is a shop's limit, and every result says so (`rules_general`). A shop's own limits are
+compared with the measurements; what a person knows of their own shop is a plain option (`--tools`,
+`--bend-radius`, `--k-factor`, `--sheet-size`, `--build-volume`, ...). A failing rule is a finding coded by
+its id, at its place, naming its limit and source, with a hint saying what to change; an error is a limit
+the part breaks, a warning a recommendation; every rule's
 outcome, its source and every failure are `measurements["rules"]`, and a figure not measured is never a
 pass. An error fails the check, as does a family that could not be measured (`measurement_failed`).
 `--material` picks a material's limits, and without it the material the parts declare is read
