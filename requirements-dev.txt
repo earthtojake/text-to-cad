@@ -8,7 +8,8 @@
 # environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
 # its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
 # environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py); and with
-# its mujoco extra (mujoco-core, 10 MB), so `cad mjcf validate --compile` compiles here the same way.
+# its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so `cad mjcf validate --compile` compiles here
+# the same way and `cad run mujoco-studio` serves Studio's web viewer from here.
 --editable ./packages/cad[build123d,trimesh,mujoco]
 --editable ./packages/cad-server
 --editable ./packages/cad-mcp

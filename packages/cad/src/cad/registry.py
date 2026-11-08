@@ -324,10 +324,12 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         holds="trimesh", download_mb=40),
     "mujoco": Integration(
         "mujoco", "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no "
-                  "renderer): an MJCF's validate compiles the model with it, so what MuJoCo refuses is a finding "
-                  "with MuJoCo's own words", extra="mujoco", process="in-process",
-        modules=("mujoco",), distributions=("mujoco-core",), identity=("mujoco", "mujoco-core"),
-        holds="MuJoCo's headless core", download_mb=10),
+                  "renderer) and MuJoCo Studio's web viewer: an MJCF's validate compiles the model with the core, so "
+                  "what MuJoCo refuses is a finding with MuJoCo's own words, and `cad run mujoco-studio --model "
+                  "scene.xml` serves the model in Studio for the person to open in a browser", extra="mujoco",
+        process="in-process", modules=("mujoco",), distributions=("mujoco-core", "mujoco-studio"),
+        identity=("mujoco", "mujoco-core", "mujoco-studio"), commands=("mujoco-studio",),
+        holds="MuJoCo's headless core and MuJoCo Studio", download_mb=20),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

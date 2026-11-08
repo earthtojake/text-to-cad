@@ -91,13 +91,18 @@ trimesh = [
   "scipy>=1.14,<2",
   "networkx>=3.2,<4",
 ]
-# The mujoco integration's extra: MuJoCo's headless core alone -- the compiler and the Python bindings, numpy
-# their one dependency, no renderer, no window system (cad.mujoco). An MJCF's validate compiles the model with
-# it, so what MuJoCo refuses is a finding in its own words. Never `mujoco` itself, which from 4.0 is a
-# meta-package that adds Studio, glfw and PyOpenGL (a window and a GPU this never uses), nor the menagerie or
-# the USD plugin. Bounded above: the compiler's Python API (MjSpec, the warning hook) moved between majors.
+# The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
+# one dependency (cad.mujoco) -- and MuJoCo Studio. An MJCF's validate compiles the model with the core, so
+# what MuJoCo refuses is a finding in its own words. Studio's web viewer is the person's window onto a model
+# (`cad run mujoco-studio --model scene.xml`, cad.mujoco._command): a Python package with its own command line,
+# so it comes with the extra as kicad-cli comes with cad[kicad]; it serves the page from this process, so it
+# stays headless (websockets its one dependency beside the core's, no GL). Never `mujoco` itself, which from
+# 4.0 is a meta-package that adds glfw and PyOpenGL for Studio's native window (a display and a GPU an agent's
+# sandbox has neither of), nor the menagerie or the USD plugin. Bounded above: the compiler's Python API
+# (MjSpec, the warning hook) and Studio's command line moved between majors.
 mujoco = [
   "mujoco-core>=4.0,<5",
+  "mujoco-studio>=4.0,<5",
 ]
 
 [project.urls]

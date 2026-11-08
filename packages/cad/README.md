@@ -625,7 +625,7 @@ src/cad/
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_molding,
                          #   _printing), and the dfm every 3D type runs with them (_check)
-  mujoco/                # the mujoco integration, MuJoCo's headless core (mujoco-core): an MJCF
+  mujoco/                # the mujoco integration, MuJoCo's headless core and Studio (mujoco-core, mujoco-studio): an MJCF
                          #   compiled by MuJoCo's own compiler, what it refuses and warns as
                          #   findings (_compile)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism

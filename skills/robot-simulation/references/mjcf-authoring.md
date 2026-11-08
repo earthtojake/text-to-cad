@@ -12,7 +12,7 @@ The conventions below are MuJoCo Menagerie's (google-deepmind/mujoco_menagerie),
 4. Write the compiler line, the default classes and the assets first, then the body tree, then actuators, equalities and keyframes.
 5. Compute inertials and unit conversions with formulas or a throwaway script, never freehand ([inertials.md](inertials.md)). Mesh files and scale: [meshes.md](meshes.md).
 6. Validate with `cad mjcf validate scene.xml --compile required` ([mjcf-checks.md](mjcf-checks.md)).
-7. Snapshot the `home` key and each joint moved; show the model ([Show the model](../SKILL.md#show-the-model)).
+7. Snapshot the `home` key and each joint moved; show the model ([Show the model](../SKILL.md#show-the-model)). To show it as MuJoCo compiles and simulates it: `cad run mujoco-studio --model path/to/scene.xml`, MuJoCo Studio's web viewer, which reloads the model as the file changes; the person opens the URL it prints.
 8. Report assumptions, skipped checks and risks ([guardrails.md](guardrails.md#the-report)).
 
 ## Units: the compiler line

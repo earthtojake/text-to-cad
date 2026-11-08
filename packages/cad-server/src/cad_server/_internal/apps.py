@@ -33,6 +33,11 @@ Where KiCads are, each platform's way:
   headless, with homes of its own (``_kicad_about``). A look that may run no command does not see a
   KiCad on Linux, as one without Spotlight misses a Mac app outside the usual folders.
 
+MuJoCo Studio is the one app the installation runs itself, its web viewer on an MJCF: ``cad run
+mujoco-studio``, the command the mujoco integration's extra brings, offered where that environment is here
+(``studio.find``, looked for with the rest: ``found_here``) and started as that command (``studio.start``),
+its page opened in the browser once Studio prints its URL.
+
 ``open_file`` starts the app on the file, or the operating system's own handler for it: detached,
 never waited on, never through a shell, its output discarded. It is given a path and an app the
 server found itself; nothing of a request is ever a command.
@@ -53,22 +58,24 @@ from pathlib import Path
 from typing import NamedTuple
 
 from cad.engine import executables
+from cad_server._internal.studio import Studio
 
-__all__ = ["APPS", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad", "NEVER_OPENED", "apps_for", "detect",
-           "file_manager", "kicad_label", "kicad_reads", "linux", "mac", "open_file", "opens", "windows"]
+__all__ = ["APPS", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "KiCad", "NEVER_OPENED", "Studio", "apps_for",
+           "detect", "file_manager", "found_here", "kicad_label", "kicad_reads", "linux", "mac", "open_file", "opens", "windows"]
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
         "sublime": "Sublime Text", "fusion": "Autodesk Fusion", "freecad": "FreeCAD", "bambu": "Bambu Studio",
         "orca": "OrcaSlicer", "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-        "kicad-nightly": "KiCad nightly"}
+        "kicad-nightly": "KiCad nightly", "mujoco-studio": "MuJoCo Studio"}
 # The apps that take each kind of file, in the menu's order. A kind not here takes none: the file
 # manager and the default app alone.
 _MESHES = ("bambu", "orca", "prusa", "freecad", "blender")
 KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
          "step": ("fusion", "freecad", "bambu", "orca", "prusa"),
          "stl": _MESHES, "3mf": _MESHES, "glb": ("blender",),
-         "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly")}
+         "kicad_pcb": ("kicad", "kicad-nightly"), "kicad_sch": ("kicad", "kicad-nightly"),
+         "mjcf": ("mujoco-studio",)}
 
 # Files no app but a KiCad record is started on, the operating system's default handler included (we cannot
 # show that it resolves to a KiCad that can open the file). The server never starts KiCad by itself (its work
@@ -154,7 +161,7 @@ LINUX_COMMANDS = {"vscode": ("code",), "cursor": ("cursor",), "zed": ("zed", "ze
 LINUX_KICADS = (("pcbnew", "eeschema", "kicad-cli", False), ("pcbnew-nightly", "eeschema-nightly", "kicad-cli-nightly", True))
 
 
-def apps_for(kind: str, found: Mapping[str, str | KiCad], file: str | os.PathLike | None = None) -> list[dict[str, str]]:
+def apps_for(kind: str, found: Mapping[str, str | KiCad | Studio], file: str | os.PathLike | None = None) -> list[dict[str, str]]:
     """The apps of ``found`` (``detect``'s) that take files of ``kind``, in the menu's order, each
     with its id and the name the menu shows: a KiCad's its label, with ``refuses: "newer"`` where it
     cannot read ``file``, which is read only when a KiCad is there to ask about it."""
@@ -570,18 +577,30 @@ def detect(platform: str = sys.platform, *, commands: bool = True) -> dict[str, 
     return linux(executables.find, _kicad_about if commands else None)
 
 
+def found_here(platform: str = sys.platform, *, commands: bool = True) -> dict[str, str | KiCad | Studio]:
+    """This computer's apps (``detect``) and MuJoCo Studio where the installation runs it with nothing
+    fetched (``studio.find``: files read, nothing run)."""
+    from cad_server._internal import studio
+
+    found: dict[str, str | KiCad | Studio] = {**detect(platform, commands=commands)}
+    mujoco = studio.find()
+    if mujoco is not None:
+        found["mujoco-studio"] = mujoco
+    return found
+
+
 class Detected:
     """What ``detect`` last found, read by every request and never computed on one: ``warm`` looks in the
     background as the server starts (no command), and ``found`` starts a background look on use when
     nothing has looked fully (with commands) or the last look is ``REFRESH_SECONDS`` old."""
 
-    def __init__(self, detect: Callable[..., dict[str, str | KiCad]] = detect, clock: Callable[[], float] = time.monotonic,
+    def __init__(self, detect: Callable[..., dict[str, str | KiCad | Studio]] = found_here, clock: Callable[[], float] = time.monotonic,
                  platform: str = sys.platform) -> None:
         self._detect = detect
         self._clock = clock
         self._platform = platform
         self._lock = threading.Lock()
-        self._found: dict[str, str | KiCad] | None = None
+        self._found: dict[str, str | KiCad | Studio] | None = None
         self._at = 0.0
         self._full = False
         self._looking: threading.Thread | None = None
@@ -590,7 +609,7 @@ class Detected:
         """Look now, in the background, without a command: the server's start."""
         return self._start(commands=False)
 
-    def found(self) -> dict[str, str | KiCad]:
+    def found(self) -> dict[str, str | KiCad | Studio]:
         """The apps last found (none before the first look ends); a look started if one is due."""
         with self._lock:
             found, due = self._found, (self._found is None or not self._full
@@ -633,13 +652,19 @@ def opens(path: str | None) -> bool:
     return not os.path.splitext(str(path or ""))[1].lower().startswith(NEVER_OPENED)
 
 
-def open_file(path: str, app: str | KiCad | None = None, *, platform: str = sys.platform,
+def open_file(path: str, app: str | KiCad | Studio | None = None, *, platform: str = sys.platform,
               spawn: Callable[..., object] = subprocess.Popen, startfile: Callable[[str], None] | None = None) -> None:
     """Start ``app`` (a path ``detect`` found, or a KiCad, by its editor for the file's extension) on the
     file at ``path``, or, with none, the operating system's own handler for it. Detached and never waited
     on; never through a shell. Raises ``FileNotFoundError`` when Linux has no ``xdg-open`` for the default,
     and ``PermissionError`` for a file no app is started on (``opens``), a KiCad alone being started on one
-    of its editors' files."""
+    of its editors' files. MuJoCo Studio is started as ``cad run mujoco-studio --model PATH`` (``studio.start``),
+    its page opened in the browser once it prints its URL."""
+    if isinstance(app, Studio):
+        from cad_server._internal import studio
+
+        studio.start(path, platform=platform)
+        return
     editor = _KICAD_EDITORS.get(os.path.splitext(path)[1].lower())
     if isinstance(app, KiCad) and editor is not None:
         app = getattr(app, editor)

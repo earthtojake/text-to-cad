@@ -47,7 +47,7 @@ only just added, its server may still be starting: try again for up to a minute 
 
 `cad doctor --check` also reports the installation in use and the server's release. Validation needs
 nothing beyond the Python standard library; a snapshot draws with the CAD kernel. `cad mjcf validate
---compile required` compiles the model with MuJoCo's headless core, `cad[mujoco]` (about 10 MB), which
+--compile required` compiles the model with MuJoCo's headless core, `cad[mujoco]` (about 20 MB with Studio's web viewer), which
 the `cad` command fetches into an environment of its own the first time and reuses after. `cad <verb>
 --help` gives the complete current interface.
 
@@ -206,6 +206,11 @@ cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 cad mjcf snapshot path/to/scene.xml review.png --pose home
 ```
+
+To show the person an MJCF as MuJoCo itself runs it, start MuJoCo Studio's web viewer on it:
+`cad run mujoco-studio --model path/to/scene.xml`. It reloads the model as the file changes and
+prints a URL for the person to open; it comes with `cad[mujoco]` (fetched once), and it listens on
+every network interface with no authentication, so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |

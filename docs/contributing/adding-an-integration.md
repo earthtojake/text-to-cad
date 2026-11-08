@@ -13,10 +13,16 @@ An integration usually makes or checks a document type, and adding a type has it
 [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) adds
 KiCad's boards and the `kicad` integration together.
 
-A smaller one is `mujoco`, which backs the `mjcf` type's `validate`. Its extra, `cad[mujoco]`, is
-`mujoco-core` alone: MuJoCo's compiler and Python bindings, numpy their one dependency, about 10 MB,
-headless, Apache-2.0. Never `mujoco` itself, a meta-package that adds Studio, glfw and PyOpenGL (a window
-and a GPU our code never uses), nor the menagerie. It is in-process: `cad.mujoco._compile` loads the model
+A smaller one is `mujoco`, which backs the `mjcf` type's `validate` and shows the person a model. Its
+extra, `cad[mujoco]`, is `mujoco-core` (MuJoCo's compiler and Python bindings, numpy their one dependency)
+and `mujoco-studio` (MuJoCo Studio, whose web viewer serves the page from Python: websockets beside the
+core's, no GL), about 20 MB, headless, Apache-2.0. Never `mujoco` itself, a meta-package that adds glfw and
+PyOpenGL for Studio's native window (a display and a GPU an agent's sandbox has neither of), nor the
+menagerie. Studio is the integration's command (`commands=("mujoco-studio",)`, `cad.mujoco._command`): `cad
+run mujoco-studio --model scene.xml` serves the model in Studio's web viewer, reloading it as the file
+changes, for the person to open at the URL it prints, and Open in offers it for an MJCF where that
+environment is here (`cad_server._internal.studio`). MuJoCo 4.0's web viewer listens on every interface
+with no host to choose, so the run says so first. The compile is in-process: `cad.mujoco._compile` loads the model
 with `MjModel.from_xml_path` and turns what MuJoCo refuses and warns into findings. Reading the model is
 the type's own (`cad.mjcf._source`, the standard library alone), so viewing an MJCF needs nothing
 installed; `cad mjcf validate --compile auto` compiles where this environment holds mujoco and says

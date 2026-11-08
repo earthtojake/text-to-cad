@@ -57,7 +57,7 @@ Each finding has a code; the codes are stable.
 | `required` | same as `auto` | the `cad` command makes the environment of `cad[mujoco]` and compiles there; `compile_unavailable` **error** only where it cannot |
 | `never` | not run | not run |
 
-Each warning MuJoCo issues while compiling is a `compile_warning` warning, in MuJoCo's words. `cad[mujoco]` is MuJoCo's headless core (`mujoco-core`, about 10 MB, no renderer), fetched once the first time `required` needs it and reused after.
+Each warning MuJoCo issues while compiling is a `compile_warning` warning, in MuJoCo's words. `cad[mujoco]` is MuJoCo's headless core and Studio's web viewer (`mujoco-core` and `mujoco-studio`, about 20 MB, no window system), fetched once the first time `required` needs it and reused after.
 
 Once compiled, the model is checked for what MuJoCo's modelling guide ("Model tuning") says to rule out before tuning anything, at `qpos0` and at the key named `home` where there is one (the message says which). The thresholds are heuristics, chosen to be sure rather than complete:
 

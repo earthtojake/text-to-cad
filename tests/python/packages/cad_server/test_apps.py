@@ -462,19 +462,21 @@ class KindsTest(unittest.TestCase):
     def test_the_apps_each_kind_takes_in_the_menus_order(self) -> None:
         every = {app: f"/apps/{app}" for app in apps.APPS}
         ids = {kind: [entry["id"] for entry in apps.apps_for(kind, every)]
-               for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch")}
+               for kind in ("script", "step", "stl", "3mf", "glb", "dxf", "urdf", "sdf", "srdf", "xbf", "kicad_pcb", "kicad_sch",
+                            "mjcf")}
         self.assertEqual(ids, {"script": ["vscode", "cursor", "zed", "pycharm", "sublime"],
                                "step": ["fusion", "freecad", "bambu", "orca", "prusa"],
                                "stl": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "3mf": ["bambu", "orca", "prusa", "freecad", "blender"],
                                "glb": ["blender"], "dxf": [], "urdf": [], "sdf": [], "srdf": [], "xbf": [],
-                               "kicad_pcb": ["kicad", "kicad-nightly"], "kicad_sch": ["kicad", "kicad-nightly"]})
+                               "kicad_pcb": ["kicad", "kicad-nightly"], "kicad_sch": ["kicad", "kicad-nightly"],
+                               "mjcf": ["mujoco-studio"]})
         self.assertEqual(apps.apps_for("step", {"bambu": "/b", "vscode": "/v"}), [{"id": "bambu", "name": "Bambu Studio"}])
         self.assertEqual(apps.APPS, {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed",
                                      "pycharm": "PyCharm", "sublime": "Sublime Text", "fusion": "Autodesk Fusion",
                                      "freecad": "FreeCAD", "bambu": "Bambu Studio", "orca": "OrcaSlicer",
                                      "prusa": "PrusaSlicer", "blender": "Blender", "kicad": "KiCad",
-                                     "kicad-nightly": "KiCad nightly"})
+                                     "kicad-nightly": "KiCad nightly", "mujoco-studio": "MuJoCo Studio"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
                          ["finder", "explorer", "files"])
 

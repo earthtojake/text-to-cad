@@ -176,6 +176,20 @@ class OpenInRoutesTest(unittest.TestCase):
         self.assertEqual(self.post({"id": newer, "target": "source", "app": "kicad-nightly"})[0], 400)
         self.opener.assert_not_called()
 
+    def test_an_mjcf_opens_in_mujoco_studio_where_the_installation_runs_it(self) -> None:
+        path = Path(self.fixture.root) / "scene.xml"
+        path.write_text('<mujoco><worldbody><geom type="sphere" size="0.1"/></worldbody></mujoco>\n', encoding="utf-8")
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents?path={path}")
+        self.assertEqual(status, 200)
+        ident = json.loads(body)["documents"][0]["id"]
+        self.assertEqual(self.listed(ident), {"target": "source", "kind": "mjcf", "name": "scene.xml", "present": True,
+                                              "apps": []}, "no Studio found, none offered")
+        studio = apps.Studio("/env/bin/mujoco-studio")
+        self.found["mujoco-studio"] = studio
+        self.assertEqual(self.listed(ident)["apps"], [{"id": "mujoco-studio", "name": "MuJoCo Studio"}])
+        self.assertEqual(self.post({"id": ident, "target": "source", "app": "mujoco-studio"}), (204, None))
+        self.opener.assert_called_once_with(os.path.normpath(self.fixture.app.file_of(ident)), studio)
+
     def test_a_kicad_files_default_handler_stays_withheld_and_refused(self) -> None:
         # Nothing shows that its handler is a KiCad that can open it: with no KiCad here, no app at all, and the
         # default is said not to be offered; an open is refused, and the opener itself refuses it and any plain app.

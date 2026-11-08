@@ -1,11 +1,12 @@
 """``cad.mujoco``: the mujoco integration -- our code that calls MuJoCo, taking its objects (its extra,
-``cad[mujoco]``: ``mujoco-core``, the compiler and the Python bindings alone, numpy their one dependency;
-no renderer, no window system).
+``cad[mujoco]``: ``mujoco-core``, the compiler and the Python bindings, numpy their one dependency, and
+``mujoco-studio``, MuJoCo Studio's web viewer; no window system).
 
 What it does for the MJCF document type (``cad.mjcf``): ``compile_findings`` compiles a model with
 MuJoCo's own compiler and says what it refused, in its words, as findings (``cad mjcf validate
 --compile``). Reading an MJCF for the viewer and the stills is the type's own (``cad.mjcf._source``),
-the standard library alone: nothing here is needed to open one.
+the standard library alone: nothing here is needed to open one. ``cad run mujoco-studio --model FILE`` shows
+the person a model in Studio's web viewer (``_command``: the environment's own ``mujoco-studio``).
 
 Everything loads on first use: ``import cad.mujoco`` imports no mujoco. A helper called where the
 extra is missing says so by name (``cad[mujoco]``), as every integration's does.
