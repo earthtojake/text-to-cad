@@ -1708,6 +1708,23 @@ def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
                 pass
 
 
+def _accept(daemon: Daemon, listener: socket.socket) -> None:
+    """Windows' main loop: each connection its port takes, served, until the daemon stops."""
+    while not daemon.stopping.is_set():
+        try:
+            connection, _address = listener.accept()
+        except socket.timeout:
+            continue
+        except OSError:
+            # An update's drain closed the port: it starts the switch helper next, on a daemon
+            # thread this process's exit would end, so the loop waits for the drain to stop it.
+            if daemon.draining:
+                daemon.stopping.wait()
+            break
+        connection.settimeout(None)
+        threading.Thread(target=_serve_connection, args=(daemon, connection), daemon=True).start()
+
+
 def _bind() -> socket.socket:
     """Windows' listener: a loopback port (its port file names it, and the token a client shows)."""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1906,15 +1923,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             _mirror(port, daemon.token)
             daemon.reached_by(port_path())
             listener.settimeout(0.5)
-            while not daemon.stopping.is_set():
-                try:
-                    connection, _address = listener.accept()
-                except socket.timeout:
-                    continue
-                except OSError:
-                    break
-                connection.settimeout(None)
-                threading.Thread(target=_serve_connection, args=(daemon, connection), daemon=True).start()
+            _accept(daemon, listener)
         else:
             from cad.engine.door import Door
 

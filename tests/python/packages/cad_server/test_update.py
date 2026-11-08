@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -291,6 +292,45 @@ class DrainTest(unittest.TestCase):
             engine.busy = 0  # the build answered
         self.assertTrue(engine.stopping.wait(30))
         self.assertEqual((closed, started.is_set()), (["door"], True))
+
+    def test_its_port_closed_by_the_drain_the_accept_loop_stays_until_the_switch_has_started(self) -> None:
+        # Windows' loop (``_accept``), on every system: were it to end at the closed port, the process
+        # would exit and take the drain's thread with it, before the switch helper started.
+        from cad_server.engine import daemon
+
+        engine = daemon.Daemon(cap=1)
+        self.addCleanup(engine.supervisor.stop)
+        settled, exited, release = threading.Event(), threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        class Stopping(threading.Event):
+            def wait(self, timeout: float | None = None) -> bool:
+                if threading.current_thread() is loop:
+                    settled.set()  # the loop saw the closed port and waits for the drain
+                return super().wait(timeout)
+
+        engine.stopping = Stopping()
+        port = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(port.close)
+        port.settimeout(0.5)
+        engine.listener = port
+
+        def accept() -> None:
+            try:
+                daemon._accept(engine, port)
+            finally:
+                exited.set()
+                settled.set()
+
+        loop = threading.Thread(target=accept, daemon=True)
+        loop.start()
+        engine.drain(release.wait)  # the switch helper's start, held
+        self.assertTrue(settled.wait(30))
+        self.assertFalse(exited.is_set(), "the port closed, the loop waits while the switch starts")
+        release.set()
+        loop.join(30)
+        self.assertFalse(loop.is_alive())
+        self.assertTrue(engine.stopping.is_set())
 
     def test_an_agent_s_tool_call_holds_it_and_an_open_session_does_not(self) -> None:
         from cad_server.mcp.http import PAGE_TOOLS, Session, Sessions
