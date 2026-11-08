@@ -5,4 +5,12 @@
 /out/
 /reports/
 /tmp/
+# And what any model writes on request (cad <type> export), as in every project.
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/XBF/
+/PDF/
 __pycache__/
