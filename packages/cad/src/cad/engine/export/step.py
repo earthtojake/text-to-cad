@@ -496,22 +496,36 @@ def _pmi_records(data: bytes) -> bytes:
 # STEP File Analyzer, "the length unit exponent should be -3". Each element is written with the
 # unit it names on the next record, and the file's numbers stay. The value it writes untyped, where
 # ``measure_value`` is a select a strict reader needs typed: ``POSITIVE_RATIO_MEASURE``, as an AP242
-# writer of no OCCT types it (haecceity's).
+# writer of no OCCT types it (haecceity's). And its gram is a bare ``SI_UNIT($,.GRAM.)``, where SI's
+# unit of mass is the kilogram (``SI_UNIT(.KILO.,.GRAM.)``) and NIST's analyzer wants a gram stated
+# as one: a ``CONVERSION_BASED_UNIT`` 'gram' of 0.001 kg, as haecceity writes it. The kilogram, its
+# measure and the exponents of a mass are written once, after the file's last record, and each
+# density's gram names them; OCCT's reader takes the same density back.
 _DENSITY_VALUE = re.compile(rb"(MEASURE_REPRESENTATION_ITEM\s*\(\s*'density'\s*,\s*)"
                             rb"([-+]?[0-9.]+(?:[eE][-+]?[0-9]+)?)(\s*,)")
-_DENSITY_MASS = re.compile(rb"(DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*)3\.(\s*\)\s*;\s*#\2\s*=\s*\(\s*MASS_UNIT\s*\(\s*\)"
-                           rb"\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\$\s*,\s*\.GRAM\.\s*\)\s*\))")
+_DENSITY_MASS = re.compile(rb"(DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*)3\.(\s*\)\s*;\s*#\2\s*=\s*)\(\s*MASS_UNIT\s*\(\s*\)"
+                           rb"\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\$\s*,\s*\.GRAM\.\s*\)\s*\)")
 _DENSITY_LENGTH = re.compile(rb"(DERIVED_UNIT_ELEMENT\s*\(\s*#(\d+)\s*,\s*)2\.(\s*\)\s*;\s*#\2\s*=\s*\(\s*LENGTH_UNIT\s*\(\s*\)"
                              rb"\s*NAMED_UNIT\s*\(\s*\*\s*\)\s*SI_UNIT\s*\(\s*\.CENTI\.\s*,\s*\.METRE\.\s*\)\s*\))")
 
 
 def _density_units(data: bytes) -> bytes:
-    """Each density typed and its unit stated as its number is, g/cm³ (see above); a file with no
-    material is left as it is."""
+    """Each density typed and its unit stated as its number is, g/cm³, the gram as 0.001 kg (see
+    above); a file with no material is left as it is."""
     if b"DERIVED_UNIT_ELEMENT" not in data:
         return data
     data = _DENSITY_VALUE.sub(rb"\g<1>POSITIVE_RATIO_MEASURE(\g<2>)\g<3>", data)
-    return _DENSITY_LENGTH.sub(rb"\g<1>-3.\g<3>", _DENSITY_MASS.sub(rb"\g<1>1.\g<3>", data))
+    last = max((int(match.group(1)) for match in _RECORD.finditer(data)), default=0)
+    kilogram, measure, exponents = last + 1, last + 2, last + 3
+    gram = b"( CONVERSION_BASED_UNIT('gram',#%d) MASS_UNIT() NAMED_UNIT(#%d) )" % (measure, exponents)
+    data, grams = _DENSITY_MASS.subn(lambda match: match.group(1) + b"1." + match.group(3) + gram, data)
+    data = _DENSITY_LENGTH.sub(rb"\g<1>-3.\g<3>", data)
+    if not grams:
+        return data
+    end = data.rindex(b"ENDSEC;")
+    return (data[:end] + b"#%d = ( MASS_UNIT() NAMED_UNIT(*) SI_UNIT(.KILO.,.GRAM.) );\n" % kilogram
+            + b"#%d = MASS_MEASURE_WITH_UNIT(MASS_MEASURE(0.001),#%d);\n" % (measure, kilogram)
+            + b"#%d = DIMENSIONAL_EXPONENTS(0.,1.,0.,0.,0.,0.,0.);\n" % exponents + data[end:])
 
 
 def _default_tolerances(path: Path, stated: list[tuple[str, str]]) -> None:

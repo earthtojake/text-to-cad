@@ -196,9 +196,9 @@ class MaterialsTest(unittest.TestCase):
         self.assertIn(metals.mild_steel().material.density, densities)
 
     def test_a_step_states_each_density_in_grams_per_cubic_centimetre(self):
-        """OCCT's writer leaves the value untyped and names the unit gram³·cm²: the export types it
-        and states the unit as the number is (``export.step._density_units``), and the reader gives
-        each density back the same."""
+        """OCCT's writer leaves the value untyped and names the unit gram³·cm², its gram a bare SI
+        unit: the export types it and states the unit as the number is, the gram as 0.001 kg
+        (``export.step._density_units``), and the reader gives each density back the same."""
         script = self.folder / "model.py"
         script.write_text(textwrap.dedent(SOURCE.replace("ROUGHNESS", "0.5")), encoding="utf-8")
         report = engine_build.build(script, ["assembly"], cwd=self.folder)[0]
@@ -212,8 +212,16 @@ class MaterialsTest(unittest.TestCase):
             stated = []
             for element in re.findall(r"#(\d+)", records[unit]):
                 named, exponent = re.fullmatch(r"DERIVED_UNIT_ELEMENT\(#(\d+),(.*)\)", records[element]).groups()
-                stated.append((re.search(r"SI_UNIT\((.*?)\)", records[named]).group(1), float(exponent)))
-            self.assertEqual(stated, [("$,.GRAM.", 1.0), (".CENTI.,.METRE.", -3.0)])
+                stated.append((records[named], float(exponent)))
+            (gram, one), (centimetre, minus_three) = stated
+            self.assertEqual((one, minus_three), (1.0, -3.0))
+            self.assertIn("SI_UNIT(.CENTI.,.METRE.)", centimetre)
+            # The gram is 0.001 of SI's unit of mass, the kilogram, as NIST's analyzer wants it.
+            measure, exponents = re.fullmatch(r"\( CONVERSION_BASED_UNIT\('gram',#(\d+)\) MASS_UNIT\(\) "
+                                              r"NAMED_UNIT\(#(\d+)\) \)", gram).groups()
+            kilogram = re.fullmatch(r"MASS_MEASURE_WITH_UNIT\(MASS_MEASURE\(0\.001\),#(\d+)\)", records[measure]).group(1)
+            self.assertEqual(records[kilogram], "( MASS_UNIT() NAMED_UNIT(*) SI_UNIT(.KILO.,.GRAM.) )")
+            self.assertEqual(records[exponents], "DIMENSIONAL_EXPONENTS(0.,1.,0.,0.,0.,0.,0.)")
         densities = {child.material.material.density for child in reader.read_step(path).children}
         self.assertEqual(densities, {metals.aluminum().material.density, metals.mild_steel().material.density})
 
