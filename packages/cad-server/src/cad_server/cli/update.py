@@ -59,7 +59,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
             return 1
         from cad_server._internal.cli_errors import Failure, write
 
-        return write(Failure(f"text-to-cad {newest}'s release folder was not made: {refused}"), prog=prog, as_json=True)
+        return write(Failure(f"cad-server {newest}'s release folder was not made: {refused}"), prog=prog, as_json=True)
     run = [made["cad"], "setup", *given]
     if os.name == "nt":
         return subprocess.call(run)

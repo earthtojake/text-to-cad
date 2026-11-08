@@ -45,6 +45,8 @@ READS = {
               "    return step.read(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder()\n",
     "old.py": "from pathlib import Path\nfrom cad import model, read_step\n\n\n@model\ndef holder2():\n"
               "    return read_step(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder2()\n",
+    "earlier.py": "from pathlib import Path\nfrom cadgen import model, step\n\n\n@model\ndef holder3():\n"
+                  "    return step.read(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder3()\n",
 }
 
 
@@ -96,7 +98,8 @@ class ProjectFolderLastTest(unittest.TestCase):
         for name, text in READS.items():
             (reads / name).write_text(text, encoding="utf-8")
         for name, said in (("new.py", []),
-                           ("old.py", ["old.py:2: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read"])):
+                           ("old.py", ["old.py:2: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read"]),
+                           ("earlier.py", ["earlier.py:2: CadDeprecationWarning: cadgen is deprecated; use cad"])):
             with self.subTest(script=name):
                 done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "run", name], cwd=reads, env=self.env)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
