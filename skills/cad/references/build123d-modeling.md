@@ -88,9 +88,13 @@ refuses 0–255 integers with OCCT's `Color out`. A paint (`paint(shape, faces, 
 0–255 integers, `(242, 240, 234)` or four with alpha.
 
 XBF keeps native physics and the resolved PBR data; GLB and the viewer retain the
-appearance. STEP keeps name, density and colour. Native texture maps are preserved in
-XBF; the viewer, GLB export and snapshots refuse them until UV mapping is supported.
-Use scalar PBR looks for those paths. OCCT snapshots keep their documented appearance approximations.
+appearance. STEP keeps name, density and colour. Native texture maps (every wood, cardboard
+and CFRP in the catalogue, a finish such as `processes.mjf()`) are kept in XBF but not drawn
+yet: the viewer, snapshots and GLB/3MF export draw the part in its material's scalar look (the
+colour build123d's setter infers, metalness, roughness, transmission, ...) and name what they left out — a snapshot or
+export warns `PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`, and `cad xbf
+inspect` lists the parts under `textures`. Set the scalar values with `pbr.override(...)` when
+the look matters. OCCT snapshots keep their documented appearance approximations.
 
 ## Placement and frame pitfalls
 

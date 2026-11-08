@@ -2639,8 +2639,13 @@ integers and a build123d `Color`; documents and glTF base factors use linear RGB
 
 XBF stores the native physical dataclass and the complete resolved PBR data, including
 embedded textures and texture transforms, on the XCAF material label. Native texture maps
-require UV mapping to render; the viewer, GLB export and OCCT snapshots refuse them
-explicitly. Use scalar PBR looks for those paths. Reading returns
+are not drawn yet (a part's mesh has no UVs): the viewer's scene, OCCT snapshots and GLB and 3MF
+exports draw the part in its material's scalar look, every map and texture transform left out
+(`document.scalar_pbr`), and the document keeps them whole, so drawing them later changes no
+format. What is left out is named once, from the materials: the structure's prototype lists it
+under `untextured` (map names by material name, only where there are any), a still's report
+and a snapshot's `warning:` line, an export's line to its log, `cad <type> inspect`'s `textures`
+list and the scene's `untextured` say it from there. Reading returns
 native `FinishedMaterial` objects with that resolved look; it does not recreate a finish's
 recipe. XCAF's standard attributes also carry the name, density and core PBR factors for
 other readers. STEP carries name, density and colour. The structure serves native physics
@@ -2953,7 +2958,8 @@ daemon's listener serves as they are.
 colour, `faceNames`, `edgeNames`, `vertexNames`, `faceColors` by ordinal, `material` and
 `faceMaterials` by ordinal -- each every field of the `Material`, named in camelCase
 (`youngModulus`, `transmissionColor`, ...), its colour the base colour it is drawn in, SI
--- and once meshed `unmeshed`/`unmeshedCheck`), instances (prototype, path, a 4x4 world matrix,
+-- `untextured` where a material carries texture maps the renderers leave out (**Materials**), and
+once meshed `unmeshed`/`unmeshedCheck`), instances (prototype, path, a 4x4 world matrix,
 colour), the tree, the document's version, and for an assembly with joints `kinematics` (also its
 own route, `.../kinematics`): the
 links (name, the instances each moves, its frame as built), the pairs (label, type, the two

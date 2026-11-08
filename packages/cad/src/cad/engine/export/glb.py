@@ -181,16 +181,16 @@ def write(view: Any, path: Path) -> None:
 
 def _material(rgba: tuple, given: dict[str, Any] | None, thickness: float) -> dict[str, Any]:
     """A look as a glTF material: PBR metallic-roughness and an extension for each part of the
-    look past it (``materials``' table), each written only where it is not glTF's default."""
+    look past it (``materials``' table), each written only where it is not glTF's default. Its
+    scalar look alone: a texture map needs UVs the mesh has none of, so the file has no image and the
+    export names what it left out (``untextured``, ``export.translate``)."""
     if given is None:
         return {"pbrMetallicRoughness": {"baseColorFactor": list(rgba), "metallicFactor": 0.0,
                                          "roughnessFactor": 0.6},
                 "doubleSided": False, "alphaMode": "BLEND" if rgba[3] < 1.0 else "OPAQUE"}
-    from cad.engine.document import pbr_from_json
+    from cad.engine.document import pbr_from_json, scalar_pbr
 
-    pbr = pbr_from_json(given["pbr"])
-    if pbr.maps.to_dict():
-        raise ValueError("GLB export of native material texture maps requires UV mapping; use a scalar PBR look")
+    pbr = pbr_from_json(scalar_pbr(given["pbr"]))
     pbr = pbr.override(metalness=0.0 if pbr.values.metalness is None else pbr.values.metalness,
                        roughness=0.5 if pbr.values.roughness is None else pbr.values.roughness)
     entry = json.loads(pbr.to_gltf().to_json())["materials"][0]

@@ -1013,7 +1013,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
-    materials and their masses, where any part has one; its joints,
+    materials and their masses, where any part has one, and the parts whose texture maps are not drawn
+    (``untextured``); its joints,
     mechanism states, configuration sequences and animations; and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
     masses, and nothing measured for them -- the lists alone."""
@@ -1083,6 +1084,9 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
         "unweighed": unweighed if materials else [],
+        # Each part whose materials' texture maps are drawn as their scalar look (``untextured``).
+        "untextured": [{"part": prototype.get("name") or prototype["key"], "materials": prototype["untextured"]}
+                       for prototype in prototypes if prototype.get("untextured")],
         "joints": joints,
         "couplings": couplings_of(kinematics),
         "states": [{"name": name, "values": values} for name, values in (kinematics.get("configurations") or {}).items()],

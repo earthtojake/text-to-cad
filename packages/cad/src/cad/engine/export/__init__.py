@@ -94,6 +94,8 @@ ZIP_DATE = (1980, 1, 1, 0, 0, 0)
 # millimetres: a micron, finer than any printer resolves, past which a part's triangles run to millions.
 TOLERANT = ("glb", "stl", "threemf")
 MIN_TOLERANCE = 0.001
+# The kinds that write each part's look (its PBR factors), so say the texture maps they leave out.
+LOOKS = ("glb", "threemf")
 # The angles an export takes, in degrees: at most the viewer's own (``mesh_format.ANGULAR``, which this
 # module does not import: a test holds them equal), so a file is never coarser than the viewer's mesh,
 # and at least one, past which a small round part's triangles run to millions.
@@ -502,4 +504,12 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
         for name, faces in (view.unmeshed or {}).items():
             told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
                  f"meshing to within {within(tolerance, angle)}")
+        if kind in LOOKS:  # a file of looks writes each part's scalar look, its texture maps left out
+            from cad.engine.document import untextured_said
+
+            for index in view.used():
+                prototype = view.prototypes[index]
+                if prototype.get("untextured"):
+                    told(f"{path.name}: " + untextured_said(prototype.get("name") or prototype["key"],
+                                                            prototype["untextured"], "written"))
     return size

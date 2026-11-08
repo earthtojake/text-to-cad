@@ -365,6 +365,24 @@ test("a face the mesher left without triangles is reported, not drawn", async ()
   document.release();
 });
 
+test("a textured material is drawn in its scalar look and the parts the structure names as untextured are reported", async () => {
+  const structure = structuredClone(STRUCTURE);
+  const ash = { type: "WoodMaterial", material: { name: "Hardwood_ASH", density: 670 },
+    pbr: { values: { metalness: 0, roughness: 0.9 }, textures: { color: "data:image/png;base64,AA==", normal: "data:image/png;base64,AA==" },
+      textureRepeat: [2, 2] } };
+  structure.prototypes[1].material = ash;
+  structure.prototypes[1].untextured = { Hardwood_ASH: ["color", "normal"] };
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine({ structure }).fetch });
+  const scene = createXbfScene(THREE, document);
+  scene.setSurfaceLook({ ...LOOK, authored: true });
+  const peg = scene.object3D.children[1].children[0].children.find(child => child.isMesh);
+  const worn = [peg.material].flat()[0];
+  assert.deepEqual([worn.roughness, worn.metalness, worn.map, worn.normalMap], [0.9, 0, null, null], "no map: the scalar look");
+  assert.deepEqual(scene.untextured, [{ prototype: 1, key: PEG.key, name: PEG.name, materials: { Hardwood_ASH: ["color", "normal"] } }]);
+  scene.dispose();
+  document.release();
+});
+
 test("display modes: the edges a mode draws, Hidden line's depth-only surfaces and Wireframe's none", async () => {
   const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
   const scene = createXbfScene(THREE, document);

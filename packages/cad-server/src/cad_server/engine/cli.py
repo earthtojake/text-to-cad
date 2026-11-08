@@ -561,6 +561,11 @@ def summary_text(summary: dict[str, Any]) -> str:
             lines.append(f"  no material: {', '.join(missing)}")
     else:
         lines.append("materials   none set")
+    if summary.get("untextured"):  # texture maps on a mesh with no UVs: drawn as the scalar look
+        from cad.engine.document import untextured_maps
+
+        lines.append("textures    not drawn yet: these parts wear their material's scalar look")
+        lines.extend(f"  {row['part']}: {untextured_maps(row['materials'])}" for row in summary["untextured"])
 
     def listed(title: str, rows: list[str]) -> None:
         if not rows:

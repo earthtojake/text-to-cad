@@ -121,7 +121,7 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual(coloured.prototypes[0].color, linear("#ff0000"))
         self.assertEqual(coloured.prototypes[0].material.material.density, metals.copper().material.density)
 
-    def test_material_serialization_embeds_textures_and_keeps_transforms(self):
+    def test_texture_maps_kept_in_the_xbf_are_drawn_as_the_scalar_look_and_named(self):
         material = copy.deepcopy(FULL)
         material.pbr.texture_repeat = (2, 3)
         material.pbr.texture_rotation = 27
@@ -134,16 +134,36 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual(restored.pbr.to_dict(), material.pbr.to_dict())
         self.assertIs(type(restored.material), type(material.material))
         self.assertEqual(document.material_key(restored), document.material_key(material))
-        shape = bd.Box(1, 2, 3)
-        shape.material = material
-        self.assertEqual(self.roundtrip(shape).prototypes[0].material.pbr.to_dict(), material.pbr.to_dict())
+        board = bd.Box(1, 2, 3)
+        board.material = material
+        board.label = "board"
+        plain = bd.Box(1, 2, 3).moved(bd.Location((5, 0, 0)))
+        plain.material = metals.copper()
+        plain.label = "plain"
+        loaded = self.roundtrip(bd.Compound(children=[board, plain], label="pair"))
+        self.assertEqual(loaded.prototypes[0].material.pbr.to_dict(), material.pbr.to_dict(), "the xbf keeps them whole")
+        # Not drawn yet (a mesh has no UVs): every renderer draws the scalar look, and the structure
+        # names what each leaves out, once, from the materials.
+        prototypes = {p["name"]: p for p in loaded.structure()["prototypes"]}
+        name = material.material.name
+        self.assertEqual(prototypes["board"]["untextured"], {name: ["color"]})
+        self.assertNotIn("untextured", prototypes["plain"])
         from cad.engine.render.finish import finish
 
-        with self.assertRaisesRegex(ValueError, "texture maps require UV mapping"):
-            finish(document.material_color(material), encoded)
-        with self.assertRaisesRegex(ValueError, "texture maps requires UV mapping"):
-            export.translate(export.Source.read(self.folder / "test.xbf"), "glb", self.folder / "test.glb")
-        self.assertFalse((self.folder / "test.glb").exists())
+        drawn = finish(document.material_color(material), encoded)
+        self.assertEqual((drawn["metallic"], drawn["ior"]), (0.3, 1.45), "the still: its scalar look")
+        told: list[str] = []
+        export.translate(export.Source.read(self.folder / "test.xbf"), "glb", self.folder / "test.glb", told=told.append)
+        self.assertEqual(told, [f"test.glb: board: {name}'s color map not written: textures are not drawn yet, "
+                                "so the part wears its material's scalar look"])
+        data = (self.folder / "test.glb").read_bytes()
+        gltf = json.loads(data[20:20 + int.from_bytes(data[12:16], "little")])
+        self.assertFalse({"images", "textures", "samplers"} & set(gltf), "no image in the file")
+        written = {m["name"]: m for m in gltf["materials"]}
+        self.assertNotIn("baseColorTexture", written[name]["pbrMetallicRoughness"])
+        self.assertEqual([written[name]["pbrMetallicRoughness"][key] for key in ("metallicFactor", "roughnessFactor")],
+                         [0.3, 0.6], "the GLB: its scalar factors")
+        self.assertIn(metals.copper().material.name, written)
 
     def test_a_glb_writes_a_transmissive_look_opaque_unless_its_opacity_fades_it(self):
         from cad.engine.export.glb import _material

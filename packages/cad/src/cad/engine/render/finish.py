@@ -211,15 +211,15 @@ def linear(value: Any) -> tuple[float, float, float]:
 def finish(rgba: Any, material: dict[str, Any] | None) -> dict[str, Any]:
     """What a face is drawn as: ``rgba`` its colour (linear, as the structure holds it, or a
     ``#rrggbb`` fill), ``material`` the structure's material for it, or None. Base colour, alpha,
-    metallic, roughness, IOR and emission, every approximation applied."""
+    metallic, roughness, IOR and emission, every approximation applied: its scalar look, its texture
+    maps left out (the mesh has no UVs; the structure names them, ``untextured``), as the viewer's
+    scene (``xbfLookParameters``) and a GLB (``export/glb.py``) leave them out."""
     colour = linear(rgba if rgba is not None else LOOK.fill)
     alpha = float(rgba[3]) if isinstance(rgba, (tuple, list)) and len(rgba) > 3 else 1.0
     if material is None:
         return {"color": tuple(value ** LOOK.colour_power for value in colour), "alpha": alpha,
                 "metallic": LOOK.plain.metallic, "roughness": LOOK.plain.roughness, "ior": LOOK.plain.ior,
                 "emission": (0.0, 0.0, 0.0)}
-    if material["pbr"].get("textures"):
-        raise ValueError("OCCT snapshots of native material texture maps require UV mapping; use a scalar PBR look")
     material = material["pbr"]["values"]
     roughness = float(material.get("roughness") if material.get("roughness") is not None else 0.5)
     coat = float(material.get("clearcoat") or 0.0)

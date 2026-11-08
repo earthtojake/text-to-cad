@@ -1499,7 +1499,7 @@ class Loaded:
             "path": str(self.path),
             "version": f"{self.version[0]}-{self.version[1]}",
             "units": "mm",
-            "prototypes": [{
+            "prototypes": [_with_untextured({
                 "index": p.index, "key": p.key, "name": p.name, "color": p.color,
                 "faceNames": {str(k): v for k, v in sorted(p.face_names.items())},
                 "edgeNames": {str(k): v for k, v in sorted(p.edge_names.items())},
@@ -1507,7 +1507,7 @@ class Loaded:
                 "faceColors": {str(k): v for k, v in sorted(p.face_colors.items())},
                 "material": material_json(p.material),
                 "faceMaterials": {str(k): material_json(v) for k, v in sorted(p.face_materials.items())},
-            } for p in self.prototypes],
+            }) for p in self.prototypes],
             "instances": [{"prototype": i.prototype, "path": "/".join(i.path), "matrix": i.matrix, "color": i.color}
                           for i in self.instances],
             "tree": self.tree,
@@ -1586,13 +1586,14 @@ def tree_structure(tree: Tree, path: Path) -> dict[str, Any]:
         material = part.material
         face_materials = {ordinal: given
                           for ordinal, given in part.face_materials.items() if 1 <= ordinal <= faces.Extent()}
-        return {"index": index, "key": part.key, "name": part.name or f"part{index + 1}", "color": read(part.color),
+        return _with_untextured({
+                "index": index, "key": part.key, "name": part.name or f"part{index + 1}", "color": read(part.color),
                 "faceNames": {str(k): v for k, v in sorted(face_names.items())},
                 "edgeNames": {str(k): v for k, v in sorted(edge_names.items())},
                 "vertexNames": {str(k): v for k, v in sorted(vertex_names.items())},
                 "faceColors": {str(k): v for k, v in sorted(face_colors.items())},
                 "material": material_json(material),
-                "faceMaterials": {str(k): material_json(v) for k, v in sorted(face_materials.items())}}
+                "faceMaterials": {str(k): material_json(v) for k, v in sorted(face_materials.items())}})
 
     paths: list[tuple[int, ...]] = []
 
@@ -1859,6 +1860,50 @@ def material_json(material: Any) -> dict[str, Any] | None:
                      "max": None if math.isnan(value.max) else value.max}
         physics[field.name] = value
     return {"type": type(material.material).__name__, "material": physics, "pbr": material.pbr.to_dict()}
+
+
+# A material's texture maps and their transforms: what no renderer draws yet (a part's mesh has no
+# UVs), so each draws the scalar look in their place. The document keeps them whole.
+TEXTURE_FIELDS = ("textures", "textureRepeat", "textureRotation", "normalizeUvs")
+
+
+def scalar_pbr(pbr: dict[str, Any]) -> dict[str, Any]:
+    """A structure material's ``pbr`` (``PbrProperties.to_dict``) without its texture maps and
+    their transforms: the scalar look the viewer's scene, a still and a GLB draw."""
+    return {key: value for key, value in pbr.items() if key not in TEXTURE_FIELDS}
+
+
+def untextured(material: dict[str, Any] | None, face_materials: dict[str, Any]) -> dict[str, list[str]]:
+    """The texture maps a part's materials carry (``material_json``), its own and its faces',
+    by material name: what is left out where it is drawn or exported (``TEXTURE_FIELDS``)."""
+    found: dict[str, set[str]] = {}
+    for given in (material, *face_materials.values()):
+        maps = ((given or {}).get("pbr") or {}).get("textures") or {}
+        if maps:
+            found.setdefault(str(given["material"].get("name") or given["pbr"].get("name") or "material"),
+                             set()).update(maps)
+    return {name: sorted(maps) for name, maps in sorted(found.items())}
+
+
+def untextured_maps(materials: dict[str, list[str]]) -> str:
+    """A part's texture maps left out (``untextured``) in words: ``ash's color and normal maps``."""
+    rows = []
+    for name, maps in materials.items():
+        listed = maps[0] if len(maps) == 1 else f"{', '.join(maps[:-1])} and {maps[-1]}"
+        rows.append(f"{name}'s {listed} map{'s' if len(maps) > 1 else ''}")
+    return "; ".join(rows)
+
+
+def untextured_said(part: str, materials: dict[str, list[str]], verb: str = "drawn") -> str:
+    """The warning for a part's texture maps left out (``untextured``), ``verb`` what was not done."""
+    return (f"{part}: {untextured_maps(materials)} not {verb}: textures are not drawn yet, so the part "
+            "wears its material's scalar look")
+
+
+def _with_untextured(entry: dict[str, Any]) -> dict[str, Any]:
+    """A structure prototype with its texture maps left out (``untextured``) where it has any."""
+    found = untextured(entry["material"], entry["faceMaterials"])
+    return {**entry, "untextured": found} if found else entry
 
 
 def material_key(material: Any) -> str | None:
