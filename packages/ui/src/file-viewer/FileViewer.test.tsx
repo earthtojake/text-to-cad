@@ -473,6 +473,29 @@ it('Open in adds the apps the host has for the document\'s files as the menu ope
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in', 'Finder']);
 });
 
+it('Open in draws a KiCad that refuses the board disabled, its hint saying why, and takes no click on it', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const openApp = vi.fn();
+  const apps = vi.fn(async () => ({ fileManager: 'finder', targets: [{ target: 'source', kind: 'kicad_pcb', name: 'blinky.kicad_pcb', present: true, default: false,
+    apps: [{ id: 'kicad', name: 'KiCad 9.0.6', refuses: 'newer' }, { id: 'kicad-nightly', name: 'KiCad 10.99 nightly' }] }] }));
+  render(<FileViewer file="/boards/blinky.kicad_pcb" renderers={[renderer]} state={{}} onStateChange={() => {}}
+    host={{ ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': vi.fn(), reveal: vi.fn() }, apps, openApp } } as any} />);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  const stable = await screen.findByRole('menuitem', { name: 'KiCad 9.0.6' });
+  expect(stable.getAttribute('aria-disabled')).toBe('true');
+  // No Default app for a KiCad file; the nightly is an ordinary row.
+  expect(within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Finder', 'KiCad 9.0.6', 'KiCad 10.99 nightly']);
+  expect(screen.getByRole('menuitem', { name: 'KiCad 10.99 nightly' }).getAttribute('aria-disabled')).toBeNull();
+  // A pointer on the row's wrapper alone: a hover from outside would leave the submenu's trigger and close it in jsdom.
+  fireEvent.pointerMove(stable.closest('[data-disabled-reason]')!, { pointerType: 'mouse' });
+  expect((await screen.findByRole('tooltip')).textContent).toBe("KiCad 9.0.6 can't open this board: it was saved by a newer KiCad.");
+  await user.click(screen.getByRole('menuitem', { name: 'KiCad 10.99 nightly' }));
+  expect(openApp).toHaveBeenCalledTimes(1);
+  expect(openApp).toHaveBeenCalledWith({ path: '/boards/blinky.kicad_pcb', kind: 'file' }, 'source', 'kicad-nightly');
+});
+
 it('says why a file will not open, and that it does not exist when it is missing', async () => {
   const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
   expect(isMissingFileError(missing)).toBe(true);

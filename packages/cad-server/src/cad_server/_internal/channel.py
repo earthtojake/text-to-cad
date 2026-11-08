@@ -1,6 +1,8 @@
 """Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
 
-Each plugin says both in its CAD server's startup config, as the server's environment:
+Each plugin says both in its CAD server's startup config, as the server's environment (the plugin folder the
+install command points the apps at says ``<host>-install``, an install by hand from the repository
+``<host>-github``):
 ``CAD_INSTALL_CHANNEL=<id>``, plus ``CAD_AUTO_UPDATED=1`` when something other than the person
 keeps that copy up to date (the store that reviewed it). The build
 that makes the plugin writes them; nothing works them out from folders, ids or a host's
