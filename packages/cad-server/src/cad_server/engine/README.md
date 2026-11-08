@@ -581,7 +581,8 @@ command**).
 
 What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
 and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that
-changes what a worker and the server say to each other), the document format the worker writes
+changes what a worker and the server say to each other; 2 since an export may carry a manufacturing check
+and a worker answers `cancel`), the document format the worker writes
 (`previous.FORMAT`) and the CAD kernel it builds with, OCP's major.minor as the library pins it
 (`KERNEL`). An order whose contract is not the server's is refused before any worker starts, in one
 line naming which package to update and to what release (`contract.refusal`): `cad here is 0.10.0,
@@ -1020,15 +1021,40 @@ Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a
 type cannot be measured for (CNC or sheet of a mesh), a pull beside `--candidates`, a unit for a type that
 declares its own and a value of another kind are refused before anything is
 read, as a STEP given no process is (it keeps none). An xbf or a model given none is checked for the one
-its parts declare, its process's options refused once the document is read. A STEP or an xbf is
-read by `document.Loaded`, the engine's own loader, in the check's process; a document id or a handle is
-exported by the engine to an xbf in a temporary folder and read the same way, so every finding's location
-is a ref `inspect` resolves. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
-the library's readers). The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
+its parts declare, its process's options refused once the document is read.
+
+**A B-rep's check is measured where the document is held.** The caller (the command, or `cad.<type>.dfm`
+in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
+`check` and no destinations, routed as an export of the same source is (`Daemon.check`, `_call`) -- a
+document id or a handle to the worker that holds it (the model's script's warm worker; a document whose
+worker is gone, its bytes to the documents worker), a STEP's or an xbf's path to the documents worker, which
+reads it with `document.load`, once, and holds it while the file stays as it was. The worker measures it in
+memory (`worker._check`, `cad.build123d._dfm_check.held`) -- nothing exported, written or read again, no
+process started and no kernel imported -- each part on a copy that shares nothing with the held document,
+and answers the report (`checked`), which the caller finishes into its result; every finding's location is a
+ref `inspect` resolves, and the result equals the one the same document gets read from its file. A model's
+check runs in its worker as a snapshot of it does, one request at a time; a build of its script cancels a
+check running there (`Daemon._cancel_check`, the worker's `cancel`, raised in the check's thread), whose
+caller is told it was cancelled, so a `cad run` never waits behind the measurement of the document it
+replaces. A check is held to the workers' memory cap as a build is: a worker over it after a check is retired
+(drained first). A worker that exits in a check is not asked again: the check fails saying so, and the next
+build or check starts a fresh worker. A file's check is measured in the calling process only where no
+engine can be reached, as it always could be.
+
+**The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
+token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
+digest -- and the check (type, process, resolved options, candidates, the options given with no process, the
+measuring library's release). The same check of the same version is answered from the store, with no worker
+asked (`reused`); a version read again after the check that differs keeps nothing. A document holds one
+version's results, so none outlives the document it describes; the store is the daemon's memory, 128 results
+and 64 MB at most, least recently used first, and `cad status --json` counts it (`checks`: held, bytes,
+measured, reused). A part an edit left untouched is measured again with its document: a check is the
+document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
+the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
 practice, each rule cited, no shop's limits), and the result is
-a `CheckResult` whose `measurements` is the report with every rule's outcome (`measurements["rules"]`). The
-command runs it in its own process when its environment holds the type's integration
+a `CheckResult` whose `measurements` is the report with every rule's outcome (`measurements["rules"]`). A
+mesh's or a DXF's command runs it in its own process when its environment holds the type's integration
 (`cad_server._internal.integration_env.carries`: a checkout's, one installed with the extras); else in that
 integration's environment at the installation's release -- `cad[build123d]` is the base the engine's kernel
 processes already run in, `cad[trimesh]` one the engine makes once, as `cad run` makes a program's
@@ -2259,7 +2285,8 @@ a declared file follows that file's bytes (**Document lifetime**).
 **Functions** (`api`, behind each type's `cad.<type>.export`, `.snapshot` and `.inspect`; `serve`,
 `status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
 a shape made elsewhere is handed over, never built (`model(shape, name=...)`, **Shapes handed over**).
-`export(source, *destinations)` a list of `Written`; `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
+`export(source, *destinations)` a list of `Written`; `check(source, check)` a manufacturing check's report,
+measured where the document is held (**Document types and integrations**); `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,

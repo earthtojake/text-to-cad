@@ -50,6 +50,12 @@ pull is text (`"z"`, `"0,0,1"`). `cad.trimesh.molding`, `pulls`, `printing` and 
 their parameters and every key of their reports, which gain families; `orientations` ranks its rows,
 best first.
 
+### A script in its own Python
+
+A script run in its own Python (not `cad run`'s) whose cad is 0.11 is refused by the next server in one
+line naming the update, as any change of the worker contract is (it is 2 now: a worker measures the
+manufacturing checks): update the cad package in that environment to the server's release.
+
 ### Fixes, nothing to change
 
 - `support_volume.estimated_support_volume_mm3` is the column of support under each overhang, down to
@@ -57,6 +63,10 @@ best first.
   upper bound, so the figure is lower now for the same part.
 - `cad model dfm <id>` with an id the engine does not hold exits 2, `not_found`, as every command does;
   0.11 exited 1 when the check ran in the integration's environment.
+- A model's, a STEP's and an xbf's check is measured by the engine where it holds the document (the
+  model's warm worker; a file read once), and the same check of an unchanged document answers the result
+  it kept, so a check run again is immediate. A `cad run` of a model's script cancels a check of it still
+  running, which says so: run the check again.
 
 ### New, nothing to change
 

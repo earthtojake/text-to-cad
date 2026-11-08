@@ -17,6 +17,23 @@ takes `molding` and `printing` alone, and a DXF's `sheet` alone (`manufacturing.
 Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`): numpy is the library's one
 required dependency, so neither integration imports the other's.
 
+**Where exact geometry is measured.** In the engine, where the document is held: the caller resolves the
+options (`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a
+`check`), which measures it in the kernel process that holds it (`cad.engine.worker._check`,
+`_dfm_check.held`) -- a model's document in its script's warm worker, a STEP's or an xbf's file in the
+documents worker, read once by the engine's loader and held while the file stays as it was -- and answers the
+report, which the caller finishes into its result (`manufacturing.finish`). Nothing is exported, written or
+read again, and no process or kernel import is paid. Each part is measured on a copy that shares nothing with
+the held document (`_dfm_brep.of_source`: a check's meshing never touches it), its result equal to the same
+document's read from its file. The engine keeps each result by the version it measured -- a model's
+generation, a file's bytes' digest -- with the check's type, process, options and library release
+(`cad_server/engine/checks.py`, 128 results and 64 MB at most, in the daemon's memory), so the same check of an
+unchanged document measures nothing; a document holds one version's results. A build of a model's script
+cancels a check running in its worker, which answers that it was cancelled; a worker killed in a check says
+so, and is not asked again. A file is measured in the calling process only where no engine can be reached
+(none installed, a sandbox that cannot start one), as before; a mesh and a DXF are measured in the calling
+process (or the integration's environment) always.
+
 **Verdicts.** The type side (this folder, the standard library alone, so the command resolves every option
 before it starts an environment) holds each process's options, its rules, the findings its facts call for
 and its summary line (`cnc.py`, `sheet.py`, `molding.py`, `printing.py`). Each process has **one table of
