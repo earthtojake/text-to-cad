@@ -16,6 +16,13 @@ of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the lin
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
 before loading either URDF.
 
+[`mujoco`](mujoco/README.md) is a benchmark, not a robot of ours: it fetches two makers' raw
+CAD (The Robot Studio's SO-101 and Trossen's WidowX AI assembly STEPs, pinned in
+`src/sources.py`), turns each into an articulated model and exports it as MJCF, URDF and SDF,
+then compares the result with Google's hand-made MuJoCo Menagerie model and the maker's own URDF.
+Nothing it fetches or writes is committed: `python src/fetch.py` downloads the sources into
+ignored folders.
+
 Every model of the old corpus is ported, but for tendon_hand's 56 review models (reviews
 and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git history) and
 `tom`, the arm, which lives in its own repository. One file is no model:

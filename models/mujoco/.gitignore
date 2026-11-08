@@ -1,0 +1,8 @@
+# Everything here is fetched or generated: the sources by src/fetch.py from the pins in
+# src/sources.py, the descriptions and reports by the scripts. Git holds the scripts alone.
+/upstream/
+/menagerie/
+/out/
+/reports/
+/tmp/
+__pycache__/
