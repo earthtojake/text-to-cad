@@ -185,28 +185,41 @@ def _hear() -> None:
 
 
 # Where no file is an input: the interpreter's folders and the library (what a body imports, never its data),
-# bytecode, the system's virtual files (``/proc``, ``/sys``, ``/dev``: what a thread pool or a clock reads), and
-# the person's cache folders (what a library keeps for itself: a font index, a compiled kernel).
-_VIRTUAL = ("/proc/", "/sys/", "/dev/")
+# bytecode, the system's virtual files (``/proc``, ``/sys``, ``/dev``: what a thread pool or a clock reads) and
+# macOS's system volume (``/System``: its version, which the standard library reads on a first lazy import), and
+# the person's cache folders (what a library keeps for itself: a font index, a compiled kernel) -- but for the
+# project's own folder and the temporary folder, which are never a cache. Windows keeps its temporary folder
+# (``%TEMP%``) inside the local application data (``%LOCALAPPDATA%``), where its libraries cache, and a project
+# may live under either; elsewhere neither is under a cache folder, and a file there is an input as it is here.
+_VIRTUAL = ("/proc/", "/sys/", "/dev/", "/System/")
+
+
+def _folder(path: str) -> str:
+    return os.path.normcase(os.path.realpath(path)) + os.sep
 
 
 def _caches() -> tuple[str, ...]:
     home = Path.home()
     named = [os.environ.get("XDG_CACHE_HOME") or str(home / ".cache"), str(home / "Library" / "Caches"),
              os.environ.get("LOCALAPPDATA") or ""]
-    return tuple(os.path.normcase(os.path.realpath(folder)) + os.sep for folder in named if folder)
+    return tuple(_folder(folder) for folder in named if folder)
 
 
 def _inputs(opened: list[str], script: Path, modules: dict[str, str]) -> dict[str, str]:
     """The files a body opened that are its inputs, by digest: regular files outside the interpreter's folders
-    and the library (``_library_roots``), the system's virtual files and the person's caches, that are not the
-    script or a module it imported (those are the closure's modules)."""
-    outside = (*_library_roots(), *_caches(), *_VIRTUAL)
+    and the library (``_library_roots``) and the system's virtual files, and outside the person's caches unless
+    in the project's folder or the temporary folder, that are not the script or a module it imported (those are
+    the closure's modules)."""
+    import tempfile
+
+    outside = (*_library_roots(), *_VIRTUAL)
+    caches = _caches()
+    kept = (_folder(str(_project(script))), _folder(tempfile.gettempdir()))
     code = {str(Path(script).resolve()), *modules}
     found: dict[str, str] = {}
     for path in dict.fromkeys(opened):
         real = os.path.normcase(os.path.realpath(path))
-        if real.startswith(outside) or "__pycache__" in real:
+        if real.startswith(outside) or "__pycache__" in real or (real.startswith(caches) and not real.startswith(kept)):
             continue
         resolved = str(Path(path).resolve())
         if resolved in code or resolved in found or not os.path.isfile(resolved):

@@ -166,6 +166,9 @@ class TheWorkersBuild(unittest.TestCase):
         json.dumps(reports)  # what the daemon sends on to the client
 
     def test_the_closure_keys_what_the_body_imported_and_opened_and_moves_when_either_changes(self) -> None:
+        # Laid out as Windows lays it out on every system: the temporary folder, where the project is, inside the
+        # local application data, where libraries keep their caches. The project's files are still its inputs.
+        self.enterContext(mock.patch.dict(os.environ, {"LOCALAPPDATA": str(self.folder.parent)}))
         (self.folder / "reading.py").write_text(textwrap.dedent(READING), encoding="utf-8")
         (self.folder / "helper.py").write_text("THICKNESS = 6\n", encoding="utf-8")
         (self.folder / "params.json").write_text('{"width": 40}\n', encoding="utf-8")
