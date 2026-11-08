@@ -49,6 +49,9 @@ FAMILY = [
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
         "engine/mjcf_source.py",  # the MJCF reader: the stills', the payload's and the type's, stdlib only
+        "engine/urdf_source.py",  # the URDF (and SRDF) reader: the stills' and the payload's, stdlib only
+        "engine/sdf_source.py",  # the SDF reader: the stills' and the payload's, stdlib only
+        "engine/robot_model.py",  # the one articulation the three readers make
     )
 ] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py", "sdf.py", "mjcf.py")]
 
@@ -66,6 +69,9 @@ ALLOWED_CADGEN = {
     "cad.sdf._external",
     "cad.mjcf._source",
     "cad.engine.mjcf_source",  # the reader itself, in the engine
+    "cad.engine.urdf_source",  # the URDF reader, in the engine
+    "cad.engine.sdf_source",  # the SDF reader, in the engine
+    "cad.engine.robot_model",  # the articulation every reader of a robot makes
     # MuJoCo's compile (the mujoco integration's): imported in the function that compiles, never by a
     # read, and itself imports mujoco only inside that function.
     "cad.mujoco._compile",

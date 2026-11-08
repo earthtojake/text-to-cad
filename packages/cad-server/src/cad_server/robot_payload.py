@@ -9,6 +9,15 @@ written, for a person reading it back. The page builds a scene from the visual l
 plays the articulation; it parses no XML, resolves no frame, meshes no shape and decides no
 limit.
 
+The description is read once, in the engine -- a URDF and an SRDF's group states over it by
+``cad.engine.urdf_source``, an SDF by ``cad.engine.sdf_source``, an MJCF by ``cad.engine.mjcf_source``,
+each into ``cad.engine.robot_model``'s articulation (every link's frame at rest, its visuals, its joints
+with their mimics and four-bars, its named poses, the facts as written) -- and the payload is the
+page's view of that read, as the OCCT stills (``cad.engine.formats.robot``) are theirs: it turns each
+visual into a mesh the page decodes, carries the mesh's scale in its placement, rounds every number
+and adds the articulation's rows. Where the payload and the stills have read a detail differently, the
+payload's ``Dialect`` keeps the viewer's (``_URDF``, ``_SDF``).
+
 The articulation (``ARTICULATION_SCHEMA_VERSION``) is played with closed-form arithmetic and
 nothing else::
 
@@ -95,9 +104,10 @@ The payload::
   carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
 - Refusals are the validators' (``cad.urdf._source``, ``cad.sdf._validation``,
   ``cad.srdf._validation``, the MJCF reader ``cad.mjcf._source``, and an ``.xml`` whose root is
-  not ``<mujoco>``) plus what the page cannot draw: a mesh in a format it has no
-  decoder for, a shape it has no mesh for, a mesh it cannot reach. Every refusal is a
-  :class:`RobotReadError` saying what to change.
+  not ``<mujoco>``), the engine reader's in the viewer's words (an SDF model the viewer does not
+  place, a joint it does not pose, a frame graph that does not resolve), plus what the page cannot
+  draw: a mesh in a format it has no decoder for, a shape it has no mesh for, a mesh it cannot
+  reach. Every refusal is a :class:`RobotReadError` saying what to change.
 
 The payload is derived data, held in this process's memory keyed by the description's path
 and bytes and its paired URDF's bytes, or an MJCF's includes' and OBJ meshes' (``robot_payload_bytes``), so a second read of an
@@ -118,9 +128,12 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
-from cad.engine import mesh_uri
+from cad.engine import mesh_uri, sdf_source, urdf_source
+from cad.engine.robot_model import Dialect, SourceError
+from cad.engine.robot_model import hex_color as _hex
+from cad.engine.urdf_source import TCAD_NAMESPACE
 from cad._internal.findings import format_findings
-from cad._internal.xml_common import children, display_path, local_name
+from cad._internal.xml_common import display_path, local_name
 from cad.registry import DOCUMENT_TYPES
 
 __all__ = [
@@ -176,8 +189,6 @@ def _mesh_scale(fmt: str, scale: list[float] | None = None) -> list[list[float]]
     unit = _DECODED_TO_METRES[fmt]
     return _scale(*(unit * value for value in (scale or [1.0, 1.0, 1.0])))
 _IDENTITY = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
-_SDF_MODEL_FRAME = "__model__"
-_SDF_WORLD_FRAME = "world"
 _MOVING = ("revolute", "continuous", "prismatic")
 _ANGULAR = ("revolute", "continuous")
 
@@ -209,26 +220,8 @@ def _multiply(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
     return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
 
 
-def _translation(x: float, y: float, z: float) -> list[list[float]]:
-    return [[1.0, 0.0, 0.0, x], [0.0, 1.0, 0.0, y], [0.0, 0.0, 1.0, z], [0.0, 0.0, 0.0, 1.0]]
-
-
 def _scale(x: float, y: float, z: float) -> list[list[float]]:
     return [[x, 0.0, 0.0, 0.0], [0.0, y, 0.0, 0.0], [0.0, 0.0, z, 0.0], [0.0, 0.0, 0.0, 1.0]]
-
-
-def _rpy(roll: float, pitch: float, yaw: float) -> list[list[float]]:
-    sr, cr, sp, cp, sy, cy = math.sin(roll), math.cos(roll), math.sin(pitch), math.cos(pitch), math.sin(yaw), math.cos(yaw)
-    return [
-        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr, 0.0],
-        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr, 0.0],
-        [-sp, cp * sr, cp * cr, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-
-
-def _pose(xyz, rpy) -> list[list[float]]:
-    return _multiply(_translation(*xyz), _rpy(*rpy))
 
 
 def _invert_rigid(m: list[list[float]]) -> list[list[float]]:
@@ -240,17 +233,6 @@ def _invert_rigid(m: list[list[float]]) -> list[list[float]]:
         [r[0][2], r[1][2], r[2][2], -(r[0][2] * t[0] + r[1][2] * t[1] + r[2][2] * t[2])],
         [0.0, 0.0, 0.0, 1.0],
     ]
-
-
-def _rotate(m: list[list[float]], v) -> list[float]:
-    return [m[i][0] * v[0] + m[i][1] * v[1] + m[i][2] * v[2] for i in range(3)]
-
-
-def _unit(v) -> list[float] | None:
-    length = math.hypot(v[0], v[1], v[2])
-    if not math.isfinite(length) or length < 1e-12:
-        return None
-    return [v[0] / length, v[1] / length, v[2] / length]
 
 
 # Emitted numbers are rounded past any display accuracy and short of a float's last bits, so
@@ -265,48 +247,6 @@ def _number(value: float) -> float:
 
 def _flat(m: list[list[float]]) -> list[float]:
     return [_number(value) for row in m for value in row]
-
-
-# --- numbers from XML ----------------------------------------------------------------------
-
-
-def _numbers(text: object, count: int, *, where: str, default: list[float] | None = None) -> list[float]:
-    raw = str(text or "").split()
-    if not raw and default is not None:
-        return list(default)
-    try:
-        values = [float(part) for part in raw]
-    except ValueError:
-        values = []
-    if len(values) != count or not all(math.isfinite(value) for value in values):
-        raise RobotReadError(f"{where} must be {count} numbers, not {str(text or '').strip()!r}")
-    return values
-
-
-def _optional_number(element: ET.Element | None, name: str) -> float | None:
-    text = element.attrib.get(name) if element is not None else None
-    try:
-        value = float(text) if text is not None and str(text).strip() else None
-    except ValueError:
-        return None
-    return value if value is not None and math.isfinite(value) else None
-
-
-def _optional_numbers(text: object, count: int) -> list[float] | None:
-    try:
-        values = [float(part) for part in str(text or "").split()]
-    except ValueError:
-        return None
-    return values if len(values) == count and all(math.isfinite(v) for v in values) else None
-
-
-def _hex(rgb: list[float]) -> str:
-    # Half rounds up, as a GLB's colour bytes are written (a channel is never negative here).
-    return "#" + "".join(f"{int(max(0.0, min(1.0, channel)) * 255 + 0.5):02x}" for channel in rgb[:3])
-
-
-def _described_origin(xyz: list[float] | None, rpy: list[float] | None) -> dict[str, list[float]]:
-    return {"xyz": list(xyz or [0.0, 0.0, 0.0]), "rpy": list(rpy or [0.0, 0.0, 0.0])}
 
 
 # --- the intermediate description ------------------------------------------------------------
@@ -409,107 +349,148 @@ def _primitive_descriptor(shape: str, dimensions: dict) -> dict:
     return {"format": "glb", "_primitive": {"shape": shape, "dimensions": dimensions}}
 
 
-# --- URDF ------------------------------------------------------------------------------------
+# --- URDF, SDF and SRDF (the engine's readers: cad.engine.urdf_source, sdf_source) ----------------------
+#
+# The description is read once, in the engine, into its articulation; this is the page's view of it:
+# each visual's mesh as the page decodes one (or a primitive cadgen meshes), its placement carrying the
+# mesh's scale to metres, the facts as written. Where the viewer and the stills have read a detail
+# differently, the payload's dialect keeps the viewer's: its words for a refusal (the page shows them),
+# a pose's ``degrees`` true by any of SDFormat's boolean words, a nested model with no link of its own
+# attached through its first nested model, a model relative to anything but the world, a
+# ``placement_frame`` and a link two joints carry refused, a URDF's colours and four-bar numbers read
+# leniently where its validator says nothing of them.
+
+_WORDS = {
+    "numbers": "{where} must be {count} numbers, not {written!r}",
+    "axis_zero": "{file} joint {joint!r} axis must be nonzero",
+    "rgba": None, "four_bar_many": None, "four_bar_number": None, "four_bar_lengths": None,
+}
+_URDF = Dialect(words={**_WORDS, "xml": "{file} could not be read: {error}"}, display=display_path)
+_SDF = Dialect(
+    words={
+        **_WORDS,
+        "xml": "{file} could not be parsed as SDF XML: {error}",
+        "sdf_root": "{file} root element must be <sdf>",
+        "sdf_models": "{file} holds {count} top-level models; the viewer renders one direct <model>",
+        "sdf_worlds": "{file} must hold one direct <model>, or one <world> holding one direct <model>",
+        "sdf_world_models": "{file} world holds {count} models; the viewer renders a world with exactly one direct <model>",
+        "rotation_format": "{where} pose uses rotation_format {format!r}; the viewer reads euler_rpy",
+        "model_relative": "{file} model {model!r} pose is relative_to {relative!r}; the viewer places a model in the world",
+        "placement_frame": "{where} is placed by its placement_frame, which the viewer does not place by; "
+                           "drop placement_frame and pose the model's own frame",
+        "frame_twice": "SDF model {model!r} names {key!r} twice: links, frames, joints and nested models share one namespace",
+        "frame_cycle": "SDF model {model!r} frame graph cycles at {key!r}",
+        "attached_cycle": "SDF model {model!r} attached_to graph cycles at {key!r}",
+        "sdf_joint_type": "{file} joint {joint!r} is a {kind!r} joint; the viewer poses fixed, revolute, continuous and "
+                          "prismatic joints",
+        "sdf_scale": "{where} mesh scale must be 3 numbers, not {written!r}",
+        "joint_unattached": "{file} joint {joint!r} child {child!r} is not attached to a link",
+        "joint_same": "{file} joint {joint!r} must connect different parent and child frames, not {link!r}",
+    },
+    display=display_path,
+)
 
 
-def _urdf_geometry_facts(geometry: ET.Element | None) -> dict:
-    mesh = geometry.find("mesh") if geometry is not None else None
-    if mesh is not None:
-        return {"type": "mesh", "filename": str(mesh.attrib.get("filename") or "").strip(),
-                "scale": _optional_numbers(mesh.attrib.get("scale"), 3)}
-    for shape in ("box", "cylinder", "sphere"):
-        element = geometry.find(shape) if geometry is not None else None
-        if element is not None:
-            facts: dict = {"type": shape, "filename": ""}
-            if shape == "box":
-                facts["size"] = _optional_numbers(element.attrib.get("size"), 3)
-            else:
-                facts["radius"] = _optional_number(element, "radius")
-                if shape == "cylinder":
-                    facts["length"] = _optional_number(element, "length")
-            return facts
-    return {"type": "unknown", "filename": ""}
-
-
-def _urdf_shape_facts(element: ET.Element) -> dict:
-    origin = element.find("origin")
-    return {
-        "name": str(element.attrib.get("name") or "").strip(),
-        **_urdf_geometry_facts(element.find("geometry")),
-        "origin": _described_origin(
-            _optional_numbers(origin.attrib.get("xyz") if origin is not None else None, 3),
-            _optional_numbers(origin.attrib.get("rpy") if origin is not None else None, 3),
-        ),
-    }
-
-
-def _urdf_origin(element: ET.Element | None, *, where: str) -> list[list[float]]:
-    if element is None:
-        return _IDENTITY
-    xyz = _numbers(element.attrib.get("xyz"), 3, where=f"{where} origin xyz", default=[0.0, 0.0, 0.0])
-    rpy = _numbers(element.attrib.get("rpy"), 3, where=f"{where} origin rpy", default=[0.0, 0.0, 0.0])
-    return _pose(xyz, rpy)
-
-
-def _urdf_material_color(material: ET.Element | None, named: dict[str, str]) -> tuple[str, str]:
-    """``(colour, material name)``: an inline ``<color>`` wins, else the named material's."""
-    if material is None:
-        return "", ""
-    name = str(material.attrib.get("name") or "").strip()
-    color = material.find("color")
-    rgba = _optional_numbers(color.attrib.get("rgba") if color is not None else None, 4)
-    if rgba is not None:
-        return _hex(rgba), name
-    return named.get(name, ""), name
-
-
-def _resolve_urdf_mesh(filename: str, *, source_path: Path, where: str) -> dict:
-    from cad.urdf._source import MeshUriKind, classify_mesh_uri, resolve_mesh_uri
-
+def _read(reader: Callable[..., Any], path: Path, dialect: Dialect, **options: Any) -> Any:
     try:
-        reference = classify_mesh_uri(filename)
-    except ValueError as exc:
-        raise RobotReadError(f"{where}: {exc}") from None
-    fmt = _drawable_format(filename, where=where)
-    if reference.kind is MeshUriKind.REMOTE:
-        raise RobotReadError(
-            f"{where} names {filename!r}, which is not a local file: the viewer draws the meshes beside "
-            "the description; copy the file next to it and name it by a relative path"
-        )
-    if reference.kind is MeshUriKind.PACKAGE:
-        path = _package_mesh(filename, source_path.parent, where)
-    else:
-        path = resolve_mesh_uri(filename)
-        if reference.kind is MeshUriKind.LOCAL_RELATIVE:
-            path = (source_path.parent / path).resolve()
-    if not path.is_file():
-        raise RobotReadError(f"{where} names {filename!r}, and no file is at {path}")
-    return {"format": fmt, "path": str(path)}
-
-
-def _package_mesh(reference: str, base_dir: Path, where: str) -> Path:
-    """A ``package://`` mesh, resolved as the stills resolve it (``cad.engine.formats.robot``):
-    in the ROS package the description is in, the nearest folder above it named for the package
-    or holding a ``package.xml`` that names it."""
-    from cad.engine.formats.robot import RobotError, package_file
-
-    try:
-        return package_file(reference, base_dir, where)
-    except RobotError as exc:
+        return reader(path, dialect, **options)
+    except SourceError as exc:
         raise RobotReadError(str(exc)) from None
 
 
-def _four_bar_element(joint_element: ET.Element) -> dict[str, Any] | None:
-    """The joint's ``<tcad:four_bar>`` as numbers, or None. The validator refused one with a
-    length that is not positive, a zero angle that is not a number, or no driver."""
-    from cad.urdf._source import FOUR_BAR_LENGTHS, FOUR_BAR_TAG, FOUR_BAR_ZEROS
+def _mesh_file(visual: Any, *, where: str, base_dir: Path, format_first: bool) -> dict:
+    """A visual's mesh file as the page decodes one: ``{format, path}``, refused by name where the page
+    has no decoder for it (``format_first``: a URDF's says so before it says the file is not local), the
+    reference names no local file, or no file is there."""
+    reference, path = visual.reference, visual.shape[1]
+    fmt = _drawable_format(reference, where=where) if format_first else ""
+    if mesh_uri.scheme(reference) == "package":
+        fmt = fmt or _drawable_format(reference, where=where)
+        if path is None:
+            try:
+                mesh_uri.package_file(reference, base_dir, where)
+            except mesh_uri.PackageError as exc:
+                raise RobotReadError(str(exc)) from None
+    elif path is None:
+        raise RobotReadError(
+            f"{where} names {reference!r}, which is not a local file: the viewer draws the meshes beside "
+            "the description; copy the file next to it and name it by a relative path"
+        )
+    fmt = fmt or _drawable_format(reference, where=where)
+    if not path.is_file():
+        raise RobotReadError(f"{where} names {reference!r}, and no file is at {path}")
+    return {"format": fmt, "path": str(path)}
 
-    element = joint_element.find(FOUR_BAR_TAG)
-    if element is None:
-        return None
-    numbers = {name: _optional_number(element, name) for name in (*FOUR_BAR_LENGTHS, *FOUR_BAR_ZEROS)}
-    return {"driver": str(element.attrib.get("driver") or "").strip(),
-            **{name: (0.0 if value is None else value) for name, value in numbers.items()}}
+
+def _sdf_primitive(where: str, kind: str, dimensions: Mapping[str, Any]) -> None:
+    """An SDF visual's primitive has the dimensions a GLB is meshed from."""
+    if (kind == "box" and "size" not in dimensions) or (kind != "box" and "radius" not in dimensions) \
+            or (kind in ("cylinder", "capsule") and "length" not in dimensions):
+        raise RobotReadError(f"{where} is a <{kind}> with missing or non-positive dimensions; give it positive dimensions")
+
+
+def _described(kind: str, articulation: Any, display: str) -> _Description:
+    """The engine's articulation of a URDF (or an SRDF's) or an SDF as the page takes it: each visual's
+    mesh the page's (every visual the page cannot draw named together), each placement carrying its
+    mesh's scale to metres, the facts as written."""
+    description = _Description(kind, articulation.name, display)
+    description.root = articulation.root
+    base_dir = Path(articulation.sources[-1]).parent
+    undrawable: list[str] = []  # every visual the page cannot draw, named together
+    for name, placement in articulation.links.items():
+        link = _Link(name)
+        link.placement = placement
+        for index, visual in enumerate(articulation.visuals.get(name, ()), start=1):
+            where = f"{display} link {name!r} visual {index}"
+            shape = visual.shape
+            try:
+                if shape[0] == "file":
+                    if kind == "sdf" and not visual.reference:
+                        raise RobotReadError(f"{where} is a <mesh> with no <uri>, so there is nothing to load")
+                    mesh = _mesh_file(visual, where=where, base_dir=base_dir, format_first=kind != "sdf")
+                    local = _multiply(visual.local, _mesh_scale(mesh["format"], shape[2]))
+                    label = PurePosixPath(visual.reference).name or "mesh"
+                elif shape[0] in DRAWABLE_SHAPES:
+                    if kind == "sdf":
+                        _sdf_primitive(where, shape[0], shape[1])
+                    mesh = _primitive_descriptor(shape[0], dict(shape[1]))
+                    local = _multiply(visual.local, _mesh_scale(mesh["format"]))
+                    label = shape[0]
+                elif kind != "sdf":
+                    raise RobotReadError(f"{where} uses geometry the viewer cannot draw; give it a mesh, box, cylinder or sphere")
+                else:
+                    what = "has no <geometry>" if shape[0] == "missing" else f"uses <{shape[0]}> geometry, which the viewer cannot draw"
+                    raise RobotReadError(f"{where} {what}. Supported: {', '.join(DRAWABLE_SHAPES)}, mesh. "
+                                         "Replace it with one of those, or reference a mesh file.")
+            except RobotReadError as exc:
+                undrawable.append(str(exc))
+                continue
+            # A URDF visual's own name is what its author called it, and what tells several visuals of
+            # one link apart; without one, it is named for its geometry. An SDF's is named for its geometry.
+            if kind != "sdf":
+                label = visual.facts["name"] or label
+            link.visuals.append(_Visual(visual.id, label, local, visual.color, mesh, visual.facts))
+        link.collisions = articulation.collisions.get(name, [])
+        link.inertial = articulation.inertials.get(name)
+        description.links.append(link)
+    if undrawable:
+        raise RobotReadError("; ".join(undrawable))
+    for linked in articulation.joints:
+        joint = _Joint(linked.name, linked.type, linked.parent, linked.child)
+        joint.frame, joint.axis, joint.lower, joint.upper = linked.frame, linked.axis, linked.lower, linked.upper
+        joint.mimic = linked.mimic
+        # The urdf skill's four-bar, in its own namespace; an element of that name in any other is no linkage.
+        four_bar = linked.four_bar
+        if four_bar is not None and four_bar.get("namespace") == TCAD_NAMESPACE:
+            joint.four_bar = four_bar
+        joint.facts = dict(linked.facts or {})
+        if kind != "sdf":
+            joint.facts["mimic"] = ({"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]}
+                                    if joint.mimic else None)
+            joint.facts["fourBar"] = _four_bar_facts(joint.four_bar)
+        description.joints.append(joint)
+    description.sdf = articulation.sdf
+    return description
 
 
 def _four_bar_facts(four_bar: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -520,544 +501,32 @@ def _four_bar_facts(four_bar: dict[str, Any] | None) -> dict[str, Any] | None:
             "inputZero": four_bar["input_zero"], "outputZero": four_bar["output_zero"]}
 
 
-def _read_urdf(path: Path) -> _Description:
+def _validated_urdf(path: Path) -> None:
     from cad.urdf._source import validate_urdf_file
 
     source, findings = validate_urdf_file(path)
     if findings.errors or source is None:
         raise RobotReadError(format_findings(findings.errors))
-    try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as exc:
-        raise RobotReadError(f"{display_path(path)} could not be read: {exc}") from None
-    display = display_path(path)
-    description = _Description("urdf", source.robot_name, display)
-    named_colors: dict[str, str] = {}
-    for material in root.findall("material"):
-        name = str(material.attrib.get("name") or "").strip()
-        color = material.find("color")
-        rgba = _optional_numbers(color.attrib.get("rgba") if color is not None else None, 4)
-        if name and rgba is not None:
-            named_colors[name] = _hex(rgba)
-
-    links: dict[str, _Link] = {}
-    undrawable: list[str] = []  # every visual the page cannot draw, named together
-    for link_element in root.findall("link"):
-        link = _Link(str(link_element.attrib.get("name") or "").strip())
-        for index, visual_element in enumerate(link_element.findall("visual"), start=1):
-            where = f"{display} link {link.name!r} visual {index}"
-            geometry = visual_element.find("geometry")
-            facts = _urdf_shape_facts(visual_element)
-            color, material_name = _urdf_material_color(visual_element.find("material"), named_colors)
-            facts["color"], facts["materialName"] = color, material_name
-            local = _urdf_origin(visual_element.find("origin"), where=where)
-            mesh_element = geometry.find("mesh") if geometry is not None else None
-            try:
-                if mesh_element is not None:
-                    filename = str(mesh_element.attrib.get("filename") or "").strip()
-                    mesh = _resolve_urdf_mesh(filename, source_path=path, where=where)
-                    scale = _numbers(mesh_element.attrib.get("scale"), 3, where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
-                    facts["path"] = mesh["path"]
-                    label = PurePosixPath(filename).name or "mesh"
-                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
-                else:
-                    shape = facts["type"]
-                    if shape not in DRAWABLE_SHAPES:
-                        raise RobotReadError(f"{where} uses geometry the viewer cannot draw; give it a mesh, box, cylinder or sphere")
-                    dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
-                    mesh = _primitive_descriptor(shape, dimensions)
-                    label = shape
-                    local = _multiply(local, _mesh_scale(mesh["format"]))
-            except RobotReadError as exc:
-                undrawable.append(str(exc))
-                continue
-            # The visual's own name is what its author called it, and what tells several visuals
-            # of one link apart; without one, it is named for its geometry.
-            link.visuals.append(_Visual(f"{link.name}:v{index}", facts["name"] or label, local, color, mesh, facts))
-        link.collisions = [_urdf_shape_facts(element) for element in link_element.findall("collision")]
-        inertial = link_element.find("inertial")
-        if inertial is not None:
-            origin = inertial.find("origin")
-            inertia_element = inertial.find("inertia")
-            inertia = {key: _optional_number(inertia_element, key) for key in ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")}
-            link.inertial = {
-                "mass": _optional_number(inertial.find("mass"), "value"),
-                "origin": _described_origin(
-                    _optional_numbers(origin.attrib.get("xyz") if origin is not None else None, 3),
-                    _optional_numbers(origin.attrib.get("rpy") if origin is not None else None, 3),
-                ),
-                "inertia": inertia if all(value is not None for value in inertia.values()) else None,
-            }
-        links[link.name] = link
-        description.links.append(link)
-    if undrawable:
-        raise RobotReadError("; ".join(undrawable))
-
-    joints_by_name: dict[str, _Joint] = {}
-    for joint_element in root.findall("joint"):
-        name = str(joint_element.attrib.get("name") or "").strip()
-        declared = next(joint for joint in source.joints if joint.name == name)
-        joint = _Joint(name, declared.joint_type, declared.parent_link, declared.child_link)
-        where = f"{display} joint {name!r}"
-        origin_element = joint_element.find("origin")
-        axis_element = joint_element.find("axis")
-        axis = _numbers(axis_element.attrib.get("xyz") if axis_element is not None else None, 3,
-                        where=f"{where} axis", default=[1.0, 0.0, 0.0])
-        joint.lower, joint.upper = declared.lower, declared.upper
-        if joint.type == "continuous":
-            joint.lower = joint.upper = None
-        mimic_element = joint_element.find("mimic")
-        if mimic_element is not None:
-            leader = str(mimic_element.attrib.get("joint") or "").strip()
-            multiplier = _optional_number(mimic_element, "multiplier")
-            offset = _optional_number(mimic_element, "offset")
-            joint.mimic = (leader, 1.0 if multiplier is None else multiplier, 0.0 if offset is None else offset)
-        joint.four_bar = _four_bar_element(joint_element)
-        limit_element = joint_element.find("limit")
-        limit = {key: _optional_number(limit_element, key) for key in ("lower", "upper", "effort", "velocity")}
-        joint.facts = {
-            "name": name, "type": joint.type, "parent": joint.parent, "child": joint.child,
-            "axis": None if joint.type == "fixed" else list(axis),
-            "origin": _described_origin(
-                _optional_numbers(origin_element.attrib.get("xyz") if origin_element is not None else None, 3),
-                _optional_numbers(origin_element.attrib.get("rpy") if origin_element is not None else None, 3),
-            ),
-            "limit": {key: value for key, value in limit.items() if value is not None} if limit_element is not None else None,
-            "mimic": {"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]} if joint.mimic else None,
-            "fourBar": _four_bar_facts(joint.four_bar),
-        }
-        joint.facts["_origin"] = _urdf_origin(origin_element, where=where)
-        joint.facts["_axis"] = axis
-        joints_by_name[name] = joint
-        description.joints.append(joint)
-
-    # Rest placements: the root at the origin, every child link's frame its joint's frame.
-    description.root = source.root_link
-    by_parent: dict[str, list[_Joint]] = {}
-    for joint in description.joints:
-        by_parent.setdefault(joint.parent, []).append(joint)
-    pending = [source.root_link]
-    while pending:
-        parent_name = pending.pop(0)
-        parent = links[parent_name]
-        for joint in by_parent.get(parent_name, ()):
-            joint.frame = _multiply(parent.placement, joint.facts.pop("_origin"))
-            axis = joint.facts.pop("_axis")
-            joint.axis = None if joint.type == "fixed" else _unit(_rotate(joint.frame, axis))
-            if joint.type != "fixed" and joint.axis is None:
-                raise RobotReadError(f"{display} joint {joint.name!r} axis must be nonzero")
-            links[joint.child].placement = joint.frame
-            pending.append(joint.child)
-    return description
 
 
-# --- SDF -------------------------------------------------------------------------------------
-
-
-def _sdf_text(parent: ET.Element, tag: str) -> str:
-    found = children(parent, tag)
-    return str(found[0].text or "").strip() if found else ""
-
-
-def _sdf_first(parent: ET.Element, tag: str) -> ET.Element | None:
-    found = children(parent, tag)
-    return found[0] if found else None
-
-
-def _sdf_pose(element: ET.Element, *, where: str) -> tuple[bool, str, list[float], list[list[float]]]:
-    """``(declared, relative_to, values, transform)`` of an element's ``<pose>``."""
-    pose = _sdf_first(element, "pose")
-    if pose is None:
-        return False, "", [0.0] * 6, _IDENTITY
-    rotation_format = str(pose.attrib.get("rotation_format") or "euler_rpy").strip().lower()
-    if rotation_format != "euler_rpy":
-        raise RobotReadError(f"{where} pose uses rotation_format {rotation_format!r}; the viewer reads euler_rpy")
-    values = _numbers(pose.text, 6, where=f"{where} pose", default=[0.0] * 6)
-    if str(pose.attrib.get("degrees") or "").strip().lower() in ("1", "true", "yes", "on"):
-        values[3:] = [math.radians(value) for value in values[3:]]
-    return True, str(pose.attrib.get("relative_to") or "").strip(), values, _pose(values[:3], values[3:])
-
-
-class _SdfScope:
-    """One model's namespace in the frame graph: the top-level model's (no prefix, its frame
-    ``__model__``) or a nested model's (``arm::``, its frame the node ``arm``), and the names
-    its links, frames, joints and nested models declare."""
-
-    __slots__ = ("name", "prefix", "frame", "declared")
-
-    def __init__(self, model: ET.Element, prefix: str, frame: str) -> None:
-        self.name, self.prefix, self.frame = str(model.attrib.get("name") or "").strip(), prefix, frame
-        self.declared = {str(element.attrib.get("name") or "").strip()
-                         for tag in ("link", "frame", "joint", "model") for element in children(model, tag)}
-
-    def own(self, element: ET.Element) -> str:
-        """The graph key of an element this model declares."""
-        return self.prefix + str(element.attrib.get("name") or "").strip()
-
-    def key(self, name: object, default: str) -> str:
-        """The graph key a name written in this model means: what the model declares by that
-        name, ``world`` for the world, the model's own frame for ``__model__`` or its own name,
-        else the name in this model's namespace -- a scoped name (``hand::palm``) reaching
-        into a model nested in it."""
-        text = str(name or "").strip()
-        if not text:
-            return default
-        if text in self.declared:
-            return self.prefix + text
-        if text == _SDF_WORLD_FRAME:
-            return _SDF_WORLD_FRAME
-        if text in (self.name, _SDF_MODEL_FRAME):
-            return self.frame
-        return self.prefix + text
-
-
-class _SdfFrames:
-    """The model's frame graph: its links, frames, joints and nested models, and theirs, keyed
-    by scoped name (``arm::elbow``), to their rest transforms in the model's world by the
-    SDFormat rules (``relative_to``, ``attached_to``, a joint's pose relative to its child, a
-    frame's to what it is attached to, a nested model's to the model it is nested in). Every
-    node's ``relative_to`` is a key, resolved in its own model's namespace when it was added."""
-
-    def __init__(self, model_name: str, model_world: list[list[float]]) -> None:
-        self.model_name = model_name
-        self.nodes: dict[str, dict] = {
-            _SDF_WORLD_FRAME: {"kind": "world", "world": _IDENTITY},
-            _SDF_MODEL_FRAME: {"kind": "model", "world": model_world, "canonical": ""},
-        }
-        self.links: set[str] = set()
-
-    def add(self, key: str, node: dict) -> None:
-        if key in self.nodes:
-            raise RobotReadError(f"SDF model {self.model_name!r} names {key!r} twice: links, frames, joints and nested models share one namespace")
-        self.nodes[key] = node
-
-    def world(self, key: str, resolving: tuple[str, ...] = ()) -> list[list[float]]:
-        node = self.nodes.get(key)
-        if node is None:
-            raise RobotReadError(f"SDF model {self.model_name!r} refers to frame {key!r}, which it does not declare")
-        if "world" in node:
-            return node["world"]
-        if key in resolving:
-            raise RobotReadError(f"SDF model {self.model_name!r} frame graph cycles at {key!r}")
-        node["world"] = _multiply(self.world(node["relative_to"], (*resolving, key)), node["pose"])
-        return node["world"]
-
-    def attached_link(self, key: str, resolving: tuple[str, ...] = ()) -> str:
-        """The link a frame moves with: a nested model's frame is attached to its canonical link."""
-        if key in self.links:
-            return key
-        if key == _SDF_WORLD_FRAME:
-            return ""
-        node = self.nodes.get(key)
-        if node is None:
-            raise RobotReadError(f"SDF model {self.model_name!r} refers to frame {key!r}, which it does not declare")
-        if key in resolving:
-            raise RobotReadError(f"SDF model {self.model_name!r} attached_to graph cycles at {key!r}")
-        if node["kind"] == "frame":
-            return self.attached_link(node["attached"], (*resolving, key))
-        if node["kind"] == "joint":
-            return self.attached_link(node["child"], (*resolving, key))
-        if node["kind"] == "model" and node["canonical"]:
-            return self.attached_link(node["canonical"], (*resolving, key))
-        return ""
-
-
-def _sdf_shape_facts(owner: ET.Element, *, where: str) -> dict:
-    geometry = _sdf_first(owner, "geometry")
-    declared, _relative, values, _transform = _sdf_pose(owner, where=where)
-    facts: dict = {"name": str(owner.attrib.get("name") or "").strip(), "type": "unknown", "filename": "",
-                   "origin": _described_origin(values[:3], values[3:])}
-    shapes = [child for child in list(geometry) if isinstance(child.tag, str)] if geometry is not None else []
-    shape = shapes[0] if shapes else None
-    if shape is None:
-        facts["type"] = "missing"
-        return facts
-    kind = local_name(shape.tag)
-    facts["type"] = kind
-    if kind == "mesh":
-        facts["filename"] = _sdf_text(shape, "uri")
-        facts["scale"] = _optional_numbers(_sdf_text(shape, "scale"), 3)
-    elif kind == "box":
-        facts["size"] = _optional_numbers(_sdf_text(shape, "size"), 3)
-    elif kind in ("cylinder", "sphere", "capsule"):
-        facts["radius"] = _optional_numbers(_sdf_text(shape, "radius"), 1)
-        facts["radius"] = facts["radius"][0] if facts["radius"] else None
-        if kind != "sphere":
-            length = _optional_numbers(_sdf_text(shape, "length"), 1)
-            facts["length"] = length[0] if length else None
-    return facts
-
-
-def _sdf_drawable(facts: dict) -> bool:
-    """Whether the viewer could draw a shape as ``_sdf_shape_facts`` describes it: a mesh by its
-    uri, or one of ``DRAWABLE_SHAPES`` with its dimensions."""
-    kind = facts.get("type")
-    if kind == "mesh":
-        return bool(facts.get("filename"))
-    if kind == "box":
-        return facts.get("size") is not None
-    return kind in DRAWABLE_SHAPES and facts.get("radius") is not None and (kind == "sphere" or facts.get("length") is not None)
-
-
-def _sdf_color(owner: ET.Element) -> str:
-    material = _sdf_first(owner, "material")
-    if material is None:
-        return ""
-    for tag in ("diffuse", "ambient"):
-        raw = _sdf_text(material, tag).split()
-        if len(raw) in (3, 4):
-            values = _optional_numbers(" ".join(raw), len(raw))
-            if values is not None:
-                return _hex(values)
-    return ""
-
-
-def _sdf_model(root: ET.Element, *, display: str) -> tuple[str, str, ET.Element]:
-    """``(document kind, world name, the model element)``: the one model a document renders."""
-    models = children(root, "model")
-    if len(models) == 1:
-        return "model", "", models[0]
-    if len(models) > 1:
-        raise RobotReadError(f"{display} holds {len(models)} top-level models; the viewer renders one direct <model>")
-    worlds = children(root, "world")
-    if len(worlds) != 1:
-        raise RobotReadError(f"{display} must hold one direct <model>, or one <world> holding one direct <model>")
-    world_models = children(worlds[0], "model")
-    if len(world_models) != 1:
-        raise RobotReadError(f"{display} world holds {len(world_models)} models; the viewer renders a world with exactly one direct <model>")
-    return "world", str(worlds[0].attrib.get("name") or "").strip(), world_models[0]
-
-
-def _sdf_metadata(root: ET.Element) -> dict:
-    def attributes(element: ET.Element, names: tuple[str, ...]) -> dict:
-        return {name: str(element.attrib.get(name) or "").strip() for name in names if str(element.attrib.get(name) or "").strip()}
-
-    def descendants(tag: str) -> list[ET.Element]:
-        return [element for element in root.iter() if isinstance(element.tag, str) and local_name(element.tag) == tag]
-
-    nested = 0
-    parents = {child: parent for parent in root.iter() for child in parent}
-    for model in descendants("model"):
-        parent = parents.get(model)
-        if parent is not None and local_name(parent.tag) == "model":
-            nested += 1
-    return {
-        "includes": [{"id": f"include:{index}", "uri": _sdf_text(element, "uri"), "name": _sdf_text(element, "name")}
-                     for index, element in enumerate(descendants("include"), start=1)],
-        "plugins": [{"id": f"plugin:{index}", **attributes(element, ("name", "filename"))}
-                    for index, element in enumerate(descendants("plugin"), start=1)],
-        "sensors": [{"id": f"sensor:{index}", **attributes(element, ("name", "type"))}
-                    for index, element in enumerate(descendants("sensor"), start=1)],
-        "lights": [{"id": f"light:{index}", **attributes(element, ("name", "type"))}
-                   for index, element in enumerate(descendants("light"), start=1)],
-        "physics": [{"id": f"physics:{index}", **attributes(element, ("name", "type", "default"))}
-                    for index, element in enumerate(descendants("physics"), start=1)],
-        "nestedModelCount": nested,
-    }
-
-
-def _resolve_sdf_mesh(uri: str, *, base_dir: Path, where: str) -> dict:
-    if mesh_uri.scheme(uri) == "package":
-        fmt = _drawable_format(uri, where=where)
-        path = _package_mesh(uri, base_dir, where)
-        if not path.is_file():
-            raise RobotReadError(f"{where} names {uri!r}, and no file is at {path}")
-        return {"format": fmt, "path": str(path)}
-    local = mesh_uri.local_path(uri)  # a drive path is a path; file:///C:/x is C:\x on Windows
-    if local is None:
-        raise RobotReadError(
-            f"{where} names {uri!r}, which is not a local file: the viewer draws the meshes beside the "
-            "description; copy the file next to it and name it by a relative path"
-        )
-    fmt = _drawable_format(uri, where=where)
-    path = (base_dir / local).resolve()
-    if not path.is_file():
-        raise RobotReadError(f"{where} names {uri!r}, and no file is at {path}")
-    return {"format": fmt, "path": str(path)}
+def _read_urdf(path: Path) -> _Description:
+    _validated_urdf(path)
+    return _described("urdf", _read(urdf_source.read_urdf, path, _URDF), display_path(path))
 
 
 def _read_sdf(path: Path) -> _Description:
     from cad.sdf._source import SdfSourceError
     from cad.sdf._validation import raise_for_validation_errors, validate_sdf_root
 
-    display = display_path(path)
     try:
         root = ET.parse(path).getroot()
     except (OSError, ET.ParseError) as exc:
-        raise RobotReadError(f"{display} could not be parsed as SDF XML: {exc}") from None
+        raise RobotReadError(f"{display_path(path)} could not be parsed as SDF XML: {exc}") from None
     try:
         raise_for_validation_errors(validate_sdf_root(root, source_path=path, base_dir=path.parent))
     except SdfSourceError as exc:
         raise RobotReadError(str(exc)) from None
-    if local_name(root.tag) != "sdf":
-        raise RobotReadError(f"{display} root element must be <sdf>")
-    version = str(root.attrib.get("version") or "").strip()
-    document_kind, world_name, model = _sdf_model(root, display=display)
-    model_name = str(model.attrib.get("name") or "").strip()
-    description = _Description("sdf", model_name, display)
-    _declared, relative_to, _values, model_world = _sdf_pose(model, where=f"{display} model {model_name!r}")
-    if relative_to and relative_to != _SDF_WORLD_FRAME:
-        raise RobotReadError(f"{display} model {model_name!r} pose is relative_to {relative_to!r}; the viewer places a model in the world")
-    frames = _SdfFrames(model_name, model_world)
-
-    # The model and every model nested in it (SDFormat 1.6+), as one frame graph: each nested
-    # model's links, frames and joints under its scoped name (``arm::elbow``), each nested
-    # model's frame posed in the model it is nested in and attached to its canonical link.
-    link_elements: list[tuple[str, ET.Element, _SdfScope]] = []
-    frame_count = 0
-    raw_joints: list[dict] = []
-
-    def collect(element: ET.Element, scope: _SdfScope) -> None:
-        nonlocal frame_count
-        where_model = f"{display} model {(scope.prefix[:-2] or model_name)!r}"
-        if str(element.attrib.get("placement_frame") or "").strip():
-            raise RobotReadError(f"{where_model} is placed by its placement_frame, which the viewer does not place by; "
-                                 "drop placement_frame and pose the model's own frame")
-        for link_element in children(element, "link"):
-            key = scope.own(link_element)
-            _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {key!r}")
-            frames.links.add(key)
-            frames.add(key, {"kind": "link", "pose": transform, "relative_to": scope.key(relative_to, scope.frame)})
-            link_elements.append((key, link_element, scope))
-        for frame_element in children(element, "frame"):
-            key = scope.own(frame_element)
-            attached = scope.key(frame_element.attrib.get("attached_to"), scope.frame)
-            _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {key!r}")
-            frames.add(key, {"kind": "frame", "pose": transform, "relative_to": scope.key(relative_to, attached), "attached": attached})
-            frame_count += 1
-        for nested in children(element, "model"):
-            key = scope.own(nested)
-            _declared, relative_to, _values, transform = _sdf_pose(nested, where=f"{display} model {key!r}")
-            inner = _SdfScope(nested, f"{key}::", key)
-            canonical = str(nested.attrib.get("canonical_link") or "").strip()
-            first = _sdf_first(nested, "link") if not canonical else None
-            first_model = _sdf_first(nested, "model") if not canonical and first is None else None
-            canonical_key = (inner.key(canonical, "") if canonical else inner.own(first) if first is not None
-                             else inner.own(first_model) if first_model is not None else "")
-            frames.add(key, {"kind": "model", "pose": transform, "relative_to": scope.key(relative_to, scope.frame), "canonical": canonical_key})
-            collect(nested, inner)
-        for joint_element in children(element, "joint"):
-            key = scope.own(joint_element)
-            joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
-            if joint_type not in (*_MOVING, "fixed"):
-                raise RobotReadError(f"{display} joint {key!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
-            parent_frame = scope.key(_sdf_text(joint_element, "parent"), "")
-            child_frame = scope.key(_sdf_text(joint_element, "child"), "")
-            _declared, relative_to, values, transform = _sdf_pose(joint_element, where=f"{display} joint {key!r}")
-            frames.add(key, {"kind": "joint", "pose": transform, "relative_to": scope.key(relative_to, child_frame), "child": child_frame})
-            axis_element = _sdf_first(joint_element, "axis")
-            xyz_element = _sdf_first(axis_element, "xyz") if axis_element is not None else None
-            axis = _numbers(xyz_element.text if xyz_element is not None else None, 3, where=f"{display} joint {key!r} axis", default=[0.0, 0.0, 1.0])
-            expressed_in = ((xyz_element.attrib.get("expressed_in") if xyz_element is not None else None)
-                            or (axis_element.attrib.get("expressed_in") if axis_element is not None else None))
-            limit_element = _sdf_first(axis_element, "limit") if axis_element is not None else None
-            limit: dict = {}
-            for name in ("lower", "upper", "effort", "velocity"):
-                value = _optional_numbers(_sdf_text(limit_element, name), 1) if limit_element is not None else None
-                if value is not None:
-                    limit[name] = value[0]
-            raw_joints.append({"name": key, "type": joint_type, "parent": parent_frame, "child": child_frame, "axis": axis,
-                               "expressed_in": scope.key(expressed_in, key), "limit": limit, "declared_limit": limit_element is not None,
-                               "pose": values})
-
-    collect(model, _SdfScope(model, "", _SDF_MODEL_FRAME))
-
-    links: dict[str, _Link] = {}
-    undrawable: list[str] = []  # every visual the page cannot draw, named together
-    for link_key, link_element, scope in link_elements:
-        link = _Link(link_key)
-        link.placement = frames.world(link.name)
-        inverse = _invert_rigid(link.placement)
-        for index, visual_element in enumerate(children(link_element, "visual"), start=1):
-            where = f"{display} link {link.name!r} visual {index}"
-            facts = _sdf_shape_facts(visual_element, where=where)
-            color = _sdf_color(visual_element)
-            facts["color"], facts["materialName"] = color, ""
-            _declared, relative_to, _values, pose = _sdf_pose(visual_element, where=where)
-            local = _multiply(inverse, _multiply(frames.world(scope.key(relative_to, link.name)), pose))
-            kind = facts["type"]
-            try:
-                if kind == "mesh":
-                    uri = facts["filename"]
-                    if not uri:
-                        raise RobotReadError(f"{where} is a <mesh> with no <uri>, so there is nothing to load")
-                    mesh = _resolve_sdf_mesh(uri, base_dir=path.parent, where=where)
-                    facts["path"] = mesh["path"]
-                    scale = _numbers(_sdf_text(_sdf_first(_sdf_first(visual_element, "geometry"), "mesh"), "scale"), 3,
-                                     where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
-                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
-                    label = PurePosixPath(uri).name or "mesh"
-                elif kind in DRAWABLE_SHAPES:
-                    dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
-                    if (kind == "box" and "size" not in dimensions) or (kind != "box" and "radius" not in dimensions) \
-                            or (kind in ("cylinder", "capsule") and "length" not in dimensions):
-                        raise RobotReadError(f"{where} is a <{kind}> with missing or non-positive dimensions; give it positive dimensions")
-                    mesh = _primitive_descriptor(kind, dimensions)
-                    local = _multiply(local, _mesh_scale(mesh["format"]))
-                    label = kind
-                else:
-                    what = "has no <geometry>" if kind == "missing" else f"uses <{kind}> geometry, which the viewer cannot draw"
-                    raise RobotReadError(f"{where} {what}. Supported: {', '.join(DRAWABLE_SHAPES)}, mesh. "
-                                         "Replace it with one of those, or reference a mesh file.")
-            except RobotReadError as exc:
-                undrawable.append(str(exc))
-                continue
-            link.visuals.append(_Visual(f"{link.name}:v{index}", label, local, color, mesh, facts))
-        link.collisions = [_sdf_shape_facts(element, where=f"{display} link {link.name!r} collision {index}")
-                           for index, element in enumerate(children(link_element, "collision"), start=1)]
-        links[link.name] = link
-        description.links.append(link)
-    if undrawable:
-        raise RobotReadError("; ".join(undrawable))
-
-    children_of: set[str] = set()
-    for raw in raw_joints:
-        parent_link = frames.attached_link(raw["parent"]) if raw["parent"] else ""
-        child_link = frames.attached_link(raw["child"]) if raw["child"] else ""
-        if not child_link:
-            raise RobotReadError(f"{display} joint {raw['name']!r} child {raw['child']!r} is not attached to a link")
-        if parent_link == child_link:
-            raise RobotReadError(f"{display} joint {raw['name']!r} must connect different parent and child frames, not {child_link!r}")
-        if child_link in children_of:
-            raise RobotReadError(f"{display} link {child_link!r} has multiple parents")
-        children_of.add(child_link)
-        joint = _Joint(raw["name"], raw["type"], parent_link, child_link)
-        joint.frame = frames.world(raw["name"])
-        if joint.type != "fixed":
-            axis_frame = frames.world(raw["expressed_in"])
-            joint.axis = _unit(_rotate(axis_frame, raw["axis"]))
-            if joint.axis is None:
-                raise RobotReadError(f"{display} joint {raw['name']!r} axis must be nonzero")
-            if joint.type != "continuous":
-                joint.lower, joint.upper = raw["limit"].get("lower"), raw["limit"].get("upper")
-        joint.facts = {
-            "name": joint.name, "type": joint.type, "parent": parent_link, "child": child_link,
-            "axis": None if joint.type == "fixed" else list(raw["axis"]),
-            "origin": _described_origin(raw["pose"][:3], raw["pose"][3:]),
-            "limit": raw["limit"] if raw["declared_limit"] else None,
-            "mimic": None,
-            "fourBar": None,
-        }
-        description.joints.append(joint)
-    roots = [link.name for link in description.links if link.name not in children_of]
-    description.root = roots[0] if len(roots) == 1 else ""
-    description.sdf = {
-        "version": version,
-        "documentKind": document_kind,
-        "worldName": world_name,
-        "modelName": model_name,
-        "rootLink": description.root,
-        "rootLinks": roots,
-        "frameCount": frame_count,
-        "linkCount": len(link_elements),
-        "jointCount": len(raw_joints),
-        # The collisions with geometry the viewer cannot draw (a <plane>, a <heightmap>, none at
-        # all): never refused, since no collision is drawn, but counted. A visual like them refuses
-        # the file (above), so there is no count of those to keep.
-        "unsupportedCollisionCount": sum(not _sdf_drawable(facts) for link in description.links for facts in link.collisions),
-        "staticMetadata": _sdf_metadata(root),
-    }
-    return description
+    return _described("sdf", _read(sdf_source.read_sdf, path, _SDF), display_path(path))
 
 
 # --- MJCF ------------------------------------------------------------------------------------
@@ -1291,24 +760,14 @@ def _read_srdf(path: Path) -> _Description:
     validate_srdf_against_urdf(source, urdf_robot=robot, result=findings)
     if findings.errors:
         raise RobotReadError(format_findings(findings.errors))
-    description = _read_urdf(urdf_path)
+    _validated_urdf(urdf_path)
+    # The group states are the engine's poses (each control's value in its unit) and its home the opening.
+    articulation = _read(urdf_source.read_srdf, path, _URDF, urdf=urdf_path)
+    description = _described("urdf", articulation, display_path(urdf_path))
     description.kind = "srdf"
-    joints = {joint.name: joint for joint in description.joints}
+    description.poses, description.home = articulation.poses, articulation.home
     groups_by_name = {group.name: group for group in source.planning_groups}
-
-    def control_units(joint_name: str, value: float) -> float:
-        joint = joints.get(joint_name)
-        return math.degrees(value) if joint is not None and joint.type in _ANGULAR else value
-
-    states: list[dict] = []
-    for state in source.group_states:
-        state_id = f"{state.group}/{state.name}"
-        values = {name: control_units(name, value) for name, value in state.joint_values_by_name.items()
-                  if name in joints and joints[name].type in _MOVING and joints[name].mimic is None}
-        description.poses[state_id] = values
-        states.append({"id": state_id, "name": state.name, "group": state.group})
-        if state.name.strip().lower() == "home":
-            description.home.update(values)
+    states = [{"id": f"{state.group}/{state.name}", "name": state.name, "group": state.group} for state in source.group_states]
 
     def tip_link(group_name: str) -> str:
         group = groups_by_name.get(group_name)

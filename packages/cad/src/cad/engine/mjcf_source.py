@@ -62,6 +62,8 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from cad.engine.robot_model import Articulation, LinkJoint, Visual
+
 __all__ = ["ARTICULATED", "Articulation", "Finding", "Findings", "GEOM_TYPES", "JOINT_TYPES", "LinkJoint",
            "MESH_SUFFIXES", "MJCF_SUFFIXES", "MjcfBody", "MjcfError", "MjcfGeom", "MjcfJoint", "MjcfMesh", "MjcfModel",
            "Visual", "articulate", "is_mjcf_file", "read_mjcf"]
@@ -992,54 +994,9 @@ def read_mjcf(path: Path) -> tuple[MjcfModel | None, Findings]:
 
 
 # --- the viewer's articulation ---------------------------------------------------------------------
-
-
-@dataclass
-class Visual:
-    """A link's visual as the viewer and the stills take one: its placement in its link's frame, its shape --
-    ``("box"|"cylinder"|"sphere"|"capsule", dimensions)`` in full sizes or ``("file", path, scale)`` -- its
-    colour (``#rrggbb``), its alpha and the name a row calls it."""
-
-    id: str
-    link: str
-    local: Matrix
-    shape: tuple
-    color: str
-    alpha: float
-    label: str
-    geom: MjcfGeom
-
-
-@dataclass
-class LinkJoint:
-    """A joint between two links as the viewer poses one: ``fixed``, ``revolute``, ``continuous`` or
-    ``prismatic``; its frame (the anchor, at rest, in the model's space) and axis (a unit vector there); its
-    range in radians or metres around zero (None: unbounded); the leader it follows, if any."""
-
-    name: str
-    type: str
-    parent: str
-    child: str
-    frame: Matrix
-    axis: list[float] | None
-    lower: float | None
-    upper: float | None
-    mimic: tuple[str, float, float] | None = None
-    source: MjcfJoint | None = None
-
-
-@dataclass
-class Articulation:
-    """The model as a tree of links: each link's rest frame, its visuals, the joints in parents-first order,
-    the poses (keyframes, in the viewer's control units: degrees for a turn, metres for a slide) and the
-    inertials, by link."""
-
-    root: str
-    links: dict[str, Matrix]
-    visuals: dict[str, list[Visual]]
-    joints: list[LinkJoint]
-    poses: dict[str, dict[str, float]]
-    inertials: dict[str, dict[str, Any]]
+#
+# The articulation's dataclasses are the engine's one shape of a robot (``robot_model``), which the URDF and
+# SDF readers make too; re-exported here under their names.
 
 
 def _hex(rgba: tuple[float, ...]) -> str:
