@@ -15,7 +15,6 @@ import math
 import numbers
 import os
 import struct
-import tempfile
 import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -63,16 +62,11 @@ def _png(rgb: Any) -> bytes:
 
 
 def _write(out: Path, data: bytes) -> None:
-    """``data`` at ``out`` whole or not at all: written beside it, then moved over it (law 17)."""
-    out.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix=f".{out.name}.", suffix=".part", dir=out.parent)
-    try:
-        with os.fdopen(handle, "wb") as file:
-            file.write(data)
-        os.replace(temporary, out)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
+    """``data`` at ``out`` whole or not at all: written beside it, then moved over it (law 17), by the
+    library's one atomic replace (``cad._internal.atomic_replace``)."""
+    from cad._internal.atomic_replace import write_bytes_atomic
+
+    write_bytes_atomic(out, data)
 
 
 def colour(distance: Any, pixel: float, step: float) -> Any:
