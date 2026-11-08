@@ -14,9 +14,11 @@ shared by every type that has them, ``inspect`` where a type has it, and the res
 ``dfm`` a 3D type's manufacturing check, ``drc`` a board's design rule check, ``erc`` a schematic's electrical
 rules check, ``validate`` a robot description's conformance check.
 
-``model`` is the one type with no file: a model built from code and held in the engine's memory,
-addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
-``.xbf`` file the engine writes of one.
+``model`` and ``implicit`` are the two types with no file: a model built from code and held in the engine's
+memory, addressed by its document id or the handle its call returns -- ``@model`` declares one whose document
+is the XCAF document of the build123d shape it returns, ``@implicit`` one whose document is the mesh sampled
+from the implicit field it returns (``cad.cadjoint.field``); ``xbf`` is the ``.xbf`` file the engine writes
+of a model.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -218,6 +220,14 @@ _TYPES = (
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True),
     DocumentTypeEntry(
+        "implicit", "implicit",
+        "a model built from an implicit (signed-distance) field and held in the engine's memory as the mesh "
+        "sampled from it, with no file behind it: addressed by its document id (cad run SCRIPT.py prints it) or "
+        "the handle its call returns",
+        (), "model/gltf-binary", "mesh", ("triangles",),
+        (_EXPORT_MESH, _SNAPSHOT, Operation("inspect", "what the document holds: its bounds, triangles and volume",
+                                             _KERNEL, engine=True), _DFM), decorator=True),
+    DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
@@ -349,8 +359,9 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
+    from cad.cadjoint._producers import PRODUCERS as cadjoint
 
-    return build123d
+    return (*build123d, *cadjoint)
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:

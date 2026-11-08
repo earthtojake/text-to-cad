@@ -53,7 +53,7 @@ del _install_font_guard
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+_TYPES = ("model", "implicit", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "cadjoint", "kicad", "trimesh")
@@ -93,7 +93,7 @@ def __dir__() -> list[str]:
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, kicad_sch, model, sdf, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, implicit, kicad_pcb, kicad_sch, model, sdf, srdf, step, stl, threemf, urdf, xbf
 
 
 @_cache

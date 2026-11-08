@@ -35,6 +35,21 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "decorator": true
     },
     {
+      "id": "implicit",
+      "title": "implicit",
+      "wire": "implicit",
+      "extensions": [],
+      "mime": "model/gltf-binary",
+      "view": "mesh",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "dfm"
+      ],
+      "decorator": true
+    },
+    {
       "id": "xbf",
       "title": "XBF",
       "wire": "xbf",
