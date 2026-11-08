@@ -28,9 +28,10 @@ linear).
 
 **Mass.** A link's ``inertial`` sums its parts' solids at their materials' densities: mass, centre
 of mass in the link frame, and the inertia tensor about that centre in the link frame's axes. A
-link whose parts have no density has ``inertial`` None: a writer says so (MuJoCo computes one
-from the geoms; URDF needs one, so the URDF writer refuses by name unless told to guess). A part
-whose material names a density that is not positive is refused by name.
+link whose parts have no density has ``inertial`` None, and each writer does what its format does
+with a link that has none: MuJoCo computes one from the geoms, a URDF link goes without and its
+validator warns, SDFormat gives it its default kilogram. A part whose material names a density that
+is not positive is refused by name.
 
 **Geometry.** A ``Mesh`` is one prototype's triangles in the prototype's own frame, in metres:
 positions ``(n, 3)`` float32 and triangles ``(m, 3)`` uint32, with the key the document knows it

@@ -6,30 +6,34 @@ the document (``cad.engine.describe``), writes it as the engine's MJCF export do
 the same bodies, joints, classes, equalities and keys the ``.xml`` export holds, and a scene attaches it
 (``scene.attach(spec(arm()), prefix="arm/", frame=...)``) as it attaches a Menagerie robot.
 
-``thing`` is what a program holds of a document: a ``.xml`` or ``.mjcf`` path (read as it is, its meshes
-where it names them), a ``.step``/``.stp`` or an ``.xbf`` path (the document it holds), a model call's
-handle (``api.Document``: the document the engine holds, transferred into this process), or a build123d
-shape, in a build or outside one (made a document here as ``model(shape, name=...)`` makes one, and
-never handed to the engine). An undecorated function, a ``Model`` not called, a mesh file and anything
-else is refused by name.
+``thing`` is what a program holds of a document: a ``.xml`` or ``.mjcf`` path (an authored model, a
+Menagerie robot, an export), a ``.step``/``.stp`` or an ``.xbf`` path (the document it holds), a model
+call's handle (``api.Document``: the document the engine holds, transferred into this process), or a
+build123d shape, in a build or outside one (made a document here as ``model(shape, name=...)`` makes
+one, and never handed to the engine). An undecorated function, a ``Model`` not called, a mesh file and
+anything else is refused by name.
 
-MuJoCo reads a mesh's file when the spec is compiled, not when it is made, so the files must outlive
-the call. Where they go:
+**Every spec names its files by absolute path.** MuJoCo resolves an attached spec's mesh and texture
+files by the child's own folder when it compiles, but a scene saved with ``to_file`` writes them bare,
+so the saved scene finds nothing the child's folder held: a Menagerie robot read with
+``MjSpec.from_file`` and attached is lost the moment the scene is saved. So ``spec`` names each mesh
+and texture by its absolute path and clears the spec's own folders (``meshdir``, ``texturedir``,
+``modelfiledir``), for an MJCF path as for a document: a scene composed from them compiles, and saved
+anywhere on this computer loads again. The price is that the saved scene's paths are this computer's;
+a robot meant to travel as a folder is an export (``cad model export <id> robot/robot.xml``, meshes
+relative beside it) that the scene ``<include>``s or attaches without saving.
+
+MuJoCo reads a mesh's file when the spec is compiled, not when it is made, so a document's files must
+outlive the call. Where they go:
 
 - ``assets`` None: a folder of the engine's cache (``places.cache_dir()/mjcf/<digest>``), named by the
   digest of what is written (the MJCF and every mesh), so the same document lands in the same folder and
-  a changed one in a new folder. The spec names each mesh by its absolute path: a scene saved from it
-  (``to_file``) finds them anywhere on this computer, and nowhere else. It is a cache: wiping it loses a
-  saved scene's meshes, never a document.
+  a changed one in a new folder. It is a cache: wiping it loses a saved scene's meshes, never a document.
 - ``assets`` a folder: the meshes and the fragment's MJCF (``<assets>/<model>.xml``) are written there,
-  relative to the working directory, and the spec names each mesh as ``<assets>/<file>``, the folder as
-  given: a scene written to the working directory (``scene.to_file("scene.xml")``), with no ``meshdir``
-  of its own, finds them, and moves with them.
+  relative to the working directory, where a project keeps them beside its scene.
 
-Either way the spec's own mesh folder is cleared (``meshdir``, ``modelfiledir``), because MuJoCo resolves
-an attached spec's mesh files by the child's folder when it compiles but writes them bare when it saves
-the scene, so a saved scene finds nothing the child's folder held. ``tolerance`` meshes the visual and
-collision meshes to within it (millimetres, as an export's): the engine's own otherwise.
+``tolerance`` meshes a document's visual and collision meshes to within it (millimetres, as an
+export's): the engine's own otherwise; an MJCF's meshes are its files, and a tolerance is refused.
 """
 
 from __future__ import annotations
@@ -60,7 +64,7 @@ def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | Non
             raise ValueError(f"{path.name} is an MJCF: its meshes are its files, and no tolerance meshes them again")
         if not path.is_file():
             raise FileNotFoundError(f"no MJCF {path}")
-        return mujoco.MjSpec.from_file(str(path))
+        return _rooted(mujoco.MjSpec.from_file(str(path)))
     tolerance = tolerance_of(tolerance)
     with _source(thing) as source:
         from cad.engine.describe import describe
@@ -90,12 +94,37 @@ def _written(mujoco: Any, description: Any, assets: str | Path | None) -> Any:
         text, files = rendered(description, ".")
         fragment = given / f"{stem}.xml"
         place(fragment, text, files, ".")
-        named = {name: (given / name).as_posix() for name in files}
+        named = {name: str((given / name).resolve()) for name in files}
     made = mujoco.MjSpec.from_file(str(fragment))
-    made.meshdir = ""
-    made.modelfiledir = ""
     for mesh in made.meshes:
         mesh.file = named.get(mesh.file, mesh.file)
+    return _rooted(made)
+
+
+def _rooted(made: Any) -> Any:
+    """``made`` with every mesh and texture file named by its absolute path, resolved as MuJoCo would
+    resolve it from the spec's own folders (``modelfiledir``, then ``meshdir`` or ``texturedir``), and
+    those folders cleared: what a scene can attach, save and load again (the module docstring)."""
+    base = Path(made.modelfiledir or ".")
+
+    def absolute(folder: str, file: str) -> str:
+        if not file:
+            return file
+        given = Path(file)
+        if given.is_absolute():
+            return str(given)
+        inside = Path(folder) if folder else Path(".")
+        return str(((inside if inside.is_absolute() else base / inside) / given).resolve())
+
+    for mesh in made.meshes:
+        mesh.file = absolute(made.meshdir, mesh.file)
+    for texture in made.textures:
+        texture.file = absolute(made.texturedir, texture.file)
+    for hfield in made.hfields:
+        hfield.file = absolute(made.meshdir, hfield.file)
+    made.meshdir = ""
+    made.texturedir = ""
+    made.modelfiledir = ""
     return made
 
 

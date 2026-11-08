@@ -71,6 +71,19 @@ def hand():
 """
 
 
+def _png_1x1() -> bytes:
+    """A one-pixel RGBA PNG, every chunk's CRC right: what a texture is to MuJoCo."""
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+    pixel = zlib.compress(b"\x00" + bytes((200, 40, 40, 255)))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixel) + chunk(b"IEND", b"")
+
+
 class SpecTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -107,16 +120,37 @@ class SpecTest(unittest.TestCase):
         scene.to_file("scene.xml")
         return scene
 
-    def test_an_mjcf_path_is_read_as_it_is(self) -> None:
+    def test_an_mjcf_path_is_read_with_its_files_named_absolutely_so_a_saved_scene_finds_them(self) -> None:
         out = self.folder / "robot" / "hinge.xml"
         api.export(self.models / "XBF/hinge.xbf", out, daemon=False, progress=False)
         made = spec(out)
-        self.assertEqual(made.meshdir, "assets")
+        # Its own folders are cleared and each mesh named by its absolute path, resolved from them.
+        self.assertEqual((made.meshdir, made.texturedir, made.modelfiledir), ("", "", ""))
+        self.assertEqual(sorted(mesh.file for mesh in made.meshes),
+                         sorted(str(path) for path in (out.parent / "assets").glob("*.stl")))
         model = made.compile()
         self.assertEqual(model.joint("elbow").type, mujoco.mjtJoint.mjJNT_HINGE)
         self.assertEqual(model.nkey, 1)
         with self.assertRaisesRegex(ValueError, "its meshes are its files"):
             spec(out, tolerance=0.1)
+        # An authored model with a texture, as a Menagerie robot has: attached, saved elsewhere, loaded again.
+        robot = self.folder / "vendor" / "arm.xml"
+        (robot.parent / "meshes").mkdir(parents=True)
+        shutil.copy(next((out.parent / "assets").glob("*.stl")), robot.parent / "meshes" / "link.stl")
+        (robot.parent / "meshes" / "grid.png").write_bytes(_png_1x1())
+        robot.write_text('<mujoco model="arm"><compiler meshdir="meshes" texturedir="meshes"/>'
+                         '<asset><mesh name="link" file="link.stl"/><texture name="grid" type="2d" file="grid.png"/>'
+                         '<material name="checker" texture="grid"/></asset>'
+                         '<worldbody><body name="link"><geom type="mesh" mesh="link" material="checker"/></body>'
+                         '</worldbody></mujoco>', encoding="utf-8")
+        vendored = spec(robot)
+        self.assertTrue(all(Path(found.file).is_absolute() for found in (*vendored.meshes, *vendored.textures)))
+        self.scene(vendored, prefix="arm/")
+        elsewhere = self.root / f"{self.folder.name}-elsewhere"
+        elsewhere.mkdir()
+        shutil.copy(self.folder / "scene.xml", elsewhere / "scene.xml")
+        model = mujoco.MjModel.from_xml_path(str(elsewhere / "scene.xml"))
+        self.assertEqual((model.nmesh, model.ntex), (1, 1))
 
     def test_an_xbf_attaches_and_a_saved_scene_finds_its_meshes_in_the_cache(self) -> None:
         made = spec(self.models / "XBF/hinge.xbf")
@@ -141,16 +175,19 @@ class SpecTest(unittest.TestCase):
         spec(self.models / "hinge.step")
         self.assertEqual(len(list((self.cache / "mjcf").iterdir())), 2)
 
-    def test_a_step_with_assets_named_writes_them_there_and_the_scene_beside_them_moves_with_them(self) -> None:
+    def test_a_step_with_assets_named_writes_them_there_and_a_scene_saved_anywhere_finds_them(self) -> None:
         made = spec(self.models / "hinge.step", assets="assets")
         # A STEP carries no mechanism: its parts hang from the world, fixed.
         self.assertEqual(made.compile().njnt, 0)
-        self.assertEqual(sorted(mesh.file for mesh in made.meshes), ["assets/hinge_arm.stl", "assets/hinge_base.stl"])
-        self.assertTrue((self.folder / "assets" / "hinge.xml").is_file())
+        folder = (self.folder / "assets").resolve()
+        self.assertEqual(sorted(mesh.file for mesh in made.meshes),
+                         [str(folder / "hinge_arm.stl"), str(folder / "hinge_base.stl")])
+        self.assertTrue((folder / "hinge.xml").is_file())
         self.scene(made)
-        moved = self.root / f"{self.folder.name}-moved"
-        shutil.copytree(self.folder, moved, ignore=shutil.ignore_patterns("cache"))
-        model = mujoco.MjModel.from_xml_path(str(moved / "scene.xml"))
+        elsewhere = self.root / f"{self.folder.name}-saved-elsewhere"
+        elsewhere.mkdir()
+        shutil.copy(self.folder / "scene.xml", elsewhere / "scene.xml")
+        model = mujoco.MjModel.from_xml_path(str(elsewhere / "scene.xml"))
         self.assertEqual(model.nmesh, 2)
 
     def test_a_build123d_shape_is_described_here_and_what_is_no_document_is_refused_by_name(self) -> None:

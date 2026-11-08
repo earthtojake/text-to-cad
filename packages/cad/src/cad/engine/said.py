@@ -106,7 +106,8 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
         counted = {status: bodies.count(status) for status in ("run", "replayed") if bodies.count(status)}
         ran = ", ".join(f"{count} {status}" for status, count in counted.items()) or "none"
         stages = ", ".join(f"{name} {timings[name]:.2f}s" for name in ("body", "names", "document", "xbf", "step",
-                                                                        "glb", "stl", "threemf", "dxf", "mjcf")
+                                                                        "glb", "stl", "threemf", "dxf", "mjcf",
+                                                                        "urdf", "sdf")
                            if timings.get(name))
         misses, hits = memo.get("misses", 0), memo.get("hits", 0)
         line = (f"built {report['model']}{worker} in {wall:.2f}s: bodies {ran}; {misses} miss{'' if misses == 1 else 'es'}, "
