@@ -111,10 +111,10 @@ def headline(errors: int, seconds: float, tools: int) -> str:
     return f"{head} · {_duration_words(seconds)} · {tools} tool{'s' if tools != 1 else ''}"
 
 
-def _previous_posts(folder: Path, stem: str) -> list[Path]:
-    """The G-code an earlier plan wrote into ``folder``, as its ``result.json`` lists it: plain names in the folder,
-    named for this document as a plan names a program (``<stem>.<setup>[.<n>-<tool>]<ext>``, a post's extension), so a
-    name the file carries is never taken for one of the person's own files (``bracket.step``)."""
+def _previous_posts(folder: Path) -> list[Path]:
+    """The G-code an earlier plan wrote into ``folder``, of whichever part, as its ``result.json`` lists it: by name in
+    the folder, with a post's extension, so a name the file carries is never taken for one of the person's own files
+    (``bracket.step``) or one outside the folder."""
     from cad._internal.cam.job import POSTS
 
     try:
@@ -126,7 +126,7 @@ def _previous_posts(folder: Path, stem: str) -> list[Path]:
     out = []
     for entry in written if isinstance(written, list) else ():
         name = Path(entry).name if isinstance(entry, str) else None
-        if name and name.startswith(f"{stem}.") and name.endswith(extensions):
+        if name and name.endswith(extensions):
             out.append(folder / name)
     return out
 
@@ -485,12 +485,9 @@ def _plan(document, named, parsed, part, freecad, folder, staging, logger, start
                        summary=str(verdict["headline"]), measurements=numbers, occurrence=part.occurrence,
                        written=tuple(folder / name for name in names))
     (staging / RESULT_JSON).write_text(json.dumps(answer.as_data(), indent=1, allow_nan=False) + "\n", encoding="utf-8")
-    stale = [path for path in _previous_posts(folder, named.stem) if path.name not in names]
-    _place(folder, staging, names)
     # The G-code of an earlier plan this one does not write is removed once all of this one's are placed, so the
     # folder never mixes two plans.
-    for path in stale:
-        path.unlink(missing_ok=True)
+    _place(folder, staging, names, [path for path in _previous_posts(folder) if path.name not in names])
     logger.debug(f"wrote {', '.join(names)} into {folder}")
     return answer
 
@@ -548,11 +545,12 @@ def _box_mesh(low, high):
     return corners, np.array(triangles, dtype=np.int64)
 
 
-def _place(folder: Path, staging: Path, names: list[str]) -> None:
-    """Each of ``names``, staged, replaced into ``folder``. Each earlier file is kept under another name (a hard link,
-    else a copy) until every rename is done, so a failure anywhere puts every earlier file back byte for byte and
-    leaves none this run wrote."""
-    kept = {folder / name: staging / f"{name}.old" for name in names if (folder / name).exists()}
+def _place(folder: Path, staging: Path, names: list[str], stale: list[Path]) -> None:
+    """Each of ``names``, staged, replaced into ``folder``, then each of ``stale`` removed. Each earlier file is kept
+    under another name (a hard link, else a copy) until every rename and removal is done, so a failure anywhere puts
+    every earlier file back byte for byte and leaves none this run wrote."""
+    kept = {folder / name: staging / f"{name}.old" for name in (*names, *(path.name for path in stale))
+            if (folder / name).exists()}
     placed: list[Path] = []
     try:
         for final, old in kept.items():
@@ -563,6 +561,9 @@ def _place(folder: Path, staging: Path, names: list[str]) -> None:
         for name in names:
             replace_atomic(staging / name, folder / name)
             placed.append(folder / name)
+        for path in stale:
+            path.unlink(missing_ok=True)
+            placed.append(path)
     except BaseException:
         for final in placed:
             if final in kept:

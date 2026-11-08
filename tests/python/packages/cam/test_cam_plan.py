@@ -415,6 +415,16 @@ class FailedWrite(unittest.TestCase):
         after = {path.name: path.read_bytes() for path in folder.iterdir()}
         self.assertEqual(before, after)                    # every earlier file back, no staging folder left
 
+    def test_a_plan_freecad_cannot_finish_leaves_no_folder_behind(self):
+        from cad.freecad import _program as runner
+
+        step = block_step(class_directory(type(self)))
+        with mock.patch.object(runner, "run", side_effect=RuntimeError("FreeCAD stopped")):
+            result = plan(step, mill_job([{"op": "face", "tool": "T1"}]))
+        self.assertFalse(result.ok)
+        self.assertIn("FreeCAD stopped", result.findings[0].message)
+        self.assertEqual(["block.step"], [path.name for path in step.parent.iterdir()])   # the folder made, then gone
+
 
 @needs_freecad
 class Model(unittest.TestCase):
@@ -445,17 +455,18 @@ class Model(unittest.TestCase):
 
 
 class EarlierPosts(unittest.TestCase):
-    def test_only_a_program_named_as_a_plan_names_one_is_taken_for_an_earlier_post(self):
+    def test_only_a_program_is_taken_for_an_earlier_post(self):
         # An earlier result.json is a file the person can open and edit: a name in it that is not a program's is
-        # never deleted from the folder.
+        # never deleted, and one outside the folder is the folder's own name. Another part's program is an earlier
+        # plan's all the same: a folder holds one plan.
         from cad._internal.cam import run
 
         folder = class_directory(type(self))
         listed = [str(folder / name) for name in ("result.json", "result.glb", "bracket.top.ngc", "bracket.top.1-T1.nc",
                                                   "bracket.step", "bracket.cam.json", "other.top.nc")]
         (folder / "result.json").write_text(json.dumps({"written": [*listed, "../bracket.top.nc"]}), encoding="utf-8")
-        found = [path.name for path in run._previous_posts(folder, "bracket")]
-        self.assertEqual(["bracket.top.ngc", "bracket.top.1-T1.nc", "bracket.top.nc"], found)
+        found = [path.name for path in run._previous_posts(folder)]
+        self.assertEqual(["bracket.top.ngc", "bracket.top.1-T1.nc", "other.top.nc", "bracket.top.nc"], found)
 
 
 if __name__ == "__main__":

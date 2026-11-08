@@ -5,7 +5,8 @@ with trimesh; a B-rep type's ``plan`` reads the part with the kernel, the build1
 the installation's base; a KiCad board's ``drc``, a schematic's ``erc`` and their ``export`` are the kicad integration's, run by
 kicode's kicad-cli. The command's own environment -- the server's installation -- holds the library without
 it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at
-the installation's release, made once by the device's engine outside any sandbox and used again, as
+the installation's release (the kernel's is the installation's base, ``cad[build123d]``, made as ``cad run``
+makes it), made once by the device's engine outside any sandbox and used again, as
 ``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from uv's cache). Its
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
@@ -56,6 +57,9 @@ def found(integration: str) -> tuple[str, str, str]:
     installation = base.Installation.here()
     if carries(integration):
         return "carried", "", installation.release
+    if integration == base.EXTRA:  # the kernel's: the installation's base
+        made = base.ensure(installation, make=False) is not None
+        return ("made" if made else "not made"), str(base.where(installation)), installation.release
     spec = extras.Spec(integrations=(integration,))
     folder = extras.where(installation, spec)
     return ("made" if extras._complete(folder, spec) is not None else "not made"), str(folder), installation.release
@@ -64,7 +68,8 @@ def found(integration: str) -> tuple[str, str, str]:
 def environment(integration: str, told: Callable[[str], None], *, engine: bool = True) -> str:
     """The Python of the environment that holds ``integration``, made first when it is not complete (by
     the device's engine when one runs, its lines said to ``told``; here, with ``engine`` false: the engine
-    itself, a viewer export). ``Failed`` in uv's or the engine's words."""
+    itself, a viewer export): the kernel's, the installation's base; any other's, ``cad[<integration>]``.
+    ``Failed`` in uv's or the engine's words."""
     from cad_server._internal import base, extras
 
     try:

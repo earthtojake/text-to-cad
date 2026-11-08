@@ -286,7 +286,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # Its own code reaches the cam job beside what its package reaches.
         for path in (f"{library}/_internal/cam/run.py", f"{library}/_internal/cam/operation.py", f"{library}/freecad/_program.py",
                      f"{library}/_internal/programs.py", f"{library}/_internal/operation.py", f"{library}/results.py",
-                     f"{library}/step/__init__.py", f"{server}/cli/document_types.py", f"{server}/_internal/integration_env.py"):
+                     f"{library}/_internal/document_type.py", f"{server}/cli/document_types.py", f"{server}/_internal/integration_env.py"):
             with self.subTest(path=path):
                 self.assertLessEqual({"cam", "cadgen-linux"}, jobs_for(path))
         # The skill's pages are its own suite's, which reads them against the code they document; no plan reads them.

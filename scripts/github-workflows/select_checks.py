@@ -61,7 +61,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("cam", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "cam")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -215,11 +215,10 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               # change to the file runs the job.
               "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
-# A CAM job (cad <type> plan): its operation and orchestration, the freecad integration, its result type, the two
-# types that answer it, and the server's command and the environment it runs a job in. Each also reaches what its
+# A CAM job (cad <type> plan): its operation and orchestration, the freecad integration, its result type, the
+# binding of the types that answer it, and the server's command and the environment it runs a job in. Each also reaches what its
 # package reaches; the cam job, which installs FreeCAD, runs on these, its own suite and runner, and a full run.
 CAM_CODE = (f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**", f"{LIBRARY_SRC}/results.py",
-            f"{LIBRARY_SRC}/model/**", f"{LIBRARY_SRC}/step/**", f"{LIBRARY_SRC}/xbf/**",
             f"{LIBRARY_SRC}/_internal/document_type.py",
             f"{LIBRARY_SRC}/_internal/operation.py", f"{LIBRARY_SRC}/_internal/programs.py",
             f"{LIBRARY_SRC}/_internal/integrations.py", f"{LIBRARY_SRC}/_internal/refused.py", f"{LIBRARY_SRC}/registry.py",

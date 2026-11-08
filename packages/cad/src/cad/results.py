@@ -1,6 +1,6 @@
 """The operations' shared result types: what every check returns, typed.
 
-Every check -- ``dfm``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``, ``cad.kicad_pcb.drc``, ...) --
+Every check -- ``dfm``, ``plan``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``, ``cad.kicad_pcb.drc``, ...) --
 answers with a ``CheckResult`` (a CAM job's, ``CamResult``, one with what a job can name and the files its plan
 wrote) -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
@@ -155,6 +155,11 @@ class CamResult(CheckResult):
         return self._written("result.glb")
 
     @property
+    def planned(self) -> bool:
+        """Whether this is a plan's result: a job ran and its results were written."""
+        return self.folder is not None
+
+    @property
     def gcode(self) -> tuple[Path, ...]:
         """The G-code the plan posted, one file a setup (or a setup's tool); none when a finding is an error."""
         return tuple(Path(path) for path in self.written if Path(path).name not in ("result.json", "result.glb"))
@@ -188,13 +193,12 @@ class CamResult(CheckResult):
                    floors=tuple(data.get("floors") or ()))
 
     def human_lines(self) -> list[str]:
-        planned = self.folder is not None
-        lines = self._plan_lines() if planned else self._part_lines()
+        lines = self._plan_lines() if self.planned else self._part_lines()
         lines += [finding.human_line() for finding in self.findings]
         if not self.ok:
             blocking = sum(1 for finding in self.findings if finding.severity == "error")
             lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
-        if planned:
+        if self.planned:
             lines.append("safety: the G-code is not proven on a machine; air-cut or single-block it first, "
                          "and check the work offset and every tool length")
         return lines

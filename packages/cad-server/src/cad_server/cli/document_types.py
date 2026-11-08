@@ -559,7 +559,7 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
-        elif _name == "plan":
+        elif _name == "plan" and getattr(_entry.operation(_name), "integration", None) == "build123d":
             OPERATIONS[(_entry.id, _name)] = _plan(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
