@@ -56,9 +56,8 @@ SHA-256, so a run is reproducible.
 
 ## Results so far
 
-Status, November 2026: WidowX AI done end to end; SO-101's model (`src/so101.py`, in progress)
-reads the STEP and groups its 80 occurrences into links, its comparison not yet run. Per-robot
-working notes are in [notes/](notes/).
+Status, November 2026: both robots converted, exported, validated and compared. Per-robot working
+notes, with every decision and its source, are in [notes/](notes/).
 
 **WidowX AI** (`python src/compare.py wxai`; full notes in [notes/wxai.md](notes/wxai.md)):
 
@@ -75,6 +74,29 @@ The joints were found from the bearing cylinders each parent and child share, an
 STEP's part placements to 0.000 mm (one 0.40 mm). The mass is the weak point: Trossen's STEP draws each
 link as a filled "dummy" block in steel, so it cannot say where the motors are. The gripper stroke
 measured on the CAD (22 mm per side, to the end stop) disagrees with Menagerie's -10 to 45 mm.
+
+**SO-101** (`python src/compare.py so101`; full notes in [notes/so101.md](notes/so101.md)):
+
+| Measure | vs Menagerie | vs the maker's URDF |
+| --- | --- | --- |
+| Joints paired by name | 6 of 6 | 6 of 6 |
+| Axes | within 0.5-1 deg but two (below) | same |
+| Total mass | -1.3% (636.8 vs 645.4 g) | +0.8% |
+| Per-link mass | within 0-4% but the base (-10%) and the jaw | same |
+| Gravity torque error | 5.8% RMS | 1.5% RMS |
+
+The STEP is the full assembly: printed parts, six ST3215 servos with their internals, 65 screws and
+nuts. The one human input is which printed parts form which link; every other part goes to the link it
+touches, a servo as a unit by its case and its horns to the link they drive, which reproduces the
+maker's grouping. Each axis is the drive horn's rim, checked against the parts' own bores (0.00 mm).
+The joint stops come from a self-collision sweep of the CAD (`src/so101_ranges.py`), within 5-10 deg of
+the references, with no number taken from them. Mass: printed parts as PLA with a 0.8 mm solid skin
+and the maker's 15% infill (277 g where solid would be 709 g), each servo at its published 55 g (the
+STEP's servo model overlaps itself), fasteners at the STEP's own steels. The two axes that differ, the
+gripper (15 deg) and wrist roll (5.3 mm line offset), differ the same against both references and agree
+with the STEP's bores: the STEP carries newer revisions of those parts (follower v10, jaw v3) than the
+references' meshes (v1). The jaw's mass is high because the servo's horns turn with it here; Menagerie
+also has a camera mount this STEP does not.
 
 **The comparison tool** never compares joint values or frames directly: it registers the root links'
 shapes, then finds each joint's matching pose, parent first. Validated by its self-test (an imposed
@@ -100,7 +122,12 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
    hull; a convex decomposition or per-face primitives would be closer.
 6. **The joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip build123d's
    default plane X, turning a link 90 deg at angle 0; build the rigid joint from the hinge's own frame.
-7. **URDF details:** joint limits written with effort and velocity 0, and a joint renamed when it shares
-   a link's name, which breaks a mimic.
-8. **Actuators, armature, damping, contact parameters** are the consumer's own and never come from CAD;
+7. **URDF details:** joint limits written with effort and velocity 0, and a joint silently renamed when it
+   shares a link's name (`gripper` became `gripper_2`), which breaks a mimic and the pairing.
+8. **No joint limits from geometry.** The STEP has no stops; a self-collision sweep found them for SO-101
+   in 41 s. That belongs in text-to-cad, not in each model script.
+9. **Reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf deep-copies
+   the whole tree (7 s and 400 MB a call); and `cad mjcf snapshot` fails when the daemon started without
+   a display.
+10. **Actuators, armature, damping, contact parameters** are the consumer's own and never come from CAD;
    a documented scene layer (native `MjSpec`) is the place, and the skill shows it.

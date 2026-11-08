@@ -36,6 +36,7 @@ import re
 from pathlib import Path
 
 import build123d as bd
+import numpy as np
 from cad import model, step
 from cad.build123d import collision, frame
 
@@ -48,31 +49,33 @@ STEP_FILE = ROOT / "upstream/so101/STEP/SO101/SO101 Assembly.step"
 OUT = ROOT / "out/so101"
 
 # The human input: which printed parts (top-level occurrences of the STEP) make which link, named as
-# Menagerie names its bodies. Read from the maker's URDF (which meshes each link holds), not its numbers.
+# the maker's URDF names its links (read for which meshes each link holds, not for its numbers).
+# Menagerie names its bodies without "_link", but a URDF holds links and joints in one namespace, and
+# the gripper's link and the jaw's joint would both be "gripper": the joints keep the official names.
 PRINTED = {
-    "base": ("Base_SO101 v12:1", "Base_08p v18:1", "WaveShare_Mounting_Plate_SO101 v4:1"),
-    "shoulder": ("Rotation_Pitch_SO101 v8:1", "Motor_holder_SO101_Base v6:1"),
-    "upper_arm": ("Upper_arm_SO101 v9:1",),
-    "lower_arm": ("Under_arm_SO101 v12:1", "Motor_holder_SO101_Wrist v8:1"),
-    "wrist": ("Wrist_Roll_Pitch_SO100 v15:1",),
-    "gripper": ("Wrist_Roll_Follower_SO101 v10:1",),
-    "moving_jaw_so101_v1": ("Moving_Jaw_SO101 v3:1",),
+    "base_link": ("Base_SO101 v12:1", "Base_08p v18:1", "WaveShare_Mounting_Plate_SO101 v4:1"),
+    "shoulder_link": ("Rotation_Pitch_SO101 v8:1", "Motor_holder_SO101_Base v6:1"),
+    "upper_arm_link": ("Upper_arm_SO101 v9:1",),
+    "lower_arm_link": ("Under_arm_SO101 v12:1", "Motor_holder_SO101_Wrist v8:1"),
+    "wrist_link": ("Wrist_Roll_Pitch_SO100 v15:1",),
+    "gripper_link": ("Wrist_Roll_Follower_SO101 v10:1",),
+    "moving_jaw_so101_v1_link": ("Moving_Jaw_SO101 v3:1",),
 }
 # The official joint names, by the pair of links a servo turns (parent holds the housing, child the horn).
 JOINTS = {
-    ("base", "shoulder"): "shoulder_pan",
-    ("shoulder", "upper_arm"): "shoulder_lift",
-    ("upper_arm", "lower_arm"): "elbow_flex",
-    ("lower_arm", "wrist"): "wrist_flex",
-    ("wrist", "gripper"): "wrist_roll",
-    ("gripper", "moving_jaw_so101_v1"): "gripper",
+    ("base_link", "shoulder_link"): "shoulder_pan",
+    ("shoulder_link", "upper_arm_link"): "shoulder_lift",
+    ("upper_arm_link", "lower_arm_link"): "elbow_flex",
+    ("lower_arm_link", "wrist_link"): "wrist_flex",
+    ("wrist_link", "gripper_link"): "wrist_roll",
+    ("gripper_link", "moving_jaw_so101_v1_link"): "gripper",
 }
 # Occurrences left out of the robot, by the start of their name:
 LEFT_OUT = {
     # The driver board stands 85 mm under the base's foot, 75 mm behind it: not mounted on the arm in
     # this STEP (exploded or forgotten). Every one of its ~120 leaves is "Steel" (Fusion's default).
     "Bus Servo Adapter": "unmounted driver board",
-    # Servo cables (swept bundles, Fusion's default "Steel"): flexible, and two of five cross a joint,
+    # Servo cables (six swept bundles, Fusion's default "Steel"): flexible, and two of them cross a joint,
     # so no rigid link holds them. Their mass is estimated in the notes.
     "Component": "servo cable",
 }
@@ -99,15 +102,19 @@ SERVO_MASS = 55.0  # g
 # Molex 50-37-5033 (KK 254 crimp housing, 3 circuits): nylon 6/6 (Molex's datasheet); the STEP gives
 # it no material. bd_materials' nylon density.
 
-# Joint limits, degrees around the STEP pose: physical stops found by so101_ranges.py (a self-collision
-# sweep of the exported description, each joint alone, the others at zero). None: no stop in a turn.
+# Joint limits, degrees around the STEP pose: the physical stops ``so101_ranges.py`` prints, the last
+# clear degree before a joint's child link runs into its parent (a surface sweep of the exported
+# description, each joint alone, the others at the STEP pose; 1 mm voxels, so about 1 mm of
+# clearance). The servo itself has no stop (ST3215: 360 degree magnetic encoder, "Mechanical Limited
+# Angle: No Limit", Waveshare's specification). The elbow's lower stop is the STEP pose: the forearm
+# rests on the upper arm there.
 LIMITS: dict[str, tuple[float, float] | None] = {
-    "shoulder_pan": None,
-    "shoulder_lift": None,
-    "elbow_flex": None,
-    "wrist_flex": None,
-    "wrist_roll": None,
-    "gripper": None,
+    "shoulder_pan": (-115, 114),  # the rotation-pitch bracket against the base servo's case / Base_08p
+    "shoulder_lift": (-192, 13),  # the upper arm against the shoulder's motor holder, both ways
+    "elbow_flex": (0, 191),  # the wrist motor holder on the upper arm (as built); the under arm on it
+    "wrist_flex": (-98, 100),  # the wrist bracket against the wrist motor holder, both ways
+    "wrist_roll": (-169, 175),  # the follower's cradle against the wrist bracket, both ways
+    "gripper": (-23, 98),  # opening: the jaw on the static jaw's cradle; closing: on the gripper servo's case
 }
 
 
@@ -124,6 +131,29 @@ def _servo_density(servo: list) -> float:
     horns = sum(volume_and_area(leaf.shape)[0] * leaf.shape.material.material.density * 1e-6  # g
                 for leaf in servo if HORN in leaf.name)
     return (SERVO_MASS - horns) / body * 1e6
+
+
+def _split_jaw(parts: list, label: str, case_points, direction):
+    """Split the printed part ``label`` of ``parts`` (in place) by the plane through the farthest
+    point of the servo case along ``direction``, normal to it: ``<label>_cradle`` and
+    ``<label>_finger``, each with the part's material, colour and a hull of its own. Returns the finger."""
+    part = next(item for item in parts if item.label == label)
+    reach = case_points @ direction
+    origin = case_points[int(np.argmax(reach))]
+    halves = bd.split(part, bisect_by=bd.Plane(origin=tuple(origin), z_dir=tuple(direction)), keep=bd.Keep.BOTH)
+    pieces = {"cradle": [], "finger": []}
+    for solid in halves.solids():
+        pieces["finger" if centroid(solid) @ direction > reach.max() else "cradle"].append(solid)
+    found = {}
+    for side, solids in pieces.items():
+        piece = solids[0] if len(solids) == 1 else bd.Compound(solids)
+        piece.label = f"{label}_{side}"
+        _material(piece, part.material)
+        piece.color = part.color
+        collision(piece, "mesh")
+        found[side] = piece
+    parts[parts.index(part):parts.index(part) + 1] = [found["cradle"], found["finger"]]
+    return found["finger"]
 
 
 def _material(part, finished) -> None:
@@ -215,12 +245,22 @@ def so101():
             collision(part, "none")
         links[leaf.link].append(part)
 
-    assemblies = {link: bd.Compound(children=parts, label=link) for link, parts in links.items()}
-
-    # The static jaw's tip: the centroid of the gripper's printed part's last 8 mm along the wrist
-    # roll axis (the jaw's length), a frame whose Z points out of the jaw and X along the jaw's pivot.
-    follower = next(part for part in links["gripper"] if part.label == _slug(PRINTED["gripper"][0]))
+    # The two jaws collide as their own shapes, not as one hull each: a jaw printed in one piece with
+    # the cradle around its servo is concave, and its hull would fill the space between the jaws. Each
+    # is split, in the model, by the plane where the gripper servo's case ends along the jaw (the
+    # servo's far face): the cradle on one side, the finger on the other, each hulled on its own.
     roll, pivot = joints["wrist_roll"][3], joints["gripper"][3]
+    case = [leaf.placed() for leaf in joints["gripper"][4] if leaf.name.startswith(CASE)]
+    case_points = np.vstack([mesh(part, 0.5, 0.5)[0] for part in case])
+    follower = _split_jaw(links["gripper_link"], _slug(PRINTED["gripper_link"][0]), case_points, roll)
+    jaw = "moving_jaw_so101_v1_link"
+    jaw_part = next(part for part in links[jaw] if part.label == _slug(PRINTED[jaw][0]))
+    along = centroid(jaw_part) - joints["gripper"][2]  # from the pivot along the jaw, square to it
+    along = along - (along @ pivot) * pivot
+    _split_jaw(links[jaw], jaw_part.label, case_points, along / np.linalg.norm(along))
+
+    # The static jaw's tip: the centroid of its finger's last 8 mm along the wrist roll axis (the jaw's
+    # length), a frame whose Z points out of the jaw and X along the jaw's pivot.
     vertices, _faces = mesh(follower, 0.5, 0.5)
     reach = vertices @ roll
     tip = vertices[reach > reach.max() - 8.0].mean(axis=0)
@@ -228,6 +268,7 @@ def so101():
     world = bd.Location(bd.Plane(origin=tuple(tip), x_dir=tuple(x_dir), z_dir=tuple(roll)))
     frame(follower, "tcp", follower.location.inverse() * world)
 
+    assemblies = {link: bd.Compound(children=parts, label=link) for link, parts in links.items()}
     for name, (parent, child, at, direction, _servo) in joints.items():
         axis = bd.Axis(tuple(at), tuple(direction))
         limits = LIMITS.get(name)

@@ -40,21 +40,48 @@ STEP = 1.0  # degrees
 REACH = 360.0  # degrees each way: a joint clear over a whole turn has no stop
 
 
-def samples(model: mujoco.MjModel, geom: int) -> np.ndarray:
-    """A mesh geom's surface as points in its geom frame (metres), about SPACING mm apart."""
+def triangles(model: mujoco.MjModel, geom: int) -> tuple[np.ndarray, np.ndarray]:
+    """A mesh geom's vertices (in its body's frame, metres) and triangles."""
     mesh = model.geom_dataid[geom]
     start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
     vertices = model.mesh_vert[start:start + count].astype(np.float64)
+    rotation = np.zeros(9)
+    mujoco.mju_quat2Mat(rotation, model.geom_quat[geom])
+    vertices = vertices @ rotation.reshape(3, 3).T + model.geom_pos[geom]
     faces = model.mesh_face[model.mesh_faceadr[mesh]:model.mesh_faceadr[mesh] + model.mesh_facenum[mesh]]
+    return vertices, faces
+
+
+def shared(vertices: np.ndarray, faces: np.ndarray, others: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+    """Which triangles of a mesh lie on another mesh of its body (their centres within a micrometre of
+    it): the cut where the model split a part into pieces for its collision hulls, which is no
+    surface. Only meshes that touch it are asked (trimesh's closest point)."""
+    import trimesh
+
+    found = np.zeros(len(faces), dtype=bool)
+    centres = vertices[faces].mean(axis=1)
+    for other_vertices, other_faces in others:
+        if np.any(centres.min(axis=0) > other_vertices.max(axis=0) + 1e-6) or \
+                np.any(centres.max(axis=0) < other_vertices.min(axis=0) - 1e-6):
+            continue
+        other = trimesh.Trimesh(other_vertices, other_faces, process=False)
+        _closest, distance, _triangle = trimesh.proximity.closest_point(other, centres)
+        found |= distance < 1e-6
+    return found
+
+
+def samples(vertices: np.ndarray, faces: np.ndarray, seed: int) -> np.ndarray:
+    """A mesh's surface as points (metres), about SPACING mm apart, a fixed seed per mesh."""
     a, b, c = (vertices[faces[:, i]] for i in range(3))
     areas = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1) * 1e6  # mm^2
-    rng = np.random.default_rng(int(geom))
+    rng = np.random.default_rng(seed)
     count = int(areas.sum() / SPACING ** 2)
     picked = rng.choice(len(faces), size=count, p=areas / areas.sum())
     u, v = rng.random(count), rng.random(count)
     flip = u + v > 1
     u[flip], v[flip] = 1 - u[flip], 1 - v[flip]
-    return np.vstack([vertices, a[picked] + u[:, None] * (b[picked] - a[picked]) + v[:, None] * (c[picked] - a[picked])])
+    return np.vstack([vertices[np.unique(faces)], a[picked] + u[:, None] * (b[picked] - a[picked])
+                      + v[:, None] * (c[picked] - a[picked])])
 
 
 def subtree(model: mujoco.MjModel, body: int) -> set[int]:
@@ -71,14 +98,28 @@ def subtree(model: mujoco.MjModel, body: int) -> set[int]:
 def main() -> None:
     model = mujoco.MjModel.from_xml_path(str(MJCF))
     data = mujoco.MjData(model)
+    names = {g: mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g) or "" for g in range(model.ngeom)}
     geoms = [g for g in range(model.ngeom)
              if model.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH and model.geom_contype[g] == 0
              and not SKIP.search(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g) or "")]
-    local = {g: samples(model, g) for g in geoms}
-    print(f"{len(geoms)} meshes, {sum(len(p) for p in local.values())} surface samples")
+    meshes = {g: triangles(model, g) for g in geoms}
+    # A part the model split (the jaws: cradle and finger) is two meshes of one body meeting on the cut.
+    pieces = {g: [o for o in geoms if o != g and model.geom_bodyid[o] == model.geom_bodyid[g]
+                  and re.sub(r"_(cradle|finger)$", "", names[o]) == re.sub(r"_(cradle|finger)$", "", names[g])]
+              for g in geoms}
+    local, cut = {}, 0
+    for g in geoms:
+        vertices, faces = meshes[g]
+        if pieces[g]:
+            inner = shared(vertices, faces, [meshes[o] for o in pieces[g]])
+            cut += int(inner.sum())
+            faces = faces[~inner]
+        local[g] = samples(vertices, faces, int(g))  # in the body's frame
+    print(f"{len(geoms)} meshes, {sum(len(p) for p in local.values())} surface samples ({cut} triangles of cuts left out)")
 
     def world(g: int) -> np.ndarray:
-        return (local[g] @ data.geom_xmat[g].reshape(3, 3).T + data.geom_xpos[g]) * 1000.0  # mm
+        body = model.geom_bodyid[g]
+        return (local[g] @ data.xmat[body].reshape(3, 3).T + data.xpos[body]) * 1000.0  # mm
 
     for joint in range(model.njnt):
         name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint)

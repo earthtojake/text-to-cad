@@ -124,7 +124,8 @@ def main(argv: list[str]) -> int:
     if unknown:
         raise SystemExit(f"no robot {', '.join(unknown)}: the robots are {', '.join(ROBOTS)}")
     print("MuJoCo Menagerie:")
-    paths = tuple(dict.fromkeys(ROBOTS[name].menagerie for name in names))
+    # Every robot's model, whichever are fetched: a sparse checkout's paths replace the last set's.
+    paths = tuple(dict.fromkeys(robot.menagerie for robot in ROBOTS.values()))
     checkout(GitSource(MENAGERIE_REPO.url, MENAGERIE_REPO.commit, paths, MENAGERIE_REPO.license), MENAGERIE)
     for name in names:
         fetch(name)
