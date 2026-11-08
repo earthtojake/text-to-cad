@@ -925,7 +925,8 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
     """The agents the Skills CLI knows and no plugin reaches: the skills, by one ``npx skills add``."""
 
     def agents(self, home: Home, *names: str) -> None:
-        marks = {"windsurf": ".codeium/windsurf", "goose": ".config/goose", "cline": ".cline"}
+        marks = {"windsurf": ".codeium/windsurf", "goose": ".config/goose", "cline": ".cline", "github-copilot": ".copilot",
+                 "droid": ".factory", "opencode": ".config/opencode"}
         for name in names:
             (home.home / marks[name]).mkdir(parents=True)
 
@@ -1007,6 +1008,24 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
                          [("codex", "install"), ("cline", "update"), ("codex", "leave")])
         shared = providers.shown(providers.shared_skills(home.machine), home.machine)
         self.assertEqual(steps[-1].subject, f"the skills in {shared}, Cline's folder: Codex lists them beside its plugin's")
+
+    def test_the_cli_s_universal_agents_keep_their_skills_in_the_shared_folder_and_codex_leaves_them(self) -> None:
+        """GitHub Copilot, Droid and OpenCode keep `.agents/skills` in a project, so the Skills CLI copies their
+        skills into `~/.agents/skills` (its `getAgentBaseDir`), never their own global folders: the folder is
+        theirs, and Codex, which reads it too, never takes the skills there for its duplicates -- which moved
+        them aside on every run, for the CLI to copy them back."""
+        home = self.make(("codex", "npx"))
+        self.agents(home, "github-copilot", "droid", "opencode")
+        shared = providers.shared_skills(home.machine)
+        self.assertEqual(providers.skills_agents(home.machine),
+                         {"github-copilot": shared, "droid": shared, "opencode": shared})
+        home.skill(shared)
+        steps = home.plan()
+        self.assertEqual([(step.app, step.action) for step in steps],
+                         [("codex", "install"), ("github-copilot", "update"), ("droid", "update"), ("opencode", "update"),
+                          ("codex", "leave")])
+        self.assertEqual(steps[-1].subject, f"the skills in {providers.shown(shared, home.machine)}, GitHub Copilot, "
+                                            "Droid and OpenCode's folder: Codex lists them beside its plugin's")
 
     def test_up_to_date_is_the_release_and_the_skills_the_cli_installed_and_the_replay_removes_them(self) -> None:
         home = self.make(("npx",))
