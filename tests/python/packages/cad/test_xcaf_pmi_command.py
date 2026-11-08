@@ -1,7 +1,6 @@
 """``cad run xcaf-pmi``: the environment's own command, its exit code the run's (``cad.xcaf_pmi._command``).
 
-The command is a stand-in here: a script beside a stand-in Python. xcaf-pmi itself is on no index yet, so no
-job installs it."""
+The command is a stand-in here: a script beside a stand-in Python, so no job installs cad[xcaf_pmi]."""
 
 from __future__ import annotations
 

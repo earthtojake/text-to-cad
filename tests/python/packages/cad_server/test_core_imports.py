@@ -148,7 +148,7 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                                "PIL"},
                  "kicad": {"kicode"},
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
-                 "xcaf_pmi": set()}
+                 "xcaf_pmi": {"xcaf_pmi", "quiddity"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
