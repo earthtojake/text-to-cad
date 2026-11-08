@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 3, 2026">
+    <LegalPage title="Privacy Policy" updated="November 7, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -73,7 +73,10 @@ export default function PrivacyPolicyPage() {
                 failed, again as one of a fixed set of words text-to-cad chooses from the kind of error and
                 whose code raised it (such as an error in your model’s code, a CAD operation the
                 geometry kernel could not do, a module or file that is not there, a picture that could
-                not be drawn, or a bug in text-to-cad) -- never the error’s message, your code or the path;
+                not be drawn, no graphics context to draw it in, or a bug in text-to-cad) -- never the error’s
+                message, your code or the path; for a snapshot request text-to-cad turned down, which part of
+                the request it turned down (such as the display mode, the clip, the camera or the size), as a
+                name from a fixed list -- never the value given;
                 how many times assemblies, mesh exports, posed joints, animations, engineering drawings
                 and Quick Edit were used; and how many of the CAD engine’s build workers started,
                 crashed or were retired (and, from earlier releases, how many builds were turned away for
