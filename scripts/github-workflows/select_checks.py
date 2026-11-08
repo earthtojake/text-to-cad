@@ -61,7 +61,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "fea")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "openscad",
+         "fea")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -215,6 +216,15 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               # change to the file runs the job.
               "packages/cad/pyproject.toml")
 KICAD_SUITE = "tests/python/packages/kicad"
+# OpenSCAD programs: the scad document type (cad.scad) and the openscad integration (OpenSCAD found and run
+# headless by the one helper for external programs, a program rendered to its mesh), the manufacturing check's
+# render of one, the server's command, the engine's kept mesh and the viewer's mesh route. Each also reaches
+# what its package reaches; the OpenSCAD job, which installs OpenSCAD, runs on these, its own suite and runner,
+# and a full run.
+OPENSCAD_CODE = (f"{LIBRARY_SRC}/scad/**", f"{LIBRARY_SRC}/openscad/**", f"{LIBRARY_SRC}/_internal/programs.py",
+                 f"{LIBRARY_SRC}/trimesh/_check.py", f"{SERVER_SRC}/_internal/scads.py", f"{SERVER_SRC}/viewer/scads.py",
+                 f"{SERVER_SRC}/cli/document_types.py", f"{SERVER_SRC}/cli/scad.py")
+OPENSCAD_SUITE = "tests/python/packages/openscad"
 # The stress study (cad <type> solve): its operation and orchestration, the netgen and calculix integrations, its
 # result type, the library's extras (netgen's and ccx's pins among them), and the server's command and the environment
 # of cad[build123d,calculix,netgen] it runs a study in. Each also reaches what its package reaches; the fea job, which
@@ -292,6 +302,7 @@ RULES: tuple[Rule, ...] = (
     # app's server and the shim reach only what names them (above). KiCad's code reaches the KiCad
     # job too, beside what its package reaches.
     Rule(KICAD_CODE, select(flags=["kicad"])),
+    Rule(OPENSCAD_CODE, select(flags=["openscad"])),
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
@@ -329,6 +340,8 @@ RULES: tuple[Rule, ...] = (
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad
     # installed), never the package jobs'.
     Rule((f"{KICAD_SUITE}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"]), final=True),
+    # The OpenSCAD suite the same: its job's alone (test-openscad.sh, with OpenSCAD installed).
+    Rule((f"{OPENSCAD_SUITE}/**", "scripts/test/test-openscad.sh"), select(flags=["openscad"]), final=True),
     Rule((f"{FEA_SUITE}/**", "scripts/test/test-fea.sh", "tests/python/support/fea_fixtures.py"), select(flags=["fea"]),
          final=True),
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),

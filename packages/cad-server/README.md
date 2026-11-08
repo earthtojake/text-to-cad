@@ -113,7 +113,14 @@ meshed by the `netgen` integration and solved by the `calculix` integration's cc
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.
-A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
+An OpenSCAD program's `export`, `snapshot` and `inspect` (`cad scad export PROGRAM part.stl part.3mf part.glb`, `cad scad
+snapshot PROGRAM out.png`, `cad scad inspect PROGRAM`) are the `openscad` integration's: the program is rendered by the
+person's own OpenSCAD -- found by `CAD_OPENSCAD`, `PATH` or its installer's places, run headless in a private folder with
+their libraries reachable; no extra, nothing to install but OpenSCAD itself, and a computer with none fails in one line
+with the install hint -- then the engine's mesh code writes, draws or reads the mesh (a `.step` is refused: a mesh has no
+B-rep); the CAD Viewer shows a `.scad` as that mesh, kept by the program's bytes and its includes'. `cad doctor` says where
+OpenSCAD is and its version.
+A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf|scad dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
 in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the

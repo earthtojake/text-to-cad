@@ -371,6 +371,19 @@ test('schema 9 names the part of a request a snapshot refused, and why the machi
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
 });
 
+test('schema 10 counts an OpenSCAD program as a kind of its own, and schema 9 still reads as it did', async () => {
+  const scad = PARTS.events.map(event => ({ ...event, kind: 'scad' }));
+  const batch = { ...PARTS, schema: 10, events: scad };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', batch)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    scad.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  // Everything schema 9 sends, schema 10 reads; schema 9 names no scad.
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...PARTS, schema: 10 })).status, 204);
+  assert.equal((await send(memory(), 'POST', '/v1/events', PARTS)).status, 204);
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...PARTS, events: scad })).status, 400);
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);

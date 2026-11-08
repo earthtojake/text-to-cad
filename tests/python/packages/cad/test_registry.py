@@ -54,12 +54,20 @@ class TheTableIsTheSource(unittest.TestCase):
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 if integration.extra is None:
-                    # A program the person installs, which ships no package: found by its probe alone.
+                    # A program the person installs, which ships no package: found by its probe alone, run as a
+                    # program of its own, with nothing for cad run to install and nothing it downloads.
                     self.assertIsNotNone(integration.probe, "an integration with no extra is a program, found by its probe")
                     self.assertFalse(integration.modules or integration.distributions)
+                    self.assertEqual((integration.process, integration.holds, integration.download_mb), ("separate", "", 0))
                 else:
+                    # An extra installs packages: the modules a script imports them by, and the distributions.
                     self.assertTrue(integration.modules and integration.distributions)
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
+        # An OpenSCAD program is read and operated on by the openscad integration, which has no extra: a script
+        # that calls its reader or operations needs nothing installed beside OpenSCAD itself.
+        self.assertEqual("openscad", registry.DOCUMENT_TYPES["scad"].reader_integration)
+        self.assertEqual({"openscad", "trimesh"},
+                         {operation.integration for operation in registry.DOCUMENT_TYPES["scad"].operations})
         # A KiCad board and schematic are edited in place (``<type>.edit``), by the kicad integration; no other
         # type is.
         self.assertEqual({"kicad_pcb": "kicad", "kicad_sch": "kicad"},
@@ -84,6 +92,10 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
         for integration in registry.INTEGRATIONS.values():
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
+        for name in ("cad.scad.read", "cad.scad.export", "cad.scad.inspect"):
+            self.assertIsNone(integrations.for_name(name), f"{name}: OpenSCAD is no extra")
+        self.assertEqual("trimesh", integrations.for_name("cad.scad.dfm"))
+        self.assertNotIn("openscad", integrations.INTEGRATIONS, "nothing for cad run to install")
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 
@@ -121,6 +133,8 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIn("carries: geometry", said)
         self.assertIn('@step("out.step")', said)
         self.assertIn("written by: no producer", registry.help_text("urdf"))
+        self.assertIn("written by: no producer; a file of it is authored", registry.help_text("scad"))
+        self.assertIn("[openscad]", registry.help_text("scad"))
         # A board and a schematic are written by their edits (``cad kicad_pcb --help``, ``cad kicad_sch --help``).
         self.assertIn('with kicad_pcb.edit("board.kicad_pcb") as board: the open board', registry.help_text("kicad_pcb"))
         self.assertIn('with kicad_sch.edit("schematic.kicad_sch") as schematic: the open schematic',

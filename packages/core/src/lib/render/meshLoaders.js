@@ -48,6 +48,8 @@ export function meshFormatFromUrl(url) {
 }
 
 function normalizeMeshFallback(fallback) {
+  // An OpenSCAD program's mesh is the STL the server renders of it (its document's `mesh` route, no extension).
+  if (fallback === RENDER_FORMAT.SCAD) return RENDER_FORMAT.STL;
   return fallback === RENDER_FORMAT.STL || fallback === RENDER_FORMAT.THREE_MF || fallback === RENDER_FORMAT.GLB
     ? fallback
     : RENDER_FORMAT.GLB;

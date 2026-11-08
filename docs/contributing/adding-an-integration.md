@@ -58,7 +58,10 @@ an integration.
       (the program, its minimum version, its install hint, the variable that names it outright); and
       `alongside`, the integrations its operations need in the same environment (calculix's: the kernel,
       which reads the B-rep a study solves, and netgen, which meshes it), which the environment the `cad`
-      command makes for it holds too.
+      command makes for it holds too. A program nothing on PyPI carries (OpenSCAD: `openscad`) has no
+      extra and names no modules or distributions, and nothing it `holds` or downloads: the person
+      installs it, the probe finds it, `cad run` has nothing to install for it, and `cad doctor` reports
+      it from the integration's `_program` module (`find`, `version`, `check_version`).
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. Add the name to `cad._INTEGRATIONS` when it has a

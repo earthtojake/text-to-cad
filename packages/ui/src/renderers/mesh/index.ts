@@ -19,10 +19,14 @@ export interface PreparedMeshDocument extends PreparedWorkspaceEntry {
   services: Omit<MeshRendererOptions, 'client'> & { preferences: CadPreferenceSource };
 }
 
-/** The triangle-mesh formats: a surface and, in a 3MF, its objects' colours. Nothing else is in the file. */
-export const MESH_FILE = /\.(?:stl|3mf)$/i;
+/**
+ * The triangle-mesh formats: a surface and, in a 3MF, its objects' colours. Nothing else is in the file. An
+ * OpenSCAD program (`.scad`) is text whose mesh the server renders with OpenSCAD (its document's `mesh`, an STL),
+ * shown as that STL is.
+ */
+export const MESH_FILE = /\.(?:stl|3mf|scad)$/i;
 
-/** An `.stl` or `.3mf` is shown as its triangles. Registers without loading three.js, a viewport or a backend connection. */
+/** An `.stl`, a `.3mf` or a `.scad` is shown as its triangles. Registers without loading three.js, a viewport or a backend connection. */
 export function createMeshRenderer({ client, ...options }: MeshRendererOptions) {
   const services = { ...options, preferences: options.preferences || createCadPreferences() };
   return defineFileRenderer<PreparedMeshDocument>({

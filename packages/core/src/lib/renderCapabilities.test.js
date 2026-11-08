@@ -20,6 +20,7 @@ test("each format's file-list glyph comes from its row", () => {
   }
   assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.XBF), ENTRY_ICON_KIND.STEP, "a STEP opens as an engine document");
   assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.SRDF), ENTRY_ICON_KIND.ROBOT);
+  assert.equal(entryIconKindForRenderFormat(RENDER_FORMAT.SCAD), ENTRY_ICON_KIND.STL_MESH, "a program is shown as the STL rendered of it");
 });
 
 test("aliases resolve to their real format", () => {

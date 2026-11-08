@@ -71,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
+            r"^tests/python/packages/openscad/(.*/)?test_[^/]*\.py$",    # test-openscad.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
@@ -252,7 +253,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
+                self.assertEqual(jobs_for(path),
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "openscad", "fea"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -333,7 +335,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "openscad", "fea"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -343,9 +345,30 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
 
+    def test_openscad_code_reaches_the_openscad_job_beside_its_package_and_its_suite_that_job_alone(self):
+        # OpenSCAD's code runs what its package runs, and the OpenSCAD job, which installs OpenSCAD.
+        library = "packages/cad/src/cad/openscad/_render.py"
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"})
+        self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
+        for path in ("packages/cad/src/cad/scad/__init__.py", "packages/cad-server/src/cad_server/viewer/scads.py",
+                     "packages/cad-server/src/cad_server/_internal/scads.py"):
+            with self.subTest(path=path):
+                self.assertIn("openscad", jobs_for(path))
+        # The one helper every external program is found by, and the type commands' table, reach both tools' jobs.
+        for path in ("packages/cad/src/cad/_internal/programs.py", "packages/cad-server/src/cad_server/cli/document_types.py"):
+            with self.subTest(path=path):
+                self.assertLessEqual({"kicad", "openscad"}, jobs_for(path))
+        # The OpenSCAD suite and its runner are that job's alone: no package job collects them.
+        for path in ("tests/python/packages/openscad/test_renders.py", "scripts/test/test-openscad.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"openscad", "skills"})
+        # ...and nothing else reaches it: an engine change runs the package suites, not OpenSCAD.
+        self.assertNotIn("openscad", jobs_for("packages/cad/src/cad/engine/api.py"))
+        self.assertNotIn("openscad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
+
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
-        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs", "openscad"})
         self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
 
     def test_the_installer_rehearsals_start_on_the_same_changes_and_no_job_runs_them(self):
@@ -420,7 +443,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "openscad", "fea"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

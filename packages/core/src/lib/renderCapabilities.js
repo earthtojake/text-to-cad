@@ -38,11 +38,13 @@ export const ENTRY_ICON_KIND = Object.freeze({
 const DEFAULT_CAPABILITIES = Object.freeze({ iconKind: ENTRY_ICON_KIND.STEP });
 const ROBOT_CAPABILITIES = Object.freeze({ iconKind: ENTRY_ICON_KIND.ROBOT });
 
-// A mesh's icon is its own format's; every other type's is its view's (`cad.registry`).
+// A mesh's icon is its own format's; every other type's is its view's (`cad.registry`). An OpenSCAD program
+// is shown as the STL the server renders of it, and wears that icon until it has one of its own.
 const MESH_ICONS = Object.freeze({
   [RENDER_FORMAT.STL]: ENTRY_ICON_KIND.STL_MESH,
   [RENDER_FORMAT.THREE_MF]: ENTRY_ICON_KIND.THREE_MF_MESH,
-  [RENDER_FORMAT.GLB]: ENTRY_ICON_KIND.GLB_MESH
+  [RENDER_FORMAT.GLB]: ENTRY_ICON_KIND.GLB_MESH,
+  [RENDER_FORMAT.SCAD]: ENTRY_ICON_KIND.STL_MESH
 });
 const VIEW_CAPABILITIES = Object.freeze({
   // An engine document (`packages/ui/src/renderers/xbf`), which a STEP opens as: one icon.
