@@ -74,7 +74,7 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
-                             "(MJCF, its meshes in assets/ beside it), .urdf or .sdf (its meshes in meshes/ "
+                             "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
                              "beside it): the document as its code built it")
     from cad.engine.export import MIN_TOLERANCE
 

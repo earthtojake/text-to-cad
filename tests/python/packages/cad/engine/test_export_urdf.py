@@ -291,6 +291,10 @@ class HandBuiltTest(_Folder):
         self.assertEqual(kind_of("robot.URDF"), "urdf")
         self.assertEqual(refused("part.stl", "robot.urdf"),
                          "part.stl is a mesh: it has no B-rep, and no URDF export is made from one")
+        # SDF is read (the viewer, the stills, `cad sdf validate`) but never written: an export to one is
+        # refused as any unknown suffix is, before anything is described.
+        with self.assertRaisesRegex(ExportRefused, r"^robot\.sdf: an export is one of .*\.urdf$"):
+            kind_of("robot.sdf")
 
 
 # The hinge of ``test_kinematics``: a base and an arm on an elbow about +Y through (40, 0, 20) mm,

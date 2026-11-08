@@ -14,7 +14,7 @@ ground (its first link, ``world``) is the root only where it holds something (a 
 collision, a mass); otherwise the first link hung from it by a ``fixed`` joint is the root, the
 ``base_link`` of a ROS robot under the name it has, and that joint is not written: the file's space
 is that link's frame, and every other joint from the ground hangs from it, its origin carried into
-that frame (``rooted``, which the SDF writer roots its tree by too). A ground that holds nothing and
+that frame (``rooted``). A ground that holds nothing and
 has no fixed child stays, an empty root link, as a ROS ``world`` link is.
 
 **Links.** Each link's frame is its joint's (the description's rule, and URDF's), so a visual's
@@ -44,7 +44,7 @@ it). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its `
 friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
 (``export.note``: an MJCF carries it). A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
-ends. A spherical joint is refused by name: URDF has no ball (export an SDF or an MJCF, which do).
+ends. A spherical joint is refused by name: URDF has no ball (export an MJCF, which has one).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
 leader a joint that moves. URDF has no named states: the description's poses are not written (an
 SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
@@ -108,7 +108,7 @@ def rendered(description: Description, meshes: str = "meshes",
     for joint in description.joints:
         if joint.kind == "spherical":
             raise ExportRefused(f"{description.name}: joint {joint.name!r} is spherical, and URDF has no ball joint: "
-                                "no URDF is written of it (an SDF or an MJCF has one)")
+                                "no URDF is written of it (an MJCF has one)")
     return _Writer(description, meshes, package).render()
 
 
@@ -153,7 +153,7 @@ def rooted(description: Description) -> tuple[Link, list[Joint], Joint | None]:
     return replace(base, frames=frames), joints, dropped
 
 
-# --- pieces the SDF writer shares ---------------------------------------------------------------------
+# --- the pieces of a URDF ---------------------------------------------------------------------------
 
 
 def name_of(text: str, fallback: str) -> str:
@@ -195,7 +195,7 @@ class Xml:
 
 def rpy(matrix: Any) -> tuple[float, float, float]:
     """A rotation's fixed-axis roll, pitch and yaw (``Rz(yaw) @ Ry(pitch) @ Rx(roll)``), as URDF's
-    ``rpy`` and SDFormat's pose read them; at a pitch of a quarter turn, the roll is zero."""
+    ``rpy`` reads them; at a pitch of a quarter turn, the roll is zero."""
     r = np.array(np.asarray(matrix, dtype=float)[:3, :3])
     r[np.abs(r) < SNAP] = 0.0
     pitch = math.atan2(-r[2, 0], math.hypot(r[0, 0], r[1, 0]))

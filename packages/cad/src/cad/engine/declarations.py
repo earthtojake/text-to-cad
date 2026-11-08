@@ -176,12 +176,11 @@ def limits(assembly: Any, joint: str, *, effort: float | None = None, velocity: 
            armature: float | None = None, damping: float | None = None, friction: float | None = None) -> Any:
     """Bound the drive of every revolute or linear joint labelled ``joint`` on ``assembly`` or below
     it, and give its dynamics: ``effort`` in N*m for a revolute joint and N for a linear one,
-    ``velocity`` in rad/s or m/s (URDF's ``<limit effort velocity>``, SDFormat's, MJCF's
+    ``velocity`` in rad/s or m/s (URDF's ``<limit effort velocity>``, MJCF's
     ``actuatorfrcrange``; MJCF bounds no speed), each positive; ``armature``, the rotor's inertia
-    reflected through its gearbox, in kg*m^2 or kg (MJCF's ``armature``; URDF and SDFormat have
+    reflected through its gearbox, in kg*m^2 or kg (MJCF's ``armature``; URDF has
     none), ``damping`` in N*m*s/rad or N*s/m and ``friction``, the drive's dry friction, in N*m or N
-    (MJCF's ``damping`` and ``frictionloss``, URDF's ``<dynamics damping friction>``, SDFormat's
-    ``<axis><dynamics>``), each zero or more; each None where the model gives none. A cylindrical or
+    (MJCF's ``damping`` and ``frictionloss``, URDF's ``<dynamics damping friction>``), each zero or more; each None where the model gives none. A cylindrical or
     a ball joint, of two and three values, is refused. A second declaration for one joint replaces
     the first. Declare it after the joint is made: it is kept on the part that holds it. Returns
     ``assembly``."""

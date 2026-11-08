@@ -7,8 +7,8 @@ each with its mass, centre and inertia, its visual meshes, its collision shapes 
 frames; joints between them with axes, limits and couplings; named poses. ``describe`` builds
 that tree from a document (``description_of``, the engine's half that needs the kernel: mass
 properties and collision fits), and the writers of each format serialise it (``export/mjcf.py``,
-``export/urdf.py``, ``export/sdf.py``) without touching the kernel. Nothing in a description
-names a format: no MuJoCo group, no ROS package, no Gazebo frame rule; those are each writer's
+``export/urdf.py``) without touching the kernel. Nothing in a description
+names a format: no MuJoCo group, no ROS package; those are each writer's
 reading of it.
 
 **Units and frames.** Everything here is SI: metres, kilograms, radians, kg*m^2. The document's
@@ -32,8 +32,8 @@ tensor about that centre in the link frame's axes. A part or an assembly declare
 (``cad.build123d.mass``) has its solids scaled alike to make up that total, its point masses
 included (``describe``'s **Mass**). A link whose parts have no density and no declared mass has
 ``inertial`` None, and each writer does what its format does
-with a link that has none: MuJoCo computes one from the geoms, a URDF link goes without and its
-validator warns, SDFormat gives it its default kilogram. A part whose material names a density that
+with a link that has none: MuJoCo computes one from the geoms, and a URDF link goes without and its
+validator warns. A part whose material names a density that
 is not positive is refused by name.
 
 **Geometry.** A ``Mesh`` is one prototype's triangles in the prototype's own frame, in metres:

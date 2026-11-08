@@ -634,7 +634,7 @@ failure: the next asker makes it again.
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
 | `description.py`, `describe.py`, `declarations.py` | the robot description: a document as a tree of rigid bodies in SI units (links with mass, centre and inertia, meshes, collision shapes, named frames; joints with frame, axis, limits and couplings; poses), built from the structure and the mechanism (`describe`), and what a model declares for it (`collision`, `frame`, `body`, `exclude`, `limits`, `mass`, `point_mass`, `friction`) |
-| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF, a URDF and an SDF with their meshes beside them from the robot description (`mjcf`, `urdf`, `sdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
+| `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); an MJCF and a URDF with their meshes beside them from the robot description (`mjcf`, `urdf`), and the body pairs that touch at rest, which the MJCF excludes (`contact`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
@@ -683,7 +683,7 @@ cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--json]
                                              STEP's) meshes an .stl or a .3mf at MM (Mesh)
                                              DST .step, .glb, .stl, .3mf, .dxf, .xbf, or .xml: an MJCF of the
                                              document (the robot description), its meshes in assets/ beside it;
-                                             .urdf, .sdf: the same as ROS and Gazebo read it, meshes/ beside it
+                                             .urdf: the same as ROS reads it, meshes/ beside it
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
@@ -2649,11 +2649,10 @@ fixed joint, an exclusion a link pair, a drive a joint's `effort`, `velocity`, `
 and `friction`, the masses and point masses each link's inertial, a friction its collisions'); an MJCF
 export writes collision geoms (with `friction` where declared), sites, child bodies, `<contact><exclude>`
 (the declared pairs, and every pair that touches at rest across a moving joint, `export/contact.py`),
-`actuatorfrcrange`, and the joint's `armature`, `damping` and `frictionloss`; a URDF and an SDF a fixed
-joint and a link, and `<limit>`'s effort and velocity, and a URDF `<dynamics damping friction>` (URDF has
+`actuatorfrcrange`, and the joint's `armature`, `damping` and `frictionloss`; a URDF a fixed
+joint and a link, `<limit>`'s effort and velocity, and `<dynamics damping friction>` (URDF has
 no armature and no contact friction: a declared one is said in the export's log, not written). Each writer keeps links and
-joints apart as its format does -- MJCF and URDF one namespace each, SDFormat's frame graph one for
-both -- and says a rename in its kind (`export.note`, the export's log).
+joints in a namespace each, as MJCF and URDF do, and says a rename in its kind (`export.note`, the export's log).
 
 `FinishedMaterial.material` is the native physical dataclass; `.pbr` is a native
 `threejs_materials.PbrProperties`. Catalogue factories return fresh finished materials.
