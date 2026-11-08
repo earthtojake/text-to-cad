@@ -257,7 +257,7 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     expect(classes(button)).toContain('size-6');
     expect(surface.some(name => button.classList.contains(name)), button.getAttribute('aria-label') || '').toBe(false);
   }
-  expect(pane.querySelector('[data-view-home]')).toBeNull();
+  expect(within(pane).queryByRole('button', { name: 'Home' })).toBeNull();
   // Flip and 2D/3D are the view's state button, Projection's (`kit/shell/StateButton.jsx`), a tile like Display's.
   expect([...viewControls(pane).querySelectorAll('[data-state-button]')]).toEqual([flipButton(pane), dimensionButton(pane)]);
   const display = within(viewControls(pane)).getByRole('button', { name: /^Display mode:/ });
@@ -1062,10 +1062,10 @@ it("2D/3D is one view: the strip, its view controls, the panel and the corner st
   for (const key of ['strip', 'panel', 'views', 'pill'] as const) expect(solid[key], key).toBe(flat[key]);
   expect(dimensionButton(pane)).toBe(dimension);
   expect(shown(dimension)).toEqual(['View: 3D', 'text-3D', 'ghost']);
-  // The corner is the one it was: the pill (the 3D camera's zoom now), and no cube, Projection or Home of a 3D view's.
+  // The corner is the one it was: the pill (the 3D camera's zoom now), and no cube or Projection of a 3D view's; no Home.
   expect(viewport3d.props.viewCube).toBe(false);
   expect(within(pane).queryByRole('button', { name: /^Projection/ })).toBeNull();
-  expect(pane.querySelector('[data-view-home]')).toBeNull();
+  expect(within(pane).queryByRole('button', { name: 'Home' })).toBeNull();
   // The pick and the measurement are where they were; a camera is the 3D view's to pose.
   expect(selected(controller)).toEqual(['#R1.2']);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));

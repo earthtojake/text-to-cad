@@ -536,7 +536,8 @@ Canonical source directories are:
   the server talks to: a Vercel project of its own, with no dependencies.
 - `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
   Python distributions (the library, the server with its bundled runtime assets, and the shim), and
-  `packages/aliases/` for the `cadgen` alias distribution.
+  `packages/aliases/` for `cadgen`, the library's deprecated alias, which every release still
+  publishes and which installs `cad` at the same release.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
@@ -932,7 +933,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    `v<VERSION>-dev.<commit>` (`@cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's four projects on
    PyPI into one folder (the library `cad`, the server `cad-server`, the
-   shim `cad-mcp`, and the alias `cadgen`, a wheel and an
+   shim `cad-mcp`, and the deprecated alias `cadgen`, a wheel and an
    sdist each, and nothing else at any other version), and an `unzip -l` assertion
    that the server's wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
@@ -1068,7 +1069,7 @@ hold each one:
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
-| the plugin folder's configs, which the install command points every app at | each as `latest`'s: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `agent-plugins` | yes | `cad_server/_internal/plugin.py` |
+| the plugin folder's configs, which the install command points every app at | `claude-install`, `codex-install`, `cursor-install`, `gemini-install`, `agent-plugins` (through 0.11, as `latest`'s `-github`) | yes | `cad_server/_internal/plugin.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
@@ -1237,7 +1238,7 @@ requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
 `release`, whose deployment branches are `main` alone, and the trusted publisher of each
-of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`) names this repository, `release-publish.yml` and that environment, so no
+of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, and the deprecated alias `cadgen`) names this repository, `release-publish.yml` and that environment, so no
 run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
 project PyPI does not have yet takes a pending publisher, the same three names, before
 its first release. No other
