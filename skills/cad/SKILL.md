@@ -300,7 +300,7 @@ A check is a Python script that calls the model and measures what it returns, so
 as it is now. Write one when the person asks for a dimension, a fit or a mass, or when the change is
 numeric and the number matters.
 
-Copy `world_parts` and `find_part` from
+Take parts with `leaves(tree)` (`cad.build123d`), and copy `find_part` from
 [Opening geometry](references/inspection-and-validation.md#opening-geometry) into the check
 first. They accumulate parent placements; raw `.leaves` do not.
 

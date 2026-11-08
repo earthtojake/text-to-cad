@@ -40,45 +40,43 @@ def bracket():
 
 A model's `.shape`, `step.read(path)` and `xbf.read(path)` return a build123d tree.
 Each node's `location` is relative to its parent. `.children`, `.descendants` and
-`.leaves` expose those nodes without accumulating ancestor placements. Before comparing
-parts in different sub-assemblies, copy these helpers into the project's check script:
+`.leaves` expose those nodes without accumulating ancestor placements. `leaves(tree)`
+(`cad.build123d`) hands back every leaf placed where it stands in the tree's frame:
+a new shape with the leaf's label, colour and material, no parent, on the same B-rep.
+Use it rather than `node.located(...)` or `node.moved(...)` on a node of a read tree:
+build123d copies the node with its parent, so each such call copies the whole
+assembly (seconds and hundreds of megabytes a call on a large vendor STEP).
+`leaves(tree, paths=True)` gives `(path, leaf)` pairs, `path` the labels from the root:
 
 ```python
-import build123d as bd
-
-
-def world_parts(node, parent=None):
-    here = (bd.Location() if parent is None else parent) * node.location
-    if node.children:
-        for child in node.children:
-            yield from world_parts(child, here)
-    else:
-        yield node.located(here)   # a copy with the full placement, not an extra move
+from cad import step
+from cad.build123d import leaves
 
 
 def find_part(tree, label):
-    matches = [part for part in world_parts(tree) if part.label == label]
+    matches = [part for part in leaves(tree) if part.label == label]
     if len(matches) != 1:
         raise ValueError(f"Expected one part labelled {label!r}, found {len(matches)}")
     return matches[0]
 ```
 
-These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
-it refuses both missing and repeated labels. For repeated components, walk a known branch
-while accumulating its parents' locations, or use an occurrence path with
-`cad <type> inspect` ([references](#references)).
+`find_part` is a project helper, not the library's: it requires a unique leaf label and
+refuses both missing and repeated labels. For repeated components, pick by path
+(`leaves(tree, paths=True)`) or use an occurrence path with `cad <type> inspect`
+([references](#references)).
 
 ```python
-from cad import step
+import build123d as bd
 from kit import kit
 
 doc = kit().shape
-for part in world_parts(doc):
+for part in leaves(doc):
     print(part.label, part.volume, part.bounding_box().center())
 
 finger = find_part(doc, "index_finger")
 top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
 plate = find_part(step.read("kit.step"), "plate")
+arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Upper_arm" in path[1]]
 ```
 
 - Calling a model from a plain script builds it in the server (a replay when nothing

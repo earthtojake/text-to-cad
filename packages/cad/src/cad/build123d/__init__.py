@@ -19,7 +19,9 @@ and the helpers a model calls with build123d objects:
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``.
+  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where
+  it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree.
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -44,6 +46,7 @@ _NAMES = {
     **{name: "cad.build123d._geometry" for name in (
         "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "closest_points", "overlap_volume",
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
+    "leaves": "cad.build123d._leaves",
     **{name: "cad.build123d._flatten" for name in (
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
 }
@@ -72,6 +75,7 @@ if TYPE_CHECKING:
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
+    from cad.build123d._leaves import leaves
     from cad.engine.declarations import collision, frame
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint

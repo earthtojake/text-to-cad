@@ -246,6 +246,11 @@ re-runs the body that read it:
   part. A STEP that names other files as its parts (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
   `cad <type> export`: export it again from its CAD tool as one file.
+- **A read tree's parts, placed**: `leaves(tree)` (`cad.build123d`) gives each leaf
+  where it stands in the file's frame, out of the tree and on the same B-rep, with its
+  label, colour and material (`paths=True`: `(path, leaf)` pairs). Never `located` or
+  `moved` a node of the tree itself: build123d copies it with its parent, the whole
+  assembly, on every call.
 - **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
   xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
