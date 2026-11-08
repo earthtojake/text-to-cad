@@ -168,7 +168,7 @@ class PthTest(unittest.TestCase):
         seen, loaded = json.loads(found)
         self.assertEqual(loaded, [])
         self.assertEqual(seen["cad.build123d"], sorted(cad.build123d.__all__))
-        self.assertEqual(seen["cad.step"], ["dfm", "export", "inspect", "plan", "read", "snapshot"])
+        self.assertEqual(seen["cad.step"], ["dfm", "export", "inspect", "plan", "read", "snapshot", "solve"])
         self.assertEqual(seen["cad.engine"], sorted(cad.engine.__all__))
         self.assertEqual(seen["cad"], sorted({*cad.__all__, "build123d", "engine"} - {"__version__"}))
 

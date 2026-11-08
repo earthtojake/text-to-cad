@@ -74,6 +74,16 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", integrations.for_name("cad.kicad_pcb.edit"))
         self.assertEqual("kicad", integrations.for_name("cad.kicad_sch.edit"))
         self.assertIsNone(integrations.for_name("cad.kicad_pcb.read"))
+        # A stress study is the calculix integration's, ccx from its extra (the cad-ccx package), which cad run runs as
+        # a command of its own; its environment holds the kernel, which reads the B-rep, and netgen, which meshes it.
+        self.assertEqual("calculix", integrations.for_name("cad.step.solve"))
+        self.assertEqual(("solve",), tuple(name for name in registry.DOCUMENT_TYPES["step"].operation_names
+                                           if registry.DOCUMENT_TYPES["step"].operation(name).integration == "calculix"))
+        self.assertEqual("calculix", integrations.for_command("ccx"))
+        self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
+        self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
+        for integration in registry.INTEGRATIONS.values():
+            self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
         # A CAM job needs the kernel in the caller's process; FreeCAD, a program, has no extra and no namespace of
         # cad run's.
         self.assertEqual("build123d", integrations.for_name("cad.step.plan"))

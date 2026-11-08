@@ -63,6 +63,7 @@ jobs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
       cam: ${{ steps.select.outputs.cam }}
+      fea: ${{ steps.select.outputs.fea }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -280,6 +281,53 @@ jobs:
 
       - name: Run the cam suite
         run: scripts/test/test-cam.sh
+        shell: bash
+
+  # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
+  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
+  # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
+  # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
+  # Xvfb), and the command through the library's runner of one operation. Only the study's code, its suite and runner, and the modules it reads
+  # through select it (and a full run). Linux only: the stack is the same wheels everywhere, and the solves are
+  # CPU-bound. About 2 minutes: 230 tests in 76 s locally, beside netgen (~10 MB) and ccx (~8 MB).
+  fea:
+    name: fea
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      # The netgen and calculix integrations' extras, with netgen pinned to the version the accuracy tests'
+      # margins were measured with (the round rod's top-fibre stress is +8.6% against 10%); the extra keeps the
+      # floor. The calculix extra pins cad-ccx (conda-forge's CalculiX, repackaged: earthtojake/ccx), the wheel
+      # PyPI has for this runner. A ccx that does not run fails here by name rather than as every solve failing.
+      - name: Install the netgen and calculix integrations
+        run: |
+          uv pip install --system --python python --editable "./packages/cad[build123d,trimesh,netgen,calculix]" \
+            "netgen-mesher==6.2.2608"
+          python -c "import cad_ccx; print(cad_ccx.executable(), cad_ccx.version())"
+
+      # A solve draws a picture of each field with the engine's stills, OCCT in an OpenGL context: on a runner with no
+      # screen, Xvfb's, as the cadgen job draws them.
+      - name: Install the display the engine's stills draw on
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
+
+      - name: Run the fea suite
+        run: xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX" scripts/test/test-fea.sh
         shell: bash
 
   core-js:

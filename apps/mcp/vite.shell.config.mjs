@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { shellWords } from './scripts/shell-words.mjs';
 
 // The shell a host keeps as the CAD app's resource (src/shell.ts, src/host/shell.ts): one small page,
 // its one script inline, built beside the app (vite.config.mjs) into dist/shell.html. It loads the app
@@ -22,7 +23,7 @@ function inlineShell() {
 }
 
 export default defineConfig({
-  plugins: [inlineShell()],
+  plugins: [shellWords(), inlineShell()],
   build: {
     emptyOutDir: false, modulePreload: false, assetsInlineLimit: Infinity, sourcemap: false,
     rolldownOptions: { input: 'shell.html' },

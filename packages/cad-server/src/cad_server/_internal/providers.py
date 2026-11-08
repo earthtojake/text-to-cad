@@ -37,11 +37,12 @@ The copies an earlier release's installer made from the repository's ``latest`` 
 taken out, the catalog with them.
 
 Every other agent the Skills CLI (``npx skills``) knows and that is installed here gets the skills
-alone, copied from the folder's ``skills/`` into that agent's own skills folder by one ``npx skills
-add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that CLI reads
-them). The CLI keeps no versions, so the receipt says which agents got which skills (those its
-``--json`` says it installed) from which release; a later run adds them again for an agent when that
-release is not this one or one of those skills is missing from its folder.
+alone, copied from the folder's ``skills/`` into the skills folder the CLI keeps for that agent by one
+``npx skills add`` for all of them (``SKILLS_AGENTS``: each one's folder and how it is detected, as that
+CLI reads them; for most, ``~/.agents/skills``). The CLI keeps no versions, so the receipt says which
+agents got which skills (those its ``--json`` says it installed) from which release; a later run adds
+them again for an agent when that release is not this one or one of those skills is missing from its
+folder, and the report after a run fails it for an agent whose folder lacks one.
 An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
@@ -52,9 +53,10 @@ out of the Skills CLI's record where it installed them from GitHub (``unlock_ski
 put them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
 (``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
 earlier release's body). The one folder two kinds of agent share,
-``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
-agent's while one that uses it is here: Codex and Gemini CLI then list those skills beside their
-plugin's, which the plan says.
+``~/.agents/skills`` (Codex and Gemini CLI read it; the Skills CLI copies the skills of GitHub Copilot,
+Amp, Antigravity, Cline, Droid, Kilo Code, OpenCode and Zed there), is the Skills CLI agents' while one
+that uses it is here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan
+says.
 
 A store's copy (claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is a
 second copy too: the install command, and ``cad setup`` with it, is the person's ask for this release,
@@ -119,7 +121,7 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("cad", "cam", "engineering-drawing", "pcb", "print3d", "robot-simulation", "sendcutsend")
+SKILLS = ("cad", "cam", "engineering-drawing", "fea", "pcb", "print3d", "robot-simulation", "sendcutsend")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "simulation", "srdf", "step-parts",
@@ -389,28 +391,30 @@ def _zed(machine: Machine) -> List[Path]:
 
 
 # The agents the Skills CLI knows that have no plugin of ours, as its agent table has them (skills
-# 1.7.4, dist/cli.mjs): its id, its display name, its global skills folder (``globalSkillsDir``),
-# and the paths any one of which, existing, is the agent installed (``detectInstalled``). Never
-# Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
+# 1.7.6, dist/cli.mjs): its id, its display name, the folder ``npx skills add -g`` copies its skills
+# into, and the paths any one of which, existing, is the agent installed (``detectInstalled``). That
+# folder is where the CLI writes (``getAgentBaseDir``), not the agent's ``globalSkillsDir``: an agent
+# whose project folder is ``.agents/skills`` (the CLI's universal agents) gets ``~/.agents/skills``
+# whatever its own global folder, so GitHub Copilot, Amp, Antigravity, Droid, Kilo Code and OpenCode
+# share it with Cline and Zed (each reads it, but Antigravity, whose documentation names only its own
+# folders). Never Claude Code, Cursor, Codex, Gemini CLI or Grok Build: they have the plugin.
 SKILLS_AGENTS: Dict[str, Tuple[str, Callable[[Machine], Path], Callable[[Machine], List[Path]]]] = {
-    # VS Code's agent is GitHub Copilot: it reads ~/.copilot/skills as well.
-    "github-copilot": ("GitHub Copilot", lambda m: m.home / ".copilot" / "skills", lambda m: [m.home / ".copilot"]),
+    # VS Code's agent is GitHub Copilot.
+    "github-copilot": ("GitHub Copilot", shared_skills, lambda m: [m.home / ".copilot"]),
     "windsurf": ("Windsurf", lambda m: m.home / ".codeium" / "windsurf" / "skills",
                  lambda m: [m.home / ".codeium" / "windsurf"]),
     "cline": ("Cline", shared_skills, lambda m: [m.home / ".cline"]),
-    "amp": ("Amp", lambda m: _config_home(m) / "agents" / "skills", lambda m: [_config_home(m) / "amp"]),
-    "antigravity": ("Antigravity", lambda m: m.home / ".gemini" / "antigravity" / "skills",
-                    lambda m: [m.home / ".gemini" / "antigravity"]),
-    "antigravity-cli": ("Antigravity CLI", lambda m: m.home / ".gemini" / "antigravity-cli" / "skills",
-                        lambda m: [m.home / ".gemini" / "antigravity-cli"]),
+    "amp": ("Amp", shared_skills, lambda m: [_config_home(m) / "amp"]),
+    "antigravity": ("Antigravity", shared_skills, lambda m: [m.home / ".gemini" / "antigravity"]),
+    "antigravity-cli": ("Antigravity CLI", shared_skills, lambda m: [m.home / ".gemini" / "antigravity-cli"]),
     "openclaw": ("OpenClaw", lambda m: _openclaw(m) / "skills",
                  lambda m: [m.home / name for name in (".openclaw", ".clawdbot", ".moltbot")]),
-    "droid": ("Droid", lambda m: m.home / ".factory" / "skills", lambda m: [m.home / ".factory"]),
+    "droid": ("Droid", shared_skills, lambda m: [m.home / ".factory"]),
     "goose": ("Goose", lambda m: _config_home(m) / "goose" / "skills", lambda m: [_config_home(m) / "goose"]),
-    "kilo": ("Kilo Code", lambda m: m.home / ".kilo" / "skills", lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
+    "kilo": ("Kilo Code", shared_skills, lambda m: [m.home / ".kilo", m.home / ".kilocode"]),
     "kiro-cli": ("Kiro CLI", lambda m: m.home / ".kiro" / "skills", lambda m: [m.home / ".kiro"]),
     "hermes-agent": ("Hermes Agent", lambda m: _hermes_home(m) / "skills", lambda m: [_hermes_home(m)]),
-    "opencode": ("OpenCode", lambda m: _config_home(m) / "opencode" / "skills", lambda m: [_config_home(m) / "opencode"]),
+    "opencode": ("OpenCode", shared_skills, lambda m: [_config_home(m) / "opencode"]),
     "roo": ("Roo Code", lambda m: m.home / ".roo" / "skills", lambda m: [m.home / ".roo"]),
     "trae": ("Trae", lambda m: m.home / ".trae" / "skills", lambda m: [m.home / ".trae"]),
     "zed": ("Zed", shared_skills, _zed),
@@ -444,11 +448,19 @@ def ours_in(folder: Path) -> List[Path]:
     return [path for path in (Path(folder) / name for name in SKILLS) if path in found]
 
 
-def skills_words(got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
-    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it."""
+def skills_words(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> str:
+    """An agent's copy of the skills as the receipt records it (``got``), as a person reads it: in the
+    folder the Skills CLI copies the agent's skills into (``skills_folder``), which an earlier release's
+    receipt may name otherwise."""
     at = f" ({str(got['at']).replace('T', ' ').rstrip('Z')[:16]})" if got.get("at") else ""
     return (f"the skills of text-to-cad {got.get('release') or '?'}, copied into "
-            f"{shown(got.get('folder') or '?', machine)} by the Skills CLI{at}")
+            f"{shown(skills_folder(agent, machine), machine)} by the Skills CLI{at}")
+
+
+def skills_lost(agent: str, got: Mapping[str, Any], machine: Optional[Machine] = None) -> List[str]:
+    """The skills the receipt says the Skills CLI installed for ``agent`` (``got``) that its folder lacks."""
+    have = {path.name for path in ours_in(skills_folder(agent, machine))}
+    return [name for name in got.get("skills") or () if name not in have]
 
 
 def skills_installed(printed: str) -> Optional[List[str]]:
@@ -1593,15 +1605,15 @@ def _shared_note(apps: Mapping[str, App], steps: List[Step], machine: Machine) -
     """A line for Codex and Gemini CLI, which read ``~/.agents/skills``, when a Skills CLI agent here
     keeps the skills there and the app has the plugin or is getting it: both copies show in it."""
     shared = shared_skills(machine)
-    owners = [step.app for step in steps if step.app in SKILLS_AGENTS and skills_folder(step.app, machine) == shared
-              and step.subject != NEED_NODE]
+    owners = list(dict.fromkeys(label(step.app) for step in steps if step.app in SKILLS_AGENTS
+                                and skills_folder(step.app, machine) == shared and step.subject != NEED_NODE))
+    whose = " and ".join([", ".join(owners[:-1]), owners[-1]] if len(owners) > 1 else owners)
     notes = []
     for name, kind in (("codex", "plugin"), ("gemini", "extension")):
         app = apps.get(name)
         getting = any(step.app == name and step.action in ("install", "update") for step in steps)
         if owners and app is not None and app.present and (app.ours() is not None or getting):
-            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, "
-                                             f"{' and '.join(label(owner) for owner in owners)}'s folder: "
+            notes.append(Step(name, "leave", f"the skills in {shown(shared, machine)}, {whose}'s folder: "
                                              f"{app.label} lists them beside its {kind}'s"))
     return notes
 

@@ -17,7 +17,7 @@ nothing. It counts these events (``analytics.EVENTS``):
   ``analytics.told_failure``);
 - an export: a ``build`` of each destination's kind, asked as a build is, the verb's time shared out;
 - a ``snapshot`` of the source's kind (``model`` for a live model; ``xbf`` for an actual file), and why one failed
-  (``snapshot_failure``);
+  (``snapshot_failure``), a refused one with the part of its request it refused (``part``);
 - ``feature``: a model calling other models or of several parts (``assembly``), one writing mesh files
   (``declared_mesh``), an export or a snapshot posing joints (``kinematics``);
 - ``health``: a warm worker started for the work, one that died under it, one retired over its memory
@@ -156,8 +156,10 @@ def counts(facts: dict[str, Any], via: str) -> dict[str, Any]:
                     **failure} for kind in written]
     elif verb == "snapshot" and facts.get("source") in KINDS:
         ok = outcome == "ok"
+        reason = None if ok else _snapshot_failure(facts, error, outcome)
         snapshots.append({"format": KINDS[facts["source"]], "ok": ok, "seconds": seconds,
-                          **({} if ok else {"reason": _snapshot_failure(facts, error, outcome)})})
+                          **({} if ok else {"reason": reason}),
+                          **({"part": _refused_part(error)} if reason == "bad_request" else {})})
     if verb == "snapshot" and facts.get("pose"):
         features.append("kinematics")
     health = {name: 1 for name, happened in (("workers", worker.get("fresh") is True),
@@ -185,11 +187,30 @@ def _outcome(facts: dict[str, Any], error: dict[str, Any] | None, worker: dict[s
     return "cancelled" if (error or {}).get("type") == "KeyboardInterrupt" else "failed"
 
 
+# The refusals that name no part themselves but say it by what they are: a pose a mechanism cannot take
+# (``mechanism.KinematicsError``), a file its reader could not read (``formats.FormatError``).
+_PARTS_BY_TYPE = {"KinematicsError": "pose", "FormatError": "source"}
+
+
+def _refused_part(error: dict[str, Any] | None) -> str:
+    """Which part of a snapshot's request a refusal named (``analytics.SNAPSHOT_PARTS``): the word the library
+    gave it (``SnapshotRefused.part``), else the one its type says, else ``other``."""
+    from cad_server import analytics
+
+    error = error or {}
+    part = error.get("part")
+    if part in analytics.SNAPSHOT_PARTS:
+        return part
+    return _PARTS_BY_TYPE.get(str(error.get("type") or "").rpartition(".")[2], "other")
+
+
 def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outcome: str) -> str:
-    """Why a snapshot failed (``analytics.SNAPSHOT_FAILURES``), as ``analytics.snapshot_failure`` decides it of an
-    error caught there: the model it draws did not build (``input_error``); a request refused, or a file not
-    there (``bad_request``, ``no_file``); cadgen's mistake (``bug``); a time, a memory or a file run out; else the
-    picture was not drawn (``render_error``)."""
+    """Why a snapshot failed (``analytics.SNAPSHOT_FAILURES``), decided of the error the verb told: the model it
+    draws did not build (``input_error``); a request refused, or a file not there (``bad_request``, ``no_file``); a
+    failure its type names (``analytics.FAILED_TYPES``: no OpenGL context to draw in, ``no_gl``, wherever it was to be
+    drawn -- this process, a worker's traceback, a render process's answer -- or no kernel process the engine could
+    start, ``no_kernel``); cadgen's mistake (``bug``); a time, a memory or a file run out; else the picture was not
+    drawn (``render_error``)."""
     from cad_server import analytics
 
     error = error or {}
@@ -199,9 +220,11 @@ def _snapshot_failure(facts: dict[str, Any], error: dict[str, Any] | None, outco
         return "input_error"
     if error.get("refused"):
         return "no_file" if facts.get("found") is False else "bad_request"
+    name = str(error.get("type") or "")
+    if analytics.FAILED_TYPES.get(name) in analytics.SNAPSHOT_FAILURES:  # no OpenGL context, no kernel process
+        return analytics.FAILED_TYPES[name]
     if analytics.told_signature(error, "build") is not None:
         return "bug"
-    name = str(error.get("type") or "")
     kind = analytics._builtin(name)
     if kind is not None and issubclass(kind, FileNotFoundError):
         return "no_file"

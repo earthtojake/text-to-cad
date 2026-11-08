@@ -60,11 +60,14 @@ scripts/bundle/bundle.sh
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
-snapshot is painted with Pillow and needs no display. On Linux with no
-screen (a server, a container, CI) that context is an X server's: install Xvfb,
-Mesa's software GL and the font the stills set their text in, and run the package
-suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
-snapshot fails, saying so.
+snapshot is painted with Pillow and needs no display. On Linux that context is an X
+server's: the OCP wheels we pin draw through GLX alone (no EGL, no OSMesa), so there is no
+off-screen context without one. A snapshot draws on the request's `DISPLAY`, else on the
+engine's: the daemon's own, else an Xvfb the daemon starts itself where `Xvfb` is on PATH
+(`cad_server/engine/display.py`). With no screen (a server, a container, CI) install Xvfb,
+Mesa's software GL and the font the stills set their text in; the package suites draw in the
+test process too, so run them under `xvfb-run`, as CI's Linux job does. With neither a
+display nor Xvfb a snapshot fails, naming what to install.
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
@@ -381,6 +384,7 @@ diff content: a comment in a module selects what the module's code would.
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 | cam | CAM's code (the library's `_internal/cam`, `freecad/`, `results.py`, the B-rep types and their binding, the runner of one operation, `_internal/programs.py`, `_internal/integrations.py` and `_internal/refused.py`, `registry.py`; the server's `cli/document_types.py`, `_internal/integration_env.py` and `_internal/base.py`), `tests/python/packages/cam`, `test-cam.sh`, and the modules a job reads a part, finds FreeCAD and writes its result through (`cad/engine/model.py`, `api.py`, `document.py`, `reader.py`, `refs.py`, `executables.py`, `kernel/imported.py`, `kernel/memo.py`, `export/glb.py`; `cad/_internal/atomic_replace.py`; `cad_server/_internal/cli_from_function.py`) | `test-cam.sh`: the CAM suite on Linux, with FreeCAD 1.1.4 installed from its release AppImage (checked by its SHA-256), the one job that installs it: about 2 minutes (20 s of it installing FreeCAD), a 5-minute timeout |
 | KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and the board's and schematic's edits (viewing and drawing a board need no KiCad and are the package suites') |
+| fea | The stress study's code (the library's `_internal/fea`, `calculix/` and `netgen/`, `results.py`, the type's binding and the runner of one operation; the server's `cli/document_types.py` and `_internal/integration_env.py`), the library's `pyproject.toml`, the engine and shared modules a study reads a document, finds CalculiX and writes its result through (`engine/document.py`, `refs.py`, `kernel/bounds.py`, `executables.py`, `export/glb.py`, `build.py`, the stills of a GLB its pictures are (`formats/glb.py`, `snapshot.py`), `_internal/atomic_replace.py`, `programs.py`, the server's `cli_from_function.py`), `tests/python/packages/fea`, `test-fea.sh` | `tests/python/packages/fea` (`test-fea.sh`), Linux only, with the netgen and calculix integrations installed (`cad[netgen,calculix]`, netgen pinned to 6.2.2608, the version the accuracy margins were measured with, and cad-ccx 2.23.0 from PyPI): the study's parse, checks and materials, the solves against hand calculations, assemblies, the results folder and its pictures (under Xvfb), and the command through the runner of one operation; about 2 minutes (230 tests in 76 s locally), under a 15-minute timeout. No package job collects the suite |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,

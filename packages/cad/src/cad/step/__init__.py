@@ -5,6 +5,9 @@
 its operations (``step.export(source, *destinations)``, ...) are the ``cad step <operation>`` commands'.
 ``step.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
 the trimesh integration (``cad._internal.manufacturing``).
+``step.solve(source, study=..., out="results/")`` runs a stress study on its part or bonded assembly, writing
+its results into that folder (with no study, it lists the parts, pairs and faces a study names), with the
+kernel, netgen and calculix integrations (``cad._internal.fea.operation``).
 ``step.plan(source, job=..., out="cam/")`` plans a CAM job on its part, FreeCAD's toolpaths and G-code checked
 against it, writing its results into that folder (with no job, it lists the faces, holes and floors a job names),
 read with the kernel and planned by the freecad integration (``cad._internal.cam.operation``).

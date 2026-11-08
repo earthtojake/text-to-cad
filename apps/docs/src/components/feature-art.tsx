@@ -368,10 +368,49 @@ function RobotsArt() {
   );
 }
 
+// A stress check: a cantilever held at its wall, its deflected shape under the load at its tip, the
+// peak at the root marked, and the verdict beside it.
+function StressArt() {
+  return (
+    <Sheet view="14 30 222 100">
+      <defs>
+        <pattern id="feature-wall" width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={5} className="text-muted-foreground" stroke="currentColor" strokeWidth={0.6} strokeOpacity={0.6} />
+        </pattern>
+      </defs>
+      <Fade>
+        <path d="M30 44 H42 V116 H30 Z" fill="url(#feature-wall)" stroke="none" />
+      </Fade>
+      <g className={ink}>
+        <Draw d="M42 44 V116" strokeWidth={1.3} />
+        <Draw d="M42 70 H190 V86 H42" strokeWidth={1.3} />
+      </g>
+      <g className={faint}>
+        <Draw late d="M42 70 Q120 74 190 92 V108 Q120 90 42 86" strokeWidth={1} strokeDasharray="3 2" />
+      </g>
+      <g className={accent}>
+        <Draw late d="M196 66 V90" strokeWidth={1.2} />
+        <Draw late d="M193 85 L196 90 L199 85" strokeWidth={1.2} />
+        <Fade late>
+          <text x={202} y={74} style={{ ...label, fontSize: 6.5 }}>300 N</text>
+        </Fade>
+      </g>
+      <g className={flag}>
+        <Draw late d="M42 66 A6 6 0 0 1 48 72" strokeWidth={2} />
+        <Fade late>
+          <text x={52} y={60} style={{ ...label, fontSize: 6.5 }}>peak 223 MPa</text>
+          <text x={52} y={102} style={{ ...label, fontSize: 6.5 }}>OK up to 1.2× this load</text>
+        </Fade>
+      </g>
+    </Sheet>
+  );
+}
+
 const ART: Record<string, () => ReactNode> = {
   parts: PartsArt,
   boards: BoardsArt,
   checks: ChecksArt,
+  stress: StressArt,
   drawings: DrawingsArt,
   cam: CamArt,
   fabrication: FabricationArt,

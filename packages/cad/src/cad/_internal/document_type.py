@@ -9,8 +9,9 @@ step`` is one object that is
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
-  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.plan``, the
-  CAM job, ``cad._internal.cam.operation``; a board's ``.drc``, a
+  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
+  the stress study, ``cad._internal.fea.operation``, and its ``.plan``, the CAM job, ``cad._internal.cam.operation``;
+  a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
@@ -86,6 +87,13 @@ class DocumentType(types.ModuleType):
             value = dfm_for(entry.id)
             self.__dict__[name] = value
             return value
+        if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":
+            # The stress study every B-rep type shares (``cad._internal.fea.operation``).
+            from cad._internal.fea.operation import solve_for
+
+            value = solve_for(entry.id)
+            self.__dict__[name] = value
+            return value
         if name.startswith("__"):
             raise AttributeError(name)
         from cad._internal.aliases import lookup
@@ -123,13 +131,15 @@ def refuse_other(document_type: str, source: Any) -> None:
     entry = DOCUMENT_TYPES[document_type]
     if isinstance(source, (str, os.PathLike)):
         text = os.fspath(source)
+        from cad.engine.addresses import parts
         from cad.engine.ids import is_id
 
-        if is_id(str(text).partition("#")[0]):
+        named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
+        if is_id(named):
             if entry.has_file:
                 raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
             return
-        found = type_of(str(text).partition("#")[0])
+        found = type_of(named)
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and not entry.has_file:

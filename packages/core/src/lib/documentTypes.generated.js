@@ -7,6 +7,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "snapshot",
     "inspect",
     "dfm",
+    "solve",
     "plan",
     "drc",
     "erc",
@@ -32,6 +33,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "solve",
         "plan"
       ],
       "decorator": true
@@ -50,6 +52,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "solve",
         "plan"
       ],
       "decorator": true
@@ -69,6 +72,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "snapshot",
         "inspect",
         "dfm",
+        "solve",
         "plan"
       ],
       "decorator": true

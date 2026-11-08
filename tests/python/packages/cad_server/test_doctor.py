@@ -457,9 +457,11 @@ class DoctorTests(unittest.TestCase):
         (self.state / "install-receipt.json").write_text(json.dumps({"schema": 1, "actions": [replaced], "skills": {"windsurf": {
             "release": "1.1.0", "folder": "/h/.codeium/windsurf/skills", "skills": ["cad"], "at": "2026-10-31T02:40:00Z"}}}),
             encoding="utf-8")
-        with mock.patch.object(providers.Machine, "here"), \
+        machine = providers.Machine(Path(self.state) / "h", {}, bundled={}, homebrew=())
+        with mock.patch.object(providers.Machine, "here", return_value=machine), \
                 mock.patch.object(providers, "detect", return_value=found) as detect:
             lines = self.apps()
+        windsurf = providers.shown(providers.skills_folder("windsurf", machine), machine)
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
             f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
@@ -469,8 +471,9 @@ class DoctorTests(unittest.TestCase):
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
             "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "
             "(2026-10-31 02:39)",
-            "app      Windsurf: the skills of text-to-cad 1.1.0, copied into /h/.codeium/windsurf/skills by the Skills CLI "
-            "(2026-10-31 02:40)"])
+            # The folder the Skills CLI keeps for it, read again: the skill gone since is said.
+            f"app      Windsurf: the skills of text-to-cad 1.1.0, copied into {windsurf} by the Skills CLI "
+            "(2026-10-31 02:40); cad not there now: run the install command again"])
         with mock.patch.object(providers.Machine, "here", side_effect=OSError("no home")):
             self.assertEqual(self.apps(), ["apps     unknown (OSError: no home)"])
 
