@@ -26,7 +26,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Articulate a mechanism** | build123d joints in the body, then `cad.build123d`. | [Kinematics](references/kinematics.md) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
-| **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and its process. | [Can it be made?](#can-it-be-made) |
+| **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the process the request names or implies; with none, no check. | [Can it be made?](#can-it-be-made) |
 
 ## Setup and paths
 
@@ -276,7 +276,7 @@ can be checked:
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
-| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: the script's `Check:` line (`cad model dfm "$ID" ...`, [Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
+| Any change to the geometry of a part whose process the request names or implies | Its process's check, with the same flags as before: the script's `Check:` line (`cad model dfm "$ID" ...`, [Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
 
 ```bash
 cad model snapshot "$ID" tmp/review.png
@@ -326,10 +326,13 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
 
 ## Can it be made?
 
-Check that a part can be machined, cut and bent, molded or printed, and say what to change where it
-cannot. A part whose process the request names is designed for it ([below](#design-for-the-process));
-a review picks the process, reads its reference and runs its check, and when the person is choosing
-between processes checks each one the same way:
+A manufacturing check runs only when the request names a fabrication process or its spec implies one
+(the words [Design for the process](#design-for-the-process) lists), or the person asks whether a part
+can be made by a process. Otherwise no check is run. The check says whether a part can be machined,
+cut and bent, molded or printed, and what to change where it cannot. A part whose process the request
+names or implies is designed for it ([below](#design-for-the-process)); a review picks the process,
+reads its reference and runs its check, and when the person is choosing between processes checks each
+one the same way:
 
 | Process | Reference | Check with |
 | --- | --- | --- |
@@ -376,8 +379,8 @@ none (6061 is machined, cast or bent); a thickness with a metal ("2 mm steel") i
    design: say so instead. Repeat until no error remains.
 4. **At the hand-off**, say the process, that the rules are general practice (no shop's limits), the
    material the check judged with, the findings left and the rules not evaluated. With no process
-   named, build what was asked and never add draft, reliefs or tool radii to it: say which process the
-   design suits if one is evident, and offer the check.
+   named or implied, build what was asked, run no check and never add draft, reliefs or tool radii to
+   it: say which process the design suits if one is evident.
 
 ### Evidence and a shop's limits
 
