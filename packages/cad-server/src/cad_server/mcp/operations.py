@@ -230,8 +230,28 @@ def arguments_named(text):
 
 def absolute(value):
     if not isinstance(value, str) or not Path(value).is_absolute():
-        raise JobError("Paths must be absolute on the engine host")
+        raise JobError("Paths must be absolute on the engine host", reason="relative_path")
     return str(Path(value).resolve())
+
+
+def failure_reason(error):
+    """Why an operation failed, as the CAD app's telemetry counts a tool's failed call
+    (``analytics.FAILURES``), from what the error is and never from what it says: the reason a refused
+    start gave (``JobError``); a file the call names that is not there (``no_file``); a request the
+    engine refused by name (``bad_request``: its refusals are ``ValueError``\\ s -- a snapshot's, an
+    export's, a pose's, a ref's); a mistake in cadgen's own code (``bug``, which ``Operations`` reports
+    as a crash); else the engine's or the machine's (``other``: a render that failed, the engine not
+    reached)."""
+    from cad.engine.snapshot import NoSuchFile
+    from cad_server import analytics
+
+    if isinstance(error, JobError):
+        return error.reason
+    if isinstance(error, (FileNotFoundError, NoSuchFile)):
+        return "no_file"
+    if isinstance(error, ValueError):
+        return "bad_request"
+    return "bug" if analytics.signature(error, "tool", bugs_only=True) is not None else "other"
 
 
 def source(value):
@@ -289,6 +309,11 @@ REPORT_BYTES = 2 * 1024 * 1024
 
 
 class Operations(Jobs):
+    def __init__(self, *, crashed=None, **options):
+        super().__init__(**options)
+        # Told each mistake in cadgen's own code an operation failed for, once (the server's telemetry).
+        self.crashed = crashed
+
     def _prune(self):
         super()._prune()
         finished = [job for job in self.jobs.values() if job["state"] in TERMINAL]
@@ -306,34 +331,48 @@ class Operations(Jobs):
             del self.requests[request_id]
 
     def call(self, name, arguments):
+        return self.answered(name, arguments)[0]
+
+    def answered(self, name, arguments):
+        """``call``'s answer, and why it failed where it did (``failure_reason``): a start refused, or an
+        operation it shows failed; None for any other."""
         try:
-            action = check_arguments(name, arguments)
-            wait = min(25, arguments.get("waitMs", 0) / 1000)
-            if action != "start":
-                if arguments["epoch"] != self.epoch:
-                    raise JobError("Operation session restarted", 409)
-                ident = arguments["operationId"]
-                with self.changed:
-                    current = self.get(ident)
-                    if current["operation"] != name:
-                        raise JobError("Use the tool that started this operation", 409)
-                    if action == "cancel":
-                        return self.cancel(ident)
-                    if arguments.get("afterSequence") is None:
-                        return self._settled(ident, wait)
-                    return self.get(ident, arguments.get("afterSequence"), wait)
-            request_id = arguments["requestId"]
-            args = {k: v for k, v in arguments.items() if k not in ("action", "requestId", "waitMs")}
-            normalized = hashlib.sha256(json.dumps([name, args], sort_keys=True, allow_nan=False).encode()).hexdigest()
-            with self.changed:
-                # Join retries before re-reading a packet or source that may have changed.
-                if request_id in self.requests:
-                    started = self._submit(request_id, normalized)
-                else:
-                    started = self._submit(request_id, normalized, operation=name, arguments=args)
-                return self._settled(started["id"], wait) if wait else started
+            result = self._called(name, arguments)
         except (ValueError, TypeError, OSError, KeyError) as error:
-            return {"state": "rejected", "error": str(error), "status": getattr(error, "status", 400)}
+            return ({"state": "rejected", "error": str(error), "status": getattr(error, "status", 400)},
+                    getattr(error, "reason", "bad_request"))
+        if result.get("state") != "failed":
+            return result, None
+        with self.changed:
+            return result, (self.jobs.get(result.get("id")) or {}).get("reason", "other")
+
+    def _called(self, name, arguments):
+        """A start, a status or a cancel: the operation's public answer; a refused one raises."""
+        action = check_arguments(name, arguments)
+        wait = min(25, arguments.get("waitMs", 0) / 1000)
+        if action != "start":
+            if arguments["epoch"] != self.epoch:
+                raise JobError("Operation session restarted", 409)
+            ident = arguments["operationId"]
+            with self.changed:
+                current = self.get(ident)
+                if current["operation"] != name:
+                    raise JobError("Use the tool that started this operation", 409)
+                if action == "cancel":
+                    return self.cancel(ident)
+                if arguments.get("afterSequence") is None:
+                    return self._settled(ident, wait)
+                return self.get(ident, arguments.get("afterSequence"), wait)
+        request_id = arguments["requestId"]
+        args = {k: v for k, v in arguments.items() if k not in ("action", "requestId", "waitMs")}
+        normalized = hashlib.sha256(json.dumps([name, args], sort_keys=True, allow_nan=False).encode()).hexdigest()
+        with self.changed:
+            # Join retries before re-reading a packet or source that may have changed.
+            if request_id in self.requests:
+                started = self._submit(request_id, normalized)
+            else:
+                started = self._submit(request_id, normalized, operation=name, arguments=args)
+            return self._settled(started["id"], wait) if wait else started
 
     def _settled(self, ident, wait):
         """Under changed's lock: the operation once it finished, or as it is after ``wait`` seconds."""
@@ -363,13 +402,23 @@ class Operations(Jobs):
         refused before it renders, and a picture is written whole or not at all
         (``snapshot.write_png``, ``draw_pictures``). An export's refusal is that only where this
         process raised it, before the engine was asked; one the engine raised may come after a
-        destination was written (a DXF's checks, after a STEP beside it)."""
+        destination was written (a DXF's checks, after a STEP beside it). And why it failed
+        (``failure_reason``), kept on the job for ``answered``, a mistake in cadgen's code told to
+        ``crashed`` once."""
         from cad.engine.export import ExportRefused
         from cad.engine.snapshot import SnapshotRefused
 
         refused_before = isinstance(error, SnapshotRefused) or (
             isinstance(error, ExportRefused) and not getattr(error, "_engine_refusal", False))
-        return {"result": {"outputsMayHaveBeenWritten": bool(job.get("writing")) and not refused_before}}
+        # Why it failed, for the telemetry of the calls that show it (``answered``); never public.
+        reason = failure_reason(error)
+        if reason == "bug" and self.crashed is not None:
+            try:
+                self.crashed(error, job.get("operation"))
+            except Exception:  # noqa: BLE001 - telemetry never fails the operation it counts
+                pass
+        return {"result": {"outputsMayHaveBeenWritten": bool(job.get("writing")) and not refused_before},
+                "reason": reason}
 
     def _finished(self, job):
         job.pop("arguments", None)

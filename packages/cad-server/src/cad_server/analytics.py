@@ -344,11 +344,13 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # no file (``no_file``) or a file CAD does not open (``not_cad``); no view, one that is gone or shows no model, or
 # a call to a tool of cadgen's its host was not listed -- a tab's or a view's, where the host shows none
 # (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read, or a
-# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s). The view's: it
+# call naming no tool of cadgen's (``bad_request``, as ``UNKNOWN_TOOL``'s), or an operation (``cad_export``,
+# ``cad_snapshot``, ``cad_inspect``) the engine refused by name (``bad_request`` too). The view's: it
 # did not answer in time (``timeout``), answered with an error or without
 # an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
 # did not start (``no_viewer``). cadgen's: anything else it raised (``bug``, reported as an ``exception`` too).
-# ``other``: a failure that named none of these.
+# ``other``: a failure that named none of these -- an operation's render or read that failed, the engine not reached
+# (``cad_server.mcp.operations.failure_reason``).
 FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
                       "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
 # Why a build failed (``build_failure``), decided where it failed, never read from its message. The model's: its

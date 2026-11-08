@@ -200,6 +200,9 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
+# Where an operation's answer carries why it failed (``analytics.FAILURES``) to ``_call``, which takes it
+# out before the host sees the answer.
+_FAILED_FOR = "_failedFor"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
@@ -283,7 +286,9 @@ class Server:
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         from .operations import Operations
-        self.operations = Operations()
+        # A mistake in cadgen's code an operation failed for is a crash of the tool's, counted as ``_call``
+        # counts one a handler raised.
+        self.operations = Operations(crashed=lambda error, tool: self.analytics.crashed(error, "tool", tool=tool))
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
         # Whether this host shows CAD cards (``host.presentation``): True, False, or None while nothing
@@ -587,11 +592,14 @@ class Server:
             if name in _AGENT_TOOLS:
                 self._arguments(name, arguments)
             result = handler(arguments, context)
+            # An operation's answer that says it failed says why too (``_operation``), never to the host.
+            failed_for = result.pop(_FAILED_FOR, None) if isinstance(result, dict) else None
             if not self.text and isinstance(result.get("structuredContent", {}).get("launch"), dict):
                 # MCP result metadata is delivered to the app, never put in the model's context.
                 result.setdefault("_meta", {})[_APP_TOKEN_META] = self._app_token
                 self._reach(result["structuredContent"]["launch"])
             ok = not (isinstance(result, dict) and result.get("isError"))
+            reason = failed_for or reason
             return result
         except ToolFailed as failure:
             reason = failure.reason
@@ -648,8 +656,14 @@ class Server:
         raise ToolFailed(said, "bad_request")
 
     def _operation(self, name, arguments):
-        result = self.operations.call(name, arguments)
-        return _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        """An operation's start, status or cancel (``operations.Operations``): its answer, and -- where it
+        says the operation failed or the start was refused -- why, for the call's telemetry (``_call``):
+        the engine refusing what the call asked is the caller's, never cadgen's bug."""
+        result, reason = self.operations.answered(name, arguments)
+        answer = _text(json.dumps(result), result, error=result["state"] in ("failed", "rejected"))
+        if reason is not None:
+            answer[_FAILED_FOR] = reason
+        return answer
 
     # launches -----------------------------------------------------------------
 

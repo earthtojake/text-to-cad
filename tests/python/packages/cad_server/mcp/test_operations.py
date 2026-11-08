@@ -250,6 +250,40 @@ class OperationsTest(unittest.TestCase):
             self.assertTrue(callable(snapshot.call_args.kwargs['progress']), 'the engine is handed where to say its stages')
             self.assertEqual(result['result']['pictures'][0]['path'], str(root / 'view.png'))
 
+    def test_a_failed_call_says_why_by_what_failed_and_a_mistake_of_cadgen_s_is_one_crash(self):
+        # The CAD app counts a tool's failed call by why (``analytics.FAILURES``), never by what the error said: a
+        # start refused (a relative path, an argument the tool does not take), a request the engine refused by name,
+        # a file it names that is not there, the engine's own failure, and a mistake in cadgen's code -- which alone
+        # is a crash, told once however often its status is asked. Operations once all counted as "bug".
+        from cad.engine.api import EngineError
+        from cad.engine.snapshot import NoSuchFile, SnapshotRefused
+        from cad_server import analytics
+
+        def broken(**_arguments):
+            from cad.engine.snapshot import parse_display
+            return parse_display(42, False)  # an int where text is due: Python's own error, in cadgen's code
+
+        crashes = []
+        jobs = Operations(crashed=lambda error, tool: crashes.append((type(error).__name__, tool)))
+        out = str(Path('/tmp/part.png').resolve())
+        start = {'source': str(Path('/tmp/part.xbf').resolve()), 'output': out, 'waitMs': 10000}
+        self.assertEqual(jobs.answered('cad_snapshot', {**start, 'requestId': 'reason-request-001', 'output': 'part.png'})[1],
+                         'relative_path')
+        self.assertEqual(jobs.answered('cad_snapshot', {**start, 'requestId': 'reason-request-002', 'display': ['solid']})[1],
+                         'bad_request')
+        failures = ((SnapshotRefused("camera 'isometric' is no preset"), 'bad_request'),
+                    (NoSuchFile('--annotation ink.json: no such file'), 'no_file'),
+                    (EngineError('the renderer drew nothing'), 'other'), (broken, 'bug'))
+        for number, (error, reason) in enumerate(failures):
+            with self.subTest(reason=reason), patch('cad.engine.api.snapshot', side_effect=error):
+                answer, why = jobs.answered('cad_snapshot', {**start, 'requestId': f'reason-request-1{number:02d}'})
+                self.assertEqual((answer['state'], why), ('failed', reason))
+                self.assertNotIn('reason', answer)
+                status = {'action': 'status', 'operationId': answer['id'], 'epoch': answer['epoch']}
+                self.assertEqual(jobs.answered('cad_snapshot', status)[1], reason)
+                self.assertIn(reason, analytics.FAILURES)
+        self.assertEqual(crashes, [('AttributeError', 'cad_snapshot')])
+
     def test_failure_reports_possible_outputs_and_long_result_is_explicit(self):
         jobs = Operations()
         args = {'requestId': 'export-request-001', 'source': str(Path('/tmp/source.xbf').resolve()),
