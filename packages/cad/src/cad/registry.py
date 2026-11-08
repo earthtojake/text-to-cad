@@ -398,13 +398,22 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
     return by_extension(name[dot:]) if dot > 0 else None
 
 
-@cache
-def _producers() -> tuple[Producer, ...]:
-    # Each integration registers the producers it has; this is the one place they are gathered.
-    from cad.build123d._producers import PRODUCERS as build123d
-    from cad.cadquery._producers import PRODUCERS as cadquery
+# Each integration that registers producers, and the module that holds them (its ``_producers``): this is the one
+# place they are gathered. A producer takes values of its own integration's tool, a class of one of its modules
+# (``Integration.modules``) in the value's ancestry, so a value is matched against the producers of the
+# integrations its classes come from alone, and a build of a build123d shape imports no other integration's code.
+_PRODUCER_MODULES = {"build123d": "cad.build123d._producers", "cadquery": "cad.cadquery._producers"}
 
-    return (*build123d, *cadquery)
+
+@cache
+def _producers_of(integration: str) -> tuple[Producer, ...]:
+    from importlib import import_module
+
+    return tuple(import_module(_PRODUCER_MODULES[integration]).PRODUCERS)
+
+
+def _producers() -> tuple[Producer, ...]:
+    return tuple(producer for name in _PRODUCER_MODULES for producer in _producers_of(name))
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -412,11 +421,20 @@ def producers_for(document_type: str) -> tuple[Producer, ...]:
     return tuple(producer for producer in _producers() if producer.document_type == document_type)
 
 
+def _candidates(document_type: str, value: Any) -> tuple[Producer, ...]:
+    """The producers of ``document_type`` that may take ``value``: those of the integrations whose modules hold a
+    class of its ancestry, read by name (no import of any tool), each integration's producers loaded on its
+    first such value."""
+    roots = {str(cls.__module__).split(".")[0] for cls in type(value).__mro__}
+    return tuple(producer for name in _PRODUCER_MODULES if roots & set(INTEGRATIONS[name].modules)
+                 for producer in _producers_of(name) if producer.document_type == document_type)
+
+
 def producer_for(document_type: str, value: Any, *, where: str = "a model") -> Producer:
     """The one producer that makes ``document_type`` of ``value``; a ``TypeError`` naming what the type
     takes, and the integration that would take more, for a value none takes. Two producers taking one
     value is the registry's error, said as one."""
-    found = [producer for producer in producers_for(document_type) if producer.matcher(value)]
+    found = [producer for producer in _candidates(document_type, value) if producer.matcher(value)]
     if len(found) == 1:
         return found[0]
     if len(found) > 1:
