@@ -133,7 +133,7 @@ FOLLOWS = ("The page follows the model: rebuilds for a document, saves for a fil
            "not after every rebuild.")
 
 TEXT_INSTRUCTIONS = (
-    f"CAD opens models and local CAD files ({FORMATS}) in the CAD Viewer in the user's browser: "
+    f"CAD opens models and local CAD files ({FORMATS}) in the user's browser: "
     "this app cannot show CAD views itself. Call cad_show with source set to a model's document id (running its "
     "script prints it) or a file's absolute path: it opens the page in the user's browser, or says it is open "
     "already, and answers with its URL; give the user that URL. " + FOLLOWS
@@ -238,7 +238,8 @@ def _unreached(page: str | None) -> str:
     has not drawn it yet, or drew it and carries none of its calls back (the Claude app's Code tab draws cards
     and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
     What the person can open instead, and the picture the agent can draw itself."""
-    instead = f"give them the CAD Viewer's page instead: {page}" if page else "ask them to open it in the CAD Viewer instead"
+    instead = (f"give them the model's page to open in their browser instead: {page}" if page
+               else "open the model in their browser instead (`cad viewer` prints its page)")
     return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
             "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
             "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
@@ -548,7 +549,7 @@ class Server:
         """No page to open or read: cad_show hands over a link to the model in the CAD Viewer."""
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY,
-             "description": ("Open a model in the CAD Viewer in the user's browser, unless its page is open there "
+             "description": ("Open a model's page in the user's browser, unless its page is open there "
                              "already; this app cannot show CAD views itself. source is a model's document id (running "
                              f"its script prints it) or a local CAD file's absolute path ({FORMATS}). Answers with the "
                              "page's URL: give it to the user. " + FOLLOWS),
@@ -974,7 +975,7 @@ class Server:
         try:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
-            raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
+            raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
                              f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         self.warm()  # the browser page's first document meshes on a pool already starting

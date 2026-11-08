@@ -15,7 +15,7 @@
  * Where the host carries none of the card's calls and the engine cannot be read from the card either
  * (the Claude app's Code tab, which refuses a card's calls and keeps it off this machine's loopback),
  * the app cannot be loaded, so the shell says what the app's own notice says (`unconnected`): this
- * chat cannot connect the viewer to its engine, and the CAD Viewer's page of what it was to show.
+ * chat cannot connect to CAD's engine, and the browser page of what it was to show.
  */
 import { resolveLocale } from '@cad/ui/i18n/locale';
 import words from 'virtual:cad-shell-words';
@@ -101,7 +101,7 @@ export async function viaTunnel(bridge: Pick<CadShell['bridge'], 'callTool'>, to
  * access refused the request, or the engine refused the link. The shell then says so (`unconnected`).
  */
 export class Unconnected extends Error {
-  constructor() { super('This chat cannot connect the CAD viewer to its engine.'); this.name = 'Unconnected'; }
+  constructor() { super('This chat cannot connect to CAD\'s engine.'); this.name = 'Unconnected'; }
 }
 
 /** The CAD app's code from the engine directly, with the launch's link: a host that carries no call. */

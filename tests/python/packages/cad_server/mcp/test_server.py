@@ -859,7 +859,7 @@ class InlineServerTest(_Session):
                 self.assertTrue(answer["isError"])
                 said = answer["content"][0]["text"]
                 self.assertTrue(said.startswith("That viewer has not reached CAD's server."), said)
-                self.assertIn("give them the CAD Viewer's page instead: http://127.0.0.1:3245/doc?token=t.", said)
+                self.assertIn("give them the model's page to open in their browser instead: http://127.0.0.1:3245/doc?token=t.", said)
                 self.assertIn("use cad_snapshot", said)
         # A token no cad_show of this server named is not waited for.
         with mock.patch.object(self.server.views, "wait", side_effect=AssertionError("waited for an unknown view")):

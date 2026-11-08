@@ -285,7 +285,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   viewer, whose own progress takes over.
 - **A card says why it cannot work, in words a person can act on.** Three states, never
   confused, and never a host's or a transport's own error string (`host/channel.ts`,
-  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`):
+  `Connection.tsx`, `tunnel.ts`'s `tunnelFailure`), and names the browser, never the CAD Viewer
+  ([Naming the page](../../packages/ui/docs/settings-ui.md#naming-the-page)):
   - **No channel.** A host can draw the card and carry none of its calls back: the Claude
     app's **Code tab** (observed 2026-10-25) frames `cad_show`'s card as "Widget from
     text-to-cad:cad cad_show", with an expand control of its own, and answers every
@@ -298,11 +299,11 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
     any call came back means none. The card then tries the engine directly (below); failing
     that it shows one notice and nothing else, no home and no library: "This chat can't
-    connect the CAD viewer to its engine. Open the model in the CAD Viewer instead." (the
-    home's says "Open the CAD Viewer instead."), and **Open in CAD Viewer**, the launch's
+    connect to CAD's engine. Open the model in your browser instead." (the
+    home's says "Open CAD in your browser instead."), and **Open in browser**, the launch's
     `browser` page, through `ui/open-link` where the host declares `openLinks`, else as a
     plain link to a new window. With no page in the launch it says "Ask your agent to open
-    the model in the CAD Viewer instead." and links nothing. Where that same chat keeps the card off
+    the model in your browser instead." and links nothing. Where that same chat keeps the card off
     this machine's loopback too (the Code tab on Windows: `ERR_BLOCKED_BY_CLIENT`), the app
     itself cannot be loaded, and the shell says the same notice in its place (`host/shell.ts`'s
     `unconnected`, the line and its words `host/unreachable.js`'s), never the fetch's own "Failed to fetch".
@@ -315,7 +316,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     again." inline.
   - **The engine refused or failed.** Its own one-line reason, where the viewer shows a
     request's failure. A call that got no reply fails in words of ours ("This chat cannot
-    connect the CAD viewer to its engine.", "The CAD plugin did not answer in time.", "The
+    connect to CAD's engine.", "The CAD plugin did not answer in time.", "The
     CAD plugin could not be reached.").
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
   where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same

@@ -65,7 +65,7 @@ it('a card its host carries no call for, and that cannot read the engine either,
   const bridge = { hostContext: { locale: 'ja-JP' }, hostCapabilities: { openLinks: {} }, request, notify };
   unconnected(bridge as any, launch, 'inline', root);
   expect(root.querySelector('[data-cad-unreachable] p')?.textContent).toBe(
-    'このチャットでは CAD ビューアーをエンジンに接続できません。代わりに CAD ビューアーでモデルを開いてください。');
+    'このチャットでは CAD のエンジンに接続できません。代わりにブラウザーでモデルを開いてください。');
   const open = root.querySelector('a')!;
   expect(open.getAttribute('href')).toBe(launch.browser);
   open.click();
@@ -73,7 +73,6 @@ it('a card its host carries no call for, and that cannot read the engine either,
   expect(notify).toHaveBeenCalledWith('ui/notifications/size-changed', { height: 180 });
   // No page in the launch: the agent is asked to open one, and nothing is linked.
   unconnected({ ...bridge, hostContext: {}, hostCapabilities: {} } as any, { ...launch, browser: undefined }, 'tabs', root);
-  expect(root.textContent).toBe("This chat can't connect the CAD viewer to its engine. Ask your agent to open the model in the CAD "
-    + 'Viewer instead.');
+  expect(root.textContent).toBe("This chat can't connect to CAD's engine. Ask your agent to open the model in your browser instead.");
   expect(root.querySelector('a')).toBeNull();
 });
