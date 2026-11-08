@@ -6,6 +6,7 @@ the table to the tree, and pin how each kind of change is routed.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import re
@@ -70,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^apps/api/src/[^/]*\.test\.mjs$",                   # test-api.sh (node --test)
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
+            r"^tests/python/packages/cam/(.*/)?test_[^/]*\.py$",         # test-cam.sh
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
             r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
@@ -193,6 +195,15 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         self.assertIn("exit 1", guard)
         self.assertTrue(all(route(path)["skills"] == "true" for path in ("README.md", "skills/cad/SKILL.md", "VERSION")))
 
+    def test_contributing_lists_every_job(self):
+        # CONTRIBUTING.md's CI table says what each job runs and when: a job missing from it (cam was) is one
+        # nobody reading the guide knows runs.
+        text = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        table = text.split("| Check | Runs when a change reaches | What it runs |", 1)[1].split("\n\n", 1)[0]
+        rows = {line.split("|")[1].strip().split(" (")[0] for line in table.splitlines()[2:] if line.startswith("|")}
+        names = {re.search(r"^    name: (.+)$", JOBS[job], re.M)[1].split(" (")[0] for job in GATED | {"version"}}
+        self.assertEqual(names - rows, set())
+
     def test_required_check_names_are_the_jobs(self):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
@@ -250,9 +261,14 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
+                # The registry holds the plan operation and FreeCAD's probe, and a model is planned from the xbf
+                # the engine's API writes of it: the plans run too. The library's pyproject also pins the
+                # integrations' extras (netgen's among them): the solves run too.
+                plans = {"cam"} if path in ("packages/cad/src/cad/registry.py", "packages/cad/src/cad/engine/api.py") \
+                    else set()
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
+                self.assertEqual(jobs_for(path), GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "kicad", "fea"}
+                                 | plans | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -301,6 +317,59 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("packages/cad/src/cad/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
         self.assertNotIn("fea", jobs_for("packages/cad/src/cad/build123d/_geometry.py"))
 
+    def test_cam_runs_its_own_job_with_freecad_installed(self):
+        job = JOBS["cam"]
+        self.assertIn("FreeCAD.AppImage --appimage-extract", job)
+        self.assertIn("sha256sum -c", job)                  # the download is the release's, checked
+        self.assertIn("CAD_FREECAD=", job)
+        self.assertIn("scripts/test/test-cam.sh", job)
+        self.assertIn("timeout-minutes: 5", job)             # twice its slowest run, about 2 minutes
+        # The suite and its runner are that job's alone: no package job collects them.
+        for path in ("tests/python/packages/cam/test_cam_plan.py", "scripts/test/test-cam.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"cam", "skills"})
+        library, server = "packages/cad/src/cad", "packages/cad-server/src/cad_server"
+        # Its own code reaches the cam job beside what its package reaches.
+        for path in (f"{library}/_internal/cam/run.py", f"{library}/_internal/cam/operation.py", f"{library}/freecad/_program.py",
+                     f"{library}/_internal/programs.py", f"{library}/_internal/operation.py", f"{library}/results.py",
+                     f"{library}/_internal/document_type.py", f"{server}/cli/document_types.py", f"{server}/_internal/integration_env.py"):
+            with self.subTest(path=path):
+                self.assertLessEqual({"cam", "cadgen-linux"}, jobs_for(path))
+        # The skill's pages are its own suite's, which reads them against the code they document; no plan reads them.
+        self.assertEqual(jobs_for("skills/cam/SKILL.md"), {"skills"})
+        self.assertEqual(tests_for("skills/cam/references/job-file.md")["skills_tests"], [f"{SKILLS}/cam"])
+        self.assertEqual(tests_for(f"{library}/_internal/cam/job.py")["skills_tests"], [f"{SKILLS}/cam"])
+        self.assertNotIn("cam", jobs_for(f"{library}/build123d/_geometry.py"))
+        # Every module of the packages CAM's code imports, and the read a part goes through, reaches its plans too,
+        # the engine's final rule notwithstanding; the rest of the engine does not.
+        sources = {"cad": REPO_ROOT / "packages/cad/src", "cad_server": REPO_ROOT / "packages/cad-server/src"}
+        cam = [*sorted((sources["cad"] / "cad/_internal/cam").glob("*.py")), *sorted((sources["cad"] / "cad/freecad").glob("*.py"))]
+        imported = set()
+        for file in cam:
+            for node in ast.walk(ast.parse(file.read_text(encoding="utf-8"))):
+                names = [node.module] if isinstance(node, ast.ImportFrom) and node.module else \
+                    [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
+                for name in (n for n in names if n.split(".")[0] in sources and "." in n):
+                    module = sources[name.split(".")[0]] / Path(*name.split("."))
+                    if module.with_suffix(".py").is_file():
+                        imported.add(module.with_suffix(".py"))
+                    for alias in getattr(node, "names", ()):        # from cad.engine import executables
+                        if (module / f"{alias.name}.py").is_file():
+                            imported.add(module / f"{alias.name}.py")
+        read = {sources["cad"] / "cad/engine" / name for name in ("document.py", "reader.py")}
+        paths = sorted(file.relative_to(REPO_ROOT).as_posix() for file in imported | read)
+        self.assertIn("packages/cad/src/cad/engine/kernel/imported.py", paths)
+        self.assertIn("packages/cad/src/cad/engine/executables.py", paths)
+        self.assertIn("packages/cad/src/cad/engine/export/glb.py", paths)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertIn("cam", jobs_for(path))
+        for path in ("packages/cad/src/cad/engine/model.py", "packages/cad/src/cad/engine/document.py",
+                     "packages/cad/src/cad/_internal/atomic_replace.py"):
+            with self.subTest(path=path):
+                self.assertEqual(tests_for(path)["cadgen_tests"], [CADGEN])
+        self.assertNotIn("cam", jobs_for("packages/cad/src/cad/engine/snapshot.py"))
+
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
         self.assertIn(f"{SERVER}/viewer/test_launcher.py", viewer["cadgen_tests"])
@@ -333,7 +402,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        self.assertEqual(jobs_for(library), GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "fea"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -345,7 +414,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
-        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cad/pyproject.toml"), GATED - {"cam", "core-js", "web", "mcp", "api", "docs"})
         self.assertNotIn("kicad", jobs_for("packages/cad-server/pyproject.toml"))
 
     def test_the_installer_rehearsals_start_on_the_same_changes_and_no_job_runs_them(self):
@@ -420,7 +489,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
+            "scripts/bundle/bundle.sh": GATED - {"cam", "core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

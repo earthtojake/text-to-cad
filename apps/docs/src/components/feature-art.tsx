@@ -306,6 +306,30 @@ function FabricationArt() {
   );
 }
 
+// A CAM job: the part in its stock, a pocket cleared in passes up to the tool, and the rapid that brought it there.
+function CamArt() {
+  return (
+    <Sheet view="24 24 192 108">
+      <g className={faint}>
+        <Fade>
+          <path d="M32 32 H208 V124 H32 Z" strokeWidth={1} strokeDasharray="3 2" />
+        </Fade>
+      </g>
+      <g className={ink}>
+        <Draw d="M46 44 H194 V112 H46 Z" strokeWidth={1.3} />
+        <Draw d="M76 60 H164 V96 H76 Z" strokeWidth={1.3} />
+      </g>
+      <g className={accent}>
+        <Draw late d="M84 68 H156 V76 H84 V84 H156 V88 H118" strokeWidth={1.2} />
+        <Fade late>
+          <path d="M84 68 L46 32" strokeWidth={1} strokeDasharray="3 2" />
+          <circle cx={118} cy={88} r={4} strokeWidth={1.2} />
+        </Fade>
+      </g>
+    </Sheet>
+  );
+}
+
 // A three-joint arm: base, shoulder, elbow, wrist and gripper, each revolute joint's axis out of the
 // page, and the shoulder's limits.
 function RobotsArt() {
@@ -388,6 +412,7 @@ const ART: Record<string, () => ReactNode> = {
   checks: ChecksArt,
   stress: StressArt,
   drawings: DrawingsArt,
+  cam: CamArt,
   fabrication: FabricationArt,
   robots: RobotsArt,
 };

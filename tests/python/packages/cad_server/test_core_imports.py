@@ -158,6 +158,8 @@ EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_mate
                  "trimesh": {"trimesh", "rtree", "scipy", "networkx"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}
+# A module that runs inside the integration's program, never in cad's Python: what it imports is the program's.
+INSIDE_THE_PROGRAM = {"cad.freecad._job": {"FreeCAD", "Part", "Path"}}
 # The library's packages that are neither an integration nor a document type: the engine and the internals.
 INFRASTRUCTURE = {"engine", "_internal"}
 # Its top-level modules: the registry, the shared result types, and @eng_drawing (open: a future pdf type).
@@ -207,7 +209,7 @@ class IntegrationsTest(unittest.TestCase):
             for name, path in library.items():
                 if of(f"cad.{integration.name}", name):
                     with self.subTest(module=name):
-                        self.assertEqual(set(), third_party(path, name) - allowed)
+                        self.assertEqual(set(), third_party(path, name) - allowed - INSIDE_THE_PROGRAM.get(name, set()))
 
     def test_each_document_type_imports_no_third_party_library(self) -> None:
         from cad.registry import DOCUMENT_TYPES

@@ -84,6 +84,12 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
         for integration in registry.INTEGRATIONS.values():
             self.assertTrue(set(integration.alongside) <= set(registry.INTEGRATIONS) - {integration.name})
+        # A CAM job needs the kernel in the caller's process; FreeCAD, a program, has no extra and no namespace of
+        # cad run's.
+        self.assertEqual("build123d", integrations.for_name("cad.step.plan"))
+        self.assertEqual("build123d", registry.DOCUMENT_TYPES["xbf"].operation("plan").integration)
+        self.assertNotIn("freecad", integrations.INTEGRATIONS)
+        self.assertEqual("CAD_FREECAD", registry.INTEGRATIONS["freecad"].probe.override)
         self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
         self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 

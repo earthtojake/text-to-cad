@@ -10,7 +10,8 @@ step`` is one object that is
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
   (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
-  the stress study, ``cad._internal.fea.operation``; a board's ``.drc``, a
+  the stress study, ``cad._internal.fea.operation``, and its ``.plan``, the CAM job, ``cad._internal.cam.operation``;
+  a board's ``.drc``, a
   schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
   the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
@@ -70,6 +71,13 @@ class DocumentType(types.ModuleType):
             return value
         if name in ("export", "snapshot", "inspect") and name in entry.operation_names:
             value = _operation(self, name)
+            self.__dict__[name] = value
+            return value
+        if name == "plan" and entry.operation("plan") is not None:
+            # The CAM job every B-rep type shares (``cad._internal.cam.operation``).
+            from cad._internal.cam.operation import plan_for
+
+            value = plan_for(entry.id)
             self.__dict__[name] = value
             return value
         if name == "dfm" and (entry.operation("dfm") or _NONE).integration == "trimesh":

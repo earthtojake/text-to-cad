@@ -121,6 +121,13 @@ export const features = [
     file: "bracket.pdf",
   },
   {
+    id: "cam",
+    name: "CAM",
+    path: "skills/cam/SKILL.md",
+    summary: "3-axis milling and drilling toolpaths and G-code, planned with FreeCAD and checked against the part.",
+    file: "bracket.top.nc",
+  },
+  {
     id: "fabrication",
     name: "Fabrication services",
     path: "skills/sendcutsend/SKILL.md",

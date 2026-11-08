@@ -8,7 +8,7 @@ The root holds ``__version__``, ``CadDeprecationWarning`` and the document types
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
 has one (``step.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
-``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
+``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.plan``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
@@ -55,7 +55,7 @@ del _install_font_guard
 _TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad", "trimesh", "netgen", "calculix")
+_INTEGRATIONS = ("build123d", "kicad", "trimesh", "netgen", "calculix", "freecad")
 
 __all__ = [
     "__version__",

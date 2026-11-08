@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`), never for a capability. It is three
+(`build123d`, `kicad`, `trimesh`, `netgen`, `calculix`, `freecad`), never for a capability. It is three
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
@@ -22,7 +22,8 @@ so in the registry (`alongside`), and its environment holds them all (a B-rep ty
 document with the kernel, meshes it with netgen and solves it with CalculiX: the environment of
 `cad[build123d,calculix,netgen]`). An external program that ships as a Python package (KiCad's `kicad-cli`, in
 kicode; CalculiX's `ccx`, in the cad-ccx package) is its integration's extra and installs the same way; any other is
-the person's to install, found by its probe: an integration with no extra and a probe alone. When a program
+the person's to install, found by its probe: an integration with no extra and a probe alone (`freecad`, FreeCAD's
+`freecadcmd`, which ships no package cad can install). When a program
 ships no package, packaging it, its own binary unmodified in a wheel per platform with a launcher that names
 where it is, is usually better than asking a person to install it (`earthtojake/ccx` is that for CalculiX). `cad doctor` says, for each integration with an extra but build123d (the
 kernel's own line), whether this installation carries it or where its environment is and whether it is

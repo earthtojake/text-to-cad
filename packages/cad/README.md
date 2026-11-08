@@ -56,7 +56,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `netgen`, `calculix`),
+  `kicad`, `trimesh`, `netgen`, `calculix`, `freecad`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -70,7 +70,7 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `plan` (a B-rep type's toolpaths and G-code), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -84,7 +84,9 @@ launcher for the engine’s one page, every document at `/<id>`, every file read
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
 trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
-and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
+and solved by CalculiX's ccx, its results a folder of standard files); a B-rep document's toolpaths and
+G-code (`cad.<type>.plan(source, job=..., out=...)`, planned by the person's FreeCAD); and engineering drawings
+(`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -412,7 +414,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `solve`, `plan`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -492,12 +494,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `plan` a B-rep type's toolpaths and G-code, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `solve`, `plan`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -602,7 +604,7 @@ src/cad/
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
-                         #   B-rep type's solve: model's, xbf's and step's)
+                         #   B-rep type's solve and plan: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -637,7 +639,10 @@ src/cad/
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
                          #   headless (_program, on _internal/programs; `cad run ccx`, _command),
                          #   its input and printed output (_files)
-  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
+  freecad/               # the freecad integration, a program the person installs: freecadcmd
+                         #   found, checked and run headless (_program, on _internal/programs),
+                         #   and the script it runs to plan and post a setup (_job)
+  results.py             # the operations' shared result types: what a check (dfm, solve, plan, drc, erc,
                          #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
@@ -654,9 +659,12 @@ src/cad/
                          #   at interpreter start), the font guard (font_scan; check_fonts, the
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
-                         #   the checks' door, the version, and the stress study a B-rep type
+                         #   the checks' door, the version, the stress study a B-rep type
                          #   runs (fea: its signature and options in operation, stdlib only; the
-                         #   study file, the mesh, the solve, the checks and the files it writes)
+                         #   study file, the mesh, the solve, the checks and the files it writes),
+                         #   and the CAM job a B-rep type runs (cam: its signature and options in
+                         #   operation, stdlib only; the job file, the checks, the plan and its
+                         #   results folder)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
@@ -801,3 +809,45 @@ kernel and netgen `alongside`, so the `cad` command runs a study where all three
 when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
 script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
 without one says so in one line.
+
+## CAM
+
+A B-rep document's `plan` is a 3-axis milling and drilling job: `cad.model.plan`, `cad.xbf.plan` and
+`cad.step.plan`, one to one with `cad model plan`, `cad xbf plan` and `cad step plan` (a mesh has no faces a
+job can name, so the mesh types have none). It is a check (law 28): its answer is a `cad.results.CamResult`, a
+`CheckResult` whose findings carry a severity, a code and a location, with two uses of one signature:
+
+```python
+from cad import step
+
+part = step.plan("bracket.step")                            # writes nothing
+part.faces, part.holes, part.floors                         # what a job names, by ref
+result = step.plan("bracket.step", job="bracket.cam.json", out="CAM")
+result.ok, result.findings, result.measurements["verdict"], result.written
+```
+
+With no job it is what a job can name: the part's faces, holes and floors, each with the engine's ref
+(`block/face 15`, the one the CAD Viewer copies), and its box. With a job (a JSON file, inline JSON or a
+dict) and `out`, a folder, the plan, which writes its results there, each file standing on its own:
+`result.json` (the result, as `--json` prints it), `result.glb` (the part, the stock and the toolpaths, an
+ordinary GLB any viewer opens) and, when nothing is an error, the G-code for each setup. They are staged in a
+folder inside `out` and moved into place once all are written, so a failed run leaves the previous results as
+they were, and the G-code of an earlier plan this one does not write is removed, so a folder never mixes two
+plans. An option of the other use is refused by name before anything is read, and a key or value a job cannot
+take is refused with the ones it can. It reads the part from its file (`step.read`, `xbf.read`); a model, which
+the engine holds with no file, is written to an `.xbf` in a temporary folder first and named by its document
+id. It resolves a job's face refs in that file by the engine's grammar (`engine.refs`), so a ref `cad <type>
+inspect` answers names the same face. Its `ok` is every check's rule, an error blocks: a plan with errors is a
+correct result of a job unfit to run, so its `result.json` and `result.glb` are written, with no G-code, and the
+command exits 1, as is a job that could not run at all (an unknown key, a missing face, no FreeCAD), which
+writes nothing.
+
+The kernel reads the part's exact faces, so the operation's integration is `build123d`, and the `cad` command
+runs it where the kernel is: its own process when its environment holds it, else the installation's base
+(law 29). The planner is `freecad`, a program with no extra: FreeCAD's `freecadcmd`, 1.1 or newer, which the
+person installs, found by its probe: `CAD_FREECAD` names it, else `freecadcmd` on PATH, else FreeCAD's
+installers' folders. A missing or older one is an error saying how to install it; cad downloads no FreeCAD
+and plans with nothing else. It runs headless, in a process of its own, in a private folder with homes of its
+own, so a plan leaves nothing in the person's FreeCAD settings, and the result names the FreeCAD version that
+ran. `src/cad/freecad/` runs it, and `src/cad/_internal/cam/` checks what it plans against the part, reads
+back what FreeCAD holds and what its post wrote against what it set, and posts nothing a check refuses.
