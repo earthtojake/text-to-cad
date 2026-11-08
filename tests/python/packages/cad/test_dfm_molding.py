@@ -159,6 +159,51 @@ class UndercutTest(unittest.TestCase):
         self.assertEqual((item["release"], item["kind"]), ("none", "internal"))
         self.assertIn(("error", "molding.undercut_unreleasable"), {(f.severity, f.code) for f in result.findings})
 
+    def test_a_ray_the_kernel_cannot_intersect_is_counted_not_fatal(self) -> None:
+        """OCCT's exact intersector raised ``Standard_Failure`` on one face of a real part (a degenerate patch),
+        which lost the whole undercuts family and then the summary (a ``KeyError``): the crossing is now not
+        found, counted and said, and every family measured."""
+        from unittest import mock
+
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector as Real
+        from OCP.Standard import Standard_Failure
+
+        made: list[Any] = []
+
+        class Failing:
+            def __init__(self, face: Any, tolerance: float) -> None:
+                self.inner, self.fails = Real(face, tolerance), not made
+                made.append(self)
+
+            def Perform(self, *args: Any) -> None:  # noqa: N802 - the kernel's name
+                if self.fails:
+                    raise Standard_Failure("")
+                self.inner.Perform(*args)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self.inner, name)
+
+        part = _tray() - bd.Pos(30, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 12)
+        with mock.patch("OCP.IntCurvesFace.IntCurvesFace_Intersector", Failing):
+            result = _check(part)
+        undercuts = result.measurements["undercuts"]
+        self.assertGreater(undercuts["unintersected_rays"], 0)
+        self.assertEqual(result.measurements["partial_sections"], [])
+        self.assertIn("rays_unintersected", {f.code for f in result.findings})
+        self.assertIn("undercut candidates", result.summary)
+
+    def test_a_family_not_measured_fails_the_check_and_never_raises(self) -> None:
+        from unittest import mock
+
+        from cad.build123d import _dfm_molding
+
+        with mock.patch.object(_dfm_molding, "_undercut_part", side_effect=RuntimeError("no rays")):
+            result = _check(_tray())
+        self.assertFalse(result.ok)
+        failed = [f for f in result.findings if f.code == "measurement_failed"]
+        self.assertEqual([f.location for f in failed], ["undercuts"])
+        self.assertIn("undercut candidates - mm2", result.summary)
+
     def test_a_drafted_tray_pulls_clean(self) -> None:
         result = _check(_tray())
         undercuts = result.measurements["undercuts"]

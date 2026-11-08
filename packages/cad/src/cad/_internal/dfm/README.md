@@ -536,9 +536,11 @@ their fillets, ribs and bosses unrecognised.
 
 Kept from today's report: `draft` scalars (`wall_area_mm2`, `zero_draft_wall_area_mm2`, `largest_zero_draft_faces`,
 `min_wall_draft`, `wall_draft_histogram_mm2`, `wall_area_by_opening_mm2`, ...), `undercuts` scalars
-(`candidate_area_mm2`, `largest_candidate_faces`, `probe_resolution_note` on a mesh), `projection`, `scale`,
-`mesh` (meshes). Fact findings: `zero_draft_walls`, `undercut_candidates` (now with feature counts),
-`coarse_curved_face` (info), `probe_resolution`, `several_bodies` (also for a multi-part document, and a
+(`candidate_area_mm2`, `largest_candidate_faces`, `probe_resolution_note` on a mesh; `unintersected_rays` and
+its note where the kernel failed to intersect a ray with a face -- that crossing is not found, the family is
+measured all the same), `projection`, `scale`, `mesh` (meshes). Fact findings: `zero_draft_walls`,
+`undercut_candidates` (now with feature counts), `coarse_curved_face` (info), `probe_resolution`,
+`rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (also for a multi-part document, and a
 warning for a part of several solids: they shadow each other), `zero_draft_walls` and `undercut_candidates`
 (their hints: when half the wall area or more reads zero draft, or a quarter of the surface or more is
 trapped -- an engineering trigger, no source's -- the pull may be the wrong one; on one part of one solid the

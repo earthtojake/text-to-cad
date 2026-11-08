@@ -405,6 +405,10 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
              + "confirm the pull before budgeting side actions") if trapped_doubt else None))
     if undercuts.get("probe_resolution_note"):
         found.append(CheckFinding("info", "probe_resolution", undercuts["probe_resolution_note"], "undercuts"))
+    if undercuts.get("unintersected_note"):
+        found.append(CheckFinding("warning", "rays_unintersected", undercuts["unintersected_note"], "undercuts",
+                                  "read the undercut figures as a lower bound near the faces the kernel could not "
+                                  "intersect"))
     parting = report.get("parting") or {}
     if parting.get("flat_parting_possible") is False:
         off = [item for item in parting.get("items") or [] if not item.get("on_plane")]
@@ -436,9 +440,14 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     return found
 
 
+def _ok(family: Any) -> dict[str, Any]:
+    """A family as it was measured, or nothing for one that could not be."""
+    return family if isinstance(family, dict) and "error" not in family else {}
+
+
 def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> str:
     if candidates:
-        rows = ranked(report["pulls"]["candidates"])
+        rows = ranked(_ok(report.get("pulls")).get("candidates") or [])
         return "pulls best first (undercuts, side actions, zero-draft area, then draft and parting): " + "; ".join(
             f"{row['pull']} {mm(row['undercut_candidate_area_mm2'])} mm2 undercut"
             + (f" ({row.get('undercut_count')} feature(s), {row.get('side_action_count')} side action(s))"
@@ -446,12 +455,15 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
             + f", {mm(row['zero_draft_wall_area_mm2'])} mm2 zero-draft, min draft {mm(row['min_wall_draft_deg'])} deg"
             + ("" if row.get("flat_parting") is not False else ", stepped parting")
             for row in rows)
-    draft, undercuts, projection = report["draft"], report["undercuts"], report["projection"]
+    # A family that could not be measured says "-" here; its own finding says why (``measurement_failed``).
+    draft, undercuts, projection = (_ok(report.get(name)) for name in ("draft", "undercuts", "projection"))
     least = (draft.get("min_wall_draft") or {}).get("draft_deg")
-    line = (f"along {','.join(f'{value:g}' for value in draft['pull_axis'])}: walls "
-            f"{mm(draft['wall_area_mm2'])} mm2, zero-draft {mm(draft['zero_draft_wall_area_mm2'])} mm2, min "
-            f"wall draft {mm(least)} deg, undercut candidates {mm(undercuts['candidate_area_mm2'])} mm2, "
-            f"projected {mm(projection['projected_area_mm2'])} mm2, depth {mm(projection['depth_along_pull_mm'])} mm")
+    axis = draft.get("pull_axis") or undercuts.get("pull_axis")
+    line = (f"along {','.join(f'{value:g}' for value in axis) if axis else resolved.get('pull')}: walls "
+            f"{mm(draft.get('wall_area_mm2'))} mm2, zero-draft {mm(draft.get('zero_draft_wall_area_mm2'))} mm2, min "
+            f"wall draft {mm(least)} deg, undercut candidates {mm(undercuts.get('candidate_area_mm2'))} mm2, "
+            f"projected {mm(projection.get('projected_area_mm2'))} mm2, depth "
+            f"{mm(projection.get('depth_along_pull_mm'))} mm")
     thickness = report.get("thickness") or {}
     if thickness.get("nominal_mm") is not None:
         line += f", nominal wall {mm(thickness['nominal_mm'])} mm"

@@ -183,6 +183,8 @@ class _Geometry:
     _rays: Any = None
     _mesh: Any = None
     _intersectors: dict[int, Any] | None = None
+    # Exact intersections of a ray and a face the kernel failed on (``cast_faces``): each a crossing not found.
+    unintersected: int = 0
     _links: dict[int, list[tuple[int, Any]]] | None = None
     _grids: dict | None = None
     _by_face: Any = None
@@ -324,6 +326,7 @@ class _Geometry:
         nearer crossing can follow."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
         from OCP.IntCurvesFace import IntCurvesFace_Intersector
+        from OCP.Standard import Standard_Failure
 
         o_all = np.asarray(origins, dtype=float).reshape(-1, 3)
         d_all = np.asarray(directions, dtype=float).reshape(-1, 3)
@@ -404,7 +407,14 @@ class _Geometry:
                     if intersector is None:
                         intersector = self._intersectors[candidate] = IntCurvesFace_Intersector(
                             rays.faces[candidate], 1e-7)
-                    intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
+                    try:
+                        intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
+                    except Standard_Failure:
+                        # The kernel cannot intersect this ray with this face (a degenerate patch of a
+                        # surface): that one crossing is not found, counted, and the ray goes on to the
+                        # next face, as for an intersection the kernel says it did not finish.
+                        self.unintersected += 1
+                        continue
                     if not intersector.IsDone():
                         continue
                     for hit in range(1, intersector.NbPnt() + 1):
@@ -796,6 +806,12 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "unsearched_count": releases.count("unknown"),
         "items": items[:_ITEMS],
     }
+    missed = sum(geo.unintersected for geo in geos)
+    if missed:
+        # Said, never hidden: a crossing not found may be a blocker missed, so the trapped area may be low.
+        result["unintersected_rays"] = missed
+        result["unintersected_note"] = (f"the kernel failed to intersect {missed} ray(s) with a face; each such "
+                                        "crossing was not found, so a blocker may be missed there")
     if len(geos) > 1:
         result["note"] = "several parts: each is tested against itself, none shadows another"
     return result
