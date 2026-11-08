@@ -70,7 +70,8 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
+  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -85,7 +86,8 @@ HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, S
 installed); a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
 trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
-and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
+and solved by CalculiX's ccx, its results a folder of standard files); a mechanism's joint stops found from its
+geometry (`cad.<type>.ranges(source)`, each joint swept against its parts); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -413,7 +415,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `solve`, `ranges`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -493,12 +495,13 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `ranges` a
+    mechanism's joint stops, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `solve`, `ranges`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -603,7 +606,7 @@ src/cad/
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
-                         #   B-rep type's solve: model's, xbf's and step's)
+                         #   B-rep type's solve and ranges: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   mjcf/                  # a MuJoCo model (MJCF XML): its reader (_source.py, the standard
@@ -652,6 +655,8 @@ src/cad/
                          #   signature and options, the trimesh integration's measuring imported
                          #   when it runs (manufacturing), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
+                         #   the joint stops a type with a mechanism runs (ranges: its signature
+                         #   and options, stdlib only; the sweep is engine/ranges.py),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
                          #   runner `cad run` starts a program by (program: the program's
@@ -808,3 +813,19 @@ kernel and netgen `alongside`, so the `cad` command runs a study where all three
 when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
 script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
 without one says so in one line.
+
+## Joint stops
+
+A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.model.ranges`,
+`cad.xbf.ranges` and `cad.step.ranges`, one to one with `cad model|xbf|step ranges`. It is a check (law
+28): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says where it stops each way and
+which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
+calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
+first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
+(`engine.ranges`: sampled points on a grid of the clearance, the other joints as built): its stop is where
+its child link meets its parent link, and a clash with any other link before it is said beside. It writes
+nothing and changes nothing: a model is code, and its ranges are written in it (law 23). Its options
+describe the sweep, never the model (law 22): `step` (degrees or millimetres), `clearance` (millimetres)
+and `geometry` (`parts`, each part's own surface; `collision`, what each declares a simulator collides it
+as). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
+process when its environment holds it, else the installation's base (law 29).

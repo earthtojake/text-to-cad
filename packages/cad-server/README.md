@@ -91,7 +91,7 @@ library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf 
 the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
 `snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
 file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
-`dfm`, `solve`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
+`dfm`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
 `--json`); `cad <type>
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
@@ -113,6 +113,10 @@ meshed by the `netgen` integration and solved by the `calculix` integration's cc
 process where its environment holds the kernel, netgen and ccx, else in the environment of
 `cad[build123d,calculix,netgen]` the engine makes once. `cad run ccx ARGS` runs the same ccx on a deck of the
 person's own.
+`cad model|xbf|step ranges SRC [--step S] [--clearance MM] [--geometry parts|collision]` sweeps each joint of the
+document's mechanism alone against its parts and says where each stops and which parts meet, writing nothing (the
+library's `cad.<type>.ranges`), run in this process where its environment holds the kernel, else in the
+installation's base.
 A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf dfm SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs

@@ -11,9 +11,9 @@ objects, producers and operations), and a process kind. A **producer** is code t
 type from some input; many integrations may produce one type, each stating which parts of the type's
 content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
-``dfm`` a 3D type's manufacturing check, ``solve`` a B-rep type's stress study,
-``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
-description's conformance check.
+``dfm`` a 3D type's manufacturing check, ``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint
+stops found from its geometry, ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check,
+``validate`` a robot description's conformance check.
 
 ``model`` is the one type with no file: a model built from code and held in the engine's memory,
 addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
@@ -41,7 +41,7 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIE
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "drc", "erc", "validate")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "solve", "ranges", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -221,6 +221,12 @@ _SOLVE = Operation("solve", "a linear static stress study of a part or a bonded 
                             "failing it; with no --study, the parts, the pairs that touch and a part's faces a study "
                             "names", "calculix")
 
+# The joint stops a document with a mechanism shares (``cad._internal.ranges``): each joint swept alone against its
+# parts' surfaces, read and meshed by the kernel. A mesh holds no mechanism, so it has none.
+_RANGES = Operation("ranges", "each joint's stops found from the geometry: the joint turned or slid alone, a step at a "
+                              "time each way, until its parts meet another part; the stops and which parts meet, "
+                              "nothing written", _KERNEL)
+
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
 
@@ -229,17 +235,17 @@ _TYPES = (
         "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
                           "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE, _RANGES), decorator=True),
     DocumentTypeEntry(
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE), decorator=True, reader=True,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM, _SOLVE, _RANGES), decorator=True, reader=True,
         reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),

@@ -52,6 +52,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
     **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
+    # The joint stops of a document with a mechanism: the kernel's, one signature for every B-rep type.
+    **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).

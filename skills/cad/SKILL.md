@@ -24,6 +24,7 @@ the page the person has open updates. Files are exports, made when asked.
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.build123d`. | [Kinematics](references/kinematics.md) |
+| **Find how far each joint can move** | `cad model ranges <id>`, then the ranges in the body. | [Joint stops](#joint-stops) |
 | **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the shop's rules. | [Can it be made?](#can-it-be-made) |
@@ -293,6 +294,37 @@ touched or hide what covers them, instead of drawing the whole model.
 - A check that fails or cannot decide has shown nothing about the design.
 - A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius reduced) builds a
   different design from the one asked for.
+
+### Joint stops
+
+`cad <type> ranges` (`model`, `xbf`, `step`) finds each joint's stops from the parts themselves:
+it turns or slides each joint alone from the as-built pose, the others as built, a degree or a
+millimetre at a time each way, until the parts meet.
+
+```bash
+cad model ranges "$ID"
+cad step ranges arm.step --step 0.5 --json
+```
+
+- **The stop** each way is where the joint's child link meets its parent link (each with the links
+  fixed to it), whatever the other joints do. The finding also names the two parts that meet.
+- **A clash**, said beside a stop, is anything the joint moves meeting another link first in this
+  pose of the other joints: a self-collision of the pose, not the joint's range.
+- **Units and zero.** Stops are in degrees or millimetres around the as-built pose, and in the
+  joint's own values where its as-built value is not zero. Write them into the joint's
+  `angular_range` or `linear_range` in the body, rounded towards zero, and run the model again.
+  The command writes nothing.
+- **What touches.** Two surfaces within `--clearance` (1 mm) count as touching. Parts already
+  touching as built (a horn on its servo) meet only when their contact grows.
+- **What is tested.** `--geometry parts` (the default) tests each part's own surface; `collision`
+  tests what each part declares a simulator collides it as. A part declared
+  `collision(part, "none")` (a fastener in its hole, a servo's internals) is left out either way.
+- **Not swept.** A turn is swept a full turn each way, a slide the document's extent. A cylindrical
+  or spherical joint is not swept, and its warning says so. A document with no joint fails with
+  `no_joints`.
+
+`--json` carries every number in `measurements.joints`: `lower`, `upper`, `range` (the joint's own
+values), the `*_contact` and `*_clash` parts, and the pairs touching as built (`resting`).
 
 ### Check scripts
 
