@@ -1074,17 +1074,18 @@ class CadApp:
     def open_in(self, ident) -> dict:
         """``GET /api/v1/local/open-in?id=<id>``: the document's files (``_open_targets``), each with
         its ``name``, whether it is there now (``present``) and the apps this computer has that take
-        its kind (``apps``, as last found: never looked for on a request), whether the operating system's
-        own handler may not open it (``default: false``: a KiCad file's, ``apps.NEVER_OPENED``), and the
-        desktop's file manager (``fileManager``)."""
+        its kind (``apps``, as last found: never looked for on a request; a KiCad that cannot read the
+        file listed with ``refuses: "newer"``), whether the operating system's own handler may not open it
+        (``default: false``: a KiCad file's, ``apps.NEVER_OPENED``), and the desktop's file manager
+        (``fileManager``)."""
         from cad_server._internal.apps import DETECTED, apps_for, file_manager, opens
 
         found = DETECTED.found()
         return {"targets": [{"target": target["target"], "kind": target["kind"],
                              "name": node_basename(target["path"]) if target["path"] else "",
                              "present": _is_file(target["path"]),
-                             **({"apps": apps_for(target["kind"], found)} if opens(target["path"])
-                                else {"apps": [], "default": False})}
+                             "apps": apps_for(target["kind"], found, target["path"]),
+                             **({} if opens(target["path"]) else {"default": False})}
                             for target in self._open_targets(ident)],
                 "fileManager": file_manager()}
 
@@ -1092,7 +1093,8 @@ class CadApp:
         """``POST /api/v1/local/open`` with ``{"id", "target", "app"}``: one of the document's files
         (``_open_targets``) in an app found for its kind, or the operating system's own handler
         (``"default"``), started detached (``apps.open_file``). 404 for a document or a file not there,
-        400 for a target the document does not have or an app not found for that file."""
+        400 for a target the document does not have, an app not found for that file, a KiCad that cannot
+        read it, or the default handler of a file it may not open (``apps.opens``)."""
         from cad_server._internal import apps
 
         self._limit(request, 8192)
@@ -1105,16 +1107,23 @@ class CadApp:
         if chosen is None:
             raise ApiError(400, f"the document has no target {payload['target']!r}",
                            f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
-        if not apps.opens(chosen["path"]):
-            raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in an app from here",
-                           "reveal it in the file manager and open it there")
+        takes_default = apps.opens(chosen["path"])
         app = None
-        if payload["app"] != "default":
+        if payload["app"] == "default":
+            if not takes_default:
+                raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in its default app from here",
+                               "open it in a KiCad Open in lists for it, or reveal it in the file manager and open it there")
+        else:
             found = apps.DETECTED.found()
-            if payload["app"] not in apps.KINDS.get(chosen["kind"], ()) or payload["app"] not in found:
-                offered = [entry["id"] for entry in apps.apps_for(chosen["kind"], found)]
+            listed = apps.apps_for(chosen["kind"], found, chosen["path"])
+            entry = next((item for item in listed if item["id"] == payload["app"]), None)
+            if entry is None:
+                offered = [item["id"] for item in listed if "refuses" not in item] + (["default"] if takes_default else [])
                 raise ApiError(400, f"{payload['app']!r} is not an app found here for {chosen['kind']} files",
-                               f"name one of {', '.join([*offered, 'default'])}")
+                               f"name one of {', '.join(offered)}" if offered else "reveal it in the file manager and open it there")
+            if "refuses" in entry:
+                raise ApiError(400, f"{entry['name']} cannot open {node_basename(chosen['path'])}: a newer KiCad saved it",
+                               "open it in a KiCad as new as the one that saved it")
             app = found[payload["app"]]
         # The catalog keeps a file's path `/`-separated; an app is handed this system's own spelling
         # (backslashes on Windows, where some apps refuse the other).

@@ -14,10 +14,12 @@ apps. Every run is at a terminal that would answer no, and asks it nothing.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import io
 import json
 import os
+import platform
 import re
 import shutil
 import stat
@@ -40,6 +42,8 @@ from cad_server._internal.launch import LAUNCHER  # noqa: E402
 from cad_server.cli import setup, stop, telemetry, uninstall  # noqa: E402
 
 RELEASE = cad_server.__version__
+# ``setUp`` stands these in for most tests: the one that tells a new person takes the real ones.
+NOTIFY, DESCRIBE = analytics.notify, telemetry.describe
 PORT = 3245
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 INSTALL_SH = REPO_ROOT / "scripts" / "install" / "install.sh"
@@ -64,7 +68,8 @@ def command(folder: Path, name: str, body: str) -> Path:
     return launcher
 
 
-# Claude Code with a development install of the plugin, and nothing else, for a plan to show.
+# Claude Code with a development install of the plugin, and nothing else, for a plan to show: the record it keeps
+# (``claude_with_a_development_install``), and its listing, which a real run asks.
 CLAUDE = """
 if args == ["plugin", "list", "--json"]:
     print(json.dumps([{"id": "text-to-cad@earthtojake-dev", "version": "0.0.1-dev.1", "scope": "user"}]))
@@ -72,6 +77,13 @@ elif args == ["plugin", "marketplace", "list", "--json"]:
     print("[]")
 else:
     sys.exit(9)
+"""
+
+# An app's command that writes in the home as it starts, as every one of them does: run for any reason, it shows.
+WRITES = """
+import os, pathlib
+wrote = pathlib.Path(os.environ["HOME"]) / ".written-by-a-command" / args[0]
+wrote.mkdir(parents=True, exist_ok=True)
 """
 
 # Claude Code with nothing installed, whose every other command succeeds: the plugin folder it is
@@ -160,7 +172,7 @@ class Fixture(unittest.TestCase):
         self.addCleanup(port.stop)
         os.environ.pop("CAD_ENGINE_PORT", None)
         for patch in (mock.patch.object(providers.Machine, "here", return_value=self.machine),
-                      mock.patch.object(setup, "engine_on", side_effect=lambda port: self.serving),
+                      mock.patch.object(setup, "running_engine", side_effect=lambda: self.serving),
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
                       mock.patch.object(setup, "stop_earlier", return_value=(True, [], "")),
                       mock.patch.object(switch, "handover", return_value=None),
@@ -284,8 +296,42 @@ class TheCommand(Fixture):
         self.assertIn(f"cad update: text-to-cad {RELEASE} is the newest release", err)
         self.assertFalse((self.state / updates.FILE).exists(), "a dry run keeps nothing")
 
-    def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
+    def claude_with_a_development_install(self) -> None:
         command(self.bin, "claude", CLAUDE)
+        records = providers.claude_dir(self.machine) / "plugins" / "installed_plugins.json"
+        records.parent.mkdir(parents=True)
+        records.write_text(json.dumps({"version": 2, "plugins": {"text-to-cad@earthtojake-dev": [
+            {"version": "0.0.1-dev.1", "scope": "user"}]}}), encoding="utf-8")
+
+    def home_files(self) -> dict[str, str]:
+        """Every path under the home, with what it holds: a dry run changes none."""
+        return {str(path): path.read_text(encoding="utf-8", errors="replace") if path.is_file() else "folder"
+                for path in sorted(self.home.rglob("*"))}
+
+    def test_a_dry_run_or_a_plan_that_leaves_an_app_runs_no_app_s_command_and_writes_nothing_in_the_home(self) -> None:
+        """Checking what an app has runs no command of it: each writes its own files as it starts (``WRITES``),
+        and would create its folder in a home where there was none."""
+        for name in ("claude", "codex", "gemini", "grok", "cursor-agent", "npx"):
+            command(self.bin, name, WRITES)
+        (self.home / ".codeium" / "windsurf").mkdir(parents=True)  # for npx
+        before = self.home_files()
+        code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.home_files(), before)
+        self.assertFalse((self.bin / "calls.jsonl").exists(), "no command ran")
+        self.assertRegex(out, r"Claude Code +install")
+        self.assertRegex(out, r"Codex +install")
+        self.assertRegex(out, r"Gemini CLI +install")
+        self.assertRegex(out, r"Grok Build +leave +served by the Claude Code plugin")
+        self.assertRegex(out, r"Windsurf +install")
+        # A real run: Grok Build's "leave" runs no command of it, and Codex is asked no version it has no use for.
+        self.run_setup()
+        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual({call[0] for call in calls}, {"claude", "codex", "gemini", "npx"})
+        self.assertNotIn(["codex", "--version"], calls)
+
+    def test_a_dry_run_prints_the_plan_and_writes_nothing(self) -> None:
+        self.claude_with_a_development_install()
         self.desktop_with({"other": {"command": "node", "args": ["server.js"]}})
         (self.home / ".cursor").mkdir()
         earlier = self.earlier_installation()
@@ -304,15 +350,68 @@ class TheCommand(Fixture):
         self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
         self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
-        self.assertIn(["0.8", "stop", f"text-to-cad 0.8.4's server, if it runs: "
+        self.assertIn(["0.8", "stop", f"cadgen 0.8.4's server, if it runs: "
                                       f"`{providers.shown(earlier['cadgen'], self.machine)} stop`"], rows)
         self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
         self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
         self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
-        calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
+        self.assertFalse((self.bin / "calls.jsonl").exists(), "no app's command runs for a dry run")
         setup.stop_earlier.assert_not_called()
+
+    def test_a_new_person_s_install_says_what_is_sent_once_and_sends_nothing_to_say_it(self) -> None:
+        """The telemetry notice on a fresh install: no choice made, nothing in the environment against it. The
+        notice is the run's report, once, kept as said; the next run says the setting instead. Under ``--json``,
+        which tells no person, it waits. The send is stubbed: nothing here reaches the receiver."""
+        quiet = {key: value for key, value in os.environ.items()
+                 if key not in ("DO_NOT_TRACK", "CAD_TELEMETRY", "CADGEN_TELEMETRY", "CI", analytics.NOTICE_ENV)}
+        with mock.patch.dict(os.environ, quiet, clear=True), mock.patch.object(analytics, "notify", NOTIFY), \
+                mock.patch.object(telemetry, "describe", DESCRIBE), mock.patch.object(analytics, "_here", return_value=True), \
+                mock.patch.object(analytics, "_post", side_effect=AssertionError("sent")) as post:
+            notice = analytics.notice_text()
+            code, out, _err = self.run_setup("--json")
+            self.assertEqual(code, 0, out)
+            self.assertRegex(json.loads(out)["verified"]["telemetry"], r"^off: not until a cad command says so")
+            self.assertNotIn(notice, out + _err)
+            settings = self.state / "settings.json"
+            self.assertNotIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8")).get("telemetry", {}))
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            self.assertEqual(out.count(notice), 1, out)
+            self.assertNotIn("telemetry on:", out)
+            self.assertIn("notifiedAt", json.loads(settings.read_text(encoding="utf-8"))["telemetry"])
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 0, out)
+            self.assertNotIn(notice, out)
+            self.assertRegex(out, r"telemetry on: by default, since text-to-cad said so on \d{4}-\d\d-\d\d; turn it off with "
+                                  r"`cad telemetry off`")
+        post.assert_not_called()
+
+    def test_a_dry_run_from_uvx_names_the_kernel_folder_the_real_run_uses(self) -> None:
+        """The install command runs ``cad setup`` from uvx's environment: a real run moves to its release's
+        folder first, and the base is keyed by that folder; a dry run stays, and says the same folder."""
+        from cad_server._internal import base
+
+        home = releases.where(RELEASE)
+        uvx = dataclasses.replace(base.Installation.here(), prefix=str(self.root / "uvx-env"), python="3.14.6",
+                                  kernel=False)
+        kernel = re.compile(r"build123d +leave +.+, made on first need in (.+)\n")
+
+        def said() -> Path:
+            with mock.patch.object(base.Installation, "here", return_value=uvx), \
+                    mock.patch.object(setup.Installer, "_home", return_value=home):
+                code, out, _err = self.run_setup("--dry-run")
+            self.assertEqual(code, 0, out)
+            return Path(str(kernel.search(out).group(1)).replace("~", str(self.home), 1))
+
+        self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home))))
+        self.assertNotEqual(said(), base.where(uvx), "not the folder of the environment it runs from")
+        # A release folder made earlier runs the Python it runs, asked of it.
+        with mock.patch.object(releases, "python_version", return_value="3.14.2"):
+            self.assertEqual(said(), base.where(dataclasses.replace(uvx, prefix=str(home), python="3.14.2")))
+        with mock.patch.object(base, "interpreter", return_value=Path(sys.executable)):
+            self.assertEqual(releases.python_version(home), platform.python_version())
+        self.assertIsNone(releases.python_version(self.root / "none"), "no Python there")
 
     def test_a_first_install_inside_a_windows_app_package_installs_nothing_and_says_where_to_run_it(self) -> None:
         """An MSIX app's shell (the Claude desktop app's) has what it writes under AppData -- uv's Python, on a
@@ -350,7 +449,7 @@ class TheCommand(Fixture):
         with mock.patch.object(installations, "appdata", return_value=[record]):
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"\n  0\.10 +stop +text-to-cad 0\.10\.0's server, if it runs: "
+            self.assertRegex(out, rf"\n  0\.10 +stop +cad-server 0\.10\.0's server, if it runs: "
                                   rf"`{re.escape(providers.shown(record['cad'], self.machine))} stop`\n")
             setup.stop_earlier.return_value = (True, ["C:/Temp/cad-engine/engine.port"], "")
             with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
@@ -358,7 +457,7 @@ class TheCommand(Fixture):
         self.assertEqual(code, 0, out)
         (call,) = setup.stop_earlier.call_args_list
         self.assertEqual(call.args[0]["cad"], record["cad"])
-        self.assertIn("0.10     stopped text-to-cad 0.10.0's server (its own `cad stop`)", out)
+        self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
@@ -395,10 +494,10 @@ class InstallUpdateAndUninstall(Fixture):
         (call,) = setup.stop_earlier.call_args_list
         self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
         console = re.escape(providers.shown(earlier["cadgen"], self.machine))
-        self.assertRegex(out, rf"\n  0\.8 +stop +text-to-cad 0\.8\.4's server, if it runs: `{console} stop`\n")
+        self.assertRegex(out, rf"\n  0\.8 +stop +cadgen 0\.8\.4's server, if it runs: `{console} stop`\n")
         self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if the stop above does "
                       "not free it, the engine serves on the next free port, and says so", out)
-        self.assertIn("0.8      stopped text-to-cad 0.8.4's server (its own `cadgen stop`)", out)
+        self.assertIn("0.8      stopped cadgen 0.8.4's server (its own `cadgen stop`)", out)
         config = json.loads(self.desktop.read_text(encoding="utf-8"))
         self.assertEqual(config["mcpServers"], {"other": {"command": "node"}, "cad": self.entry()})
         self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
@@ -419,7 +518,7 @@ class InstallUpdateAndUninstall(Fixture):
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        self.assertIn("0.8      text-to-cad 0.8.4's server was not running", out)
+        self.assertIn("0.8      cadgen 0.8.4's server was not running", out)
         self.assertIn(f"text-to-cad {RELEASE} is already up to date here.", out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
         self.assertNotIn("Restart", out)
@@ -454,7 +553,7 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
         self.assertEqual([call.args[0]["version"] for call in setup.stop_earlier.call_args_list], ["0.8.4"])
-        self.assertIn("0.8      text-to-cad 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
+        self.assertIn("0.8      cadgen 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
         self.assertNotIn("0.8.3", out)
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual(self.receipt()["stopped"], [])
@@ -477,9 +576,30 @@ class InstallUpdateAndUninstall(Fixture):
                             "serving": {"port": PORT}}
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
-            self.assertRegex(out, rf"engine +switch +text-to-cad {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
-                                  rf"drains, then text-to-cad {re.escape(RELEASE)}'s takes its place")
+            self.assertRegex(out, rf"engine +switch +cad-server {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
+                                  rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
         setup.stop_earlier.assert_not_called()
+
+    def test_an_engine_a_command_started_runs_with_no_port_and_the_plan_and_the_report_say_so(self) -> None:
+        """``cad doctor`` or a build starts an engine that opens no HTTP port until a page asks for one: it runs,
+        and the plan (which switches it, as the switch does) and the report say what is true."""
+        no_port = "with no HTTP port yet (the first CAD view opens one)"
+        self.serving = {"ok": True, "pid": 9, "version": "0.0.1", "installation": "0.0.1",
+                        "prefix": str(self.root / "older"), "serving": None}
+        code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"engine +switch +cad-server 0\.0\.1's engine \(pid 9\) {re.escape(no_port)}: "
+                              rf"drains, then cad-server {re.escape(RELEASE)}'s takes its place")
+        self.assertNotIn("no engine running", out)
+        self.serving = {**self.serving, "version": RELEASE, "installation": RELEASE, "prefix": sys.prefix}
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"engine +leave +cad-server {re.escape(RELEASE)}'s engine \(pid 9\) {re.escape(no_port)}: "
+                              "this installation's")
+        self.assertIn(f"verify   engine: cad-server {RELEASE} running, {no_port}\n", out)
+        self.assertNotIn("not running", out)
+        self.serving = {**self.serving, "serving": {"port": PORT}}
+        self.assertIn(f"verify   engine: cad-server {RELEASE} running, on port {PORT}\n", self.run_setup()[1])
 
     def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
         self.desktop_with({})
@@ -488,7 +608,12 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup()
             self.assertEqual(code, 0, out)
             switch.handover.assert_called_once_with(RELEASE, told=mock.ANY)
-            self.assertIn(f"engine   text-to-cad {RELEASE} is the current installation (412 ms without an engine)", out)
+            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation (412 ms without an engine)", out)
+            self.assertEqual(out.count("is the current installation"), 1, "one line says it")
+            switch.handover.return_value = {"from": "0.0.1", "to": RELEASE, "ok": True, "gapMs": None}
+            self.assertIn(f"engine   cad-server 0.0.1 -> {RELEASE} is the current installation\n", self.run_setup()[1])
+            switch.handover.return_value = {"from": None, "to": RELEASE, "ok": True, "gapMs": None}
+            self.assertIn(f"engine   cad-server {RELEASE} is the current installation\n", self.run_setup()[1])
             self.assertLess(out.index("Claude Desktop: install"), out.index("is the current installation"),
                             "the apps first, then the switch")
             switch.follow.assert_not_called()
@@ -496,7 +621,7 @@ class InstallUpdateAndUninstall(Fixture):
                                             "restored": True}
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
-        self.assertIn(f"engine   the switch to text-to-cad {RELEASE} failed: no hello; the release before runs again", out)
+        self.assertIn(f"engine   the switch to cad-server {RELEASE} failed: no hello; the release before runs again", out)
         # The release before's plugin folder, and the apps' copies of it, come back with it.
         switch.follow.assert_called_once_with(told=mock.ANY)
 
@@ -516,7 +641,7 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
             where = providers.shown(str(releases.where(RELEASE)), self.machine)
-            self.assertRegex(out, rf"\n  release\s+make\s+text-to-cad {re.escape(RELEASE)} in {re.escape(where)}, once\n")
+            self.assertRegex(out, rf"\n  release\s+make\s+cad-server {re.escape(RELEASE)} in {re.escape(where)}, once\n")
             make.assert_not_called()
             code, out, _err = self.run_setup("--only", "claude")
         self.assertEqual(code, 0, out)
@@ -703,6 +828,14 @@ sys.exit(0)
         self.assertFalse(self.state.exists())
         self.assertFalse(self.cache.exists())
 
+    def test_an_uninstall_with_no_record_of_a_setup_says_so_and_takes_out_what_it_finds(self) -> None:
+        self.desktop_with({"cad": self.entry()})
+        code, out, _err = self.run_uninstall("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[0], "text-to-cad: cad uninstall finds no record of an earlier run, so it takes "
+                                              "out every copy of text-to-cad here:")
+        self.assertIn("Claude Desktop", out)
+
     def test_an_uninstall_asks_first_and_without_a_yes_changes_nothing(self) -> None:
         """``cad uninstall`` destroys, so it says its plan and asks: where no one can be asked (no terminal,
         ``--json``) it changes nothing without ``--yes``, naming the command with it; at a terminal, anything
@@ -769,6 +902,20 @@ sys.exit(0)
         got = self.receipt()["skills"]["windsurf"]
         self.assertEqual((got["release"], got["skills"]), (RELEASE, list(providers.SKILLS)))
         self.assertIn("Windsurf: start a new session for the skills", out)
+        where = providers.shown(folder, self.machine)
+        self.assertRegex(out, rf"verify   Windsurf: the skills of text-to-cad {re.escape(RELEASE)}, copied into "
+                              rf"{re.escape(where)} by the Skills CLI \(\d{{4}}-")
+        document = json.loads(self.run_setup("--json", "--only", "windsurf")[1])
+        self.assertEqual(document["verified"]["apps"], {"windsurf": {"verdict": "ok", "release": RELEASE}})
+        # The report reads the folder again: a skill gone since, which nothing here can add back, is said.
+        shutil.rmtree(folder / providers.SKILLS[0])
+        (self.bin / ("npx.cmd" if os.name == "nt" else "npx")).unlink()
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, rf"verify   Windsurf: the skills .+, without {providers.SKILLS[0]}\n")
+        command(self.bin, "npx", NPX)
+        code, out, _err = self.run_setup()
+        self.assertIn(f": {providers.SKILLS[0]} missing", out)
         # The receipt's release is this one and every skill is there: nothing to do.
         calls = (self.bin / "calls.jsonl").read_text(encoding="utf-8")
         code, out, _err = self.run_setup()
@@ -782,6 +929,8 @@ sys.exit(0)
         self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
                                 *sorted(providers.SKILLS), "-y"])
         self.assertEqual(providers.ours_in(folder), [])
+        self.assertIn("Restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
+        self.assertNotIn("Restart to load it", out)
 
     def test_only_takes_a_skills_cli_agent(self) -> None:
         command(self.bin, "npx", NPX)

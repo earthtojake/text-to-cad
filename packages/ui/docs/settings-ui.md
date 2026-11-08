@@ -21,7 +21,7 @@ the host's `links` and the `appSettings` `CadViewer` hands it — and the name m
 under the file's name: Models and Files, the file explorer). The view's one frame (`kit/shell/ViewFrame.jsx`, which
 every renderer mounts, 2D or 3D) owns the scene's chrome: the tool strip and the view's controls at its end (a 3D
 view's Projection, Display and Preview), the sub-toolbar of the tool in hand under it, the update status, the view's
-panel, Quick Edit, the view's corner (the cube with its Home, or a flat view's zoom pill) and Preview, with Preview's own
+panel, Quick Edit, the view's corner (the cube, or a flat view's zoom pill) and Preview, with Preview's own
 bar in the navbar's place. Renderers supply
 their tools, their tools' rows, their panel's sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
@@ -69,7 +69,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   script: Visual Studio Code, Cursor …; a file's: FreeCAD, Bambu Studio …, by their product names,
   untranslated as Finder is); each file the model's last build wrote that is on disk, its apps as
   **App (file name)** (FreeCAD (bracket.step)); and **Default app**, the OS's own handler for the
-  source. A group with no item is left out with its separator, and an export whose file is gone is
+  source. A KiCad board or schematic takes each KiCad this computer has, a channel's newest, by a name
+  that says which (**KiCad 9.0.6**, **KiCad 10.99 nightly**), and no Default app. A KiCad that cannot
+  read the file's format is never silently hidden: its row is drawn disabled, with the reason as its
+  hint (**KiCad 9.0.6 can't open this board: it was saved by a newer KiCad.**, `file.kicadBoardTooNew`,
+  `file.kicadSchematicTooNew`), so the person learns what to install. A group with no item is left out
+  with its separator, and an export whose file is gone is
   left out. The apps are asked for as the menu opens, never before: what needs no answer is there
   at once, the apps join it when it comes, and a failed or slow answer leaves the menu as without
   them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the CAD viewer's
@@ -106,7 +111,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name. The view's own
   controls are the view's, in every host, with or without a navbar: how the model is looked at —
   **Projection** and **Display**, a board's **Flip**, **2D/3D** and **Display** — and **Preview** end the
-  strip, and the corner holds the cube with its **Home**, or a flat view's zoom (below); they act on the
+  strip, and the corner holds the cube, or a flat view's zoom (below); they act on the
   whole view, whatever tool is in hand, so they are no tools, and a new per-file button that is no tool
   goes with them. In Preview, Preview's own
   controls, **Preview settings** and **Exit preview**, are its bar's. So a host may leave the
@@ -223,7 +228,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   between (a file with only tools that pick has them after a rule, as its own second section), in every
   host, with a navbar or without: a 3D file's **Projection**, **Display** and **Preview**; a board's
   **Flip**, **2D/3D** and **Display** — the state buttons first, the menu after them. The tools are what
-  you do to the model, the view's controls how you look at it; the corner keeps the cube and its Home, or
+  you do to the model, the view's controls how you look at it; the corner keeps the cube, or
   a flat view's zoom (**The view's corner**, below). **What goes on the screen is what is changed often**:
   a tool, Projection and Display, a board's Flip (its side), 2D/3D and Display (its preset), the zoom. What is
   changed now and then goes in the view's panel or behind a menu: a board's layers and layer display are
@@ -260,7 +265,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   file handler's corner: Full size and its update). The rest of the right side of the view is clear.
 - **View cube** at bottom-right, its 6rem box 2px from the right edge and 8px off the bottom
   (`VIEWPORT_CORNER_INSET_PX`, `VIEWPORT_CUBE_BOTTOM`), so its axes and their labels stay inside the
-  view: enlarged face/edge/corner hit areas and neutral hover and XYZ guides; **Home** at its upper-left
+  view: enlarged face/edge/corner hit areas and neutral hover and XYZ guides, and nothing beside it
   (**The view's corner**, below). A host whose own
   control floats over that corner lifts it clear with `--cad-viewport-corner-bottom`, the
   room that control takes from the bottom edge. A host can instead anchor it at bottom-left
@@ -272,16 +277,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `FloatingToolBar`'s `views`): a play triangle, the way into Preview — a mode of the whole view, not a
   setting of it. It is no tool: pressing it leaves the tool in hand as it is.
 - **The view's corner** (`kit/shell/ViewCorner.jsx`), at the bottom-right, is where the picture is
-  looked at from, never a tool. A **3D view's** is the cube and **Home** at its upper-left, as a ViewCube's
-  house is (Autodesk's, Onshape's): the view it opened with — the opening direction, what is shown framed
-  whole — as Fusion's and Maya's cubes' Home is (`ViewHome`). Home is the strip's 24px tile with no surface
-  of its own — no fill, border, blur or shadow until the pointer or the keyboard is on it, when it takes the
-  strip's hover fill — snug against the cube: its tile overlaps the cube's box by 16px across and 10px down
-  from the box's top-left corner (`viewportLayout.js`'s `viewCornerLayout`), so the house stands just up and
-  to the left of the cube's drawing (the Z axis's label, at the opening view), and nothing the cube draws
-  reaches it at any angle. Its house is ringed in the background's colour (the glow Preview's bar gives its
-  name), so it reads over a dark and a light canvas and over the model alike; its tooltip, **Home**, opens
-  beside it, away from the corner. A **flat view's** corner is its **zoom pill** alone (`ZoomControl.jsx`), a
+  looked at from, never a tool. A **3D view's** is the cube alone, with no Home button beside it: its faces,
+  edges and corners turn the view, its darker right-front-top corner to the usual isometric view, and Zoom to
+  fit (F, a double-click on empty space under Select, the view's menu) frames what is shown from where it is
+  looked at. A **flat view's** corner is its **zoom pill** alone (`ZoomControl.jsx`), a
   floating toolbar of its own, drawn as the strip is: the strip's shape (`STRIP_SHAPE_CLASS`) on the strip's
   surface (`FLOATING_CHROME_SURFACE_CLASS`: its border, its medium shadow, the 90% fill and its blur), −, the
   48px percentage in the type scale's `text-tiny` and tabular digits, and +, each the strip's tile inside the
@@ -290,7 +289,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   (`chromeInset.js`'s `CORNER_INSET_PX`, 12px): the chrome's 8px and the 4px a floating toolbar's shadow falls
   under it, so the pill's shadow fades out before the bottom edge instead of running into it, the right edge
   keeps the strip's 8px of untouched canvas, and the corner's two edges read as one gap. A board in 3D keeps
-  its pill, which zooms its camera: there is no cube and no Home. How the view is looked at is the strip's end, not the corner's (**Tool strip**, above): a
+  its pill, which zooms its camera: there is no cube. How the view is looked at is the strip's end, not the corner's (**Tool strip**, above): a
   3D view's Projection and Display, a board's Flip, 2D/3D and Display. A state of how the model is looked at is
   **one state button** (`kit/shell/StateButton.jsx`), the one control every such state is drawn with, as
   Blender's viewport gizmo shows its projection and Flux its flip: Projection, and a board's 2D/3D and Flip,
@@ -307,8 +306,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and
   Preview's own controls are its bar's (see [Preview](#camera-animation-and-preview)).
 - **The corner at the left** (`viewportLayout.js`'s `viewCornerLayout`): a host that anchors the cube at the
-  bottom-left (`--cad-viewport-corner-left`) moves all of the corner there, as one group mirrored: Home at the
-  cube's upper-right, the pill the corner's inset from the left edge, the tooltips and menus opening to the
+  bottom-left (`--cad-viewport-corner-left`) moves all of the corner there, as one group mirrored: the cube,
+  and the pill the corner's inset from the left edge, the tooltips and menus opening to the
   right; `--cad-viewport-corner-bottom` lifts it all either way. The pill is placed from the host's corner
   variable as the cube's box is, so a host that moves the corner moves the pill with it.
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
@@ -328,11 +327,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
 | File | Tool strip, left to right |
 | --- | --- |
-| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, then Projection, Display and Preview; Home at the cube |
-| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview; Home at the cube |
-| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, then Projection, Display and Preview; Home at the cube |
-| 3MF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview; Home at the cube |
-| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Projection, Display and Preview; Home at the cube |
+| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, then Projection, Display and Preview |
+| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
+| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, then Projection, Display and Preview |
+| 3MF | Select, Pencil, Shapes, Measure; Clip, then Projection, Display and Preview |
+| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, then Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane’s smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; then Flip, 2D/3D and Display; the zoom pill in the corner |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
@@ -950,8 +949,8 @@ height, so nothing the 2D view shows is lost. It is the view's other canvas in t
 frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
 selection, the ink, the measurements and the corner are the same mounted components, with the same
 names, in both: the strip's view controls and the zoom pill stand where they stood, and the pill zooms the 3D camera.
-There is no cube (a board turns over by Flip), Projection is Display's menu's and Home's work is
-Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
+There is no cube (a board turns over by Flip), and Projection is Display's menu's. The key **3** switches,
+as KiCad's Alt+3 opens its 3D view.
 
 | Control | In 3D |
 | --- | --- |
@@ -965,7 +964,6 @@ Zoom to fit's. The key **3** switches, as KiCad's Alt+3 opens its 3D view.
 | Flip (⇧F) | a camera move, as KiCad's 3D viewer's F and Altium's Bottom Side are: it turns the camera over the board's left-to-right axis, which way is up kept, so the back is seen as the 2D view's back, mirrored left to right; eased as every camera move is, round its target (`kit/camera/runtimeCamera.js`), never through the board: from straight above or below the board turns over about its own top-to-bottom axis, the one the 2D view mirrors across, its eye passing the side it leans to (the screen's right where it leans to neither), and near there the same way. Its icon is the side the camera is on, so it changes as the camera passes the board's plane, turned by Flip or by hand, and a file reopened in 3D shows its camera's side |
 | Zoom pill | the same pill, zooming the 3D camera: the 3D views' percentage (100% the board framed whole at the camera's angle, as 3D opens), −, +, its menu and the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) |
 | Projection | Display's menu's, after a rule under the presets: Orthographic or Perspective, kept with the file's view |
-| Home | none: Zoom to fit (F, a double-click on empty space under Select, the pill's or the view's menu) frames the board |
 | A panel shown or hidden | the canvas takes what the panel leaves, the camera centred in it; the strip stays at the view's centre |
 
 Entering 3D opens head on, on the window the 2D view shows, from the side it shows (in perspective too,
@@ -999,7 +997,7 @@ DXF view has no Display or Preview control. A native KiCad board's view settings
 Flip, 2D/3D and Display (its presets) — and its Layers tab's layer
 display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)); in 3D its Display's list ends,
 after a separator, with **Projection** (a muted label, then Orthographic and Perspective, a
-`DropdownMenuRadioGroup`: choosing one closes the menu, as a mode does); it has no Home and no Preview.
+`DropdownMenuRadioGroup`: choosing one closes the menu, as a mode does); it has no Preview.
 It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1339,7 +1337,7 @@ selected.
 
 Zoom to Fit recenters and frames the whole original model at the current angle, in the room under
 the tool strip and centred in it, as a flat view's fit keeps clear of the strip (every 3D fit does:
-Home, the first frame, a board's 3D view);
+the first frame, a board's 3D view);
 Zoom to Selection frames the selection and is unavailable without one. A double-click on empty space fits
 only while Select is in hand, in every view, 2D or 3D: under Pencil, Shapes or Measure a double-click is
 the tool's (the frame says Select is up, `data-cad-selecting`, and `kit/viewport/dom.js`'s
@@ -1352,7 +1350,7 @@ pill (`kit/shell/ZoomControl.jsx`, a floating toolbar drawn as the strip is: [Th
 − and + either side of the zoom as a percentage in tabular digits at a fixed width, and the percentage, pressed, its menu — Zoom in, Zoom out (half again, and back), Zoom to
 100%, then Zoom to fit and Zoom to selection, each with its key, as Figma's: ⌘+ and ⌘- (Ctrl+= and
 Ctrl+- elsewhere; the plain + and - too), ⇧0, F (⇧1 too) and ⇧2. A 3D view shows no percentage, as CAD
-tools do not: Home at its cube, F, a double-click on empty space under Select and the view's menu frame it, and the
+tools do not: F, a double-click on empty space under Select and the view's menu frame it, and the
 same keys zoom it. A board in 3D keeps its pill, which reads and steps its 3D camera
 (`viewportZoom`, the 3D views' own zoom). On a phone the zoom is More's Zoom row, its choices opening under it. **100% is the
 model as authored, framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`; a board's
@@ -1551,11 +1549,11 @@ Every hint is a `TooltipHint`: compact text, one surface and arrow, a 400ms
 delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
 strip's buttons (Preview among them; a tool with a key shows it after its name,
-muted), the drawing row's tools (each with its key), the corner's buttons (Home, the zoom's),
+muted), the drawing row's tools (each with its key), the corner's buttons (the zoom's),
 the navbar's right-hand controls (the
 update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
 settings, Exit preview) are hinted by name — the strip's and the zoom pill's hints above their
-buttons, Home's beside it, away from the corner, the others' below; a state button
+buttons, the others' below; a state button
 (Projection, a board's 2D/3D and Flip) is hinted by what a press does ("Switch to Perspective",
 "View from top ⇧F"), its key after it as a tool's is; there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,

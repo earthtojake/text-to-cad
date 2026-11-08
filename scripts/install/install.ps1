@@ -15,7 +15,7 @@
 function Install-TextToCad {
     $ErrorActionPreference = 'Stop'
     # The release this script was published with, installed when the version feed cannot be read.
-    $CadVersion = "0.11.0"
+    $CadVersion = "0.11.1"
     # The first release whose `cad uninstall` asks before it destroys, and takes --yes for an answer.
     $ConsentSince = '0.11.0'
     $VersionFeed = 'https://api.texttocad.dev/v1/versions'
