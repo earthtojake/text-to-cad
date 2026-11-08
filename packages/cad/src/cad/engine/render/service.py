@@ -90,7 +90,7 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     from OCP.Graphic3d import Graphic3d_Camera
     from OCP.gp import gp_Dir, gp_Pnt
 
-    from cad.engine.render.occt import PRESETS, camera_in_millimetres, occt_fov, occt_scale, vertical_fov
+    from cad.engine.render.occt import camera_in_millimetres, direction_of, occt_fov, occt_scale, vertical_fov
 
     spec = camera_in_millimetres(spec, scene.millimetres_per_scene_unit)
 
@@ -98,7 +98,8 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
         value = spec.get(name)
         return None if value is None else np.array(value, float)
 
-    preset = PRESETS.get(str(spec.get("preset") or "iso").lower(), PRESETS["iso"])
+    # A preset or an azimuth:elevation pair, as camera.js reads one (``snapshot.parse_camera`` refused any other).
+    preset = direction_of(str(spec.get("preset") or "iso").strip().lower())
     position, target = vector("position"), vector("target")
     points = scene.placed_points() if tight else scene.box_corners()
     low, high = points.min(0), points.max(0)
@@ -119,6 +120,11 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     aspect = width / height
     forward = -d
     right = np.cross(forward, up)
+    if not np.linalg.norm(right) > 1e-12 and spec.get("up") is None:
+        # Straight down or up with Z up implied (a 0:90 preset, a direction of [0, 0, 1]): +Y up the
+        # picture, as the top and bottom presets have it.
+        up = np.array(direction_of("top")[1], float)
+        right = np.cross(forward, up)
     if not np.linalg.norm(right) > 1e-12:
         raise ValueError("camera.up must not lie along the direction the camera looks")
     right /= np.linalg.norm(right)

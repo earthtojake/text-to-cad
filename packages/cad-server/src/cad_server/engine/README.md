@@ -1856,11 +1856,17 @@ unless given; `hidden` and `isolated`: lists of part refs, an occurrence's path 
 grammar, which every look -- Preview, X-ray, Explode, Clip -- leaves out or alone draws, as the
 viewer's hide and isolate do, and which a Quick Edit packet given to `--annotation` carries; a
 robot's parts are named by the viewer's visual ids too, `link:v1` (`link:v1/object/0` one object of
-it); a ref that names nothing is refused by name); `--json` reports what was drawn
+it); a ref that names nothing is refused by name), each key and value checked as the viewer checks its
+display settings (`clip.axis` is `x`, `y` or `z`, `clip.at` a number) and anything else refused by
+name, never left out of the picture; `--json` reports what was drawn
 and each stage's milliseconds (`serveMs`, `meshMs`, `sceneMs` when a scene is made, `presentMs`,
 `frameMs`, `drawMs`, `renderMs`, `totalMs`; a file no document: `readMs` its reader, `openMs` its
 render process opening it). `parts` and `exploded` for a document that places one
-part are refused by name before anything renders. `--annotation FILE` draws the viewer's annotation over the
+part are refused by name before anything renders. `--camera` is a preset, an `azimuth:elevation` pair, a camera object or `authored`: an
+object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`, `zoom`,
+`orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
+`focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y
+up the picture, as `top` and `bottom` do. `--annotation FILE` draws the viewer's annotation over the
 model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
 annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
 and `--measurements FILE` Measure's dimensions (`[{start, end, label, color}]`). A camera object's

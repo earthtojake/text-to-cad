@@ -135,7 +135,8 @@ class SnapshotTest(unittest.TestCase):
             parse_display("sideways", grid=False)
         with self.assertRaisesRegex(SnapshotRefused, "underneath"):
             parse_camera("underneath")
-        with self.assertRaisesRegex(SnapshotRefused, "projection"):
+        with self.assertRaisesRegex(SnapshotRefused, "projection belongs to display.camera: "
+                                                     "--display '{\"camera\": {\"projection\": \"perspective\"}}'"):
             parse_camera('{"projection": "perspective"}')
         (self.folder / "out.jpg").write_bytes(b"a photo")
         with self.assertRaisesRegex(SnapshotRefused, r"\.png"):
@@ -160,6 +161,57 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(done.returncode, 2)
         self.assertIn("display.exploded", done.stderr)
         self.assertEqual(out.read_bytes(), b"before")
+
+    def test_a_clip_and_a_camera_object_take_what_the_viewer_takes_and_refuse_the_rest_by_name(self) -> None:
+        """``display.clip`` and a camera object are the viewer's own vocabularies (``@cad/core``'s
+        ``displaySettings.js`` and ``camera.js``): what the viewer writes is taken whole, and anything else
+        is refused before anything renders, saying what is taken -- never a cut drawn where nobody asked
+        (an unknown ``position``), a view other than the one named (an unknown preset), or Python's own
+        words (``substring not found``, ``'list' object has no attribute 'strip'``)."""
+        from cad.engine.snapshot import options
+
+        viewer = {"enabled": True, "axis": "y", "at": 12.5, "invert": True, "partColors": False}
+        self.assertEqual(parse_display(json.dumps({"clip": viewer}), grid=False)["clip"], viewer)
+        camera = {"position": [80, -80, 60], "target": [0, 0, 0], "up": [0, 0, 1], "orthographicHalfHeight": 30, "zoom": 1}
+        self.assertEqual(parse_camera(json.dumps(camera)), camera)  # a Quick Edit packet's view, as the viewer writes it
+        self.assertEqual(parse_camera('{"preset": "45:30", "zoom": 1.5}'), {"preset": "45:30", "zoom": 1.5})
+        for display, said in (('{"clip": {"axis": "Z"}}', "display.clip.axis is x, y or z, not 'Z'"),
+                              ('{"clip": {"axis": "z", "position": 3}}',
+                               "display.clip has no position; it takes at, axis, enabled, invert, partColors"),
+                              ('{"clip": {"at": "3"}}', "display.clip.at is a number"),
+                              ('{"clip": {"enabled": "yes"}}', "display.clip.enabled is true or false"),
+                              ('{"clip": true}', "display.clip is {")):
+            with self.subTest(display=display), self.assertRaises(SnapshotRefused) as refused:
+                parse_display(display, grid=False)
+            self.assertTrue(str(refused.exception).startswith(said), str(refused.exception))
+        for given, said in (('{"preset": "isometric"}', "camera.preset 'isometric' is no preset (back, bottom, front, "
+                                                         "iso, left, right, top) or azimuth:elevation pair"),
+                            ('{"position": [1, 2], "target": [0, 0, 0]}', "camera.position is [x, y, z]"),
+                            ('{"up": [0, 0, 0]}', "camera.up is [x, y, z], not all 0"),
+                            ('{"zoom": 0}', "camera.zoom is a number above 0"),
+                            ('{"azimuth": 45, "elevation": 30}', "camera has no azimuth, elevation; its keys are direction, "
+                                                                 "name, orthographicHalfHeight, position, preset, target, "
+                                                                 "up, zoom; an azimuth and an elevation, in degrees, are "
+                                                                 "--camera 45:30")):
+            with self.subTest(camera=given), self.assertRaises(SnapshotRefused) as refused:
+                parse_camera(given)
+            self.assertEqual(str(refused.exception), said)
+        # A function's (or a tool's) display and camera are text or an object; anything else is refused as such.
+        with self.assertRaisesRegex(SnapshotRefused, r'^--display is a mode \(solid, .*\) or the display object, not \["solid"\]$'):
+            options(display=["solid"])
+        with self.assertRaisesRegex(SnapshotRefused, r'^--camera is a preset .* or a camera object, not \["iso"\]$'):
+            options(camera=["iso"])
+
+    def test_a_camera_object_s_preset_is_the_view_it_names(self) -> None:
+        # An azimuth:elevation preset in a camera object turns the camera as the string does (camera.js); it
+        # once fell back to iso without a word.
+        gl()
+        pictures = {}
+        for name, camera in (("pair", {"preset": "200:15"}), ("iso", {"preset": "iso"})):
+            out = self.folder / f"preset-{name}.png"
+            snapshot(self.document, out, camera=camera, size=(160, 120), daemon=False)
+            pictures[name] = out.read_bytes()
+        self.assertNotEqual(pictures["pair"], pictures["iso"])
 
     def test_a_snapshot_says_its_stages_as_it_reaches_them_and_a_job_s_pictures_are_counted(self) -> None:
         from cad.engine import snapshot as drawing

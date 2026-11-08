@@ -95,8 +95,14 @@ VISIBILITY = ("hidden", "isolated")
 EXPLODED_KEYS = frozenset({"enabled", "amount"})
 # Explode's amount when a request names none: the viewer's own default.
 EXPLODED_AMOUNT = 0.5
+# ``display.clip``, as the viewer's display settings take it (``@cad/core``'s ``displaySettings.js``,
+# ``DISPLAY_CLIP_SETTINGS_KEYS``): ``partColors`` is the viewer's cap colour switch.
+CLIP_KEYS = frozenset({"enabled", "axis", "at", "invert", "partColors"})
+CLIP_AXES = ("x", "y", "z")
 CAMERA_PRESETS = frozenset({"front", "back", "right", "left", "top", "bottom", "iso"})
 CAMERA_KEYS = frozenset({"preset", "name", "position", "target", "up", "direction", "zoom", "orthographicHalfHeight"})
+# What a camera object leaves to the display (``display.camera``): the lens, not where the camera stands.
+LENS_KEYS = ("projection", "focalLength")
 # ``--camera authored``: the view the annotation's ink was drawn in, exactly (``authored``).
 AUTHORED = "authored"
 # The Quick Edit packets an annotation file is looked for beside (``cad_server.viewer`` writes them).
@@ -179,6 +185,27 @@ def _exploded(value: Any) -> dict[str, Any]:
     return {"enabled": enabled, "amount": float(amount)}
 
 
+def _clip(value: Any) -> dict[str, Any]:
+    """``display.clip``, checked as the viewer checks it (``@cad/core``'s ``displaySettings.js``): ``enabled``,
+    ``axis`` (x, y or z), ``at`` (the plane's coordinate on its axis, in the file's unit) and ``invert``, and
+    the viewer's ``partColors``. A clip given cuts unless it says ``"enabled": false``."""
+    if not isinstance(value, dict):
+        raise SnapshotRefused('display.clip is {"axis": "x", "y" or "z", "at": the plane\'s coordinate on it, '
+                              '"invert": true or false}')
+    unknown = sorted(set(value) - CLIP_KEYS)
+    if unknown:
+        raise SnapshotRefused(f"display.clip has no {', '.join(unknown)}; it takes {', '.join(sorted(CLIP_KEYS))}")
+    if "axis" in value and value["axis"] not in CLIP_AXES:
+        raise SnapshotRefused(f"display.clip.axis is x, y or z, not {value['axis']!r}")
+    at = value.get("at")
+    if "at" in value and (isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at)):
+        raise SnapshotRefused("display.clip.at is a number: the plane's coordinate on its axis, in the file's unit")
+    for key in ("enabled", "invert", "partColors"):
+        if key in value and not isinstance(value[key], bool):
+            raise SnapshotRefused(f"display.clip.{key} is true or false")
+    return dict(value)
+
+
 def exploded_amount(display: dict[str, Any]) -> float:
     """How far apart the display moves the parts: 0 when it does not explode them."""
     exploded = display.get("exploded")
@@ -218,6 +245,8 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                                           "and exploded=AMOUNT moves the parts apart (one of each, by commas)")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
+    if "clip" in display:
+        display["clip"] = _clip(display["clip"])
     unknown = sorted(set(display) - DISPLAY_KEYS)
     if unknown:
         raise SnapshotRefused(f"display has no {', '.join(unknown)}; an engine document's display takes "
@@ -306,23 +335,60 @@ def parse_camera(value: str | None) -> Any:
         parsed = _json_or_file(text, "--camera")
         if not isinstance(parsed, dict):
             raise SnapshotRefused("--camera is a preset, an azimuth:elevation pair or a JSON object")
+        moved = {key: parsed[key] for key in LENS_KEYS if key in parsed}
+        if moved:
+            raise SnapshotRefused(f"camera {', '.join(moved)} belongs to display.camera: "
+                                  f"--display '{json.dumps({'camera': moved})}'")
         unknown = sorted(set(parsed) - CAMERA_KEYS)
         if unknown:
-            raise SnapshotRefused(f"camera has no {', '.join(unknown)}; its keys are {', '.join(sorted(CAMERA_KEYS))}")
-        moved = [key for key in ("projection", "focalLength") if key in parsed]
-        if moved:
-            raise SnapshotRefused(f"camera {', '.join(moved)} belongs to display.camera")
+            said = f"camera has no {', '.join(unknown)}; its keys are {', '.join(sorted(CAMERA_KEYS))}"
+            if {"azimuth", "elevation"} & set(unknown):
+                # The angles are the string form's, which says them in degrees: --camera 45:30.
+                angles = [parsed.get("azimuth"), parsed.get("elevation")]
+                given = all(isinstance(angle, (int, float)) and not isinstance(angle, bool) for angle in angles)
+                said += ("; an azimuth and an elevation, in degrees, are --camera "
+                         + (":".join(f"{angle:g}" for angle in angles) if given else "AZIMUTH:ELEVATION (45:30)"))
+            raise SnapshotRefused(said)
+        _camera_values(parsed)
         return parsed
     if text.lower() in CAMERA_PRESETS:
         return text.lower()
-    pair = text.split(":")
-    try:
-        if len(pair) == 2 and all(math.isfinite(float(part)) for part in pair):
-            return text
-    except ValueError:
-        pass
+    if _angle_pair(text):
+        return text
     raise SnapshotRefused(f"camera {text!r} is no preset ({', '.join(sorted(CAMERA_PRESETS))}), "
                           "azimuth:elevation pair, JSON object or authored")
+
+
+def _angle_pair(text: str) -> bool:
+    """Whether ``text`` is an ``azimuth:elevation`` pair of degrees (``45:30``), as ``camera.js`` reads one."""
+    pair = text.split(":")
+    try:
+        return len(pair) == 2 and all(math.isfinite(float(part)) for part in pair)
+    except ValueError:
+        return False
+
+
+def _camera_values(camera: dict[str, Any]) -> None:
+    """A camera object's values, checked as the viewer's ``camera.js`` checks them (``normalizeCameraSpec``):
+    ``preset`` a preset or an ``azimuth:elevation`` pair; ``position`` and ``target`` three numbers, ``up``
+    and ``direction`` three and not all 0; ``zoom`` and ``orthographicHalfHeight`` above 0; ``name`` a word."""
+    preset = camera.get("preset")
+    if "preset" in camera and not (isinstance(preset, str) and (preset.strip().lower() in CAMERA_PRESETS
+                                                                 or _angle_pair(preset))):
+        raise SnapshotRefused(f"camera.preset {preset!r} is no preset ({', '.join(sorted(CAMERA_PRESETS))}) "
+                              "or azimuth:elevation pair")
+    for key in ("position", "target", "up", "direction"):
+        if key in camera and not _numbers(camera[key], 3):
+            raise SnapshotRefused(f"camera.{key} is [x, y, z]")
+        if key in ("up", "direction") and key in camera and sum(value * value for value in camera[key]) <= 1e-12:
+            raise SnapshotRefused(f"camera.{key} is [x, y, z], not all 0")
+    for key in ("zoom", "orthographicHalfHeight"):
+        value = camera.get(key)
+        if key in camera and (isinstance(value, bool) or not isinstance(value, (int, float))
+                              or not math.isfinite(value) or value <= 0):
+            raise SnapshotRefused(f"camera.{key} is a number above 0")
+    if "name" in camera and not isinstance(camera["name"], str):
+        raise SnapshotRefused("camera.name is the view's name, a string")
 
 
 def _load(value: Any, label: str) -> Any:
@@ -679,12 +745,22 @@ def options(display: Any = None, camera: Any = None, grid: bool = False, width: 
             height: int | None = None, size_profile: str | None = None, *,
             board: bool = False, schematic: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
     """A snapshot's options as a function gives them -- ``display`` a mode, a
-    JSON text or the display object -- checked as the verb checks its flags."""
-    if isinstance(display, dict):
-        display = json.dumps(display)
-    return (parse_display(display, bool(grid), board=board, schematic=schematic), parse_camera(camera if camera is None or isinstance(camera, str)
-                                                              else json.dumps(camera)),
-            parse_size(width, height, size_profile))
+    JSON text or the display object, ``camera`` a preset, a pair, JSON text or a camera object --
+    checked as the verb checks its flags."""
+    return (parse_display(_flag_text(display, "--display"), bool(grid), board=board, schematic=schematic),
+            parse_camera(_flag_text(camera, "--camera")), parse_size(width, height, size_profile))
+
+
+def _flag_text(value: Any, flag: str) -> str | None:
+    """``--display`` or ``--camera`` as a function may give it -- its text, or the object it names --
+    as the text the flag's parser reads; anything else refused by name, as the flag takes it."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value)
+    takes = (f"a mode ({', '.join(DISPLAY_MODES)}) or the display object" if flag == "--display" else
+             f"a preset ({', '.join(sorted(CAMERA_PRESETS))}), an azimuth:elevation pair or a camera object")
+    raise SnapshotRefused(f"{flag} is {takes}, not {json.dumps(value, default=repr)[:80]}")
 
 
 def draw(source: Any, out: Path, *, display: Any = None, camera: Any = None, grid: bool = False,
@@ -955,7 +1031,8 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
     if not jobs:
         raise SnapshotRefused("--job names no job")
     shown_flags = None  # parsed per file: each file family owns its Display vocabulary
-    camera_flag = parse_camera(camera if camera is None or isinstance(camera, str) else json.dumps(camera))
+    display = _flag_text(display, "--display")
+    camera_flag = parse_camera(_flag_text(camera, "--camera"))
     pose_flag = parse_pose(pose) if isinstance(pose, str) else pose
     ink_flag = parse_annotation(annotation)
     dimensions_flag = parse_measurements(measurements)
