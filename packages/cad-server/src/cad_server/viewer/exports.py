@@ -278,7 +278,7 @@ class ExportJobs(Jobs):
             retained = sum(j.get("bytes", 0) for j in self.jobs.values() if j["state"] == "ready")
             if size + retained > MAX_RETAINED_BYTES:
                 raise ExportError("Export exceeded the temporary storage limit.")
-            # A STEP's PMI, checked in the written file by a reader of no OCCT (``cad/step/_ap242.py``).
+            # A STEP's PMI, checked in the written file by a reader of no OCCT (``cad/engine/export/ap242.py``).
             verified = next((row["pmiVerification"] for row in (result or {}).get("files", [])
                              if row.get("path") == str(target) and "pmiVerification" in row), None)
             return {"state": "ready", "stage": "Ready to save", "bytes": size, "pmiVerification": verified,

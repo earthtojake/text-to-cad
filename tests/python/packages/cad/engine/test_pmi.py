@@ -1,6 +1,6 @@
 """Semantic PMI (``cad.engine.pmi``): a plate's datums, dimensions and geometric tolerances
 written into its xbf as XCAF's GD&T objects and read back the same from the file as from the
-build; its AP242 STEP read by OCCT and by a reader of no OCCT (``cad/step/_ap242.py``),
+build; its AP242 STEP read by OCCT and by a reader of no OCCT (``cad/engine/export/ap242.py``),
 which agree on values, units, datum frames and the faces each annotation is on; a dimension
 given limits, written as AP242's lower and upper limit and its nominal still measured; a surface
 profile on several faces of any kind, written as one AP242 surface profile tolerance; a general
@@ -39,7 +39,7 @@ from cad.build123d import (annotate, camera, datum, dimensional_location, dimens
                           position_tolerance, section, surface_profile_tolerance, view)
 from cad.engine import build as engine_build
 from cad.engine import document, export
-from cad.step import _ap242 as ap242
+from cad.engine.export import ap242
 from cad.engine.pmi import (PMI, PMIError, PMIUnsupported, _bores, _faces, _ref, _resolved_part, _surface, coverage,
                                dropped, otherwise_controlled, read, records_of_document, refuse_dropped, suggestions)
 
@@ -2297,7 +2297,7 @@ class StepWriteTest(_Folder):
         for failed, said in ((mismatched, r"\(8 of 9 matched\): hole-diameter: not the model's face"),
                              (unread, r"\(0 of 9 matched\): The STEP reader could not complete the check")):
             target.write_bytes(b"an earlier file")
-            with mock.patch("cad.step._ap242.check", return_value=failed):
+            with mock.patch("cad.engine.export.ap242.check", return_value=failed):
                 with self.assertRaisesRegex(export.ExportRefused,
                                             r"part.step not written: the PMI in the STEP written does not match the "
                                             r"model's document, or could not be checked against it " + said):
@@ -2342,7 +2342,7 @@ class StepWriteTest(_Folder):
         mismatched = {"matched": 9, "total": 10, "problems": ["A: values, units, datum order or face association could "
                                                              "not be verified."], "sha256": "x"}
         again.write_bytes(b"an earlier file")
-        with mock.patch("cad.step._ap242.check", return_value=mismatched):
+        with mock.patch("cad.engine.export.ap242.check", return_value=mismatched):
             with self.assertRaisesRegex(export.ExportRefused, r"again.step not written: .* \(9 of 10 matched\): A: "):
                 _export({"source": {"path": str(self.step)}, "destinations": [str(again)]}, [].append)
         self.assertEqual(again.read_bytes(), b"an earlier file")

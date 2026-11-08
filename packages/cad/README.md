@@ -603,8 +603,7 @@ src/cad/
   model/                 # the model, the type with no file: @model and a model's operations, by
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
-  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them); a
-                         #   STEP's AP242 PMI records read and checked in step/_ap242.py
+  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -634,7 +633,8 @@ src/cad/
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
-                         #   on this computer (places)
+                         #   on this computer (places); a STEP's AP242 PMI read back and checked
+                         #   in the file written, with no OCCT (export/ap242.py)
   results.py             # the operations' shared result types: what a check (dfm, drc, erc,
                          #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future

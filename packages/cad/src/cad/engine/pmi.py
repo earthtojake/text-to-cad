@@ -2412,7 +2412,7 @@ def checked(source: Any, entries: list[dict[str, Any]], target: Any,
 
     from cad.engine import refs as grammar
     from cad.engine.export import ExportRefused
-    from cad.step._ap242 import check
+    from cad.engine.export.ap242 import check
 
     target = Path(target)
     binding = not source.foreign

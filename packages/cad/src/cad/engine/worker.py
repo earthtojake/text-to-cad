@@ -381,7 +381,7 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
         # Each destination written, counted of them all (``progress.py``: an export's ``write``).
         say("write", detail=target.name, count=[index, len(request["destinations"])])
         before = _stat(target)
-        # A STEP of a document with PMI is checked in the file written (``cad/step/_ap242.py``), within
+        # A STEP of a document with PMI is checked in the file written (``cad/engine/export/ap242.py``), within
         # its ``write`` frame, whoever asked for it -- ``cad model export``, ``api.export`` or the
         # viewer, alike: with the PMI a STEP carries, its notes being the xbf's alone
         # (``pmi.step_entries``), against the document's faces (``pmi.step_surfaces``), staged

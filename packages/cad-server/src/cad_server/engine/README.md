@@ -2840,10 +2840,10 @@ carries is checked in the file (`pmi.checked`): a build's declared one, `cad
 <type> export`'s and `<type>.export()`'s (the worker's `export`), and the viewer's, which offers STEP as it
 offers every format of the document's kind, nothing inspected first (**Viewer exports**), one the
 PMI refuses (above) failing with its reason. After writing the file the engine reads it back with
-`cad.step._ap242` -- a Part 21 reader of AP242's PMI entities with no OCCT in it -- and matches
+`cad.engine.export.ap242` -- a Part 21 reader of AP242's PMI entities with no OCCT in it -- and matches
 every entry but the notes, which it neither expects nor counts (nor the views, which are no
 entries), to one record of the file by face name, kind, values, units, datum order, zone and a
-basic dimension's note (`_ap242.check`), each part to its own product's records alone: the reader
+basic dimension's note (`ap242.check`), each part to its own product's records alone: the reader
 gives each record the product it, its faces and every datum its frame names are of (its shape
 aspects' `of_shape`, the faces' representation's product), and a part is its product by its name,
 so face names and datum letters need be unique only within a part. Each face is held to the

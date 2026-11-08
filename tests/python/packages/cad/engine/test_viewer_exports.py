@@ -33,7 +33,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.step._ap242.check",
+                 patch("cad.engine.export.ap242.check",
                        return_value={"matched": 1, "total": 1, "problems": []}) as check:
                 result = _export(request, lambda _: None)
                 check.assert_called_once_with([entry], output, {}, {0: "plate"})
@@ -43,7 +43,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.step._ap242.check", return_value=failed):
+                 patch("cad.engine.export.ap242.check", return_value=failed):
                 with self.assertRaisesRegex(ExportRefused, r"result.step not written: the PMI in the STEP written does "
                                                            r"not match the model's document.*\(0 of 1 matched\): A: "):
                     _export(request, lambda _: None)
@@ -52,7 +52,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.step._ap242.check") as check:
+                 patch("cad.engine.export.ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"}, "destinations": [str(output)]}, lambda _: None)
                 check.assert_not_called()
                 self.assertNotIn("pmiVerification", result["files"][0])
@@ -75,7 +75,7 @@ class ViewerExportsTest(unittest.TestCase):
             with patch.object(Source, "read", return_value=source), \
                  patch("cad.engine.export.viewer.check"), \
                  patch("cad.engine.export.translate", side_effect=write), \
-                 patch("cad.step._ap242.check") as check:
+                 patch("cad.engine.export.ap242.check") as check:
                 result = _export({"source": {"path": str(output)}, "expected": {"version": "v"},
                                   "destinations": [str(output)]}, lambda _: None)
                 check.assert_not_called()

@@ -521,7 +521,7 @@ def _default_tolerances(path: Path, stated: list[tuple[str, str]]) -> None:
     ``PRODUCT_DEFINITION_SHAPE``, its representation's item the 'tolerance class'. Numbered on from
     the file's last record, in the document's order, so the same document writes the same bytes. A
     part is found by its name among the products that hold geometry; two of one name refuse the file."""
-    from cad.step import _ap242 as ap242
+    from cad.engine.export import ap242
 
     data = path.read_bytes()
     end = data.rindex(b"ENDSEC;")
