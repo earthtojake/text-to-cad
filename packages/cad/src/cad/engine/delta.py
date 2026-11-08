@@ -48,6 +48,7 @@ _BOXES_HELD = 1 << 16
 # ``triangles`` and ``volume`` are an implicit document's (``cad.engine.implicit_document.facts_of``): a model's facts
 # hold neither, and the line under its run says neither.
 FACTS = ("parts", "bounds", "joints", "sequences", "warnings", "triangles", "volume")
+_IMPLICIT = ("triangles", "volume")
 _KEY = 12  # the hex digits of a part's geometry key the facts keep: enough to tell two builds' parts apart
 # A placement's rotation term smaller than this decides nothing: the part side it multiplies is
 # not measured for it.
@@ -447,6 +448,8 @@ def delta(now: dict[str, Any], before: dict[str, Any] | None) -> dict[str, Any]:
     changed on a geometry both builds have."""
     found: dict[str, Any] = {"first": before is None}
     for name in FACTS:
+        if name in _IMPLICIT and name not in now and (before is None or name not in before):
+            continue  # a model's delta says nothing of a sample's facts: its shape is as it was
         row: dict[str, Any] = {"now": now.get(name)}
         if before is not None and before.get(name) != row["now"]:
             row["was"] = before.get(name)

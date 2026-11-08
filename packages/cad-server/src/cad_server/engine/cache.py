@@ -366,7 +366,8 @@ class Cache:
         if record is None or record.get("revision") != revision:
             return  # a build since recorded a newer revision: its own save follows
         format = self.format_of(data)
-        meta = {"revision": revision, "bytes": len(data), "format": format}
+        # An xbf's meta is as it always was; only another format names itself (an implicit document's ``glb``).
+        meta = {"revision": revision, "bytes": len(data), **({"format": format} if format != "xbf" else {})}
         held.cache.write(self.inside(ident, format), data)
         other = self.inside(ident, "xbf" if format != "xbf" else "glb")  # one file per document: the other format's goes
         held.cache.remove(other)
