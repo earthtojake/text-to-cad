@@ -808,15 +808,18 @@ def _details(ctx: Context) -> dict[str, Any]:
     sides: dict[tuple[int, int, str], set[int]] = {}
     for part, infos in enumerate(ctx.faces):
         for side in infos:
-            ns = side.surface.normal
-            if side.surface.kind != "plane" or ns is None:
+            # a side is any face standing between a top and a bottom, of any surface: a plane square to them, a
+            # round corner's cylinder, a dot's, a letter's spline
+            normals = ([np.asarray(side.surface.normal, dtype=float)] if side.surface.kind == "plane"
+                       and side.surface.normal is not None else [sample.normal for sample in side.samples])
+            if not normals:
                 continue
             tops, bottoms = [], []
             for other, shared in ctx.adjacent(part, side.ordinal).items():
                 neighbour = ctx.info(part, other)
                 if neighbour.surface.kind != "plane" or neighbour.surface.normal is None:
                     continue
-                if abs(float(np.dot(neighbour.surface.normal, ns))) > 0.2:
+                if max(abs(float(np.dot(neighbour.surface.normal, n))) for n in normals) > 0.2:
                     continue
                 for edge in shared:
                     if edge.smooth:
@@ -863,8 +866,8 @@ def _details(ctx: Context) -> dict[str, Any]:
     for item in items:
         item["faces"] = item["faces"][:12]
     return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM,
-            "method": "steps between parallel planes up to step_ceiling_mm high; a step is a detail while it is "
-                      "narrower than across_below_mm (text-to-cad's own figure: no guide states one) and its steps "
+            "method": "steps between parallel planes up to step_ceiling_mm high, by sides of any surface; a step "
+                      "is a detail while it is narrower than across_below_mm (text-to-cad's own figure: no guide states one) and its steps "
                       "bound the raised top or the sunk floor all round (an island or a pocket: text, a logo, a "
                       "mark); wider, or a step running on across a face, is the part's geometry, which the walls and "
                       "gaps judge"}

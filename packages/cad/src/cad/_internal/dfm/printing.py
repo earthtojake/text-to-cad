@@ -147,10 +147,18 @@ def _overhang(rows: list[Row], kinds_by_tech: dict[str, tuple[str, ...]]) -> lis
     for technology, limit, source, severity, said in rows:
         found.append(Rule("printing.overhang_angle", "overhangs", "angle_deg", "min", {technology: limit}, "deg",
                           "down-facing surface angle from horizontal", source, severity=severity, by="technology",
-                          when={"technology": technology},
+                          when={"technology": technology, "angle_given": False},
                           item_when={"kind": kinds_by_tech[technology], "counted": True},
                           fix="support it, chamfer it to at least {limit:g} deg from horizontal, or turn the part",
                           note=said))
+        # the person's printer, declared (--angle-limit), as --tools declares a shop's cutters: its own angle
+        found.append(Rule("printing.overhang_angle", "overhangs", "angle_deg", "min", {technology: 1.0}, "deg",
+                          "down-facing surface angle from horizontal", source, severity=severity, by="technology",
+                          scale_by="angle_limit", when={"technology": technology, "angle_given": True},
+                          item_when={"kind": kinds_by_tech[technology], "counted": True},
+                          fix="support it, chamfer it to at least {limit:g} deg from horizontal (the --angle-limit "
+                              "given), or turn the part",
+                          note="the printer's own self-supporting angle, given (--angle-limit)"))
     return found
 
 
@@ -349,10 +357,11 @@ def _ruled() -> RuleSet:
 
 
 RULES = _ruled()
-#: The overhang angle ``printing.overhang_angle`` judges each face against, per technology.
+#: The overhang angle ``printing.overhang_angle`` judges each face against, per technology, where no
+#: ``--angle-limit`` is given (given, the rule judges against it).
 OVERHANG_JUDGED: dict[str, float] = {technology: float(limit) for rule in RULES.rules
                                      if rule.id == "printing.overhang_angle" and isinstance(rule.limit, dict)
-                                     for technology, limit in rule.limit.items()}
+                                     and rule.scale_by is None for technology, limit in rule.limit.items()}
 
 
 # --- options ------------------------------------------------------------------------------------------------
@@ -434,6 +443,7 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     machine = machine_volume(resolved)
     return {"technology": resolved["technology"], "material": material,
             "material_class": materials.material_class(material), "angle_limit": angle_limit(resolved),
+            "angle_given": resolved.get("angle_limit") is not None,
             "layer_height": layer_height(resolved),
             # the build volume's: given (an error to pass it) or a typical machine assumed (a warning naming it)
             "machine_given": machine["origin"] == "given",
@@ -496,7 +506,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         assembled = f"; {IN_PLACE}" if parts > 1 else ""
         # One cause, one finding: where printing.overhang_angle judges each face, this is the sum of them (info,
         # naming the rule); a warning only where no rule judges the faces and the technology needs support.
-        judged = overhangs["angle_limit_used_deg"] <= OVERHANG_JUDGED.get(technology, -1.0)
+        judged = technology in OVERHANG_JUDGED  # at the angle used: the one given, else the rule's
         found.append(CheckFinding(
             "warning" if technology not in POWDER and not judged else "info", "overhangs",
             f"{overhangs['down_facing_area_below_limit_mm2']:g} mm2 ({overhangs['down_facing_area_below_limit_pct']:g}%"

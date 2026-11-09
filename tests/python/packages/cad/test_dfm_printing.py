@@ -90,6 +90,15 @@ class OverhangTest(unittest.TestCase):
         self.assertEqual(knife.severity, "warning", "the 30 deg tip is a knife, reported once: it prints rounded")
         self.assertIn("text-to-cad's own figure", knife.message)
 
+    def test_the_overhang_rule_follows_the_angle_limit_given(self) -> None:
+        # a 50 deg underside: over FDM's cited 45, under a printer's 55 given; a 30 deg one passes a 25 given
+        for angle, given, failed, limit in ((50.0, None, False, 45.0), (50.0, 55.0, True, 55.0),
+                                            (30.0, 25.0, False, 25.0)):
+            result = check(wedge(angle), "wedge") if given is None else check(wedge(angle), "wedge", angle_limit=given)
+            [judged] = [o for o in outcome(result, "printing.overhang_angle") if o["status"] in ("passed", "failed")]
+            self.assertEqual((judged["status"] == "failed", judged["limit"]), (failed, limit), (angle, given))
+            self.assertEqual("printing.overhang_angle" in codes(result), failed)
+
     def test_powder_holds_every_overhang(self) -> None:
         result = check(wedge(30.0), "wedge", technology="sls")
         self.assertNotIn("printing.overhang_angle", codes(result))
@@ -316,6 +325,18 @@ class DetailAndGapTest(unittest.TestCase):
         part += bd.Pos(8, 0, 4) * bd.Box(2, 4, 0.2, align=A)
         found = items(check(part, "strip", technology="sls"), "details")
         self.assertEqual([(item["kind"], item["xyz"][0] > 0) for item in found], [("emboss", True)])
+
+
+    def test_a_detail_with_round_sides_is_a_detail(self) -> None:
+        # a 2 mm square island with 0.4 mm corner rounds and a 2.4 mm dot, both 0.5 high, and a 0.3 mm round-ended
+        # groove 0.5 deep: their sides are cylinders, and each is raised or sunk text all the same
+        part = bd.Box(40, 12, 4, align=A)
+        part += bd.Pos(-12, 0, 4) * bd.fillet(bd.Box(2, 2, 0.5, align=A).edges().filter_by(bd.Axis.Z), 0.4)
+        part += bd.Pos(0, 0, 4) * bd.Cylinder(1.2, 0.5, align=A)
+        part -= bd.Pos(12, 0, 4) * bd.extrude(bd.SlotCenterToCenter(6, 0.3), amount=-0.5)
+        found = sorted((item["kind"], round(item["xyz"][0] / 12)) for item in items(check(part, "dots", technology="sls"),
+                                                                                     "details"))
+        self.assertEqual(found, [("emboss", -1), ("emboss", 0), ("engrave", 1)])
 
 
 class AssemblyTest(unittest.TestCase):
