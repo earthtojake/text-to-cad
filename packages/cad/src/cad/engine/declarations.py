@@ -1,6 +1,6 @@
 """What a part declares for a simulator, beside its material: its collision, its named frames, whether it
-is a body of its own, what it does not collide with, how its joints are driven, what it weighs and how
-it grips.
+is a body of its own, what it does not collide with, how its joints are driven, what it weighs, how
+it grips, whether it floats and what its link is named.
 
 ``collision(part, kind)`` says what a simulator collides the part as (``description.COLLISIONS``):
 the mesh itself (the default a description is made with), a ``box``, a ``sphere``, a ``cylinder``
@@ -45,6 +45,16 @@ own over its assembly's: a sliding coefficient, or MuJoCo's three (sliding, tors
 is the surface's, which the material's library does not carry, so it is declared beside it. No
 material's friction is assumed: where none is declared, a simulator uses its own default.
 
+**The base and the links' names.** ``free(shape)`` says that what ``shape`` holds is not bolted to
+the world: the link a robot description hangs from the world that holds a part at or below it -- on
+the top assembly, the robot's base (its ground link) -- floats (a humanoid, a quadruped, a mobile base,
+a part dropped on a table). Bolted is the default. It is a simulator's, as ``limits`` is: AP242's
+mechanism has a ground and no word for a ground that floats. ``link(shape, name)`` names the link the
+parts at or below ``shape`` make, instead of its first part's (or a jointed assembly's) label; a
+declaration on a part or an assembly below names its own links over it. Both are declared on a node of
+the tree and kept, as ``mass`` is, on every part below it with how many levels above the part it was
+declared, so the document carries them on the parts' prototypes and gives them back to the node.
+
 Each is an attribute of the object, as a material is, and travels as build123d moves it: a copy,
 ``moved`` and ``located`` keep them. ``limits`` is kept on the part that holds the joint, so it is
 declared after the joint is made. A frame is given in the part's OWN frame, the one its geometry
@@ -67,7 +77,7 @@ from typing import Any
 
 from cad.engine.description import COLLISIONS
 
-__all__ = ["body", "collision", "exclude", "frame", "friction", "limits", "mass", "point_mass"]
+__all__ = ["body", "collision", "exclude", "frame", "free", "friction", "limits", "link", "mass", "point_mass"]
 
 # The attributes the declarations are kept in on a shape (``document.collect`` reads them).
 COLLISION = "_collision"
@@ -79,6 +89,8 @@ DRIVES = "_drives"  # {joint label: {"effort": ..., "velocity": ..., ...}}, the 
 MASS = "_mass"  # grams, the part's or the assembly's whole
 POINTS = "_points"  # {name: (grams, Location in the part's own frame, (ixx, iyy, izz) kg*m^2 or None)}
 FRICTION = "_friction"  # (sliding,) or (sliding, torsional, rolling)
+FREE = "_free"  # True: what the node holds floats (``free``)
+LINK = "_link"  # the name of the link the node's parts make (``link``)
 #: What ``limits`` declares of a joint, by its keyword: the drive's bounds, then the joint's dynamics.
 DRIVE = ("effort", "velocity", "armature", "damping", "friction")
 # The joints a drive bounds, by build123d's class, and the ones it refuses: a bound of one value.
@@ -296,6 +308,27 @@ def point_mass(part: Any, grams: float, at: Any, *, name: str | None = None,
     # A dict of its own each time, as a frame's: a copy of the part shares the one it held.
     part.__dict__[POINTS] = {**held, name: (weight, bd.Location(at.wrapped), moments)}
     return part
+
+
+def free(shape: Any) -> Any:
+    """Say that ``shape``, a part or an assembly, is not bolted to the world: the link a robot
+    description hangs from the world that holds a part at or below it floats (MJCF's ``<freejoint>``;
+    a URDF's root, which floats already). On the top assembly, the robot's base. Returns ``shape``."""
+    _shape(shape, "free")
+    shape.__dict__[FREE] = True
+    return shape
+
+
+def link(shape: Any, name: str) -> Any:
+    """Name ``name`` the link the parts at or below ``shape`` make in a robot description, instead of
+    its first part's label: one link, so ``shape``'s parts must all be one link's, and no other link may
+    take the name (both refused when the robot is described). A part declared a body is named by its
+    ``body`` declaration. A second declaration replaces the first. Returns ``shape``."""
+    _shape(shape, "link")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"a link's name is a non-empty string, not {name!r}")
+    shape.__dict__[LINK] = name
+    return shape
 
 
 def friction(shape: Any, coefficient: float | tuple[float, float, float]) -> Any:

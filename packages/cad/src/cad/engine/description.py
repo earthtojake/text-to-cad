@@ -12,9 +12,12 @@ names a format: no MuJoCo group, no ROS package; those are each writer's
 reading of it.
 
 **Units and frames.** Everything here is SI: metres, kilograms, radians, kg*m^2. The document's
-millimetres and degrees are converted once, in ``describe``. Every frame is taken at the AS-BUILT
-state (``mechanism.as_built``: the pose every file of the model shows), which is every joint's
-zero here: a joint's ``as_built`` value is recorded, and its ``lower``/``upper`` are around zero,
+millimetres and degrees are converted once, in ``describe``. Every frame is taken at the ZERO state,
+every joint's zero here: the AS-BUILT state (``mechanism.as_built``: the pose every file of the model
+shows), or the mechanism state a description is asked to be zero at (``describe``'s ``zero``, the
+description's ``zero`` its name), where every body stands as that state poses it and each joint's value
+there is its zero. A joint's ``as_built`` value is the authored value its zero stands for (the state's,
+given a ``zero``), and its ``lower``/``upper`` are around zero,
 so a writer that wants the authored range back adds it (MJCF's ``ref`` is zero because the body is
 authored where it stands; URDF's zero is the same pose). A joint's ``origin`` is its frame in the
 PARENT link's frame, its axis that frame's Z, as AP242 pairs have it (the pair's ``frames[0]`` on
@@ -55,7 +58,9 @@ name from the link it would have merged into, with its own mass, geometry and fr
 ``prismatic`` (a slide, ranged or not), ``cylindrical`` (a turn and a slide on one axis: two
 values), or ``spherical`` (three angles); a part no pair moves hangs from the ground, or from the
 link it is below in the tree, by a ``fixed`` joint. The ground is the first link, named ``world``
-unless the model names it. A coupling is written on the joint that follows: ``follows =
+unless the model names it. A link hung from the ground that floats (``cad.build123d.free``: a robot's
+base not bolted to the world) hangs by a ``floating`` joint, URDF's word: six values, no axis and no
+limits, its zero the link's frame; no pose names it, and nothing follows or leads it. A coupling is written on the joint that follows: ``follows =
 (leader, ratio, offset)`` meaning ``value = ratio * leader + offset`` around zero, which is what
 URDF's ``<mimic>`` and MuJoCo's ``<equality><joint>`` say; a coupling of more than two joints is
 a chain of followers from its first. A virtual pinion (``mechanism``'s: a ``rack_and_pinion_pair``'s
@@ -79,7 +84,8 @@ at zero; a writer that can close it does (MJCF), one that cannot leaves it open 
 each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
 
 **Poses.** The mechanism's named states, each as ``{joint: value}`` around zero, in radians or
-metres (a cylindrical or spherical joint's value is a tuple). Configuration sequences are not
+metres (a cylindrical or spherical joint's value is a tuple); taken at a ``zero`` state, every other
+state is around that one, and the zero state's own pose is every value at zero. Configuration sequences are not
 here: a GLB bakes them; a simulator plays its own.
 """
 
@@ -97,7 +103,7 @@ __all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionErro
 #: convex hulls of a decomposition of its mesh, or none.
 COLLISIONS = ("mesh", "box", "sphere", "cylinder", "capsule", "decomposed", "none")
 #: The joint kinds, in the words URDF uses where it has one; ``cylindrical`` and ``spherical`` are AP242's.
-JOINT_KINDS = ("fixed", "revolute", "continuous", "prismatic", "cylindrical", "spherical")
+JOINT_KINDS = ("fixed", "revolute", "continuous", "prismatic", "cylindrical", "spherical", "floating")
 #: The joints a closure may be: a slide is kept a joint of the tree where its loop has a turn or a ball.
 CLOSURE_KINDS = ("revolute", "continuous", "prismatic", "cylindrical", "spherical")
 
@@ -251,6 +257,7 @@ class Description:
     closures: list[Closure] = field(default_factory=list)
     warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
     excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
+    zero: str | None = None  # the mechanism state every joint's zero is at; None for the as-built state
 
     @property
     def root(self) -> Link:
@@ -265,9 +272,40 @@ class Description:
     def children(self, name: str) -> list[Joint]:
         return [joint for joint in self.joints if joint.parent == name]
 
+    def summary(self, kind: str) -> dict[str, Any]:
+        """What the description holds, as an export of ``kind`` (``mjcf``, ``urdf``) says it (``said.robot``):
+        its links but the ground (the robot's own), its joints but those it hangs from the ground by, whether
+        its base floats, its couplings (``[follower, leader, ratio]``), closures, total mass (kg, None where no
+        link has one) and the links with none, named frames, collisions by kind (a decomposed part's hulls are
+        ``hull``), exclusions, poses, its zero state and its warnings. JSON's types alone."""
+        ground = self.root
+        mounts = {joint.name for joint in self.joints if joint.parent == ground.name}
+        links = [link for link in self.links if link is not ground or link.visuals or link.collisions
+                 or link.inertial is not None]
+        joints: dict[str, list[str]] = {}
+        for joint in self.joints:
+            if joint.name not in mounts:
+                joints.setdefault(joint.kind, []).append(joint.name)
+        collisions: dict[str, int] = {}
+        for link in links:
+            for collision in link.collisions:
+                kind_of = "hull" if collision.part else collision.geometry.kind
+                collisions[kind_of] = collisions.get(kind_of, 0) + 1
+        weighed = [link.inertial.mass for link in links if link.inertial is not None]
+        return {"kind": kind, "name": self.name, "links": [link.name for link in links], "joints": joints,
+                "base": "free" if any(joint.kind == "floating" for joint in self.joints) else "fixed",
+                "couplings": [[joint.name, joint.follows[0], float(joint.follows[1])] for joint in self.joints
+                              if joint.follows is not None],
+                "closures": [closure.name for closure in self.closures],
+                "mass": float(sum(weighed)) if weighed else None,
+                "massless": [link.name for link in links if link.inertial is None and link.parts],
+                "frames": [name for link in links for name in link.frames],
+                "collisions": collisions, "excludes": [list(pair) for pair in self.excludes],
+                "poses": [pose.name for pose in self.poses], "zero": self.zero, "warnings": list(self.warnings)}
+
     def controls(self) -> list[Joint]:
-        """The joints a person or a controller moves: not fixed, not following another."""
-        return [joint for joint in self.joints if joint.kind != "fixed" and joint.follows is None]
+        """The joints a person or a controller moves: not fixed, not floating, not following another."""
+        return [joint for joint in self.joints if joint.kind not in ("fixed", "floating") and joint.follows is None]
 
     def check(self) -> None:
         """The tree's invariants, raised by name: one root, every joint between known links, every child
@@ -291,6 +329,10 @@ class Description:
                 raise DescriptionError(f"link {link.name!r} hangs from nothing: no joint places it")
         if self.root.name in placed:
             raise DescriptionError(f"the root link {self.root.name!r} is placed by joint {placed[self.root.name]!r}")
+        for joint in self.joints:
+            if joint.kind == "floating" and joint.parent != self.root.name:
+                raise DescriptionError(f"joint {joint.name!r} floats, and a link floats from the ground alone, not "
+                                       f"from {joint.parent!r}")
         for link in self.links:
             for geometry in [v.geometry for v in link.visuals] + [c.geometry for c in link.collisions]:
                 if geometry.kind == "mesh" and geometry.mesh not in self.meshes:

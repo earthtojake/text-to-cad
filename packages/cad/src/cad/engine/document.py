@@ -25,7 +25,8 @@ survives into the file and into a STEP; and on each part the key of its geometry
 (``KEY_GUID``), which a reader caches the part's tessellation by only once the part it
 read makes that key again (``Loaded``); and on a part that declares them, its collision, its
 named frames, its body, its exclusions, its joints' drive limits and dynamics, the masses it is
-declared part of, its point masses and its contact friction (``declarations``:
+declared part of, its point masses, its contact friction, the nodes declared free above it and
+the link names declared above it (``declarations``:
 ``DECLARATIONS_GUID``), what a robot description is made of beside the material. Saved with the
 BinXCAF driver as ``.xbf``, atomically, and only when its bytes changed -- every
 sub-shape's ``Checked`` flag written cleared (``unchecked``), so a cold build and a
@@ -286,7 +287,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
               path: str, inherited_collision: str | None = None,
               inherited_exclude: tuple[str, ...] = (), inherited_masses: tuple[tuple[int, float], ...] = (),
               inherited_friction: tuple[float, ...] | None = None,
-              inherited_decomposition: dict[str, Any] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
+              inherited_decomposition: dict[str, Any] | None = None,
+              inherited_nodes: tuple[tuple[int, str, Any], ...] = ()) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
@@ -302,6 +304,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         # Each mass declared at or above the node, as (how many levels above it, grams): the outermost first.
         own_mass = state.get(declarations.MASS)
         masses = inherited_masses + (((0, _grams(own_mass, path)),) if own_mass is not None else ())
+        # And each ``free`` and ``link`` declared at or above it, as (levels above it, key, value), the outermost first.
+        nodes = inherited_nodes + _nodes(state, path)
         surface = _friction(state.get(declarations.FRICTION), path) or inherited_friction
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
@@ -315,7 +319,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                 prototype, signature, child_color = visit(child, child_topods.Located(_identity()), color, material,
                                                           path + "/" + (child_label or f"{own}.{at}"), collision,
                                                           excluded, tuple((up + 1, grams) for up, grams in masses),
-                                                          surface, decomposition)
+                                                          surface, decomposition,
+                                                          tuple((up + 1, key, value) for up, key, value in nodes))
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -341,7 +346,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
         frames = _frames(state.get(declarations.FRAMES), path)
-        declared = _declared(state, excluded, path, masses, surface, decomposition)
+        declared = _declared(state, excluded, path, masses, surface, decomposition, nodes)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
                      tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
                      declarations_key(collision, frames, declared))
@@ -2068,9 +2073,29 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 #: limits and dynamics (``{label: {"effort": ..., "damping": ...}}``, the keys declared), the masses
 #: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the
 #: part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm, "inertia"?}}``), its
-#: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``) and a decomposed collision's options
-#: (``{"maxHulls"?, "threshold"?}``, those given, the part's or its assembly's with the collision).
-DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction", "decomposition")
+#: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``), a decomposed collision's options
+#: (``{"maxHulls"?, "threshold"?}``, those given, the part's or its assembly's with the collision), the nodes
+#: declared free at or above it (``[levels above the part, ...]``, the outermost first) and the link names
+#: declared at or above it (``[[levels above the part, name], ...]``, the outermost first).
+DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction", "decomposition", "free", "link")
+
+
+def _nodes(state: dict[str, Any], path: str) -> tuple[tuple[int, str, Any], ...]:
+    """A node's own ``free`` and ``link`` declarations (``declarations.free``, ``declarations.link``), checked,
+    as (0, key, value)."""
+    from cad.engine import declarations
+
+    found: list[tuple[int, str, Any]] = []
+    if state.get(declarations.FREE) is not None:
+        if state[declarations.FREE] is not True:
+            raise ValueError(f"{path}: free is declared True, not {state[declarations.FREE]!r}")
+        found.append((0, "free", True))
+    name = state.get(declarations.LINK)
+    if name is not None:
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{path}: a link's name is a non-empty string, not {name!r}")
+        found.append((0, "link", name))
+    return tuple(found)
 
 
 def _grams(value: Any, path: str) -> float:
@@ -2092,7 +2117,8 @@ def _friction(value: Any, path: str) -> tuple[float, ...] | None:
 
 def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
               masses: tuple[tuple[int, float], ...] = (), surface: tuple[float, ...] | None = None,
-              decomposition: dict[str, Any] | None = None) -> dict[str, Any]:
+              decomposition: dict[str, Any] | None = None,
+              nodes: tuple[tuple[int, str, Any], ...] = ()) -> dict[str, Any]:
     """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``, ``mass``, ``point_mass``,
     ``friction``, ``collision``'s decomposition options) as JSON holds them: a key only where it declares one."""
     from cad.engine import declarations
@@ -2125,6 +2151,12 @@ def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
         found["friction"] = list(surface)
     if decomposition:
         found["decomposition"] = dict(decomposition)
+    floating = [up for up, key, _value in nodes if key == "free"]
+    if floating:
+        found["free"] = floating
+    named = [[up, value] for up, key, value in nodes if key == "link"]
+    if named:
+        found["link"] = named
     return found
 
 

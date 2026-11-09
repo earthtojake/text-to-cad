@@ -17,8 +17,24 @@ state that moves a joint of a loop is left out of the poses, and warned. A virtu
 pair to a link of no part that no other pair reaches) is no link: its racks follow the first of them.
 With none (a STEP, a model without joints), each top-level node of the document's tree is a
 link hung from ``world`` by a ``fixed`` joint named for it, so a scene can make any of them free; an
-assembly at the top is one link, all its parts together. A link's name is its mechanism link's (its
-first part's), or its node's, made unique with ``_2``, ``_3``; a joint's is unique among joints alone.
+assembly at the top is one link, all its parts together. A link's name is the one its parts are declared
+to make (``declarations.link``: the innermost declaration over each part, a part declared a body aside),
+else its mechanism link's (the label of the jointed assembly that holds it, else its first part's), or
+its node's, made unique with ``_2``, ``_3``; a joint's is unique among joints alone. A declared name is
+refused by name where one link's parts declare two, where two links declare one, and where it is the
+ground's, ``world``.
+
+**The base.** A node declared free (``declarations.free``) floats what it holds: each link hung from
+``world`` that holds a part at or below it hangs by a ``floating`` joint in place of its ``fixed`` one. A
+free node none of whose parts is in a link hung from ``world`` is refused by name.
+
+**The zero.** Given ``zero``, a mechanism state's name, the description is taken there (``description``'s
+**Units and frames**): each joint the state moves has its origin turned or slid by its value there (its
+value around the as-built state, ``d``), so every link stands as the state poses it; its limits are its
+range less ``d``, its ``as_built`` the state's value, a follower's offset what keeps its coupling true
+about the new zero, and every pose (the state's own among them, at zero) less ``d``, a spherical joint's
+turn composed (``M(d)^-1 @ M(v)``). A name no state has is refused, the states named; so is a state that
+moves a joint of a loop (it has no pose without a solver), and a document with no mechanism.
 
 **Bodies.** A part declared a body (``declarations.body``) leaves the link it was made part of: it is a
 link of its own, named for the declaration (its name, else the part's), framed at the part's own
@@ -92,13 +108,17 @@ FLIP = np.diag([1.0, -1.0, -1.0, 1.0])
 WORLD = "world"
 
 
-def describe(view: Any, *, collision_default: str = "mesh") -> Description:
+def describe(view: Any, *, collision_default: str = "mesh", zero: str | None = None) -> Description:
     """The robot ``view``'s document is (see the module docstring): its links, joints, meshes,
     poses and the joints that close its loops, checked (``Description.check``). ``collision_default``
-    is a part's collision where it declares none: one of ``description.COLLISIONS``."""
+    is a part's collision where it declares none: one of ``description.COLLISIONS``. ``zero`` is the
+    mechanism state every joint's zero is taken at (the module's **The zero**), the as-built state where
+    None."""
     if collision_default not in COLLISIONS:
         raise ValueError(f"collision_default {collision_default!r} is none of {', '.join(COLLISIONS)}")
-    return _Describer(view, collision_default).run()
+    if zero is not None and (not isinstance(zero, str) or not zero):
+        raise ValueError(f"zero is a mechanism state's name, not {zero!r}")
+    return _Describer(view, collision_default, zero).run()
 
 
 def _rotation(axis: int, angle: float) -> np.ndarray:
@@ -148,8 +168,9 @@ def _unique(name: str, taken: set[str]) -> str:
 
 
 class _Describer:
-    def __init__(self, view: Any, collision_default: str) -> None:
+    def __init__(self, view: Any, collision_default: str, zero: str | None = None) -> None:
         self.view = view
+        self.zero = zero
         self.source = view.source
         self.structure = self.source.structure
         self.collision_default = collision_default
@@ -161,6 +182,12 @@ class _Describer:
         self.fitted: dict[str, Any] = {}
         self.link_names: set[str] = set()
         self.joint_names: set[str] = set()
+        # Each part's declared link name (``declarations.link``: the innermost over it), a body's aside, and the
+        # link that took each declared name, by its name.
+        self.link_named = {index: str(self._declared(index)["link"][-1][1]) for index in range(len(self.instances))
+                           if self._declared(index).get("link") and self._declared(index).get("body") is None}
+        self.reserved = set(self.link_named.values())
+        self.declared_links: dict[str, str] = {}
 
     def warn(self, text: str) -> None:
         if text not in self.warnings:
@@ -175,24 +202,156 @@ class _Describer:
                                    "of the document as built")
         for text in (kinematics or {}).get("warnings") or ():
             self.warn(text)
+        if WORLD in self.reserved:
+            raise DescriptionError(f"a link is declared {WORLD!r}, which is the ground's name: name it another")
         world = Link(_unique(WORLD, self.link_names), np.eye(4))
         links, joints, poses, closures = [world], [], [], []
-        if kinematics is not None and kinematics.get("links"):
+        jointed = kinematics is not None and bool(kinematics.get("links"))
+        if jointed:
             closures = self._mechanism(kinematics, links, joints)
             poses = self._poses(kinematics, joints, closures)
             self._drives(kinematics)
         else:
             self._unjointed(links, joints)
+        if self.zero is not None and not jointed:
+            raise DescriptionError(f"no mechanism state {self.zero!r}: the document has no mechanism, so no state "
+                                   "to take the zero at")
         self._bodies(links, joints)
+        self._free(links, joints)
         excludes = self._excludes(links)
         self.masses = self._masses()
         meshes = self._meshes()
         self.hulls = self._decompositions(links, meshes)
         for link in links[1:]:
             self._geometry(link)
-        found = Description(self.structure["name"], links, joints, meshes, poses, closures, excludes=excludes)
+        if self.zero is not None:
+            poses = self._zeroed(kinematics, links, joints, poses)
+        found = Description(self.structure["name"], links, joints, meshes, poses, closures, excludes=excludes,
+                            zero=self.zero)
         found.check()
         found.warnings = tuple(self.warnings)
+        return found
+
+    def _link_name(self, parts: tuple[int, ...], fallback: str) -> str:
+        """A link's name: the one its parts declare (``declarations.link``), else ``fallback`` made unique (the
+        module's **Links**), each declared name refused where it names two links or one link takes two."""
+        declared = sorted({self.link_named[index] for index in parts if index in self.link_named})
+        if len(declared) > 1:
+            raise DescriptionError(f"link {fallback!r} holds parts declared to be link {declared[0]!r} and link "
+                                   f"{declared[1]!r}: one link takes one name")
+        if declared:
+            name = declared[0]
+            if name in self.declared_links:
+                raise DescriptionError(f"link name {name!r} is declared on parts of two links, "
+                                       f"{self.declared_links[name]!r} and {fallback!r}: a name names one link")
+            self.declared_links[name] = fallback
+            self.link_names.add(name)
+            return name
+        found, at = fallback or "part", 2
+        while found in self.link_names or found in self.reserved:
+            found, at = f"{fallback or 'part'}_{at}", at + 1
+        self.link_names.add(found)
+        return found
+
+    def _free(self, links: list[Link], joints: list[Joint]) -> None:
+        """Each link hung from the world that holds a part at or below a node declared free hung by a
+        ``floating`` joint (the module's **The base**); a free node that holds none refused by name."""
+        nodes: dict[tuple[int, ...], set[int]] = {}
+        names: dict[tuple[int, ...], str] = {}
+
+        def walk(node: dict[str, Any], at: tuple[int, ...], above: list[tuple[int, ...]]) -> None:
+            names[at] = node.get("name") or "the model"
+            if "children" in node:
+                for position, child in enumerate(node["children"]):
+                    walk(child, at + (position,), above + [at])
+                return
+            index = int(node["instance"])
+            chain = above + [at]
+            for up in self._declared(index).get("free") or ():
+                if 0 <= int(up) < len(chain):
+                    nodes.setdefault(chain[-1 - int(up)], set()).add(index)
+
+        walk(self.structure["tree"], (), [])
+        if not nodes:
+            return
+        owner = {index: link for link in links for index in link.parts}
+        from_world = {joint.child: joint for joint in joints if joint.parent == links[0].name}
+        for node, held in sorted(nodes.items()):
+            hung = [from_world[owner[index].name] for index in sorted(held)
+                    if index in owner and owner[index].name in from_world]
+            if not hung:
+                index = min(held)
+                link = owner.get(index)
+                placed = next((joint for joint in joints if link is not None and joint.child == link.name), None)
+                where = (f"in link {link.name!r}, which hangs from {placed.parent!r} by joint {placed.name!r}"
+                         if link is not None and placed is not None else "in no link")
+                raise DescriptionError(f"{names[node]!r} is declared free, and none of its parts is in a link hung "
+                                       f"from the world: part {self._name(index)!r} is {where}; declare free the "
+                                       "assembly or part that holds the base")
+            for joint in hung:
+                joint.kind = "floating"
+
+    def _zeroed(self, kinematics: dict[str, Any], links: list[Link], joints: list[Joint],
+                poses: list[Pose]) -> list[Pose]:
+        """The description taken at the mechanism state ``self.zero`` (the module's **The zero**): each moved
+        joint's origin, limits, as-built value and coupling offset, every link's frame from the root, and the
+        poses around it."""
+        states = list((kinematics.get("configurations") or {}))
+        if self.zero not in states:
+            known = ", ".join(repr(name) for name in states)
+            raise DescriptionError(f"no mechanism state {self.zero!r}: "
+                                   + (f"the states are {known}" if states else "the document names none"))
+        here = next((pose for pose in poses if pose.name == self.zero), None)
+        if here is None:  # left out: it moves a joint of a loop (``_poses``)
+            raise DescriptionError(f"mechanism state {self.zero!r} moves a joint of a loop, which has no pose without "
+                                   "a solver: no description is taken at it")
+        by_name = {joint.name: joint for joint in joints}
+        shift = {name: _values(value) for name, value in here.values.items() if name in by_name}
+        authored = (kinematics.get("configurations") or {})[self.zero]
+        for name, moved in shift.items():
+            joint = by_name[name]
+            joint.origin = joint.origin @ motion(joint.kind, moved)
+            joint.limits = tuple(tuple(None if bound is None else bound - moved[index] for bound in bounds)
+                                 for index, bounds in enumerate(joint.limits))
+            label_kind = self.pair_kinds.get(name)
+            if label_kind is not None and name in authored:
+                units = [UNITS[unit] for unit in label_kind["pair"].get("units") or ()]
+                joint.as_built = tuple(value * unit for value, unit in zip(_values(authored[name]), units))
+        followed = {joint.name: joint.follows for joint in joints if joint.follows is not None}  # as authored
+        for joint in joints:
+            if joint.follows is not None:
+                leader, ratio, offset = joint.follows
+                led = shift.get(leader, (0.0,))[0]
+                joint.follows = (leader, ratio, offset + ratio * led - shift.get(joint.name, (0.0,))[0])
+        # Every link where its joint now puts it at zero, from the root.
+        frames = {links[0].name: links[0].frame}
+        pending = [links[0].name]
+        while pending:
+            parent = pending.pop(0)
+            for joint in joints:
+                if joint.parent == parent:
+                    frames[joint.child] = frames[parent] @ joint.origin
+                    pending.append(joint.child)
+        for link in links:
+            link.frame = frames.get(link.name, link.frame)
+        found = []
+        for pose in poses:
+            values: dict[str, float | tuple[float, ...]] = {}
+            for name in [*pose.values, *(name for name in shift if name not in pose.values)]:
+                joint = by_name[name]
+                given = pose.values.get(name)
+                if given is None and name in followed and followed[name][0] in pose.values:  # where its leader puts it
+                    leader, ratio, offset = followed[name]
+                    given = ratio * _values(pose.values[leader])[0] + offset
+                old = _values(given) if given is not None else (0.0,) * len(shift.get(name, (0.0,)))
+                moved = shift.get(name, (0.0,) * len(old))
+                if joint.kind == "spherical":
+                    turned = np.linalg.inv(motion("spherical", moved)) @ motion("spherical", old)
+                    values[name] = _angles(turned)
+                    continue
+                around = tuple(value - by for value, by in zip(old, moved))
+                values[name] = around[0] if len(around) == 1 else around
+            found.append(Pose(pose.name, values))
         return found
 
     def _declared(self, index: int) -> dict[str, Any]:
@@ -218,7 +377,9 @@ class _Describer:
             at = links.index(link)
             for index in bodies:
                 wanted = self._declared(index)["body"] or self._name(index)
-                child = Link(_unique(wanted, self.link_names), self.worlds[index].copy(), parts=(index,))
+                named = _unique(wanted, self.link_names | self.reserved)
+                self.link_names.add(named)
+                child = Link(named, self.worlds[index].copy(), parts=(index,))
                 at += 1
                 links.insert(at, child)
                 joints.append(self._fixed(child.name, link, child))
@@ -280,7 +441,7 @@ class _Describer:
             parts = tuple(_leaves(node))
             if not parts:
                 continue
-            link = Link(_unique(node["name"], self.link_names), self.worlds[parts[0]].copy(), parts=parts)
+            link = Link(self._link_name(parts, node["name"]), self.worlds[parts[0]].copy(), parts=parts)
             links.append(link)
             joints.append(self._fixed(link.name, links[0], link))
 
@@ -295,8 +456,8 @@ class _Describer:
         made: dict[int, Link] = {}
 
         def link(at: int, frame: np.ndarray) -> Link:
-            found = made[at] = Link(_unique(blocks[at]["name"], self.link_names), frame,
-                                    parts=tuple(blocks[at].get("instances") or ()))
+            parts = tuple(blocks[at].get("instances") or ())
+            found = made[at] = Link(self._link_name(parts, blocks[at]["name"]), frame, parts=parts)
             links.append(found)
             return found
 

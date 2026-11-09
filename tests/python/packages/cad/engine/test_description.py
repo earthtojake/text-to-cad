@@ -10,7 +10,9 @@ and a mass that cannot be made refused; a turned link's inertia in its own frame
 MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop a tree and the closure
 its last pair, two frames that coincide as built, one closing at a slide moved to its nearest turn, and a
 state moving it left out; a pinion that holds no part no link, its racks following the first; a part with no
-density warned, one whose density is not positive refused."""
+density warned, one whose density is not positive refused; a free base floating and a declared link name, both
+round-tripped through the xbf and refused where they name no link rightly; and a description taken at a
+mechanism state, its bodies posed there and its joints, limits and states counted from it."""
 
 from __future__ import annotations
 
@@ -870,6 +872,103 @@ class VirtualPinionTest(_Folder):
                                    atol=1e-12)
         self.assertNotIn("pinion", description.poses[0].values)
         self.assertFalse([warning for warning in description.warnings if "pinion" in warning], description.warnings)
+
+
+# A two-joint arm on a plate: its base named, the whole free, and two states to take the zero at.
+TWO = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import free, link, mechanism_state
+from cad.engine import xbf
+
+
+@xbf("XBF/two.xbf")
+def two():
+    plate = bd.Box(100, 60, 20)
+    plate.label = "plate"
+    upper = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    upper.label = "upper"
+    fore = bd.Box(80, 16, 8, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    fore.label = "fore"
+    for part in (plate, upper, fore):
+        part.material = metals.aluminum()
+    bd.RevoluteJoint("shoulder", plate, axis=bd.Axis((40, 0, 20), (0, 1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("shoulder", upper, bd.Location())
+    plate.joints["shoulder"].connect_to(upper.joints["shoulder"], angle=0)
+    bd.RevoluteJoint("elbow", upper, axis=bd.Axis((120, 0, 10), (0, 1, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("elbow", fore, bd.Location())
+    upper.joints["elbow"].connect_to(fore.joints["elbow"], angle=0)
+    {declare}
+    root = bd.Compound(children=[plate, upper, fore], label="two")
+    {root}
+    mechanism_state(root, "home", shoulder=30, elbow=45)
+    mechanism_state(root, "up", shoulder=90)
+    return root
+"""
+
+
+class BaseAndZeroTest(_Folder):
+    def test_a_free_base_floats_a_link_takes_its_declared_name_and_both_round_trip_through_the_xbf(self) -> None:
+        description, _structure = self.described("two", TWO.format(declare='link(plate, "base_link")',
+                                                                   root="free(root)"))
+        self.assertEqual([link.name for link in description.links], ["world", "base_link", "upper", "fore"])
+        self.assertEqual([(joint.name, joint.kind, joint.parent) for joint in description.joints],
+                         [("two", "floating", "world"), ("shoulder", "revolute", "base_link"),
+                          ("elbow", "revolute", "upper")])
+        self.assertEqual([joint.name for joint in description.controls()], ["shoulder", "elbow"])
+        self.assertEqual(description.summary("mjcf")["base"], "free")
+        # The document keeps them on the parts, levels above each, and a shape rebuilt from it on their nodes.
+        path = self.folder / "XBF/two.xbf"
+        by_name = {prototype["name"]: prototype for prototype in document.Loaded(path).structure()["prototypes"]}
+        self.assertEqual((by_name["plate"]["free"], by_name["plate"]["link"], by_name["fore"]["free"]),
+                         ([1], [[0, "base_link"]], [1]))
+        rebuilt = Source.read(path).shape()
+        self.assertTrue(rebuilt.__dict__["_free"])
+        self.assertEqual({child.label: child.__dict__.get("_link") for child in rebuilt.children},
+                         {"plate": "base_link", "upper": None, "fore": None})
+
+    def test_a_name_or_a_free_node_that_names_no_link_rightly_is_refused_by_name(self) -> None:
+        with self.assertRaisesRegex(DescriptionError, "link name 'arm' is declared on parts of two links, 'upper' and "
+                                                      "'fore'"):
+            self.described("two", TWO.format(declare='link(upper, "arm"); link(fore, "arm")', root="pass"))
+        with self.assertRaisesRegex(DescriptionError, "'world', which is the ground's name"):
+            self.described("two", TWO.format(declare='link(plate, "world")', root="pass"))
+        with self.assertRaisesRegex(DescriptionError, "'fore' is declared free, and none of its parts is in a link hung "
+                                                      "from the world: part 'fore' is in link 'fore', which hangs from "
+                                                      "'upper' by joint 'elbow'"):
+            self.described("two", TWO.format(declare="free(fore)", root="pass"))
+        with self.assertRaisesRegex(DescriptionError, "link 'pair' holds parts declared to be link 'a' and link 'b'"):
+            self.described("pair", PAIR.replace("from cad.engine import xbf", "from cad.build123d import link\n"
+                                                "from cad.engine import xbf").replace(
+                '    return bd.Compound(children=[left, right], label="pair")',
+                '    link(left, "a"); link(right, "b")\n'
+                '    return bd.Compound(children=[bd.Compound(children=[left, right], label="pair")], label="top")'))
+
+    def test_taken_at_a_state_every_body_stands_there_and_the_joints_count_from_it(self) -> None:
+        source = TWO.format(declare="pass", root="pass")
+        built, structure = self.described("two", source)
+        found = describe(Source.read(self.folder / "XBF/two.xbf").view(), zero="home")
+        home = next(pose for pose in built.poses if pose.name == "home").values
+        # At zero, each link where the as-built description puts it at the state, which is where the mechanism
+        # puts its parts there.
+        posed = _frames_at(built, home)
+        for link in found.links:
+            np.testing.assert_allclose(link.frame, posed[link.name], atol=1e-12, err_msg=link.name)
+        self.assertEqual(found.zero, "home")
+        for name, at in (("shoulder", math.radians(30)), ("elbow", math.radians(45))):
+            before, after = (next(joint for joint in each.joints if joint.name == name) for each in (built, found))
+            np.testing.assert_allclose(after.limits, [(before.limits[0][0] - at, before.limits[0][1] - at)], atol=1e-12)
+            np.testing.assert_allclose(after.as_built, [at], atol=1e-12)
+        # The other states around it: up is the shoulder at 90 and the elbow as built.
+        poses = {pose.name: pose.values for pose in found.poses}
+        np.testing.assert_allclose([poses["home"]["shoulder"], poses["home"]["elbow"]], [0, 0], atol=1e-12)
+        np.testing.assert_allclose([poses["up"]["shoulder"], poses["up"]["elbow"]],
+                                   [math.radians(60), math.radians(-45)], atol=1e-12)
+        self.assert_placed_as_the_mechanism_places(built, structure)
+        with self.assertRaisesRegex(DescriptionError, "no mechanism state 'rest': the states are 'home', 'up'"):
+            describe(Source.read(self.folder / "XBF/two.xbf").view(), zero="rest")
+        with self.assertRaisesRegex(DescriptionError, "no mechanism state 'home': the document has no mechanism"):
+            self.described("pair", PAIR, zero="home")
 
 
 if __name__ == "__main__":

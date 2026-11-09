@@ -10,7 +10,10 @@ is; so the MJCF writer excludes every such pair itself (``export/mjcf.py``), and
 them, the bodies welded to its parent (joined to it by fixed joints
 alone, the world's included) and those welded to its child: each pair of them, one from each side, whose
 collision geometries overlap or come within ``TOUCH`` of each other with every joint at zero (the
-as-built state, the description's frames). A mesh is its convex hull, a primitive itself, as MuJoCo
+description's zero state, its frames). A floating joint (a free base, ``cad.build123d.free``) is no
+joint of a mechanism: a free body resting on a bolted one must collide with it, so no pair across it
+is excluded, and its base is welded to nothing, so MuJoCo's ``filterparent`` filters its children's
+contacts with it itself. A mesh is its convex hull, a primitive itself, as MuJoCo
 collides them, so a decomposed part (``collision(part, "decomposed")``) is tested hull by hull. The test is exact for convex shapes: the distance between two of them by GJK over their
 support functions, after their axis-aligned boxes (grown by ``TOUCH``) are found to meet. A pair GJK
 does not settle in ``ITERATIONS`` steps is counted as touching, so the rule errs towards an exclusion.
@@ -42,7 +45,7 @@ def touching(description: Description) -> list[tuple[str, str]]:
     shapes: dict[str, list[tuple[np.ndarray, np.ndarray, Support]]] = {}
     found: list[tuple[str, str]] = []
     seen: set[frozenset[str]] = set()
-    moving = [(joint.parent, joint.child) for joint in description.joints if joint.kind != "fixed"]
+    moving = [(joint.parent, joint.child) for joint in description.joints if joint.kind not in ("fixed", "floating")]
     for ends in moving + [(closure.parent, closure.child) for closure in description.closures]:
         for parent, child in itertools.product(welded[ends[0]], welded[ends[1]]):
             key = frozenset((parent, child))

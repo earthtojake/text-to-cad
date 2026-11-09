@@ -39,7 +39,13 @@ them itself).
 
 What a writer must say about a file it writes -- a robot writer's renamed link or joint -- it says with
 ``note(text)``: a line ``translate`` hands its ``told`` (the build's and the export's log), or, written
-outside a translation, an ``ExportWarning``.
+outside a translation, an ``ExportWarning``. A robot writer says what the file holds too, with
+``described(summary)`` (``Description.summary``): ``translate`` hands it, with every note the file was
+written with (``notes``), to its ``summary``, which the export's row carries (``said.robot`` says it).
+
+A robot description (an MJCF, a URDF) may be taken at a mechanism state of the document (``zero``: every
+joint's zero at that state, ``describe``'s **The zero**): ``zero_of`` refuses one for any other kind, by
+name, before anything is written.
 
 Importing this package imports no kernel: a kind's writer loads on its first use.
 """
@@ -55,9 +61,8 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "ExportWarning", "Kind", "Source", "View", "kind_of",
-           "note", "refused",
-           "tolerance_of", "translate"]
+__all__ = ["KINDS", "MIN_TOLERANCE", "ROBOTS", "TOLERANT", "ExportRefused", "ExportWarning", "Kind", "Source", "View",
+           "described", "kind_of", "note", "refused", "tolerance_of", "translate", "zero_of"]
 
 
 class ExportRefused(ValueError):
@@ -70,6 +75,9 @@ class ExportWarning(UserWarning):
 
 # The lines the translation running in this context hears (``note``), or None outside one.
 _NOTES: "contextvars.ContextVar[list[str] | None]" = contextvars.ContextVar("cad_export_notes", default=None)
+# What the robot file the translation running in this context writes holds (``described``), or None outside one.
+_SUMMARY: "contextvars.ContextVar[list[dict[str, Any]] | None]" = contextvars.ContextVar("cad_export_summary",
+                                                                                        default=None)
 
 
 def note(text: str) -> None:
@@ -81,6 +89,14 @@ def note(text: str) -> None:
         warnings.warn(text, ExportWarning, stacklevel=2)
     elif text not in heard:
         heard.append(text)
+
+
+def described(summary: dict[str, Any]) -> None:
+    """Say what the robot file being written holds (``Description.summary``): to the translation's
+    ``summary``; outside one, nowhere."""
+    heard = _SUMMARY.get()
+    if heard is not None:
+        heard.append(summary)
 
 
 @dataclass(frozen=True)
@@ -129,6 +145,8 @@ ZIP_DATE = (1980, 1, 1, 0, 0, 0)
 # finer than any printer resolves, past which a part's triangles run to millions.
 TOLERANT = ("stl", "threemf")
 MIN_TOLERANCE = 0.001
+# The kinds a robot description is written as, which alone take a ``zero`` state.
+ROBOTS = ("mjcf", "urdf")
 
 
 def refused(source: Any, destination: Any) -> str | None:
@@ -164,6 +182,21 @@ def tolerance_of(tolerance: Any, destinations: Any = ()) -> float | None:
             raise ExportRefused(f"{Path(destination).name}: a tolerance meshes an STL or a 3MF; export the "
                                 f"{LABELS[kind_of(destination)]} without one")
     return value
+
+
+def zero_of(zero: Any, destinations: Any = ()) -> str | None:
+    """An export's ``zero`` state checked, or None: a mechanism state's name, and every destination a
+    robot description (an MJCF or a URDF), refused by name before anything is written. Whether the
+    document has the state is ``describe``'s to say."""
+    if zero is None:
+        return None
+    if not isinstance(zero, str) or not zero:
+        raise ExportRefused(f"zero is a mechanism state's name, not {zero!r}")
+    for destination in destinations:
+        if kind_of(destination) not in ROBOTS:
+            raise ExportRefused(f"{Path(destination).name}: a zero state poses a robot description (.xml, .urdf); "
+                                f"export the {LABELS[kind_of(destination)]} without one")
+    return zero
 
 
 def kind_of(path: Any) -> str:
@@ -402,6 +435,11 @@ class Source:
             if prototype.get("mass"):
                 # Each mass back on the node that declared it, ``up`` levels above the part (``declare``).
                 made.__dict__[_MASSES] = [(int(up), float(grams)) for up, grams in prototype["mass"]]
+            # Each ``free`` and ``link`` likewise.
+            nodes = [(int(up), "_free", True) for up in prototype.get("free") or ()]
+            nodes += [(int(up), "_link", str(name)) for up, name in prototype.get("link") or ()]
+            if nodes:
+                made.__dict__[_NODES] = nodes
             # A part stands where its instance does: at its own placement in its assembly, unless the
             # document places it elsewhere (a posed structure), where it stands in its assembly's frame.
             world = matrix_of(instance["matrix"])
@@ -414,6 +452,9 @@ class Source:
             for up, grams in made.__dict__.pop(_MASSES, ()):
                 if up < len(chain):
                     chain[-1 - up].__dict__["_mass"] = grams
+            for up, key, value in made.__dict__.pop(_NODES, ()):
+                if up < len(chain):
+                    chain[-1 - up].__dict__[key] = value
             for child in made.__dict__.get("_NodeMixin__children") or ():
                 declare(child, chain)
 
@@ -423,8 +464,10 @@ class Source:
 
 
 _STRUCTURES: dict[int, tuple[Any, Any, dict[str, Any]]] = {}
-# A rebuilt part's masses until ``Source.shape`` puts each on the node that declared it.
+# A rebuilt part's masses, and its ``free`` and ``link`` declarations, until ``Source.shape`` puts each on the
+# node that declared it.
 _MASSES = "_cad_masses"
+_NODES = "_cad_nodes"
 
 
 def structure_of(tree: Any, path: Path | None) -> dict[str, Any]:
@@ -468,6 +511,7 @@ class View:
     tree: dict[str, Any]
     matrices: list[Any]  # every instance's world matrix, by instance index
     tolerance: float | None = None  # the export's own, in mm; None meshes at the engine's (``export/mesh.py``)
+    zero: str | None = None  # the mechanism state a robot description is taken at (``zero_of``); None as built
     unmeshed: dict[str, int] | None = None  # at the export's own tolerance: faces left without triangles, by part
 
     @property
@@ -507,10 +551,13 @@ def _instances(node: dict[str, Any]) -> list[int]:
 
 
 def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
-              told: Callable[[str], None] | None = None) -> int:
+              told: Callable[[str], None] | None = None, zero: str | None = None,
+              summary: Callable[[dict[str, Any]], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
     as ``kind`` (from the suffix when None), an STL or a 3MF meshed to within ``tolerance`` (mm) when
-    one is given (``told`` hears each part it left faces of without triangles); returns the file's size. The
+    one is given (``told`` hears each part it left faces of without triangles), a robot description taken
+    at the mechanism state ``zero`` when one is given (``summary`` hears what it holds, with the notes it
+    was written with: ``described``); returns the file's size. The
     translation lands only where the file does not hold its bytes already (``put``): a file written
     again the same is left as it is. Every declared file is written this way too, after the build or
     the take-up that made its document (``build``)."""
@@ -521,6 +568,7 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     if path.suffix.lower() not in KINDS[kind].suffixes:
         raise ExportRefused(f"{path.name}: a {kind} export ends in {' or '.join(KINDS[kind].suffixes)}")
     tolerance = tolerance_of(tolerance, [path])
+    zero = zero_of(zero, [path])
     if not isinstance(document, Source):
         why = refused(document, path)
         if why:
@@ -538,10 +586,12 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
         raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance meshes it again")
     view = source.view()
     view.tolerance = tolerance
+    view.zero = zero
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     heard: list[str] = []
-    token = _NOTES.set(heard)
+    summaries: list[dict[str, Any]] = []
+    token, summarized = _NOTES.set(heard), _SUMMARY.set(summaries)
     try:
         if not spec.atomic:
             spec.write(view, path)
@@ -550,6 +600,10 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
             _written, size = put(path, lambda temporary: spec.write(view, temporary))
     finally:
         _NOTES.reset(token)
+        _SUMMARY.reset(summarized)
+    if summary is not None:
+        for found in summaries:
+            summary({**found, "notes": list(heard)})
     for text in heard:
         if told is not None:
             told(f"{path.name}: {text}")
