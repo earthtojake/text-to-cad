@@ -342,7 +342,8 @@ free(root)                                  # the base is not bolted to the worl
   collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
   `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`
   caps the count (16 by default, `None` for no limit), `threshold=` (0.01 to 1, 0.05 by default) is the
-  concavity left, smaller cutting finer. The hulls are cached by the part's mesh and options; a
+  concavity left, smaller cutting finer. The first export decomposes every such part (about 15 s
+  for a printed part of a desktop arm). The hulls are cached by the part's mesh and options; a
   decomposition not in the cache needs CoACD, `cad[coacd]`, which the engine fetches into an
   environment of its own on first need: the export is refused, naming the part and the extra, only
   where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl Linux) or no engine runs.

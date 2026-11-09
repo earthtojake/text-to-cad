@@ -306,6 +306,8 @@ angle_degrees = u.get_angle(v)
 signed_angle_degrees = u.get_signed_angle(v, normal)
 center = circular_edge.arc_center
 radius = circular_edge.radius
+axis = cylindrical_face.axis_of_rotation   # Axis (a point on it, its direction); None for a plane
+bore = cylindrical_face.radius
 size = shape.bounding_box().size
 ```
 
@@ -327,7 +329,9 @@ press-fit pin, a bearing in its bore) is named as such, not inferred from where 
 sits in the tree. A part meant to sit on, bolt to or bear against another measures
 `closest_points` distance 0 against it; above 0 is a gap, and the part floats. Over
 many parts, two `bounding_box(optimal=False)` envelopes that do not meet rule a pair
-out, leaving the exact queries for the pairs that remain. Both measure the parts as
+out, leaving the exact queries for the pairs that remain. A solid-to-solid `closest_points`
+on large parts (a vendor STEP's printed parts, thousands of faces each) takes seconds a pair, so
+filter first, and measure from a point (`bd.Vertex(*p)`) where a point answers the question. Both measure the parts as
 built: a part clear there can still pass through another in a pose
 ([reviewing motion](kinematics.md#reviewing-motion)).
 

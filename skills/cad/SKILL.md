@@ -323,6 +323,9 @@ cad step ranges arm.step --step 0.5 --json
   or spherical joint is not swept, nor is a joint of a closed loop (it moves only with its loop), and
   its warning says so. A document with no joint fails with
   `no_joints`.
+- **Cost.** The sweep runs on one core, and its time grows with finer settings: a 270-part
+  six-joint arm took 19 s at the defaults and 7 minutes at `--clearance 0.2 --step 0.5`. Start at
+  the defaults, and answer a narrower question (do the jaws close?) with a posed snapshot.
 
 `--json` carries every number in `measurements.joints`: `lower`, `upper`, `range` (the joint's own
 values), the `*_contact` and `*_clash` parts, and the pairs touching as built (`resting`).
