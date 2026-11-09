@@ -90,6 +90,20 @@ class DraftTest(unittest.TestCase):
             self.assertGreater(wall["draft_deg"], 3.0)
             self.assertLess(wall["draft_deg"], 6.0)
 
+    def test_a_round_tangent_to_a_wall_square_to_the_pull_has_its_zero_draft(self) -> None:
+        # a block's bottom edges rounded: each round is tangent to a vertical side, so its least draft is 0 on
+        # that edge -- read there, the same however the part and its pull are turned
+        block = bd.Box(40, 30, 20)
+        block = bd.fillet(block.edges().group_by(bd.Axis.Z)[0], 3)
+        for turn in ((0, 0, 0), (23, -37, 61)):
+            placed = bd.Rot(*turn) * block
+            pull = (bd.Rot(*turn) * bd.Pos(0, 0, 1)).position
+            items = _check(placed, pull=f"{pull.X:.12f},{pull.Y:.12f},{pull.Z:.12f}").measurements["draft"]["items"]
+            with self.subTest(turn=turn):
+                rounds = [item["draft_deg"] for item in items if item["surface"] in ("cylinder", "torus")]
+                self.assertEqual(len(rounds), 4)
+                self.assertTrue(all(abs(draft) < 1e-6 for draft in rounds), rounds)
+
     def test_splines_that_are_analytic_surfaces_read_as_them(self) -> None:
         from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
 

@@ -3,7 +3,8 @@
 Every part of the document is measured along the pull on its B-rep, each finding at a face's ref:
 
 - **draft**: per face, its angle to the pull -- exact for a plane, for a cylinder or cone whose axis runs
-  along the pull (zero, the half-angle), the least over points sampled on the face otherwise -- and which
+  along the pull (zero, the half-angle), the least over points sampled on the face and along its edges
+  otherwise (a round tangent to a wall square to the pull is zero there) -- and which
   way it opens: ``+pull`` (released by the half withdrawing along the pull), ``-pull``, ``none`` (zero
   draft, either half) or ``split`` (the face turns through the pull: the parting line crosses it);
 - **undercuts**: points sampled on every face shot along the way the face opens with exact rays; a point
@@ -56,6 +57,8 @@ _RELEASE_RAYS = 200000
 _MOST_PER_FACE = 400
 #: The denser set of surface points the rolling ball is tested against.
 _BALL_POINTS = 6000
+#: Points along each edge a curved face's draft is also read at (``_Geometry.boundary_normals``).
+_BOUNDARY_POINTS = 9
 #: The sampled points the wall thickness is read at, at most (each a rolling ball solved exactly).
 _THICK_POINTS = 1600
 #: Candidates sample fewer points: six pulls, each its own undercut rays.
@@ -201,6 +204,7 @@ class _Geometry:
     _by_face: Any = None
     _vertices: dict[int, np.ndarray] = field(default_factory=dict)
     _contact: tuple[np.ndarray, list[dict[str, Any]]] | None = None
+    _boundary: dict[int, np.ndarray] | None = None
 
     def __post_init__(self) -> None:
         self.faces = self.part.faces()
@@ -274,6 +278,40 @@ class _Geometry:
 
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
+
+    def boundary_normals(self, ordinal: int) -> np.ndarray:
+        """The face's outward normals along its edges (``_BOUNDARY_POINTS`` an edge, on its curves in the face's
+        (u, v)): where a curved face's draft is least when it is least at its boundary -- a fillet tangent to a
+        wall square to the pull reaches zero draft on the tangent edge, which no sample inside it lands on."""
+        if self._boundary is None:
+            self._boundary = {}
+        found = self._boundary.get(ordinal)
+        if found is None:
+            from OCP.BRepAdaptor import BRepAdaptor_Curve2d
+            from OCP.BRepGProp import BRepGProp_Face
+            from OCP.TopAbs import TopAbs_EDGE
+            from OCP.TopExp import TopExp_Explorer
+            from OCP.TopoDS import TopoDS
+
+            face = self.faces[ordinal - 1]
+            props = BRepGProp_Face(face.wrapped)
+            normals = []
+            explorer = TopExp_Explorer(face.wrapped, TopAbs_EDGE)
+            while explorer.More():
+                try:
+                    curve = BRepAdaptor_Curve2d(TopoDS.Edge(explorer.Current()), face.wrapped)
+                    first, last = curve.FirstParameter(), curve.LastParameter()
+                    for k in range(_BOUNDARY_POINTS):
+                        uv = curve.Value(first + (last - first) * k / (_BOUNDARY_POINTS - 1))
+                        _, normal = _dfm_brep.point_normal(face, uv.X(), uv.Y(), props)
+                        if float(np.linalg.norm(normal)) > 0.5:
+                            normals.append(normal)
+                except Exception:  # noqa: BLE001 - an edge with no curve in the face adds no point
+                    pass
+                explorer.Next()
+            found = np.array(normals).reshape(-1, 3)
+            self._boundary[ordinal] = found
+        return found
 
     def _mesh_crosses(self, ray: np.ndarray, face: np.ndarray, origins: np.ndarray, directions: np.ndarray
                       ) -> np.ndarray:
@@ -542,6 +580,10 @@ def _face_drafts(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> list[_Fac
             exact = True
         else:
             draft = float(sample.min()) if len(sample) else 90.0
+            edge = geo.boundary_normals(ordinal) @ pull
+            if len(edge):
+                # its least over its edges too: a round's draft falls to the wall's it is tangent to there
+                draft = min(draft, float(np.degrees(np.arcsin(np.clip(np.abs(edge), 0.0, 1.0))).min()))
             lean = float(np.average(along, weights=weights)) if len(along) else 0.0
         if exact:
             opens = "none" if draft < zero_tol else ("+pull" if lean > 0 else "-pull")
@@ -627,7 +669,7 @@ def _draft(geos: list[_Geometry], drafts: list[list[_FaceDraft]], pull: np.ndarr
         "items": items[:_ITEMS],
         "method": ("per face on the B-rep: a plane's angle to the pull exactly, a cylinder's or cone's whose axis "
                    "runs along the pull exactly (zero, the half-angle), any other face the least over points "
-                   "sampled on it; faces at or above wall_limit_deg are not walls"),
+                   "sampled on it and along its edges; faces at or above wall_limit_deg are not walls"),
     }
     measured = [item for item in items if item["opens"] != "split"]
     if measured:
