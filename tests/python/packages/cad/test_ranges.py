@@ -5,7 +5,8 @@ meets the wall one way and the base the other, the carriage slides until it meet
 stop the other (touching the base all along, as built, which stops nothing), each stop where an exact
 distance says the parts come within the clearance; the document is not changed. A STEP with no joint has
 nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
-is cut into hulls for the collision geometry alone."""
+is cut into hulls for the collision geometry alone. The stops are said as a table, and a long sweep says each joint as
+it starts and ends."""
 
 from __future__ import annotations
 
@@ -94,6 +95,28 @@ class Ranges(unittest.TestCase):
                                                     slide["upper_clash"]), "each stop is its own: nothing else first")
         self.assertEqual({"joint_stops"}, {finding.code for finding in result.findings})
         self.assertEqual(before, document.read_bytes(), "the document is not changed")
+
+    def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
+        import contextlib
+        import io
+
+        from cad import xbf
+
+        document = self.rig()
+        said = io.StringIO()
+        with mock.patch("cad.engine.ranges.LONG", 0.0), contextlib.redirect_stderr(said):
+            result = xbf.ranges(document)
+        lines = result.human_lines()
+        self.assertEqual([line.split() for line in lines[:3]],
+                         [["joint", "lower", "upper", "range"], ["elbow", "-30", "deg", "+101", "deg", "-30", "to",
+                                                                 "101", "deg"],
+                          ["slide", *lines[2].split()[1:]]])
+        self.assertTrue(lines[3].startswith("elbow: lower -30 deg: arm (arm) meets wall"), lines)
+        self.assertFalse([line for line in lines if line.startswith("info:")], lines)
+        # Each joint said as it starts, about how long it may take, and as it ends, though not verbose.
+        heard = said.getvalue().splitlines()
+        self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 2): up to about "), heard)
+        self.assertTrue(heard[1].startswith("ranges: elbow swept in "), heard)
 
     def test_a_decomposed_part_is_cut_for_the_collision_geometry_alone(self) -> None:
         from cad import xbf

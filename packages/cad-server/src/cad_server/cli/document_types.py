@@ -296,7 +296,7 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
     (``cad_server._internal.integration_env``), its options refused here first."""
 
     def run(argv: list[str], prog: str) -> int:
-        from cad._internal.ranges import INTEGRATION, options
+        from cad._internal.ranges import INTEGRATION, StopsResult, options
         from cad.results import CheckFinding, CheckResult
         from cad_server._internal import integration_env
         from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
@@ -320,7 +320,7 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
             sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
                        for value in positional]
             found = integration_env.call(python, document_type, "ranges", sources, keywords)
-            return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+            return StopsResult(ok=bool(found["ok"]), path=Path(found["path"]),
                                findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
                                summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
 

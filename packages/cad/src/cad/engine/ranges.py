@@ -95,14 +95,23 @@ class JointStops:
     resting: list[tuple[str, str]] = field(default_factory=list)  # part pairs touching at zero (moving, still)
 
 
+#: Seconds past which a joint's sweep is said as it starts and as it ends (``sweep``'s ``progress``): a fine step or
+#: clearance on a vendor STEP's thousands of faces takes minutes a joint.
+LONG = 15.0
+
+
 def sweep(description: Any, *, step: float = 1.0, clearance: float = 1.0, geometry: str = "parts",
-          told: Callable[[str], None] | None = None) -> list[JointStops]:
+          told: Callable[[str], None] | None = None,
+          progress: Callable[[str], None] | None = None) -> list[JointStops]:
     """Each controlled joint's stops (see the module docstring): ``step`` degrees for a turning joint and
     millimetres for a sliding one, ``clearance`` millimetres, ``geometry`` what is tested (``GEOMETRY``);
-    ``told`` hears a line per joint as it is done."""
+    ``told`` hears a line per joint as it is done. ``progress`` hears, of a joint whose sweep may take more
+    than ``LONG`` seconds (its first pose's time times its poses, a full turn each way at most), a line as
+    it starts saying about how long, and one as it ends."""
     if geometry not in GEOMETRY:
         raise ValueError(f"geometry {geometry!r} is none of {', '.join(GEOMETRY)}")
-    return _Sweep(description, step, clearance, told or (lambda _line: None), geometry).run()
+    return _Sweep(description, step, clearance, told or (lambda _line: None), geometry,
+                  progress or (lambda _line: None)).run()
 
 
 def _tested(link: Any, geometry: str) -> list[tuple[str, Any]]:
@@ -287,8 +296,12 @@ class _Reach:
 
 class _Sweep:
     def __init__(self, description: Any, step: float, clearance: float, told: Callable[[str], None],
-                 geometry_of: str = "parts") -> None:
+                 geometry_of: str = "parts", progress: Callable[[str], None] = lambda _line: None) -> None:
         self.description = description
+        self.progress = progress
+        self.clearance = float(clearance)
+        self.place = ""  # which joint of how many is swept, as ``progress`` says it
+        self.long = False  # whether the joint swept now was said to be long
         self.step = float(step)
         self.pitch = float(clearance) * 1e-3  # metres
         self.told = told
@@ -389,11 +402,16 @@ class _Sweep:
 
     def run(self) -> list[JointStops]:
         found = []
-        for joint in self.description.controls():
+        controls = list(self.description.controls())
+        for at, joint in enumerate(controls, 1):
             started = time.perf_counter()
+            self.place, self.long = f"{at} of {len(controls)}", False
             stops = self.joint(joint)
             found.append(stops)
-            self.told(f"{joint.name}: {_said(stops)} ({time.perf_counter() - started:.1f} s)")
+            seconds = time.perf_counter() - started
+            self.told(f"{joint.name}: {_said(stops)} ({seconds:.1f} s)")
+            if self.long:
+                self.progress(f"{joint.name} swept in {_duration(seconds)}")
         return found
 
     def joint(self, joint: Any) -> JointStops:
@@ -453,7 +471,9 @@ class _Sweep:
                     if frozenset((link_of[int(code) // len(self.parts)], link_of[int(code) % len(self.parts)]))
                     not in self.excluded}
 
+        started = time.perf_counter()
         zero = pairs(0.0)
+        posed = time.perf_counter() - started
         stops.resting = sorted({(self.parts[a][0], self.parts[b][0]) for a, b in zero})
         step = self.step / scale  # radians or metres
         if turning:
@@ -463,6 +483,12 @@ class _Sweep:
                                     for name, points in self.points.items()])
             reach = float(np.linalg.norm(everything.max(axis=0) - everything.min(axis=0))) + step
         count = int(math.ceil(reach / step - 1e-9))
+        most = posed * 2 * count  # a full turn (or the document's extent) each way: a stop ends it sooner
+        if most > LONG:
+            self.long = True
+            self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(most)} at {self.step:g} "
+                          f"{unit} a step and {self.clearance:g} mm clearance (a coarser --step or --clearance is "
+                          "faster)")
         child_side, parent_side = self.rigid(joint.child) & moving, self.rigid(joint.parent) - moving
 
         def contact_at(pair: tuple[int, int], value: float) -> Contact:
@@ -495,6 +521,11 @@ class _Sweep:
                 stops.upper, stops.upper_contact = stop if stop is not None else (None, None)
                 stops.upper_clash = clash
         return stops
+
+
+def _duration(seconds: float) -> str:
+    """A span as a person reads it: seconds below two minutes, else minutes."""
+    return f"{seconds:.0f} s" if seconds < 120 else f"{seconds / 60:.0f} min"
 
 
 def _said(stops: JointStops) -> str:
