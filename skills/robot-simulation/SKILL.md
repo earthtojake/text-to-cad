@@ -132,7 +132,8 @@ mechanism):
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a
   camera mount, a fingertip the simulator addresses), with its own mass and geoms.
-- **`exclude(a, b)`** says two parts (or an assembly, or a label) never collide. The MJCF excludes every
+- **`exclude(a, b)`** says two parts (or assemblies) never collide, one given as the shape and the other
+  as the shape or its label. The MJCF excludes every
   jointed pair whose collisions touch at rest by itself, the first joint's on a world-welded base too.
 - **`limits(assembly, joint, effort=, velocity=, armature=, damping=, friction=)`**: a joint's drive
   limits, N*m or N and rad/s or m/s, the URDF's `<limit>` and MJCF's `actuatorfrcrange`, and

@@ -325,7 +325,7 @@ collision(cover, "none")                    # shown, never collides
 collision(jaw, "decomposed", max_hulls=8)   # convex hulls of its mesh (cad[coacd]); its visual whole
 frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
 body(camera, "camera_mount")                # its own body, fixed to the link it is fastened to
-exclude(camera, "wrist")                    # never collides with the wrist (a part, assembly or label)
+exclude(camera, "wrist")                    # never collides with the wrist (a part or assembly, and one or its label)
 limits(root, "elbow", effort=27, velocity=6.28,  # the elbow's drive: N*m and rad/s (N, m/s on a slide)
        armature=0.01, damping=0.4, friction=0.15)  # kg*m^2, N*m*s/rad, N*m (kg, N*s/m, N on a slide)
 point_mass(housing, 85, bd.Pos(0, 0, 12), name="servo")  # g, at a point in the housing's own frame (mm)
@@ -355,7 +355,7 @@ free(root)                                  # the base is not bolted to the worl
   assembly's; a second frame of one name on a part replaces the first.
 - **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF a link
   on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
-- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does; on the collision geometry (`--geometry collision`) it sets aside their two links whole, as the MJCF does.
+- **`exclude(a, b)`**: the two never collide, each a part, an assembly or its label, one of them the shape itself, which keeps the declaration (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does; on the collision geometry (`--geometry collision`) it sets aside their two links whole, as the MJCF does.
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
   label on the assembly or below it, in SI: URDF's `<limit>`, MJCF's `actuatorfrcrange`
   (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written

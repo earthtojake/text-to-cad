@@ -330,8 +330,8 @@ cad step ranges arm.step --step 0.5 --json
 - **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
   against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
   pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
-  hardware) is set aside with `exclude(a, b)` in the body (a part, an assembly or a label each,
-  [kinematics](references/kinematics.md)): those two parts never stop or clash in the sweep, and
+  hardware) is set aside with `exclude(a, b)` in the body (a part or an assembly, and another or its
+  label, [kinematics](references/kinematics.md)): those two parts never stop or clash in the sweep, and
   every other pair of their links still does, so the jaw then stops on the other jaw. The same
   declaration tells a simulator their two links never collide (MJCF's `<contact><exclude>`).
 - **What is tested.** `--geometry parts` (the default) tests each part's own surface: the

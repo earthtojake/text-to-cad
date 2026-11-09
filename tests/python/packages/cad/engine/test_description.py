@@ -576,6 +576,13 @@ class BodiesTest(_Folder):
             body(assembly)
         with self.assertRaisesRegex(ValueError, "'part' with itself"):
             exclude(part, "part")
+        # Either way round, the shape keeps it; two labels have no shape to keep it on, and say which to give.
+        other = bd.Box(1, 1, 1)
+        self.assertIs(exclude("case_top", other), other)
+        self.assertEqual(other.__dict__["_exclude"], ("case_top",))
+        with self.assertRaisesRegex(TypeError, r"exclude\('jaw', 'case_top'\): one of the two is the part or the "
+                                               r"assembly itself.*exclude\(part, 'case_top'\)"):
+            exclude("jaw", "case_top")
         with self.assertRaisesRegex(ValueError, "no revolute or linear joint 'elbow' on assembly"):
             limits(assembly, "elbow", effort=1)
         bd.BallJoint("wrist", part)
@@ -590,6 +597,10 @@ class BodiesTest(_Folder):
             limits(assembly, "elbow")
         with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
             self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
+        # A label first and the shape second is the same declaration.
+        swapped, _structure = self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude("base", cam)'))
+        self.assertEqual((swapped.excludes, swapped.part_excludes), ((("base", "camera"),),
+                                                                     (("bodies/base", "bodies/cam"),)))
 
 
 # The hinge's links each a compound of parts, the moving joint on the base's compound: limits declared on the

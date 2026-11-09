@@ -193,12 +193,20 @@ def body(part: Any, name: str | None = None) -> Any:
 
 
 def exclude(a: Any, b: Any) -> Any:
-    """Say that ``a`` never collides with ``b``: a part or an assembly (every part below it), and
-    another, or the label of one -- a part's label names its link too. A simulator that filters
-    contacts by pair is told so (MJCF's ``<contact><exclude>``). Returns ``a``."""
-    _shape(a, "exclude")
+    """Say that ``a`` never collides with ``b``: each a part or an assembly (every part below it), or
+    the label of one -- a part's label names its link too -- in either order, one of the two a shape:
+    the declaration is kept on it, as every declaration is, and names the other by its label. A
+    simulator that filters contacts by pair is told so (MJCF's ``<contact><exclude>``). Returns the
+    shape that keeps it."""
     import build123d as bd
 
+    if not isinstance(a, bd.Shape) and isinstance(b, bd.Shape):
+        a, b = b, a  # the pair is either way round: the shape keeps it
+    if not isinstance(a, bd.Shape):
+        if isinstance(a, str) and isinstance(b, str):
+            raise TypeError(f"exclude({a!r}, {b!r}): one of the two is the part or the assembly itself, which keeps "
+                            f"the declaration, and the other may be its label: exclude(part, {b!r})")
+        _shape(a, "exclude")
     if isinstance(b, bd.Shape):
         other = b.label
         if not isinstance(other, str) or not other:
