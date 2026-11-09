@@ -1329,10 +1329,22 @@ def _draw_staged(staged: list[tuple[Path, Path, Path, Still]], daemon: bool,
     return drawn
 
 
+#: The parts the mesher's warning names before it counts the rest.
+UNMESHED_NAMED = 4
+
+
 def _warn(unmeshed: dict[str, list[int]]) -> dict[str, list[int]]:
-    """A warning for each part's faces the mesher left without triangles: the picture lacks them."""
-    for name, faces in unmeshed.items():
-        print(f"warning: {name}: the mesher left face{'s' if len(faces) > 1 else ''} "
-              f"{', '.join(map(str, faces))} without triangles, so the picture does not draw "
-              f"{'them' if len(faces) > 1 else 'it'}", file=sys.stderr)
+    """One warning for the faces the mesher left without triangles, which the picture lacks: how many, of how
+    many parts, the first ``UNMESHED_NAMED`` parts named with their faces' ordinals. A vendor's STEP leaves a
+    few on a large assembly (a screw's tip, a sliver a boolean left), so it is a line, not a line a part."""
+    if not unmeshed:
+        return unmeshed
+    count = sum(len(faces) for faces in unmeshed.values())
+    named = [f"{name} ({', '.join(map(str, faces))})" for name, faces in unmeshed.items()]
+    rest = len(named) - UNMESHED_NAMED
+    listed = "; ".join(named[:UNMESHED_NAMED]) + (f"; and {rest} more part{'s' if rest != 1 else ''}" if rest > 0
+                                                   else "")
+    print(f"warning: the mesher left {count} face{'s' if count != 1 else ''} of {len(named)} "
+          f"part{'s' if len(named) != 1 else ''} without triangles, so the picture does not draw "
+          f"{'them' if count != 1 else 'it'}: {listed}", file=sys.stderr)
     return unmeshed

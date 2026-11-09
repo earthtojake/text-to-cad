@@ -30,9 +30,10 @@ cad model snapshot "$ID" tmp/review.png
 cad model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
-A face the mesher left without triangles is drawn without it and named in a
-warning, with its part. It is usually a sliver a boolean left: the picture is then
-not the whole model.
+A face the mesher left without triangles is drawn without it, and one warning
+counts them and names the first parts. In your own model it is usually a sliver a
+boolean left; in a vendor's STEP, a few faces of a large assembly (a screw's tip)
+are common. Either way the picture is not the whole model where they are.
 
 ## Views
 

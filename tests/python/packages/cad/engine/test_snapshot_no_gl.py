@@ -1,7 +1,8 @@
 """A picture the engine cannot draw for want of an OpenGL context (``snapshot.NO_GL``) is drawn by the
 calling process where it can draw (``drawable_here``), and the engine's failure stands where it cannot;
 any other failure stands either way. A held document's picture is drawn here from an xbf the engine
-exported. The engine's refusal is injected: no OpenGL context is made."""
+exported. The engine's refusal is injected: no OpenGL context is made. The faces a picture lacks, which the
+mesher left without triangles, are said in one line however many parts have them."""
 
 from __future__ import annotations
 
@@ -88,3 +89,14 @@ class NoOpenGlInTheEngine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnmeshedFaces(unittest.TestCase):
+    def test_the_faces_the_mesher_left_are_one_warning_naming_the_first_parts(self) -> None:
+        said = io.StringIO()
+        with redirect_stderr(said):
+            snapshot._warn({"SOLID": [6, 74], "screw:1": [1], "screw:2": [1], "Wrist": [91], "nut": [3]})
+            snapshot._warn({})
+        self.assertEqual(said.getvalue().splitlines(), [
+            "warning: the mesher left 6 faces of 5 parts without triangles, so the picture does not draw them: "
+            "SOLID (6, 74); screw:1 (1); screw:2 (1); Wrist (91); and 1 more part"])
