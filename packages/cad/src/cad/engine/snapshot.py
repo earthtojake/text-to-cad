@@ -146,7 +146,8 @@ RENDER_SCALE_RANGE = (1.0, 3.0)
 class SnapshotRefused(ValueError):
     """A request the snapshot will not draw, said before anything renders. ``part``: which part of the
     request it refused, one word (``refusing``: ``source``, ``out``, ``display``, ``display.mode``,
-    ``display.exploded``, ``display.clip``, ``display.grid``, ``display.visibility``, ``camera``, ``pose``,
+    ``display.exploded``, ``display.clip``, ``display.grid``, ``display.visibility``, ``display.collision``,
+    ``camera``, ``pose``,
     ``size``, ``annotation``, ``measurements``, ``references``, ``job``), never the value given: what the
     server's telemetry counts a refusal by (``cad_server.analytics.SNAPSHOT_PARTS``); None where none said."""
 

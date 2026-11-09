@@ -20,12 +20,12 @@ CADGEN = ROOT / "packages/cad-server/src/cad_server/analytics.py"
 RECEIVER = ROOT / "apps/api/src/events.mjs"
 
 
-def names(path: Path, start: str, end: str) -> list[str]:
+def names(path: Path, start: str, end: str, word: str = r"[a-z0-9][a-z0-9_]*") -> list[str]:
     text = path.read_text(encoding="utf-8")
     body = text[text.index(start) + len(start):]
     body = body[:body.index(end)]
     body = re.sub(r"(?m)(?://|#).*$", "", body)  # comments name words that are no control
-    return re.findall(r"""['"]([a-z0-9][a-z0-9_]*)['"]""", body)
+    return re.findall(rf"""['"]({word})['"]""", body)
 
 
 class TheControlsAreOneVocabulary(unittest.TestCase):
@@ -66,6 +66,21 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         self.assertIn("xbf", formats)
         schema = ast.literal_eval(assignments["SCHEMA"])
         self.assertRegex(RECEIVER.read_text(encoding="utf-8"), rf"\[{schema}, \{{[^\n]*kinds: KINDS_10")
+
+
+class TheSnapshotPartsAreOneVocabulary(unittest.TestCase):
+    def test_cadgen_names_the_parts_its_schema_takes(self) -> None:
+        # A part cadgen names that its schema's receiver lacks refuses the whole batch; schema 10's parts are
+        # schema 9's and the ones it adds, and the current sender's schema is the one that reads them.
+        part = r"[a-z][a-z.]*"  # a part is dotted: ``display.clip``
+        cadgen = names(CADGEN, "SNAPSHOT_PARTS = frozenset({", "})", part)
+        schema_9 = names(RECEIVER, "const SNAPSHOT_PARTS = new Set([", "]);", part)
+        added = names(RECEIVER, "const SNAPSHOT_PARTS_10 = new Set([...SNAPSHOT_PARTS, ", "]);", part)
+        self.assertEqual(len(cadgen), len(set(cadgen)), "each part once")
+        self.assertEqual(set(cadgen), set(schema_9) | set(added))
+        self.assertIn("display.collision", added)
+        self.assertNotIn("display.collision", schema_9)
+        self.assertRegex(RECEIVER.read_text(encoding="utf-8"), r"\[10, \{[^\n]*\n[^\n]*parts: SNAPSHOT_PARTS_10")
 
 
 if __name__ == "__main__":

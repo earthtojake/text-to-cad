@@ -184,7 +184,8 @@ SCHEMA = 10
 # Nor schema 8: the same builds, views and snapshots told apart as models or files; no new field or identity.
 # Nor schema 9: a refused snapshot told apart by which part of its request was refused -- a word of ours, as its
 # reason is, never the value given.
-# Nor schema 10: one more format (``mjcf``).
+# Nor schema 10: one more format (``mjcf``), and one more part of a snapshot's request a refusal names
+# (``display.collision``, an MJCF's collision view), a word of ours.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -394,11 +395,11 @@ FAILED_TYPES = {"cad.engine.render.context.Unavailable": "no_gl",
                 "cad_server.engine.supervisor.Gone": "no_kernel"}
 # Which part of a snapshot's request a refusal (``bad_request``) named (``cad.engine.snapshot.SnapshotRefused.part``,
 # where the library refused it): its source, its picture's path (``out``), the display -- its mode, Explode, Clip, the
-# grid, what it hides and isolates -- the camera, the pose, the size, the annotation, the measurements, a board's
+# grid, what it hides and isolates, an MJCF's collision view (from schema 10) -- the camera, the pose, the size, the annotation, the measurements, a board's
 # references, a job; ``other`` where the refusal named none; ``none`` for a failure that was no refusal. A word,
 # never the value given.
 SNAPSHOT_PARTS = frozenset({"source", "out", "display", "display.mode", "display.exploded", "display.clip",
-                            "display.grid", "display.visibility", "camera", "pose", "size", "annotation",
+                            "display.grid", "display.visibility", "display.collision", "camera", "pose", "size", "annotation",
                             "measurements", "references", "job", "other"})
 # What a person used: a model with children (an engine model of several parts too), a model declaring mesh
 # exports (``@stl``, ``@glb``, ``@threemf``), a snapshot (or an engine export) that posed joints or played an
