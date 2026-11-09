@@ -169,6 +169,8 @@ cad mjcf snapshot sim/scene.xml tmp/mjcf.png --pose '{"shoulder_lift": 30}' --ca
 cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder_lift": 30}' --camera right
 ```
 
+`--pose` is in degrees for each format, as for the model, though the files hold radians.
+
 Read each export's summary first: the links, the joints, the mass, the collisions by kind. Then
 compare the MJCF snapshot with the URDF snapshot of the same pose and camera. Both files come from
 one model, so the robot must stand the same way and each joint must turn the same way in both. A

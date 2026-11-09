@@ -247,7 +247,9 @@ and joint names, so a rename updates every consumer in the same task, and any UR
    ledgered: it is regenerated. A generated file has no ledger; the model is its source.
 3. SI units: meters, kilograms, seconds, radians, unless the target explicitly requires otherwise.
    URDF limits and SRDF group states never hold degrees; an MJCF says `<compiler angle="radian"/>`,
-   since MuJoCo's default is degrees.
+   since MuJoCo's default is degrees. These are the files' units: a snapshot's `--pose` takes
+   degrees (metres for a slide), as `cad model snapshot` does
+   ([Check each change](#check-each-change)).
 4. Do not infer spatial transforms, mesh units, handedness, axes, joint signs or planning
    semantics from vague prose or visual impression. Use CAD transforms, dimensioned drawings,
    measured values, existing source data, simulator documentation, or explicit documented
@@ -361,6 +363,9 @@ cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad mjcf snapshot path/to/scene.xml review.png --pose home
 cad run mujoco-studio --model path/to/scene.xml
 ```
+
+A snapshot's `--pose` takes a turn in degrees and a slide in metres, though the file holds
+radians: `{"shoulder_pitch": 30}` is 30 degrees, and 0.5 is half a degree, drawn as if at zero.
 
 `cad run mujoco-studio` shows the person an MJCF as MuJoCo itself runs it, in MuJoCo Studio's web
 viewer: it reloads the model as the file changes and prints a URL for the person to open; it comes
