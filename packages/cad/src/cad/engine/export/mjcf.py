@@ -74,7 +74,8 @@ a ``statistic`` (the robot's centre and extent at zero, so a viewer frames it), 
 (headlight, haze, camera angle), a gradient skybox, a checker ground ``plane`` and a light, all MuJoCo's
 built-in textures, so the scene is one file. The plane is at ``z = 0``, or at the robot's lowest point
 where it reaches below. A ``scene.xml`` that is there is the person's and is never written over: the
-export says which (``export.note``: wrote it, or kept it). The robot's file is the one an export
+export says when it wrote one (``export.note``), and of one that is there says nothing, unless it includes
+no file of the robot's name, so shows another robot. The robot's file is the one an export
 writes again; the scene is the person's to edit. An export named ``scene.xml`` writes no scene.
 
 Numbers are written short and the same every time: nine significant digits at most, ``-0`` as ``0``,
@@ -139,7 +140,9 @@ def write_description(description: Description, path: Any, *, assets: str = "ass
     if scene and path.name.lower() != SCENE:
         beside = path.parent / SCENE
         if beside.exists():
-            note(f"kept the existing {SCENE}: it is yours to edit, and an export never writes over it")
+            if not _includes(beside, path):
+                note(f"the existing {SCENE} beside it includes no {path.name}, so it shows another robot: it is "
+                     f"yours to edit, and an export never writes over it")
         else:
             from cad.engine.atomic_replace import put
 
@@ -148,6 +151,20 @@ def write_description(description: Description, path: Any, *, assets: str = "ass
                  "writes over it)")
             written.append(beside)
     return written
+
+
+def _includes(scene: Path, robot: Path) -> bool:
+    """Whether the MJCF ``scene`` includes the file ``robot`` (an ``include`` naming it, relative to the scene's
+    folder, as MuJoCo resolves one); False for a scene that does not read as XML."""
+    import xml.etree.ElementTree as ElementTree
+
+    try:
+        root = ElementTree.parse(scene).getroot()
+    except (OSError, ElementTree.ParseError):
+        return False
+    wanted = robot.resolve()
+    return any((scene.parent / found).resolve() == wanted
+               for found in (element.get("file") for element in root.iter("include")) if found)
 
 
 def scene_of(description: Description, robot: str) -> str:

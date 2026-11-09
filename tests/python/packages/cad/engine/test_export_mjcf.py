@@ -543,13 +543,19 @@ class EngineTest(_Folder):
         floor = float(model.geom("floor").pos[2])
         self.assertGreater(min(float(data.geom_xpos[at][2]) for at in range(model.ngeom)
                                if model.geom_group[at] == 3), floor - 0.03)
-        # Exported again, the scene is the person's.
+        # Exported again, the scene is the person's, kept without a word; one that includes another robot is
+        # said, once.
         scene = out.parent / "scene.xml"
         scene.write_text(scene.read_text(encoding="utf-8") + "<!-- mine -->\n", encoding="utf-8")
         told.clear()
         api.export(xbf, out, zero="home", daemon=False, progress=False, log=told.append)
-        self.assertIn("two.xml: kept the existing scene.xml: it is yours to edit, and an export never writes over it",
-                      told)
+        self.assertFalse([line for line in told if "scene.xml" in line], told)
+        self.assertTrue(scene.read_text(encoding="utf-8").endswith("<!-- mine -->\n"))
+        other = out.parent / "other.xml"
+        api.export(xbf, other, zero="home", daemon=False, progress=False, log=told.append)
+        self.assertEqual([line for line in told if "scene.xml" in line],
+                         ["other.xml: the existing scene.xml beside it includes no other.xml, so it shows another "
+                          "robot: it is yours to edit, and an export never writes over it"])
         self.assertTrue(scene.read_text(encoding="utf-8").endswith("<!-- mine -->\n"))
         with self.assertRaisesRegex(ExportRefused, "two.stl: a zero state poses a robot description"):
             api.export(xbf, self.folder / "two.stl", zero="home", daemon=False, progress=False)
