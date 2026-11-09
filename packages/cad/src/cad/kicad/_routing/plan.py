@@ -259,10 +259,17 @@ class Router:
         self.g_nm = round(self.pitch * NM)
         self.epsilon = rules.epsilon
         local = [pad.clearance or 0.0 for pad in board.pads]
+        # Copper DRC holds to more than its net's clearance: a graphic's own (a barcode's visual separation), and a
+        # solder-mask opening, which keeps other nets' copper its expansion, the mask-to-copper clearance and (an
+        # untented via's opening beside it) the mask's least width away.
+        apart = board.mask_to_copper
+        far = [graphic.clearance or 0.0 for graphic in board.graphics]
+        far += [margin + apart + board.via_mask + board.mask_min_width for pad in board.pads for _, margin in pad.mask]
+        far += [board.via_mask + apart for via in board.vias if via.mask]
         widest = max([w.width / 2 for w in wants] + [w.via_diameter / 2 for w in wants] + [0.0])
-        biggest = max([rules.clearance(net) for net in self.net_id] + [w.clearance for w in wants] + local
+        biggest = max([rules.clearance(net) for net in self.net_id] + [w.clearance for w in wants] + local + far
                       + [rules.holes, rules.edge, rules.hole_gap + max(w.via_drill for w in wants) / 2, 0.0])
-        self.reach = biggest + widest + 0.2
+        self.reach = biggest + widest + 0.2  # how far the fields and the exact check look round each obstacle
         self._region()
         self.fields = Fields(self.i0, self.j0, self.nx, self.ny, self.pitch, self.copper, self.reach)
         self.obstacles = Obstacles(len(self.copper), self.reach)
@@ -346,15 +353,6 @@ class Router:
                 found.setdefault(need, []).append(self.layer_of[name])
             return found
 
-        # Copper DRC holds to more than its net's clearance (a barcode's visual separation, a solder-mask opening):
-        # the fields and the exact check reach as far as that needs, before anything is read into them.
-        widest = max([w.width / 2 for w in self.wants] + [w.via_diameter / 2 for w in self.wants] + [0.0])
-        far = [graphic.clearance or 0.0 for graphic in board.graphics]
-        far += [margin + apart + board.via_mask + board.mask_min_width for pad in board.pads for _, margin in pad.mask]
-        far += [board.via_mask + apart for via in board.vias if via.mask]
-        reach = max(far + [0.0]) + widest + 0.2
-        if reach > self.reach:
-            self.reach = fields.reach = obstacles.reach = reach
         for pad in board.pads:
             keep, net, layers = rules.clearance(pad.net, pad.clearance), self._net(pad.net), self._ids(pad.layers)
             for need, ids in masked(keep, pad.layers, pad.mask).items():

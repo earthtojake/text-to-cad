@@ -404,7 +404,10 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
                         f"route(b, plan)), not {type(board).__name__} {board!r:.60}")
     entries = _entries(connections, {"layers": layers, "width": width, "clearance": clearance, "vias": vias,
                                      "via_cost": via_cost})
-    copper = read_copper(board.get_as_string())
+    # The solder mask's clearance to copper (DRC's solder_mask_bridge) is the board's setting, which KiCad gives
+    # with its design rules, not the file's text.
+    mask_to_copper = board.get_design_rules().rules.solder_mask_paste.mask_to_copper_clearance / 1_000_000
+    copper = read_copper(board.get_as_string(), mask_to_copper=mask_to_copper)
     if copper.open_outline or not copper.outline:
         ends = [f"({x:g}, {y:g})" for piece in copper.open_outline for x, y in (piece[0], piece[-1])][:4]
         raise ValueError("route keeps copper inside the board's outline, and this board's Edge.Cuts "

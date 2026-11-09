@@ -464,6 +464,10 @@ class Plans(unittest.TestCase):
             def get_as_string(self) -> str:
                 return self.text
 
+            def get_design_rules(self):
+                return SimpleNamespace(rules=SimpleNamespace(solder_mask_paste=SimpleNamespace(
+                    mask_to_copper_clearance=0)))
+
         import cad.kicad
 
         self.assertIs(cad.kicad.Routed, Routed)
@@ -482,6 +486,24 @@ class Plans(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             route(Open(broken), ["A"], layers=["F.Cu"])
         self.assertIn("does not close: it ends apart at (0, 0), (30, 0)", str(caught.exception))
+
+    def test_the_boards_mask_to_copper_clearance_is_read_from_kicad(self) -> None:
+        """The solder mask's clearance to copper is the board's setting, which KiCad gives with its rules (nm): the
+        router reads the board with it, in mm."""
+        from cad.kicad._routing import board as reader
+
+        class Open:
+            def get_as_string(self) -> str:  # an outline that does not close: refused once it is read
+                return board().replace('(layer "Edge.Cuts")', '(layer "Dwgs.User")')
+
+            def get_design_rules(self):
+                return SimpleNamespace(rules=SimpleNamespace(solder_mask_paste=SimpleNamespace(
+                    mask_to_copper_clearance=50_000)))
+
+        read = mock.Mock(side_effect=reader.read_copper)
+        with mock.patch.object(reader, "read_copper", read), self.assertRaises(ValueError):
+            route(Open(), ["A"], layers=["F.Cu"])
+        self.assertEqual(0.05, read.call_args.kwargs["mask_to_copper"])
 
     def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
         limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
@@ -574,7 +596,8 @@ class OpenBoard:
     def get_design_rules(self):
         return SimpleNamespace(rules=SimpleNamespace(constraints=SimpleNamespace(
             min_clearance=0, min_track_width=0, copper_edge_clearance=0, hole_clearance=0, hole_to_hole_min=0,
-            min_via_size=0, min_through_drill=0, min_via_annular_width=0)))
+            min_via_size=0, min_through_drill=0, min_via_annular_width=0),
+            solder_mask_paste=SimpleNamespace(mask_to_copper_clearance=0)))
 
     def get_custom_design_rules(self):
         raise ApiError("no such request")
