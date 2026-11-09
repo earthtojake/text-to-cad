@@ -221,9 +221,9 @@ written:
   <include file="arm.xml"/>
 
   <actuator>
-    <position class="servo" name="shoulder_pan" joint="shoulder_pan"/>
-    <position class="servo" name="shoulder_lift" joint="shoulder_lift"/>
-    <position class="servo" name="wrist_roll" joint="wrist_roll" inheritrange="0" ctrlrange="-3.1416 3.1416"/>
+    <position class="servo" name="base_yaw" joint="base_yaw"/>
+    <position class="servo" name="shoulder" joint="shoulder"/>
+    <position class="servo" name="tool_roll" joint="tool_roll" inheritrange="0" ctrlrange="-3.1416 3.1416"/>
   </actuator>
   ...
 </mujoco>
@@ -423,15 +423,23 @@ What to try, in the order MuJoCo's modelling guide gives:
   rolling) on the gripper's pads when a grasp turns or rolls.
 - **Joints**: `armature` (the reflected rotor inertia, from the actuator's data sheet) and a light
   `damping` on every actuated joint; both steady an implicit integrator without changing the
-  motion much. Both are the hardware's, so they go in the model's `limits()`. A datasheet that gives
-  no armature still gives the parts of one: the armature is the rotor's inertia times the gear
-  ratio squared. Use the motor's rotor inertia if its datasheet lists one (1 g*cm^2 is 1e-7
-  kg*m^2). Otherwise use `m r^2 / 2` of a solid cylinder the rotor's size, an upper bound, since a
-  coreless motor's cup rotor is far lighter. For example, 2.4e-7 kg*m^2 through a 1:345 gearbox
-  is 0.029 kg*m^2. Write the estimate and how you made it in a comment beside it. With nothing to
-  estimate from, leave `armature=` out of the model, and tune one in the scene as a
-  `<default><joint armature="..."/></default>` above its `<include>`, marked as tuned rather than
-  measured.
+  motion much. Both are the hardware's, so what is known of them goes in the model's `limits()`.
+  The armature is the rotor's inertia times the gear ratio squared, and a servo's listing gives the
+  ratio far more often than the rotor. Take the best of these, in order:
+  1. **The motor's rotor inertia**, where its own datasheet lists one (1 g*cm^2 is 1e-7 kg*m^2):
+     in the model, with its source in a comment.
+  2. **The rotor's size**, where you can find it (the motor's part number, a teardown, or the motor
+     the vendor's STEP draws inside the servo, measured there): `m r^2 / 2` of a solid cylinder that
+     size is an upper bound, since a coreless motor's cup rotor is far lighter. In the model, with how
+     you made it in a comment. For example, 1e-7 kg*m^2 through a 1:250 gearbox is 0.00625 kg*m^2.
+  3. **Neither**: leave `armature=` out of the model; the model carries the hardware, and this is
+     not known of it. Tune one in the scene as a `<default><joint armature="..."/></default>` above
+     its `<include>`, marked as tuned rather than measured. Start from the order of magnitude: the
+     small brushed motors inside hobby and smart servos have rotors of roughly 1e-8 kg*m^2 (a
+     coreless micro motor) to 1e-6 kg*m^2 (an iron-core can motor about 25 mm across), so 1e-7
+     times the gear ratio squared is a fair first value, good to a factor of ten either way. Raise it
+     while a joint rings or chatters under its position actuator; lower it while the joint lags a
+     command the hardware follows.
 - **Actuators**: gains from the robot's data sheet (`kp`, and `kv` or `dampratio` for a position
   actuator), control ranges inside the joint's limits.
 
