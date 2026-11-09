@@ -3,8 +3,8 @@ the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the
 the repository's own URDF check passing it and the stills reading its links where the description has them;
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
 and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
-friction as its dynamics and its armature and a part's contact friction said and not written, a ball
-refused by name, a joint that closes a loop left out and said; a root with an inertia, or standing off the
+friction as its dynamics and its armature and a part's contact friction not written and said in a line
+a kind, a ball refused by name, a joint that closes a loop left out and said; a root with an inertia, or standing off the
 world's frame, hung from an empty ``base_link`` there and a free base the root; a root part turned in its
 placement standing where the MJCF stands it; and a jointed model built by the engine and exported to ``.urdf``, its
 links moving as the mechanism moves them, and a free arm taken at a state, its links at zero where the
@@ -338,16 +338,20 @@ class HandBuiltTest(_Folder):
 
     def test_a_joint_s_damping_and_friction_are_its_dynamics_and_what_urdf_cannot_say_is_said(self) -> None:
         description = arm()
-        shoulder = description.joints[0]
+        shoulder, knuckle = description.joints
         shoulder.armature, shoulder.damping, shoulder.friction = 0.012, 0.5, 0.2
+        knuckle.armature = 0.003
         upper = description.link("arm")
-        upper.collisions[0] = Collision("arm", upper.collisions[0].geometry, (0.9,))
+        geometry = upper.collisions[0].geometry
+        # Two hulls of one part: the part is named once.
+        upper.collisions[:] = [Collision(f"arm_hull{at}", geometry, (0.9,), part="arm") for at in range(2)]
         path = self.folder / "arm.urdf"
         with self.assertWarns(ExportWarning) as said:
             write_description(description, path)
-        self.assertEqual(sorted(str(warning.message) for warning in said.warnings),
-                         ["collision 'arm''s contact friction is not written: URDF has none (an MJCF carries it)",
-                          "joint 'shoulder''s armature is not written: URDF has none (an MJCF carries it)"])
+        # A line a kind, naming every joint or part that declares it.
+        self.assertEqual([str(warning.message) for warning in said.warnings],
+                         ["armature of 2 joints not written (a URDF has none; an MJCF carries it): shoulder, knuckle",
+                          "contact friction of 1 part not written (a URDF has none; an MJCF carries it): arm"])
         text = path.read_text(encoding="utf-8")
         self.assertIn('<dynamics damping="0.5" friction="0.2"/>', text)
         self.assertEqual(text.count("<dynamics"), 1)  # the knuckle declares none

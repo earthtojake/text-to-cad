@@ -61,7 +61,7 @@ massless link between them: ``<name>`` the turn (revolute or continuous) to ``<n
 none, ``0``, which URDF requires and a ROS controller reads literally (``cad urdf validate`` warns of
 it). A joint's ``damping`` and ``friction`` (``cad.build123d.limits``) are its ``<dynamics damping
 friction>``, each where declared; URDF has no armature, so a declared one is not written, and said
-(``export.note``: an MJCF carries it). A bound the description leaves open is written
+once for every joint that declares one (``export.note``: an MJCF carries it). A bound the description leaves open is written
 ``1e16`` (SDFormat's own word for none), since URDF ranges a revolute and a prismatic joint at both
 ends. A spherical joint is refused by name: URDF has no ball (export an MJCF, which has one).
 A coupling is a ``<mimic>`` on the follower (``multiplier`` its ratio, ``offset`` its offset), its
@@ -69,7 +69,7 @@ leader a joint that moves. URDF has no named states: the description's poses are
 SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
 (``cad.build123d.exclude``) are not written (an SRDF's ``disable_collisions`` is where MoveIt keeps
 them). URDF has no contact friction either (Gazebo's ``<gazebo>`` extensions are outside URDF): a
-part's (``cad.build123d.friction``) is not written, and said. URDF is a tree and cannot close a loop: a joint
+part's (``cad.build123d.friction``) is not written, and said once for every part that declares one. URDF is a tree and cannot close a loop: a joint
 that closes one (``description``'s **Loops**) is left out and said (``export.note``), and the loop's links
 hang open from the tree (the MJCF closes it). The CAD Viewer's ``<tcad:four_bar>`` extension is not
 written: it derives one rocker's angle from its driver and places no coupler link, and a generated loop
@@ -312,6 +312,9 @@ class _Writer:
         self.materials: dict[tuple[str, str], str] = {}
         self.material_rows: list[Xml] = []
         self.files = MeshFiles(description)
+        # What URDF has no word for, said once a kind when the file is rendered (``_unwritten``): the joints
+        # that declare an armature, the parts that declare a contact friction.
+        self.unwritten: dict[str, list[str]] = {"armature": [], "contact friction": []}
         # The description's own links are named first, then its joints, each in tree order; what the writer
         # adds (a cylindrical joint's link and slide, a named frame's link and joint) after, as it is written.
         order, pending = [], [self.root.name]
@@ -346,6 +349,7 @@ class _Writer:
             joint.add("child", [("link", self.links[self.root.name])])
             body.extend([Xml("link", [("name", base)]), joint])
         self._subtree(body, self.root)
+        self._unwritten()
         sections = self.material_rows + body
         lines = ['<?xml version="1.0" encoding="utf-8"?>',
                  f'<robot name="{escape(name_of(self.description.name, "robot"))}">']
@@ -355,6 +359,15 @@ class _Writer:
             lines.extend(section.lines(1))
         lines.append("</robot>")
         return "\n".join(lines) + "\n", self.files.files
+
+    def _unwritten(self) -> None:
+        """A line a kind for what the file declares and URDF cannot say, naming every joint or part that
+        declares it: ``armature of 6 joints not written (a URDF has none; an MJCF carries it): ...``."""
+        for what, of in (("armature", "joint"), ("contact friction", "part")):
+            names = list(dict.fromkeys(self.unwritten[what]))
+            if names:
+                note(f"{what} of {len(names)} {of}{'s' if len(names) != 1 else ''} not written (a URDF has none; "
+                     f"an MJCF carries it): {', '.join(names)}")
 
     def _subtree(self, body: list[Xml], link: Link) -> None:
         body.append(self._link(self.links[link.name], link))
@@ -412,7 +425,7 @@ class _Writer:
             if dynamics:
                 element.add("dynamics", dynamics)
             if joint.armature is not None:
-                note(f"joint {name!r}'s armature is not written: URDF has none (an MJCF carries it)")
+                self.unwritten["armature"].append(self.joint_of.get(joint.name, name))
         if mimic and joint.follows is not None:
             leader, ratio, offset = joint.follows
             if self.kinds.get(leader) not in ("revolute", "continuous", "prismatic", "cylindrical"):
@@ -444,8 +457,7 @@ class _Writer:
                     piece.add("material", [("name", material)])
         for collision in link.collisions:
             if collision.friction:
-                note(f"collision {collision.of!r}'s contact friction is not written: URDF has none (an MJCF "
-                     "carries it)")
+                self.unwritten["contact friction"].append(collision.of)
             wanted = name_of(collision.name, "collision")
             for suffix, placement, geometry in shaped(collision.geometry):
                 piece = element.add("collision", [("name", collisions(wanted + suffix))])
