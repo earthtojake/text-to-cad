@@ -696,12 +696,17 @@ def _knife_runs(ctx: Context, part: int, upto: float) -> list[dict[str, Any]]:
         else:
             checkpoint()
             _, angles = brep.edge_angles(ctx.parts[part], edge, coarse)
+            if np.isfinite(angles).any():
+                # the least angle found exactly between the samples about it, whatever the sampling (a rod cut
+                # 25 deg off its axis reads 25.0, not the 25.99 or 25.01 its nearest samples give)
+                coarse, angles = _least_angle(ctx.parts[part], edge, coarse, angles)
         if not np.isfinite(angles).any() or not float(np.nanmin(angles)) <= upto:
             continue
         valid = np.isfinite(angles)
         deepest = mo.thin_depth(minimum, max(float(np.nanmin(angles)), mo.FOLD_DEG)) or 1.0
         count = max(2, int(math.ceil(float(edge.length) / max(0.05, deepest / 4.0))) + 1)
-        fine = np.linspace(0.0, 1.0, min(count, KNIFE_POINTS))
+        # the least angle's own place among the points, so the stretch about it reads it
+        fine = np.unique(np.append(np.linspace(0.0, 1.0, min(count, KNIFE_POINTS)), coarse[int(np.nanargmin(angles))]))
         points = _edge_points_at(edges[edge.ordinal - 1], fine)
         along = np.interp(fine, coarse[valid], angles[valid])
         segment = np.minimum(along[:-1], along[1:])
@@ -714,6 +719,46 @@ def _knife_runs(ctx: Context, part: int, upto: float) -> list[dict[str, Any]]:
                       "length": float(np.linalg.norm(points[1:][under] - points[:-1][under], axis=1).sum()),
                       "middle": points[len(points) // 2]})
     return found
+
+
+#: The least angle along a curved edge is refined to this many degrees' change (golden-section search).
+LEAST_ANGLE_TOL = 1e-6
+
+
+def _least_angle(part: Any, edge: Any, fractions: np.ndarray, angles: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``fractions`` and ``angles`` with the edge's least angle added where it lies: a golden-section search of
+    ``brep.edge_angles`` between the samples either side of the least sampled one (an end's least is its own)."""
+    finite = np.isfinite(angles)
+    k = int(np.nanargmin(angles))
+    if k in (0, len(fractions) - 1) or not (finite[k - 1] and finite[k + 1]):
+        return fractions, angles
+
+    def at(fraction: float) -> float:
+        value = float(brep.edge_angles(part, edge, np.array([fraction]))[1][0])
+        return value if math.isfinite(value) else math.inf
+
+    ratio = (math.sqrt(5.0) - 1.0) / 2.0
+    lo, hi = float(fractions[k - 1]), float(fractions[k + 1])
+    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+    fa, fb = at(a), at(b)
+    for _ in range(60):
+        if abs(fa - fb) < LEAST_ANGLE_TOL and hi - lo < 1e-9:
+            break
+        if fa <= fb:
+            hi, b, fb = b, a, fa
+            a = hi - ratio * (hi - lo)
+            fa = at(a)
+        else:
+            lo, a, fa = a, b, fb
+            b = lo + ratio * (hi - lo)
+            fb = at(b)
+        if hi - lo < 1e-9:
+            break
+    best, value = (a, fa) if fa <= fb else (b, fb)
+    if not value < float(angles[k]):
+        return fractions, angles
+    order = np.searchsorted(fractions, best)
+    return np.insert(fractions, order, best), np.insert(angles, order, value)
 
 
 def _edge_points_at(edge: Any, fractions: np.ndarray) -> np.ndarray:

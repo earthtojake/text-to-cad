@@ -239,6 +239,22 @@ class KnifeZoneTest(unittest.TestCase):
         self.assertEqual(self.wall_failures(result), [])
         self.assertIn("printing.knife_edge", codes(result))
 
+    def test_a_knife_s_least_angle_and_its_sliver_read_alike_on_every_technology_and_its_mesh(self) -> None:
+        # a 10 mm rod cut 25 deg off its axis: its edge runs from 25 deg at the tip; the least is found between
+        # the samples, whatever each technology's sampling, and its STL's walls leave the tip's sliver to the knife
+        # though the edge's creases run on to 60 deg (each crease its own thin depth)
+        rod = bd.Cylinder(5, 60) - bd.Rotation(0, 65, 0) * bd.Box(200, 200, 40,
+                                                                   align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+        for technology in ("fdm", "sla", "sls"):
+            [knife] = items(check(rod, "rod", technology=technology), "knife_edges")
+            self.assertAlmostEqual(knife["angle_deg"], 25.0, delta=1e-3, msg=technology)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rod.stl"
+            bd.export_stl(rod, str(path), tolerance=0.01, angular_tolerance=0.1)
+            result = cad.stl.dfm(str(path), process="printing", technology="fdm")
+        self.assertEqual(self.wall_failures(result), [])
+        self.assertIn("printing.knife_edge", codes(result))
+
 
 class WallTest(unittest.TestCase):
     @classmethod

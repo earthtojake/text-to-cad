@@ -378,13 +378,32 @@ CREASE_DEG = 60.0
 
 class _Knife:
     """A knife edge of a mesh: its creases as segments, their two flanks' normals, its material angle (the
-    creases' median by length), length and thin depth (``meshops_printing.thin_depth``)."""
+    creases' median by length), length and thin depth (``meshops_printing.thin_depth``) at that angle, and each
+    crease's own thin depth (``depths``: at the angle of the creases around it, ``_local_angles``) -- an edge whose
+    angle runs from 25 to 60 deg is as thin as its 25 deg tip there, deeper than its median says."""
 
-    __slots__ = ("starts", "ends", "left", "right", "angle", "length", "depth")
+    __slots__ = ("starts", "ends", "left", "right", "angle", "length", "depth", "depths")
 
-    def __init__(self, starts, ends, left, right, angle: float, length: float, depth: float | None) -> None:
+    def __init__(self, starts, ends, left, right, angle: float, length: float, depth: float | None,
+                 depths: np.ndarray | None = None) -> None:
         self.starts, self.ends, self.left, self.right = starts, ends, left, right
         self.angle, self.length, self.depth = angle, length, depth
+        self.depths = depths if depths is not None else np.full(len(starts), depth or 0.0)
+
+
+def _local_angles(starts: np.ndarray, ends: np.ndarray, angles: np.ndarray, lengths: np.ndarray,
+                  window: float) -> np.ndarray:
+    """Each crease's angle as the creases around it read it: the length-weighted median of those whose middles lie
+    within ``window`` of its own -- one triangle's crease scatters (an exact 41 deg edge meshes as creases of 4 to
+    58 deg), the run of them along the edge does not."""
+    middles = (starts + ends) / 2.0
+    found = np.empty(len(angles))
+    for k in range(len(angles)):
+        near = np.flatnonzero(np.linalg.norm(middles - middles[k], axis=1) <= window)
+        order = near[np.argsort(angles[near])]
+        weight = np.cumsum(lengths[order])
+        found[k] = angles[order][min(int(np.searchsorted(weight, weight[-1] / 2.0)), len(order) - 1)]
+    return found
 
 
 def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
@@ -418,9 +437,14 @@ def _knife_chains(mesh: trimesh.Trimesh, minimum: float | None) -> list[_Knife]:
         depth = mo.thin_depth(minimum, typical)
         if depth is not None and length < depth:
             continue
-        found.append(_Knife(mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]],
-                            mesh.face_normals[sides[mine, 0]], mesh.face_normals[sides[mine, 1]], typical, length,
-                            depth))
+        starts, ends = mesh.vertices[pairs[mine, 0]], mesh.vertices[pairs[mine, 1]]
+        depths = None
+        if depth is not None:
+            # each crease its own depth, at the angle of the creases within the knife's depth of it
+            local = _local_angles(starts, ends, angle[mine], lengths[mine], max(depth, 2.0 * float(np.median(lengths[mine]))))
+            depths = np.array([mo.thin_depth(minimum, a) or 0.0 for a in local])
+        found.append(_Knife(starts, ends, mesh.face_normals[sides[mine, 0]], mesh.face_normals[sides[mine, 1]],
+                            typical, length, depth, depths))
     return found
 
 
@@ -445,8 +469,9 @@ def _outside_knives(points: np.ndarray, normals: np.ndarray, zones: list[_Knife]
     for knife in zones:
         if not knife.depth:
             continue
-        lo = np.minimum(knife.starts.min(axis=0), knife.ends.min(axis=0)) - knife.depth
-        hi = np.maximum(knife.starts.max(axis=0), knife.ends.max(axis=0)) + knife.depth
+        reach = float(knife.depths.max())
+        lo = np.minimum(knife.starts.min(axis=0), knife.ends.min(axis=0)) - reach
+        hi = np.maximum(knife.starts.max(axis=0), knife.ends.max(axis=0)) + reach
         near = np.flatnonzero(keep & np.all((points >= lo) & (points <= hi), axis=1))
         if not len(near):
             continue
@@ -456,7 +481,9 @@ def _outside_knives(points: np.ndarray, normals: np.ndarray, zones: list[_Knife]
             if faces is not None:
                 flanking |= (np.einsum("ij,ij->i", faces[near], knife.left[segment]) > flank) | \
                     (np.einsum("ij,ij->i", faces[near], knife.right[segment]) > flank)
-        keep[near] &= ~((distance <= knife.depth + 1e-6) & flanking)
+        # within some crease's own depth (a curved knife is as thin as its sharpest stretch there)
+        within = mo.past_segments(points[near], knife.starts, knife.ends, knife.depths) <= 1e-6
+        keep[near] &= ~((within | (distance <= knife.depth + 1e-6)) & flanking)
     return keep
 
 
@@ -515,17 +542,49 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
     return length[keep], origins[rays][keep], normals[rays][keep], faces[rays][keep], hit[keep]
 
 
+#: Two triangles meeting at under this many degrees are one curved surface's chords (a sharper crease is the
+#: part's own edge): what a chord's departure from the surface is read across (``_chord_sag``).
+CHORD_DEG = 30.0
+
+
+def _chord_sag(mesh: trimesh.Trimesh) -> np.ndarray:
+    """Per triangle, how far its chords may depart from the curved surface they stand for: across each smooth
+    edge with a neighbour (turning under ``CHORD_DEG``), a chord of width ``c`` turned by ``theta`` from the
+    next stands ``c theta / 8`` off its arc (``c`` read as 1.5 times the triangles' centres' spacing across the
+    edge, an over-estimate where they are not a strip's); its greatest. A plane's triangles read 0."""
+    sag = np.zeros(len(mesh.faces))
+    if not len(mesh.face_adjacency):
+        return sag
+    theta = np.asarray(mesh.face_adjacency_angles, dtype=float)
+    smooth = theta < np.radians(CHORD_DEG)
+    if not smooth.any():
+        return sag
+    pairs = mesh.face_adjacency[smooth]
+    edges = mesh.vertices[mesh.face_adjacency_edges[smooth]]
+    along = edges[:, 1] - edges[:, 0]
+    along /= np.maximum(np.linalg.norm(along, axis=1, keepdims=True), 1e-300)
+    apart = mesh.triangles_center[pairs[:, 1]] - mesh.triangles_center[pairs[:, 0]]
+    across = np.linalg.norm(apart - along * np.einsum("ij,ij->i", apart, along)[:, None], axis=1)
+    value = 1.5 * across * theta[smooth] / 8.0
+    np.maximum.at(sag, pairs[:, 0], value)
+    np.maximum.at(sag, pairs[:, 1], value)
+    return sag
+
+
 def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, hits: np.ndarray,
-                labels: np.ndarray) -> list[dict]:
+                labels: np.ndarray, sag: np.ndarray | None = None) -> list[dict]:
     """The thickness field as items: each face's thinnest sample (``_regions``: ``labels``, per triangle), a face
     and the face its thinnest ray lands on one item -- a wall is read from both its sides, and is one wall --,
     as the exact path lists them (whether a mesh's wall is joined on two sides is not known: ``supported``
-    None). Unsorted and uncapped: ``_wall_ranked`` ranks every body's together."""
+    None), each with how far the mesh's chords may depart from the surfaces either side of its thinnest ray
+    (``chord_mm``: ``_chord_sag``'s at the two triangles, added). Unsorted and uncapped: ``_wall_ranked`` ranks
+    every body's together."""
     if not len(thickness):
         return []
     own, across = labels[faces], labels[hits]
     order = np.lexsort((thickness, own))
     own, across, values, points = own[order], across[order], thickness[order], origins[order]
+    chords = (sag[faces] + sag[hits])[order] if sag is not None else np.zeros(len(order))
     first = np.ones(len(own), dtype=bool)
     first[1:] = own[1:] != own[:-1]
     starts = np.flatnonzero(first)
@@ -539,7 +598,7 @@ def _wall_items(thickness: np.ndarray, origins: np.ndarray, faces: np.ndarray, h
             continue
         seen.add(pair)
         items.append({"xyz": _p(points[at]), "thickness_mm": _r(float(value), mo.JUDGED), "samples": int(count),
-                      "supported": None, "sampled": True})
+                      "supported": None, "sampled": True, "chord_mm": _r(float(chords[at]), 6)})
     return items
 
 
@@ -607,7 +666,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             found["_hits"] = np.concatenate([found["_hits"], extra[4]])
         if "_thickness" in found:
             found["_items"] = _wall_items(found["_thickness"], found["_origins"], found["_faces"], found["_hits"],
-                                          _regions(body)[0])
+                                          _regions(body)[0], _chord_sag(body))
         return found
 
     if len(bodies) <= 1:

@@ -83,7 +83,9 @@ The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness
   fin, one item). Every reading is sampled (`sampled`); on the B-rep the thinnest walls and gaps are then
   refined to the exact least distance (`refined`). On a mesh a place smaller than the rays' spacing can be
   missed, and more rays find false thin places as well as true ones, so a mesh's thin reading is confirmed
-  on the STEP or the model before the design changes.
+  on the STEP or the model before the design changes. A mesh's wall under its limit by no more than its
+  chords may stray from the curved surface (`chord_mm`) is a warning, at the limit within the mesh's
+  accuracy (a 0.5 mm tube's STL reads 0.498): only the exact model can say which side it falls.
 - `printing.knife_edge` is a convex edge under 45 degrees of material somewhere along it, which thins
   to nothing: `angle_deg` is its least, `length_mm` the stretch under 45, `thin_depth_mm` how far in it
   stays under the minimum wall. A warning (text-to-cad's own rule;

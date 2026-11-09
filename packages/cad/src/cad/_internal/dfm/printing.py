@@ -284,7 +284,16 @@ def _general() -> tuple[Rule, ...]:
                     {"supported": False}, "a wall joined to the part on one side or none")
     found += _rules("printing.wall", "wall_thickness", "thickness_mm", "min", "mm",
                     "wall thickness (a mesh: whether supported is not known, judged as supported)", rows["wall_s"],
-                    _FIX_WALL, {"supported": None})
+                    _FIX_WALL, {"supported": None, "at_limit": (False, None)})
+    # a mesh's wall under the limit by no more than its chords may depart from the surface: at the limit within
+    # the mesh's accuracy (``_at_limit``), a warning whatever the limit's own severity
+    found += _rules("printing.wall", "wall_thickness", "thickness_mm", "min", "mm",
+                    "wall thickness (a mesh: whether supported is not known, judged as supported)",
+                    [(tech, limit, source, "warning", said) for tech, limit, source, _, said in rows["wall_s"]],
+                    _FIX_WALL + "; or check the exact model (a STEP or the model): the mesh cannot tell",
+                    {"supported": None, "at_limit": True},
+                    detail="at the limit within the mesh's accuracy: its chords may depart from the surface by "
+                           "{chord_mm:.3g} mm there, read from its curvature and edge lengths")
     found += _rules("printing.hole_diameter", "holes", "diameter_mm", "min", "mm", "hole diameter", rows["hole"],
                     "open it to at least {limit:g} mm, or drill it after printing")
     found += _rules("printing.pin_diameter", "pins", "diameter_mm", "min", "mm", "pin diameter", rows["pin"],
@@ -463,9 +472,25 @@ def _ok(family: Any) -> dict[str, Any]:
     return family if isinstance(family, dict) and "error" not in family else {}
 
 
+def _at_limit(report: dict[str, Any], resolved: dict[str, Any]) -> None:
+    """A mesh's wall (an item with ``chord_mm``) under ``printing.wall``'s limit by no more than its chords may
+    depart from the surface there, and past no limit by more, is at the limit within the mesh's accuracy
+    (``at_limit``): the rule's warning, not its error. Exact geometry's walls carry no ``chord_mm``."""
+    walls = _ok(report.get("wall_thickness"))
+    limits = [limit for rule in RULES.rules if rule.id == "printing.wall" and rule.severity == "error"
+              for limit in [rule.limit_for({"technology": resolved["technology"]})] if limit is not None]
+    for item in walls.get("items") or ():
+        chord, value = item.get("chord_mm"), item.get("thickness_mm")
+        if not isinstance(chord, (int, float)) or not isinstance(value, (int, float)) or "at_limit" in item:
+            continue
+        under = [limit for limit in limits if value < limit]
+        item["at_limit"] = bool(under) and all(limit <= value + chord for limit in under)
+
+
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
     technology = resolved["technology"]
+    _at_limit(report, resolved)
     mesh = _ok(report.get("mesh"))
     if mesh:
         if mesh.get("watertight") is False:

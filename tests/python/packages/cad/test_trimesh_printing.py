@@ -500,6 +500,28 @@ class CheckTest(unittest.TestCase):
 
         self.assertGreaterEqual(set(payload), {"mesh", "overhangs", "wall_thickness", "support_volume"})
 
+    def test_a_wall_at_its_limit_within_the_mesh_s_chords_is_a_warning(self) -> None:
+        """A 0.5 mm tube is at SLA's 0.5 mm limit exactly; its STL's chords read it a few microns thin. Within the
+        mesh's own deviation (read from its curvature and edge lengths) that is the limit, a warning saying so; on
+        FDM (0.8 mm) the same wall is still an error."""
+        tube = Cylinder(10, 40) - Cylinder(9.5, 41)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "tube.stl"
+            export_stl(tube, str(path), tolerance=0.01, angular_tolerance=0.1)
+            sla = cad.stl.dfm(str(path), process="printing", technology="sla")
+            fdm = cad.stl.dfm(str(path), process="printing", technology="fdm")
+        walls = [f for f in sla.findings if f.code == "printing.wall"]
+        self.assertTrue(walls and all(f.severity == "warning" for f in walls), [f.message for f in walls])
+        self.assertIn("within the mesh's accuracy", walls[0].message)
+        thinnest = min(sla.measurements["wall_thickness"]["items"], key=lambda item: item["thickness_mm"])
+        self.assertTrue(thinnest["at_limit"])
+        self.assertGreater(thinnest["chord_mm"], 0.5 - thinnest["thickness_mm"])
+        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in fdm.findings})
+        # a box's flat walls have no chords to depart: none is at a limit
+        with tempfile.TemporaryDirectory() as td:
+            flat = cad.stl.dfm(_stl(_hollow_box(0.45), Path(td), "box"), process="printing", technology="sla")
+        self.assertIn(("error", "printing.wall"), {(f.severity, f.code) for f in flat.findings})
+
     def test_angle_limit_is_echoed_back(self) -> None:
         """The limit used has to travel with the numbers it produced."""
         with tempfile.TemporaryDirectory() as td:
