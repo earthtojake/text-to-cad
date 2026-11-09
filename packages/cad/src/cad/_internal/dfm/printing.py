@@ -522,8 +522,11 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       "a slicer cannot tell its inside, and every figure of it is of a surface",
                                       item.get("location"), "close the shell into a solid, or rebuild the part as one"))
         if item.get("sound") is False:
+            faulty = item.get("faulty_faces") or []
+            on = f" on {', '.join(ref.rsplit('/', 1)[-1] for ref in faulty)}" if faulty else ""
             found.append(CheckFinding("error", "not_sound", f"{item['part']} fails the kernel's validity check "
-                                      f"({', '.join(item.get('issues') or ['invalid'])}): a slicer may misread it",
+                                      f"({', '.join(item.get('issues') or ['invalid'])}{on}): a slicer may "
+                                      "misread it",
                                       item.get("location"), "rebuild the faulty feature; export the STEP again"))
     if (solid.get("body_count") or 0) > 1:
         found.append(CheckFinding("info", "several_bodies", f"{solid['body_count']} solids in {solid['part_count']} "

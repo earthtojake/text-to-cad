@@ -507,6 +507,20 @@ class PlateTest(unittest.TestCase):
         self.assertAlmostEqual(result.measurements["stair_stepping"]["area_mm2"], 400 / math.cos(math.radians(10)),
                                delta=0.5)
 
+    def test_an_unsound_part_names_the_kernel_s_status_and_every_face_it_faults(self) -> None:
+        # two boxes overlapping in one part: the boolean check's BOPAlgo_SelfIntersect, on the faces that cross
+        box = bd.Solid.make_box(10, 10, 10)
+        for place in (bd.Pos(0, 0, 0), bd.Rot(0, 0, 30) * bd.Pos(3, -2, 0)):
+            pair = bd.Compound([place * box, place * bd.Pos(5, 0, 0) * box])
+            result = check(pair, "pair")
+            (item,) = result.measurements["solid"]["items"]
+            self.assertEqual((item["sound"], item["issues"]), (False, ["BOPAlgo_SelfIntersect"]), place)
+            self.assertGreaterEqual(len(item["faulty_faces"]), 2)
+            finding = next(f for f in result.findings if f.code == "not_sound")
+            self.assertEqual(finding.location, item["faulty_faces"][0])
+            named = ", ".join(face.rsplit("/", 1)[-1] for face in item["faulty_faces"])
+            self.assertIn(f"(BOPAlgo_SelfIntersect on {named})", finding.message)
+
     def test_an_open_or_unsound_part_is_an_error(self) -> None:
         report = {"solid": {"items": [{"part": "lid", "location": "lid/face 1", "closed": False, "sound": False,
                                        "issues": ["BRepCheck_NotClosed"]}], "body_count": 1, "part_count": 1}}

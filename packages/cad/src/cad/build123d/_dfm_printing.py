@@ -460,6 +460,49 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
 SOUND_FACES = 200
 
 
+def _boolean_check(part: Any) -> tuple[bool, list[str], list[int]]:
+    """The boolean kernel's argument check (``BRepAlgoAPI_Check``, as ``_geometry.is_sound``) on the part's own
+    shape: whether it passes, why not (its ``BOPAlgo_CheckStatus`` names, say ``BOPAlgo_SelfIntersect``) and
+    the faces it names (ordinals, a faulty edge's or vertex's faces too). A check the kernel could not finish
+    raises: no verdict."""
+    from OCP.BOPAlgo import BOPAlgo_CheckStatus
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
+    from OCP.TopExp import TopExp
+    from OCP.collections import (
+        IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedDataMapOfShapeListOfShape)
+
+    part._maps()
+    if part.shape.wrapped is None or part.shape.wrapped.IsNull():
+        return False, ["BOPAlgo_BadType"], []
+    checker = BRepAlgoAPI_Check(part.shape.wrapped)
+    if checker.HasErrors():
+        raise RuntimeError("boolean argument checker failed")
+    inconclusive = (BOPAlgo_CheckStatus.BOPAlgo_CheckUnknown, BOPAlgo_CheckStatus.BOPAlgo_OperationAborted)
+    names: set[str] = set()
+    faces: set[int] = set()
+    ancestors = {}
+    for result in checker.Result():
+        if result.GetCheckStatus() in inconclusive:
+            raise RuntimeError(f"boolean argument check was inconclusive: {result.GetCheckStatus().name}")
+        names.add(result.GetCheckStatus().name)
+        for shapes in (result.GetFaultyShapes1(), result.GetFaultyShapes2()):
+            for shape in shapes:
+                kind = shape.ShapeType()
+                if kind == TopAbs_FACE:
+                    faces.add(int(part._face_map.FindIndex(shape)))
+                elif kind in (TopAbs_EDGE, TopAbs_VERTEX):
+                    if kind not in ancestors:
+                        found = TopTools_IndexedDataMapOfShapeListOfShape()
+                        TopExp.MapShapesAndAncestors_s(part.shape.wrapped, kind, TopAbs_FACE, found)
+                        ancestors[kind] = found
+                    found = ancestors[kind]
+                    index = found.FindIndex(shape)
+                    if index:
+                        faces.update(int(part._face_map.FindIndex(face)) for face in found.FindFromIndex(index))
+    return bool(checker.IsValid()), sorted(names), sorted(face for face in faces if face)
+
+
 def _solid(ctx: Context) -> dict[str, Any]:
     from OCP.BRep import BRep_Tool
     from OCP.BRepClass3d import BRepClass3d
@@ -491,20 +534,25 @@ def _solid(ctx: Context) -> dict[str, Any]:
                 closed += int(BRep_Tool.IsClosed_s(explorer.Current()))
                 explorer.Next()
         issues: list[str] = []
+        faulty: list[int] = []
         faces = len(ctx.faces[index])
         check = "boolean" if checked + faces <= SOUND_FACES else "topology"
         try:
             if check == "boolean":
                 checked += faces
-                sound: bool | None = bool(_geometry.is_sound(part.shape))
+                sound, faults, faulty = _boolean_check(part)
                 if not sound:
-                    issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)}) or ["boolean check"]
+                    issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)} | set(faults)) \
+                        or ["boolean check"]
             else:
                 issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)})
                 sound = not issues
         except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
             sound = None
-        items.append({"part": part.name or part.owner or f"part {index + 1}", "location": ctx.ref(index, 1),
+        faulty_faces = faulty if issues and check == "boolean" else []
+        items.append({"part": part.name or part.owner or f"part {index + 1}",
+                      "location": ctx.ref(index, faulty_faces[0] if faulty_faces else 1),
+                      "faulty_faces": [ctx.ref(index, face) for face in faulty_faces][:20],
                       "xyz": _xyz(part.shape.bounding_box(optimal=False).center()), "solids": len(solids), "shells": shells,
                       "closed": bool(solids) and closed == shells, "inner_shells": inner, "sound": sound,
                       "issues": issues, "check": check, "volume_mm3": _r(float(part.shape.volume), 3),
