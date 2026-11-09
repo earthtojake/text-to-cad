@@ -77,16 +77,17 @@ class Renders:
         state["meshed"] = {key: meshed.get(key) for key in ("parts", "meshed", "seconds", "triangles", "mode")}
         return timings
 
-    def _open(self, render: Any, path: Path) -> dict[str, int]:
+    def _open(self, render: Any, path: Path, collision: bool = False) -> dict[str, int]:
         """The process holds the file no document at ``path`` as it is now: read again by its
-        reader whenever a file it read has changed (``formats.stale``)."""
+        reader whenever a file it read has changed (``formats.stale``); ``collision``, an MJCF's
+        collision geoms in place of its visuals."""
         from cad.engine.formats import stale
 
         timings: dict[str, int] = {}
         state = render.state
         if state.get("version") is None or stale(state.get("files") or {}):
             clock = time.perf_counter()
-            answer = render.request({"op": "open", "path": str(path)})
+            answer = render.request({"op": "open", "path": str(path), **({"collision": True} if collision else {})})
             if "refused" in answer:
                 raise Refused(answer["refused"], answer.get("part"))
             if "opened" not in answer:
@@ -128,7 +129,8 @@ class Renders:
 
     def _file(self, path: Path, still: dict[str, Any], progress: Any = None) -> tuple[bytes, dict[str, Any]]:
         """A picture of a file no document (``foreign``): its render process, which reads it with
-        its reader, asked for a frame. ``progress`` as ``draw`` takes it."""
+        its reader, asked for a frame; an MJCF's collision view (``display.collision``) another
+        process's, which reads the file's collision geoms. ``progress`` as ``draw`` takes it."""
         if progress is not None:
             progress.stage("scene", detail=path.name)
         if path.suffix.lower() == ".kicad_pcb":
@@ -136,8 +138,9 @@ class Renders:
             from cad_server._internal.boards import prepare
 
             prepare(path)
-        render, answer, timings = self._frame(f"file:{path}", str(path), still, lambda held: self._open(held, path),
-                                              progress)
+        collision = bool((still.get("display") or {}).get("collision"))
+        render, answer, timings = self._frame(f"file:{path}" + ("#collision" if collision else ""), str(path), still,
+                                              lambda held: self._open(held, path, collision), progress)
         return self._drawn(render, answer, timings)
 
     def draw(self, path: Path, still: dict[str, Any], progress: Any = None) -> tuple[bytes, dict[str, Any]]:

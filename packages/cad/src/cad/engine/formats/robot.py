@@ -13,7 +13,10 @@ the world holds its child where it is), an SRDF's group states the poses and its
 opening, an MJCF's keyframes the poses by their names (a body a link, the world the root, a hinge
 revolute -- continuous without a range -- a slide prismatic, a ball or a free joint fixed, a body of
 several joints a chain of one-joint links, an equality coupling a mimic, the geoms of groups 0 to 2
-its visuals). Where the stills have always read a detail differently from the payload, the stills'
+its visuals). An MJCF's collision view (``display.collision``, ``robot_file(..., collision=True)``) draws
+instead the geoms MuJoCo collides (a ``contype`` or ``conaffinity`` not 0, a mesh as the convex hull its
+file is), each its own colour of the Parts palette, so each hull of a decomposed part stands apart; a
+URDF, an SDF or an SRDF has none, refused by name. Where the stills have always read a detail differently from the payload, the stills'
 dialect keeps it (``_STILLS``).
 
 **Posing**: a control is a revolute or continuous joint (degrees) or a prismatic one (metres);
@@ -425,10 +428,11 @@ def _followers(robot: Robot, name: str) -> None:
 # --- MJCF (the mjcf type's own reader, cad.engine.mjcf_source) ---------------------------------------
 
 
-def read_mjcf(path: Path) -> Robot:
+def read_mjcf(path: Path, *, collision: bool = False) -> Robot:
     """An MJCF as a robot: ``cad.engine.mjcf_source``'s model, articulated as the viewer poses it (a link per body,
     a chain of one-joint links for a body of several joints), each visual's shape in the tuple a URDF's
-    gives (``_drawn``), its keyframes the poses by their names. Refused with the reader's errors."""
+    gives (``_drawn``), its keyframes the poses by their names; with ``collision``, its geoms that collide as
+    the visuals. Refused with the reader's errors."""
     from cad.engine.mjcf_source import articulate
     from cad.engine.mjcf_source import read_mjcf as read_model
 
@@ -436,7 +440,7 @@ def read_mjcf(path: Path) -> Robot:
     model, findings = read_model(path)
     if model is None:
         raise RobotError(f"{path.name} cannot be read as an MJCF:\n{findings.formatted()}")
-    articulation = articulate(model)
+    articulation = articulate(model, collision=collision)
     files: list[Path] = [Path(file) for file in model.files] or [path]
     visuals: dict[str, list[Visual]] = {}
     for link, found in articulation.visuals.items():
@@ -473,10 +477,13 @@ def _mjcf_shape(shape: tuple, where: str) -> tuple:
     raise RobotError(f"{where} is a {kind}; the stills draw a mesh, box, cylinder, sphere or capsule")
 
 
-def read_robot(path: Path) -> Robot:
+def read_robot(path: Path, *, collision: bool = False) -> Robot:
     suffix = Path(path).suffix.lower()
     if suffix in MJCF:
-        return read_mjcf(path)
+        return read_mjcf(path, collision=collision)
+    if collision:
+        raise RobotError(f"{Path(path).name}: display.collision draws an MJCF's collision geoms (cad mjcf snapshot), "
+                         f"not a {suffix.lstrip('.').upper()}'s: snapshot the MJCF exported from the same model")
     return read_urdf(path) if suffix == ".urdf" else read_sdf(path) if suffix == ".sdf" else read_srdf(path)
 
 
@@ -584,12 +591,24 @@ def _linear(colour: str) -> tuple[float, float, float, float]:
     return tuple(round(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4, 6) for c in channels) + (1.0,)
 
 
-def robot_file(path: Path) -> Foreign:
+def robot_file(path: Path, *, collision: bool = False) -> Foreign:
     """The robot at ``path`` as the stills hold it: a part per link mesh (shared by every visual of
     one file, scale and colour), an instance per visual placed at the opening pose, each link's
-    visuals one colour of the Parts palette; ``pose`` places them at another."""
+    visuals one colour of the Parts palette; ``pose`` places them at another. With ``collision`` (an
+    MJCF's), its collision geoms instead, each a colour of the palette of its own, in every mode."""
     path = Path(path)
-    robot = read_robot(path)
+    robot = read_robot(path, collision=collision)
+    if collision:
+        from cad.engine.render.look import LOOK
+
+        shown = 0
+        for link in robot.links:
+            for visual in robot.visuals.get(link, ()):
+                visual.color = LOOK.palette[shown % len(LOOK.palette)]
+                shown += 1
+        if not shown:
+            raise RobotError(f"{path.name}: no geom of {robot.name} collides (each has contype and conaffinity 0, or "
+                             "no shape the stills draw)")
     parts: list[Part] = []
     made: dict[tuple, list[tuple[int, np.ndarray]]] = {}
     visuals: list[tuple[str, np.ndarray, str, str]] = []  # link, placement in the link's frame (mm), path, colour
@@ -621,7 +640,8 @@ def robot_file(path: Path) -> Foreign:
     def instances(values: dict[str, float]) -> list[Placed]:
         frames = robot.placements(values)
         return [Placed(part, frames[visuals[at][0]] @ visuals[at][1], visuals[at][2],
-                       _linear(visuals[at][3]) if visuals[at][3] else None, links.index(visuals[at][0]), *named[at])
+                       _linear(visuals[at][3]) if visuals[at][3] else None,
+                       None if collision else links.index(visuals[at][0]), *named[at])
                 for part, at in rows]
 
     opening, _named = robot.values(None)

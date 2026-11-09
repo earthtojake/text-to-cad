@@ -173,15 +173,23 @@ def assemble(kind: str, path: Path, name: str, parts: list[Part], placed: list[P
     return Foreign(kind, Path(path), structure, buffers, shapes, files, pose, list(warnings or []))
 
 
-def read(path: Path) -> Any:
+def read(path: Path, *, collision: bool = False) -> Any:
     """The file at ``path`` read by its suffix's reader: a ``Foreign`` (a mesh file, a robot), or a
-    ``dxf.Drawing``. Raises ``FormatError`` naming what it cannot read."""
+    ``dxf.Drawing``; with ``collision``, an MJCF's collision geoms (``robot.robot_file``). Raises
+    ``FormatError`` naming what it cannot read."""
     path = Path(path).resolve()
     suffix = path.suffix.lower()
     if suffix not in KINDS:
         raise FormatError(f"{path.name}: the stills read {', '.join(KINDS)} files, not {suffix or 'this'}")
     if not path.is_file():
         raise FormatError(f"no file {path}")
+    if collision and suffix not in ROBOTS:
+        raise FormatError(f"{path.name}: display.collision draws an MJCF's collision geoms (cad mjcf snapshot), not a "
+                          f"{KINDS[suffix].upper()}'s")
+    if collision:
+        from cad.engine.formats.robot import robot_file
+
+        return robot_file(path, collision=True)
     if suffix == ".stl":
         from cad.engine.formats.meshes import stl_file
 

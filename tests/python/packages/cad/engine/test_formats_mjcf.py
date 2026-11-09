@@ -1,7 +1,9 @@
 """An MJCF as the stills draw it (`engine/formats/robot.py` `read_mjcf`, over the mjcf type's own reader,
 `cad.mjcf._source`): its bodies the links, its hinge and slide the joints, the geoms of groups 0 to 2 the
 visuals (a box, a capsule by ``fromto``, a sphere, a binary STL, an OBJ) and its keyframe a pose by its
-name; placed as the URDF reader places the same robot written as a URDF, and drawn as one still.
+name; placed as the URDF reader places the same robot written as a URDF, and drawn as one still. Its
+collision view (``display.collision``): the geoms that collide, whatever their group, each its own colour,
+drawn as a still; any other file's refused by name.
 
 The fixtures are made here, small, in a folder of the test's own.
 """
@@ -33,7 +35,7 @@ MJCF = """\
   <worldbody>
     <geom name="floor" type="box" size="0.2 0.2 0.01" pos="0 0 -0.01"/>
     <body name="base" pos="0 0 0.1">
-      <geom name="post" type="capsule" fromto="0 0 0 0 0 0.1" size="0.01"/>
+      <geom name="post" type="capsule" fromto="0 0 0 0 0 0.1" size="0.01" contype="0" conaffinity="0"/>
       <geom name="hull" type="box" size="0.05 0.05 0.05" group="3"/>
       <body name="arm" pos="0 0 0.1">
         <joint name="shoulder" type="hinge" axis="0 1 0" range="-90 90"/>
@@ -169,6 +171,35 @@ class MjcfRobotTest(unittest.TestCase):
         np.testing.assert_allclose(block[:3, 3], (0, 0, 320), atol=1e-6)
         self.assertEqual(posed["kinematics"]["pose"]["configuration"], "raised")
         self.assertIn(str(self.folder / "meshes" / "cube.obj"), found.files)
+
+    def test_its_collision_view_is_the_geoms_that_collide_each_its_own_colour(self) -> None:
+        from cad.engine.formats.robot import read_robot
+        from cad.engine.snapshot import parse_display
+
+        self.assertEqual(parse_display("collision,wireframe", False), {"collision": True, "mode": "wireframe"})
+        robot = read_robot(self.path, collision=True)
+        meshes = {link: [visual.mesh for visual in visuals] for link, visuals in robot.visuals.items()}
+        # The group-3 hull collides and is drawn; the post (contype and conaffinity 0) is a visual alone.
+        self.assertEqual(meshes["base"], [("box", (0.1, 0.1, 0.1))])
+        self.assertEqual([len(meshes[link]) for link in ("world", "arm", "slider")], [1, 2, 1])
+        found = formats.read(self.path, collision=True)
+        colours = [tuple(instance["color"]) for instance in found.structure["instances"]]
+        self.assertEqual((len(colours), len(set(colours))), (5, 5), colours)
+        with self.assertRaisesRegex(formats.FormatError, r"rig\.urdf: display\.collision draws an MJCF's collision "
+                                                         r"geoms \(cad mjcf snapshot\), not a URDF's"):
+            formats.read(self.folder / "rig.urdf", collision=True)
+        with self.assertRaisesRegex(formats.FormatError, r"tet\.stl: display\.collision draws an MJCF's"):
+            formats.read(self.folder / "meshes" / "tet.stl", collision=True)
+
+    def test_a_snapshot_of_its_collision_view_is_a_picture(self) -> None:
+        from cad.engine.snapshot import snapshot
+
+        opengl.require(context.available())
+        visual, collision = self.folder / "visual.png", self.folder / "collision.png"
+        snapshot(self.path, visual, size=(160, 120), daemon=False)
+        snapshot(self.path, collision, display={"collision": True}, size=(160, 120), daemon=False)
+        self.assertTrue(collision.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertNotEqual(collision.read_bytes(), visual.read_bytes())
 
     def test_an_mjcf_the_reader_refuses_is_refused_with_its_errors(self) -> None:
         bad = self.folder / "bad.mjcf"

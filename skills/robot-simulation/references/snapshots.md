@@ -11,6 +11,7 @@ cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad srdf snapshot path/to/robot.srdf review.png --pose '{"shoulder_pitch": 30}'
 cad mjcf snapshot path/to/scene.xml review.png --pose home
 cad mjcf snapshot path/to/scene.xml review.png --pose '{"joint1": 30, "finger_joint2": 0.02}'
+cad mjcf snapshot path/to/scene.xml collision.png --display collision --pose home
 ```
 
 ## Poses
@@ -65,6 +66,14 @@ in for a floor), a heightfield, a signed-distance geom, an ellipsoid, an inline 
 `<replicate>`, `<attach>`, `<flexcomp>`, `<flex>` and `<composite>` would expand to. A `.xml` whose
 root is not `<mujoco>`, an include that is not there, a mesh file that is not there and the
 validator's own errors refuse the file before anything renders.
+
+`--display collision` draws instead what MuJoCo collides: every geom whose `contype` or
+`conaffinity` is not 0, whatever its group, each in its own colour, so that each hull of a
+decomposed part stands apart (a mesh geom collides as its convex hull, and a hull file already is
+one). Compare it with the visual snapshot at the same pose and camera: a pocket, a slot or the gap
+between jaws that the hulls fill is a gap the simulator does not have. It combines with a mode
+(`--display collision,wireframe`) and with `--pose`. A URDF, an SRDF and a model's document are
+refused by name: snapshot the MJCF exported from the same model.
 
 ## Display, camera and annotations
 

@@ -24,8 +24,9 @@ the CAD Viewer and ``cad mjcf snapshot`` open an MJCF on any device.
   name rgba>``;
 - ``<worldbody>`` and its ``<body name pos quat|euler|axisangle|xyaxes|zaxis childclass>`` tree,
   ``<frame>`` groups (a pure transform on what they hold), ``<inertial>``, ``<geom type size fromto
-  pos quat ... rgba material mesh group>`` (groups 0 to 2 drawn, as MuJoCo's viewer draws them by
-  default; 3 and up are a model's collision geoms and are not visuals), ``<joint type axis pos range
+  pos quat ... rgba material mesh group contype conaffinity>`` (groups 0 to 2 drawn, as MuJoCo's viewer
+  draws them by default; 3 and up are a model's collision geoms and are not visuals; ``articulate``'s
+  ``collision`` draws instead the geoms that collide, a ``contype`` or ``conaffinity`` not 0), ``<joint type axis pos range
   limited ref>`` and ``<freejoint>``;
 - ``<equality><joint joint1 joint2 polycoef>``: a linear coupling as a mimic;
 - ``<keyframe><key name qpos>``: each a pose of the model's hinge and slide joints;
@@ -306,6 +307,7 @@ class MjcfGeom:
     mesh: str | None = None
     material: str | None = None
     where: str = ""
+    collides: bool = True  # its contype or conaffinity not 0 (each 1 unless set), as MuJoCo pairs geoms
 
     @property
     def drawn(self) -> bool:
@@ -855,7 +857,9 @@ class _Reader:
             colour = (rgba[0], rgba[1], rgba[2], rgba[3])
         group_values = self.numbers(attributes.get("group"), 1, where=where, name="group")
         group = int(group_values[0]) if group_values else 0
-        geom = MjcfGeom(name, body.name, kind, size, local, colour, group, mesh, material, where)
+        bits = [self.numbers(attributes.get(key), 1, where=where, name=key) for key in ("contype", "conaffinity")]
+        collides = any(int(found[0]) != 0 if found else True for found in bits)
+        geom = MjcfGeom(name, body.name, kind, size, local, colour, group, mesh, material, where, collides)
         body.geoms.append(geom)
         if group in DRAWN_GROUPS and geom.visual() is None:
             if kind == "plane":
@@ -1007,10 +1011,12 @@ def _hex(rgba: tuple[float, ...]) -> str:
     return "#" + "".join(f"{max(0, min(255, round(float(value) * 255))):02x}" for value in rgba[:3])
 
 
-def articulate(model: MjcfModel) -> Articulation:
+def articulate(model: MjcfModel, *, collision: bool = False) -> Articulation:
     """The model as the viewer poses it. A body is a link; a body with one hinge or slide hangs from its parent
     by that joint; one with several is a chain, a link per joint, each at the body's frame, the joints applied in
-    their order (MuJoCo's composition); one with none, or with a ball or free joint alone, hangs fixed."""
+    their order (MuJoCo's composition); one with none, or with a ball or free joint alone, hangs fixed. Its visuals
+    are the geoms of the drawn groups; with ``collision``, the geoms that collide instead (a ``contype`` or a
+    ``conaffinity`` not 0, whatever their group: what MuJoCo pairs for contacts), each that has a shape to draw."""
     links: dict[str, Matrix] = {}
     visuals: dict[str, list[Visual]] = {}
     joints: list[LinkJoint] = []
@@ -1032,7 +1038,7 @@ def articulate(model: MjcfModel) -> Articulation:
         if body.inertial is not None:
             inertials[body.name] = body.inertial
         for index, geom in enumerate(body.geoms, start=1):
-            if not geom.drawn:
+            if not (geom.collides and geom.visual() is not None if collision else geom.drawn):
                 continue
             visual = geom.visual()
             assert visual is not None

@@ -1922,7 +1922,10 @@ passed through a worker's export request still uses its render reader, preservin
 feature edges and file units; its export source holds no B-rep to mesh. `--display` takes
 a mode (`solid`, `shaded`, `parts`, `xray`, `hidden-line`, `wireframe`), `exploded=A` (the parts
 moved apart as the viewer's Explode moves them, by an amount from 0 to 1; with a mode,
-`hidden-line,exploded=0.6`), or the display object (a drawing takes none: `mode`, `grid`, `camera`,
+`hidden-line,exploded=0.6`), `collision` (an MJCF's: the geoms MuJoCo collides, a `contype` or
+`conaffinity` not 0 whatever their group, in place of its visuals, each its own colour of the Parts
+palette; read by a render process of its own, as another reading of the file; any other file or
+document refused by name), or the display object (a drawing takes none: `mode`, `grid`, `camera`, `collision`,
 `clip`: `{"enabled", "axis", "at", "invert", "partColors"}`,
 its `at` in the file's unit as the viewer reads it -- a document's millimetres, a robot's or a GLB's
 metres, a 3MF's declared unit (`render/clip.py`); `exploded`: `{"enabled", "amount"}`, 0.5

@@ -95,7 +95,7 @@ __all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "dr
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "collision"})
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
@@ -257,7 +257,8 @@ def exploded_amount(display: dict[str, Any]) -> float:
 
 @refusing("display")
 def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, both by commas (``hidden-line,exploded=0.6``), or
+    """``--display``: a mode, ``exploded=AMOUNT``, ``collision`` (an MJCF's collision geoms, each its
+    own colour, in place of its visuals), any of them by commas (``hidden-line,exploded=0.6``), or
     the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
     (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
     ``render/schematic.py``)."""
@@ -282,11 +283,14 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                 name, equals, amount = token.partition("=")
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
+                elif token == "collision" and "collision" not in display:
+                    display["collision"] = True
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "and exploded=AMOUNT moves the parts apart (one of each, by commas)",
+                                          "exploded=AMOUNT moves the parts apart, and collision draws an MJCF's "
+                                          "collision geoms (one of each, by commas)",
                                           part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
@@ -301,6 +305,10 @@ def parse_display(value: str | None, grid: bool, *, board: bool = False, schemat
                               part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
         raise SnapshotRefused("display.grid is true or false", part="display.grid")
+    if "collision" in display and not isinstance(display["collision"], bool):
+        raise SnapshotRefused("display.collision is true or false", part="display.collision")
+    if display.get("collision") is False:
+        del display["collision"]  # the visuals, as with none: one reading of the file
     _visibility(display)
     if grid:
         display["grid"] = True
