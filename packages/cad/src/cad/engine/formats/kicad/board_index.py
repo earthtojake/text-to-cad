@@ -52,7 +52,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from cad.engine.formats.kicad.ref_path import ref_prefix_names
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.geometry import (
-    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, disc, format_xy, hull, inside, pen_outlines,
+    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, cos_sin, disc, format_xy, hull, inside, pen_outlines,
     polygon_distance, polyline_distance, rotate, union,
 )
 from cad.engine.formats.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
@@ -708,7 +708,10 @@ def _stackup_json(stackup: Stackup, num: Callable[[float], float]) -> dict:
 
 
 def _circle(center: XY, radius: float, segments: int = _CIRCLE_SEGMENTS) -> list[XY]:
-    return [(center[0] + radius * math.cos(2 * math.pi * k / segments), center[1] + radius * math.sin(2 * math.pi * k / segments)) for k in range(segments)]
+    """A circle as ``segments`` points, the same bits on every platform (``cos_sin``): the router reads a board's
+    circles from here."""
+    return [(center[0] + radius * cos, center[1] + radius * sin)
+            for cos, sin in (cos_sin(2 * math.pi * k / segments) for k in range(segments))]
 
 
 def _close(a: XY, b: XY, within: float = _JOIN) -> bool:
