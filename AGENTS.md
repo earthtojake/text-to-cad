@@ -152,6 +152,10 @@ which points both at the checkout.
 
 ## Repo Rules
 
+- Claude Code, Codex and Cursor are the first-class integrations, and supporting them comes first:
+  a change that touches the plugin, the skills, CAD's server or the CAD app keeps all three
+  working, and is tested in each before it ships (the host table in
+  [`apps/mcp/README.md`](apps/mcp/README.md) says what each gets). Other hosts are best effort.
 - Boundaries and design laws live in each package's README: read
   [`packages/cad/README.md`](packages/cad/README.md) (the laws),
   [`packages/core/README.md`](packages/core/README.md),
