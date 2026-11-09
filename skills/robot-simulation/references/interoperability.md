@@ -25,7 +25,9 @@ meshes, collision shapes and named frames; joints with axes and limits around th
 couplings; mechanism states as named poses; all in SI units) and written by the destination's
 suffix: `cad model export <id> robot.xml` (MJCF) or `robot.urdf`. Each
 writes its meshes as binary STL in metres beside the file: in `assets/` for an MJCF (its
-`meshdir`), in `meshes/` for a URDF, named by relative path. The two files of one
+`meshdir`), in `meshes/` for a URDF, named by relative path. An export lists the meshes it wrote
+there (`.robot.xml.meshes`), and the next export of that file removes those it no longer names (parts
+renamed or gone), never a file it did not write nor one another robot's list names. The two files of one
 model name every link and joint alike, so a controller, an SRDF and a policy read the same names in
 each (URDF names keep `[A-Za-z0-9_]`, every other character `_`). MJCF and URDF keep links
 and joints apart, so a link and a joint may share a name, which the URDF export says (`cad urdf

@@ -241,9 +241,58 @@ def digest(text: str, files: dict[str, bytes]) -> str:
     return found.hexdigest()
 
 
+#: The list a description's writer keeps beside the meshes it wrote, one per file it wrote them for: ``.<name>.meshes``
+#: in the meshes' folder, a mesh file's name a line (``place``).
+WRITTEN = ".{name}.meshes"
+
+
+def _listed(folder: Path, name: str) -> set[str]:
+    """The meshes the list ``name`` in ``folder`` names (``WRITTEN``): none where there is no list or it reads as
+    none. A name with a folder in it, or none at all, is no mesh the writer wrote."""
+    try:
+        lines = (folder / WRITTEN.format(name=name)).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return set()
+    return {line for line in lines if line and line == Path(line).name and not line.startswith(".")}
+
+
+def _stale(path: Path, folder: Path, files: dict[str, bytes]) -> None:
+    """The meshes the last export of ``path`` wrote and this one no longer names, removed, and this export's listed
+    (``WRITTEN``): a writer removes only files it can show it wrote, its own list naming them, never one another
+    file's list still names (two robots sharing a folder) nor any other file. Said where it removes any."""
+    wanted = set(files)
+    gone = _listed(folder, path.name) - wanted
+    if gone:
+        for other in folder.glob(WRITTEN.format(name="*")):
+            if other.name != WRITTEN.format(name=path.name):
+                gone -= _listed(folder, other.name[1:-len(".meshes")])
+    removed = 0
+    for name in sorted(gone):
+        try:
+            (folder / name).unlink()
+            removed += 1
+        except FileNotFoundError:
+            pass
+    listed = folder / WRITTEN.format(name=path.name)
+    text = "".join(f"{name}\n" for name in sorted(wanted))
+    if not same_text(listed, text):
+        listed.write_text(text, encoding="utf-8")
+    if removed:
+        note(f"removed {removed} mesh{'es' if removed != 1 else ''} from {folder.name}/ that the last export of "
+             f"{path.name} wrote and this one no longer names")
+
+
+def same_text(path: Path, text: str) -> bool:
+    try:
+        return path.read_text(encoding="utf-8") == text
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def place(path: Path, text: str, files: dict[str, bytes], assets: str) -> list[Path]:
     """A rendering moved into place: staged beside ``path``, the meshes first and the MJCF last, so a
-    reader of the MJCF finds every mesh it names; each file only where its bytes changed."""
+    reader of the MJCF finds every mesh it names; each file only where its bytes changed. The meshes an earlier
+    export of ``path`` wrote and this one no longer names are removed, and only those (``_stale``)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     folder = path.parent / assets
     written = [path] + [folder / name for name in files]
@@ -263,6 +312,8 @@ def place(path: Path, text: str, files: dict[str, bytes], assets: str) -> list[P
                     replace_atomic(held / name, folder / name)
         if not same_bytes(path, staged):
             replace_atomic(staged, path)
+    if folder.is_dir():
+        _stale(path, folder, files)
     return written
 
 

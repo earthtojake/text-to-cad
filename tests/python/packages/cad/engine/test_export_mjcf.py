@@ -203,6 +203,30 @@ class HandBuiltTest(_Folder):
         turned = SHOULDER @ _rotation_z(1.2)
         np.testing.assert_allclose(data.xpos[model.body("finger").id], (turned @ TIP)[:3, 3], atol=1e-9)
 
+    def test_an_export_again_removes_the_meshes_it_wrote_before_and_names_no_more_and_nothing_else(self) -> None:
+        from dataclasses import replace
+
+        from cad.engine.export import ExportWarning
+
+        path = self.folder / "arm.xml"
+        write_description(arm(), path)
+        assets = self.folder / "assets"
+        (assets / "mine.stl").write_bytes(b"a file of the person's")  # no export wrote it
+        other = arm()
+        write_description(other, self.folder / "other.xml")  # another robot in the folder, its own list
+        renamed = arm()
+        renamed.meshes["k1"] = replace(renamed.meshes["k1"], name="renamed")
+        # The other robot's export no longer names arm_link.stl, but this one's does: it stays.
+        write_description(renamed, self.folder / "other.xml")
+        self.assertTrue((assets / "arm_link.stl").exists())
+        # Once neither names it, it goes, and only it.
+        with self.assertWarnsRegex(ExportWarning, r"^removed 1 mesh from assets/ that the last export of arm.xml "
+                                                  r"wrote and this one no longer names"):
+            write_description(renamed, path)
+        self.assertEqual(sorted(child.name for child in assets.iterdir()),
+                         [".arm.xml.meshes", ".other.xml.meshes", "arm_renamed.stl", "mine.stl"])
+        self.assertEqual((assets / ".arm.xml.meshes").read_text(encoding="utf-8"), "arm_renamed.stl\n")
+
     def test_a_loop_of_slides_alone_is_refused_by_name_and_nothing_is_written(self) -> None:
         slide = Closure("rail", "prismatic", "world", "finger", SHOULDER, np.linalg.inv(SHOULDER @ TIP) @ SHOULDER,
                         loop=("shoulder", "knuckle", "rail"))
