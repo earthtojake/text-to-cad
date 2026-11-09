@@ -50,8 +50,11 @@ leader a joint that moves. URDF has no named states: the description's poses are
 SRDF's group states are where ROS keeps them). URDF has no contact exclusion: the description's
 (``cad.build123d.exclude``) are not written (an SRDF's ``disable_collisions`` is where MoveIt keeps
 them). URDF has no contact friction either (Gazebo's ``<gazebo>`` extensions are outside URDF): a
-part's (``cad.build123d.friction``) is not written, and said. A loop is refused by name, as every robot
-format refuses one.
+part's (``cad.build123d.friction``) is not written, and said. URDF is a tree and cannot close a loop: a joint
+that closes one (``description``'s **Loops**) is left out and said (``export.note``), and the loop's links
+hang open from the tree (the MJCF closes it). The CAD Viewer's ``<tcad:four_bar>`` extension is not
+written: it derives one rocker's angle from its driver and places no coupler link, and a generated loop
+has its coupler as a link of its own.
 
 **Names.** URDF names are any text, but ROS tooling reads ``[A-Za-z0-9_]``: every other character
 is ``_``, and a name already held in its kind is given ``_2``, ``_3`` and said (``export.note``):
@@ -113,14 +116,14 @@ def rendered(description: Description, meshes: str = "meshes",
 
 
 def checked(description: Description, label: str) -> None:
-    """A description a tree format writes, or refused by name: a loop, a broken tree."""
-    if description.loops:
-        raise ExportRefused(f"{description.name}: the mechanism has a loop through {', '.join(description.loops)}, "
-                            f"and {label} writes a tree: no {label} is written of it")
+    """A description a tree format writes, or refused by name (a broken tree); each joint that closes a
+    loop said, which the tree leaves out."""
     try:
         description.check()
     except DescriptionError as error:
         raise ExportRefused(f"{description.name}: {error}") from error
+    for closure in description.closures:
+        note(f"{label} cannot close a loop: joint {closure.name!r} is left out; the MJCF closes it")
 
 
 def rooted(description: Description) -> tuple[Link, list[Joint], Joint | None]:

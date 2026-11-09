@@ -56,11 +56,22 @@ link it is below in the tree, by a ``fixed`` joint. The ground is the first link
 unless the model names it. A coupling is written on the joint that follows: ``follows =
 (leader, ratio, offset)`` meaning ``value = ratio * leader + offset`` around zero, which is what
 URDF's ``<mimic>`` and MuJoCo's ``<equality><joint>`` say; a coupling of more than two joints is
-a chain of followers from its first. A joint's ``effort`` and ``velocity`` are its drive's bounds
+a chain of followers from its first. A virtual pinion (``mechanism``'s: a ``rack_and_pinion_pair``'s
+first joint that holds no part) is no link and no joint here: its link carries nothing a simulator
+needs, so its racks follow the first of them, by the ratio of their ratios, and that rack is the
+coupling's control. A joint's ``effort`` and ``velocity`` are its drive's bounds
 (``cad.build123d.limits``): N*m and rad/s for a turn, N and m/s for a slide, None where the model
 gives none; its ``armature`` (kg*m^2, kg), ``damping`` (N*m*s/rad, N*s/m) and ``friction`` (N*m, N)
-are the joint's own dynamics, None where the model gives none. A mechanism with a loop is described with its pairs and
-``loops`` naming them, and every writer refuses it (no format here solves a loop).
+are the joint's own dynamics, None where the model gives none.
+
+**Loops.** A mechanism whose pairs close a loop is a tree and its ``closures``: the tree is the pairs
+followed from the ground, breadth first, in the mechanism's pair order, and each pair that reaches a
+link the tree already holds is a ``Closure``, not a joint -- the loop's last pair to be reached, which is
+the pair an author pairs by label once the rest are connected. A closure that would be a slide (a
+prismatic or cylindrical pair) is moved to the loop's revolute or ball pair nearest it, so a writer can
+close the loop with point constraints, and the slide is a joint of the tree. A closure's two frames, one
+on each link, coincide as built (``describe`` refuses one that does not, by name), so the loop is closed
+at zero; a writer that can close it does (MJCF), one that cannot leaves it open and says so (URDF).
 
 **Contacts.** ``excludes`` are the link pairs a model says never collide (``cad.build123d.exclude``),
 each pair once, in link order; what a writer finds touching at rest is its own (``export/contact.py``).
@@ -77,20 +88,22 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["COLLISIONS", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint", "Link",
-           "Mesh", "Pose", "Visual"]
+__all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
+           "Link", "Mesh", "Pose", "Visual"]
 
 #: What a part's collision may be (``cad.build123d.collision``): the mesh itself, a fitted primitive, or none.
 COLLISIONS = ("mesh", "box", "sphere", "cylinder", "capsule", "none")
 #: The joint kinds, in the words URDF uses where it has one; ``cylindrical`` and ``spherical`` are AP242's.
 JOINT_KINDS = ("fixed", "revolute", "continuous", "prismatic", "cylindrical", "spherical")
+#: The joints a closure may be: a slide is kept a joint of the tree where its loop has a turn or a ball.
+CLOSURE_KINDS = ("revolute", "continuous", "prismatic", "cylindrical", "spherical")
 
 Matrix = np.ndarray  # a 4x4 float64 rigid transform, row-major, metres
 
 
 class DescriptionError(ValueError):
-    """A document that cannot be described as a robot, said by name (a loop, a density that is not
-    positive, a part that is no solid where a mass is needed)."""
+    """A document that cannot be described as a robot, said by name (a loop that does not close as built, a
+    density that is not positive, a mass its parts cannot carry)."""
 
 
 @dataclass(frozen=True)
@@ -187,6 +200,28 @@ class Joint:
         return self.limits[0][1] if self.limits else None
 
 
+@dataclass
+class Closure:
+    """A pair the tree leaves out to close a loop (the module's **Loops**): a joint from ``parent`` to
+    ``child``, both links of the tree, whose frame is ``origin`` in the parent's frame and ``frame`` in the
+    child's, the two the same place in the model's space as built; its Z is the axis. ``loop`` names the
+    loop's joints, this one among them, from the ground's side."""
+
+    name: str
+    kind: str  # one of CLOSURE_KINDS
+    parent: str
+    child: str
+    origin: Matrix  # the joint frame in the parent link's frame at zero
+    frame: Matrix  # the same frame in the child link's frame
+    limits: tuple[tuple[float | None, float | None], ...] = ()  # as a Joint's: around zero, SI
+    as_built: tuple[float, ...] = ()
+    loop: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.kind not in CLOSURE_KINDS:
+            raise ValueError(f"closure {self.name!r}: kind {self.kind!r} is none of {', '.join(CLOSURE_KINDS)}")
+
+
 @dataclass(frozen=True)
 class Pose:
     name: str
@@ -196,15 +231,15 @@ class Pose:
 @dataclass
 class Description:
     """A document as a robot: links in tree order (the ground first), joints parents-first, the meshes the
-    links' geometry names, the poses, the link pairs that never collide, and the mechanism's loops (every
-    writer refuses a description with one)."""
+    links' geometry names, the poses, the link pairs that never collide, and the joints that close the
+    mechanism's loops (``closures``: the module's **Loops**), which the tree leaves out."""
 
     name: str
     links: list[Link]
     joints: list[Joint]
     meshes: dict[str, Mesh] = field(default_factory=dict)
     poses: list[Pose] = field(default_factory=list)
-    loops: tuple[str, ...] = ()
+    closures: list[Closure] = field(default_factory=list)
     warnings: tuple[str, ...] = ()  # what the description could not carry, said once each
     excludes: tuple[tuple[str, str], ...] = ()  # link pairs that never collide (``cad.build123d.exclude``)
 
@@ -227,11 +262,8 @@ class Description:
 
     def check(self) -> None:
         """The tree's invariants, raised by name: one root, every joint between known links, every child
-        placed by one joint, meshes the geometry names present, no loop. A loop is said first: its
-        closing joint places a link a second time."""
-        if self.loops:
-            raise DescriptionError(f"the mechanism has a loop through {', '.join(self.loops)}: no robot format "
-                                   f"writes one")
+        placed by one joint, meshes the geometry names present, and each closure between two links of the
+        tree, named as no joint is."""
         names = [link.name for link in self.links]
         if len(set(names)) != len(names):
             raise DescriptionError(f"link names repeat: {sorted({n for n in names if names.count(n) > 1})}")
@@ -258,6 +290,16 @@ class Description:
             for end in pair:
                 if end not in known:
                     raise DescriptionError(f"an exclusion names link {end!r}, which there is not")
+        joints = {joint.name for joint in self.joints}
+        for closure in self.closures:
+            for end in (closure.parent, closure.child):
+                if end not in known:
+                    raise DescriptionError(f"closure {closure.name!r} names link {end!r}, which there is not")
+            if closure.parent == closure.child:
+                raise DescriptionError(f"closure {closure.name!r} joins link {closure.parent!r} to itself")
+            if closure.name in joints:
+                raise DescriptionError(f"closure {closure.name!r} is named as a joint is")
+            joints.add(closure.name)
 
 
 def srgb(linear: tuple[float, ...] | None, default: tuple[float, float, float, float] = (0.8, 0.8, 0.8, 1.0)) -> tuple[float, float, float, float]:

@@ -7,8 +7,10 @@ through the xbf and through a warm build; a part kept a body of its own, an excl
 limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
 wrong; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
 and a mass that cannot be made refused; a turned link's inertia in its own frame, as the description, the
-MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop described and refused;
-a part with no density warned, one whose density is not positive refused."""
+MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop a tree and the closure
+its last pair, two frames that coincide as built, one closing at a slide moved to its nearest turn, and a
+state moving it left out; a pinion that holds no part no link, its racks following the first; a part with no
+density warned, one whose density is not positive refused."""
 
 from __future__ import annotations
 
@@ -170,6 +172,103 @@ def loop():
     bd.RigidJoint("far", arm, bd.Location())
     base.joints["near"].connect_to(arm.joints["near"], angle=30)
     return bd.Compound(children=[base, arm], label="loop")
+"""
+
+# A four-bar in the XZ plane, its hinges along +Y: the crank, the coupler and the rocker each built where it
+# stands, three hinges connected at 0 and the loop's last, rocker to coupler, paired by label.
+FOUR_BAR = """
+import math
+
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import mechanism_state
+from cad.engine import xbf
+
+A, B, C, D = (0, 0), (15, 26), (55, 50), (80, 0)  # mm, in the XZ plane
+
+
+def bar(name, start, end, y):
+    length = math.hypot(end[0] - start[0], end[1] - start[1])
+    turn = math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
+    part = bd.Location((start[0], y, start[1]), (0, -turn, 0)) * bd.Box(
+        length, 6, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
+    part.label = name
+    part.material = metals.aluminum()
+    return part
+
+
+def hinge(name, holder, child, at, connect=True):
+    joint = bd.RevoluteJoint(name, holder, axis=bd.Axis((at[0], 0, at[1]), (0, 1, 0)), angular_range=(-360, 360))
+    bd.RigidJoint(name, child, joint.location)
+    if connect:
+        joint.connect_to(child.joints[name], angle=0)
+
+
+@xbf("XBF/four_bar.xbf")
+def four_bar():
+    base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
+    base.label = "base"
+    base.material = metals.aluminum()
+    crank, coupler, rocker = bar("crank", A, B, 0), bar("coupler", B, C, 8), bar("rocker", D, C, 0)
+    hinge("a", base, crank, A)
+    hinge("b", crank, coupler, B)
+    hinge("d", base, rocker, D)
+    hinge("c", rocker, coupler, C, connect=False)
+    root = bd.Compound(children=[base, crank, coupler, rocker], label="four_bar")
+    return mechanism_state(root, "swung", a=20)
+"""
+
+# An oscillating cylinder: a crank on the base, a rod on the crank, a cylinder hinged to the base that the
+# rod slides in, the slide paired last by label, so the loop closes at a slide.
+CYLINDER = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/cylinder.xbf")
+def cylinder():
+    base = bd.Box(140, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MAX))
+    base.label = "base"
+    crank = bd.Box(10, 6, 40, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    crank.label = "crank"
+    rod = bd.Pos(0, 8, 40) * bd.Box(80, 6, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
+    rod.label = "rod"
+    barrel = bd.Pos(110, 16, 4) * bd.Box(30, 8, 8)
+    barrel.label = "barrel"
+    for name, holder, child, at in (("a", base, crank, (0, 0, 0)), ("b", crank, rod, (0, 0, 40)),
+                                    ("c", base, barrel, (120, 0, 0))):
+        joint = bd.RevoluteJoint(name, holder, axis=bd.Axis(at, (0, 1, 0)), angular_range=(-90, 90))
+        bd.RigidJoint(name, child, joint.location)
+        joint.connect_to(child.joints[name], angle=0)
+    along = bd.Axis((120, 0, 0), (-3, 0, 1))  # from the barrel's hinge towards the rod's
+    slide = bd.LinearJoint("s", barrel, axis=along, linear_range=(-50, 50))
+    bd.RigidJoint("s", rod, bd.Location(along.position))
+    return bd.Compound(children=[base, crank, rod, barrel], label="cylinder")
+"""
+
+# A gripper whose two slides one pinion couples, the pinion a reference axis on the palm (no part).
+GRIPPER = """
+import build123d as bd
+from cad.build123d import mechanism_state, rack_and_pinion_pair
+from cad.engine import xbf
+
+
+@xbf("XBF/gripper.xbf")
+def gripper():
+    palm = bd.Box(80, 20, 20)
+    palm.label = "palm"
+    fingers = []
+    for side, x, out in (("left", -30, -1), ("right", 30, 1)):
+        finger = bd.Pos(x, 0, 25) * bd.Box(8, 16, 30)
+        finger.label = side
+        slide = bd.LinearJoint(side, palm, axis=bd.Axis((x, 0, 10), (out, 0, 0)), linear_range=(0, 30))
+        bd.RigidJoint(side, finger, bd.Location((x, 0, 10)))
+        slide.connect_to(finger.joints[side], position=0)
+        fingers.append(finger)
+    bd.RevoluteJoint("pinion", palm, axis=bd.Axis((0, 0, 10), (0, 1, 0)), angular_range=(-360, 360))
+    gripper = bd.Compound(children=[palm, *fingers], label="gripper")
+    rack_and_pinion_pair(gripper, "grip", pinion=1, left=0.15, right=0.3)
+    return mechanism_state(gripper, "open", grip=100)
 """
 
 # A part whose material weighs nothing.
@@ -709,14 +808,68 @@ class UnjointedTest(_Folder):
                         description.warnings)
         self.assertEqual(description.poses, [])
 
-    def test_a_loop_is_described_and_refused_and_a_density_that_is_not_positive_refused(self) -> None:
-        description, _structure = self.described("loop", LOOP)
-        self.assertEqual(set(description.loops), {"near", "far"})
-        self.assertEqual([joint.child for joint in description.joints], ["base", "arm", "arm"])
-        with self.assertRaisesRegex(DescriptionError, "loop through"):
-            description.check()
+    def test_a_density_that_is_not_positive_is_refused(self) -> None:
         with self.assertRaisesRegex(DescriptionError, "'block'.*'foam'.*not positive"):
             self.described("foam", WEIGHTLESS)
+
+
+class LoopTest(_Folder):
+    def test_a_loop_is_a_tree_and_the_closure_its_last_pair_whose_frames_coincide_as_built(self) -> None:
+        description, structure = self.described("four_bar", FOUR_BAR)
+        self.assertEqual([(joint.name, joint.parent, joint.child) for joint in description.joints],
+                         [("four_bar", "world", "base"), ("a", "base", "crank"), ("d", "base", "rocker"),
+                          ("b", "crank", "coupler")])
+        [closure] = description.closures
+        self.assertEqual((closure.name, closure.kind, closure.parent, closure.child, closure.loop),
+                         ("c", "revolute", "rocker", "coupler", ("d", "c", "b", "a")))
+        # Its two frames are one place as built: on the hinge at C, its Z the axis (+Y).
+        here = description.link("rocker").frame @ closure.origin
+        there = description.link("coupler").frame @ closure.frame
+        np.testing.assert_allclose(here, there, atol=1e-12)
+        np.testing.assert_allclose(here[:3, 3], [0.055, 0, 0.05], atol=1e-9)
+        np.testing.assert_allclose(here[:3, 2], [0, 1, 0], atol=1e-12)
+        self.assert_placed_as_the_mechanism_places(description, {
+            **structure, "kinematics": {**structure["kinematics"], "configurations": {}}})
+        # A state moving a joint of the loop has no pose without a solver: left out, and said.
+        self.assertEqual(description.poses, [])
+        self.assertIn("mechanism state 'swung' moves joint 'a', which is in a loop and has no pose without a solver: "
+                      "the description leaves the state out", description.warnings)
+        # A joint stop sweep moves one joint alone, which no joint of a loop does.
+        from cad.engine.ranges import sweep
+
+        self.assertEqual({stops.joint: (stops.swept, stops.why) for stops in sweep(description)}, {
+            name: (False, "it is in the loop through d, c, b, a, which moves as a whole: no joint of it moves alone")
+            for name in ("a", "d", "b")})
+        # Two hinges on one axis between the same two parts are a loop too: the second a closure.
+        description, _structure = self.described("loop", LOOP)
+        self.assertEqual([joint.name for joint in description.joints], ["loop", "near"])
+        self.assertEqual([(c.name, c.parent, c.child, c.loop) for c in description.closures],
+                         [("far", "base", "arm", ("far", "near"))])
+
+    def test_a_loop_closing_at_a_slide_closes_at_its_nearest_turn_instead(self) -> None:
+        description, _structure = self.described("cylinder", CYLINDER)
+        [closure] = description.closures
+        self.assertEqual((closure.name, closure.kind, closure.parent, closure.child), ("c", "revolute", "base", "barrel"))
+        self.assertEqual([(joint.name, joint.kind, joint.parent, joint.child) for joint in description.joints[1:]],
+                         [("a", "revolute", "base", "crank"), ("b", "revolute", "crank", "rod"),
+                          ("s", "prismatic", "rod", "barrel")])
+        np.testing.assert_allclose(description.link("base").frame @ closure.origin,
+                                   description.link("barrel").frame @ closure.frame, atol=1e-12)
+
+
+class VirtualPinionTest(_Folder):
+    def test_a_pinion_that_holds_no_part_is_no_link_and_its_racks_follow_the_first(self) -> None:
+        description, _structure = self.described("gripper", GRIPPER)
+        self.assertEqual([link.name for link in description.links], ["world", "palm", "left", "right"])
+        self.assertEqual([(joint.name, joint.kind, joint.follows) for joint in description.joints],
+                         [("gripper", "fixed", None), ("left", "prismatic", None),
+                          ("right", "prismatic", ("left", 2.0, 0.0))])
+        self.assertEqual([joint.name for joint in description.controls()], ["left"])
+        self.assertEqual(description.poses[0].name, "open")
+        np.testing.assert_allclose([description.poses[0].values[name] for name in ("left", "right")], [0.015, 0.03],
+                                   atol=1e-12)
+        self.assertNotIn("pinion", description.poses[0].values)
+        self.assertFalse([warning for warning in description.warnings if "pinion" in warning], description.warnings)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ Its **clash** each way, where one comes first, is the first pose where anything 
 subtree, and the subtrees its followers move) meets any other link, the other joints as built: a
 self-collision of that pose, said beside the stop, never in place of it. A turning joint is swept a full
 turn each way (one clear a full turn has no stop); a sliding one as far as the whole document's extent.
-A cylindrical or spherical joint, two or three values, is not swept.
+A cylindrical or spherical joint, two or three values, is not swept, nor is a joint of a loop
+(``Description.closures``), which moves only with the rest of its loop.
 
 **The test is on surfaces**, the way the parts would meet: each part's own surface (``geometry="parts"``,
 the default: its mesh, as the viewer draws it), or what it declares a simulator collides it as
@@ -290,6 +291,9 @@ class _Sweep:
         self.told = told
         self.joints = {joint.name: joint for joint in description.joints}
         self.excluded = {frozenset(pair) for pair in (getattr(description, "excludes", None) or ())}
+        # Each joint of a loop, and the loop's joints: a loop moves as a whole, so none of them moves alone.
+        self.looped = {label: closure.loop for closure in (getattr(description, "closures", None) or ())
+                       for label in closure.loop}
         # Every part's surface samples in its link's frame, and which part each point is.
         self.parts: list[tuple[str, str]] = []  # (part, link) by part index
         self.points: dict[str, np.ndarray] = {}
@@ -400,6 +404,10 @@ class _Sweep:
         stops = JointStops(joint.name, joint.kind, unit, as_built, declared=declared)
         if joint.kind not in SWEPT:
             stops.swept, stops.why = False, f"a {joint.kind} joint has {2 if joint.kind == 'cylindrical' else 3} values"
+            return stops
+        if joint.name in self.looped:
+            stops.swept, stops.why = False, (f"it is in the loop through {', '.join(self.looped[joint.name])}, which "
+                                             "moves as a whole: no joint of it moves alone")
             return stops
         moving = self.moved_by(joint.name)
         mover_links = [name for name in self.points if name in moving]

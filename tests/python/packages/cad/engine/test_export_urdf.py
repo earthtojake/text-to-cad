@@ -3,9 +3,8 @@ the exact text of a small hand-built one, its meshes MJCF's bytes beside it, the
 the repository's own URDF check passing it and the stills reading its links where the description has them;
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
 and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
-friction as its dynamics and its armature and a part's contact friction said and not written, a ball and a
-loop refused by
-name; and a jointed model built by the engine and exported to ``.urdf``, its links moving
+friction as its dynamics and its armature and a part's contact friction said and not written, a ball
+refused by name, a joint that closes a loop left out and said; and a jointed model built by the engine and exported to ``.urdf``, its links moving
 as the mechanism moves them."""
 
 from __future__ import annotations
@@ -21,7 +20,8 @@ import numpy as np
 
 from cad import urdf
 from cad.engine import api, document, mechanism
-from cad.engine.description import Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose, Visual
+from cad.engine.description import (Closure, Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose,
+                                    Visual)
 from cad.engine.export import ExportRefused, ExportWarning, kind_of, refused
 from cad.engine.export import mjcf
 from cad.engine.export.urdf import write_description
@@ -47,7 +47,7 @@ SHOULDER = _frame(0, 0, 0.2, "x", -math.pi / 2)
 TIP = _frame(0.3, 0, 0)
 
 
-def arm(loops: tuple[str, ...] = (), shoulder: str = "revolute") -> Description:
+def arm(closures: tuple[Closure, ...] = (), shoulder: str = "revolute") -> Description:
     tetrahedron = Mesh("k1", "link", np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1]], np.float32),
                        np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]], np.uint32))
     red = (0.9, 0.1, 0.1, 1.0)
@@ -69,7 +69,7 @@ def arm(loops: tuple[str, ...] = (), shoulder: str = "revolute") -> Description:
               Joint("knuckle", "revolute", "arm", "finger", TIP, limits=((-0.5, 0.75),), as_built=(0.0,),
                     follows=("shoulder", 0.5, 0.1))]
     return Description("arm", [world, upper, finger], joints, meshes={"k1": tetrahedron},
-                       poses=[Pose("raised", {"shoulder": 1.2})], loops=loops)
+                       poses=[Pose("raised", {"shoulder": 1.2})], closures=list(closures))
 
 
 GOLDEN = """\
@@ -280,12 +280,19 @@ class HandBuiltTest(_Folder):
         self.assertIn('<dynamics damping="0.5" friction="0.2"/>', text)
         self.assertEqual(text.count("<dynamics"), 1)  # the knuckle declares none
 
-    def test_a_ball_and_a_loop_are_refused_by_name_and_nothing_is_written(self) -> None:
+    def test_a_ball_is_refused_by_name_and_nothing_is_written(self) -> None:
         with self.assertRaisesRegex(ExportRefused, "joint 'shoulder' is spherical, and URDF has no ball joint"):
             write_description(arm(shoulder="spherical"), self.folder / "arm.urdf")
-        with self.assertRaisesRegex(ExportRefused, "loop through shoulder"):
-            write_description(arm(loops=("shoulder",)), self.folder / "arm.urdf")
         self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_a_joint_that_closes_a_loop_is_left_out_and_said_and_the_tree_written(self) -> None:
+        strut = Closure("strut", "revolute", "world", "finger", SHOULDER @ TIP, np.eye(4), loop=("shoulder", "knuckle",
+                                                                                                "strut"))
+        path = self.folder / "arm.urdf"
+        with self.assertWarnsRegex(ExportWarning, "URDF cannot close a loop: joint 'strut' is left out; the MJCF "
+                                                  "closes it"):
+            write_description(arm((strut,)), path)
+        self.assertEqual(path.read_text(encoding="utf-8"), GOLDEN)
 
     def test_urdf_is_the_kind_and_a_mesh_file_is_no_source_of_one(self) -> None:
         self.assertEqual(kind_of("robot.URDF"), "urdf")

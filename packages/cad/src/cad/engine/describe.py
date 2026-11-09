@@ -8,8 +8,14 @@ the document places them, and its mechanism (``kinematics``, ``mechanism.block``
 **Links.** The first link is ``world``, holding nothing, at the model's origin. With a mechanism,
 its ground link (the parts no pair moves) hangs from ``world`` by a ``fixed`` joint named for the
 model (a pair's joint is named by its label, so a fixed joint takes ``_2`` where one holds its name), so a fragment attaches under a frame as one body tree; every other link hangs from the link
-its pair reaches it from, the pairs followed from the ground as ``mechanism.link_worlds`` follows
-them. With none (a STEP, a model without joints), each top-level node of the document's tree is a
+its pair reaches it from, the pairs followed from the ground breadth first, in the mechanism's pair
+order. A pair that reaches a link the tree already holds closes a loop: it is a ``Closure``
+(``description``'s **Loops**, where a slide is traded for its loop's nearest turn or ball), its frame on
+each of its two links, the two checked to coincide as built within the tolerance the mechanism reads
+every pair to (1e-6 of the model's size in millimetres, at least 1), else refused by name. A mechanism
+state that moves a joint of a loop is left out of the poses, and warned. A virtual pinion (a revolute
+pair to a link of no part that no other pair reaches) is no link: its racks follow the first of them.
+With none (a STEP, a model without joints), each top-level node of the document's tree is a
 link hung from ``world`` by a ``fixed`` joint named for it, so a scene can make any of them free; an
 assembly at the top is one link, all its parts together. A link's name is its mechanism link's (its
 first part's), or its node's, made unique with ``_2``, ``_3``; a joint's is unique among joints alone.
@@ -69,8 +75,8 @@ from typing import Any
 import numpy as np
 
 from cad.engine.declarations import DRIVE
-from cad.engine.description import (COLLISIONS, Collision, Description, DescriptionError, Geometry, Inertial, Joint,
-                                    Link, Mesh, Pose, Visual, column_major, srgb)
+from cad.engine.description import (COLLISIONS, Closure, Collision, Description, DescriptionError, Geometry, Inertial,
+                                    Joint, Link, Mesh, Pose, Visual, column_major, srgb)
 
 __all__ = ["describe"]
 
@@ -84,9 +90,8 @@ WORLD = "world"
 
 def describe(view: Any, *, collision_default: str = "mesh") -> Description:
     """The robot ``view``'s document is (see the module docstring): its links, joints, meshes,
-    poses and loops, checked (``Description.check``, but for a loop: a description with one is
-    made, and every writer refuses it). ``collision_default`` is a part's collision where it
-    declares none: one of ``description.COLLISIONS``."""
+    poses and the joints that close its loops, checked (``Description.check``). ``collision_default``
+    is a part's collision where it declares none: one of ``description.COLLISIONS``."""
     if collision_default not in COLLISIONS:
         raise ValueError(f"collision_default {collision_default!r} is none of {', '.join(COLLISIONS)}")
     return _Describer(view, collision_default).run()
@@ -167,11 +172,10 @@ class _Describer:
         for text in (kinematics or {}).get("warnings") or ():
             self.warn(text)
         world = Link(_unique(WORLD, self.link_names), np.eye(4))
-        links, joints, poses, loops, closing = [world], [], [], (), set()
+        links, joints, poses, closures = [world], [], [], []
         if kinematics is not None and kinematics.get("links"):
-            loops = tuple((kinematics.get("loop") or ()))
-            closing = self._mechanism(kinematics, links, joints)
-            poses = self._poses(kinematics, joints)
+            closures = self._mechanism(kinematics, links, joints)
+            poses = self._poses(kinematics, joints, closures)
             self._drives(kinematics)
         else:
             self._unjointed(links, joints)
@@ -181,10 +185,8 @@ class _Describer:
         meshes = self._meshes()
         for link in links[1:]:
             self._geometry(link)
-        found = Description(self.structure["name"], links, joints, meshes, poses, loops, excludes=excludes)
-        checked = found if not loops else Description(found.name, links, [j for j in joints if j.name not in closing],
-                                                      meshes, poses, excludes=excludes)
-        checked.check()
+        found = Description(self.structure["name"], links, joints, meshes, poses, closures, excludes=excludes)
+        found.check()
         found.warnings = tuple(self.warnings)
         return found
 
@@ -277,9 +279,9 @@ class _Describer:
             links.append(link)
             joints.append(self._fixed(link.name, links[0], link))
 
-    def _mechanism(self, kinematics: dict[str, Any], links: list[Link], joints: list[Joint]) -> set[str]:
+    def _mechanism(self, kinematics: dict[str, Any], links: list[Link], joints: list[Joint]) -> list[Closure]:
         """The mechanism's links from its ground, each by the pair that reaches it (see the module
-        docstring); returns the names of the joints that close a loop."""
+        docstring), and the closures of its loops (``description``'s **Loops**)."""
         blocks = kinematics["links"]
         ground = int(kinematics.get("ground") or 0)
         built = [column_major(block["matrix"]) for block in blocks]
@@ -300,38 +302,58 @@ class _Describer:
         joints.append(self._fixed(kinematics.get("name") or self.structure["name"], links[0], base))
         self.pair_joints: dict[str, Joint] = {}
         self.pair_kinds: dict[str, dict[str, Any]] = {}
-        closing: set[str] = set()
-        used: set[int] = set()
-        queue = [ground]
-        while queue:
-            at = queue.pop(0)
-            for index, pair in enumerate(pairs):
-                first, second = pair["links"]
-                if index in used or at not in (first, second) or first == second:
-                    continue
-                used.add(index)
-                if not pair.get("frames"):
-                    self.warn(f"pair {pair['label']!r} has no frames: the description leaves it out")
-                    continue
-                forward = at == first
-                other = second if forward else first
-                joint, frame = self._joint(pair, made[at], built[first], built[second], as_built, forward)
-                if other in made:  # the pair closes a loop: its child stands where the tree put it
-                    closing.add(joint.name)
-                    joint.child = made[other].name
-                else:
-                    joint.child = link(other, frame).name
-                    queue.append(other)
-                joints.append(joint)
-                self.pair_joints[pair["label"]] = joint
-                self.pair_kinds[pair["label"]] = {"pair": pair, "forward": forward}
+        self.virtual = _virtual(blocks, pairs, ground)
+        for index, pair in enumerate(pairs):
+            if not pair.get("frames") and index not in self.virtual:
+                self.warn(f"pair {pair['label']!r} has no frames: the description leaves it out")
+        order, closing = _spanning(pairs, ground, self.virtual)
+        for index, forward in order:
+            pair = pairs[index]
+            first, second = pair["links"]
+            at, other = (first, second) if forward else (second, first)
+            joint, frame = self._joint(pair, made[at], built[first], built[second], as_built, forward)
+            joint.child = link(other, frame).name
+            joints.append(joint)
+            self.pair_joints[pair["label"]] = joint
+            self.pair_kinds[pair["label"]] = {"pair": pair, "forward": forward}
+        pinions = {pairs[index]["links"][1] for index in self.virtual}
         for at in range(len(blocks)):
-            if at not in made:
+            if at not in made and at not in pinions:
                 self.warn(f"link {blocks[at]['name']!r} is reached by no pair from the ground: it hangs fixed from "
                           f"{WORLD!r} where it was built")
                 joints.append(self._fixed(blocks[at]["name"], links[0], link(at, built[at].copy())))
-        self._couplings(kinematics)
-        return closing
+        closures = self._closures(pairs, closing, made, built, as_built)
+        self._couplings(kinematics, {closure.name for closure in closures})
+        return closures
+
+    def _closures(self, pairs: list[dict[str, Any]], closing: list[tuple[int, bool, tuple[int, ...]]],
+                  made: dict[int, Link], built: list[np.ndarray],
+                  as_built: dict[str, tuple[float, ...]]) -> list[Closure]:
+        """Each closing pair a closure: its joint from the link the tree reached it from, its frame on the
+        other link where that link stands, the two checked to be one place as built (within the tolerance
+        the mechanism reads every pair to: 1e-6 of the model's size in millimetres, at least 1)."""
+        scale = max([1.0] + [float(np.abs(column_major(instance["matrix"])[:3, 3]).max()) / MM
+                             for instance in self.instances])
+        found = []
+        for index, forward, loop in closing:
+            pair = pairs[index]
+            first, second = pair["links"]
+            at, other = (first, second) if forward else (second, first)
+            joint, frame = self._joint(pair, made[at], built[first], built[second], as_built, forward)
+            here = made[at].frame @ joint.origin
+            apart = np.linalg.inv(here) @ frame
+            shift, turn = float(np.linalg.norm(apart[:3, 3])) / MM, float(np.abs(apart[:3, :3] - np.eye(3)).max())
+            names = tuple(pairs[step]["label"] for step in loop)
+            if shift > 1e-6 * scale or turn > 1e-6 * scale:
+                rotation = apart[:3, :3]
+                spin = (rotation[2, 1] - rotation[1, 2], rotation[0, 2] - rotation[2, 0], rotation[1, 0] - rotation[0, 1])
+                angle = math.atan2(math.hypot(*spin) / 2, (float(np.trace(rotation)) - 1) / 2)
+                raise DescriptionError(f"the loop through {', '.join(names)} does not close as built: joint "
+                                       f"{joint.name!r} stands {shift:.3g} mm and {math.degrees(angle):.3g} deg from "
+                                       "where its pair puts it")
+            found.append(Closure(joint.name, joint.kind, made[at].name, made[other].name, joint.origin,
+                                 np.linalg.inv(made[other].frame) @ frame, joint.limits, joint.as_built, names))
+        return found
 
     def _joint(self, pair: dict[str, Any], parent: Link, first: np.ndarray, second: np.ndarray,
                as_built: dict[str, tuple[float, ...]], forward: bool) -> tuple[Joint, np.ndarray]:
@@ -359,16 +381,22 @@ class _Describer:
             kind = "continuous"
         return Joint(label, kind, parent.name, "", origin, tuple(limits), si), child
 
-    def _couplings(self, kinematics: dict[str, Any]) -> None:
+    def _couplings(self, kinematics: dict[str, Any], closing: set[str]) -> None:
         """Each coupling written on the joints that follow: every one from its first-named value
-        (``value = ratio * leader``, around zero, in SI)."""
+        (``value = ratio * leader``, around zero, in SI), a virtual pinion's from its first rack. A
+        joint that closes a loop follows nothing and leads nothing: it is left out, and warned."""
         held = getattr(getattr(self.source, "mechanism", None), "couplings", None) or {}
+        pinions = {(kinematics.get("pairs") or [])[index]["label"] for index in getattr(self, "virtual", set())}
         for name, coupling in (kinematics.get("couplings") or {}).items():
             if name in held:
                 terms = [(label, index, ratio) for label, ratios in held[name].ratios.items()
                          for index, ratio in enumerate(ratios) if ratio]
             else:
                 terms = [tuple(term) for term in coupling.get("terms") or () if term[2]]
+            for label in sorted({term[0] for term in terms} & closing):
+                self.warn(f"coupling {name!r} drives joint {label!r}, which closes a loop and is no joint of the "
+                          "tree: the description leaves it out of the coupling")
+            terms = [term for term in terms if term[0] not in pinions and term[0] not in closing]
             if len(terms) < 2:
                 continue
             (hub, hub_index, hub_ratio), others = terms[0], terms[1:]
@@ -382,11 +410,19 @@ class _Describer:
                 follower = self.pair_joints[label]
                 follower.follows = (self.pair_joints[hub].name, (ratio * unit) / (hub_ratio * hub_unit), 0.0)
 
-    def _poses(self, kinematics: dict[str, Any], joints: list[Joint]) -> list[Pose]:
-        """The mechanism's named states around zero, in SI."""
+    def _poses(self, kinematics: dict[str, Any], joints: list[Joint], closures: list[Closure]) -> list[Pose]:
+        """The mechanism's named states around zero, in SI. A state that moves a joint of a loop has no pose
+        without a solver: it is left out, and warned."""
         found = []
         as_built = {label: _values(value) for label, value in (kinematics.get("asBuilt") or {}).items()}
+        looped = {label for closure in closures for label in closure.loop}
         for name, values in (kinematics.get("configurations") or {}).items():
+            moved = sorted(label for label, value in values.items() if label in looped and any(
+                abs(a - b) > 1e-9 for a, b in zip(_values(value), as_built.get(label, _values(value)))))
+            if moved:
+                self.warn(f"mechanism state {name!r} moves joint {moved[0]!r}, which is in a loop and has no pose "
+                          "without a solver: the description leaves the state out")
+                continue
             pose: dict[str, float | tuple[float, ...]] = {}
             for label, value in values.items():
                 joint = getattr(self, "pair_joints", {}).get(label)
@@ -664,6 +700,78 @@ class _Describer:
         if kind == "capsule":
             length = max(length - 2 * radius, 0.0)
         return frame, (radius, length)
+
+
+def _virtual(blocks: list[dict[str, Any]], pairs: list[dict[str, Any]], ground: int) -> set[int]:
+    """The virtual pinions' pairs, by index: a revolute pair to a link, not the ground, that holds no part
+    and that no other pair reaches (``mechanism``'s virtual pinion, a ``rack_and_pinion_pair``'s reference
+    axis)."""
+    touched: dict[int, int] = {}
+    for pair in pairs:
+        for end in set(pair["links"]):
+            touched[end] = touched.get(end, 0) + 1
+    return {index for index, pair in enumerate(pairs)
+            if pair["type"] == "revolute" and pair["links"][1] != ground and not blocks[pair["links"][1]].get("instances")
+            and touched.get(pair["links"][1]) == 1 and pair["links"][0] != pair["links"][1]}
+
+
+def _spanning(pairs: list[dict[str, Any]], ground: int,
+              skipped: set[int]) -> tuple[list[tuple[int, bool]], list[tuple[int, bool, tuple[int, ...]]]]:
+    """The tree of ``description``'s **Loops**: each pair that reaches a link, ``(index, forward)`` in the
+    order they are followed (breadth first from ``ground``, the pairs in their order; ``forward`` from its
+    first link), and each pair that closes a loop, ``(index, forward, the loop's pairs)``, the loop from the
+    ground's side. ``skipped``: pairs no tree holds (virtual pinions). A closing pair that is a slide is
+    traded for the loop's turn or ball nearest it, which closes the loop in its place."""
+    cut: set[int] = set()
+    for _attempt in range(len(pairs) + 1):
+        reached: dict[int, tuple[int, int] | None] = {ground: None}  # each link: (the pair, the link it came from)
+        order: list[tuple[int, bool]] = []
+        closing: list[tuple[int, bool, tuple[int, ...]]] = []
+        used: set[int] = set()
+        queue = [ground]
+        while queue:
+            at = queue.pop(0)
+            for index, pair in enumerate(pairs):
+                first, second = pair["links"]
+                if index in used or at not in (first, second) or first == second:
+                    continue
+                used.add(index)
+                if index in skipped or not pair.get("frames"):
+                    continue
+                other = second if at == first else first
+                if index in cut or other in reached:
+                    closing.append((index, at == first, ()))
+                    continue
+                reached[other] = (index, at)
+                order.append((index, at == first))
+                queue.append(other)
+
+        def chain(link: int) -> list[int]:
+            found = []
+            came = reached.get(link)
+            while came is not None:
+                step, link = came
+                found.append(step)
+                came = reached.get(link)
+            return found
+
+        traded = None
+        for row, (index, forward, _loop) in enumerate(closing):
+            first, second = pairs[index]["links"]
+            left, right = chain(first if forward else second), chain(second if forward else first)
+            while left and right and left[-1] == right[-1]:
+                left.pop()
+                right.pop()
+            closing[row] = (index, forward, (*reversed(left), index, *right))
+            if traded is None and pairs[index]["type"] in ("prismatic", "cylindrical"):
+                nearest = [step for pair_of in zip(left + [None] * len(right), right + [None] * len(left))
+                           for step in pair_of if step is not None]
+                traded = next((step for step in nearest if pairs[step]["type"] in ("revolute", "spherical")
+                               and step not in cut), None)
+        if traded is None:
+            return order, closing
+        cut.add(traded)
+    return order, closing
 
 
 def _leaves(node: dict[str, Any]) -> list[int]:

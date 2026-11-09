@@ -42,14 +42,29 @@ body and a joint may share one -- a repeat given ``_2``, ``_3`` and said (``expo
 excludes each body pair that touches at rest across a joint that moves (``export/contact.py``'s rule:
 MuJoCo's ``filterparent`` passes the pair at a robot's first joint, whose parent is welded to the
 world) and each pair the model declares (``cad.build123d.exclude``), in that order, each once. A coupling is an
-``equality`` of the follower on its leader (``polycoef`` its offset and ratio). A pose is a ``key``,
-its ``qpos`` in MuJoCo's joint order (a ball's a unit quaternion from the three angles, x then y then
-z as the pair turns, a cylindrical's turn then slide), a joint it does not name at zero, a follower
-where its leader puts it.
+``equality`` of the follower on its leader (``polycoef`` its offset and ratio); a virtual pinion's racks follow
+the first of them (the description has no pinion), so the file holds the one control the hardware has.
+
+**Loops.** A joint that closes a loop (``description``'s **Loops**: a ``Closure``) is no joint of the tree:
+it is a ``site`` on each of its two bodies at the joint's frame, ``<name>/1`` on the parent's and
+``<name>/2`` on the child's, which coincide as built, and ``connect`` equalities of sites, named for the
+joint. A ball is one ``connect`` (the point held: three constraints). A turn is two: the sites, and a
+second pair ``AXIS_SPAN`` along the axis (``<name>/1_axis``, ``<name>/2_axis``, the ``connect``
+``<name>/axis``), so the point and the axis's direction are held and the turn about it is free: six rows,
+five of them independent, a hinge. A ``weld`` would hold the turn too, and one with ``torquescale="0"``
+would free every turn, a ball. In a planar loop some rows repeat what the tree's parallel hinges hold
+already; MuJoCo's constraints are soft, so a redundant row costs the solver a row and nothing else. MuJoCo
+has no slide equality, so a slide never closes a loop here: the description closes the loop at its turn
+or ball nearest the slide, and a loop with neither is refused by name. The closing joint's range is not
+enforced (an equality has none), and the export says so where it has one; ``contact`` excludes its two
+bodies where they touch at rest, as it does a joint's.
+
+A pose is a ``key``, its ``qpos`` in MuJoCo's joint order (a ball's a unit quaternion from the three
+angles, x then y then z as the pair turns, a cylindrical's turn then slide), a joint it does not name at
+zero, a follower where its leader puts it.
 
 Numbers are written short and the same every time: nine significant digits at most, ``-0`` as ``0``,
-a length or an angle within 1e-12 of zero as zero (the rounding of a product of frames). A
-description with a loop is refused by name, as every robot format refuses one. The file and its
+a length or an angle within 1e-12 of zero as zero (the rounding of a product of frames). The file and its
 meshes are staged beside the target and moved into place, each only where its bytes changed; the mesh
 folder moves in whole when there is none, else each mesh moves into it, and nothing else in it is
 touched (a scene's own assets may share it).
@@ -78,6 +93,8 @@ __all__ = ["digest", "rendered", "write", "write_description"]
 NUDGE = 1e-9
 #: A length or an angle this near zero is zero: what a product of rotations leaves of one.
 SNAP = 1e-12
+#: How far along a turn that closes a loop its second pair of sites stands, metres (the module's **Loops**).
+AXIS_SPAN = 0.1
 _RECORD = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute", "<u2")])
 
 
@@ -134,9 +151,11 @@ def place(path: Path, text: str, files: dict[str, bytes], assets: str) -> list[P
 
 def rendered(description: Description, assets: str = "assets") -> tuple[str, dict[str, bytes]]:
     """``description`` as MJCF text and its mesh files' bytes by file name, nothing written."""
-    if description.loops:
-        raise ExportRefused(f"{description.name}: the mechanism has a loop through {', '.join(description.loops)}, "
-                            "and MJCF writes a tree: no MJCF is written of it")
+    for closure in description.closures:
+        if closure.kind in ("prismatic", "cylindrical"):
+            raise ExportRefused(f"{description.name}: joint {closure.name!r} closes the loop through "
+                                f"{', '.join(closure.loop)} and slides, and MuJoCo has no slide equality: an MJCF "
+                                "closes a loop at a turn or a ball, which this loop has none of")
     try:
         description.check()
     except DescriptionError as error:
@@ -199,6 +218,20 @@ class _Writer:
         self.mesh_files: dict[str, str] = {}  # each mesh's file, by its key: written once however it is scaled
         self.qpos: list[tuple[Joint, int]] = []  # each moving joint and how many values it holds, in MuJoCo's order
         self.joint_names: dict[str, str] = {}  # each moving joint's written name, by the description's
+        # Each link's closure sites (the module's **Loops**): (closure, which, its frame in the link's), and each
+        # site's written name by (closure, which).
+        self.closure_sites: dict[str, list[tuple[str, str, np.ndarray]]] = {}
+        self.closure_named: dict[tuple[str, str], str] = {}
+        for closure in description.closures:
+            along = np.eye(4)
+            along[2, 3] = AXIS_SPAN
+            hinge = closure.kind in ("revolute", "continuous")
+            for which, link, frame in (("1", closure.parent, closure.origin), ("2", closure.child, closure.frame)):
+                frame = np.asarray(frame, dtype=float)
+                rows = self.closure_sites.setdefault(link, [])
+                rows.append((closure.name, which, frame))
+                if hinge:
+                    rows.append((closure.name, f"{which}_axis", frame @ along))
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         d = self.description
@@ -327,6 +360,9 @@ class _Writer:
                               *_placement(frame @ collision.geometry.placement)])
         for name, placed in link.frames.items():
             body.add("site", [("name", self.sites(name)), *_placement(frame @ np.asarray(placed, dtype=float))])
+        for closure, which, placed in self.closure_sites.get(link.name, ()):
+            named = self.closure_named[(closure, which)] = self.sites(f"{closure}/{which}")
+            body.add("site", [("name", named), *_placement(frame @ placed)])
 
     def _shape(self, geometry: Geometry) -> list[tuple[str, str | None]]:
         size = [float(value) for value in geometry.size]
@@ -389,6 +425,16 @@ class _Writer:
                                         + (f"a {kinds[name]} joint" if name in kinds else "no joint here"))
             equality.add("joint", [("joint1", self.joint_names[joint.name]), ("joint2", self.joint_names[leader]),
                                    ("polycoef", _numbers((offset, ratio, 0, 0, 0), snap=0))])
+        named = _Names()
+        for closure in self.description.closures:
+            hinge = closure.kind in ("revolute", "continuous")
+            for suffix in ("", "_axis") if hinge else ("",):
+                equality.add("connect", [("name", named(closure.name + ("/axis" if suffix else ""))),
+                                         ("site1", self.closure_named[(closure.name, "1" + suffix)]),
+                                         ("site2", self.closure_named[(closure.name, "2" + suffix)])])
+            if any(bound is not None for bounds in closure.limits for bound in bounds):
+                note(f"joint {closure.name!r} closes a loop as an equality, which holds no range: its range is not "
+                     "enforced")
         return equality
 
     def _keyframe(self) -> _Element:

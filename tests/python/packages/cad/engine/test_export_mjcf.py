@@ -3,9 +3,11 @@ a robot out -- the exact text of a small hand-built one, its meshes binary STLs 
 same bytes written twice, and MuJoCo compiling it to the bodies, masses and keys it describes; a body
 fixed to its link, a body and a joint of one name, a drive's effort, a joint's armature, damping and
 frictionloss and a part's contact friction, and the contact pairs excluded, a
-link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop
-refused by name, and a mesh file refused as a source; and a jointed model built by the engine and
-exported to ``.xml``, its bodies standing where the mechanism puts its links, as built and at a state."""
+link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop of
+slides alone refused by name, and a mesh file refused as a source; and models built by the engine and
+exported to ``.xml``: a four-bar whose loop two connects close as built and hold closed as it falls, two
+slides a pinion of no part couples as one control, and a hinge whose bodies stand where the mechanism puts
+its links, as built and at a state."""
 
 from __future__ import annotations
 
@@ -20,9 +22,13 @@ import mujoco
 import numpy as np
 
 from cad.engine import api, document, mechanism
-from cad.engine.description import Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose, Visual
-from cad.engine.export import ExportRefused, kind_of, refused
-from cad.engine.export.mjcf import write_description
+from cad.engine.description import (Closure, Collision, Description, Geometry, Inertial, Joint, Link, Mesh, Pose,
+                                    Visual)
+from cad.engine.export import ExportRefused, ExportWarning, kind_of, refused
+from cad.engine.describe import describe
+from cad.engine.export import Source
+from cad.engine.export.mjcf import rendered, write_description
+from cad.mujoco import spec
 
 
 def _frame(x: float = 0, y: float = 0, z: float = 0, about: str | None = None, angle: float = 0.0) -> np.ndarray:
@@ -42,7 +48,7 @@ SHOULDER = _frame(0, 0, 0.2, "x", -math.pi / 2)
 TIP = _frame(0.3, 0, 0)
 
 
-def arm(loops: tuple[str, ...] = ()) -> Description:
+def arm(closures: tuple[Closure, ...] = ()) -> Description:
     tetrahedron = Mesh("k1", "link", np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1]], np.float32),
                        np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]], np.uint32))
     red = (0.9, 0.1, 0.1, 1.0)
@@ -62,7 +68,7 @@ def arm(loops: tuple[str, ...] = ()) -> Description:
               Joint("knuckle", "revolute", "arm", "finger", TIP, limits=((-0.5, 0.75),), as_built=(0.0,),
                     follows=("shoulder", 0.5, 0.1))]
     return Description("arm", [world, upper, finger], joints, meshes={"k1": tetrahedron},
-                       poses=[Pose("raised", {"shoulder": 1.2})], loops=loops)
+                       poses=[Pose("raised", {"shoulder": 1.2})], closures=list(closures))
 
 
 GOLDEN = """\
@@ -166,9 +172,12 @@ class HandBuiltTest(_Folder):
         turned = SHOULDER @ _rotation_z(1.2)
         np.testing.assert_allclose(data.xpos[model.body("finger").id], (turned @ TIP)[:3, 3], atol=1e-9)
 
-    def test_a_loop_is_refused_by_name_and_nothing_is_written(self) -> None:
-        with self.assertRaisesRegex(ExportRefused, "loop through shoulder"):
-            write_description(arm(loops=("shoulder",)), self.folder / "arm.xml")
+    def test_a_loop_of_slides_alone_is_refused_by_name_and_nothing_is_written(self) -> None:
+        slide = Closure("rail", "prismatic", "world", "finger", SHOULDER, np.linalg.inv(SHOULDER @ TIP) @ SHOULDER,
+                        loop=("shoulder", "knuckle", "rail"))
+        with self.assertRaisesRegex(ExportRefused, "joint 'rail' closes the loop through shoulder, knuckle, rail and "
+                                                   "slides, and MuJoCo has no slide equality"):
+            write_description(arm((slide,)), self.folder / "arm.xml")
         self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_xml_and_mjcf_are_the_kind_and_a_mesh_file_is_no_source_of_one(self) -> None:
@@ -296,7 +305,139 @@ def hinge():
 """
 
 
+# A four-bar in the XZ plane, its hinges along +Y: three hinges connected at 0, the loop's last, rocker to
+# coupler, paired by label.
+FOUR_BAR = """
+import math
+
+import build123d as bd
+from bd_materials import metals
+from cad.engine import xbf
+
+A, B, C, D = (0, 0), (15, 26), (55, 50), (80, 0)  # mm, in the XZ plane
+
+
+def bar(name, start, end, y):
+    length = math.hypot(end[0] - start[0], end[1] - start[1])
+    turn = math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
+    part = bd.Location((start[0], y, start[1]), (0, -turn, 0)) * bd.Box(
+        length, 6, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
+    part.label = name
+    part.material = metals.aluminum()
+    return part
+
+
+def hinge(name, holder, child, at, connect=True):
+    joint = bd.RevoluteJoint(name, holder, axis=bd.Axis((at[0], 0, at[1]), (0, 1, 0)), angular_range=(-360, 360))
+    bd.RigidJoint(name, child, joint.location)
+    if connect:
+        joint.connect_to(child.joints[name], angle=0)
+
+
+@xbf("XBF/four_bar.xbf")
+def four_bar():
+    base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
+    base.label = "base"
+    base.material = metals.aluminum()
+    crank, coupler, rocker = bar("crank", A, B, 0), bar("coupler", B, C, 8), bar("rocker", D, C, 0)
+    hinge("a", base, crank, A)
+    hinge("b", crank, coupler, B)
+    hinge("d", base, rocker, D)
+    hinge("c", rocker, coupler, C, connect=False)
+    return bd.Compound(children=[base, crank, coupler, rocker], label="four_bar")
+"""
+
+# Two fingers on slides out of a palm, coupled through a pinion that holds no part (a reference axis).
+GRIPPER = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import mechanism_state, rack_and_pinion_pair
+from cad.engine import xbf
+
+
+@xbf("XBF/gripper.xbf")
+def gripper():
+    palm = bd.Box(80, 20, 20)
+    palm.label = "palm"
+    fingers = []
+    for side, x, out in (("left", -30, -1), ("right", 30, 1)):
+        finger = bd.Pos(x, 0, 25) * bd.Box(8, 16, 30)
+        finger.label = side
+        finger.material = metals.aluminum()
+        slide = bd.LinearJoint(side, palm, axis=bd.Axis((x, 0, 10), (out, 0, 0)), linear_range=(0, 30))
+        bd.RigidJoint(side, finger, bd.Location((x, 0, 10)))
+        slide.connect_to(finger.joints[side], position=0)
+        fingers.append(finger)
+    bd.RevoluteJoint("pinion", palm, axis=bd.Axis((0, 0, 10), (0, 1, 0)), angular_range=(-360, 360))
+    gripper = bd.Compound(children=[palm, *fingers], label="gripper")
+    rack_and_pinion_pair(gripper, "grip", pinion=1, left=0.15, right=0.15)
+    return mechanism_state(gripper, "open", grip=100)
+"""
+
+
 class EngineTest(_Folder):
+    def built(self, name: str, source: str) -> Path:
+        (self.folder / f"{name}.py").write_text(textwrap.dedent(source), encoding="utf-8")
+        api.build_script(self.folder / f"{name}.py", daemon=False)
+        return self.folder / f"XBF/{name}.xbf"
+
+    def test_a_four_bar_closes_its_loop_with_two_connects_that_hold_it_closed_as_it_falls(self) -> None:
+        xbf = self.built("four_bar", FOUR_BAR)
+        out = self.folder / "robot" / "four_bar.xml"
+        api.export(xbf, out, daemon=False, progress=False)
+        with self.assertWarnsRegex(ExportWarning, "joint 'c' closes a loop as an equality, which holds no range"):
+            rendered(describe(Source.read(xbf).view()))
+        model = mujoco.MjModel.from_xml_path(str(out))
+        # The tree's three hinges, and the loop's last pair two connects of sites on the rocker and the coupler.
+        self.assertEqual([model.joint(at).name for at in range(model.njnt)], ["a", "b", "d"])
+        self.assertEqual([(model.equality(at).name, int(model.eq_type[at]), int(model.eq_objtype[at]))
+                          for at in range(model.neq)],
+                         [("c", mujoco.mjtEq.mjEQ_CONNECT, mujoco.mjtObj.mjOBJ_SITE),
+                          ("c/axis", mujoco.mjtEq.mjEQ_CONNECT, mujoco.mjtObj.mjOBJ_SITE)])
+        self.assertEqual([(equality.name, equality.objtype) for equality in spec(xbf).equalities],
+                         [("c", mujoco.mjtObj.mjOBJ_SITE), ("c/axis", mujoco.mjtObj.mjOBJ_SITE)])
+        data = mujoco.MjData(model)
+
+        def gap() -> float:
+            return max(float(np.linalg.norm(data.site(f"c/1{end}").xpos - data.site(f"c/2{end}").xpos))
+                       for end in ("", "_axis"))
+
+        mujoco.mj_forward(model, data)
+        self.assertLess(gap(), 1e-9, "closed as built")
+        np.testing.assert_allclose(data.site("c/1").xpos, [0.055, 0, 0.05], atol=1e-9)
+        # Under gravity the linkage swings and the loop holds, within MuJoCo's default soft constraint (a few
+        # millimetres while it whips round, a tenth of one once it hangs); open, it parts by centimetres.
+        worst = {}
+        for active in (1, 0):
+            mujoco.mj_resetData(model, data)
+            data.eq_active[:] = active
+            worst[active] = 0.0
+            for _step in range(400):
+                mujoco.mj_step(model, data)
+                worst[active] = max(worst[active], gap())
+            if active:
+                self.assertGreater(abs(data.qpos[0]), math.radians(20), "the crank swung")
+                self.assertLess(gap(), 1e-3)
+        self.assertLess(worst[1], 1e-2)
+        self.assertGreater(worst[0], 10 * worst[1])
+
+    def test_two_slides_a_pinion_couples_are_one_control_and_the_pinion_no_body(self) -> None:
+        xbf = self.built("gripper", GRIPPER)
+        out = self.folder / "robot" / "gripper.xml"
+        api.export(xbf, out, daemon=False, progress=False)
+        text = out.read_text(encoding="utf-8")
+        self.assertIn('<joint joint1="right" joint2="left" polycoef="0 1 0 0 0"/>', text)
+        self.assertNotIn("pinion", text)
+        model = mujoco.MjModel.from_xml_path(str(out))
+        self.assertEqual(([model.body(at).name for at in range(model.nbody)], model.njnt),
+                         (["world", "palm", "left", "right"], 2))
+        np.testing.assert_allclose(model.key("open").qpos, [0.015, 0.015], atol=1e-12)
+        data = mujoco.MjData(model)
+        data.qpos[:] = (0.01, 0.0)
+        for _step in range(200):
+            mujoco.mj_step(model, data)
+        self.assertAlmostEqual(data.qpos[1], data.qpos[0], delta=1e-4)
+
     def test_a_built_hinge_exports_to_an_mjcf_whose_bodies_move_as_its_links_do(self) -> None:
         (self.folder / "hinge.py").write_text(textwrap.dedent(HINGE), encoding="utf-8")
         api.build_script(self.folder / "hinge.py", daemon=False)

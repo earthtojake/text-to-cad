@@ -6,14 +6,15 @@ pocket, a bearing face on a bearing face. MuJoCo filters a body's contacts with 
 (``filterparent``) except where the parent is welded to the world, which is where a robot's first joint
 is; so the MJCF writer excludes every such pair itself (``export/mjcf.py``), and this is its rule.
 
-**The rule.** For every joint that moves, the bodies welded to its parent (joined to it by fixed joints
+**The rule.** For every joint that moves, a joint that closes a loop (``Description.closures``) among
+them, the bodies welded to its parent (joined to it by fixed joints
 alone, the world's included) and those welded to its child: each pair of them, one from each side, whose
 collision geometries overlap or come within ``TOUCH`` of each other with every joint at zero (the
 as-built state, the description's frames). A mesh is its convex hull, a primitive itself, as MuJoCo
 collides them. The test is exact for convex shapes: the distance between two of them by GJK over their
 support functions, after their axis-aligned boxes (grown by ``TOUCH``) are found to meet. A pair GJK
 does not settle in ``ITERATIONS`` steps is counted as touching, so the rule errs towards an exclusion.
-Pairs come in joint order, each once. Text and numpy alone (law 3), the same description the same pairs.
+Pairs come in joint order, then the closures', each once. Text and numpy alone (law 3), the same description the same pairs.
 """
 
 from __future__ import annotations
@@ -41,10 +42,9 @@ def touching(description: Description) -> list[tuple[str, str]]:
     shapes: dict[str, list[tuple[np.ndarray, np.ndarray, Support]]] = {}
     found: list[tuple[str, str]] = []
     seen: set[frozenset[str]] = set()
-    for joint in description.joints:
-        if joint.kind == "fixed":
-            continue
-        for parent, child in itertools.product(welded[joint.parent], welded[joint.child]):
+    moving = [(joint.parent, joint.child) for joint in description.joints if joint.kind != "fixed"]
+    for ends in moving + [(closure.parent, closure.child) for closure in description.closures]:
+        for parent, child in itertools.product(welded[ends[0]], welded[ends[1]]):
             key = frozenset((parent, child))
             if parent == child or key in seen:
                 continue
