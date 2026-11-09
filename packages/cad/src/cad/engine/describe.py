@@ -664,7 +664,7 @@ class _Describer:
         cuts = list(wanted)
         try:
             made = hulls([(meshes[key].positions, meshes[key].triangles, self._options(wanted[(key, options)]))
-                          for key, options in cuts])
+                          for key, options in cuts], names=[str(wanted[cut]["name"]) for cut in cuts])
         except Unavailable as error:
             names = ", ".join(repr(wanted[cut]["name"]) for cut in cuts)
             raise DescriptionError(f"part {names} collides as convex hulls (collision 'decomposed'), which CoACD "

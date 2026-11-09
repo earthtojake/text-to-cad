@@ -2,7 +2,8 @@
 round-tripped through the document, its xbf and a shape rebuilt from it, an assembly's handed to its parts; the
 writers' output with a decomposer the test stands in for -- an MJCF geom of a mesh asset per hull, a URDF
 collision per hull, the visual whole, and the contact rule testing the hulls, not the part's one hull; the hulls
-kept in the engine's cache by the mesh and the options, so a second description decomposes nothing; the refusals,
+kept in the engine's cache by the mesh and the options, so a second description decomposes nothing, the first
+saying so as it starts; the refusals,
 of an option on another kind and of options out of range; at most 16 hulls by default; a miss where coacd is not
 installed decomposed in the coacd integration's environment, which the engine makes on first need (a stand-in
 here), and refused, saying why, where none can hold it (no wheel, no engine, a making that failed); and,
@@ -195,10 +196,18 @@ class WritersTest(_Folder):
         self.assertIn('filename="meshes/bracket_bracket_hull1.stl"', written)
 
     def test_the_hulls_are_kept_in_the_engine_s_cache_by_the_mesh_and_the_options(self) -> None:
+        import contextlib
+        import io
+
         path = self.build('collision(arm, "decomposed")')
-        first = self.described(path)
-        again = self.described(path)
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            first = self.described(path)
+            again = self.described(path)
         self.assertEqual(self.calls, [[{"maxHulls": 16}]], "the second description decomposed nothing")
+        # The first says it decomposes, by the part, before CoACD starts; the second says nothing.
+        self.assertEqual(said.getvalue(), "decomposing 1 part into convex hulls with CoACD: bracket (seconds to "
+                                          "minutes each, once: the hulls are kept for the exports after)\n")
         self.assertEqual([c.geometry.mesh for c in again.link("bracket").collisions],
                          [c.geometry.mesh for c in first.link("bracket").collisions])
         held = sorted((self.folder / "cache" / "hulls").glob("*.npz"))

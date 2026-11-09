@@ -101,9 +101,11 @@ def digest(positions: Any, triangles: Any, options: dict[str, Any]) -> str:
     return found.hexdigest()
 
 
-def hulls(meshes: Sequence[Mesh]) -> list[list[Hull]]:
+def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[list[Hull]]:
     """Each mesh's hulls (the module docstring), each ``(positions float32 (n, 3), triangles uint32 (m, 3))``:
-    the cache's where it holds them, else CoACD's, all the misses in one child, and kept."""
+    the cache's where it holds them, else CoACD's, all the misses in one child, and kept. Misses are said in a
+    line on stderr before CoACD starts, by ``names`` (each mesh's part) where given: a first decomposition takes
+    minutes, a later one none."""
     from cad.engine.places import cache_dir
 
     folder = cache_dir() / "hulls"
@@ -115,6 +117,12 @@ def hulls(meshes: Sequence[Mesh]) -> list[list[Hull]]:
         found.append(_read(folder / f"{key}.npz"))
     missing = [at for at, held in enumerate(found) if held is None]
     if missing:
+        named = [names[at] for at in missing] if names is not None else []
+        shown = ""
+        if named:
+            shown = ": " + ", ".join(named[:4]) + (f" and {len(named) - 4} more" if len(named) > 4 else "")
+        print(f"decomposing {len(missing)} part{'s' if len(missing) != 1 else ''} into convex hulls with CoACD{shown} "
+              "(seconds to minutes each, once: the hulls are kept for the exports after)", file=sys.stderr, flush=True)
         made = _decompose([meshes[at] for at in missing])
         for at, held in zip(missing, made):
             found[at] = held
