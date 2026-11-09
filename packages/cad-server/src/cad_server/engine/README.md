@@ -2597,8 +2597,19 @@ channel but a STEP one as LINEAR keys within a tenth of a millimetre and of a de
 ## Materials
 
 Materials are build123d's native `bd_materials.FinishedMaterial` objects. Import the
-catalogue and finishes from `bd_materials`; the library defines no material class or catalogue
-and does not replace `Shape.material`.
+catalogue and finishes from `bd_materials`; the library defines no material class and does not
+replace `Shape.material`. For what that catalogue lacks it ships named looks,
+`cad.build123d.materials` (`build123d/materials.py`): boards and their parts (`soldermask`, `fr4`,
+`silkscreen`, `bare_copper`, `enig`, `hasl`, `solder`, `mold_compound`, `ceramic`, `led_lens`,
+`connector_housing`) and process finishes (`anodized`, `powder_coat`, `bead_blasted`, `brushed`,
+`zinc_plated`, `black_oxide`), with presets (`soldermask_green`, `soldermask_matte_black`,
+`anodized_black`, `powder_coat_black`). Each factory returns a fresh `FinishedMaterial` built from
+bd_materials' own classes, never a subclass, so a release that knows none of these reads them
+(`material_from_json`'s closed set): the physics bd_materials' table renamed for the look (its FR-4,
+copper, 6061-T6, 304 stainless, mild steel, or the `substrate=` metal a finish is on) or a
+`custom_metal`, `custom_plastic` or `SolidMaterial` of its own (SAC305, moulding compound, alumina,
+clear epoxy, PBT-GF30), and a scalar `PbrProperties` look, no texture map. bd_materials' own textured
+finishes (`bead_blast`, `brushed`, `zinc_plate`, `tin_plate`) draw untextured as a flat roughness 1.
 
 ```python
 from bd_materials import metals

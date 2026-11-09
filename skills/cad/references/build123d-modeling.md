@@ -75,7 +75,32 @@ A project's material is a native `FinishedMaterial`, with physics in `.material`
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
 with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad <type> inspect` reports kilograms.
-There is no text-to-cad material class, catalogue or adapter.
+There is no text-to-cad material class or adapter.
+
+For boards, electronic parts and process finishes, which `bd_materials` lacks or draws poorly
+untextured, `cad.build123d.materials` has named looks. Each returns a fresh native
+`FinishedMaterial` (physics from `bd_materials`, a scalar look every renderer draws). A `color`
+is a preset or any hex; `substrate=` is the `bd_materials` metal a finish is on.
+
+```python
+from cad.build123d import materials, paint
+
+board.material = materials.soldermask("green")              # finish="matte" for a flat mask
+paint(board, pads, materials.enig())
+bracket.material = materials.powder_coat("RAL7016", finish="satin")
+```
+
+| Use for | Call |
+| --- | --- |
+| A board's body; its edge or a slot | `soldermask(color, finish="glossy"\|"matte")`, `soldermask_green()`, `soldermask_matte_black()`; `fr4()` |
+| Markings, pads, joints | `silkscreen(color)`, `bare_copper(oxidized=False)`, `enig()`, `hasl(lead_free=True)`, `solder()` |
+| IC packages, chip parts, LEDs | `mold_compound()`, `ceramic("white"\|"tan")`, `led_lens(color, diffused=False)` |
+| Connector and switch bodies | `connector_housing(color)` (PBT-GF30) |
+| Aluminium | `anodized(color)`, `anodized_black()`, `bead_blasted()` |
+| Steel and stainless | `powder_coat(color, finish="matte"\|"satin"\|"gloss")`, `powder_coat_black()`, `brushed()`, `zinc_plated("clear"\|"blue"\|"yellow"\|"black")`, `black_oxide(oiled=True)` |
+
+Prefer these to `bd_materials`' textured finishes (`bead_blast`, `brushed`, `zinc_plate`,
+`tin_plate`), which draw flat at roughness 1 until textures are drawn.
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,

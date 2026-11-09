@@ -627,7 +627,9 @@ src/cad/
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   and the producers it registers (_producers)
+                         #   named material looks (materials: solder mask, ENIG, anodized, ...,
+                         #   each a native bd_materials FinishedMaterial), and the producers it
+                         #   registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are

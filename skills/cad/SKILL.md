@@ -153,7 +153,8 @@ is the script's folder; two explicit names in it must differ.
 - **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"` (`"#4a6fa5cc"` with
   alpha). `part.color` is build123d's: it takes no 0-255 integers (OCCT's `Color out`), which
   `paint` does. Import `metals` from `bd_materials`; assign a native material with
-  `part.material = metals.aluminum()`
+  `part.material = metals.aluminum()`; boards, electronic parts and finishes (solder mask,
+  ENIG, anodized, powder coat) are `cad.build123d.materials`' named looks
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
 - **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
   Python opens, each tracked by its bytes. The clock, environment variables and

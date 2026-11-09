@@ -17,7 +17,9 @@ and the helpers a model calls with build123d objects:
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``.
+  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,
+  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -46,13 +48,18 @@ _NAMES = {
 
 __all__ = sorted(_NAMES)
 
+# Its public submodules, each imported on first use (``cad.build123d.materials``).
+_SUBMODULES = ("materials",)
+
 
 def __getattr__(name: str) -> Any:
+    import importlib
+
+    if name in _SUBMODULES:
+        return importlib.import_module(f"{__name__}.{name}")
     module = _NAMES.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    import importlib
-
     return getattr(importlib.import_module(module), name)
 
 
@@ -63,6 +70,7 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from cad.build123d import materials
     from cad.build123d._flatten import (flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces,
                                         union_faces)
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
