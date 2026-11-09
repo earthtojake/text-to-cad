@@ -12,6 +12,8 @@ A description generated from a CAD model (`cad model export <id> robot.xml` or `
 - meshed at the viewer's tolerance unless the export or `spec` is given `tolerance=` (millimetres);
 - collision shapes as each part's `collision()` declares: its own mesh (which MuJoCo hulls), a fitted primitive, the convex hulls CoACD cuts its mesh into (`decomposed`: one STL per hull, `<model>_<part>_hull<i>.stl`, beside the part's whole visual), or none.
 
+A vendor arm's folder holds a few hundred files and ten-odd MB, and that is expected: most files are hulls (the SO-101's ten decomposed printed parts are 160 of its 279, 16 each; `collision(part, "decomposed", max_hulls=8)` caps them at half), and its 330 visual geoms come from about 120 prototypes, a board's 122 parts among them, each file placed as often as it is used. Merging a link's visuals into a mesh a colour was measured on it: 105 geoms, 249 files, and twice the bytes (26 MB), since every screw and servo part is copied where it was placed. So every visual stays a part, named for it.
+
 A wrong mesh is fixed in the model and exported again; a mesh file in such a folder is never edited or replaced by hand. The rest of this file is for a description written by hand.
 
 ## Splitting Source CAD Into Link Assets
