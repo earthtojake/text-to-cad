@@ -165,6 +165,27 @@ RESTART = {
     "grok": "Grok Build: start a new session",
     "gemini": "Gemini CLI: start a new session",
 }
+
+
+def needs_restart(step: "Step") -> bool:
+    """Whether ``step`` done takes the app's restart to work (``RESTART``): a plugin installed or updated,
+    whose skills load in the app's next session, and Claude Desktop gaining CAD's server. A new pin of Claude
+    Desktop's server is not one: the server it runs keeps working with the newer engine, and the app takes
+    the pin at its next start."""
+    if step.app not in APPS or step.action not in ("install", "update"):
+        return False
+    return step.app != "claude-desktop" or step.action == "install"
+
+
+def restart(name: str, machine: Optional["Machine"] = None) -> str:
+    """What a person does for ``name`` to pick up a changed plugin or config (``RESTART``), as on this
+    platform: on Windows, Claude Desktop keeps running in the system tray when its window closes."""
+    if name == "claude-desktop" and _machine(machine).windows:
+        return ("Claude Desktop: quit it from its icon in the system tray (closing its window leaves it running), "
+                "then reopen it to load CAD's server")
+    return RESTART[name]
+
+
 # The CLIs an app bundles, for an app whose terminal command may be missing or older.
 BUNDLED = {"codex": ("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",)}
 # Where Homebrew puts the commands it installs (Apple silicon's, Intel macOS's, Linux's): never on the PATH of

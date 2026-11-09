@@ -466,9 +466,10 @@ class TheCommand(Fixture):
         self.assertEqual(call.args[0]["cad"], record["cad"])
         self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
-    def test_a_run_that_writes_claude_desktop_s_config_ends_telling_the_person_to_reopen_it(self) -> None:
-        # Claude Desktop reads its config only as it starts, its Code tab's card included: the run that changed
-        # it says so last, and a run that changed nothing says nothing of it.
+    def test_claude_desktop_gaining_cad_s_server_ends_the_run_telling_the_person_to_reopen_it(self) -> None:
+        # Claude Desktop reads its config only as it starts, its Code tab's card included: the run that gave it
+        # CAD's server says so last. A run that changed nothing says nothing, and nor does one that only moved
+        # the server's pin: the server it runs keeps working with the newer engine.
         self.desktop_with({})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
@@ -477,6 +478,13 @@ class TheCommand(Fixture):
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
         self.assertNotIn("restart to load it", out)
+        self.desktop_with({"cad": self.entry("0.0.1")})
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"], self.entry())
+        self.assertNotIn("restart to load it", out)
+        # On Windows, closing its window leaves it running in the tray: the line says to quit it there.
+        self.assertIn("system tray", providers.restart("claude-desktop", providers.Machine(self.home, {}, platform="win32")))
 
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
@@ -555,7 +563,8 @@ class InstallUpdateAndUninstall(Fixture):
         # The pin is what uvx runs: it moves to this release, and the environment someone added stays.
         cad = json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"]
         self.assertEqual(cad, {**self.entry(), "env": older["env"]})
-        self.assertIn(providers.RESTART["claude-desktop"], out)
+        # A new pin takes no restart: the server the app runs keeps working with the newer engine.
+        self.assertNotIn(providers.RESTART["claude-desktop"], out)
         written = self.desktop_with({"cad": self.entry("99.0.0")})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)

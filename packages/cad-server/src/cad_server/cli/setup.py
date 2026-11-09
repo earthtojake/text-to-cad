@@ -784,7 +784,7 @@ class Installer:
         names = [name for name in providers.APPS if name in changed]
         if "claude" in changed:  # Cursor and Grok Build load the Claude Code plugin
             names += [name for name in providers.FED_BY if self.fed and apps[name].present and name not in names]
-        lines = [providers.RESTART[name] for name in names]
+        lines = [providers.restart(name, self.machine) for name in names]
         agents = [providers.label(name) for name in providers.SKILLS_AGENTS if name in changed]
         if agents:
             lines.append(f"{', '.join(agents)}: start a new session for the skills")
@@ -888,9 +888,9 @@ class Installer:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
                 self._keep(receipt)
-        if steps:
-            told("Next, restart to load it: " + "; ".join(providers.RESTART[step.app] for step in steps
-                                                     if step.app in providers.RESTART))
+        due = list(dict.fromkeys(step.app for step in steps if providers.needs_restart(step)))
+        if due:
+            told("Next, restart to load it: " + "; ".join(providers.restart(app, self.machine) for app in due))
         return not failed, [step.data() for step in steps]
 
     def install(self) -> int:
@@ -976,7 +976,7 @@ class Installer:
                 self.actions += records
                 failed = failed or not ok
                 # A plugin installed or updated loads in the app's next session; a config, as the app opens.
-                if ok and records and step.action in ("install", "update") and step.app in providers.APPS:
+                if ok and records and providers.needs_restart(step):
                     changed.add(step.app)
                 if ok and step.agents:  # the Skills CLI keeps no versions: the receipt says which release
                     self._record_skills(receipt, step, steps, records, changed)

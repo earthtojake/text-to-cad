@@ -146,10 +146,10 @@ TEXT_INSTRUCTIONS = (
 
 # A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
 CLAUDE_CODE_INSTRUCTIONS = (
-    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. In the Claude "
-    "desktop app, CAD's inline card comes from Claude Desktop's own config: where a cad_show tool is listed, show "
-    "models with it. If none is, give the user the `cad viewer` link, which opens in the app's browser pane or "
-    "their browser, and tell them the card needs `cad setup` once, then to quit and reopen Claude Desktop."
+    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. In the Claude desktop "
+    "app's Code tab, CAD's inline card comes from Claude Desktop's own config: show models with its cad_show where "
+    "it is listed; where it is not, run `cad setup` and ask the user to quit and reopen Claude Desktop. Elsewhere, "
+    "and meanwhile, give the user the `cad viewer` link, which opens in the app's browser pane or their browser."
 )
 
 _ICON_SVG = (
