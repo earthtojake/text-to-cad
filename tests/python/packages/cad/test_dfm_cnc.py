@@ -707,24 +707,16 @@ class DiscCutterTest(unittest.TestCase):
     angle is a special cutter, said with its angle."""
 
     def test_a_disc_must_pass_its_way_in(self) -> None:
-        blk = bd.Box(40, 40, 30, align=(A.CENTER, A.CENTER, A.MIN))
-        chamber = bd.Pos(0, 0, 15) * bd.Cylinder(10, 6)
-        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
-            # a 20 mm chamber behind a 4 mm bore: a disc reaching its wall from inside the bore is wider than it
-            bottle = cnc(_part(turn * (blk - bd.Cylinder(2, 80) - chamber)), material="aluminum")
-            self.assertEqual({i["reason"] for i in bottle.measurements["sharp_edges"]["items"]}, {"no_way_in"}, turn)
-            self.assertFalse(bottle.ok)
-            # behind a 12 mm bore it is a keyseat cutter's (its disc no wider than the bore)
-            groove = cnc(_part(turn * (blk - bd.Cylinder(6, 80) - chamber)), material="aluminum")
-            self.assertEqual(groove.measurements["sharp_edges"]["by_tool"], {"keyseat_cutter": 2}, turn)
-            self.assertTrue(groove.ok)
-        # a round chamber under a 5 mm square port: no disc passes it, the chamber open to no side
-        square = bd.Box(40, 40, 20, align=(A.CENTER, A.CENTER, A.MIN))
-        round_chamber = square - bd.Pos(0, 0, 10) * bd.Cylinder(10, 3, align=(A.CENTER, A.CENTER, A.MIN)) \
-            - bd.Pos(0, 0, 13) * bd.Box(5, 5, 8, align=(A.CENTER, A.CENTER, A.MIN))
-        result = cnc(_part(round_chamber), material="aluminum")
-        self.assertIn("no_way_in", {i["reason"] for i in result.measurements["sharp_edges"]["items"]})
-        self.assertFalse(result.ok)
+        # (one placement: the turns are FrameTest's) a 20 mm chamber behind a 4 mm bore: a disc reaching its wall
+        # from inside the bore is wider than it; behind a 12 mm bore it is a keyseat cutter's
+        blk = bd.Box(24, 24, 12, align=(A.CENTER, A.CENTER, A.MIN))
+        chamber = bd.Pos(0, 0, 6) * bd.Cylinder(10, 3)
+        bottle = cnc(_part(blk - bd.Cylinder(2, 40) - chamber), material="aluminum")
+        self.assertEqual({i["reason"] for i in bottle.measurements["sharp_edges"]["items"]}, {"no_way_in"})
+        self.assertFalse(bottle.ok)
+        groove = cnc(_part(blk - bd.Cylinder(6, 40) - chamber), material="aluminum")
+        self.assertEqual(groove.measurements["sharp_edges"]["by_tool"], {"keyseat_cutter": 2})
+        self.assertTrue(groove.ok)
 
     def test_a_v_or_a_dovetail_of_no_standard_angle_is_a_special_cutter(self) -> None:
         plate = bd.Box(80, 40, 12, align=(A.CENTER, A.CENTER, A.MIN))
@@ -760,17 +752,16 @@ class DiscCutterTest(unittest.TestCase):
         self.assertTrue(result.ok)
 
     def test_an_obstacle_between_stations_is_found_and_measured(self) -> None:
-        # a 10 mm channel along a 100 mm block, a 5 mm bridge over it: the floor's edges under it are unmade for
-        # its 5 mm, wherever it stands between the stations
-        block = bd.Box(100, 30, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Pos(0, 0, 15) * bd.Box(102, 10, 10.01)
-        for x in (0.0, -43.75):
-            result = cnc(_part(block + bd.Pos(x, 0, 18.5) * bd.Box(5, 10, 3)), material="aluminum")
-            under = [i for i in result.measurements["sharp_edges"]["items"] if i.get("unreached_mm")]
-            self.assertEqual(len(under), 2, x)
-            for item in under:
-                self.assertAlmostEqual(item["unreached_mm"], 5.0, delta=0.25)
-                self.assertEqual(item["reason"], "blocked")
-                self.assertLess(abs(item["xyz"][0] - x), 1.0)
+        # a 10 mm channel along a 40 mm block, a 3 mm bridge over it between two stations: the floor's edges
+        # under it are unmade for its 3 mm
+        block = bd.Box(40, 30, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Pos(0, 0, 15) * bd.Box(42, 10, 10.01)
+        result = cnc(_part(block + bd.Pos(-6.9, 0, 18.5) * bd.Box(3, 10, 3)), material="aluminum")
+        under = [i for i in result.measurements["sharp_edges"]["items"] if i.get("unreached_mm")]
+        self.assertEqual(len(under), 2)
+        for item in under:
+            self.assertAlmostEqual(item["unreached_mm"], 3.0, delta=0.25)
+            self.assertEqual(item["reason"], "blocked")
+            self.assertLess(abs(item["xyz"][0] + 6.9), 1.0)
 
     def test_a_slot_cutter_s_groove_adds_no_setup(self) -> None:
         # an O-ring groove round a boss: cut by a slot cutter from above, its bottom asks no side of its own

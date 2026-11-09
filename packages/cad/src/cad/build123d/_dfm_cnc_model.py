@@ -29,6 +29,9 @@ WORLD = tuple(np.array(axis, dtype=float) for axis in
 SAME = 0.9999
 #: A face whose every normal is within this (|cos|) of perpendicular to a direction lies along it.
 ALONG = 0.02
+#: The direction a point's material is told along (``Model.solid``): oblique to every axis, so no ray of it runs
+#: along a face of a part drawn square.
+SOLID_RAY = np.array([0.2672612419124244, 0.5345224838248488, 0.8017837257372732])
 #: How far off its face a ray starts, so it does not hit the face it leaves.
 LIFT = 1e-3
 #: The sample budget: about ``SAMPLE_SCALE * sqrt(faces)`` points shared over the faces by area, at most
@@ -709,18 +712,35 @@ class Model:
         return found
 
     def solid(self, points: np.ndarray) -> np.ndarray:
-        """Whether each point lies in the part's material (on its boundary is not), by one classifier kept."""
-        if self._classifier is None:
-            from OCP.BRepClass3d import BRepClass3d_SolidClassifier
-
-            self._classifier = BRepClass3d_SolidClassifier(self.part.shape.wrapped)
-        from OCP.gp import gp_Pnt
-        from OCP.TopAbs import TopAbs_IN
-
+        """Whether each point lies in the part's material (on its boundary is not): the first face a ray from it
+        meets looks away from it (the ray leaving the material there), by the model's own ray cast along one
+        oblique direction; a ray that meets a face nearly edge-on, or at once, is classified exactly instead (one
+        classifier kept). A solid classifier costs 40 ms a point on a freeform part, a ray a fraction of one."""
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
         found = np.zeros(len(points), dtype=bool)
-        for k, point in enumerate(points):
-            self._classifier.Perform(gp_Pnt(*(float(v) for v in point)), 1e-6)
-            found[k] = self._classifier.State() == TopAbs_IN
+        if not len(points):
+            return found
+        hits = self.first_all(points, np.tile(SOLID_RAY, (len(points), 1)), skip=1e-7)
+        doubtful = []
+        for k, hit in enumerate(hits):
+            if hit is None:
+                continue  # it leaves the part: outside
+            facing = float(np.asarray(hit.normal) @ SOLID_RAY)
+            if abs(facing) < 0.05 or hit.distance < 1e-6:
+                doubtful.append(k)
+            else:
+                found[k] = facing > 0.0
+        if doubtful:
+            if self._classifier is None:
+                from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+
+                self._classifier = BRepClass3d_SolidClassifier(self.part.shape.wrapped)
+            from OCP.gp import gp_Pnt
+            from OCP.TopAbs import TopAbs_IN
+
+            for k in doubtful:
+                self._classifier.Perform(gp_Pnt(*(float(v) for v in points[k])), 1e-6)
+                found[k] = self._classifier.State() == TopAbs_IN
         return found
 
     def escapes(self, point: np.ndarray, normal: np.ndarray, direction: np.ndarray) -> bool:

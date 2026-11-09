@@ -1302,11 +1302,11 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
         return unit(nb - na * float(nb @ na))
 
     def dense(fn: Callable[[Stations], np.ndarray]) -> np.ndarray:
-        """``fn`` at every station, tried first at the coarse ones: a way none of those reaches is spared the
-        rest (a disc cutter's walk costs rays a station)."""
-        if count == len(coarse.points):
-            return fn(st)
-        if not fn(coarse).any():
+        """``fn`` at every station, tried first at the edge's ends and middle, then the coarse ones: a way none
+        of those reaches is spared the rest (a disc cutter's walk costs rays a station)."""
+        if not fn(stations(model, edge, 3)).any():
+            return np.zeros(count, dtype=bool)
+        if count > len(coarse.points) and not fn(coarse).any():
             return np.zeros(count, dtype=bool)
         return fn(st)
 
@@ -1439,9 +1439,24 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                                 outside = middle
                         return inside
 
-                    near_side = edge_at(float(offsets[first]), float(offsets[first - 1])) if first else float(offsets[first])
-                    far_side = edge_at(float(offsets[last]), float(offsets[last + 1])) if last + 1 < len(offsets) \
-                        else float(offsets[last])
+                    near_side, far_side = float(offsets[first]), float(offsets[last])
+                    pitch = float(offsets[1] - offsets[0]) if len(offsets) > 1 else 0.0
+                    tall = model.first(start + way * step, normals[a][k]) if kind == "slot" else None
+
+                    def close(width: float, least: float) -> bool:
+                        # a comparison a walk's step could turn: the opening's sides found exactly first
+                        margins = [abs(width - 2.0 * least)]
+                        if tall is not None:
+                            margins.append(abs(width - tall.distance))
+                        return min(margins) < 3.0 * pitch
+
+                    narrowing = tall is not None and far_side - near_side < tall.distance + 3.0 * pitch
+                    if close(far_side - near_side, near_side - step) or narrowing:
+                        # exact where a verdict turns on it, or a narrow opening is to be said in millimetres
+                        if first:
+                            near_side = edge_at(near_side, float(offsets[first - 1]))
+                        if last + 1 < len(offsets):
+                            far_side = edge_at(far_side, float(offsets[last + 1]))
                     least = near_side - step
                     width = far_side - near_side
                     if bore is not None:
@@ -1457,7 +1472,6 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                         info["entry"] = (width >= 2.0 * least - 1e-6 and fits(middle, least, way, side, normals[a][k])) \
                             or fed(place, radius, way, side)
                     if kind == "slot":
-                        tall = model.first(start + way * step, normals[a][k])
                         if tall is not None and width < tall.distance - 1e-6:
                             known = info["narrow"]
                             if known is None or width < known[0]:
