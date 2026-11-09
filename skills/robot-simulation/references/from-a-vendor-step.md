@@ -63,10 +63,12 @@ A servo's two horns are coaxial, so check that their axes agree before you trust
 Measure the axes once in a script and write them in the model as `(point, direction)` constants.
 Then:
 
-- **Snap only noise.** A component within `1e-9` of 0 is 0 (the `cad` skill's
-  kinematics reference). A real
-  tilt of half a degree comes from the vendor's mates and is part of the CAD's geometry. Keep it,
-  or square the axis where the hardware is square, and say which you did.
+- **Keep the measured axis; snap only noise.** A component within `1e-9` of 0 is 0 (the `cad`
+  skill's kinematics reference). A tilt of half a degree comes from the vendor's mates, and the
+  parts are drawn on it: keep it. Square an axis only if you also place the parts square on it.
+  A part that turns about a squared axis while it stays where the STEP drew it wobbles 0.1 to
+  0.2 mm against neighbours it clears by less than a millimetre, and `ranges` then finds stops
+  that are not there (a gripper shut at -49 degrees instead of -95).
 - **Pick each direction's sign** so that a positive angle is the motion you mean (lift raises, the
   gripper opens). The writers copy the sign and cannot know which way is meant.
 - **Build each joint at the hinge's own frame.** Put the `RevoluteJoint` on the parent link (its
