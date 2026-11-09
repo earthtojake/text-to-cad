@@ -112,7 +112,8 @@ class ChoosingTest(unittest.TestCase):
         # --python: its own Python's line passes, a path is taken as named (and checked once made), another is refused.
         self.assertEqual(self.prepared("--python", "3.13.5", "render.py").spec.python_options, ("--managed-python",))
         named = self.prepared("--python", "/opt/py313/bin/python3", "render.py").spec
-        self.assertEqual((named.python, named.python_options), ("/opt/py313/bin/python3", ()))
+        self.assertEqual((named.python, named.python_options),  # absolute against the caller's folder, as this
+                         (extras.absolute("/opt/py313/bin/python3", os.getcwd()), ()))  # platform spells it
         self.assertEqual(self.refused("--python", "3.14", "render.py"),
                          "render.py uses bpy, which the blender integration runs on Python 3.13: --python 3.14 is "
                          "another; drop --python")
