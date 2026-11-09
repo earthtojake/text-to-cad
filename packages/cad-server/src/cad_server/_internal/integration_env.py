@@ -1,13 +1,15 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
 A type's manufacturing ``dfm`` is its integration's (``cad.registry``): a mesh's, trimesh's; a model's, a STEP's,
-an xbf's and a DXF's, build123d's; a KiCad board's ``drc``, a schematic's ``erc`` and their ``export`` are the
-kicad integration's, run by kicode's kicad-cli. The command's own environment -- the server's installation --
-holds the library without them, so the operation runs in the environment of that integration instead: for
-build123d, the installation's base, the environment the engine's kernel processes run in (``base``); for
-another, ``cad[<integration>]`` at the installation's release, made once by the device's engine outside any
-sandbox and used again, as ``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from
-uv's cache). Its
+an xbf's and a DXF's, build123d's; a B-rep type's ``solve`` reads the document with the kernel, meshes it with
+netgen and solves it with CalculiX, so it runs where all three are (``cad[build123d,calculix,netgen]``:
+calculix's registry entry names the others ``alongside``); a KiCad board's ``drc``, a schematic's ``erc`` and
+their ``export`` are the kicad integration's, run by kicode's kicad-cli. The command's own environment -- the
+server's installation -- holds the library without them, so the operation runs in the environment of that
+integration instead: for build123d alone, the installation's base, the environment the engine's kernel
+processes run in (``base``); for another, ``cad[<integration>]`` at the installation's release, made once by the
+device's engine outside any sandbox and used again, as ``cad run`` makes a program's
+(``cad_server._internal.extras``: offline first, from uv's cache). Its
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
@@ -22,7 +24,7 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Union
 
 from cad_server._internal.cli_errors import REASONS, Failure
 
@@ -30,6 +32,20 @@ __all__ = ["Failed", "Refused", "call", "carries", "environment", "found"]
 
 # The library's runner of one operation (``cad._internal.operation``).
 RUNNER = "cad._internal.operation"
+
+
+#: One integration by its name, or several an operation needs together (``("build123d", "netgen")``).
+Integrations = Union[str, tuple[str, ...]]
+
+
+def _names(integration: Integrations) -> tuple[str, ...]:
+    """The integrations an environment for ``integration`` holds, sorted: each one named and those its operations
+    need beside it, transitively (the registry's ``alongside``: calculix's, the kernel and netgen), as ``cad run``
+    reads them too (``cad._internal.integrations.alongside``)."""
+    from cad._internal.integrations import alongside
+
+    named = (integration,) if isinstance(integration, str) else tuple(integration)
+    return tuple(sorted({*named, *(other for name in named for other in alongside(name))}))
 
 
 class Failed(RuntimeError):
@@ -46,20 +62,21 @@ class Refused(Failed, Failure):
         Failure.__init__(self, words, reason)
 
 
-def carries(integration: str) -> bool:
-    """Whether this process's environment holds ``integration``'s modules (found, none loaded)."""
+def carries(integration: Integrations) -> bool:
+    """Whether this process's environment holds ``integration``'s modules (found, none loaded): each one's, for
+    several."""
     import importlib.util
 
     from cad.registry import INTEGRATIONS
 
-    modules = INTEGRATIONS[integration].modules
+    modules = tuple(module for name in _names(integration) for module in INTEGRATIONS[name].modules)
     try:
         return bool(modules) and all(importlib.util.find_spec(name) is not None for name in modules)
     except (ImportError, ValueError):
         return False
 
 
-def found(integration: str) -> tuple[str, str, str]:
+def found(integration: Integrations) -> tuple[str, str, str]:
     """Where ``integration``'s operations run, read and nothing made or marked used (``cad doctor``):
     ``(state, folder, release)`` -- ``carried`` (this process's environment holds it; no folder), ``made`` or
     ``not made`` (made on first need, by the first command that needs it), the folder of its environment
@@ -69,24 +86,25 @@ def found(integration: str) -> tuple[str, str, str]:
     installation = base.Installation.here()
     if carries(integration):
         return "carried", "", installation.release
-    spec = extras.Spec(integrations=(integration,))
+    spec = extras.Spec(integrations=_names(integration))
     folder = extras.where(installation, spec)
     return ("made" if extras._complete(folder, spec) is not None else "not made"), str(folder), installation.release
 
 
-def environment(integration: str, told: Callable[[str], None], *, engine: bool = True) -> str:
+def environment(integration: Integrations, told: Callable[[str], None], *, engine: bool = True) -> str:
     """The Python of the environment that holds ``integration``, made first when it is not complete (by
     the device's engine when one runs, its lines said to ``told``; here, with ``engine`` false: the engine
     itself, a viewer export). ``Failed`` in uv's or the engine's words."""
     from cad_server._internal import base, extras
 
     try:
-        if integration == base.EXTRA:  # the kernel's own: the base the engine's kernel processes run in
+        names = _names(integration)
+        if names == (base.EXTRA,):  # the kernel's own: the base the engine's kernel processes run in
             found = base.ensure(base.Installation.here(), told=told, engine=engine)
             if found is None:
                 raise base.Refused("the CAD kernel's environment could not be made")
         else:
-            found = extras.ensure(base.Installation.here(), extras.Spec(integrations=(integration,)), told=told,
+            found = extras.ensure(base.Installation.here(), extras.Spec(integrations=names), told=told,
                                   engine=engine)
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
