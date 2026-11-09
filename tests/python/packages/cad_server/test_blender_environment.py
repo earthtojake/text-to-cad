@@ -99,7 +99,7 @@ class ChoosingTest(unittest.TestCase):
         self.assertEqual(recipe.requirement, BLENDER.requires, "the integration's own pins, and no cad")
         self.assertIsNone(recipe.revise, "nothing resolved again: no pins of cad's to decide")
         self.assertEqual(base.commands("uv", Path("/env"), recipe)[0],
-                         ["uv", "venv", "--no-project", "--python", "3.13", "--managed-python", "/env"],
+                         ["uv", "venv", "--no-project", "--python", "3.13", "--managed-python", str(Path("/env"))],
                          "a managed Python uv fetches itself: never `uv python install`, which writes python3.13")
         self.assertEqual(recipe.making, "making the blender integration's environment, once: bpy 5.2.3 on Python 3.13 "
                                         f"(Blender as a Python module, about {BLENDER.download_mb} MB to download)")
