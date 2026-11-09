@@ -914,7 +914,8 @@ def _text_box(text: str, at: XY, angle: float, node: list) -> tuple[XY, ...]:
     """The box ``text``'s letters fill where KiCad puts it: drawn unturned about its anchor in the
     plot's stroke font (``stroke_font``), its stroke round it, then turned and placed as KiCad turns text."""
     size, thickness, justify = _text_effects(node)
-    points = [point for stroke in text_strokes(text, size=size, justify=justify, mirror="mirror" in justify) for point in stroke]
+    points = [point for stroke in text_strokes(text, size=size, justify=justify, mirror="mirror" in justify, markup=True)
+              for point in stroke]
     if not points:
         return ()
     reach = thickness / 2

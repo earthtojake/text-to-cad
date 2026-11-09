@@ -23,19 +23,24 @@ text seen from the other side of the board, slanted for italic text as KiCad sla
 its own (an eighth of a glyph's height above the baseline), and turned by its angle. A
 character the font has no glyph for is drawn as a box the size of an ``X``.
 
-With ``markup`` (a schematic's text, and its drawing sheet's), KiCad's text markup is drawn as KiCad
-draws it rather than letter for letter: ``~{...}`` its content with a bar over it, ``_{...}`` a
-subscript and ``^{...}`` a superscript (``SUPER_SUB_SIZE`` the size, shifted down or up by a share of
-it), the markers themselves never drawn and the width, so the justification, measured on what is
-drawn. Markup nests; a marker without its closing brace, and ``${...}`` (a text variable), stay literal.
+With ``markup`` (every text KiCad draws: a schematic's, its drawing sheet's, and a board's -- its
+silkscreen, fab and copper text, its footprints' fields, its pads' and tracks' net names), KiCad's text
+markup is drawn as KiCad draws it rather than letter for letter: ``~{...}`` its content with a bar over
+it, ``_{...}`` a subscript and ``^{...}`` a superscript (``SUPER_SUB_SIZE`` the size, shifted down or up
+by a share of it), the markers themselves never drawn and the width, so the justification, measured on
+what is drawn. :func:`parse_markup` reads it as KiCad's ``markup_parser.h`` does: markup nests; a marker
+whose brace never closes, a stray brace, an escape sequence (``{slash}``) and a URL stay literal. The
+viewer's twin (``@cad/core``'s ``plot2d/strokeFont.js``) reads and draws the same, held to the same cases
+(its ``strokeFont.parity.json``).
 """
 
 from __future__ import annotations
 
 import math
+import re
 from typing import Sequence
 
-__all__ = ["GLYPHS", "glyph_strokes", "text_strokes"]
+__all__ = ["GLYPHS", "glyph_strokes", "parse_markup", "text_strokes"]
 
 #: ASCII 32 (space) to 126 (``~``), in the Hershey distribution's encoding (module doc).
 GLYPHS: tuple[str, ...] = (
@@ -138,39 +143,70 @@ def _line_strokes(line: str, scale_x: float, scale_y: float, tilt: float = 0.0) 
     return pen * scale_x, strokes
 
 
-def _markup(text: str, start: int = 0, nested: bool = False) -> tuple[list, int, bool]:
-    """``text`` from ``start`` as runs: a plain string, or ``(marker, runs)`` for ``~{``, ``_{`` and ``^{``.
-    Answers the runs, where it stopped, and whether a ``}`` closed them (``nested`` alone stops there)."""
-    runs: list = []
-    plain: list[str] = []
-    index = start
-    while index < len(text):
-        character = text[index]
-        if nested and character == "}":
-            if plain:
-                runs.append("".join(plain))
-            return runs, index + 1, True
-        if character in "~_^$" and text.startswith("{", index + 1):
-            if character == "$":  # a text variable, its name drawn as it is written
-                close = text.find("}", index + 2)
-                if close >= 0:
-                    plain.append(text[index:close + 1])
-                    index = close + 1
-                    continue
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _escape_end(text: str, index: int) -> int:
+    """Where an escape sequence (``{slash}``: a brace, an identifier, a brace) at ``index`` ends, or -1."""
+    if not text.startswith("{", index):
+        return -1
+    found = _IDENTIFIER.match(text, index + 1)
+    return found.end() + 1 if found and text.startswith("}", found.end()) else -1
+
+
+def _url_end(text: str, index: int) -> int:
+    """Where a URL at ``index`` (``http://`` or ``https://``, then at least one character, to the next space) ends, or -1."""
+    for scheme in ("http://", "https://"):
+        after = index + len(scheme)
+        if text.startswith(scheme, index) and after < len(text) and text[after] != " ":
+            space = text.find(" ", after)
+            return len(text) if space < 0 else space
+    return -1
+
+
+def parse_markup(text: str) -> list:
+    """``text`` as KiCad's markup parser reads it (``markup_parser.h``): runs, each a plain string or
+    ``(marker, runs)`` for an overbar (``~``), a subscript (``_``) or a superscript (``^``). Markup
+    nests. A marker whose brace never closes, a lone ``~``, ``_`` or ``^``, a stray brace, an escape
+    sequence inside markup (``{slash}``, whose brace closes nothing) and a URL (``http://`` or
+    ``https://`` to the next space) are text, as written.
+
+    One pass with a stack of the markers open; a marker still open at the end is KiCad's failed match,
+    text, and the text is read again with it so (whether a marker closes depends on nothing but where it is)."""
+    failed: set[int] = set()
+    while True:
+        top: list = []
+        stack: list[tuple[int, str, list]] = []  # (where, marker, runs) of each marker open
+
+        def put(piece) -> None:
+            runs = stack[-1][2] if stack else top
+            if isinstance(piece, str) and runs and isinstance(runs[-1], str):
+                runs[-1] += piece
             else:
-                inner, after, closed = _markup(text, index + 2, nested=True)
-                if closed:
-                    if plain:
-                        runs.append("".join(plain))
-                        plain = []
-                    runs.append((character, inner))
-                    index = after
-                    continue
-        plain.append(character)
-        index += 1
-    if plain:
-        runs.append("".join(plain))
-    return runs, index, False
+                runs.append(piece)
+
+        at = 0
+        while at < len(text):
+            character = text[at]
+            if stack and character == "}":
+                _where, marker, runs = stack.pop()
+                put((marker, runs))
+                at += 1
+            elif character in "~_^" and text.startswith("{", at + 1) and at not in failed:
+                stack.append((at, character, []))
+                at += 2
+            elif stack and (escape := _escape_end(text, at)) > 0:
+                put(text[at:escape])
+                at = escape
+            elif not stack and (url := _url_end(text, at)) > 0:
+                put(text[at:url])
+                at = url
+            else:
+                put(character)
+                at += 1
+        if not stack:
+            return top
+        failed.update(where for where, _marker, _runs in stack)
 
 
 def _markup_strokes(line: str, scale_x: float, scale_y: float, tilt: float) -> tuple[float, list[list[tuple[float, float]]]]:
@@ -207,7 +243,7 @@ def _markup_strokes(line: str, scale_x: float, scale_y: float, tilt: float) -> t
             pen = lay(inner, pen, small, lift - size * _SUB_OFFSET if marker == "_" else lift + size * _SUPER_OFFSET)
         return pen
 
-    return lay(_markup(line)[0], 0.0, 1.0, 0.0), strokes
+    return lay(parse_markup(line), 0.0, 1.0, 0.0), strokes
 
 
 def text_strokes(
@@ -239,7 +275,7 @@ def text_strokes(
     scale_x = (width if width > 0 else height) / _CAP_HEIGHT
     lines = str(text).split("\n")
     tilt = _ITALIC_TILT if italic else 0.0
-    laid = [_markup_strokes(line, scale_x, scale_y, tilt) if markup and any(isinstance(run, tuple) for run in _markup(line)[0])
+    laid = [_markup_strokes(line, scale_x, scale_y, tilt) if markup and any(isinstance(run, tuple) for run in parse_markup(line))
             else _line_strokes(line, scale_x, scale_y, tilt) for line in lines]
     line_height = height * _LINE_SPACING
     block_height = height + line_height * (len(lines) - 1)

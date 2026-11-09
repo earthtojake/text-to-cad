@@ -410,7 +410,8 @@ class _Painter:
             if kind == "label":
                 if detail < item.get("lod", 0):
                     continue
-                strokes = text_strokes(item["text"], size=item["size"], at=item["at"], angle=item.get("angle", 0.0), mirror=mirrored)
+                strokes = text_strokes(item["text"], size=item["size"], at=item["at"], angle=item.get("angle", 0.0), mirror=mirrored,
+                                       markup=True)
                 for stroke in strokes:
                     self.line(stroke, item_color(layer["id"], item), item.get("w", 0), minimum=False)
                 continue
@@ -440,7 +441,8 @@ class _Painter:
                 self.line(item["pts"], paint, wide, closed=item.get("closed", False), opacity=opacity, minimum=not copper or not wide)
         for item in named:
             for label in track_labels(item, viewport):
-                strokes = text_strokes(label["text"], size=label["size"], at=label["at"], angle=label["angle"], mirror=mirrored)
+                strokes = text_strokes(label["text"], size=label["size"], at=label["at"], angle=label["angle"], mirror=mirrored,
+                                       markup=True)
                 for stroke in strokes:
                     self.line(stroke, netname_color(layer["id"]), label["w"], minimum=False)
         self.flush()

@@ -522,7 +522,8 @@ class _Builder:
 
     def text(self, layer: str, text: str, at: XY, angle: float, node: list, *, selector: str | None = None) -> None:
         size, thickness, justify, italic = _text_style(node)
-        strokes = text_strokes(text, size=size, at=at, angle=angle, justify=justify, mirror="mirror" in justify, italic=italic)
+        strokes = text_strokes(text, size=size, at=at, angle=angle, justify=justify, mirror="mirror" in justify, italic=italic,
+                               markup=True)
         flags = {"ref": selector} if selector else {}
         found = sexpr.find(node, "layer")
         if found is not None and any(isinstance(atom, Sym) and atom == "knockout" for atom in found[2:]) and strokes:
@@ -542,7 +543,8 @@ class _Builder:
         size, _thickness, justify, italic = _text_style(node)
         at = sexpr.pair(sexpr.find(node, "at"), (0.0, 0.0))
         angle = sexpr.number(sexpr.find(node, "at")[3]) if len(sexpr.find(node, "at") or []) > 3 else 0.0
-        flat = [point for stroke in text_strokes(text, size=size, at=at, justify=justify, italic=italic) for point in stroke]
+        flat = [point for stroke in text_strokes(text, size=size, at=at, justify=justify, italic=italic, markup=True)
+                for point in stroke]
         if not flat:
             flat = [at]
         corners = box(flat)

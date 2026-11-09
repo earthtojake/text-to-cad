@@ -19,8 +19,10 @@ a mismatch is refused by name on both sides.
 The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
 front copper the active layer, KiCad's drawing order for that (`pcbnew/pcb_draw_panel_gal.cpp`), its
 colours, zones at its 60% opacity, a plated hole seen through to the board's background, a pad's
-number and net name over it. No drawing sheet (KiCad's page border and title block) is drawn: the
-board is the board alone, which the fit frames.
+number and net name over it, every text in the stroke font with KiCad's markup drawn as KiCad draws it
+(`~{RESET}` overbarred, `IO_{3}` and `x^{2}` sub- and superscripts, the markers never drawn; one reading
+of it on both sides, `plot2d/strokeFont.parity.json`). No drawing sheet (KiCad's page border and title
+block) is drawn: the board is the board alone, which the fit frames.
 
 ```jsonc
 {
@@ -120,7 +122,7 @@ Each item has `t`, its type; every point is sheet millimetres.
 | `path` | `pts` (2+ points), `w`, optional `closed`, optional `pairs` | a stroked polyline, round caps and joins; with `pairs`, separate segments, the points taken two by two; `w` 0 is a hairline (one CSS pixel at any zoom) |
 | `circle` | `at`, `r`, `w` | a filled disc (`w` 0) or a ring `w` wide centred on `r` |
 | `text` | `text`, `w`, `strokes` (polylines of 2+ points), optional `knockout` | the string's strokes, `w` wide; knocked out (`knockout`: the four corners of its box), the box filled and the letters cut from it |
-| `label` | `kind` (`pad`, `via`), `text`, `at`, `size` (height, width), `angle`, `w`, `lod` | a name the renderer lays out in the stroke font (`plot2d/strokeFont.js`, the engine's `stroke_font` point for point), centred on `at`, `angle` degrees counter-clockwise, its strokes `w` wide; drawn once the view shows `lod` CSS pixels per millimetre, and from below laid out to read the right way round |
+| `label` | `kind` (`pad`, `via`), `text`, `at`, `size` (height, width), `angle`, `w`, `lod` | a name the renderer lays out in the stroke font (`plot2d/strokeFont.js`, the engine's `stroke_font` point for point, KiCad's markup drawn), centred on `at`, `angle` degrees counter-clockwise, its strokes `w` wide; drawn once the view shows `lod` CSS pixels per millimetre, and from below laid out to read the right way round |
 
 Flags any item may carry: `ref`, the board reference of what drew it (`#R1` for a footprint's
 graphics and text, `#R1.2` for a pad and its mask and paste); `net`, the net of a piece of copper;

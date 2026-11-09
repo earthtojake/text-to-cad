@@ -196,7 +196,7 @@ function layoutItem(item, where) {
       || !finite(item.angle ?? 0) || !finite(item.lod ?? 0)) {
       throw new Error(`${where} (label) needs a string, a centre, a positive size, an angle and a level of detail; received ${describe(item)}.`);
     }
-    const strokes = textStrokes(item.text, { size, at: item.at, angle: item.angle ?? 0 });
+    const strokes = textStrokes(item.text, { size, at: item.at, angle: item.angle ?? 0, markup: true });
     box = strokes.length ? boxOf(strokes.flat(), width / 2) : boxOf([item.at], 0);
   } else if (item.t === "text") {
     if (typeof item.text !== "string" || !Array.isArray(item.strokes) || !item.strokes.every((stroke) => Array.isArray(stroke) && stroke.length >= 2 && stroke.every(isPoint))) {
@@ -502,7 +502,7 @@ function labelStrokes(item, mirrored) {
   let laid = LABELS.get(item);
   if (!laid) LABELS.set(item, (laid = {}));
   const key = mirrored ? "bottom" : "top";
-  if (!laid[key]) laid[key] = textStrokes(item.text, { size: item.size, at: item.at, angle: item.angle ?? 0, mirror: mirrored });
+  if (!laid[key]) laid[key] = textStrokes(item.text, { size: item.size, at: item.at, angle: item.angle ?? 0, mirror: mirrored, markup: true });
   return laid[key];
 }
 
@@ -555,7 +555,7 @@ function strokeTrackNames(ctx, item, viewport, mirrored, PathCtor) {
   const key = `${mirrored ? "b" : "t"}${names.length}`;
   const add = (target) => {
     for (const name of names) {
-      for (const points of textStrokes(name.text, { size: name.size, at: name.at, angle: name.angle, mirror: mirrored })) {
+      for (const points of textStrokes(name.text, { size: name.size, at: name.at, angle: name.angle, mirror: mirrored, markup: true })) {
         addPolyline(target, points, false);
       }
     }

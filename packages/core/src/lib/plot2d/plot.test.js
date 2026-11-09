@@ -401,6 +401,20 @@ test("other layers shown, dimmed or hidden keep the outline, and the holes throu
   assert.deepEqual(strengths({ layer: "F.SilkS", others: "hidden" }), [["area", 0, 1], ["F.SilkS", 1, 1], ["Edge.Cuts", 1, 1]]);
 });
 
+test("a pad's and a via's names draw KiCad's markup, as the board's text does: no tilde or brace", () => {
+  const named = (text) => {
+    const names = layer("names", "names", "both", [{ t: "label", kind: "via", text, at: [20, 15], size: [1, 1], angle: 0, w: 0.1, lod: 0 }]);
+    const layout = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: [names] }] });
+    const [left, top, right] = layout.sheets[0].layers[0].items[0].box;
+    return { width: right - left, top };
+  };
+  const barred = named("~{EN}");
+  const plain = named("EN");
+  // EN's letters, the bar a little past their ink at each end; spelled out, `~{EN}` would be twice as wide.
+  assert.ok(Math.abs(barred.width - plain.width) < 0.25, `as wide as EN: ${barred.width} against ${plain.width}`);
+  assert.ok(barred.top < plain.top, "with a bar over it");
+});
+
 // A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its
 // edge, KiCad's drawing sheet (a frame line and the title block's box), a resistor (its body's background
 // fill, its outline, a pin), a wire, a junction and a field.

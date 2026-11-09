@@ -283,7 +283,8 @@ Bottom views mirror the board and its annotations. Native 2D snapshots support t
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
-and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
+and use stroke lettering, KiCad's text markup (`~{RESET}`, `IO_{3}`, `x^{2}`) drawn as KiCad draws it on
+silkscreen, fab and copper text, fields and net names; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.
 

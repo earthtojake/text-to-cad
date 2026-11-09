@@ -28,7 +28,7 @@ export {
 } from "./plot.js";
 export { BOARD_PALETTES, HOLE_COLORS, NAME_COLORS, DIM_OPACITY, SCHEMATIC_COLORS, SCHEMATIC_DARK_COLORS, ZONE_OPACITY, boardPalette, itemColor, layerColor,
   netnameColor, schematicColors, schematicItemColor } from "./theme.js";
-export { GLYPHS, glyphStrokes, textStrokes } from "./strokeFont.js";
+export { GLYPHS, glyphStrokes, parseMarkup, textStrokes } from "./strokeFont.js";
 export { MASK_OPACITY, boardFinish, finishColor } from "./stackup.js";
 export { boardMirrorX, boardPlanProjection, marksInPlan, planToSheet, sheetToPlan } from "./boardView.js";
 export {
