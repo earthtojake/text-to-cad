@@ -326,7 +326,9 @@ class ThePayload(SchematicFixture):
         from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
 
         fixture = repo_path("packages", "ui", "src", "renderers", "schematic", "__fixtures__", "schematic.plot.json")
-        self.assertEqual(json.loads(fixture.read_text(encoding="utf-8")), json.loads(json.dumps(build_schematic_plot(self.root))),
+        # The route's payload: every page on KiCad's drawing sheet.
+        built = build_schematic_plot(self.root, drawing_sheet=True)
+        self.assertEqual(json.loads(fixture.read_text(encoding="utf-8")), json.loads(json.dumps(built)),
                          "regenerate the fixture: see its README")
 
 

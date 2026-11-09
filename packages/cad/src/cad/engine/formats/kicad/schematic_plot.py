@@ -9,7 +9,7 @@ the free text and graphics. Text is the board's stroke font, Hershey Simplex
 (:mod:`.stroke_font`), at KiCad's positions and sizes: same places, different glyphs, KiCad's markup
 (``~{overbar}``, ``_{subscript}``, ``^{superscript}``) drawn as KiCad draws it. The page's edge is a
 layer of its own (``page``), which a view leaves off unless asked. KiCad's drawing sheet (its frame and
-title block) is drawn only when asked (``drawing_sheet``, as a still asks): KiCad's default
+title block) is drawn only when asked (``drawing_sheet``, as a still and the viewer's route ask): KiCad's default
 (:mod:`.drawing_sheet`), its variables the sheet's own title block, path, file, paper and page.
 
 The payload is the board's plot payload's shape (``packages/core/docs/plot-payload.md``), with

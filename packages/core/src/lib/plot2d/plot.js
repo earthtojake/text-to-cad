@@ -46,7 +46,9 @@
  * is the pane's), in the `theme` (`theme.js`'s `schematicColors`: KiCad's light paper and dark
  * ink, or a dark sheet and light ink, each element the same hue; the file's own colour where it gives one,
  * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
- * unless a view asks for its `border`. The fit frames the page.
+ * unless a view asks for its `border`. Its drawing sheet (`drawing_sheet`: KiCad's default frame, with its
+ * zone numbers and letters, and title block, which the route always sends) is drawn as KiCad's schematic
+ * editor shows it, always, a layer like the others. The fit frames the page, the frame 10 mm inside it.
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";

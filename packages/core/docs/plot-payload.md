@@ -243,8 +243,9 @@ schematic's frame is KiCad's own: millimetres, y down, the page's top-left corne
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
 sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
-fields, as data). The drawing sheet is a layer only when asked: `cad kicad_sch snapshot` asks, the
-route never does, so the viewer's pages have none.
+fields, as data). Every page the route answers is on KiCad's drawing sheet (`drawing_sheet`, below), which
+the viewer draws always, as KiCad's schematic editor shows it; `cad kicad_sch snapshot` asks for it too
+and draws the title block (the frame with `border`). `build_schematic_plot` leaves it out unless asked.
 
 ```jsonc
 {
@@ -263,7 +264,7 @@ route never does, so the viewer's pages have none.
 
 The layers, bottom to top, each present only where it draws something but `page`: `page` (kind
 `sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked),
-`drawing_sheet` (`drawing_sheet`, only when asked: KiCad's default drawing sheet, its built-in
+`drawing_sheet` (`drawing_sheet`, on every page the route answers: KiCad's default drawing sheet, its built-in
 `.kicad_wks`, at its positions -- the frame, two rectangles at the 10 mm margin and 2 mm inside it with
 the column numbers and row letters every 50 mm, each item flagged `frame`, and the title block in the
 bottom-right corner, its box, rows and texts with their `${...}` filled from the sheet's own title

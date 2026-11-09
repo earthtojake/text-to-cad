@@ -402,12 +402,17 @@ test("other layers shown, dimmed or hidden keep the outline, and the holes throu
 });
 
 // A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its
-// edge, a resistor (its body's background fill, its outline, a pin), a wire, a junction and a field.
+// edge, KiCad's drawing sheet (a frame line and the title block's box), a resistor (its body's background
+// fill, its outline, a pin), a wire, a junction and a field.
 const SCHEMATIC = {
   schemaVersion: 4, kind: "schematic", generator: "eeschema",
   sheets: [{ name: "/", path: "/", number: "1", file: "divider.kicad_sch", width: 297, height: 210, background: "#F5F4EF", page: [0, 0, 297, 210],
     layers: [
       layer("page", "sheet", "both", [{ t: "path", pts: [[0, 0], [297, 0], [297, 210], [0, 210], [0, 0]], w: 0, closed: true, page: true }]),
+      layer("drawing_sheet", "drawing_sheet", "both", [
+        { t: "path", pts: [[10, 10], [287, 10], [287, 200], [10, 200], [10, 10]], w: 0.15, closed: true, frame: true },
+        { t: "path", pts: [[177, 166], [285, 166], [285, 198], [177, 198], [177, 166]], w: 0.15, closed: true }
+      ]),
       layer("symbols", "symbol", "both", [
         { t: "poly", pts: square(100, 60, 2, 5), fill: "background", ref: "#R1", id: "b1" },
         { t: "path", pts: square(100, 60, 2, 5), w: 0.254, closed: true, ref: "#R1", id: "b1", color: "#123456", opacity: 0.5 }
@@ -420,7 +425,7 @@ const SCHEMATIC = {
   schematic: { root: "divider.kicad_sch", sheets: [{ path: "/", name: "/", page: "1", parent: null, pins: [] }] }
 };
 
-test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colours, its page edge off", () => {
+test("a schematic's sheet is drawn on its paper alone, on KiCad's drawing sheet, in KiCad's schematic colours, its page edge off", () => {
   const layout = layoutPlot(SCHEMATIC);
   assert.equal(layout.kind, "schematic");
   assert.equal(layout.sheets[0].path, "/");
@@ -432,6 +437,8 @@ test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colo
   assert.deepEqual(calls.filter(([name]) => name === "fillRect"), [["fillRect", "#F5F4EF", 0, 0, 297, 210]]);
   const inks = painted(calls).map(([name, , style]) => [name, name === "fill" ? style.fill : style.stroke, style.alpha]);
   assert.deepEqual(inks, [
+    ["stroke", "#840000", 1], // the drawing sheet's frame, always drawn, as KiCad's schematic editor shows it
+    ["stroke", "#840000", 1], // and its title block
     ["fill", "#FFFFC2", 1],   // the body's background: KiCad's device background
     ["stroke", "#123456", 0.5], // its outline in the file's own colour
     ["stroke", "#840000", 1], // the pin
@@ -444,7 +451,7 @@ test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colo
   drawPlot(dark.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: dark.Path2D, theme: "dark" });
   assert.deepEqual(dark.calls.filter(([name]) => name === "fillRect"), [["fillRect", "#1C1C1C", 0, 0, 297, 210]]);
   assert.deepEqual(painted(dark.calls).map(([name, , style]) => (name === "fill" ? style.fill : style.stroke)),
-    ["#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
+    ["#D07050", "#D07050", "#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
   // Asked for, the page's edge is drawn too.
   const bordered = recorder(800, 600);
   drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });
