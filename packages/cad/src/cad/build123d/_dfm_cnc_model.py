@@ -300,6 +300,7 @@ class Model:
         self._outline: dict[int, np.ndarray] = {}
         self._face_boxes: np.ndarray | None = None
         self._face_intersectors: dict[int, Any] = {}
+        self._screen: brep.Screen | None = None
         self.area = float(part.shape.area)
         box = part.shape.bounding_box()
         self.box_min = np.array([box.min.X, box.min.Y, box.min.Z])
@@ -313,6 +314,19 @@ class Model:
         self._sweeps: dict[int, np.ndarray] = {}
         self._stations: dict[tuple[int, int], Stations] = {}
         self._classifier: Any = None
+
+    def shed(self) -> None:
+        """Drop what the part's measurement made and its report no longer reads -- its mesh, samples, grids and
+        stations, made again if asked -- so an assembly's parts are not all held at once."""
+        self._meshes = None
+        self._quota = None
+        self._samples.clear()
+        self._outline.clear()
+        self._projected.clear()
+        self._extents.clear()
+        self._sweeps.clear()
+        self._stations.clear()
+        self._classifier = None
 
     # --- faces -------------------------------------------------------------------------------------------
 
@@ -575,11 +589,16 @@ class Model:
     def _intersector(self, index: int) -> Any:
         found = self._face_intersectors.get(index)
         if found is None:
-            from OCP.IntCurvesFace import IntCurvesFace_Intersector
-
-            found = IntCurvesFace_Intersector(self.faces[index].wrapped, 1e-7)
+            found = brep.Intersector(self.faces[index].wrapped, 1e-7, self.screen, index)
             self._face_intersectors[index] = found
         return found
+
+    @property
+    def screen(self) -> brep.Screen:
+        """Which faces a ray can cross, by their triangulations (``brep.Screen``), read as rays ask."""
+        if self._screen is None:
+            self._screen = brep.Screen([face.wrapped for face in self.faces], self.size)
+        return self._screen
 
     def _cast(self, origin: Iterable[float], direction: Iterable[float], skip: float, end: float,
               nearest: bool, given: tuple[np.ndarray, np.ndarray] | None = None
@@ -597,6 +616,7 @@ class Model:
             candidates, entries = self._candidates(o, d, skip, end)
         else:
             candidates, entries = given
+        candidates, entries = self.screen.order(o, d, candidates, entries, skip, end)
         if not len(candidates):
             return None
         line = gp_Lin(gp_Pnt(*o), gp_Dir(*d))

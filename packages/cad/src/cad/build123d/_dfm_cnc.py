@@ -191,8 +191,27 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     models: list[Model] = []
     frames: list[np.ndarray] = []
     framing: list[dict[str, Any]] = []
-    for part in document.parts:
+    unintersected: list[dict[str, Any]] = []
+    # A part that is another's geometry moved (``brep.copies``) is measured once: the first's items said again at
+    # its own refs and places. Each part is machined in its own frame, so where it stands changes nothing.
+    copies = brep.copies(document.parts) if len(document.parts) > 1 else {}
+    model_of: dict[int, int] = {}
+    shares: dict[int, dict[str, Any]] = {}
+    for index, part in enumerate(document.parts):
         checkpoint()
+        copy = copies.get(index)
+        if copy is not None and copy.of in model_of:
+            first = model_of[copy.of]
+            models.append(models[first])
+            frames.append(frames[first])
+            model_of[index] = len(models) - 1
+            framing.append({**framing[first], "part": part.name, "location": part.ref("face", 1),
+                            "copy_of": document.parts[copy.of].owner or document.parts[copy.of].name})
+            for name, items in families.items():
+                items.extend([{**item, "_model": len(models) - 1, "_copy": (copy, document.parts[copy.of], part)}
+                              for item in items if item.get("_model") == first and "_copy" not in item])
+            _add_shares(scalars, shares.get(first, {}))
+            continue
         try:
             model = Model(part)
             # the part is machined in its own frame (``machine_frame``): measured turned into it, every place
@@ -207,11 +226,18 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         frames.append(rotation)
         framing.append({"part": part.name, "location": model.ref(1), "axes": [brep.rounded(row, 6) for row in rotation],
                         "turned": not np.array_equal(rotation, np.eye(3)), "aligned_area_fraction": round(share, 4)})
+        model_of[index] = len(models) - 1
         before = {name: len(items) for name, items in families.items()}
+        totals = _shares(scalars)
         _measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed)
+        shares[len(models) - 1] = _minus(_shares(scalars), totals)
+        missed = brep.unintersected(model.part, [model.screen], [model.screen.faces])
+        if missed:
+            unintersected.append(missed)
         for name, items in families.items():
             for item in items[before.get(name, 0):]:
                 item.setdefault("_model", len(models) - 1)
+        model.shed()
     report: dict[str, Any] = {"machine": {"axes": axes, "turning": turning,
                                           "tools_mm": list(tools) if tools else None,
                                           "stock_mm": list(stock) if stock else None, "frames": framing}}
@@ -256,8 +282,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
                 narrowest[key] = item
                 kept.append(item)
             items = kept
-        family = {"items": [_public(_to_part(item, frames[item["_model"]]) if "_model" in item else item)
-                            for item in items[:CAP]], "count": len(items), **scalars.get(name, {})}
+        family = {"items": [_public(_placed(item, frames)) for item in items[:CAP]], "count": len(items),
+                  **scalars.get(name, {})}
         for item in family["items"]:
             if item.get("unreached_mm"):
                 # the stretch of an edge no tool reaches, where it lies in the part's own coordinates
@@ -268,6 +294,8 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         report["model"] = {"error": failed["model"]}
     report["partial_sections"] = sorted(name for name in failed)
     report["partial"] = bool(failed)
+    if unintersected:
+        report["findings"] = unintersected
     return report
 
 
@@ -331,6 +359,54 @@ def _floor_and_ceiling(model: Model, a: int, b: int) -> bool:
     """Whether two faces are planes facing each other square to one direction (a recess's floor and ceiling)."""
     sa, sb = model.surface(a), model.surface(b)
     return sa.kind == sb.kind == "plane" and float(np.asarray(sa.normal) @ np.asarray(sb.normal)) < -SAME
+
+
+def _shares(scalars: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The scalars a part adds to the document's (each its own count), as they stand."""
+    return {"by_tool": dict((scalars.get("sharp_edges") or {}).get("by_tool") or {}),
+            "fine_faces": (scalars.get("small_features") or {}).get("fine_faces", 0)}
+
+
+def _minus(after: dict[str, Any], before: dict[str, Any]) -> dict[str, Any]:
+    return {"by_tool": {way: count - before["by_tool"].get(way, 0) for way, count in after["by_tool"].items()},
+            "fine_faces": after["fine_faces"] - before["fine_faces"]}
+
+
+def _add_shares(scalars: dict[str, dict[str, Any]], share: dict[str, Any]) -> None:
+    """A copy's counts: its first's again (its least sizes are the first's, already)."""
+    if share.get("by_tool"):
+        totals = scalars.setdefault("sharp_edges", {"by_tool": {}})["by_tool"]
+        for way, count in share["by_tool"].items():
+            totals[way] = totals.get(way, 0) + count
+    if share.get("fine_faces") and "small_features" in scalars:
+        scalars["small_features"]["fine_faces"] = scalars["small_features"].get("fine_faces", 0) + share["fine_faces"]
+
+
+def _placed(item: dict[str, Any], frames: list[np.ndarray]) -> dict[str, Any]:
+    """An item as it lies in its part: turned back out of the machine frame (``_to_part``), and a copy's moved
+    from its first's onto it, at its own refs (``_moved``)."""
+    if "_model" not in item:
+        return item
+    placed = _to_part(item, frames[item["_model"]])
+    if "_copy" in item:
+        copy, first, part = item["_copy"]
+        placed = _moved(placed, copy, first, part)
+    return placed
+
+
+def _moved(value: Any, copy: brep.Copy, first: brep.Part, part: brep.Part, key: str | None = None) -> Any:
+    """``value`` (an item of ``first``, in its own coordinates) as it lies in ``part``, its copy
+    (``brep.moved``), with the fields that hold directions as text or in lists of their own."""
+    if isinstance(value, dict):
+        return {name: (found if name.startswith("_") else _moved(found, copy, first, part, name))
+                for name, found in value.items()}
+    if key == "hole_axis" and isinstance(value, str):
+        return ", ".join(f"{v:g}" for v in brep.rounded(copy.direction([float(p) for p in value.split(",")]), 6))
+    if key == "inclined_directions" and isinstance(value, list):
+        return [brep.moved(found, copy, first, part, _PLACES, _DIRECTIONS, "direction") for found in value]
+    if isinstance(value, list) and not (len(value) == 3 and all(isinstance(v, (int, float)) for v in value)):
+        return [_moved(found, copy, first, part, key) for found in value]
+    return brep.moved(value, copy, first, part, _PLACES, _DIRECTIONS, key)
 
 
 def _public(item: dict[str, Any]) -> dict[str, Any]:

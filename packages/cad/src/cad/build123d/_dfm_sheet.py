@@ -1929,8 +1929,15 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
             out[name] = run()
         except Exception as error:  # noqa: BLE001 - one family's failure is reported, the rest measured
             out[name] = error
+    missed = brep.unintersected(part, [analysis.rays.screen], [analysis.rays.faces])
+    if missed:
+        out["_findings"] = [missed]
     return out
 
+
+#: The fields of a sheet's items that hold a place, and those that hold a direction (``brep.moved``).
+_PLACES = frozenset({"xyz", "axis_origin", "tangent_lines"})
+_DIRECTIONS = frozenset({"axis"})
 
 _SORT = {"not_sheet": ("deviation_mm", True), "sharp_bends": (None, False), "bends": ("radius_to_thickness", False),
          "flanges": ("length_tangent_mm", False), "reliefs": ("width_mm", False), "holes": ("size_mm", False),
@@ -1944,9 +1951,19 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     """The sheet report of ``document``: facts alone, every family's ``items`` at a ref."""
     if not document.parts:
         raise Unmeasured("empty_document", "the document holds no part to measure")
-    results = []
-    for part in document.parts:
+    results: list[dict[str, Any]] = []
+    # A part that is another's geometry moved (``brep.copies``) is measured once, its first's items said again at
+    # its own refs and places: a sheet is read in its own frame, wherever it stands.
+    copies = brep.copies(document.parts) if len(document.parts) > 1 else {}
+    for index, part in enumerate(document.parts):
         checkpoint()
+        copy = copies.get(index)
+        if copy is not None:
+            first = document.parts[copy.of]
+            results.append({family: (found if isinstance(found, Exception) else
+                                     brep.moved(found, copy, first, part, _PLACES, _DIRECTIONS))
+                            for family, found in results[copy.of].items() if family != "_findings"})
+            continue
         try:
             results.append(_part(part, options))
         except Exception as error:  # noqa: BLE001 - a part that cannot be measured fails its families alone
@@ -1971,6 +1988,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     report["bent"] = bool((report.get("bends") or {}).get("items"))
     report["partial"] = bool(partial)
     report["partial_sections"] = partial
+    found = [finding for result in results for finding in result.get("_findings", ())]
+    if found:
+        report["findings"] = found
     return report
 
 

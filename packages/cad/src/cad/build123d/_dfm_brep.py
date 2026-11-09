@@ -63,6 +63,9 @@ class Part:
     _edges: list[Any] | None = field(default=None, repr=False)
     _face_map: Any = field(default=None, repr=False)
     _edge_map: Any = field(default=None, repr=False)
+    # Each edge's kernel adaptors for ``edge_angles``, made once: a curved edge's least angle is searched with
+    # dozens of calls, each of which walked the face's every edge and copied both surfaces' adaptors again.
+    _edge_context: dict[int, Any] = field(default_factory=dict, repr=False)
 
     def ref(self, kind: str, ordinal: int) -> str:
         """The ref of one element: ``plate/face 7`` (``face 7`` where the part is an unlabelled root)."""
@@ -336,6 +339,149 @@ def parts_of(shape: Any, name: str | None = None) -> Document:
                           paths=(refs.path_text(root, node),), material=getattr(leaf, "material", None)))
     empty = [part.owner or part.name for part in parts if not part.faces()]
     return Document(name=tree["name"], parts=[part for part in parts if part.faces()], empty=empty)
+
+
+# --- copies ----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Copy:
+    """A part that is another's geometry moved: ``of`` the index of the first part with that geometry, and the
+    motion that takes a point of that part onto this one (``rotation @ point + shift``; ``proper`` False where it
+    mirrors). Their faces, edges and vertices correspond ordinal for ordinal."""
+
+    of: int
+    rotation: np.ndarray
+    shift: np.ndarray
+    proper: bool
+
+    def point(self, xyz: Any) -> list[float]:
+        return [float(v) for v in self.rotation @ np.asarray(xyz, dtype=float) + self.shift]
+
+    def direction(self, xyz: Any) -> list[float]:
+        return [float(v) for v in self.rotation @ np.asarray(xyz, dtype=float)]
+
+
+def _signature(part: Part) -> tuple[Any, ...]:
+    """What a part's copies share, read cheaply: its counts, and each face's kind and edge count in order."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopExp import TopExp_Explorer
+
+    kinds = []
+    for face in part.faces():
+        explorer, edges = TopExp_Explorer(face.wrapped, TopAbs_EDGE), 0
+        while explorer.More():
+            edges += 1
+            explorer.Next()
+        kinds.append((int(BRepAdaptor_Surface(face.wrapped, False).GetType()), edges))
+    return (len(part.solids()), len(part.edges()), tuple(kinds))
+
+
+def _probes(part: Part) -> np.ndarray:
+    """Points a part's moved copy has moved alike, ordinal for ordinal: every vertex, each edge's middle and
+    each face's middle (its surface at the middle of its parameters)."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+    from OCP.TopAbs import TopAbs_VERTEX
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS
+    from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedMapOfShape
+
+    vertices = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(part.shape.wrapped, TopAbs_VERTEX, vertices)
+    points = [_xyz(BRep_Tool.Pnt_s(TopoDS.Vertex(vertices.FindKey(i)))) for i in range(1, vertices.Extent() + 1)]
+    for edge in part.edges():
+        if BRep_Tool.Degenerated_s(edge.wrapped):
+            continue
+        curve = BRepAdaptor_Curve(edge.wrapped)
+        points.append(_xyz(curve.Value(0.5 * (curve.FirstParameter() + curve.LastParameter()))))
+    for face in part.faces():
+        surface = BRepAdaptor_Surface(face.wrapped)
+        points.append(_xyz(surface.Value(0.5 * (surface.FirstUParameter() + surface.LastUParameter()),
+                                         0.5 * (surface.FirstVParameter() + surface.LastVParameter()))))
+    return np.array(points).reshape(-1, 3)
+
+
+#: The fields of a report's items that name the part an item is of (``moved``).
+NAMED = frozenset({"part", "name"})
+
+
+def moved(value: Any, copy: Copy, first: Part, part: Part, places: frozenset[str], directions: frozenset[str],
+          key: str | None = None) -> Any:
+    """``value`` -- a report's item, or what it holds, of ``first``, the part ``copy`` is of -- as it lies in
+    ``part``, the copy: the refs at the first's owner at the copy's, its name (under a key of ``NAMED``) the
+    copy's, the points under a key of ``places`` and the vectors under one of ``directions`` moved (at any depth:
+    a list of points, of lines), the rest as it is. Keys starting ``_`` are a measurement's own and kept."""
+    if isinstance(value, dict):
+        return {name: (found if name.startswith("_") else moved(found, copy, first, part, places, directions, name))
+                for name, found in value.items()}
+    if isinstance(value, str):
+        was = f"{first.owner}/"
+        if value.startswith(was):
+            return f"{part.owner}/" + value[len(was):]
+        return part.name if key in NAMED and value == first.name else value
+    if key in places or key in directions:
+        if isinstance(value, (list, tuple)) and len(value) == 3 and all(isinstance(v, (int, float)) for v in value):
+            return rounded(copy.point(value) if key in places else copy.direction(value), 4 if key in places else 6)
+    if isinstance(value, (list, tuple)):
+        return [moved(found, copy, first, part, places, directions, key) for found in value]
+    return value
+
+
+#: A copy's probes lie within this share of its size of the first's moved (the kernel's own precision is 1e-7).
+COPY_TOLERANCE = 1e-7
+
+
+def copies(parts: list[Part], mirrored: bool = True) -> dict[int, Copy]:
+    """The parts that are an earlier part's geometry moved -- turned and shifted, mirrored too where
+    ``mirrored`` -- by their index: what a check measures once and says at every copy. A part is a copy when its
+    counts and faces' kinds match and every probe (``_probes``: its vertices, edges' and faces' middles, ordinal
+    for ordinal) lies where the first's moved (the best rigid motion of the probes, ``COPY_TOLERANCE`` of the
+    size): the same geometry, moved, its faces in the same order. Instances of one shape are one part already."""
+    groups: dict[tuple[Any, ...], list[int]] = {}
+    for index, part in enumerate(parts):
+        checkpoint()
+        try:
+            groups.setdefault(_signature(part), []).append(index)
+        except Exception:  # noqa: BLE001 - a part the kernel cannot read so is measured on its own
+            continue
+    found: dict[int, Copy] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        firsts: list[tuple[int, np.ndarray]] = []
+        for index in members:
+            checkpoint()
+            try:
+                probes = _probes(parts[index])
+            except Exception:  # noqa: BLE001
+                continue
+            for first, theirs in firsts:
+                copy = _moved(theirs, probes, mirrored)
+                if copy is not None:
+                    found[index] = Copy(first, *copy)
+                    break
+            else:
+                firsts.append((index, probes))
+    return found
+
+
+def _moved(a: np.ndarray, b: np.ndarray, mirrored: bool) -> tuple[np.ndarray, np.ndarray, bool] | None:
+    """The rigid motion taking the points ``a`` onto ``b`` (ordinal for ordinal), or None where none does."""
+    if a.shape != b.shape or len(a) < 3:
+        return None
+    ca, cb = a.mean(axis=0), b.mean(axis=0)
+    u, _, vt = np.linalg.svd((a - ca).T @ (b - cb))
+    proper = float(np.linalg.det(vt.T @ u.T)) > 0.0
+    if not proper and not mirrored:
+        return None
+    rotation = vt.T @ np.diag([1.0, 1.0, 1.0 if proper else -1.0]) @ u.T
+    shift = cb - rotation @ ca
+    size = float(np.ptp(a, axis=0).max()) or 1.0
+    if float(np.abs(a @ rotation.T + shift - b).max()) > COPY_TOLERANCE * max(size, 1.0):
+        return None
+    return rotation, shift, proper
 
 
 # --- surfaces --------------------------------------------------------------------------------------------
@@ -655,9 +801,19 @@ def edge_angles(part: Part, edge: Edge, fractions: np.ndarray) -> tuple[np.ndarr
     from OCP.TopAbs import TopAbs_REVERSED
     from OCP.gp import gp_Pnt, gp_Vec
 
-    shape = part.edges()[edge.ordinal - 1]
-    a, b = (part.faces()[ordinal - 1] for ordinal in edge.faces)
-    curve = BRepAdaptor_Curve(shape.wrapped)
+    context = part._edge_context.get(edge.ordinal)
+    if context is None:
+        from OCP.BRepGProp import BRepGProp_Face
+
+        shape = part.edges()[edge.ordinal - 1]
+        a, b = (part.faces()[ordinal - 1] for ordinal in edge.faces)
+        curve = BRepAdaptor_Curve(shape.wrapped)
+        planar = all(BRepAdaptor_Surface(f.wrapped).GetType() == GeomAbs_Plane for f in (a, b))
+        context = (curve, planar) if planar else (
+            curve, planar, _in_face_orientation(a, shape), BRepAdaptor_Curve2d(shape.wrapped, a.wrapped),
+            BRepAdaptor_Curve2d(shape.wrapped, b.wrapped), BRepGProp_Face(a.wrapped), BRepGProp_Face(b.wrapped))
+        part._edge_context[edge.ordinal] = context
+    curve, planar = context[0], context[1]
     first, last = curve.FirstParameter(), curve.LastParameter()
     length = float(edge.length)
     params = []
@@ -668,18 +824,15 @@ def edge_angles(part: Part, edge: Edge, fractions: np.ndarray) -> tuple[np.ndarr
         except Exception:  # noqa: BLE001 - a curve the kernel cannot measure along is read by its parameter
             params.append(first + float(fraction) * (last - first))
     points = np.zeros((len(params), 3))
-    planar = all(BRepAdaptor_Surface(f.wrapped).GetType() == GeomAbs_Plane for f in (a, b))
     for k, t in enumerate(params):
         point = gp_Pnt()
         curve.D0(t, point)
         points[k] = _xyz(point)
     if planar:
         return points, np.full(len(params), float(edge.angle_deg))
-    orientation = _in_face_orientation(a, shape)
+    orientation, on_a, on_b = context[2], context[3], context[4]
+    props = (context[5], context[6])
     angles = np.full(len(params), np.nan)
-    on_a, on_b = BRepAdaptor_Curve2d(shape.wrapped, a.wrapped), BRepAdaptor_Curve2d(shape.wrapped, b.wrapped)
-    from OCP.BRepGProp import BRepGProp_Face
-    props = (BRepGProp_Face(a.wrapped), BRepGProp_Face(b.wrapped))
     for k, t in enumerate(params):
         point, tangent = gp_Pnt(), gp_Vec()
         curve.D1(t, point, tangent)
@@ -700,6 +853,417 @@ def edge_angles(part: Part, edge: Edge, fractions: np.ndarray) -> tuple[np.ndarr
 
 
 # --- rays and points -------------------------------------------------------------------------------------
+
+
+#: Triangles of a face's own triangulation per box of the ray screen (``Screen``).
+SCREEN_CHUNK = 16
+#: A face's surface lies within its triangulation's deflection of its triangles; the screen widens each box by
+#: this many deflections (and the face's tolerance), so no ray that crosses the face misses its boxes.
+SCREEN_SLACK = 3.0
+#: The screen's mesh deflection, a share of the part's size: its boxes are as loose as this.
+SCREEN_SHARE = 2e-3
+#: The face boundary's polylines (``Intersector``) are walked to this share of the part's size.
+BOUNDARY_SHARE = 2e-5
+#: Box tests a screen runs at once, at most (its arrays are this many rows).
+_SCREEN_BLOCK = 1 << 18
+
+
+def freeform(face: Any) -> bool:
+    """Whether a face (a ``TopoDS_Face``) is free-form: its surface no plane, cylinder, cone, sphere or torus."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Sphere, GeomAbs_Torus
+
+    return BRepAdaptor_Surface(face, False).GetType() not in (GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone,
+                                                               GeomAbs_Sphere, GeomAbs_Torus)
+
+
+#: A free-form face of this many edges or more is heavy (``heavy``).
+HEAVY_EDGES = 48
+
+
+def heavy(face: Any) -> bool:
+    """Whether a face's exact intersection is costly: a free-form face of many edges (``HEAVY_EDGES``). The
+    kernel's intersector costs microseconds a ray on most faces, and a millisecond or more on such a face, most of
+    it classifying a crossing against its many edges' curves -- 6 ms a ray its line meets the surface beyond the
+    trim, on a 526-edge face, against 4 to 20 microseconds on a face of under 20 edges."""
+    if not freeform(face):
+        return False
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopExp import TopExp_Explorer
+
+    explorer, edges = TopExp_Explorer(face, TopAbs_EDGE), 0
+    while explorer.More() and edges < HEAVY_EDGES:
+        edges += 1
+        explorer.Next()
+    return edges >= HEAVY_EDGES
+
+
+class Screen:
+    """Which faces a ray can cross, read from each face's own triangulation (the one its samples were laid on;
+    nothing is meshed here): the face's triangles in chunks of ``SCREEN_CHUNK`` along a space-filling curve,
+    each chunk's box widened by ``SCREEN_SLACK`` deflections and the face's tolerance. The surface over a
+    triangle lies within the deflection of it, so a ray that meets none of a face's boxes does not cross the
+    face, and is never intersected with it exactly: on a free-form face a miss costs the exact intersection a
+    millisecond or more (nine in ten of a large part's), its boxes microseconds. Where a ray can cross, where it
+    enters the face's nearest box bounds the crossing, a tighter bound than the face's own box. A face holding
+    no triangulation (or one of no deflection) is not screened: every ray its box admits is intersected, as
+    before; it is read again when asked of next, so a face sampled later is screened from then on."""
+
+    def __init__(self, faces: list[Any], size: float) -> None:
+        self.faces = faces
+        self.size = float(size) or 1.0
+        count = len(faces)
+        # Only a heavy face is screened (``heavy``): any other's exact intersection costs less than its boxes.
+        self.heavy = np.array([heavy(face) for face in faces], dtype=bool)
+        self._read = np.zeros(count, dtype=bool)
+        self.boundaries: dict[int, tuple[np.ndarray, np.ndarray, float]] = {}
+        #: Per face index, the rays the kernel failed to intersect with it (``Intersector``).
+        self.failed: dict[int, int] = {}
+        self.first = np.zeros(count, dtype=np.int64)
+        self.count = np.zeros(count, dtype=np.int64)
+        self.lo = np.zeros((0, 3))
+        self.hi = np.zeros((0, 3))
+
+    def _chunks(self, face: Any) -> tuple[np.ndarray, np.ndarray, Any] | None:
+        from OCP.BRep import BRep_Tool
+        from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+        from OCP.GCPnts import GCPnts_TangentialDeflection
+        from OCP.TopAbs import TopAbs_EDGE
+        from OCP.TopExp import TopExp, TopExp_Explorer
+        from OCP.TopLoc import TopLoc_Location
+        from OCP.TopoDS import TopoDS
+
+        location = TopLoc_Location()
+        triangulation = BRep_Tool.Triangulation_s(face, location)
+        fine = SCREEN_SHARE * self.size
+        if triangulation is None or not triangulation.Deflection() <= fine:
+            # Its own mesh is missing or coarser than the screen's: a copy of the face meshed finely (nothing
+            # is written into the face itself, whose mesh its samples are laid on).
+            from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+            from OCP.BRepMesh import BRepMesh_IncrementalMesh
+
+            face = TopoDS.Face(BRepBuilderAPI_Copy(face, True, False).Shape())
+            BRepMesh_IncrementalMesh(face, fine, False, 0.5, False)
+            location = TopLoc_Location()
+            triangulation = BRep_Tool.Triangulation_s(face, location)
+        if triangulation is None or triangulation.NbTriangles() == 0:
+            return None
+        # The surface's deflection, and its boundary's: a plane's triangles lie on it exactly, but its round
+        # edges' chords cut inside them by their own deflection.
+        deflection = float(triangulation.Deflection())
+        trsf = location.Transformation()
+        nodes = np.array([_xyz(triangulation.Node(i).Transformed(trsf)) for i in range(1, triangulation.NbNodes() + 1)])
+        # The boundary as the triangulation's polylines (``Intersector``): each edge's, and each vertex's point.
+        starts, ends, tolerance, unknown = [], [], 0.0, False
+        edge_deflection = max(BOUNDARY_SHARE * self.size, 1e-6)
+        explorer = TopExp_Explorer(face, TopAbs_EDGE)
+        while explorer.More():
+            edge = TopoDS.Edge(explorer.Current())
+            explorer.Next()
+            tolerance = max(tolerance, float(BRep_Tool.Tolerance_s(edge)))
+            if BRep_Tool.Degenerated_s(edge):
+                continue
+            polygon = BRep_Tool.PolygonOnTriangulation_s(edge, triangulation, location)
+            if polygon is None:
+                return None  # a boundary the triangulation does not say how near it keeps: not screened
+            deflection = max(deflection, float(polygon.Deflection()))
+            try:
+                curve = BRepAdaptor_Curve(edge)
+                walked = GCPnts_TangentialDeflection(curve, 0.1, edge_deflection)
+                line = np.array([_xyz(walked.Value(i)) for i in range(1, walked.NbPoints() + 1)])
+            except Exception:  # noqa: BLE001 - an edge the kernel cannot walk: its boundary is unknown
+                line = np.zeros((0, 3))
+            if len(line) < 2:
+                unknown = True
+                continue
+            starts.extend(line[:-1])
+            ends.extend(line[1:])
+        if not (math.isfinite(deflection) and deflection > 0.0):
+            return None
+        tris = np.array([triangulation.Triangle(i).Get() for i in range(1, triangulation.NbTriangles() + 1)]) - 1
+        corners = nodes[tris]                                   # (t, 3, 3)
+        low, high = corners.min(axis=1), corners.max(axis=1)
+        middle = corners.mean(axis=1)
+        span = np.maximum(middle.max(axis=0) - middle.min(axis=0), 1e-300)
+        cells = np.clip(((middle - middle.min(axis=0)) / span * 1023).astype(np.int64), 0, 1023)
+        code = np.zeros(len(cells), dtype=np.int64)
+        for bit in range(10):  # a Morton code: neighbouring triangles land in one chunk
+            for axis in range(3):
+                code |= ((cells[:, axis] >> bit) & 1) << (3 * bit + axis)
+        order = np.argsort(code, kind="stable")
+        low, high = low[order], high[order]
+        cuts = np.arange(0, len(order), SCREEN_CHUNK)
+        margin = SCREEN_SLACK * deflection + float(BRep_Tool.Tolerance_s(face)) + 1e-9 * self.size
+        # The full intersector accepts a crossing its classifier puts within the intersector's own tolerance of
+        # the boundary in (u, v) (1e-7: in millimetres, over the surface's least resolution), or within the
+        # largest edge tolerance of an edge's curve (``IntCurvesFace_Intersector::internalCall``): twice both,
+        # and the polylines' own deflection, is the reach.
+        try:
+            surface = BRepAdaptor_Surface(face, False)
+            per_mm = min(float(surface.UResolution(1.0)), float(surface.VResolution(1.0)))
+            uv = 1e-7 / per_mm if per_mm > 0.0 and math.isfinite(per_mm) else math.inf
+        except Exception:  # noqa: BLE001 - a surface the kernel cannot resolve: its boundary unknown
+            uv = math.inf
+        if not math.isfinite(uv):
+            unknown = True
+        reach = 2.0 * (tolerance + float(BRep_Tool.Tolerance_s(face)) + uv) + SCREEN_SLACK * edge_deflection + 1e-7
+        boundary = None if unknown else (np.array(starts).reshape(-1, 3), np.array(ends).reshape(-1, 3), reach)
+        return (np.minimum.reduceat(low, cuts, axis=0) - margin, np.maximum.reduceat(high, cuts, axis=0) + margin,
+                boundary)
+
+    def _load(self, faces: np.ndarray) -> None:
+        """Read the faces not yet read whose triangulation is there now."""
+        pending = np.unique(faces[~self._read[faces]])
+        if not len(pending):
+            return
+        lows, highs = [self.lo], [self.hi]
+        at = len(self.lo)
+        for index in pending:
+            found = self._chunks(self.faces[int(index)])
+            if found is None:
+                continue  # not screened, asked again next time
+            self._read[index] = True
+            self.boundaries[int(index)] = found[2]
+            self.first[index], self.count[index] = at, len(found[0])
+            lows.append(found[0])
+            highs.append(found[1])
+            at += len(found[0])
+        if len(lows) > 1:
+            self.lo, self.hi = np.vstack(lows), np.vstack(highs)
+
+    def pairs(self, origins: np.ndarray, directions: np.ndarray, ray: np.ndarray, face: np.ndarray,
+              start: Any, end: Any) -> tuple[np.ndarray, np.ndarray]:
+        """For (ray, face) pairs (``ray`` indexes ``origins`` and ``directions``, unit; ``face`` the faces'
+        indices): whether the ray can cross the face between ``start`` and ``end`` (each a number, or one per
+        pair), and the least distance it can cross it at (NaN for a face not screened, which can always be
+        crossed)."""
+        ray = np.asarray(ray, dtype=np.int64)
+        face = np.asarray(face, dtype=np.int64)
+        keep = np.ones(len(face), dtype=bool)
+        entry = np.full(len(face), np.nan)
+        if not len(face):
+            return keep, entry
+        self._load(face[self.heavy[face]])
+        starts = np.broadcast_to(np.asarray(start, dtype=float), face.shape)
+        ends = np.broadcast_to(np.asarray(end, dtype=float), face.shape)
+        screened = np.flatnonzero(self.count[face] > 0)
+        counts = self.count[face[screened]]
+        bounds = np.concatenate([[0], np.cumsum(counts)])
+        begin = 0
+        while begin < len(screened):
+            # as many pairs as keep the box tests under _SCREEN_BLOCK
+            stop = int(np.searchsorted(bounds, bounds[begin] + _SCREEN_BLOCK, side="right")) - 1
+            stop = max(stop, begin + 1)
+            pick = screened[begin:stop]
+            n = counts[begin:stop]
+            pair = np.repeat(np.arange(len(pick)), n)
+            chunk = np.repeat(self.first[face[pick]], n) + (np.arange(int(n.sum())) - np.repeat(np.cumsum(n) - n, n))
+            o, d = origins[ray[pick]][pair], directions[ray[pick]][pair]
+            lows, highs = self.lo[chunk], self.hi[chunk]
+            flat = np.abs(d) <= 1e-300
+            with np.errstate(divide="ignore", invalid="ignore"):
+                inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d))
+                t1, t2 = (lows - o) * inverse, (highs - o) * inverse
+            lo = np.where(flat, -np.inf, np.minimum(t1, t2)).max(axis=1)
+            hi = np.where(flat, np.inf, np.maximum(t1, t2)).min(axis=1)
+            across = np.all(~flat | ((lows <= o) & (o <= highs)), axis=1)
+            s, e = starts[pick][pair], ends[pick][pair]
+            ok = across & (lo <= hi) & (hi >= s) & (lo <= e)
+            near = np.where(ok, np.maximum(lo, s), np.inf)
+            least = np.minimum.reduceat(near, np.concatenate([[0], np.cumsum(n)[:-1]]))
+            keep[pick] = np.isfinite(least)
+            entry[pick] = least
+            begin = stop
+        return keep, entry
+
+    def order(self, origin: np.ndarray, direction: np.ndarray, candidates: np.ndarray, entries: np.ndarray,
+              start: float, end: float) -> tuple[np.ndarray, np.ndarray]:
+        """One ray's candidate faces (by their boxes, with where it enters each) less those it cannot cross,
+        nearest first by the tighter bound."""
+        if not len(candidates) or not self.heavy[candidates].any():
+            return candidates, entries
+        keep, entry = self.pairs(origin[None, :], direction[None, :], np.zeros(len(candidates), dtype=np.int64),
+                                 candidates, start, end)
+        entries = np.where(np.isnan(entry), entries, np.maximum(entries, np.where(np.isnan(entry), 0.0, entry)))
+        candidates, entries = candidates[keep], entries[keep]
+        order = np.argsort(entries, kind="stable")
+        return candidates[order], entries[order]
+
+
+
+class Intersector:
+    """``IntCurvesFace_Intersector`` of one face, as exact, at a fraction of its cost on a free-form face.
+
+    The kernel's intersector, asked to accept a crossing within its boundary's tolerance (``UseBToler``, as every
+    check casts), classifies a crossing its fast classifier finds outside the face again with a classifier it
+    builds anew each call: on a large free-form face, 30 ms a ray whose line meets the surface beyond the face's
+    trim, most of a part's rays. The same intersector without it answers every crossing inside the face alike;
+    the two differ only on a crossing within the boundary's tolerance, whose line passes that near the face's
+    edges. So a ray is cast with the fast one, and with the full one too where its line passes within reach of the
+    edges' polylines (``Screen.boundaries``: the triangulation's, widened by its deflection and every edge's and
+    vertex's tolerance); a face with no polylines to read is always cast with the full one."""
+
+    def __init__(self, face: Any, tolerance: float, screen: "Screen | None" = None, index: int = -1) -> None:
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector
+
+        self.face = face
+        self.tolerance = tolerance
+        self._screen = screen
+        self._index = index
+        free = screen is not None and bool(screen.heavy[index])
+        self._fast = IntCurvesFace_Intersector(face, tolerance) if free else None
+        if self._fast is not None:
+            self._fast.SetUseBoundToler(False)
+        self._full: Any = None if free else IntCurvesFace_Intersector(face, tolerance)
+        self._points: list[tuple[float, float, float]] = []
+        self._done = False
+
+    def _near_boundary(self, line: Any, start: float, end: float) -> list[tuple[float, float]]:
+        """The stretches of the ray -- the line between ``start`` and ``end`` -- that pass within reach of the
+        face's boundary (its polylines, ``Screen.boundaries``), apart and in order: only there can the full
+        intersector accept a crossing the fast one does not. The whole ray where the boundary is unknown."""
+        screen = self._screen
+        assert screen is not None
+        screen._load(np.array([self._index]))
+        found = screen.boundaries.get(self._index)
+        if found is None:
+            return [(start, end)]
+        starts, ends, reach = found
+        if not len(starts):
+            return [(start, end)]
+        location, direction = line.Location(), line.Direction()
+        o = np.array([location.X(), location.Y(), location.Z()])
+        d = np.array([direction.X(), direction.Y(), direction.Z()])
+        # the ray clipped to the boundary's box (widened by the reach): beyond it no point is near it
+        low = np.minimum(starts.min(axis=0), ends.min(axis=0)) - reach
+        high = np.maximum(starts.max(axis=0), ends.max(axis=0)) + reach
+        flat = np.abs(d) <= 1e-300
+        with np.errstate(divide="ignore", invalid="ignore"):
+            inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d))
+            t1, t2 = (low - o) * inverse, (high - o) * inverse
+        if np.any(flat & ((o < low) | (o > high))):
+            return []
+        enter = max(float(np.where(flat, -np.inf, np.minimum(t1, t2)).max()), start - reach)
+        leave = min(float(np.where(flat, np.inf, np.maximum(t1, t2)).min()), end + reach)
+        if enter > leave:
+            return []
+        # the least distance between the ray's stretch [enter, leave] and each boundary segment (both clamped)
+        p1 = o + enter * d
+        span = leave - enter
+        e2 = ends - starts
+        r = p1 - starts
+        b = e2 @ d
+        c = r @ d
+        e = np.einsum("ij,ij->i", e2, e2)
+        f = np.einsum("ij,ij->i", e2, r)
+        denominator = e - b * b  # the ray's direction is a unit: its own a = 1
+        with np.errstate(divide="ignore", invalid="ignore"):
+            s_ray = np.where(denominator > 1e-300, np.clip((b * f - c * e) / np.where(denominator > 1e-300, denominator, 1.0),
+                                                           0.0, span), 0.0)
+            t_seg = np.where(e > 1e-300, (b * s_ray + f) / np.where(e > 1e-300, e, 1.0), 0.0)
+        below, above = t_seg < 0.0, t_seg > 1.0
+        t_seg = np.clip(t_seg, 0.0, 1.0)
+        s_ray = np.where(below, np.clip(-c, 0.0, span), np.where(above, np.clip(b - c, 0.0, span), s_ray))
+        gap = (p1 + s_ray[:, None] * d) - (starts + t_seg[:, None] * e2)
+        near = np.einsum("ij,ij->i", gap, gap) <= reach * reach
+        if not near.any():
+            return []
+        # every point within reach of a near segment lies, along the ray, within reach of that segment's shadow:
+        # the shadows, merged where they overlap
+        a, b = (starts[near] - o) @ d, (ends[near] - o) @ d
+        lows, highs = np.maximum(np.minimum(a, b) - reach, start), np.minimum(np.maximum(a, b) + reach, end)
+        merged: list[list[float]] = []
+        for low, high in sorted(zip(lows.tolist(), highs.tolist())):
+            if low > high:
+                continue
+            if merged and low <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], high)
+            else:
+                merged.append([low, high])
+        return [(low, high) for low, high in merged]
+
+    def Perform(self, line: Any, start: float, end: float) -> None:  # noqa: N802 - the kernel's name
+        from OCP.Standard import Standard_Failure
+
+        self._points: list[tuple[float, float, float]] = []
+        self._done = False
+        try:
+            if self._fast is None:
+                self._full.Perform(line, start, end)
+                self._take(self._full)
+                return
+            stretches = self._near_boundary(line, start, end)
+            self._fast.Perform(line, start, end)
+            if not stretches:
+                self._take(self._fast)
+                return
+            # the fast intersector's crossings off the stretches; the full one's on each
+            if self._full is None:
+                from OCP.IntCurvesFace import IntCurvesFace_Intersector
+
+                self._full = IntCurvesFace_Intersector(self.face, self.tolerance)
+            self._take(self._fast, outside=stretches)
+            for low, high in stretches:
+                self._full.Perform(line, low, high)
+                self._take(self._full, within=(low, high))
+            self._points.sort()
+        except Standard_Failure:
+            # The kernel cannot intersect this line with this face (a degenerate patch of its surface): that one
+            # crossing is not found -- the ray goes on to its other faces -- and is counted against the face
+            # (``Screen.failed``), which the check says, never a family lost to it.
+            self._points, self._done = [], False
+            if self._screen is not None:
+                self._screen.failed[self._index] = self._screen.failed.get(self._index, 0) + 1
+
+    def _take(self, intersector: Any, outside: list[tuple[float, float]] | None = None,
+              within: tuple[float, float] | None = None) -> None:
+        if not intersector.IsDone():
+            return
+        self._done = True
+        for k in range(1, intersector.NbPnt() + 1):
+            w = float(intersector.WParameter(k))
+            if outside is not None and any(low <= w <= high for low, high in outside):
+                continue
+            if within is not None and not within[0] <= w <= within[1]:
+                continue
+            self._points.append((w, float(intersector.UParameter(k)), float(intersector.VParameter(k))))
+
+    def IsDone(self) -> bool:  # noqa: N802
+        return self._done
+
+    def NbPnt(self) -> int:  # noqa: N802
+        return len(self._points)
+
+    def WParameter(self, k: int) -> float:  # noqa: N802
+        return self._points[k - 1][0]
+
+    def UParameter(self, k: int) -> float:  # noqa: N802
+        return self._points[k - 1][1]
+
+    def VParameter(self, k: int) -> float:  # noqa: N802
+        return self._points[k - 1][2]
+
+
+def unintersected(part: Part, screens: Iterable["Screen"], faces: Iterable[list[Any]]) -> dict[str, Any] | None:
+    """The finding that says the kernel failed to intersect rays with some of the part's faces (``Screen.failed``:
+    each a crossing not found, so what those rays reach is not measured there), naming the faces; None where
+    every ray was intersected."""
+    counts: dict[int, int] = {}
+    for screen, listed in zip(screens, faces):
+        for index, count in screen.failed.items():
+            ordinal = part.face_ordinal(listed[index])
+            if ordinal:
+                counts[ordinal] = counts.get(ordinal, 0) + count
+    if not counts:
+        return None
+    refs = [part.ref("face", ordinal) for ordinal in sorted(counts)]
+    shown = ", ".join(refs[:8]) + (f" and {len(refs) - 8} more" if len(refs) > 8 else "")
+    return {"severity": "warning", "code": "rays_unintersected", "location": refs[0],
+            "message": f"the kernel failed to intersect {sum(counts.values())} ray(s) with {len(refs)} face(s) of "
+                       f"{part.owner or part.name or 'the part'} ({shown}): a crossing of those faces was not found, "
+                       "so a wall, gap or reach measured across them is not measured there",
+            "hint": "rebuild the faulty face (its surface has a degenerate patch the kernel cannot intersect), then "
+                    "check again"}
 
 
 class Rays:
@@ -734,6 +1298,7 @@ class Rays:
             low, high = box.CornerMin(), box.CornerMax()
             self.boxes[index] = (low.X(), low.Y(), low.Z(), high.X(), high.Y(), high.Z())
         self._intersectors: dict[int, Any] = {}
+        self.screen = Screen(self.faces, size)
 
     def _candidates(self, o: np.ndarray, d: np.ndarray, start: float, end: float) -> tuple[np.ndarray, np.ndarray]:
         """The faces whose boxes the ray meets between ``start`` and ``end``, nearest first, and where it
@@ -756,9 +1321,7 @@ class Rays:
     def _intersector(self, index: int) -> Any:
         found = self._intersectors.get(index)
         if found is None:
-            from OCP.IntCurvesFace import IntCurvesFace_Intersector
-
-            found = self._intersectors[index] = IntCurvesFace_Intersector(self.faces[index], self._tolerance)
+            found = self._intersectors[index] = Intersector(self.faces[index], self._tolerance, self.screen, index)
         return found
 
     def _crossings(self, origin: Iterable[float], direction: Iterable[float], start: float, end: float,
@@ -771,6 +1334,7 @@ class Rays:
         d = np.asarray(list(direction), dtype=float)
         d = d / (np.linalg.norm(d) or 1.0)
         candidates, entries = self._candidates(o, d, start, end)
+        candidates, entries = self.screen.order(o, d, candidates, entries, start, end)
         if not len(candidates):
             return []
         line = gp_Lin(gp_Pnt(*o), gp_Dir(*d))

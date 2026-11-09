@@ -766,5 +766,181 @@ class CheckpointTest(unittest.TestCase):
                         _dfm_check.measure("step", path, process, resolved, False)
 
 
+def _lofted() -> bd.Shape:
+    """A free-form part: a loft through three sections (two B-spline faces), a slot cut across it."""
+    a = bd.Sketch() + bd.Ellipse(20, 12)
+    b = bd.Pos(3, 2, 25) * (bd.Sketch() + bd.Ellipse(12, 16))
+    c = bd.Pos(-2, 0, 50) * (bd.Sketch() + bd.Circle(9))
+    return bd.loft([a.faces()[0], b.faces()[0], c.faces()[0]]) - bd.Pos(0, 0, 25) * bd.Box(8, 60, 6)
+
+
+class ExactRaysTest(unittest.TestCase):
+    """Exact rays cost what they must (``brep.Screen``, ``brep.Intersector``) and answer what the kernel's own
+    intersector answers, ray for ray: the screen leaves out only faces a ray cannot cross, and the fast
+    intersector stands in for the full one only where the line passes no boundary it could be accepted at."""
+
+    def test_rays_answer_as_the_kernel_s_intersector_and_skip_faces_they_cannot_cross(self) -> None:
+        from unittest import mock
+
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector
+
+        shape = _lofted()
+        part = brep.Part("p", "p", shape)
+        samples = [sample for face in part.faces() for sample in brep.samples(face, 24)]
+        rng = np.random.default_rng(7)
+        rays = []
+        for sample in samples:
+            turned = rng.normal(size=3)
+            rays += [(sample.point, -sample.normal), (sample.point, sample.normal),
+                     (sample.point, turned / np.linalg.norm(turned))]
+        # every free-form face heavy (``brep.HEAVY_EDGES``): the screen and the fast intersector on both B-splines
+        heavy = mock.patch.object(brep, "HEAVY_EDGES", 1)
+        heavy.start()
+        self.addCleanup(heavy.stop)
+        fast, plain = brep.Rays(shape), brep.Rays(shape)
+        plain.screen.order = lambda o, d, c, e, s, en: (c, e)  # type: ignore[method-assign]
+        performed = {"fast": 0, "plain": 0}
+
+        def kernel(index: int) -> object:
+            found = plain._intersectors.get(index)
+            if found is None:
+                found = plain._intersectors[index] = IntCurvesFace_Intersector(plain.faces[index], 1e-7)
+            performed["plain"] += 1
+            return found
+
+        plain._intersector = kernel  # type: ignore[method-assign]
+        counting = fast._intersector
+
+        def counted(index: int) -> object:
+            performed["fast"] += 1
+            return counting(index)
+
+        fast._intersector = counted  # type: ignore[method-assign]
+        for origin, direction in rays:
+            a, b = fast.first(origin, direction, skip=1e-6), plain.first(origin, direction, skip=1e-6)
+            self.assertEqual(a is None, b is None)
+            if a is not None and b is not None:
+                # the same crossing; near a boundary found on the stretch there, to the root's last digits
+                self.assertAlmostEqual(a[0], b[0], delta=1e-12 * max(1.0, b[0]))
+                self.assertTrue(a[1].IsSame(b[1]))
+        for origin, direction in rays[:200]:
+            mine, kernel = fast.intervals(origin, direction), plain.intervals(origin, direction)
+            self.assertEqual(len(mine), len(kernel))
+            for (p, q), (r, t) in zip(mine, kernel):
+                self.assertAlmostEqual(p, r, delta=1e-12 * max(1.0, abs(r)))
+                self.assertAlmostEqual(q, t, delta=1e-12 * max(1.0, abs(t)))
+        self.assertTrue(fast.screen.heavy.any())
+        self.assertLess(performed["fast"], performed["plain"])
+
+    def test_a_face_the_kernel_cannot_intersect_is_said_and_the_family_completes(self) -> None:
+        from unittest import mock
+
+        from OCP.Standard import Standard_Failure
+
+        import cad.build123d as cb
+
+        shape = bd.Box(30, 20, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 6)
+        shape.label = "tray"
+        original = brep.Intersector.Perform
+
+        class Broken:
+            """The kernel's intersector failing on every line, as OCCT does on a degenerate surface patch."""
+
+            def Perform(self, *args: object) -> None:  # noqa: N802 - the kernel's name
+                raise Standard_Failure("the kernel failed")
+
+        def one_face_fails(self: brep.Intersector, line: object, start: float, end: float) -> None:
+            if self._index == 0:
+                self._full, self._fast = Broken(), None
+            original(self, line, start, end)
+
+        for process, check in (("cnc", lambda: cb.cnc(shape, material="aluminum")),
+                               ("sheet", lambda: cb.sheet_metal(shape, material="aluminum")),
+                               ("printing", lambda: cb.printing(shape, technology="fdm"))):
+            with self.subTest(process=process), mock.patch.object(brep.Intersector, "Perform", one_face_fails):
+                result = check()
+                self.assertFalse(result.measurements.get("partial_sections"), result.measurements.get("partial_sections"))
+                said = [finding for finding in result.findings if finding.code == "rays_unintersected"]
+                self.assertEqual(len(said), 1, [finding.code for finding in result.findings])
+                self.assertIn("tray/face 1", said[0].message)
+
+
+def _bracket() -> bd.Shape:
+    """A plate with a pocket and a hole: a part with something in every cnc family."""
+    plate = bd.Box(40, 24, 8) - bd.Pos(-7.5, 0, 2) * bd.Box(14, 12, 4) - bd.Pos(12, 0, 0) * bd.Cylinder(3, 8)
+    return plate.fillet(1.0, plate.edges().group_by(bd.Axis.Z)[-1])
+
+
+class CopiesTest(unittest.TestCase):
+    """An assembly's parts that are one geometry moved (``brep.copies``) are measured once, and every copy's
+    items are said at its own refs and places: a row of copies costs one part's measurement, and reads as the
+    same parts each measured alone."""
+
+    PLACES = ((0, 0, 0, 0), (70, 0, 0, 0), (0, 60, 0, 90), (-70, -10, 15, 180))
+
+    def _kit(self, shape: bd.Shape) -> bd.Compound:
+        parts = []
+        for index, (x, y, z, turn) in enumerate(self.PLACES):
+            placed = bd.Pos(x, y, z) * bd.Rot(0, 0, turn) * shape
+            placed.label = f"b{index}"
+            parts.append(placed)
+        kit = bd.Compound(children=parts)
+        kit.label = "kit"
+        return kit
+
+    def test_copies_are_found_with_their_motion(self) -> None:
+        kit = self._kit(_bracket())
+        other = bd.Pos(0, -60, 0) * bd.Box(40, 24, 8)
+        other.label = "other"
+        document = brep.parts_of(bd.Compound(children=[*kit.children, other]), "kit")
+        found = brep.copies(document.parts)
+        self.assertEqual(sorted(found), [1, 2, 3])
+        self.assertTrue(all(found[k].of == 0 and found[k].proper for k in found))
+        corner = np.array([20.0, 12.0, 4.0])
+        np.testing.assert_allclose(found[2].point(corner), [-12.0, 80.0, 4.0], atol=1e-9)
+        np.testing.assert_allclose(found[3].point(corner), [-90.0, -22.0, 19.0], atol=1e-9)
+
+    def test_a_row_of_copies_costs_one_part_and_reads_as_its_first_moved(self) -> None:
+        from unittest import mock
+
+        import cad.build123d as cb
+        from cad.build123d import _dfm_cnc, _dfm_sheet
+
+        kit = self._kit(_bracket())
+        for process, module, name, check in (
+                ("cnc", _dfm_cnc, "_measure_part", lambda shape: cb.cnc(shape, material="aluminum")),
+                ("sheet", _dfm_sheet, "_part", lambda shape: cb.sheet_metal(shape, material="aluminum"))):
+            with self.subTest(process=process):
+                real = getattr(module, name)
+                with mock.patch.object(module, name, side_effect=real) as measured:
+                    together = check(kit)
+                self.assertEqual(measured.call_count, 1)
+                self.assertEqual(together.measurements.get("partial_sections"), [])
+                alone = check(bd.Compound(children=[self._kit(_bracket()).children[0]], label="kit"))
+                for family, value in alone.measurements.items():
+                    if not isinstance(value, dict) or not value.get("items"):
+                        continue
+                    first = [item for item in value["items"] if str(item.get("location", "")).startswith("b0/")]
+                    for index, (x, y, z, turn) in enumerate(self.PLACES):
+                        theirs = [item for item in together.measurements[family]["items"]
+                                  if str(item.get("location", "")).startswith(f"b{index}/")]
+                        self.assertEqual(sorted(item["location"].split("/", 1)[1] for item in theirs),
+                                         sorted(item["location"].split("/", 1)[1] for item in first), family)
+                        c, s_ = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+                        turn_xy = np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]])
+                        for a in theirs:
+                            # its first's item at the same face, of the same figures, moved onto it
+                            alike = [item for item in first if item["location"].split("/", 1)[1]
+                                     == a["location"].split("/", 1)[1] and all(
+                                         item.get(k) == a.get(k) for k in a if type(a[k]) in (int, float)
+                                         or k in ("kind", "reason"))]
+                            self.assertTrue(alike, (family, a))
+                            if a.get("xyz") is not None:
+                                gaps = [float(np.linalg.norm(np.array(a["xyz"]) - (turn_xy @ np.array(b["xyz"])
+                                                                                    + np.array([x, y, z]))))
+                                        for b in alike]
+                                self.assertLess(min(gaps), 2e-4, (family, a))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -404,7 +404,6 @@ class _Geometry:
         by every face's box at once; then each meets its candidate faces exactly, nearest box first, until no
         nearer crossing can follow."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
-        from OCP.IntCurvesFace import IntCurvesFace_Intersector
         from OCP.Standard import Standard_Failure
 
         o_all = np.asarray(origins, dtype=float).reshape(-1, 3)
@@ -470,6 +469,10 @@ class _Geometry:
                 # out of the exact intersections -- a ray through a row of contacts tests the few it hits.
                 crosses = self._mesh_crosses(ray, face, o_all, d_all)
                 ray, face, enter = ray[crosses], face[crosses], enter[crosses]
+                # a free-form face's triangulation screens the rest, and bounds where each ray can cross it
+                can, near = rays.screen.pairs(o_all, d_all, ray, face, skip, 1e9)
+                ray, face = ray[can], face[can]
+                enter = np.where(np.isnan(near[can]), enter[can], np.maximum(enter[can], np.nan_to_num(near[can])))
             order = np.lexsort((enter, ray))
             ray, face, enter = ray[order], face[order], enter[order]
             cuts = np.flatnonzero(np.diff(ray)) + 1
@@ -486,8 +489,8 @@ class _Geometry:
                     candidate = int(face[k])
                     intersector = self._intersectors.get(candidate)
                     if intersector is None:
-                        intersector = self._intersectors[candidate] = IntCurvesFace_Intersector(
-                            rays.faces[candidate], 1e-7)
+                        intersector = self._intersectors[candidate] = _dfm_brep.Intersector(
+                            rays.faces[candidate], 1e-7, rays.screen, candidate)
                     try:
                         intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
                     except Standard_Failure:
@@ -998,7 +1001,8 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "unsearched_count": releases.count("unknown"),
         "items": items[:_ITEMS],
     }
-    missed = sum(geo.unintersected for geo in geos)
+    missed = sum(geo.unintersected + sum((geo._rays.screen.failed if geo._rays is not None else {}).values())
+                 for geo in geos)
     if missed:
         # Said, never hidden: a crossing not found may be a blocker missed, so the trapped area may be low.
         result["unintersected_rays"] = missed
