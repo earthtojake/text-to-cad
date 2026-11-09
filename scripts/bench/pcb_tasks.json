@@ -1,0 +1,654 @@
+{
+  "about": "The tasks pcb_bench.py prepares and grades, on the projects of pcb_corpus.json. `prompt` is what a person would ask, written to PROMPT.md in the run folder; `mutations` seed faults into the fetched project before the run, as text edits of its files (delete an item by its own uuid, strip a net's copper, move a part, edit inside an item); `checks` grade the finished folder against the untouched corpus project (DRC and ERC no worse kind by kind, the same connections, parts where they were, a part where asked, a net routed or renamed, a review naming the seeded faults); `rebuild` grades a build project on its sources built again; `reference` is a fix that passes them, and `proof` says how the checks were shown to fail on the seeded run and pass on the reference.",
+  "tasks": [
+    {
+      "id": "ecc83-reconnect",
+      "project": "ecc83",
+      "kind": "fix_drc",
+      "prompt": "I was tidying up the copper on ecc83-pp_v2.kicad_pcb and now KiCad's DRC fails. Get the board passing DRC again without changing the circuit or moving any parts.",
+      "mutations": [
+        {
+          "op": "delete",
+          "file": "ecc83-pp_v2.kicad_pcb",
+          "uuids": [
+            "75d83ffa-ca0d-43f8-b0ce-de2fc9158449",
+            "f234c2ce-9b86-4ee2-a191-d9362243fb18"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "net_routed",
+          "net": "Net-(P4-PM)"
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "parts_unmoved"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "ecc83-pp_v2.kicad_pcb"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails drc_no_worse (unconnected 0 -> 1), net_routed; the reference (the original board restored) passes every check."
+    },
+    {
+      "id": "ecc83-move-hole",
+      "project": "ecc83",
+      "kind": "move_part",
+      "prompt": "On ecc83-pp_v2.kicad_pcb, move the top-right mounting hole P6 5 mm to the left, to (160.1, 93.98) mm, so it clears a rib in the enclosure. Leave every other part where it is and keep the board passing DRC.",
+      "checks": [
+        {
+          "check": "part_at",
+          "ref": "P6",
+          "at": [
+            160.1,
+            93.98
+          ]
+        },
+        {
+          "check": "parts_unmoved",
+          "except": [
+            "P6"
+          ]
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "drc_no_worse"
+        }
+      ],
+      "reference": [
+        {
+          "op": "move_part",
+          "file": "ecc83-pp_v2.kicad_pcb",
+          "ref": "P6",
+          "at": [
+            160.1,
+            93.98
+          ]
+        },
+        {
+          "op": "refill",
+          "file": "ecc83-pp_v2.kicad_pcb"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails part_at; the reference (P6 moved to (160.1, 93.98) and the pours refilled by KiCad; moved without the refill, drc_no_worse fails on the stale GND pour (clearance, solder_mask_bridge)) passes every check."
+    },
+    {
+      "id": "stackchan-erc",
+      "project": "stackchan_pantilt",
+      "kind": "fix_erc",
+      "prompt": "ERC on m5-pantilt.kicad_sch started failing after my last edit of the schematic. Fix the schematic so ERC is as clean as it was, with the circuit still matching the board.",
+      "mutations": [
+        {
+          "op": "delete",
+          "file": "m5-pantilt.kicad_sch",
+          "uuids": [
+            "334550f0-85e3-47b8-bcfc-51acfcf5f3ac"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "erc_no_worse"
+        },
+        {
+          "check": "sch_nets_same"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "m5-pantilt.kicad_sch"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails erc_no_worse, sch_nets_same; the reference (the original schematic restored) passes every check."
+    },
+    {
+      "id": "pic-sheet-label",
+      "project": "pic_programmer",
+      "kind": "fix_erc",
+      "prompt": "Since I edited the sockets sheet (pic_sockets.kicad_sch), ERC on pic_programmer.kicad_sch reports problems it did not before. Fix the schematic so ERC is back to how it was and the programmer's connections are what they were.",
+      "mutations": [
+        {
+          "op": "edit",
+          "file": "pic_sockets.kicad_sch",
+          "uuid": "9dbbe1e8-9196-4699-8087-a7d318f4a263",
+          "from": "\"DATA-RB7\"",
+          "to": "\"DATA_RB7\""
+        }
+      ],
+      "checks": [
+        {
+          "check": "erc_no_worse"
+        },
+        {
+          "check": "sch_nets_same"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "pic_sockets.kicad_sch"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails erc_no_worse, sch_nets_same; the reference (the original sockets sheet restored) passes every check."
+    },
+    {
+      "id": "interf-rename-net",
+      "project": "interf_u",
+      "kind": "renet",
+      "prompt": "Rename the net MATCHL to ADDR_MATCH, in the schematic (interf_u.kicad_sch) and on the board (interf_u.kicad_pcb), keeping every connection as it is.",
+      "checks": [
+        {
+          "check": "sch_net_named",
+          "net": "/ADDR_MATCH",
+          "was": "/MATCHL"
+        },
+        {
+          "check": "board_net_named",
+          "net": "/ADDR_MATCH",
+          "was": "/MATCHL"
+        },
+        {
+          "check": "sch_nets_same",
+          "rename": {
+            "/MATCHL": "/ADDR_MATCH"
+          }
+        },
+        {
+          "check": "connectivity_same",
+          "rename": {
+            "/MATCHL": "/ADDR_MATCH"
+          }
+        },
+        {
+          "check": "erc_no_worse"
+        },
+        {
+          "check": "drc_no_worse"
+        }
+      ],
+      "reference": [
+        {
+          "op": "replace_all",
+          "file": "interf_u.kicad_sch",
+          "from": "MATCHL",
+          "to": "ADDR_MATCH"
+        },
+        {
+          "op": "replace_all",
+          "file": "interf_u.kicad_pcb",
+          "from": "MATCHL",
+          "to": "ADDR_MATCH"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails sch_net_named, board_net_named, sch_nets_same, connectivity_same; the reference (MATCHL replaced by ADDR_MATCH in the schematic and the board) passes every check."
+    },
+    {
+      "id": "easyduino-review",
+      "project": "easyduino_nano",
+      "kind": "review",
+      "prompt": "I'm about to send Easyduino_Atmega_Nano.kicad_pcb to the fab. Review the board and write what is wrong with it in REVIEW.md: for each problem, the parts or nets involved and where it is. Don't change the design files.",
+      "mutations": [
+        {
+          "op": "delete",
+          "file": "Easyduino_Atmega_Nano.kicad_pcb",
+          "uuids": [
+            "3d8f4c5a-5e60-43c1-9839-138a70375a51",
+            "0e79e03b-7ad4-451b-93dc-cc3d958e09f6"
+          ]
+        },
+        {
+          "op": "move_part",
+          "file": "Easyduino_Atmega_Nano.kicad_pcb",
+          "ref": "R6",
+          "at": [
+            156.43,
+            98.97
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "files_unchanged",
+          "except": [
+            "REVIEW.md"
+          ]
+        },
+        {
+          "check": "review_names",
+          "file": "REVIEW.md",
+          "faults": [
+            {
+              "id": "ADC7 via removed",
+              "any": [
+                "ADC ?7"
+              ]
+            },
+            {
+              "id": "CC2 track removed",
+              "any": [
+                "CC ?2"
+              ]
+            },
+            {
+              "id": "R6 moved onto R7",
+              "any": [
+                "\\bR6\\b"
+              ]
+            }
+          ]
+        }
+      ],
+      "reference": [
+        {
+          "op": "write",
+          "file": "REVIEW.md",
+          "text": "# Review\n\n1. /ADC7 is not connected: its via at (166.1, 101.0) is missing, so U1 pin 22 no longer reaches A1 pin 26.\n2. /CC2 is not connected: the track from J1 B5 to R2 is missing.\n3. R6 sits on top of R7 (courtyards overlap, its pads short to R7's) and is off its tracks.\n"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails review_names (no REVIEW.md); the reference (a REVIEW.md naming the three faults; the seeded board's DRC shows each (4 unconnected, R6/R7 courtyards, clearance and short)) passes every check."
+    },
+    {
+      "id": "bitaxe-route-rx",
+      "project": "bitaxe_ultra",
+      "kind": "route_net",
+      "prompt": "The /RX net on bitaxeUltra.kicad_pcb (U2 pin 13 to the ESP32-S3, U12 pin 11) has no copper any more. Route it again so the board passes DRC as before, without moving parts or touching other nets.",
+      "mutations": [
+        {
+          "op": "strip_net",
+          "file": "bitaxeUltra.kicad_pcb",
+          "net": "/RX"
+        }
+      ],
+      "checks": [
+        {
+          "check": "net_routed",
+          "net": "/RX"
+        },
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "parts_unmoved"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "bitaxeUltra.kicad_pcb"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails net_routed, drc_no_worse (unconnected 0 -> 1); the reference (the original routing restored) passes every check."
+    },
+    {
+      "id": "coldfire-bumped-part",
+      "project": "kit-dev-coldfire-xilinx_5213",
+      "kind": "fix_drc",
+      "prompt": "A part on kit-dev-coldfire-xilinx_5213.kicad_pcb got nudged and DRC fails now. Put the board right without changing the circuit.",
+      "mutations": [
+        {
+          "op": "move_part",
+          "file": "kit-dev-coldfire-xilinx_5213.kicad_pcb",
+          "ref": "C103",
+          "at": [
+            142.891,
+            112.395
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "parts_unmoved",
+          "except": [
+            "C102",
+            "C103"
+          ]
+        }
+      ],
+      "reference": [
+        {
+          "op": "move_part",
+          "file": "kit-dev-coldfire-xilinx_5213.kicad_pcb",
+          "ref": "C103",
+          "at": [
+            143.891,
+            112.395
+          ]
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails drc_no_worse (courtyards_overlap 0 -> 1); the reference (C103 moved back to (143.891, 112.395)) passes every check."
+    },
+    {
+      "id": "piantor-rename-net",
+      "project": "piantor_left",
+      "kind": "renet",
+      "prompt": "Rename the vbus_sense net to VBUS_SENSE in keyboard_pcb.kicad_sch and on the board, keyboard_pcb.kicad_pcb, so the names match our firmware. Nothing else should change.",
+      "checks": [
+        {
+          "check": "sch_net_named",
+          "net": "VBUS_SENSE",
+          "was": "vbus_sense"
+        },
+        {
+          "check": "board_net_named",
+          "net": "VBUS_SENSE",
+          "was": "vbus_sense"
+        },
+        {
+          "check": "sch_nets_same",
+          "rename": {
+            "vbus_sense": "VBUS_SENSE"
+          }
+        },
+        {
+          "check": "connectivity_same",
+          "rename": {
+            "vbus_sense": "VBUS_SENSE"
+          }
+        },
+        {
+          "check": "erc_no_worse"
+        },
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "parts_unmoved"
+        }
+      ],
+      "reference": [
+        {
+          "op": "replace_all",
+          "file": "keyboard_pcb.kicad_sch",
+          "from": "\"vbus_sense\"",
+          "to": "\"VBUS_SENSE\""
+        },
+        {
+          "op": "replace_all",
+          "file": "keyboard_pcb.kicad_pcb",
+          "from": "\"vbus_sense\"",
+          "to": "\"VBUS_SENSE\""
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails sch_net_named, board_net_named, sch_nets_same, connectivity_same; the reference (vbus_sense replaced by VBUS_SENSE in the schematic and the board) passes every check."
+    },
+    {
+      "id": "bms-route-rs485-de",
+      "project": "bms_c1",
+      "kind": "route_net",
+      "prompt": "The RS485 driver-enable line on bms-c1.kicad_pcb, net /ESP32-C3 MCU/RS485_DE from the ESP32-C3 (U5 pin 20) to the transceiver (U2 pin 3), lost its copper. Route it again; the board should pass DRC as it did, with no part moved.",
+      "mutations": [
+        {
+          "op": "strip_net",
+          "file": "bms-c1.kicad_pcb",
+          "net": "/ESP32-C3 MCU/RS485_DE"
+        }
+      ],
+      "checks": [
+        {
+          "check": "net_routed",
+          "net": "/ESP32-C3 MCU/RS485_DE"
+        },
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "parts_unmoved"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "bms-c1.kicad_pcb"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails net_routed, drc_no_worse (unconnected 0 -> 1); the reference (the original routing restored) passes every check."
+    },
+    {
+      "id": "cm5-missing-via",
+      "project": "cm5_minima",
+      "kind": "fix_drc",
+      "prompt": "After my last round of edits CM5_MINIMA_3.kicad_pcb has a new DRC problem. Find it and fix the board so DRC is as it was before, without moving parts or changing the circuit.",
+      "mutations": [
+        {
+          "op": "delete",
+          "file": "CM5_MINIMA_3.kicad_pcb",
+          "uuids": [
+            "45ef097f-e085-4d36-a4e3-68000287c7d8"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "drc_no_worse"
+        },
+        {
+          "check": "net_routed",
+          "net": "/CM5/CAM_GPIO0"
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "parts_unmoved"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "CM5_MINIMA_3.kicad_pcb"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails drc_no_worse (unconnected 0 -> 1), net_routed; the reference (the original board restored) passes every check."
+    },
+    {
+      "id": "hackrf-review",
+      "project": "hackrf_one",
+      "kind": "review",
+      "prompt": "Before we order another batch of hackrf-one.kicad_pcb (in hackrf-one/), review the board for anything broken and list each problem in REVIEW.md, at the top of this folder, naming the parts or nets involved and where they are. Don't edit the design.",
+      "mutations": [
+        {
+          "op": "strip_net",
+          "file": "hackrf-one/hackrf-one.kicad_pcb",
+          "net": "/baseband/CLK3"
+        },
+        {
+          "op": "delete",
+          "file": "hackrf-one/hackrf-one.kicad_pcb",
+          "uuids": [
+            "8919e3ca-a56b-44eb-bdca-b2fb81486208"
+          ]
+        },
+        {
+          "op": "move_part",
+          "file": "hackrf-one/hackrf-one.kicad_pcb",
+          "ref": "C4",
+          "at": [
+            91.5,
+            163.0468
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "files_unchanged",
+          "except": [
+            "REVIEW.md"
+          ]
+        },
+        {
+          "check": "review_names",
+          "file": "REVIEW.md",
+          "faults": [
+            {
+              "id": "CLK3 unrouted",
+              "any": [
+                "CLK ?3"
+              ]
+            },
+            {
+              "id": "TX_AMP_OUT track removed",
+              "any": [
+                "TX_AMP_OUT"
+              ]
+            },
+            {
+              "id": "C4 moved onto C1",
+              "any": [
+                "\\bC4\\b"
+              ]
+            }
+          ]
+        }
+      ],
+      "reference": [
+        {
+          "op": "write",
+          "file": "REVIEW.md",
+          "text": "# Review\n\n1. /baseband/CLK3 has no copper: R33 pin 2 and U19 pin 8 are unconnected.\n2. /frontend/TX_AMP_OUT is open: the track from C62 pin 1 to U14 pin 4 is missing.\n3. C4 has been moved onto C1 near (91.5, 163.0): its VAA pad overlaps C1's VCC pad and it is off its tracks.\n"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails review_names (no REVIEW.md); the reference (a REVIEW.md naming the three faults; the seeded board's DRC shows each (3 unconnected, C4 shorting VAA to VCC)) passes every check."
+    },
+    {
+      "id": "tinytapeout-erc",
+      "project": "tiny_tapeout",
+      "kind": "fix_erc",
+      "prompt": "ERC on tinytapeout-demo.kicad_sch got worse after I cleaned up the root sheet. Fix the schematic so ERC is no worse than it was and the circuit is unchanged.",
+      "mutations": [
+        {
+          "op": "delete",
+          "file": "tinytapeout-demo.kicad_sch",
+          "uuids": [
+            "a9c83093-0684-4454-987a-cb239888da03"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "check": "erc_no_worse"
+        },
+        {
+          "check": "sch_nets_same"
+        }
+      ],
+      "reference": [
+        {
+          "op": "restore",
+          "file": "tinytapeout-demo.kicad_sch"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails erc_no_worse, sch_nets_same; the reference (the original schematic restored) passes every check."
+    },
+    {
+      "id": "macropad-move-knob",
+      "project": "macropad",
+      "kind": "build_edit",
+      "rebuild": true,
+      "prompt": "Move Nine's rotary encoder (SW10) 2 mm to the left, so its shaft sits at x = 119 mm, to clear the case lip. The board is generated by the scripts in this folder: make the change in the source and rebuild, keeping the board passing DRC.",
+      "checks": [
+        {
+          "check": "part_at",
+          "ref": "SW10",
+          "at": [
+            116.5,
+            68.0
+          ],
+          "tolerance": 0.01
+        },
+        {
+          "check": "parts_unmoved",
+          "except": [
+            "SW10"
+          ]
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "drc_no_worse"
+        }
+      ],
+      "reference": [
+        {
+          "op": "edit",
+          "file": "scripts/board_common.py",
+          "from": "ENC_SHAFT = (121.0, 60.5)",
+          "to": "ENC_SHAFT = (119.0, 60.5)"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails part_at (the unchanged sources rebuild SW10 at 118.5, 68); the reference (ENC_SHAFT set to (119.0, 60.5) in scripts/board_common.py, rebuilt: DRC 0 errors as the original build) passes every check."
+    },
+    {
+      "id": "orbit-mount-radius",
+      "project": "orbit_clock",
+      "kind": "build_edit",
+      "rebuild": true,
+      "prompt": "Bring Orbit's four mounting holes in to a 42 mm radius from the board's centre (they are at 42.5 mm) to match the new stand. The board is made by this folder's scripts: change the source, rebuild, and keep the board passing DRC.",
+      "checks": [
+        {
+          "check": "parts_on_circle",
+          "refs": [
+            "H1",
+            "H2",
+            "H3",
+            "H4"
+          ],
+          "centre": [
+            100.0,
+            100.0
+          ],
+          "radius": 42.0,
+          "tolerance": 0.01
+        },
+        {
+          "check": "parts_unmoved",
+          "except": [
+            "H1",
+            "H2",
+            "H3",
+            "H4"
+          ]
+        },
+        {
+          "check": "connectivity_same"
+        },
+        {
+          "check": "drc_no_worse"
+        }
+      ],
+      "reference": [
+        {
+          "op": "edit",
+          "file": "scripts/geometry.py",
+          "from": "MOUNT_R, MOUNT_ANGLES = 42.5,",
+          "to": "MOUNT_R, MOUNT_ANGLES = 42.0,"
+        }
+      ],
+      "proof": "pcb_bench.py selftest, 2026-11-09: the seeded run fails parts_on_circle (the unchanged sources rebuild them at 42.5 mm); the reference (MOUNT_R set to 42.0 in scripts/geometry.py, rebuilt: DRC 0 errors as the original build) passes every check."
+    }
+  ]
+}

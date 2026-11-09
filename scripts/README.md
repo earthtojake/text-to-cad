@@ -269,9 +269,13 @@ hand when the studio or the look changes.
 `bench/` — manual measurements, never run in CI ([`bench/README.md`](bench/README.md)):
 `corpus_bench.py`, the corpus batch (the xbf engine's cold, no-op, edit, revert and
 restart builds of the models in `corpus.json`, then each document's whole mesh and a
-snapshot); and `occt_parity.py`, the viewer against
-OCCT, mode by mode. Their reports are local output under `tmp/`, never committed here;
-only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`).
+snapshot); `occt_parity.py`, the viewer against
+OCCT, mode by mode; and the PCB benchmark: `pcb_fetch.py` downloads the KiCad projects
+`pcb_corpus.json` pins (and builds this repository's ECAD samples) into `tmp/pcb-corpus/`,
+and `pcb_bench.py` makes a run folder per task of `pcb_tasks.json` and grades what an agent
+left in it. Their reports are local output under `tmp/`, never committed here; only their
+pure helpers are tested (`tests/python/global/test_bench_helpers.py`,
+`tests/python/global/test_pcb_bench_helpers.py`).
 
 ## CI
 
