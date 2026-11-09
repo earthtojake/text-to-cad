@@ -1603,7 +1603,10 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
             for a in (0, 1):
                 other = mid_normals[1 - a]
                 for d in WORLD:
+                    # the wall rises from the root toward the tool, the other face falls away from it
                     if ok(d) and float(other @ d) > LOOKS_ALONG and model.along(faces[a], d) \
+                            and float(inward(st, count // 2, a) @ d) > SAME \
+                            and float(inward(st, count // 2, 1 - a) @ d) < 0.0 \
                             and bool(model.escape_all(st.points, bisectors, d).all()):
                         return made("end_mill", corner=True)
         # a keyseat cutter: the recess has a floor and a ceiling square to an approach direction, its way in a
