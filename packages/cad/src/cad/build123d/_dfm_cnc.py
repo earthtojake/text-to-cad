@@ -49,8 +49,9 @@ the machine frame's. The families, and how each is measured:
   turn); a chamfer mill along the bisector of a V between two planes; and an obtuse edge between two planes
   each seen from outside along its own normal, each side faced from its own direction. An obtuse edge (a void
   over ``OBTUSE_DEG``) adds no setup of its own, however it is made: it is made in the setups that make its
-  two faces, which the cover counts. On five simultaneous axes the tool's direction leans along the edge as
-  it goes (``LEANS_DEG``), a continuous path station to station. The end mill is tried from both faces
+  two faces, which the cover counts. On five simultaneous axes a chamfer mill's direction leans along the
+  edge as it goes (``LEANS_DEG``), a continuous path station to station; an end mill's stays its face's
+  normal. The end mill is tried from both faces
   before any cutter, the setups' ways last.
   Each unmade edge says why (``reason``: ``other_axes``, ``vertical_corner``, ``acute``, ``blocked``,
   ``no_square_face``, see ``_why``); a ball's crease is an item too (``made_by`` ``ball_mill``, its round's
@@ -150,7 +151,7 @@ WALK_STEPS = 64
 #: An edge's needs: each a list of directions any one of which meets it (an end mill's or a chamfer mill's,
 #: with whether the machine has it); the edge is made when every need is met.
 Needs = list[list[tuple[np.ndarray, bool]]]
-#: On five simultaneous axes the tool leans along the edge as it goes: by one of these (degrees, toward the
+#: On five simultaneous axes a chamfer mill leans along the edge as it goes: by one of these (degrees, toward the
 #: edge's way), the lean turning by at most ``LEAN_STEP_DEG`` station to station. Own figures.
 LEANS_DEG = (0.0, -10.0, 10.0, -20.0, 20.0, -30.0, 30.0, -40.0, 40.0)
 LEAN_STEP_DEG = 20.0
@@ -298,7 +299,7 @@ def _one_cause(model: Model, index: int, state: dict[str, Any], families: dict[s
     for item in [item for item in families.get("gaps", []) if item.get("_model") == index]:
         pair = {item["_face"], item["_opposite"]}
         for special in specials:
-            if pair <= (special.get("_faces") or set()) and _floor_and_ceiling(model, *pair):
+            if len(pair) == 2 and pair <= (special.get("_faces") or set()) and _floor_and_ceiling(model, *pair):
                 item["made_by"] = "slot_cutter"
                 item["cutter_recess"] = special["location"]
         for pocket in pockets:
@@ -1217,8 +1218,9 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     on the other, which lies along it, seen from outside (a profile's corner side-milled, whatever the turn);
     a chamfer mill along the bisector of a V of its angle; and an obtuse edge (a void over 90 degrees)
     between two planes each seen from outside along its own normal, each side faced from its own direction
-    (the tool's corner forms the edge, the other face leaning away). On five simultaneous axes an end mill's
-    or a chamfer mill's direction may lean along the edge as it goes (``path_reach``). The directions an end
+    (the tool's corner forms the edge, the other face leaning away). On five simultaneous axes a chamfer
+    mill's direction may lean along the edge as it goes (``path_reach``); an end mill's axis stays its plane
+    face's normal. The directions an end
     mill or a chamfer mill needs go to ``directions`` under the edge's ordinal (``Needs``), a square corner's
     and a V's, never an obtuse edge's (it is made in its faces' setups); where no way reaches every station,
     the stations any reaches go to ``partial``."""
@@ -1263,7 +1265,9 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
         ok_at = np.zeros((count, len(leans)), dtype=bool)
         for j, lean in enumerate(leans):
             ways = np.array([unit(math.cos(lean) * b + math.sin(lean) * t) for b, t in zip(bases, st.tangents)])
-            ok_at[:, j] = [ok(w) and model.escapes(o, l, w) for o, l, w in zip(origins, lifts, ways)]
+            # any direction the machine has (a path through a machine axis is still a path: the question
+            # beyond the machine's axes is whether the edge is made, and the fixed directions already failed)
+            ok_at[:, j] = [_allowed(state, w) and model.escapes(o, l, w) for o, l, w in zip(origins, lifts, ways)]
         reached = np.zeros(count, dtype=bool)
         live = np.zeros(len(leans), dtype=bool)
         step = math.radians(LEAN_STEP_DEG) + 1e-9
@@ -1349,11 +1353,9 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
             machine = ok(na)
             if not machine and (beyond is not None or not model.along(faces[1 - a], na)):
                 continue
+            # an end mill's end on a plane fixes its axis to the plane's normal, on five axes too: leaned, it
+            # would gouge the face it is to leave flat
             reached = floor_reach(a, na)
-            if state["axes"] >= 5 and not reached.all():
-                # five simultaneous axes lean the tool along the edge as it goes
-                across = np.array([inward(k, a) for k in range(count)])
-                reached = path_reach(st.points + across * step, normals[a], np.tile(na, (count, 1)))
             if reached.all():
                 full.append((na, machine))
             tried.append(("end_mill", [[(na, machine)]], reached))
@@ -1411,16 +1413,18 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
 
     def chamfer_reach() -> np.ndarray:
         if straight_v:
-            found = model.escape_all(st.points, bisectors, bisector)
-            if state["axes"] < 5 or found.all():
-                return found
+            # a straight V's bisector is one direction: five axes present it as three do, with no lean
+            return model.escape_all(st.points, bisectors, bisector)
+        # a curved V's turns along it: on five axes the mill follows it, leaning as it goes
         return path_reach(st.points, bisectors, bisectors)
 
-    if v_mill and ok(bisector):
+    if v_mill and (ok(bisector) or not straight_v):
+        # a curved V (five axes alone) follows its bisector along it: no one direction to count as a setup
+        needs = [[(bisector, True)]] if straight_v else []
         reached = chamfer_reach()
         if reached.all():
-            return made("chamfer_mill", [[(bisector, True)]])
-        tried.append(("chamfer_mill", [[(bisector, True)]], reached))
+            return made("chamfer_mill", needs)
+        tried.append(("chamfer_mill", needs, reached))
     mid = np.asarray(edge.midpoint)
     shoulder = next((angle for angle in V_MILLS if abs(void - (180.0 - angle / 2.0)) < 0.5), None)
     if shoulder is not None:

@@ -665,6 +665,17 @@ class SideMillTest(unittest.TestCase):
                 counts.append(setup["setup_count"])
         self.assertEqual(set(counts), {counts[0]})
 
+    def test_five_axes_follow_a_curved_v_three_present_one_direction(self) -> None:
+        # a 90 deg V groove around a shaft: its bisector turns all the way round, no one direction makes it; five
+        # simultaneous axes follow it with a chamfer mill, three only warn that more axes would
+        shaft = bd.Cylinder(10, 40) - bd.revolve(bd.Plane.XZ * bd.make_face(
+            bd.Polyline((7, 0), (10.5, 3.5), (10.5, -3.5), close=True)), bd.Axis.Z)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            three = cnc(_part(turn * shaft), material="aluminum")
+            self.assertEqual([i["reason"] for i in three.measurements["sharp_edges"]["items"]], ["other_axes"], turn)
+            five = cnc(_part(turn * shaft), material="aluminum", axes=5)
+            self.assertEqual(five.measurements["sharp_edges"]["by_tool"], {"chamfer_mill": 1}, turn)
+
     def test_a_hex_socket_s_pointed_floor_adds_no_setup(self) -> None:
         # a hex socket with a six-facet pyramid floor: its facets' creases are obtuse, made in the setup that
         # reaches the socket; the count is the flat-floored socket's

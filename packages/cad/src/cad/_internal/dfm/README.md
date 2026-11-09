@@ -343,8 +343,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   from its own direction (the tool's corner forms the edge, the other face leaning away: a 140 degree
   valley's, a 100 or 120 degree profile root's). An obtuse edge (void over 90.5, `OBTUSE_DEG`) adds no setup of
   its own, however it is made: it is made in the setups that make its two faces, which the cover counts (a
-  root reads one count at any turn; a hex socket's pyramid floor adds none). On five axes (simultaneous) an end
-  mill's or a chamfer mill's direction leans along the edge as it goes, up to 40 deg toward its way, by at
+  root reads one count at any turn; a hex socket's pyramid floor adds none). On five axes (simultaneous) a chamfer
+  mill's direction leans along the edge as it goes (an end mill's axis stays its plane face's normal: leaned,
+  it would gouge it), up to 40 deg toward its way, by at
   most 20 deg station to station (`LEANS_DEG`, own figures): a continuous path, not one direction for all 9
   stations (on 3 and 3+2 axes, one direction an edge). A gear's curved roots and a closed pocket's corners
   stay unmade. `by_tool` counts every concave edge by the tool. A recess a special cutter makes takes in the
