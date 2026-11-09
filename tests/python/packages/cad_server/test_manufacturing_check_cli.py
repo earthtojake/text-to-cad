@@ -80,15 +80,27 @@ class ManufacturingCheckCommand(unittest.TestCase):
     def test_molding_answers_one_json_line_with_its_measurements(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "molding", "--pull", "-z", "--json")
         payload = json.loads(out)
-        # A plain box has no draft: the rules fail it (exit 1) and say where.
-        self.assertEqual(code, 1)
+        # A plain box has no draft: a recommendation, so it passes (exit 0) with warnings that say where.
+        self.assertEqual(code, 0, out)
         self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
-        self.assertFalse(payload["ok"])
-        self.assertIn("molding.draft_min", [f["code"] for f in payload["findings"] if f["severity"] == "error"])
+        self.assertTrue(payload["ok"])
+        self.assertIn("molding.draft_min", [f["code"] for f in payload["findings"] if f["severity"] == "warning"])
+        self.assertEqual([f["code"] for f in payload["findings"] if f["severity"] == "error"], [])
         self.assertEqual(payload["measurements"]["draft"]["pull_axis"], [0.0, 0.0, -1.0], "--pull -z reached argparse")
         finding = next(f for f in payload["findings"] if f["code"] == "zero_draft_walls")
         self.assertEqual((finding["severity"], len(finding["location"].split(", "))), ("warning", 3))
         self.assertEqual(pull_value(["p.stl", "--pull", "-z"]), ["p.stl", "--pull=-z"])
+
+    def test_a_part_that_fails_its_rules_exits_one_with_its_json_line(self) -> None:
+        """A box missing two triangles is open: no mold fills it, an error of every process (exit 1)."""
+        opened = self.folder / "open.stl"
+        box = trimesh.creation.box(extents=(20, 20, 15))
+        trimesh.Trimesh(box.vertices, box.faces[:-2], process=False).export(opened)
+        code, out, _ = _run("stl", str(opened), "--process", "molding", "--json")
+        payload = json.loads(out)
+        self.assertEqual((code, payload["ok"]), (1, False), out)
+        self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
+        self.assertIn("not_watertight", [f["code"] for f in payload["findings"] if f["severity"] == "error"])
 
     def test_printing_says_its_findings_then_its_summary(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "printing", "--angle-limit", "30")
