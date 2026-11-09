@@ -14,7 +14,7 @@ Every part of the document is measured along the pull on its B-rep, each finding
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
   it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
   or a boss's face, else wall), the thinnest faces refined to the exact least distance to a face across
-  (``_refine_thin``); **transitions**: each step read on its stepped side (two parallel faces at two
+  (``_refine_thin``) and the thickest to their greatest ball over the face (``_refine_thick``); **transitions**: each step read on its stepped side (two parallel faces at two
   wall offsets, the chain of faces between them: its run over the change, ``ops.steps``), and on a free-form
   face no step takes in the rolling ball's steepest change;
 - **ribs**: two opposite planar faces close together, both standing on one base face (a concave edge or
@@ -1087,7 +1087,87 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         nominal = ops.weighted_median(np.array([face["median"] for face in per_face.values()]),
                                       np.array([float(geo.areas[ordinal - 1]) for ordinal in per_face]))
         _refine_thin(geo, per_face, bound, owners, links)
+        if nominal:
+            _refine_thick(geo, per_face, float(nominal), cap, convex, values)
     return _Thickness(values, held, nominal, per_face)
+
+
+#: Faces whose thickest sampled ball reaches this share of the nominal wall have that thickest refined.
+_THICK_REFINED_SHARE = 1.2
+#: At most this many faces are refined, thickest first, each in at most this many rounds of eight trials.
+_THICK_REFINED_FACES = 32
+_THICK_ROUNDS = 24
+_THICK_STARTS = 4
+
+
+def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: float, cap: np.ndarray,
+                  convex: dict[int, set[int]], values: np.ndarray) -> None:
+    """The thickest faces' greatest ball found exactly over each face, not at its samples alone: a pattern
+    search over the face's own (u, v) from each of its ``_THICK_STARTS`` thickest samples, eight neighbours a
+    round, the step halved where none is thicker, each trial inside the face (its trimmed boundary; on it a convex edge's other face passes
+    through the point) and solved as the samples are (``ops.ball_thickness``), a ball held across a convex edge
+    of its face no wall's, as a sample's is not. Four alike blind holes' floors, sampled where each part's
+    placement put the points, read 2.6 to 3.1 mm against a true 4.0; refined, each reads it in every placement."""
+    from OCP.BRepClass import BRepClass_FaceClassifier
+    from OCP.BRepTools import BRepTools
+    from OCP.BRep import BRep_Tool
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+    from OCP.TopAbs import TopAbs_IN
+    from OCP.gp import gp_Pnt, gp_Pnt2d
+
+    vertices, triangles, owners = geo.mesh
+    order = sorted(((face["max"], ordinal) for ordinal, face in per_face.items()
+                    if face["max"] >= _THICK_REFINED_SHARE * nominal), reverse=True)
+    for _, ordinal in order[:_THICK_REFINED_FACES]:
+        checkpoint()
+        face = per_face[ordinal]
+        shape = geo.faces[ordinal - 1]
+        surface = BRep_Tool.Surface_s(shape.wrapped)
+        umin, umax, vmin, vmax = BRepTools.UVBounds_s(shape.wrapped)
+        mine = np.flatnonzero((geo.owner == ordinal) & np.isfinite(values))
+        starts = [geo.points[k] for k in mine[np.argsort(-values[mine])][:_THICK_STARTS]] or [np.asarray(face["at"])]
+        classifier = BRepClass_FaceClassifier()
+
+        def on_face(u: float, v: float) -> bool:
+            classifier.Perform(shape.wrapped, gp_Pnt2d(u, v), 1e-7)
+            return classifier.State() == TopAbs_IN
+
+        def thickness(uv: list[tuple[float, float]]) -> np.ndarray:
+            rows = [_dfm_brep.point_normal(shape, u, v) for u, v in uv]
+            pts = np.array([p for p, _ in rows])
+            nrm = np.array([n for _, n in rows])
+            ray = geo.cast(pts - nrm * geo.eps, -nrm) + geo.eps
+            read, held_by = ops.ball_thickness(pts, nrm, ray, vertices, triangles, others=geo.points,
+                                         point_face=np.full(len(pts), ordinal), triangle_face=owners,
+                                         others_face=geo.owner, cap=np.full(len(pts), cap[geo.owner == ordinal][0]
+                                                                            if (geo.owner == ordinal).any() else np.inf))
+            held = np.array([b >= 0 and int(owners[b]) in convex.get(ordinal, set()) for b in held_by], dtype=bool)
+            return np.where(np.isfinite(read) & ~held, read, -np.inf)
+
+        overall, overall_uv = -math.inf, None
+        for start in starts:
+            projected = GeomAPI_ProjectPointOnSurf(gp_Pnt(*np.asarray(start, dtype=float)), surface)
+            if projected.NbPoints() == 0:
+                continue
+            best_uv = projected.LowerDistanceParameters()
+            best = float(thickness([best_uv])[0])
+            du, dv = (umax - umin) / 4.0, (vmax - vmin) / 4.0
+            for _ in range(_THICK_ROUNDS):
+                if du < 1e-4 * max(umax - umin, 1e-12) and dv < 1e-4 * max(vmax - vmin, 1e-12):
+                    break
+                trials = [(best_uv[0] + a * du, best_uv[1] + b * dv) for a in (-1, 0, 1) for b in (-1, 0, 1) if a or b]
+                trials = [(u, v) for u, v in trials if on_face(u, v)]
+                read = thickness(trials) if trials else np.zeros(0)
+                if len(read) and float(read.max()) > best + 1e-9:
+                    k = int(np.argmax(read))
+                    best_uv, best = trials[k], float(read[k])
+                else:
+                    du, dv = du / 2.0, dv / 2.0
+            if best > overall:
+                overall, overall_uv = best, best_uv
+        if overall_uv is not None and overall > face["max"]:
+            face["max"] = overall
+            face["at"] = _dfm_brep.point_normal(shape, *overall_uv)[0]
 
 
 #: The thinnest faces (by their least sampled wall) refined to the exact least distance to a face across.
