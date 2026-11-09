@@ -161,12 +161,14 @@ def _kicode(state: _KiCad) -> dict[str, types.ModuleType]:
     root.KiCad = KiCad
     schematic = types.ModuleType("kicode.schematic")
     schematic.Schematic = Schematic
+    board = types.ModuleType("kicode.board")
+    board.Board = Board
     kinds = types.ModuleType("kicode.proto.common.types")
     kinds.DocumentType = types.SimpleNamespace(DOCTYPE_PCB="pcb", DOCTYPE_SCHEMATIC="schematic")
     libraries = types.ModuleType("kicode.proto.common.types.library_types_pb2")
     libraries.LibraryType = types.SimpleNamespace(LT_SYMBOL=SYMBOL)
     libraries.LibraryLoadStatus = types.SimpleNamespace(LLS_LOADED=LOADED)
-    return {"kicode": root, "kicode.schematic": schematic, "kicode.proto.common.types": kinds,
+    return {"kicode": root, "kicode.schematic": schematic, "kicode.board": board, "kicode.proto.common.types": kinds,
             "kicode.proto.common.types.library_types_pb2": libraries}
 
 

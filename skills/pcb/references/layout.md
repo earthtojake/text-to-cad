@@ -55,11 +55,14 @@ board at its block's end, and the next step reads what the last one saved. Each 
    thermal reliefs round dense small pads can neck below the minimum connection width
    (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
    Copper that overlaps another net's pad on any of its layers can be taken onto that pad's net when
-   KiCad saves: a ground stitching via through a supply pad on the far side becomes a supply via, with
-   any copper polygon joined to it, and DRC reports it as that net's copper, not as a short. Keep each
-   via and net polygon clear of other nets' pads on every layer it spans (a through via spans them
-   all), and after the save read back that each is still on the net you gave it (`board.vias`,
-   `board.shapes`: each item's `id` and `net`).
+   KiCad loads, edits or saves the board: a ground stitching via through a supply pad becomes a supply
+   via, with any copper polygon joined to it, and DRC reports it as that net's copper, not as a short.
+   Keep each via and net polygon clear of other nets' pads on every layer it spans (a through via spans
+   them all). The edit checks its save for this: each track, via, copper shape or zone saved on another
+   net than you gave it (or the file had) is a `warning: ... KiCad saved via #via:<uuid> on +9V, not GND:
+   it overlaps pad #J3.1 of +9V` on stderr, and one of `b.net_changes` after the block (`ref`, `was`,
+   `now`, `pad`). Treat each as an error: move the item clear of that pad and give it its net again in
+   the next edit; setting the net back alone does not hold while it still overlaps the pad.
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every
    step (below). Fix what it finds the same way.
 

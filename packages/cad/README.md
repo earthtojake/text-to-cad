@@ -703,7 +703,11 @@ One KiCad serves a project: the board's and the schematic's edits of one
 project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
-made is removed. Exports and checks of the edited file are explicit calls after the block.
+made is removed. Exports and checks of the edited file are explicit calls after the block. A board's save is
+checked for the nets KiCad moved: KiCad gives copper the net of a pad it overlaps on any layer, as it loads
+and commits, so each track, via, copper shape and zone saved on another net than the block gave it (else the
+file had) is a warning on stderr naming it (`#via:<uuid>`), both nets and the pad it overlaps, and is on the
+board after the block, `board.net_changes` (`cad.kicad._drift`).
 
 ## Manufacturing checks
 

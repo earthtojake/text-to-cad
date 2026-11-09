@@ -27,7 +27,10 @@ when KiCad's fails (it may have written some files of a hierarchy first), every 
 document, its project and, for a schematic, each sheet file of its hierarchy as KiCad holds it -- is put
 back as it was, a file it made is removed, and the edit raises ``KicadRunError`` with KiCad's words and what
 its server logged. Each document of a
-shared server is saved at its own block's exit, by the same rules. A ``.kicad_prl`` (KiCad's local
+shared server is saved at its own block's exit, by the same rules. A board's block is handed KiPy's board
+watched (``_drift``): the nets its ``create_items`` and ``update_items`` give items are noted, and after the
+save every item KiCad saved on another net (its connectivity takes copper onto the net of a pad it overlaps)
+is a warning on stderr and one of the board's ``net_changes``. A ``.kicad_prl`` (KiCad's local
 settings) the edit made beside its file is removed once its server stops, and so is a folder made for a new
 file that ends with no file in it.
 
@@ -458,6 +461,22 @@ def _save(opened: Any, path: Path, kind: _Kind, server: _Server) -> None:
                             + "; nothing is saved: every file the save writes is as it was") from None
 
 
+def _moved(watch: Any, before: str | None, path: Path, opened: Any) -> None:
+    """The items of the board just saved whose net KiCad changed (``_drift``): each said as a warning on stderr,
+    and kept as the board's ``net_changes``. A board that cannot be read back says so instead."""
+    from ._drift import say
+
+    if not path.is_file():
+        return
+    try:
+        changes = watch.check(before, path)
+    except (OSError, ValueError, UnicodeDecodeError) as error:
+        print(f"warning: {path.name}: its nets could not be checked after the save ({error})", file=sys.stderr)
+        return
+    opened.net_changes = tuple(changes)
+    say(changes, path.name)
+
+
 # The servers the edits of this process run, by project: its folder, its name and the thread editing it.
 _SERVERS: dict[tuple[Path, str, int], _Server] = {}
 
@@ -541,12 +560,21 @@ def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> It
         else:
             opened = _join(server, kind, path, create)
             stack.callback(server.open.discard, path)
+        watch = None
         if kind is _SCHEMATIC:
             opened = _with_libraries(server.client, opened, path)
+        else:
+            from ._drift import Watch
+
+            watch = Watch()
+            opened = watch.board(opened)
         yield opened  # a raise leaves the file as it was: nothing is saved, and the exception goes on
         saved = create or _modified(opened)
         if saved:
+            was = None if create or watch is None else path.read_text(encoding="utf-8", errors="replace")
             _save(opened, path, kind, server)
+            if watch is not None:
+                _moved(watch, was, path, opened)
     if create:
         made = None if project or path.with_suffix(".kicad_pro") in server.said else path.with_suffix(".kicad_pro")
         server.said.add(path.with_suffix(".kicad_pro"))

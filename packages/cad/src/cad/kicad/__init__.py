@@ -13,7 +13,8 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
   ``kicad-cli api-server`` on the file (KiCad makes one not there yet), one per project, which the board's
   and the schematic's edits share; KiPy connected to it, the open document handed over (a schematic's
   project symbol libraries loaded first), saved at the block's end when it was changed and not when the
-  block raises, the server stopped and its folder removed.
+  block raises, the server stopped and its folder removed; ``_drift``, the board's check at the save of the
+  nets KiCad moved onto a pad's.
 * ``_check``: KiCad's design rule check (``cad.kicad_pcb.drc``, ``cad kicad_pcb drc``).
 * ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
   drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export`` and the server's ``cad
