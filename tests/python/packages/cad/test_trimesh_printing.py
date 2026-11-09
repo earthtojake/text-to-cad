@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 import trimesh
-from build123d import Align, Box, Polyline, Pos, Rotation, export_stl, extrude, make_face
+from build123d import Align, Box, Cylinder, Polyline, Pos, Rotation, export_stl, extrude, make_face
 
 import cad
 from cad.trimesh import _printing as dfam_tool
@@ -163,6 +163,45 @@ class MeshCleanTest(unittest.TestCase):
             self.assertAlmostEqual(float(mesh.volume), 1000.0, places=6)
 
 
+class FoldTest(unittest.TestCase):
+    """A fan folded back over itself in one plane (an exporter's, wrapping a concave boundary) is laid flat."""
+
+    @staticmethod
+    def _notched_prism(height: float = 5.0) -> trimesh.Trimesh:
+        # a square notched from the top (E is its reflex corner); both caps fanned from A, so the fan's middle
+        # triangle (A, C, E) winds against its neighbours: a fold in each cap
+        outline = [(0, 0), (4, 0), (4, 4), (2, 1), (0, 4)]
+        n = len(outline)
+        vertices = [(x, y, 0.0) for x, y in outline] + [(x, y, height) for x, y in outline]
+        faces = [(0, 2, 1), (0, 3, 2), (0, 4, 3)]  # the bottom, seen from below
+        faces += [(n, n + 1, n + 2), (n, n + 2, n + 3), (n, n + 3, n + 4)]  # the top
+        for k in range(n):
+            a, b = k, (k + 1) % n
+            faces += [(a, b, n + b), (a, n + b, n + a)]
+        return trimesh.Trimesh(vertices, faces, process=False)
+
+    def test_a_folded_fan_is_laid_flat_and_reads_no_ceiling(self) -> None:
+        from cad.trimesh import _mesh
+
+        mesh = _mesh.prepared(self._notched_prism())
+        self.assertEqual(mesh.metadata["folds_laid_flat"], 2)
+        normals = mesh.face_normals[mesh.face_adjacency]
+        self.assertGreater(float(min((a @ b) for a, b in normals)), _mesh.FOLD_DOT)
+        self.assertTrue(mesh.is_watertight)
+        self.assertAlmostEqual(float(mesh.volume), (16 - 0.5 * 4 * 3) * 5.0, places=6)  # the notch is 6 mm2
+        top = mesh.triangles_center[:, 2] > 4.999
+        self.assertTrue((mesh.face_normals[top][:, 2] > 0.999).all())  # no triangle of the top looks down
+
+    def test_a_mesh_with_no_fold_is_not_changed(self) -> None:
+        from cad.trimesh import _mesh
+
+        box = trimesh.creation.box((10, 20, 30))
+        before = box.faces.copy()
+        mesh = _mesh.prepared(box.copy())
+        self.assertEqual(mesh.metadata["folds_laid_flat"], 0)
+        self.assertTrue((mesh.faces == before).all())
+
+
 class OverhangTest(unittest.TestCase):
     def test_a_round_on_the_plates_edge_is_no_overhang_as_on_exact_geometry(self) -> None:
         from build123d import Axis, fillet
@@ -246,6 +285,16 @@ class WallThicknessTest(unittest.TestCase):
         self.assertGreater(facts["min_mm"], 9.0)
 
 
+    def test_one_fin_is_one_wall(self) -> None:
+        """A 0.5 mm fin is one wall, read from its two sides: one item, as on its exact geometry."""
+        part = Box(40, 30, 5, align=(Align.CENTER, Align.CENTER, Align.MIN)) \
+            + Pos(0, 0, 5) * Box(30, 0.5, 15, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        with tempfile.TemporaryDirectory() as td:
+            facts = dfam_tool._wall_facts(dfam_tool._load(_stl(part, Path(td), "fin")), samples=2000)
+        thin = [item for item in facts["items"] if item["thickness_mm"] < 0.8]
+        self.assertEqual(len(thin), 1)
+        self.assertAlmostEqual(thin[0]["thickness_mm"], 0.5, delta=1e-3)
+
     def test_the_figures_are_of_the_rays_the_items_are(self) -> None:
         """min_mm is the thinnest item, on one body and on several: the summary never says a thinner wall is not
         there (a knob read "walls min 1.2" beside its 0.277 mm web)."""
@@ -281,6 +330,17 @@ class MeshDefectTest(unittest.TestCase):
         self.assertNotIn("error", report["wall_thickness"])
         self.assertGreater(report["wall_thickness"]["samples_valid"], 1000)
         self.assertNotIn("printing.knife_edge", [finding.code for finding in result.findings])
+
+    def test_an_acute_crease_is_no_gap(self) -> None:
+        """A groove of two arcs meeting at its root at 52 degrees: rays from one flank near the root land on the
+        other at a few tenths of a millimetre -- the crease's angle, not a slot (the exact path skips the face
+        beside its own alike, and reads no gap there)."""
+        lens = (Pos(-9, 0, 30) * Rotation(90, 0, 0) * Cylinder(10, 40)) & (Pos(9, 0, 30) * Rotation(90, 0, 0) * Cylinder(10, 40))
+        part = Box(40, 30, 30, align=(Align.CENTER, Align.CENTER, Align.MIN)) - lens
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.dfm(_stl(part, Path(td), "lens"), process="printing")
+        self.assertEqual(result.measurements["gaps"]["items"], [])
+        self.assertNotIn("printing.gap", [finding.code for finding in result.findings])
 
     def test_faces_lying_on_faces_are_the_meshs_defect_said_once_not_a_gap(self) -> None:
         part = Box(20, 20, 10) - Pos(0, 0, 5) * Box(0.005, 30, 5, align=(Align.CENTER, Align.CENTER, Align.MAX))

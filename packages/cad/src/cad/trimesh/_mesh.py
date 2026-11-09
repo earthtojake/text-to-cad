@@ -16,6 +16,13 @@ unknown and its cracks gaps. Cleaned:
   one that would leave an edge used once, which would open the shell;
 - **zero-area pieces dropped**: a connected piece whose triangles hold no area is an exporter's debris,
   never a body;
+- **folds laid flat**: two triangles side by side in one plane whose normals oppose (``FOLD_DOT``) are a fan
+  the exporter folded back over itself (a fan from a far corner wrapping a hub's arc): each wound against its
+  neighbours, it reads as a ceiling over its own face and a knife edge at the fold. The planar region the
+  fold is in is triangulated again from its boundary -- the edges its triangles leave once their windings
+  cancel -- so its triangles cover it once each, wound as the region faces; the boundary and every
+  neighbour stay as they were, and a region that does not come out with the same area and boundary is left
+  as read. A mesh with no fold is not changed;
 - **cracks closed**: a hole in the surface whose boundary lies within ``CRACK_FRACTION`` of the part's
   diagonal of one straight line (a sliver the tessellation left open) is filled by a fan of triangles
   wound as its neighbours are. A wider hole is the part's own opening: it stays open, and the check says
@@ -26,12 +33,13 @@ Watertightness is judged per body (``closure``): which bodies are open, and the 
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
 import trimesh
 
-__all__ = ["CRACK_FRACTION", "SLIVER_AREA", "clean", "closure", "facts", "load", "prepared"]
+__all__ = ["CRACK_FRACTION", "FOLD_DOT", "SLIVER_AREA", "clean", "closure", "facts", "load", "prepared"]
 
 #: A boundary loop whose corners all lie within this fraction of the part's diagonal of the line through its
 #: two farthest corners is a crack of the tessellation, not an opening: a chord tolerance's width (a 117 mm
@@ -44,6 +52,10 @@ CRACK_MAX_CORNERS = 64
 SLIVER_AREA = 1e-8
 #: Slivers joined by their edges are settled together while there are at most this many of them.
 SLIVER_GROUP = 12
+#: Two triangles sharing an edge whose normals' dot is under this, the far corner of each in the other's plane
+#: (``FOLD_PLANE`` of the diagonal), are folded over each other: one plane, wound both ways.
+FOLD_DOT = -0.999
+FOLD_PLANE = 1e-5
 
 
 def load(path: str, units: str = "mm") -> trimesh.Trimesh:
@@ -71,7 +83,7 @@ def prepared(mesh: trimesh.Trimesh, units: str = "mm") -> trimesh.Trimesh:
 def clean(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     """``mesh`` welded, its collapsed triangles and zero-area pieces dropped and its cracks closed, in place
     (the module's docstring). What it did is in ``mesh.metadata``: ``degenerate_faces_dropped``,
-    ``debris_faces_dropped``, ``cracks_closed``."""
+    ``debris_faces_dropped``, ``folds_laid_flat`` (the planar regions triangulated again), ``cracks_closed``."""
     before = int(len(mesh.faces))
     mesh.merge_vertices()
     faces = np.asarray(mesh.faces)
@@ -94,7 +106,9 @@ def clean(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         if debris:
             mesh.update_faces(~drop)
     mesh.remove_unreferenced_vertices()
+    folds = _unfold(mesh)
     cracks = _close_cracks(mesh)
+    mesh.metadata["folds_laid_flat"] = folds
     mesh.metadata["degenerate_faces_dropped"] = int(collapsed.sum()) + slivers
     mesh.metadata["debris_faces_dropped"] = debris
     mesh.metadata["cracks_closed"] = cracks
@@ -168,6 +182,268 @@ def _drop_slivers(mesh: trimesh.Trimesh) -> int:
     if dropped:
         mesh.update_faces(keep)
     return dropped
+
+
+def _unfold(mesh: trimesh.Trimesh) -> int:
+    """Triangulate again, in place, each planar region holding a fold (``FOLD_DOT``): the number of regions."""
+    if len(mesh.faces) < 2:
+        return 0
+    normals = np.asarray(mesh.face_normals)
+    pairs = np.asarray(mesh.face_adjacency)
+    if not len(pairs):
+        return 0
+    dots = np.einsum("ij,ij->i", normals[pairs[:, 0]], normals[pairs[:, 1]])
+    candidates = np.flatnonzero(dots < FOLD_DOT)
+    if not len(candidates):
+        return 0
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    faces = np.asarray(mesh.faces)
+    tolerance = FOLD_PLANE * (float(np.linalg.norm(mesh.extents)) or 1.0)
+    shared = np.asarray(mesh.face_adjacency_edges)
+    unshared = np.asarray(mesh.face_adjacency_unshared)
+    neighbours: dict[int, list[int]] = {}
+    for a, b in pairs:
+        neighbours.setdefault(int(a), []).append(int(b))
+        neighbours.setdefault(int(b), []).append(int(a))
+    done = np.zeros(len(faces), dtype=bool)
+    replaced: list[tuple[np.ndarray, np.ndarray]] = []
+    for k in candidates:
+        a, b = (int(f) for f in pairs[k])
+        if done[a] or done[b]:
+            continue
+        origin, normal = vertices[shared[k, 0]], normals[a]
+        if abs(float((vertices[unshared[k, 1]] - origin) @ normal)) > tolerance:
+            continue  # a knife edge's two flanks, not one plane
+        region, frontier = {a, b}, [a, b]
+        while frontier:
+            face = frontier.pop()
+            for other in neighbours.get(face, ()):
+                if other in region or done[other] or abs(float(normals[other] @ normal)) < -FOLD_DOT:
+                    continue
+                if np.all(np.abs((vertices[faces[other]] - origin) @ normal) <= tolerance):
+                    region.add(other)
+                    frontier.append(other)
+        chosen = np.fromiter(sorted(region), dtype=int)
+        done[chosen] = True
+        made = _flat(vertices, faces[chosen])
+        if made is not None:
+            replaced.append((chosen, made))
+    if not replaced:
+        return 0
+    keep = np.ones(len(faces), dtype=bool)
+    for chosen, _made in replaced:
+        keep[chosen] = False
+    mesh.faces = np.concatenate([faces[keep]] + [made.astype(faces.dtype) for _chosen, made in replaced])
+    return len(replaced)
+
+
+def _flat(vertices: np.ndarray, triangles: np.ndarray) -> np.ndarray | None:
+    """The planar region ``triangles`` cover (counted with their windings) triangulated again from its
+    boundary, wound as the region faces; None where its boundary is no set of simple loops or the new
+    triangles do not cover the region's area once."""
+    corners = vertices[triangles]
+    area = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0]).sum(axis=0) / 2.0
+    size = float(np.linalg.norm(area))
+    if not size > 0:
+        return None
+    normal = area / size
+    net: dict[tuple[int, int], int] = {}
+    for tri in triangles:
+        for i, j in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+            key, way = ((int(i), int(j)), 1) if i < j else ((int(j), int(i)), -1)
+            net[key] = net.get(key, 0) + way
+    following: dict[int, int] = {}
+    for (i, j), count in net.items():
+        if count == 0:
+            continue
+        if abs(count) != 1:
+            return None
+        start, end = (i, j) if count == 1 else (j, i)
+        if start in following:
+            return None  # a corner two loops pass through
+        following[start] = end
+    loops: list[list[int]] = []
+    seen: set[int] = set()
+    for start in following:
+        if start in seen:
+            continue
+        loop, at = [], start
+        while at not in seen:
+            seen.add(at)
+            loop.append(at)
+            at = following.get(at, -1)
+            if at < 0:
+                return None
+        if at != start or len(loop) < 3:
+            return None
+        loops.append(loop)
+    seed = np.array([1.0, 0.0, 0.0]) if abs(normal[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(normal, seed)
+    u /= np.linalg.norm(u)
+    v = np.cross(normal, u)
+    flat = np.stack([vertices @ u, vertices @ v], axis=1)
+
+    def signed(loop: list[int]) -> float:
+        p = flat[loop]
+        return float((p[:, 0] * np.roll(p[:, 1], -1) - np.roll(p[:, 0], -1) * p[:, 1]).sum() / 2.0)
+
+    outers = [loop for loop in loops if signed(loop) > 0]
+    holes = [loop for loop in loops if signed(loop) <= 0]
+    if not outers:
+        return None
+    owned: dict[int, list[list[int]]] = {k: [] for k in range(len(outers))}
+    for hole in holes:
+        point = flat[hole[0]]
+        inside = [k for k, outer in enumerate(outers) if _contains(flat[outer], point)]
+        if not inside:
+            return None
+        owned[min(inside, key=lambda k: abs(signed(outers[k])))].append(hole)
+    made: list[list[int]] = []
+    for k, outer in enumerate(outers):
+        polygon = list(outer)
+        for hole in sorted(owned[k], key=lambda h: -float(flat[h, 0].max())):
+            polygon = _bridge(polygon, hole, flat)
+            if polygon is None:
+                return None
+        clipped = _clip(polygon, flat)
+        if clipped is None:
+            return None
+        made.extend(clipped)
+    result = np.asarray(made, dtype=int).reshape(-1, 3)
+    new = vertices[result]
+    cross = np.cross(new[:, 1] - new[:, 0], new[:, 2] - new[:, 0]) @ normal / 2.0
+    if (cross < -1e-9 * size).any() or abs(float(cross.sum()) - size) > 1e-6 * size:
+        return None
+    return result
+
+
+def _contains(polygon: np.ndarray, point: np.ndarray) -> bool:
+    """Whether ``point`` lies inside the 2D ``polygon`` (even-odd)."""
+    x, y = float(point[0]), float(point[1])
+    a, b = polygon, np.roll(polygon, -1, axis=0)
+    crosses = (a[:, 1] > y) != (b[:, 1] > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        at = a[:, 0] + (y - a[:, 1]) * (b[:, 0] - a[:, 0]) / (b[:, 1] - a[:, 1])
+    return bool((crosses & (x < at)).sum() % 2)
+
+
+def _bridge(outer: list[int], hole: list[int], flat: np.ndarray) -> list[int] | None:
+    """``outer`` (counter-clockwise) and ``hole`` (clockwise, inside it) as one loop, joined by a cut from the
+    hole's rightmost corner to a corner of the outer loop it sees (Eberly's bridge)."""
+    m = max(range(len(hole)), key=lambda k: (flat[hole[k], 0], -flat[hole[k], 1]))
+    mx, my = flat[hole[m]]
+    best, edge = math.inf, None
+    for k in range(len(outer)):
+        a, b = flat[outer[k]], flat[outer[(k + 1) % len(outer)]]
+        if (a[1] > my) == (b[1] > my) and not (a[1] == my or b[1] == my):
+            continue
+        if a[1] == b[1]:
+            x = min(a[0], b[0])
+        else:
+            x = a[0] + (my - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+        if mx <= x < best:
+            best, edge = x, k
+    if edge is None:
+        return None
+    k0, k1 = edge, (edge + 1) % len(outer)
+    pick = k0 if flat[outer[k0], 0] >= flat[outer[k1], 0] else k1
+    hit = np.array([best, my])
+    corner = flat[outer[pick]]
+    # a corner of the outer loop inside the triangle (hole corner, hit, picked corner) is nearer the cut: the
+    # one at the least angle to the ray is seen from the hole's corner
+    tri = np.array([[mx, my], hit, corner])
+    angle = math.inf
+    for k, index in enumerate(outer):
+        p = flat[index]
+        if k == pick or p[0] < mx:
+            continue
+        if _in_triangle(p[None], *tri, strict=False)[0]:
+            off = math.atan2(abs(p[1] - my), p[0] - mx)
+            if off < angle or (off == angle and p[0] < flat[outer[pick], 0]):
+                angle, pick = off, k
+    # a corner an earlier bridge reached is in the loop twice or more: the cut leaves from the copy whose
+    # wedge (between the loop's edges into and out of it) the cut runs into, or the loop crosses itself there
+    copies = [k for k, index in enumerate(outer) if index == outer[pick]]
+    if len(copies) > 1:
+        corner = flat[outer[pick]]
+        toward = float(np.arctan2(my - corner[1], mx - corner[0]))
+        for k in copies:
+            after, before = flat[outer[(k + 1) % len(outer)]], flat[outer[k - 1]]
+            start = float(np.arctan2(after[1] - corner[1], after[0] - corner[0]))
+            span = (float(np.arctan2(before[1] - corner[1], before[0] - corner[0])) - start) % (2 * math.pi)
+            if 0.0 < (toward - start) % (2 * math.pi) < span:
+                pick = k
+                break
+    return outer[:pick + 1] + hole[m:] + hole[:m + 1] + outer[pick:]
+
+
+def _in_triangle(points: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray, strict: bool = True) -> np.ndarray:
+    """Which ``points`` lie inside the triangle: strictly inside a counter-clockwise one, or (not ``strict``)
+    inside or on either way round."""
+    def side(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> np.ndarray:
+        return (q[0] - p[0]) * (r[:, 1] - p[1]) - (q[1] - p[1]) * (r[:, 0] - p[0])
+
+    s1, s2, s3 = side(a, b, points), side(b, c, points), side(c, a, points)
+    if strict:
+        return (s1 > 0) & (s2 > 0) & (s3 > 0)
+    return ((s1 >= 0) & (s2 >= 0) & (s3 >= 0)) | ((s1 <= 0) & (s2 <= 0) & (s3 <= 0))
+
+
+def _cuts(points: np.ndarray, a: np.ndarray, c: np.ndarray, ends: tuple[int, int]) -> bool:
+    """Whether the segment ``a``-``c`` crosses an edge of the loop ``points`` other than those at its two ends'
+    positions: a corner a bridge reaches twice has edges a test of points alone does not see."""
+    p, q = points, np.roll(points, -1, axis=0)
+
+    def side(u: np.ndarray, w: np.ndarray, r: np.ndarray) -> np.ndarray:
+        return np.sign((w[0] - u[0]) * (r[:, 1] - u[1]) - (w[1] - u[1]) * (r[:, 0] - u[0]))
+
+    first = side(a, c, p) * side(a, c, q) < 0
+    second = np.sign((q[:, 0] - p[:, 0]) * (a[1] - p[:, 1]) - (q[:, 1] - p[:, 1]) * (a[0] - p[:, 0])) * \
+        np.sign((q[:, 0] - p[:, 0]) * (c[1] - p[:, 1]) - (q[:, 1] - p[:, 1]) * (c[0] - p[:, 0])) < 0
+    crossing = first & second
+    n = len(points)
+    for end in ends:
+        crossing[end] = crossing[(end - 1) % n] = False
+    return bool(crossing.any())
+
+
+def _clip(polygon: list[int], flat: np.ndarray) -> list[list[int]] | None:
+    """A simple counter-clockwise loop (its corners may repeat where a bridge runs both ways) cut into
+    triangles by ear clipping; None where no ear is left to cut."""
+    ring = list(polygon)
+    out: list[list[int]] = []
+    at = 0
+    while len(ring) > 3:
+        n = len(ring)
+        points = flat[ring]
+        cut = False
+        for collinear in (False, True):
+            for step in range(n):
+                k = (at + step) % n
+                i0, i1, i2 = (k - 1) % n, k, (k + 1) % n
+                a, b, c = points[i0], points[i1], points[i2]
+                turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+                scale = max(float(np.abs(b - a).max()), float(np.abs(c - b).max()), 1e-300) ** 2
+                if turn < -1e-12 * scale or (turn <= 1e-12 * scale and not collinear):
+                    continue
+                rest = np.ones(n, dtype=bool)
+                rest[[i0, i1, i2]] = False
+                corners = (np.all(points == a, axis=1) | np.all(points == b, axis=1) | np.all(points == c, axis=1))
+                rest &= ~corners
+                if turn > 1e-12 * scale and (_in_triangle(points[rest], a, b, c, strict=False).any()
+                                             or _cuts(points, a, c, (i0, i2))):
+                    continue
+                out.append([ring[i0], ring[i1], ring[i2]])
+                del ring[i1]
+                at = i1 % len(ring)
+                cut = True
+                break
+            if cut:
+                break
+        if not cut:
+            return None
+    out.append(list(ring))
+    return out
 
 
 def _close_cracks(mesh: trimesh.Trimesh) -> int:
@@ -274,7 +550,7 @@ def facts(mesh: trimesh.Trimesh) -> dict[str, Any]:
     found: dict[str, Any] = {"watertight": closed["watertight"], "volume_mm3": closed["closed_volume_mm3"]}
     if closed["open_body_count"]:
         found.update(open_body_count=closed["open_body_count"], open_bodies=closed["open_bodies"])
-    for key in ("degenerate_faces_dropped", "cracks_closed"):
+    for key in ("degenerate_faces_dropped", "folds_laid_flat", "cracks_closed"):
         if mesh.metadata.get(key):
             found[key] = int(mesh.metadata[key])
     return found
