@@ -1,6 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOARD_THICKNESS_MM, headOnCamera, leavingView, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
+import { BOARD_THICKNESS_MM, headOnCamera, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -91,12 +91,13 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * 3D has drawn that same picture), and eases, on the side the 2D view showed, to the 3D views' Home tilt,
  * the board framed whole (from the bottom, Home turned over as Flip turns it), or to the camera this file
  * was left at in 3D, turned over to that side if it looks at the other: the ease never crosses the board's
- * plane, so Flip's icon stays the side it was. Leaving it with the camera where that
- * left it gives the 2D view back as it was; once the camera has been moved (a Flip moves it), or when the 3D
- * view opened on the camera a file was left at in 3D (a reload in 3D, with no 2D picture under it), leaving
- * frames the 2D view on what the camera was centred on, at its scale, from its side, the side Flip's icon
- * showed (the board in 3D up until the flat canvas has painted it). Which of the two is up, and the 3D camera
- * and projection, are the file's view (`board3d`).
+ * plane, so Flip's icon stays the side it was. Leaving it gives the 2D view back its own window, as it was
+ * left (or fitted, when it was never moved: a file reopened in 3D), whatever the camera did meanwhile: each
+ * mode keeps its own view, as KiCad's 3D viewer, a window of its own, never moves the PCB editor's. The side
+ * is the one state the two share (Flip's icon, which follows the camera in 3D), so the 2D view comes back
+ * from the side Flip showed, its window kept as a Flip in 2D keeps it (the board in 3D up until the flat
+ * canvas has painted it). Which of the two is up, and the 3D camera and projection, are the file's view
+ * (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -458,7 +459,7 @@ function BoardSurface({ view, data }) {
 
   // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
   // `shown3d`: the board in 3D is on screen in its place; `closing3d`: leaving 3D, the board in 3D stays
-  // over the flat canvas until the flat canvas has painted the window it hands over.
+  // over the flat canvas until the flat canvas has painted its own window again.
   const [shown3d, setShown3d] = useState(false);
   const [closing3d, setClosing3d] = useState(false);
   const boardView = useBoardView({
@@ -496,11 +497,6 @@ function BoardSurface({ view, data }) {
   // `flat`: it opens on the flat canvas's own picture, which stays on screen until the board in 3D has drawn it;
   // `side`: the side the 2D view showed, which the opening's ease ends on.
   const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false, side: display.side, flat: false }));
-  const openingRef = useRef(opening);
-  openingRef.current = opening;
-  // The side the 2D view showed as 3D was entered, and the window leaving 3D hands the 2D view (none: its own).
-  const enteredRef = useRef(null);
-  const leavingRef = useRef(null);
   const switchDimension = useCallback(next => {
     if (next === dimensionRef.current) return;
     if (next === "3d") {
@@ -509,29 +505,25 @@ function BoardSurface({ view, data }) {
       const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side,
         mirrorX: mirrorFor(side), thickness: thicknessRef.current, distance: 2 * span }) : null;
       const left = saved.current.board3d.camera;
-      enteredRef.current = { side };
       setOpening({ camera: headOn, then: left, home: !left, side, flat: Boolean(headOn) });
       setClosing3d(false);
     } else {
-      // Leaving a 3D view that opened on the 2D picture, its camera moved by nobody since (the opening's ease is
-      // not a move), gives the 2D view back as it was, from the side it showed; else the 2D view is framed on
-      // what the camera centres, at its scale, from its side: a camera moved, or the one a file left in 3D
-      // reopened on, which no 2D picture was under (`boardFrame.js`'s `leavingView`).
-      const solid3d = view3dRef.current;
-      const leaving = leavingView({ flat: Boolean(openingRef.current.flat), moved: Boolean(solid3d?.moved()), side: enteredRef.current?.side ?? null,
-        plan: () => solid3d?.plan(mirrorFor) ?? null });
-      leavingRef.current = leaving.transform;
-      if (leaving.side && leaving.side !== displayRef.current.side) setDisplay(current => ({ ...current, side: leaving.side }));
+      // Leaving 3D gives the 2D view its own window back, as it was left, whatever the 3D camera did (KiCad's
+      // 3D viewer, a window of its own, never moves the PCB editor's view): each mode keeps its own last view,
+      // as entering 3D eases to the 3D camera it was left at. The flat canvas has held its window all along
+      // (a file reopened in 3D: the 2D view it was left at, or the fit). Framing it on the 3D camera's window
+      // instead (`planFromCamera`) brought an orbit's zoom and centre into the plan, off the board; that
+      // window is still what a prompt's view of a 3D view is (`currentView`). Only the side carries over, as
+      // it does entering: Flip's icon is one state, the camera's side in 3D (`onCamera3d`), and the 2D view
+      // comes back from that side, its window kept as a Flip in 2D keeps it.
       setClosing3d(true);
     }
     dimensionRef.current = next;
     setDimension(next);
   }, [mirrorFor]);
-  // Left: the flat canvas painted at the window it is handed, under the board in 3D, which then goes.
+  // Left: the flat canvas painted at its own window, under the board in 3D, which then goes.
   useEffect(() => {
     if (dimension !== "2d" || !closing3d) return;
-    if (leavingRef.current) viewRef.current?.setView(leavingRef.current);
-    leavingRef.current = null;
     viewRef.current?.settle();
     setShown3d(false);
     setClosing3d(false);

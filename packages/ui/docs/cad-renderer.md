@@ -262,11 +262,13 @@ at the flat scale for the viewport's lens, `boardFrame.js`'s `perspectiveHeadOn`
 eases to a camera on the side the 2D view showed (`boardFrame.js`'s `cameraOnSide`, the opening's
 `side`): the camera the file was left at in 3D, turned over to that side when it looks at the other, or
 Home's direction so turned, handed to the viewport's `goHome`, so the ease never crosses the board's plane.
-Leaving, the flat canvas paints the window it is handed (`usePlotView`'s `settle`) under the 3D
-viewport, which then goes: its own window when the 3D view opened on it (`opening.flat`) and nobody has
-moved the 3D camera since the opening (the count of hands on it, `camera/cameraTouch.js`'s `cameraHands`),
-else the camera's (`planFromCamera`): a camera moved, or the one a file left in 3D reopened on, which no
-2D picture was under (`boardFrame.js`'s `leavingView`).
+Leaving, the flat canvas paints its own window again (`usePlotView`'s `settle`) under the 3D viewport,
+which then goes: the window it held all the while 3D was up, as the 2D view was left (a file reopened in
+3D: the window it was left at in 2D, or the fit), whatever the 3D camera did, as KiCad's 3D viewer, a
+window of its own, never moves the PCB editor's view. Each mode keeps its own last view: entering eases
+to the 3D camera, leaving gives back the 2D window. Only the side carries over, both ways: Flip's icon is
+one state, the camera's side in 3D. The camera's window (`boardFrame.js`'s `planFromCamera`) is what a
+prompt's view of the board in 3D is, and nothing leaving frames.
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
 board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision
