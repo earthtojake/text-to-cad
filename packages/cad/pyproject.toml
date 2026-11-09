@@ -133,9 +133,11 @@ mujoco = [
 # (cad.coacd._decomposer), since its native library carries a TBB of its own beside the kernel's. One wheel, its
 # library loaded with ctypes, numpy its one dependency, MIT; about 1.5-3.5 MB. Bounded to the 1.0 line: the hulls
 # are a function of CoACD's release (the decomposer's cache key names the line) and its ctypes entry point's
-# arguments are positional. CoACD publishes abi3 wheels for macOS arm64, Linux x86_64 and aarch64 and Windows
-# x86_64 alone, and no sdist, so the extra installs it only there: anywhere else (an Intel Mac, Windows on ARM) it
-# installs nothing and a decomposition the cache does not hold is refused, naming the extra.
+# arguments are positional. Where an environment lacks it, the engine makes this extra's environment on first need
+# for the decomposer (cad.engine.hulls). CoACD publishes abi3 wheels for macOS arm64, Linux x86_64 and aarch64
+# (manylinux: glibc) and Windows x86_64 alone, and no sdist, so the extra installs it only there: anywhere else (an
+# Intel Mac, Windows on ARM) it installs nothing, and a musl Linux, which no marker tells apart, cannot install it;
+# there a decomposition the cache does not hold is refused, naming the extra and the platform.
 coacd = [
   "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
 ]

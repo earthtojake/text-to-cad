@@ -696,6 +696,23 @@ class Daemon:
         send({"ok": True, "base": True} if error is None else {"failed": error, "base": True})
 
     @staticmethod
+    def integration(request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The environment of one of the library's integrations, asked by a process of the engine's that lacks it
+        (``{"op": "integration", "integration": "coacd"}``: a worker's decomposition, ``cad.engine.hulls``): made
+        here on first need when it is not, as the ``cad`` command's integrations are
+        (``integration_env.made``), each line of its making a ``log`` frame, then ``{"ok": true, "python"}``, or
+        ``{"failed"}`` in one line."""
+        from cad_server._internal import integration_env
+
+        try:
+            python = integration_env.made(str(request.get("integration") or ""),
+                                          lambda line: send({"log": line}))
+        except integration_env.Failed as failed:
+            send({"failed": str(failed)})
+            return
+        send({"ok": True, "python": python})
+
+    @staticmethod
     def environment() -> dict[str, str]:
         """The environment of the client that started the daemon, as near as the daemon can tell:
         its own, without the engine's folder its starter put first on ``PYTHONPATH``
@@ -1235,6 +1252,7 @@ class Daemon:
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
                      "expected": request.get("expected"), "original": request.get("original"),
                      **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"zero": request["zero"]} if request.get("zero") is not None else {}),
                      **({"display": shown} if shown else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
@@ -1411,6 +1429,8 @@ class Daemon:
             send(self.status())
         elif op == "base":
             self.base(request, send)
+        elif op == "integration":
+            self.integration(request, send)
         elif op == "pid":
             send({"ok": True, "pid": os.getpid()})  # who answers: a client that started a daemon asks
         elif op == "stop":

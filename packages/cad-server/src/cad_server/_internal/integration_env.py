@@ -11,6 +11,11 @@ the installation's release, made once by the device's engine outside any sandbox
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
+A process of the engine's own that needs an integration its environment lacks -- a worker's decomposition of a
+collision, the coacd integration's (``cad.engine.hulls``) -- asks the device's engine for it over the door
+(``{"op": "integration", "integration"}``, ``made``), which makes the same environment the same way, and runs
+the integration's code there in a process of its own.
+
 An installation whose own environment carries the integration (one installed with its extra; a
 checkout's development environment for trimesh alone, as ``requirements-dev.txt`` installs the library
 with that extra and not kicad's) runs the operation itself, in this process, as an installation that
@@ -24,7 +29,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any, Union
 
-__all__ = ["Failed", "call", "carries", "environment", "found"]
+__all__ = ["Failed", "call", "carries", "environment", "found", "made"]
 
 # The library's runner of one operation (``cad._internal.operation``).
 RUNNER = "cad._internal.operation"
@@ -89,6 +94,31 @@ def environment(integration: Integrations, told: Callable[[str], None], *, engin
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
     return found.python
+
+
+def made(integration: str, told: Callable[[str], None]) -> str:
+    """The Python of the environment that holds ``integration``, for a process of the engine's own that lacks it
+    (``{"op": "integration"}``, answered by the engine: a worker's decomposition, ``cad.engine.hulls``): this
+    process's own where it carries it, else ``environment``'s, its making the engine's one of that environment --
+    the one under way followed, or one started (``extras.Making``, as the door's ``base`` with a spec makes a
+    program's) -- each of its lines said to ``told``. ``Failed`` in one line: an integration the registry does
+    not name, or uv's words."""
+    import sys
+
+    from cad.registry import INTEGRATIONS
+    from cad_server._internal import extras
+
+    if integration not in INTEGRATIONS:
+        raise Failed(f"no integration {integration!r}: one of {', '.join(sorted(INTEGRATIONS))}")
+    if carries(integration):
+        return sys.executable
+    try:
+        error = extras.making(extras.Spec(integrations=_names(integration))).follow(told)
+    except extras.Refused as refused:
+        raise Failed(str(refused)) from None
+    if error is not None:
+        raise Failed(error)
+    return environment(integration, told, engine=False)
 
 
 def call(python: str, document_type: str, operation: str, args: list[Any], kwargs: dict[str, Any]) -> dict[str, Any]:

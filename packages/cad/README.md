@@ -361,9 +361,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
     from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
     person's click.
-    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s) is fetched once, the
-    first time a command needs it, from uv's cache and the network, and works offline after that; a
-    first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.
+    An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s; `cad[mujoco]`'s;
+    `cad[coacd]`'s, for an export's decomposed collision) is fetched once, the first time a command needs
+    it, from uv's cache and the network, and works offline after that; a first-need fetch that cannot
+    reach the network says so in a line, and nothing else waits on it.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
     crash; a model's own process, where only the library is installed, counts nothing -- is kept

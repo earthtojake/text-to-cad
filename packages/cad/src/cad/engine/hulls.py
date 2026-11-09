@@ -5,15 +5,17 @@ meshes in, each one's hulls out, made by the coacd integration's decomposer in a
 build of TBB (its symbols exported) beside the TBB OCCT runs on, which is the clash netgen's OpenCascade has
 with OCP's; it logs from native code to file descriptor 1, which is a worker's protocol; and it can die on a
 mesh it cannot repair. So the process that holds the kernel never imports it: each decomposition is a child
-interpreter of this environment (``python -m cad.coacd._decomposer JOB RESULT``, the integration's code, which
-imports coacd and numpy alone), handed every mesh the cache does not hold at once. A child that dies, or stops
-past ``TIMEOUT_S``, fails the decomposition in one line with the end of what it printed.
+interpreter (``python -m cad.coacd._decomposer JOB RESULT``, the integration's code, which imports coacd and
+numpy alone; this environment's Python or the coacd integration's, **Where coacd is**), handed every mesh the
+cache does not hold at once. A child that dies, or stops past ``TIMEOUT_S``, fails the decomposition in one line
+with the end of what it printed.
 
 **What it is asked.** Each mesh is ``(positions, triangles, options)``: positions ``(n, 3)``, triangles ``(m,
 3)``, and ``options`` the declaration's (``maxHulls``: CoACD's ``max_convex_hull``, at most that many hulls,
-merged down to it; ``threshold``: its concavity threshold, 0.01 to 1, smaller cutting finer), each absent for
-CoACD's own default (no limit; 0.05). The child welds the corners a tessellation repeats on each face and
-runs CoACD with seed 0 (``cad.coacd._decomposer``), so the same mesh and options make the same hulls.
+merged down to it, 16 unless the declaration says otherwise; ``threshold``: its concavity threshold, 0.01 to 1,
+smaller cutting finer), each absent for CoACD's own default (no limit; 0.05). The child welds the corners a
+tessellation repeats on each face and runs CoACD with seed 0 (``cad.coacd._decomposer``), so the same mesh and
+options make the same hulls.
 
 **The cache.** A decomposition takes CoACD seconds to minutes, and a model is exported again on every
 change, so each mesh's hulls are kept in the engine's cache folder, never beside the model:
@@ -23,9 +25,18 @@ float32, its triangles as little-endian uint32). A hit reads the hulls back with
 a changed part, a changed option or another release line is a new key. A file that does not read is
 decomposed again and written over. It is a cache: wiping it costs a decomposition, never a document.
 
-**Where coacd is.** The child runs this interpreter, so a decomposition the cache does not hold needs coacd
-in this environment: the extra, ``cad[coacd]`` (``cad run`` makes a model's environment with it where its
-header names it). Without it, ``Unavailable`` says so, naming the extra.
+**Where coacd is.** An integration runs where its extra is installed: the child runs this interpreter where this
+environment holds coacd (one installed with ``cad[coacd]``, or a model's whose header names it), else the Python
+of the coacd integration's environment, ``cad[coacd]`` at the installation's release, which the device's engine
+makes once, outside any sandbox, on first need and keeps (``{"op": "integration", "integration": "coacd"}``
+over its door, as the ``cad`` command's ``solve`` has netgen's and CalculiX's: ``cad_server._internal.
+integration_env``), each line of its making said on stderr as it comes -- a worker's, which its caller is
+shown -- offline first, from uv's cache, and the network for what that lacks; one that cannot reach it says
+so in a line. So no model names ``cad[coacd]`` in its header, and an ``.xbf`` or a STEP the documents worker
+exports decomposes too. ``Unavailable`` says, naming the extra, why no environment can hold it: CoACD
+publishes no wheel for this platform (``PLATFORMS``: none for an Intel Mac, Windows on ARM or a musl Linux),
+no engine answers to make it (a model's own process with none running), or its making failed (uv's words).
+``PROVIDE`` stands in for the engine (a test's provisioner).
 """
 
 from __future__ import annotations
@@ -37,13 +48,14 @@ import pickle
 import subprocess
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-__all__ = ["EXTRA", "RECIPE", "TIMEOUT_S", "Failed", "Unavailable", "digest", "hulls"]
+__all__ = ["EXTRA", "PLATFORMS", "PROVIDE", "RECIPE", "TIMEOUT_S", "Failed", "Unavailable", "digest", "hulls",
+           "published"]
 
 EXTRA = "cad[coacd]"
 #: The coacd integration's decomposer, run as a module in the child (never imported here).
@@ -51,6 +63,13 @@ CHILD = "cad.coacd._decomposer"
 #: What the hulls are a function of beside the mesh and the options: the CoACD release line the extra pins
 #: (``coacd>=1.0.14,<1.1``), the weld and the seed. A change here is a new key for every mesh.
 RECIPE = "coacd 1.0; welded; seed 0; v1"
+#: Where CoACD publishes wheels, and so where ``cad[coacd]`` installs it (its marker in ``pyproject.toml``;
+#: manylinux wheels, so a Linux of glibc's): it has no sdist, so anywhere else no environment can hold it.
+PLATFORMS = "macOS arm64, Linux x86_64 and aarch64 (glibc) and Windows x86_64"
+#: The Python of the coacd integration's environment, for a process whose own lacks coacd: ``PROVIDE(told)``,
+#: made first where it is not, each line of its making said to ``told``; None where nothing answers to make
+#: it; ``Unavailable`` in its maker's words where it cannot be made. None: the device's engine's (``_engine``).
+PROVIDE: Callable[[Callable[[str], None]], str | None] | None = None
 #: The longest one child may take (s): past it the child is stopped and the decomposition says so, rather
 #: than a decomposition that never returns holding an export (and the engine or the worker it runs in).
 TIMEOUT_S = 3600.0
@@ -135,20 +154,16 @@ def _write(path: Path, found: list[Hull]) -> None:
 
 def _decompose(meshes: Sequence[Mesh]) -> list[list[Hull]]:
     """CoACD's hulls of ``meshes``, made in one child process (the module's **Why a process of its own**)."""
-    import importlib.util
-
-    if importlib.util.find_spec("coacd") is None:
-        raise Unavailable(f"coacd comes with cad's coacd integration, {EXTRA}, which this environment does not hold")
-
+    python, own = _python()
     jobs = [{"positions": np.asarray(p, dtype=np.float64).reshape(-1, 3), "triangles": np.asarray(t).reshape(-1, 3),
              "options": dict(options)} for p, t, options in meshes]
     with tempfile.TemporaryDirectory(prefix="cad-coacd-") as tmp:
         job_path, result_path = Path(tmp) / "job.pickle", Path(tmp) / "result.pickle"
         job_path.write_bytes(pickle.dumps(jobs))
         try:
-            done = subprocess.run([sys.executable, "-P", "-m", CHILD, str(job_path), str(result_path)],
-                                  env=_child_env(Path(__file__).resolve().parents[2]), stdin=subprocess.DEVNULL,
-                                  capture_output=True, text=True, timeout=TIMEOUT_S)
+            done = subprocess.run([python, "-P", "-m", CHILD, str(job_path), str(result_path)],
+                                  env=_child_env(Path(__file__).resolve().parents[2]) if own else _foreign_env(),
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=TIMEOUT_S)
         except subprocess.TimeoutExpired as error:
             raise Failed(f"CoACD did not finish in {TIMEOUT_S:.0f} s and was stopped; fewer hulls (max_hulls) or a "
                          "coarser threshold decomposes sooner") from error
@@ -164,6 +179,80 @@ def _decompose(meshes: Sequence[Mesh]) -> list[list[Hull]]:
         found.append([(np.asarray(p, dtype=np.float32).reshape(-1, 3), np.asarray(t, dtype=np.uint32).reshape(-1, 3))
                       for p, t in result["hulls"]])
     return found
+
+
+def published(system: str | None = None, machine: str | None = None, glibc: bool | None = None) -> bool:
+    """Whether CoACD publishes a wheel for this platform (``PLATFORMS``), or the one given."""
+    import platform
+
+    system = platform.system() if system is None else system
+    machine = (platform.machine() if machine is None else machine).lower()
+    if system == "Darwin":
+        return machine == "arm64"
+    if system == "Windows":
+        return machine in ("amd64", "x86_64")
+    if system == "Linux":
+        return machine in ("x86_64", "aarch64", "arm64") and (_glibc() if glibc is None else glibc)
+    return False
+
+
+def _glibc() -> bool:
+    """Whether this Python runs on glibc (a manylinux wheel's), not musl."""
+    import platform
+
+    try:
+        if os.confstr("CS_GNU_LIBC_VERSION"):
+            return True
+    except (AttributeError, OSError, ValueError):
+        pass
+    return platform.libc_ver()[0] == "glibc"
+
+
+def _python() -> tuple[str, bool]:
+    """The Python the child runs (the module's **Where coacd is**), and whether it is this one."""
+    import importlib.util
+    import platform
+
+    if importlib.util.find_spec("coacd") is not None:
+        return sys.executable, True
+    if not published():
+        raise Unavailable(f"coacd comes with cad's coacd integration, {EXTRA}, which installs it only where CoACD "
+                          f"publishes wheels, {PLATFORMS}, and this is {platform.system()} {platform.machine()}")
+    python = (PROVIDE or _engine)(_told)
+    if python is None:
+        raise Unavailable(f"coacd comes with cad's coacd integration, {EXTRA}, which this environment does not hold, "
+                          "and no engine answered to make its environment: export through the cad command, which "
+                          f"makes it on first need, or install {EXTRA} here")
+    return python, False
+
+
+def _told(line: str) -> None:
+    print(f"cad: {line}", file=sys.stderr, flush=True)
+
+
+def _engine(told: Callable[[str], None]) -> str | None:
+    """The Python of the coacd integration's environment, made by the device's engine where it is not (``{"op":
+    "integration"}``), its lines said to ``told``; None where no engine answers, or one that has no such request
+    (another release's). ``Unavailable`` in the engine's words where it cannot be made."""
+    from cad.engine import client
+
+    try:
+        answer = client.request({"op": "integration", "integration": "coacd"}, start=False,
+                                on_log=lambda frame: told(str(frame.get("log", ""))))
+    except (ConnectionError, OSError, ValueError):
+        return None
+    if not answer or str(answer.get("failed") or "").startswith("unknown request"):
+        return None
+    if answer.get("failed"):
+        raise Unavailable(f"the engine could not make {EXTRA}'s environment: {answer['failed']}")
+    python = answer.get("python")
+    return python if isinstance(python, str) and python else None
+
+
+def _foreign_env() -> dict[str, str]:
+    """The child's environment where it runs another environment's Python: this one, without the import path
+    this process was handed, so that Python imports its own cad and numpy."""
+    return {name: value for name, value in os.environ.items() if name not in ("PYTHONPATH", "PYTHONHOME")}
 
 
 def _child_env(source: Path) -> dict[str, str]:

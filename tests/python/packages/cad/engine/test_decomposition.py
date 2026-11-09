@@ -3,7 +3,9 @@ round-tripped through the document, its xbf and a shape rebuilt from it, an asse
 writers' output with a decomposer the test stands in for -- an MJCF geom of a mesh asset per hull, a URDF
 collision per hull, the visual whole, and the contact rule testing the hulls, not the part's one hull; the hulls
 kept in the engine's cache by the mesh and the options, so a second description decomposes nothing; the refusals,
-of an option on another kind, of options out of range and of a decomposition where coacd is not installed; and,
+of an option on another kind and of options out of range; at most 16 hulls by default; a miss where coacd is not
+installed decomposed in the coacd integration's environment, which the engine makes on first need (a stand-in
+here), and refused, saying why, where none can hold it (no wheel, no engine, a making that failed); and,
 where coacd is installed (the development environment's extra), CoACD's own hulls of an L-shaped part, two or
 more, which MuJoCo compiles."""
 
@@ -186,18 +188,112 @@ class WritersTest(_Folder):
         self.assertEqual(self.calls, [[{"maxHulls": 16}], [{"maxHulls": 2}]])
         self.assertEqual(len(list((self.folder / "cache" / "hulls").glob("*.npz"))), 2)
 
-    def test_a_decomposition_where_coacd_is_not_installed_is_refused_naming_the_part_and_the_extra(self) -> None:
-        path = self.build('collision(arm, "decomposed")')
+
+class FirstNeedTest(_Folder):
+    """Where this environment lacks coacd, the decomposer runs in the coacd integration's environment, which the
+    engine makes on first need (``hulls.PROVIDE`` stands in for it: no network here); where no environment can
+    hold it, the refusal says why, naming the part and the extra."""
+
+    def without_coacd(self) -> Any:
         real = importlib.util.find_spec
+        return mock.patch("importlib.util.find_spec",
+                          lambda name, *args: None if name == "coacd" else real(name, *args))
 
-        def without_coacd(name: str, *args: Any) -> Any:
-            return None if name == "coacd" else real(name, *args)
+    def test_a_miss_runs_the_decomposer_in_the_environment_the_engine_makes_with_the_lines_of_its_making(self) -> None:
+        import contextlib
+        import io
+        import pickle
 
-        with mock.patch("importlib.util.find_spec", without_coacd):
-            with self.assertRaisesRegex(DescriptionError, r"part 'bracket' collides as convex hulls \(collision "
-                                                          r"'decomposed'\), which CoACD makes: coacd comes with cad's "
-                                                          r"coacd integration, cad\[coacd\]"):
+        from cad.engine import hulls
+
+        path = self.build('collision(arm, "decomposed")')
+        asked: list[str] = []
+
+        def provide(told: Any) -> str:
+            told("making the coacd integration's environment, once: cad[coacd] (about 4 MB to download)")
+            asked.append("made")
+            return "/elsewhere/bin/python"
+
+        def child(argv: list[str], **given: Any) -> Any:
+            self.assertEqual(argv[:4], ["/elsewhere/bin/python", "-P", "-m", "cad.coacd._decomposer"])
+            self.assertNotIn("PYTHONPATH", given["env"], "another environment's Python imports its own cad")
+            jobs = pickle.loads(Path(argv[4]).read_bytes())
+            Path(argv[5]).write_bytes(pickle.dumps([{"hulls": [_box(*arm) for arm in ARMS]} for _job in jobs]))
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        said = io.StringIO()
+        with self.without_coacd(), mock.patch.object(hulls, "published", return_value=True), \
+                mock.patch.object(hulls, "PROVIDE", provide), mock.patch("subprocess.run", child), \
+                contextlib.redirect_stderr(said):
+            description = describe(Source.read(path).view())
+        self.assertEqual(asked, ["made"])
+        self.assertIn("cad: making the coacd integration's environment, once", said.getvalue())
+        self.assertEqual([c.name for c in description.link("bracket").collisions], ["bracket_hull0", "bracket_hull1"])
+        # Kept: the next description asks for no environment at all.
+        with self.without_coacd(), mock.patch.object(hulls, "PROVIDE", lambda _told: self.fail("asked again")):
+            describe(Source.read(path).view())
+
+    def test_where_no_environment_can_hold_coacd_the_refusal_says_why(self) -> None:
+        from cad.engine import hulls
+
+        path = self.build('collision(arm, "decomposed")')
+        prefix = (r"part 'bracket' collides as convex hulls \(collision 'decomposed'\), which CoACD makes: coacd comes "
+                  r"with cad's coacd integration, cad\[coacd\], ")
+        cases = [
+            ("no wheel", False, lambda _told: self.fail("no environment is made where no wheel exists"),
+             prefix + r"which installs it only where CoACD publishes wheels, macOS arm64, Linux x86_64 and aarch64 "
+                      r"\(glibc\) and Windows x86_64, and this is "),
+            ("no engine", True, lambda _told: None,
+             prefix + r"which this environment does not hold, and no engine answered to make its environment: "
+                      r"export through the cad command"),
+        ]
+        for name, wheel, provide, said in cases:
+            with self.subTest(name), self.without_coacd(), mock.patch.object(hulls, "published", return_value=wheel), \
+                    mock.patch.object(hulls, "PROVIDE", provide):
+                with self.assertRaisesRegex(DescriptionError, said):
+                    describe(Source.read(path).view())
+
+        def offline(_told: Any) -> str:
+            raise hulls.Unavailable("the engine could not make cad[coacd]'s environment: uv cannot reach the network")
+
+        with self.without_coacd(), mock.patch.object(hulls, "published", return_value=True), \
+                mock.patch.object(hulls, "PROVIDE", offline):
+            with self.assertRaisesRegex(DescriptionError, r"which CoACD makes: the engine could not make cad\[coacd\]'s "
+                                                          r"environment: uv cannot reach the network; or declare it"):
                 describe(Source.read(path).view())
+
+    def test_coacd_publishes_wheels_for_four_platforms_alone(self) -> None:
+        from cad.engine.hulls import published
+
+        for system, machine, glibc, wheel in [
+                ("Darwin", "arm64", None, True), ("Darwin", "x86_64", None, False),
+                ("Windows", "AMD64", None, True), ("Windows", "ARM64", None, False),
+                ("Linux", "x86_64", True, True), ("Linux", "aarch64", True, True),
+                ("Linux", "x86_64", False, False), ("Linux", "armv7l", True, False), ("FreeBSD", "amd64", None, False)]:
+            with self.subTest(system=system, machine=machine, glibc=glibc):
+                self.assertIs(published(system, machine, glibc), wheel)
+
+    def test_the_engine_is_asked_over_its_door_and_an_engine_without_the_request_is_none(self) -> None:
+        from cad.engine import hulls
+
+        told: list[str] = []
+
+        def answering(answer: Any) -> Any:
+            def request(message: dict[str, Any], on_log: Any = None, **_given: Any) -> Any:
+                self.assertEqual(message, {"op": "integration", "integration": "coacd"})
+                on_log({"log": "making the coacd integration's environment, once"})
+                return answer
+            return mock.patch("cad.engine.client.request", request)
+
+        with answering({"ok": True, "python": "/env/bin/python"}):
+            self.assertEqual(hulls._engine(told.append), "/env/bin/python")
+        self.assertEqual(told, ["making the coacd integration's environment, once"])
+        for answer in (None, {"failed": "unknown request 'integration'"}):
+            with answering(answer):
+                self.assertIsNone(hulls._engine(told.append))
+        with answering({"failed": "uv cannot reach the network"}):
+            with self.assertRaisesRegex(hulls.Unavailable, "could not make cad\\[coacd\\]'s environment: uv cannot"):
+                hulls._engine(told.append)
 
 
 @unittest.skipUnless(importlib.util.find_spec("coacd"), "coacd is the coacd extra's: requirements-dev.txt installs it")

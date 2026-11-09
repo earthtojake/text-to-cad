@@ -37,7 +37,11 @@ integration's) runs in the environment of that integration, made once by the eng
 (`cad_server/_internal/integration_env.py`); an integration whose operations need another beside it says
 so in the registry (`alongside`), and its environment holds them all (a B-rep type's `solve` reads the
 document with the kernel, meshes it with netgen and solves it with CalculiX: the environment of
-`cad[build123d,calculix,netgen]`). An external program that ships as a Python package (KiCad's `kicad-cli`, in
+`cad[build123d,calculix,netgen]`). A process of the engine's own that needs an integration its environment lacks
+asks the engine for that environment over its door (`{"op": "integration"}`, `integration_env.made`), which makes
+it the same way and answers its Python, and runs the integration's code there in a process of its own: a worker's
+decomposition of a collision, the `coacd` integration's (`cad.engine.hulls`), so no model names `cad[coacd]` in its
+header. An external program that ships as a Python package (KiCad's `kicad-cli`, in
 kicode; CalculiX's `ccx`, in the cad-ccx package) is its integration's extra and installs the same way; any other is
 the person's to install, found by its probe: an integration with no extra and a probe alone. When a program
 ships no package, packaging it, its own binary unmodified in a wheel per platform with a launcher that names
