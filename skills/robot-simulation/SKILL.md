@@ -72,12 +72,15 @@ mechanism):
 
 - **The mechanism** is the links and joints: build123d's `RevoluteJoint`, `LinearJoint`,
   `CylindricalJoint` and `BallJoint` connected with `connect_to`. The as-built pose is every joint's
-  zero in the description, and each joint's limits are its range around that zero: build the
-  mechanism at the pose a simulator should start from (fingers open, arm straight), so its joint
-  values are the CAD's. Where the CAD stands elsewhere (a vendor STEP at its own pose, a calibration
-  zero the software sets), name that pose a mechanism state and export with `--zero <state>`: every
-  body stands as the state poses it, each joint counts from there (its limits and the other states
-  shifted with it), and the CAD stays as drawn. Where the hardware's stops are the parts meeting, find them from the parts:
+  zero in the description, and each joint's limits are its range around that zero. Where the robot
+  has a controller, the description's zero is the controller's zero, so that a joint value means the
+  same in the simulator and on the hardware; where none exists yet, build the mechanism at the pose a
+  simulator should start from (fingers open, arm straight). A vendor's STEP is often drawn at its
+  controller's zero: its published ranges fit the swept stops around the pose drawn (the vendor-STEP
+  recipe's step 7 says how to tell). Where the controller's zero is another pose, name that pose a
+  mechanism state and export with `--zero <state>`: every body stands as the state poses it, each
+  joint counts from there (its limits and the other states shifted with it), and the CAD stays as
+  drawn. Where the hardware's stops are the parts meeting, find them from the parts:
   `cad model ranges <id>` turns or slides each joint alone until its child link meets its parent and
   prints each stop, in degrees or millimetres around the as-built pose; write them into the joint's
   `angular_range` or `linear_range`, rounded towards zero, and run the model again (the `cad` skill's
@@ -93,7 +96,8 @@ mechanism):
   KDL takes no inertia on the root; `base_link` keeps its name and stays the robot's base frame. A
   root of another name gets an empty `base_link` above it instead.
 - **Mechanism states** (`mechanism_state(assembly, "home", ...)`) are the named poses, MJCF keys
-  (a URDF holds no poses). Name one `home`, the pose a person and a controller start from.
+  (a URDF holds no poses). Name one `home`, the pose a person and a controller start from: the zero
+  itself where the hardware starts there, another state where it does not.
 - **Couplings** (`gear_pair`, `rack_and_pinion_pair`) are a follower joint on its leader: MJCF's
   `<equality><joint>`, URDF's `<mimic>`. Two slides a pinion drives (a parallel gripper) couple
   through a `RevoluteJoint` on the palm connected to nothing, named first in the
@@ -123,7 +127,9 @@ mechanism):
   gripper's jaws: CoACD cuts its mesh into convex hulls, each a collision geom of its own (MJCF and
   URDF alike, `<part>_hull<i>`), while the visual stays whole. `max_hulls=` caps the count (16 by
   default, `None` for no limit) and `threshold=` (0.01 to 1, CoACD's 0.05 by default) is the concavity
-  it leaves: smaller cuts finer. The engine fetches `cad[coacd]` on first need; the export is refused,
+  it leaves: smaller cuts finer. A hull's corners lie on the part, but its faces bridge the part's
+  concave places by a few millimetres on a large part, at any threshold: two links that nearly touch
+  there overlap at rest as hulls (the vendor-STEP recipe's step 5 says what to do). The engine fetches `cad[coacd]` on first need; the export is refused,
   naming the part and the extra, only where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl
   Linux) or no engine runs to fetch it.
   The hulls are cached by the part's mesh and options, so only a changed part decomposes again; the
@@ -143,7 +149,8 @@ mechanism):
   its dynamics: the rotor's reflected inertia (kg*m^2, kg), viscous damping (N*m*s/rad, N*s/m) and dry
   friction (N*m, N), MJCF's `armature`, `damping` and `frictionloss` and URDF's `<dynamics damping
   friction>` (URDF has no armature: the export's log says it is left out). Without a drive limit a URDF
-  says `effort="0" velocity="0"`, which a ROS controller reads literally. Actuators, gains and contact
+  says `effort="0" velocity="0"`, which a ROS controller reads literally; a joint given only one of
+  the two has the other written 0, and the export's log names it. Actuators, gains and contact
   tuning are the scene's.
 - **`friction(part_or_assembly, coefficient)`** is the contact friction of a part's surface, set where
   its material is and inherited as one is: a sliding coefficient (MuJoCo keeps its torsional and

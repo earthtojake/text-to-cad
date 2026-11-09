@@ -5,8 +5,17 @@ A vendor's STEP of a robot holds parts and their placements, but no mechanism. E
 the world. To get a robot that moves, write a model that reads the STEP, groups its parts into
 links, puts a joint at each hinge, and declares what a simulator needs. Then export it as MJCF and
 URDF. The steps below go in order, and each names the reference with the detail. The times given
-are ranges for a desktop arm of a few hundred parts on a laptop: they grow with the parts' size and
-detail and shrink on a faster machine.
+are ranges on a laptop: they grow with the parts' surface area and detail (a few large freeform
+shells cost more than hundreds of small printed parts) and shrink on a faster machine.
+
+Vendor STEPs come in two kinds, and steps 2 to 5 say what each needs:
+
+- **An assembly with its internals**: printed or machined parts, servos or motors with their horns,
+  fasteners, boards and cables, often hundreds of parts. A hobby or desktop arm usually comes so.
+- **One plain solid per link**: a simplified ("dummy") envelope of each link, or an industrial arm's
+  outer shells, with no motors, gearboxes or fasteners inside. A link may be a few solids (a shell
+  and a cap). Such solids are often modelled filled, and neighbours are often drawn a little into
+  each other.
 
 ## 1. Read it
 
@@ -21,15 +30,32 @@ cad step snapshot vendor/arm.step tmp/as-drawn.png --camera right
 The conversion takes seconds. `xbf.read(HERE / "../vendor/arm.xbf")` then hands the model a tree,
 and `leaves(tree, paths=True)` gives each part placed where it stands, with its path of labels
 (the `cad` skill's inspection reference, Opening geometry).
-`path[1]` is the top-level component (`Forearm v4:1`, `Servo v2:3`). Use a throwaway `cad run`
-script to print each component's joined bounds once: it maps the STEP faster than reading the
-inspect output does. Look at the pose the vendor drew, too. An arm drawn folded at rest is a fine
-CAD pose, but not a simulator's zero (step 7).
+`path[1]` is the top-level component (`Forearm v4:1`, `Servo v2:3`). `inspect --query structure`
+counts the parts; use a throwaway `cad run` script to print each leaf's path, volume, face count
+and bounds once: it maps the STEP faster than reading the inspect output does. Look at the pose the
+vendor drew, too: it may be the controller's zero, or only a pose to ship it in (step 7).
+
+**Which way is up.** Many CAD tools draw Y up, and a STEP from one lies on its side in a Z-up
+simulator. No export option turns a robot over: place it in the model. Re-place every leaf with one
+rigid placement as you take it, a rotation that takes the vendor's up to +Z and a translation that
+puts the base's mounting face on z = 0 and its first axis on the Z axis:
+
+```python
+TO_WORLD = bd.Pos(0, 0, BASE_LIFT) * bd.Location((0, 0, 0), (90, 0, 0))   # vendor +Y up to +Z
+for path, part in leaves(xbf.read(STEP_XBF), paths=True):
+    part = TO_WORLD * part        # keeps its label, colour and material
+```
+
+One rigid placement for every part keeps each part where it stands on its hinges, so measure the
+axes (step 3) on the re-placed parts, or move each measured axis by the same placement. A snapshot
+of the re-placed parts shows the base on the ground.
 
 ## 2. Group the parts into links
 
 This step is the one human decision. Every part goes into exactly one link, and a joint sits
-between two links:
+between two links. In a STEP of one plain solid per link, each solid (or the few solids of one
+link) is a row of the table below, in chain order from the base; there is nothing more to sort, and
+the rules here are for an assembly with its internals:
 
 - **Printed or machined parts by function.** A bracket that carries a servo and the arm segment
   that servo turns are two links.
@@ -64,17 +90,36 @@ wrong.
 
 ## 3. Find each joint axis from the geometry
 
-A hinge's axis is a cylinder in the parts: a servo horn, a bearing bore, a shaft. build123d gives
-a cylindrical face's axis in world coordinates:
+A hinge's axis is a circle in the parts: a servo horn, a bearing bore, a shaft, a flange. Look
+for it on both sides of the hinge, the parent's and the child's, where the two agree. build123d gives
+each in world coordinates, from two sources:
 
 ```python
 import build123d as bd
 
-horn_face = horn.faces().filter_by(bd.GeomType.CYLINDER).sort_by(bd.SortBy.AREA)[-1]
-axis = horn_face.axis_of_rotation   # an Axis: a point on it and its direction
-radius = horn_face.radius
+
+def cylinders(part):
+    """(point, direction, radius) of each cylindrical face. build123d's face.radius is None on a
+    trimmed cylinder (common in vendor STEPs), so measure it from a point of the face."""
+    for face in part.faces().filter_by(bd.GeomType.CYLINDER):
+        axis = face.axis_of_rotation
+        offset = face.position_at(0.5, 0.5) - axis.position
+        radius = (offset - axis.direction * offset.dot(axis.direction)).length
+        yield axis.position, axis.direction, radius
+
+
+def circles(part):
+    """(centre, normal, radius) of each circular edge: a bore's rim, a flange's edge."""
+    for edge in part.edges().filter_by(bd.GeomType.CIRCLE):
+        yield edge.arc_center, edge.normal(), edge.radius
 ```
 
+Cylindrical faces come first: a horn, a bore. Smooth covers and freeform shells often have none
+that match across a hinge (one side of the joint is a freeform surface), but their rims still do:
+circular edges of the parent and the child with one normal and coaxial centres are the hinge's axis,
+at the point where they lie. Group each side's circles by axis (direction within a hundredth of a
+degree, the axis line within a few hundredths of a millimetre), and keep the axes the two sides share
+to within about a millimetre (the two halves of a hinge can disagree by tenths: below).
 A servo's two horns are coaxial, so check that their axes agree before you trust either one.
 Measure the axes once in a script and write them in the model as `(point, direction)` constants.
 Then:
@@ -85,8 +130,15 @@ Then:
   A part that turns about a squared axis while it stays where the STEP drew it wobbles a tenth of a
   millimetre or more against neighbours it clears by less than a millimetre, and `ranges` then finds
   stops that are not there (a jaw that stops far short of closing).
+- **Where the two sides disagree, use the child's bore.** A vendor's parts can be drawn a few
+  tenths of a millimetre off each other's axis (the parent's bore here, the child's a little there).
+  Put the joint on the child's own bore, the axis the child is drawn around: it then turns in
+  place, and the parent, which does not move, keeps its offset. On the parent's axis the child
+  would swing on a small circle and rub against neighbours it clears by less than that. Write the
+  offset in a comment beside the axis.
 - **Pick each direction's sign** so that a positive angle is the motion you mean (lift raises, the
-  jaw opens). The writers copy the sign and cannot know which way is meant.
+  jaw opens), or the controller's sign where it is known (step 7). The writers copy the sign and
+  cannot know which way is meant.
 - **Build each joint at the hinge's own frame.** Put the `RevoluteJoint` on the parent link (its
   Compound, or the part that carries the bearing), `bd.RevoluteJoint(name, parent_link,
   axis=bd.Axis(point, direction), angular_range=...)`. Put `bd.RigidJoint(name, child_link, hinge.location)` on the child link, then
@@ -94,10 +146,22 @@ Then:
 
 ## 4. Mass
 
-Vendor materials are often wrong for weighing: cables marked steel, printed parts modelled solid.
-A material you set replaces the part's colour (the faces the vendor painted keep theirs); set
-`part.color` back after it to keep the vendor's. Weigh each part as the hardware is, and count each
-part once: what a listing weighs, your declarations together weigh.
+Vendor materials are often wrong for weighing: cables marked steel, printed parts modelled solid,
+shells modelled filled. A material you set replaces the part's colour (the faces the vendor painted
+keep theirs); set `part.color` back after it to keep the vendor's. A STEP with no colours at all
+(`part.color` is None on every part) takes the material's colour everywhere, since there is none to
+keep: give the parts a neutral one after the material instead (`part.color = bd.Color(0.75, 0.75,
+0.75)`), or the vendor's from its pictures. Weigh each part as the hardware is, and count each part
+once: what a listing weighs, your declarations together weigh.
+
+**One plain solid per link.** The datasheet's weight of the arm is usually all there is: one
+material on every solid and `mass(arm, TOTAL_G)` split it by volume, which puts each link's centre
+of mass too far from its joints, where the hardware's motors are. `point_mass()` for each joint's
+actuator, listed or estimated, at its axis on the link that holds it, moves the mass back where it
+is; the total stays the datasheet's ([inertials](inertials.md#a-link-drawn-as-one-plain-solid) has
+the code). Say in the model's docstring which masses are listed and which estimated.
+
+**An assembly with its internals:**
 
 - **Printed parts:** a material (`plastics.pla()`), then `mass(part, grams)` estimated from the print
   settings ([inertials](inertials.md#a-printed-part)).
@@ -128,6 +192,12 @@ servos, the printed parts and the rest, each once.
 
 ## 5. Collisions
 
+**One plain solid per link:** `collision(part, "decomposed")` on a concave link (a yoke, a clevis,
+a gripper's palm with its slot), the default hull on a convex one (a base, a roll link), and `"none"`
+on a part that runs inside another (a sliding bar inside its guide).
+
+**An assembly with its internals:**
+
 - **Printed parts:** `collision(part, "decomposed")`, so that the pocket a servo sits in stays a
   pocket. The first export decomposes each part, from a few seconds to about a minute each by its
   size and detail (minutes for a dozen parts), and says each part on stderr as it is done. The
@@ -156,6 +226,17 @@ simulator makes and the hardware does not: raise that part's cap (`max_hulls=32`
 `threshold=`, and export again. A hull that only rounds over an inside corner nothing reaches does
 not matter, and a part whose shape never matters for contact can take fewer (`max_hulls=8`).
 
+Expect hulls to stand proud of the part. Their corners lie on the part's surface, but their faces
+bridge its concave places, by a few millimetres on a link a few hundred millimetres long, and a
+lower `threshold` or more hulls hardly changes that: the deepest bridge stays, and a fine threshold
+costs tens of times longer. So two links that clear each other by less than that beside a concave
+place (a wrist parked against the upper arm in the drawn pose) overlap at rest as hulls, and
+`cad mjcf validate` says `contacts_at_rest`, naming the two hulls. Where those links never meet in
+the hardware's working range, `exclude(a, b)` them, and say in the model that the simulator lets
+them pass through each other. Where they must still collide, no hull setting clears them: try a
+fitted shape on the convex one of the pair (`"cylinder"`, `"capsule"`), and validate again until the
+warning is gone.
+
 ## 6. Stops and drive limits
 
 ```bash
@@ -164,7 +245,9 @@ cad model ranges "$ID"
 ```
 
 At its defaults (0.3 mm clearance, 1 degree steps), `ranges` takes tens of seconds for an arm of a
-few hundred parts and six joints, by the parts' detail and the machine. The defaults stop each joint
+few hundred small parts and six joints, and minutes for one of a few large freeform shells: its time
+follows the parts' surface area and detail, not their count. A long sweep says each joint on stderr
+as it starts. The defaults stop each joint
 where its parts all but touch: write those stops. A larger `--clearance` only narrows a range (at
 1 mm a jaw can stop well short of closing), so keep the default. To ask again about one joint after
 a change, sweep it alone: `cad model ranges "$ID" --joint jaw`.
@@ -176,7 +259,16 @@ A stop at 0 means the same, unless the vendor drew the arm at that stop: an arm 
 the other way confirms. Vendor parts often sit a fraction of a millimetre apart (a moving jaw beside
 the cover of the servo that drives it): such a pair stops a joint only where its contact grows or its
 gap closes to half, and the stop says so (`touching as built`). Check such a stop with a posed
-snapshot at it. Where it is not the hardware's stop (the jaws still wide apart when the jaw meets
+snapshot at it.
+
+Simplified parts are often drawn sunk into each other: a link a little too wide for its clevis, a
+forearm resting a millimetre into the upper arm it folds onto, a gripper's carriage drawn inside its
+rail. `ranges` finds these and lists them under the joint (`overlapping as drawn ... by 180 mm^3,
+1.0 mm deep`). Such a pair stops the joint only where one part is pushed deeper into the other than
+drawn, by 0.6 mm more: its overlap shrinking, or sliding along with the joint, stops nothing, so the
+sweep goes on to the real stop, and no `exclude()` is needed for it. A stop such a pair makes says
+`deeper than drawn (overlapping ..., 1.0 mm deep, as built)`, and lies past the true one by up to
+about that depth: read it against a posed snapshot and the datasheet, and write the narrower. Where it is not the hardware's stop (the jaws still wide apart when the jaw meets
 the cover), set the pair aside in the model and sweep again: the two parts never stop the sweep,
 every other pair of their links still does, and the jaw then stops on the other jaw. A servo's case
 is often several shells (a middle and two covers), and the part that clears one sweeps into the
@@ -203,24 +295,56 @@ the way round has no stop in the parts: give it the actuator's own travel, or ma
 ([Generate from CAD](../SKILL.md#generate-from-cad)).
 
 Then declare `limits(arm, joint, effort=, velocity=, armature=)` from the actuator's datasheet:
-the stall torque in N*m, and the no-load speed in rad/s at the supply voltage you use. The armature
+the stall torque in N*m, and the no-load speed in rad/s at the supply voltage you use. Give both: a
+URDF requires the two, writes 0 for one left out, and a ROS controller reads that 0 as no speed (or
+no torque) allowed; the export names each joint it wrote so. Where the datasheet has no speed (a
+gripper's often has none), give the drive's from its maker, or measure it. The armature
 needs an estimate when the datasheet gives none, and a listing rarely does
 ([tuning](mujoco-environment.md#tuning)).
 
 ## 7. Zero and states
 
-The CAD's pose is every joint's zero unless you name another one. Compute a `home` state in the
-model from the measured axes, name the vendor's pose `rest` with every joint at 0, and export with
-`--zero home`. Each joint then counts from `home`, and `rest` becomes a key.
+A joint's zero is a fact of the hardware: its controller counts from one pose. Make the
+description's zero that pose, so that a joint value means the same in the simulator, in a driver
+and in the vendor's datasheet. The CAD's pose is every joint's zero unless you export with
+`--zero <state>`.
 
-`home` is your choice, said in the model's docstring. For a desktop arm, upright means every link
-of the pitch chain pointing straight up (each joint at the angle that stands its link vertical),
-the wrist in line, the roll at 0 and the gripper closed. Compute each angle from the axes: a link
-runs from its joint's axis to the next joint's (the last along the roll axis), and each joint turns
-every link after it, so take them in order. An angle is only meaningful within its range: move it
-by a full turn into the range, or the export refuses the state (`wrist at -350 deg, outside its
-range -90 to 90`). For an arm whose joints are `base_yaw`, `shoulder`, `elbow`, `wrist`,
-`tool_roll` and `jaw`:
+**Is the drawn pose the controller's zero?** Vendors often draw a robot at its zero, and their
+published joint ranges tell. Sweep the stops first (step 6), then lay each published range over the
+stops found around the drawn pose:
+
+- A range that is one-sided or lopsided around 0 (0 to 150, -10 to 200) puts the zero at or near
+  one end of the travel. A drawn pose folded against a stop, with ranges that start at 0, is that
+  pose.
+- Where the drawn pose is the zero, every published range fits inside the swept stops, each end a
+  little inside the stop on its side (a controller stops short of the parts). Try each joint's two
+  signs: usually only one puts the range inside the stops, and that is the controller's sign.
+- Where neither sign fits (the range runs through a stop either way), the drawn pose is not that
+  joint's zero.
+
+Where the ranges fit, keep the drawn pose as the zero and say so in the model's docstring, with the
+evidence (each range against its stops). The limits you write are then the datasheet's numbers.
+Re-zero only when you know the controller's zero is another pose, from the vendor's own description
+(a URDF, a driver's calibration) or its manual: compute that pose as a state from the measured axes
+(below), name the drawn pose `drawn` with every joint at 0, and export with `--zero <state>`. Each
+joint then counts from that state, and `drawn` becomes a key.
+
+**What stays undetermined.** A roll joint clear all the way round has no stop to fit a range
+against, and a symmetric range (±360) says nothing either: neither its zero nor its sign can be told
+from the geometry or the datasheet. The same holds for a joint whose range and stops are both
+symmetric. Keep the drawn pose's 0 and a stated convention for the sign (positive turns
+counter-clockwise looking out along the link), and write in the docstring that both are unchecked,
+so that whoever connects the controller checks them.
+
+**`home` and other states.** `home` is the pose the hardware starts from: the zero itself where the
+controller parks there. A working pose (the upper arm up, the forearm forward) is another state,
+`ready`. Compute a state's angles from the measured axes rather than by eye. A link runs from its
+joint's axis to the next joint's (the last along the roll axis), and each joint turns every link
+after it, so take them in order. A state must lie within every joint's range: an angle outside it
+may be the same pose a full turn round, and where no turn brings it inside, the pose is out of this
+robot's reach (an elbow that stops short of straight cannot stand the arm upright): choose another
+pose. For an arm whose joints are `base_yaw`, `shoulder`, `elbow`, `wrist`, `tool_roll` and `jaw`,
+standing each pitch link straight up:
 
 ```python
 UP = bd.Vector(0, 0, 1)
@@ -238,29 +362,32 @@ def turn(v, target, axis):
     return math.degrees(math.atan2(n.dot(v.cross(target)), v.dot(target)))
 
 
-home = {"base_yaw": 0, "tool_roll": 0, "jaw": RANGES["jaw"][0]}
+upright = {"base_yaw": 0, "tool_roll": 0, "jaw": RANGES["jaw"][0]}
 for at, joint in enumerate(PITCH):
     axis = bd.Vector(*AXES[joint][1])
     angle = turn(along[joint], UP, axis)
     lo, hi = RANGES[joint]
-    home[joint] = next((a for a in (angle, angle - 360, angle + 360) if lo <= a <= hi), angle)
+    within = [a for a in (angle, angle - 360, angle + 360) if lo <= a <= hi]
+    if not within:
+        raise ValueError(f"{joint} at {angle:.0f} deg is outside its range {lo} to {hi}: out of reach")
+    upright[joint] = within[0]
     for later in PITCH[at + 1:]:   # this joint carries every link after it
-        along[later] = along[later].rotate(bd.Axis((0, 0, 0), axis), home[joint])
-mechanism_state(arm, "home", **home)
+        along[later] = along[later].rotate(bd.Axis((0, 0, 0), axis), upright[joint])
+mechanism_state(arm, "upright", **upright)
 ```
 
 Check the signs on the model before exporting:
 
 ```bash
-cad model snapshot "$ID" tmp/home.png --pose home --camera right
+cad model snapshot "$ID" tmp/upright.png --pose upright --camera right
 cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ```
 
 ## 8. Export, validate, compare
 
 ```bash
-cad model export "$ID" sim/arm.xml --zero home
-cad model export "$ID" description/arm.urdf --zero home
+cad model export "$ID" sim/arm.xml          # --zero <state> only where step 7 re-zeroed
+cad model export "$ID" description/arm.urdf
 cad mjcf validate sim/scene.xml --compile required
 cad urdf validate description/arm.urdf
 cad mjcf snapshot sim/scene.xml tmp/mjcf.png --pose '{"shoulder": 30}' --camera right

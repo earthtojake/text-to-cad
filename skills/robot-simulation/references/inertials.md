@@ -12,6 +12,30 @@ A description generated from a CAD model (`cad model export <id> robot.xml` or `
 - **A part that is not what it is made of** (a hollow shell modelled solid, a motor modelled as its housing): declare what it weighs, `mass(part, grams)` from `cad.build123d`, the measured or datasheet total; its solids are scaled alike to make it up, so the centre of mass and the inertia's shape stay the geometry's. On an assembly, `mass()` is all of it: its parts keep their densities' ratios (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so), an inner `mass()` fixes its own subtree and the outer one scales the rest. Say so to the person.
 - **A lump the CAD leaves out** (a motor or a battery inside a filled housing): `point_mass(part, grams, at, name="motor")`, at `at` in the part's own frame, with no inertia of its own unless `inertia=(ixx, iyy, izz)` (kg·m², in `at`'s axes) gives it. It goes into the link's inertial exactly. A `mass()` above it counts it, so declare the measured total and the lumps you know: the solids make up the rest, and a total the lumps reach is refused by name.
 
+## A Link Drawn as One Plain Solid
+
+A vendor's simplified STEP, or an industrial arm's shells, draws each link as one filled solid with
+no motor inside, and the datasheet gives the whole arm's weight and nothing per link. Give every
+solid one material and the arm its total, `mass(arm, total_g)`: the total is split by the links'
+volumes, and the model's docstring says so. That split puts each link's mass where its envelope is,
+but the hardware's mass sits mostly in its motors and gearboxes, at the joints: each link's centre of
+mass comes out too far from its joints (towards the middle of its envelope), and its inertia too
+large, by tens of percent on a long link. Where the actuators' masses are known (the vendor's
+actuator line, a published motor) or can be estimated (an actuator of the joint's torque class from
+another maker's datasheet), put each at its joint, on the link that holds its case, with
+`point_mass()` in that part's own frame, and keep `mass(arm, total_g)`: the lumps count towards the
+total and the solids make up the rest, so the total stays the datasheet's and the centres of mass
+move towards the joints. Say in the docstring which masses are listed and which estimated.
+
+```python
+ARM_G = 9000.0                                     # the datasheet: the arm's weight
+ACTUATOR_G = {"shoulder": 1200.0, "elbow": 900.0}  # each joint's actuator: listed, or estimated (say which)
+for joint, grams in ACTUATOR_G.items():
+    case = parts[HOLDS[joint]][0]                  # the link that holds the actuator's case
+    point_mass(case, grams, case.location.inverse() * bd.Location(AXES[joint][0]), name=f"{joint}_actuator")
+mass(arm, ARM_G)
+```
+
 ## A Printed Part
 
 A printed part is a shell around sparse infill, not the solid its CAD models, so its material's
@@ -50,7 +74,7 @@ sub-assembly with the datasheet's weight, or `point_mass()` where the CAD leaves
 - Visualization-only or kinematics-only consumers (RViz, CAD Viewer, MoveIt kinematic planning): inertials are optional but still recommended so the model stays simulator-ready.
 - Frame-only links (`base_footprint`, optical frames, TCP markers): intentionally omit `inertial` and mark the link frame-only in the ledger.
 
-Do not give movable physical links zero or missing mass for a simulation target; most engines misbehave. If mass is unknown, use a documented assumed density or assumed total mass distributed by volume, and say so in the ledger.
+Do not give movable physical links zero or missing mass for a simulation target; most engines misbehave. If mass is unknown, use a documented assumed density or assumed total mass distributed by volume, and say so in the ledger: a split by volume puts each link's centre of mass too far from its joints where the hardware's mass is in its motors ([A Link Drawn as One Plain Solid](#a-link-drawn-as-one-plain-solid)).
 
 ## Semantics
 
