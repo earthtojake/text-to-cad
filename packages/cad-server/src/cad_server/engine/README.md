@@ -2705,7 +2705,8 @@ export writes collision geoms (with `friction` where declared), sites, child bod
 joint and a link, `<limit>`'s effort and velocity, and `<dynamics damping friction>` (URDF has
 no armature and no contact friction: a declared one is said in the export's log, not written), its root
 the free base, and an empty `base_link` before a root that has a mass (KDL takes no inertia on the
-root). Each writer keeps links and
+root) or whose frame is not the world's (its first part's own frame, turned or moved), at the root's
+placement, so every link stands where the MJCF stands it. Each writer keeps links and
 joints in a namespace each, as MJCF and URDF do, and says a rename in its kind (`export.note`, the export's log).
 
 **The zero, the scene and what an export says** (`describe.py`'s **The zero**, `export/mjcf.py`'s **The

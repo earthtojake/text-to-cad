@@ -4,8 +4,9 @@ the repository's own URDF check passing it and the stills reading its links wher
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
 and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
 friction as its dynamics and its armature and a part's contact friction said and not written, a ball
-refused by name, a joint that closes a loop left out and said; a root with an inertia hung from an empty
-``base_link`` and a free base the root; and a jointed model built by the engine and exported to ``.urdf``, its
+refused by name, a joint that closes a loop left out and said; a root with an inertia, or standing off the
+world's frame, hung from an empty ``base_link`` there and a free base the root; a root part turned in its
+placement standing where the MJCF stands it; and a jointed model built by the engine and exported to ``.urdf``, its
 links moving as the mechanism moves them, and a free arm taken at a state, its links at zero where the
 mechanism puts them there."""
 
@@ -274,17 +275,18 @@ class HandBuiltTest(_Folder):
         checked = urdf.validate(path)
         self.assertTrue(checked.ok, [f.message for f in checked.findings])
         robot = read_urdf(path)
-        # The base is the root, where the file's space is; the joint that fixed it is not written, and the post
-        # hangs from the base where it stood.
-        self.assertEqual(robot.root, "base")
+        # The base takes the ground's place; the joint that fixed it is not written, and the post hangs from the base
+        # where it stood. The base stands turned and off the world's origin, so an empty base_link roots it there:
+        # the file's space is the world's, every link where the description stands it.
+        self.assertEqual(robot.root, "base_link")
         self.assertEqual([(j.name, j.type, j.parent, j.child) for j in robot.joints],
-                         [("mount", "fixed", "base", "post"), ("slider", "continuous", "base", "slider_turn"),
+                         [("base_link_joint", "fixed", "base_link", "base"), ("mount", "fixed", "base", "post"),
+                          ("slider", "continuous", "base", "slider_turn"),
                           ("slider_slide", "prismatic", "slider_turn", "slider")])
         description = rig()
-        space = np.linalg.inv(description.link("base").frame)
         for name in ("base", "post", "slider"):
-            np.testing.assert_allclose(robot.links[name], space @ description.link(name).frame, atol=1e-8)
-        slide = robot.joints[2]
+            np.testing.assert_allclose(robot.links[name], description.link(name).frame, atol=1e-8)
+        slide = robot.joints[3]
         self.assertEqual((slide.lower, slide.upper), (0.0, 1e16))  # the open end: SDFormat's word for none
 
     def test_a_root_with_an_inertia_hangs_from_an_empty_base_link_and_a_free_base_is_the_root(self) -> None:
@@ -303,11 +305,13 @@ class HandBuiltTest(_Folder):
             checked = urdf.validate(path)
             self.assertTrue(checked.ok, [finding.message for finding in checked.findings])
             robot = read_urdf(path)
-            # KDL takes no inertia on the root: an empty link before it, at its origin; the description's names kept.
+            # KDL takes no inertia on the root: an empty link before it, where the base stands; the description's
+            # names kept.
             self.assertEqual((robot.root, robot.joints[0].name, robot.joints[0].parent, robot.joints[0].child),
                              (empty, f"{empty}_joint", empty, named))
-            np.testing.assert_allclose(robot.links[named], np.eye(4), atol=1e-12)
-        # A free base all the ground holds is the root, its floating joint unwritten; beside a bolted post the
+            np.testing.assert_allclose(robot.links[named], base.frame, atol=1e-12)
+        # A free base all the ground holds is the root (behind the empty link that stands it where it starts), its
+        # floating joint unwritten; beside a bolted post the
         # ground stays the root and the free base is written fixed to it, and said.
         description = rig()
         description.joints[0].kind = "floating"
@@ -315,7 +319,7 @@ class HandBuiltTest(_Folder):
                         joints=[joint for joint in description.joints if joint.name != "mount"])
         write_description(alone, self.folder / "alone.urdf")
         self.assertEqual((read_urdf(self.folder / "alone.urdf").root, "rig" in {j.name for j in
-                          read_urdf(self.folder / "alone.urdf").joints}), ("base", False))
+                          read_urdf(self.folder / "alone.urdf").joints}), ("base_link", False))
         with self.assertWarnsRegex(ExportWarning, "link 'base' is free, and a URDF has one root: it is written fixed "
                                                   "to 'world'"):
             write_description(description, self.folder / "beside.urdf")
@@ -329,7 +333,8 @@ class HandBuiltTest(_Folder):
         path = self.folder / "rig.urdf"
         with self.assertWarnsRegex(ExportWarning, "link 'base' is written 'base_2': another link holds its name"):
             write_description(description, path)
-        self.assertEqual(sorted(read_urdf(path).links), ["base", "base_2", "post", "slider", "slider_turn"])
+        self.assertEqual(sorted(read_urdf(path).links), ["base", "base_2", "base_link", "post", "slider",
+                                                         "slider_turn"])
 
     def test_a_joint_s_damping_and_friction_are_its_dynamics_and_what_urdf_cannot_say_is_said(self) -> None:
         description = arm()
@@ -395,7 +400,49 @@ def hinge():
 """
 
 
+# A hinge whose base part is turned a quarter about X in its placement: the root link's frame, the base's own,
+# is turned in the world.
+TURNED = """
+import build123d as bd
+from bd_materials import metals
+from cad.engine import xbf
+
+
+@xbf("XBF/turned.xbf")
+def turned():
+    base = bd.Pos(0, 38, 0) * bd.Rot(90, 0, 0) * bd.Box(100, 20, 60)
+    base.label = "base"
+    arm = bd.Pos(40, 38, 30) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm.label = "arm"
+    for part in (base, arm):
+        part.material = metals.aluminum()
+    elbow = bd.RevoluteJoint("elbow", base, axis=bd.Axis((40, 38, 30), (0, -1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", arm, elbow.location)
+    elbow.connect_to(arm.joints["elbow"], angle=0)
+    return bd.Compound(children=[base, arm], label="turned")
+"""
+
+
 class EngineTest(_Folder):
+    def test_a_turned_root_part_stands_where_the_mjcf_stands_it(self) -> None:
+        (self.folder / "turned.py").write_text(textwrap.dedent(TURNED), encoding="utf-8")
+        api.build_script(self.folder / "turned.py", daemon=False)
+        xbf = self.folder / "XBF/turned.xbf"
+        api.export(xbf, self.folder / "mjcf" / "turned.xml", daemon=False, progress=False)
+        api.export(xbf, self.folder / "urdf" / "turned.urdf", daemon=False, progress=False)
+        mjcf_robot, urdf_robot = read_robot(self.folder / "mjcf" / "turned.xml"), read_robot(self.folder / "urdf" / "turned.urdf")
+        # The URDF roots at an empty link at the world's frame, and every link of the MJCF stands where the URDF
+        # stands it, at zero and with the hinge turned.
+        self.assertEqual(urdf_robot.root, "base_link")
+        np.testing.assert_allclose(urdf_robot.placements(urdf_robot.values(None)[0])["base"][:3, :3],
+                                   [[1, 0, 0], [0, 0, -1], [0, 1, 0]], atol=1e-6)
+        for values in (None, {"elbow": 40}):
+            built = mjcf_robot.placements(mjcf_robot.values(values)[0])
+            placed = urdf_robot.placements(urdf_robot.values(values)[0])
+            for name in ("base", "arm"):
+                np.testing.assert_allclose(placed[name], built[name], atol=1e-6, err_msg=f"{name} at {values}")
+
+
     def test_a_built_hinge_exports_to_a_urdf_whose_links_move_as_its_mechanism_does(self) -> None:
         (self.folder / "hinge.py").write_text(textwrap.dedent(HINGE), encoding="utf-8")
         api.build_script(self.folder / "hinge.py", daemon=False)

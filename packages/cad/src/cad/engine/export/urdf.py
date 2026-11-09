@@ -13,8 +13,8 @@ root of that package. Nothing here imports the kernel: the writer is text and nu
 reader that bolts a robot down adds its own ``world`` link). The description's ground (its first link,
 ``world``) is the root only where it holds something (a visual, a collision, a mass); otherwise the
 first link hung from it by a ``fixed`` joint is the root, under the name it has, and that joint is not
-written: the file's space is that link's frame, and every other joint from the ground hangs from it, its
-origin carried into that frame (``rooted``). A base declared free (``cad.build123d.free``: a
+written: every other joint from the ground hangs from the root, its origin carried into the root's frame
+(``rooted``), and the root stands where that joint stood it (**The base link**). A base declared free (``cad.build123d.free``: a
 ``floating`` joint from the ground) is the root the same way where it is all the ground holds, the
 floating joint not written, as a URDF root floats already; beside another link hung from the ground, the
 ground stays the root, an empty ``world`` link as ROS has one, and the free link is written ``fixed`` to it,
@@ -27,7 +27,10 @@ the root link and drops it with a warning. So where the root link has an ``<iner
 at an empty link before it, ``base_link``, joined to it by a ``fixed`` joint ``base_link_joint`` at its
 origin, as ROS names a robot's base; where the root is itself named ``base_link``, the empty one is
 ``base_link_root`` (and its joint ``base_link_root_joint``), so the description's names stay as they
-are. A root with no inertial is the root as it is.
+are. The file's space is the world's, as an MJCF's is: where the root link's frame is not the world's (its
+first part's own frame, moved or turned in the world), the empty link roots it the same way, its joint at
+the root's placement, so every link stands where the MJCF of the same document stands it. A root with no
+inertial at the world's frame is the root as it is.
 
 **Links.** Each link's frame is its joint's (the description's rule, and URDF's), so a visual's
 and a collision's ``<origin>`` is its placement in the link frame, and a link's ``<inertial>`` is
@@ -292,7 +295,9 @@ class _Writer:
     def __init__(self, description: Description, meshes: str, package: str | None) -> None:
         self.description = description
         self.prefix = f"package://{package}/{meshes}" if package else meshes
-        self.root, self.joints, _dropped = rooted(description)
+        self.root, self.joints, dropped = rooted(description)
+        # Where the root stands in the world: the dropped joint's origin (the module's **The base link**).
+        self.placed = np.eye(4) if dropped is None else np.asarray(dropped.origin, dtype=float)
         self.children: dict[str, list[Joint]] = {}
         for joint in self.joints:
             self.children.setdefault(joint.parent, []).append(joint)
@@ -328,12 +333,13 @@ class _Writer:
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         body: list[Xml] = []
-        if self.root.inertial is not None:
-            # An empty root before one with an inertia, which KDL drops (the module's **The base link**).
+        if self.root.inertial is not None or not np.allclose(self.placed, np.eye(4), rtol=0.0, atol=1e-12):
+            # An empty root before one with an inertia, which KDL drops, or one the world does not stand at (the
+            # module's **The base link**).
             wanted = "base_link" if self.links[self.root.name] != "base_link" else "base_link_root"
             base = self._name(self.link_names, wanted, "link")
             joint = Xml("joint", [("name", self._name(self.joint_names, f"{base}_joint", "joint")), ("type", "fixed")])
-            joint.add("origin", _origin(np.eye(4)))
+            joint.add("origin", _origin(self.placed))
             joint.add("parent", [("link", base)])
             joint.add("child", [("link", self.links[self.root.name])])
             body.extend([Xml("link", [("name", base)]), joint])
