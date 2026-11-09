@@ -31,8 +31,10 @@ element never waits on a build.
 An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "given", "token"}``,
 ``api.check``) and no destinations is a manufacturing check of the document it names, measured where it is
 held (``_check``: the integration ``cad.registry.manufacturing_check`` names), answered ``{"id", "done": {"checked": ...}}``. A
-``{"id", "op": "cancel", "token"}`` request, answered at once by the thread that reads the requests
-(``{"id", "cancelled"}``: whether one was), asks the check of that token to stop (``_cancel``): a check
+``{"id", "op": "cancel", "token"}`` request, answered by the thread that reads the requests as soon as it reads
+it -- once the kernel call in progress returns, as OCP holds Python's lock through a call -- (``{"id",
+"cancelled"}``: whether one was; the daemon waits for no such answer), asks the check of that token to stop
+(``_cancel``): a check
 running stops at its next checkpoint (the integration's ``checkpoint``: between parts, families, faces and
 rays, so after whatever kernel call it is in, the whole part's mesh the longest), one still queued is
 dropped before it starts, and either is answered as cancelled (``cancelled``). The daemon asks it when a
@@ -769,6 +771,9 @@ def failure(error: BaseException) -> dict[str, Any]:
 
 def main() -> int:
     os.environ["CAD_ENGINE_WORKER"] = "1"
+    from cad.engine.contract import measuring
+
+    measuring()  # what measures its checks: its code as it starts, before anything a check measures with loads
     protocol = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)  # the model's prints go where the daemon reads logs from
     sys.stdout = sys.stderr

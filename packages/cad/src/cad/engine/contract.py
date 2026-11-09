@@ -37,8 +37,8 @@ from typing import Any
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "answers_checks", "interpreter", "measures_for",
-           "measuring", "notice", "refusal", "release", "spelled"]
+__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "answers_checks", "interpreter", "measure",
+           "measures_for", "measuring", "notice", "refusal", "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
@@ -83,31 +83,36 @@ def interpreter() -> dict[str, Any] | None:
 
 
 # The libraries a manufacturing check measures with, by the distribution that carries each (the first of
-# them installed): their versions name the measuring side with the library's code (``measuring``).
+# them installed): their versions name the measuring side with the library's code (``measuring``). A check the
+# engine measures is a B-rep check -- build123d's, on OCP, a part's material read with bd_materials and its
+# arrays numpy's; a mesh's check (trimesh's) is measured in its caller's own process, never asked of the engine
+# (``api.check``), so its libraries name nothing here.
 MEASURING: dict[str, tuple[str, ...]] = {
     "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp"), "bd_materials": ("bd_materials",),
-    "trimesh": ("trimesh",), "scipy": ("scipy",), "numpy": ("numpy",)}
+    "numpy": ("numpy",)}
 
 
-@functools.lru_cache(maxsize=1)
-def measuring() -> dict[str, Any]:
-    """What measures a manufacturing check in this process, read once per process: the digest of this
-    library's code (``code``: every source file of the cad package, by its place in it, so a checkout's
-    edited copy and the published one of one release are two) and the version of each library a check
-    measures with (``libraries``, ``MEASURING``; None for one not installed here). The caller sends its own
-    with each check (``api.check``), the result is kept under the measuring process's, and a process whose
-    own is unlike the caller's (``measures_for``) measures nothing for it. Nothing is imported."""
+def measure(root: Any = None) -> dict[str, Any]:
+    """What measures a manufacturing check in this process now (``measuring`` keeps the first): the digest of
+    this library's code (``code``: every source file of the cad package by its place in it -- a ``.py``, or the
+    ``.pyc`` an install of bytecode alone holds in its place -- so a checkout's edited copy and the published one
+    of one release are two) and the version of each library a check measures with (``libraries``,
+    ``MEASURING``; None for one not installed here). A process with no CAD kernel (``OCP`` not found: the
+    ``cad`` command's environment) names no library at all: it measures nothing itself, and any process of its
+    code measures for it (``measures_for``). Nothing is imported. ``root``: the package folder whose code is
+    hashed, the cad package's by default."""
     import hashlib
+    import importlib.util
     import os
-    from importlib import metadata
     from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent if root is None else Path(root)
     found = hashlib.blake2b(digest_size=16)
     for folder, folders, files in os.walk(root):
         folders[:] = sorted(name for name in folders if name != "__pycache__")
+        sources = set(files)
         for name in sorted(files):
-            if not name.endswith(".py"):
+            if not (name.endswith(".py") or (name.endswith(".pyc") and name[:-1] not in sources)):
                 continue
             path = Path(folder) / name
             try:
@@ -116,21 +121,67 @@ def measuring() -> dict[str, Any]:
                 continue
             found.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0" + data + b"\0")
     libraries: dict[str, str | None] = {}
-    for name, distributions in MEASURING.items():
+    try:
+        kernel = importlib.util.find_spec("OCP") is not None
+    except (ImportError, ValueError):
+        kernel = False
+    installed = _installed() if kernel else {}
+    for name, distributions in MEASURING.items() if kernel else ():
         libraries[name] = None
         for distribution in distributions:
-            try:
-                libraries[name] = metadata.version(distribution)
-                break
-            except metadata.PackageNotFoundError:
-                continue
+            said = installed.get(_normal(distribution))
+            if said is None:
+                from importlib import metadata
+
+                try:
+                    said = metadata.version(distribution)  # one the folders' names do not say: asked the long way
+                except metadata.PackageNotFoundError:
+                    continue
+            libraries[name] = said
+            break
     return {"code": found.hexdigest(), "libraries": libraries}
+
+
+def _normal(name: str) -> str:
+    import re
+
+    return re.sub(r"[-_.]+", "_", name).lower()
+
+
+def _installed() -> dict[str, str]:
+    """Each distribution on the import path by its normalized name, and its version, as its ``.dist-info``
+    folder's name says them -- the first on the path, as Python imports it -- read from the folders' listings
+    alone (``importlib.metadata`` costs more than the rest of ``cad.engine``'s import)."""
+    import os
+
+    found: dict[str, str] = {}
+    for entry in sys.path:
+        try:
+            names = os.listdir(entry or ".")
+        except OSError:
+            continue
+        for name in names:
+            if name.endswith(".dist-info") and "-" in name:
+                distribution, _, said = name[:-len(".dist-info")].partition("-")
+                found.setdefault(_normal(distribution), said)
+    return found
+
+
+@functools.lru_cache(maxsize=1)
+def measuring() -> dict[str, Any]:
+    """What measures a manufacturing check in this process (``measure``), as its code was when it was loaded:
+    taken as ``cad.engine`` is first imported, before anything a check measures with is, and kept for the
+    process's life (a worker takes it again, at once, as it starts: ``worker.main``). The caller sends its own
+    with each check (``api.check``), the process that measures it says its own with the result, a result is
+    kept under the check, its release and this code and served to every caller the process that measured it
+    measures for (``measures_for``), and a process unlike its caller measures nothing for it."""
+    return measure()
 
 
 def measures_for(asked: Any, mine: Any) -> bool:
     """Whether a process whose measuring side is ``mine`` (``measuring``'s) measures a check its caller asks
-    with ``asked``: the same code, and the same version of every library the caller has (one it has not --
-    a command with no kernel -- is the measuring process's to name)."""
+    with ``asked``: the same code, and the same version of every library the caller names (a caller with no
+    kernel names none: any process of its code measures for it)."""
     if not (isinstance(asked, dict) and isinstance(mine, dict) and isinstance(asked.get("libraries"), dict)
             and isinstance(mine.get("libraries"), dict)):
         return False
