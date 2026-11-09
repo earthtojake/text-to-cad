@@ -15,7 +15,8 @@ A cylindrical or spherical joint, two or three values, is not swept, nor is a jo
 
 **The test is on surfaces**, the way the parts would meet: each part's own surface (``geometry="parts"``,
 the default: its mesh, as the viewer draws it), or what it declares a simulator collides it as
-(``"collision"``: the primitive fitted to it where it declares one, else its mesh), with a part declared
+(``"collision"``: the primitive fitted to it where it declares one, its hulls where it is decomposed, else
+its mesh), with a part declared
 ``collision(part, "none")`` taking no part either way (a fastener seated in the hole it holds, a servo's
 internals), is sampled to points ``0.6 * clearance`` apart; the still side's points mark a grid of
 ``clearance`` cells; the moving side's points, moved, are looked up in it. So two surfaces within about
@@ -106,15 +107,17 @@ def sweep(description: Any, *, step: float = 1.0, clearance: float = 1.0, geomet
 
 def _tested(link: Any, geometry: str) -> list[tuple[str, Any]]:
     """A link's tested shapes, each with its part's name: ``parts``, the part itself (its visual mesh) for each
-    part that collides at all; ``collision``, what each declares (``Link.collisions``). A link's collisions are
-    its visuals' subsequence, in order, the parts declared ``none`` left out."""
+    part that collides at all; ``collision``, what each declares (``Link.collisions``), a decomposed part's hulls
+    each under the part's name. A link's collisions are its visuals' subsequence, in order, the parts declared
+    ``none`` left out and a decomposed part's hulls one after another."""
     if geometry == "collision":
-        return [(collision.name, collision.geometry) for collision in link.collisions]
+        return [(collision.of, collision.geometry) for collision in link.collisions]
     found, at = [], 0
     for visual in link.visuals:
-        if at < len(link.collisions) and link.collisions[at].name == visual.name:
+        if at < len(link.collisions) and link.collisions[at].of == visual.name:
             found.append((visual.name, visual.geometry))
-            at += 1
+            while at < len(link.collisions) and link.collisions[at].of == visual.name:
+                at += 1
     return found
 
 

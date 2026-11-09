@@ -11,7 +11,7 @@ them, the bodies welded to its parent (joined to it by fixed joints
 alone, the world's included) and those welded to its child: each pair of them, one from each side, whose
 collision geometries overlap or come within ``TOUCH`` of each other with every joint at zero (the
 as-built state, the description's frames). A mesh is its convex hull, a primitive itself, as MuJoCo
-collides them. The test is exact for convex shapes: the distance between two of them by GJK over their
+collides them, so a decomposed part (``collision(part, "decomposed")``) is tested hull by hull. The test is exact for convex shapes: the distance between two of them by GJK over their
 support functions, after their axis-aligned boxes (grown by ``TOUCH``) are found to meet. A pair GJK
 does not settle in ``ITERATIONS`` steps is counted as touching, so the rule errs towards an exclusion.
 Pairs come in joint order, then the closures', each once. Text and numpy alone (law 3), the same description the same pairs.

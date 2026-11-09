@@ -42,7 +42,9 @@ by, so a writer writes each prototype once however many links place it. A visual
 its colour; a collision is what the part's ``collision`` declaration asked for
 (``cad.build123d.collision``): the mesh itself (a simulator hulls it; the default), a ``box``, a
 ``sphere``, a ``cylinder`` or a ``capsule`` fitted to the part by the kernel (an oriented bounding
-box, its axis the longest side), or none; its ``friction`` is the part's contact friction
+box, its axis the longest side), the convex hulls CoACD cuts the part's mesh into (``decomposed``: a
+collision per hull, each a mesh of its own, ``<part>_hull<i>``, its ``part`` the part's name), or
+none; its ``friction`` is the part's contact friction
 (``cad.build123d.friction``: sliding, or sliding, torsional and rolling), empty where it declares
 none and a simulator's default applies. Named frames (``cad.build123d.frame``) are kept on their
 link, in the link's frame, for a writer's sites or fixed frames. A part declared a body
@@ -91,8 +93,9 @@ import numpy as np
 __all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
            "Link", "Mesh", "Pose", "Visual"]
 
-#: What a part's collision may be (``cad.build123d.collision``): the mesh itself, a fitted primitive, or none.
-COLLISIONS = ("mesh", "box", "sphere", "cylinder", "capsule", "none")
+#: What a part's collision may be (``cad.build123d.collision``): the mesh itself, a fitted primitive, the
+#: convex hulls of a decomposition of its mesh, or none.
+COLLISIONS = ("mesh", "box", "sphere", "cylinder", "capsule", "decomposed", "none")
 #: The joint kinds, in the words URDF uses where it has one; ``cylindrical`` and ``spherical`` are AP242's.
 JOINT_KINDS = ("fixed", "revolute", "continuous", "prismatic", "cylindrical", "spherical")
 #: The joints a closure may be: a slide is kept a joint of the tree where its loop has a turn or a ball.
@@ -144,6 +147,12 @@ class Collision:
     name: str
     geometry: Geometry
     friction: tuple[float, ...] = ()  # (sliding,) or (sliding, torsional, rolling); () where none is declared
+    part: str = ""  # the part it is one hull of (a decomposition: ``name`` is ``<part>_hull<i>``); "" where ``name`` is
+
+    @property
+    def of(self) -> str:
+        """The name of the part this collides for: its own, or the part it is one hull of."""
+        return self.part or self.name
 
 
 @dataclass(frozen=True)

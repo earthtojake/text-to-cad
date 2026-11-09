@@ -1,7 +1,7 @@
 # Adding an integration
 
 An **integration** is our support for one third-party tool, named for the tool's own project
-(`build123d`, `kicad`, `trimesh`, `mujoco`, `netgen`, `calculix`), never for a capability. It is
+(`build123d`, `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`), never for a capability. It is
 three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README

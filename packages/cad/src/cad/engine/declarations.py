@@ -4,8 +4,10 @@ it grips.
 
 ``collision(part, kind)`` says what a simulator collides the part as (``description.COLLISIONS``):
 the mesh itself (the default a description is made with), a ``box``, a ``sphere``, a ``cylinder``
-or a ``capsule`` the kernel fits to the part, or ``none``. On an assembly it is every part's below
-it that declares none, as a material is. ``frame(part, name, location)`` names a frame on a part --
+or a ``capsule`` the kernel fits to the part, ``decomposed`` (convex hulls CoACD cuts the part's mesh
+into, the coacd integration's, its visual whole: ``max_hulls`` and ``threshold`` bound it), or
+``none``. On an assembly it is every part's below it that declares none, as a material is, its
+options with it. ``frame(part, name, location)`` names a frame on a part --
 a tool tip, a camera mount, a sensor -- for a writer's sites or fixed frames.
 
 ``body(part, name=None)`` keeps a part a body of its own, fixed to the link it would have merged
@@ -69,6 +71,7 @@ __all__ = ["body", "collision", "exclude", "frame", "friction", "limits", "mass"
 
 # The attributes the declarations are kept in on a shape (``document.collect`` reads them).
 COLLISION = "_collision"
+DECOMPOSITION = "_decomposition"  # a decomposed collision's options: {"maxHulls"?, "threshold"?}, those given
 FRAMES = "_frames"
 BODY = "_body"  # the body's name, "" for the part's own
 EXCLUDE = "_exclude"  # the labels it does not collide with, sorted
@@ -91,15 +94,42 @@ def _shape(part: Any, said: str) -> Any:
     return part
 
 
-def collision(part: Any, kind: str) -> Any:
+#: The concavity threshold CoACD takes: its own range (its default, 0.05, where none is given).
+THRESHOLD = (0.01, 1.0)
+
+
+def collision(part: Any, kind: str, *, max_hulls: int | None = None, threshold: float | None = None) -> Any:
     """Say what a simulator collides ``part`` as: one of ``mesh``, ``box``, ``sphere``,
-    ``cylinder``, ``capsule`` or ``none`` (the primitives fitted by the kernel to the part's
-    oriented bounding box, a cylinder's and a capsule's axis its longest side). On an assembly,
+    ``cylinder``, ``capsule``, ``decomposed`` or ``none`` (the primitives fitted by the kernel to the
+    part's oriented bounding box, a cylinder's and a capsule's axis its longest side). ``decomposed``
+    is a set of convex hulls cut from the part's mesh by CoACD (the coacd integration, ``cad[coacd]``,
+    where the robot is described), its visual left whole: ``max_hulls`` at most that many (CoACD's
+    ``max_convex_hull``; no limit where None), ``threshold`` its concavity threshold, 0.01 to 1, a
+    smaller one cutting finer (CoACD's 0.05 where None); no other kind takes either. On an assembly,
     every part below it that declares none. Returns ``part``."""
     _shape(part, "collision")
     if kind not in COLLISIONS:
         raise ValueError(f"collision {kind!r} is none of {', '.join(COLLISIONS)}")
+    options: dict[str, Any] = {}
+    if max_hulls is not None:
+        if isinstance(max_hulls, bool) or not isinstance(max_hulls, int) or max_hulls < 1:
+            raise ValueError(f"max_hulls is a whole number of hulls, at least 1, not {max_hulls!r}")
+        options["maxHulls"] = int(max_hulls)
+    if threshold is not None:
+        if (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+                or not THRESHOLD[0] <= threshold <= THRESHOLD[1]):
+            raise ValueError(f"threshold is CoACD's concavity threshold, {THRESHOLD[0]:g} to {THRESHOLD[1]:g}, "
+                             f"not {threshold!r}")
+        options["threshold"] = float(threshold)
+    if options and kind != "decomposed":
+        given = " or ".join(name for name, value in (("max_hulls", max_hulls), ("threshold", threshold))
+                            if value is not None)
+        raise ValueError(f"collision {kind!r} takes no {given}: they bound a decomposed one")
     part.__dict__[COLLISION] = kind
+    if options:
+        part.__dict__[DECOMPOSITION] = options
+    else:
+        part.__dict__.pop(DECOMPOSITION, None)
     return part
 
 

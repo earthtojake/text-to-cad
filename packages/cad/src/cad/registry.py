@@ -350,6 +350,14 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         process="in-process", modules=("mujoco",), distributions=("mujoco-core", "mujoco-studio"),
         identity=("mujoco", "mujoco-core", "mujoco-studio"), commands=("mujoco-studio",),
         holds="MuJoCo's headless core and MuJoCo Studio", download_mb=20),
+    "coacd": Integration(
+        "coacd", "CoACD, the approximate convex decomposition of a triangle mesh: a part declared collision(part, "
+                 "\"decomposed\") collides in a robot description as the convex hulls CoACD cuts its mesh into, its "
+                 "visual whole, always in a process of its own (its TBB and the kernel's cannot share one), the "
+                 "hulls kept in the engine's cache by the mesh's digest",
+        extra="coacd", process="separate",
+        modules=("coacd",), distributions=("coacd",), identity=("coacd",),
+        holds="CoACD's convex decomposition", download_mb=4),
     "netgen": Integration(
         "netgen", "netgen, the tetrahedral mesher: a stress study (solve) meshes a part's own faces with it, curved "
                   "second-order elements, every face kept under its ref, always in a process of its own (its "

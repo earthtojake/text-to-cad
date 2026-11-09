@@ -24,7 +24,9 @@ the description holds it; a link with no mass is given no ``<inertial>`` (the UR
 of a moving one: a simulator wants one, a viewer does not). A shape is a ``<mesh>`` (its ``scale``
 the geometry's) or a primitive in URDF's full sizes: a ``<box size>``, a ``<sphere radius>``, a
 ``<cylinder radius length>``; a capsule, which URDF has no word for, is its cylinder and a sphere at
-each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``. A visual's colour
+each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``. A decomposed part
+(``cad.build123d.collision(part, "decomposed")``) is a ``<collision>`` per convex hull, ``<part>_hull<i>``,
+each hull's mesh a file of its own (``<model>_<part>_hull<i>.stl``), its visual the part whole. A visual's colour
 is a ``<material>`` declared once at the top and named in the visual: one per material name and
 colour (a part with no material is ``color``), a repeat given ``_2``, ``_3``. A named frame is a
 link of its own with nothing in it, hung from its link by a ``fixed`` joint ``<frame>_joint``, as a
@@ -397,7 +399,7 @@ class _Writer:
                 piece.add("material", [("name", material)])
         for collision in link.collisions:
             if collision.friction:
-                note(f"collision {collision.name!r}'s contact friction is not written: URDF has none (an MJCF "
+                note(f"collision {collision.of!r}'s contact friction is not written: URDF has none (an MJCF "
                      "carries it)")
             wanted = name_of(collision.name, "collision")
             for suffix, placement, geometry in shaped(collision.geometry):

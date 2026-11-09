@@ -128,6 +128,17 @@ mujoco = [
   "mujoco-core>=4.0,<5",
   "mujoco-studio>=4.0,<5",
 ]
+# The coacd integration's extra: a part declared `collision(part, "decomposed")` collides in a robot description as
+# the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process
+# (cad.coacd._decomposer), since its native library carries a TBB of its own beside the kernel's. One wheel, its
+# library loaded with ctypes, numpy its one dependency, MIT; about 1.5-3.5 MB. Bounded to the 1.0 line: the hulls
+# are a function of CoACD's release (the decomposer's cache key names the line) and its ctypes entry point's
+# arguments are positional. CoACD publishes abi3 wheels for macOS arm64, Linux x86_64 and aarch64 and Windows
+# x86_64 alone, and no sdist, so the extra installs it only there: anywhere else (an Intel Mac, Windows on ARM) it
+# installs nothing and a decomposition the cache does not hold is refused, naming the extra.
+coacd = [
+  "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
@@ -144,7 +155,8 @@ use-ignore-files = false
 # netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
 # cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
 # package jobs that check types do not install it.
-ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx"]
+# coacd: imported only by the decomposer's own process (`cad/coacd/_decomposer.py`), and it ships no type stubs.
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

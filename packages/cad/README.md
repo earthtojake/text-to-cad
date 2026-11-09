@@ -56,7 +56,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `mujoco`, `netgen`, `calculix`),
+  `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -642,6 +642,9 @@ src/cad/
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
+  coacd/                 # the coacd integration, CoACD's convex decomposition: the process of its own
+                         #   that cuts a part declared collision(part, "decomposed") into convex hulls
+                         #   (_decomposer), which the engine starts and keeps the hulls of (engine/hulls.py)
   netgen/                # the netgen integration: the mesher, always in a process of its own
                          #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
   calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run

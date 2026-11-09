@@ -371,6 +371,8 @@ class Source:
             # the word, each frame as the Location the model gave, read back from its 16 floats.
             if prototype.get("collision") is not None:
                 made.__dict__["_collision"] = prototype["collision"]
+            if prototype.get("decomposition"):
+                made.__dict__["_decomposition"] = dict(prototype["decomposition"])
             if prototype.get("frames"):
                 frames = {}
                 for frame_name, values in prototype["frames"].items():

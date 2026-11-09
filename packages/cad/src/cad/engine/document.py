@@ -285,13 +285,19 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     def visit(obj: Any, topods: Any, inherited: tuple | None, inherited_material: Any,
               path: str, inherited_collision: str | None = None,
               inherited_exclude: tuple[str, ...] = (), inherited_masses: tuple[tuple[int, float], ...] = (),
-              inherited_friction: tuple[float, ...] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
+              inherited_friction: tuple[float, ...] | None = None,
+              inherited_decomposition: dict[str, Any] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
         own_material = _material(state.get("_material"))
         material = own_material or inherited_material
-        collision = _collision(state.get(declarations.COLLISION), path) or inherited_collision
+        collision = _collision(state.get(declarations.COLLISION), path)
+        # A decomposition's options go with its collision, the part's own over its assembly's.
+        if collision is None:
+            collision, decomposition = inherited_collision, inherited_decomposition
+        else:
+            decomposition = _decomposition(state.get(declarations.DECOMPOSITION), collision, path)
         excluded = tuple(sorted({*inherited_exclude, *(state.get(declarations.EXCLUDE) or ())}))
         # Each mass declared at or above the node, as (how many levels above it, grams): the outermost first.
         own_mass = state.get(declarations.MASS)
@@ -309,7 +315,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                 prototype, signature, child_color = visit(child, child_topods.Located(_identity()), color, material,
                                                           path + "/" + (child_label or f"{own}.{at}"), collision,
                                                           excluded, tuple((up + 1, grams) for up, grams in masses),
-                                                          surface)
+                                                          surface, decomposition)
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -335,7 +341,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
         frames = _frames(state.get(declarations.FRAMES), path)
-        declared = _declared(state, excluded, path, masses, surface)
+        declared = _declared(state, excluded, path, masses, surface, decomposition)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
                      tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
                      declarations_key(collision, frames, declared))
@@ -2021,6 +2027,27 @@ def _collision(value: Any, path: str) -> str | None:
     return value
 
 
+def _decomposition(value: Any, collision: str, path: str) -> dict[str, Any] | None:
+    """A decomposed collision's options (``declarations.collision``'s ``max_hulls`` and ``threshold``, as
+    ``{"maxHulls", "threshold"}``, those given) checked, or None for none; options on another kind refused."""
+    from cad.engine.declarations import THRESHOLD
+
+    if not value:
+        return None
+    if collision != "decomposed":
+        raise ValueError(f"{path}: collision {collision!r} takes no decomposition options")
+    if not isinstance(value, dict) or set(value) - {"maxHulls", "threshold"}:
+        raise ValueError(f"{path}: a decomposition's options are maxHulls and threshold, not {value!r}")
+    hulls, threshold = value.get("maxHulls"), value.get("threshold")
+    if hulls is not None and (isinstance(hulls, bool) or not isinstance(hulls, int) or hulls < 1):
+        raise ValueError(f"{path}: maxHulls is a whole number of hulls, at least 1, not {hulls!r}")
+    if threshold is not None and (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+                                  or not THRESHOLD[0] <= threshold <= THRESHOLD[1]):
+        raise ValueError(f"{path}: threshold is {THRESHOLD[0]:g} to {THRESHOLD[1]:g}, not {threshold!r}")
+    return {**({"maxHulls": int(hulls)} if hulls is not None else {}),
+            **({"threshold": float(threshold)} if threshold is not None else {})}
+
+
 def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
     """A part's named frames (``declarations.frame``), each as 16 floats, column-major, millimetres,
     in the part's own frame."""
@@ -2040,9 +2067,10 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 #: under: its body's name ("" for the part's own), the labels it does not collide with, its joints' drive
 #: limits and dynamics (``{label: {"effort": ..., "damping": ...}}``, the keys declared), the masses
 #: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the
-#: part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm, "inertia"?}}``) and its
-#: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``).
-DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction")
+#: part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm, "inertia"?}}``), its
+#: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``) and a decomposed collision's options
+#: (``{"maxHulls"?, "threshold"?}``, those given, the part's or its assembly's with the collision).
+DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction", "decomposition")
 
 
 def _grams(value: Any, path: str) -> float:
@@ -2063,9 +2091,10 @@ def _friction(value: Any, path: str) -> tuple[float, ...] | None:
 
 
 def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
-              masses: tuple[tuple[int, float], ...] = (), surface: tuple[float, ...] | None = None) -> dict[str, Any]:
+              masses: tuple[tuple[int, float], ...] = (), surface: tuple[float, ...] | None = None,
+              decomposition: dict[str, Any] | None = None) -> dict[str, Any]:
     """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``, ``mass``, ``point_mass``,
-    ``friction``) as JSON holds them: a key only where it declares one."""
+    ``friction``, ``collision``'s decomposition options) as JSON holds them: a key only where it declares one."""
     from cad.engine import declarations
     from cad.engine.mechanism import _numpy
 
@@ -2094,6 +2123,8 @@ def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
         found["pointMasses"] = held
     if surface is not None:
         found["friction"] = list(surface)
+    if decomposition:
+        found["decomposition"] = dict(decomposition)
     return found
 
 

@@ -33,7 +33,10 @@ given none, and MuJoCo computes one from its geoms (visual and collision alike).
 of class ``visual``, a collision one of class ``collision`` named ``<part>_collision`` where its
 visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJoCo's half sizes (a
 box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
-capsule's length its cylinder's, as ``describe`` fits it), its ``friction`` the part's
+capsule's length its cylinder's, as ``describe`` fits it); a decomposed part (``cad.build123d.collision(part,
+"decomposed")``) is a ``collision`` geom per convex hull, ``<part>_hull<i>``, each of the mesh asset of that
+name, a file of its own (``<model>_<part>_hull<i>.stl``), while its visual is the part whole. Each has its
+``friction`` the part's
 contact friction (``cad.build123d.friction``: the sliding coefficient alone, the torsional and rolling
 then MuJoCo's defaults, or all three) where it declares one, none where it does not, so MuJoCo's
 default (or a scene's ``default`` class) holds; a named frame a ``site``.
