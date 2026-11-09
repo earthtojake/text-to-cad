@@ -49,7 +49,8 @@ class Pad:
     track may end and be in its copper on every layer (for a padstack of several shapes, a disc round ``end``
     that lies in each layer's), ``hole`` its drill, ``clearance`` its own (or its footprint's) clearance where it
     overrides the netclass, ``end`` where a route to it ends: ``at``, or the middle of its shape where its copper
-    is offset past its anchor (an SMD pad's ``offset``)."""
+    is offset past its anchor (an SMD pad's ``offset``); ``mask`` its solder-mask opening on each outer copper
+    layer it has one over, as (layer, how far it reaches past the copper: its expansion)."""
 
     ref: str
     part: str
@@ -62,6 +63,7 @@ class Pad:
     hole: Shape | None = None
     clearance: float | None = None
     end: XY | None = None
+    mask: tuple[tuple[str, float], ...] = ()
 
     @property
     def anchor(self) -> XY:
@@ -84,7 +86,7 @@ class Track:
 @dataclass(frozen=True)
 class Via:
     """A via: its copper a disc of ``diameter`` on each of ``layers`` (the copper layers it spans), its drill
-    ``drill``."""
+    ``drill``; ``mask`` the outer copper layers KiCad leaves it untented on (a solder-mask opening round it)."""
 
     net: str | None
     at: XY
@@ -92,6 +94,7 @@ class Via:
     drill: float
     layers: tuple[str, ...]
     id: str | None = None
+    mask: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -132,6 +135,14 @@ class BoardCopper:
     holes: tuple[Shape, ...]  # unplated holes
     outline: tuple[tuple[XY, ...], ...]  # closed rings: the edge, and any cutout
     open_outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts pieces that close on nothing
+    # The solder mask, as DRC's solder_mask_bridge judges it: an opening of a pad's or an untented via's exposes
+    # any copper of another net within it (or within mask_to_copper of it), and two openings closer than
+    # mask_min_width are one. New vias are untented on the outer layers ``untented`` names (the board's setting),
+    # their opening ``via_mask`` round them (the board's pad-to-mask clearance).
+    untented: tuple[str, ...] = ()
+    via_mask: float = 0.0
+    mask_min_width: float = 0.0
+    mask_to_copper: float = 0.0
 
     def pad(self, ref: str) -> Pad:
         """The pad ``U1.3`` (the first of several sharing that number)."""
@@ -313,10 +324,28 @@ def _clearance_of(node: list) -> float | None:
     return float(found) if isinstance(found, (int, float)) and not isinstance(found, bool) and found > 0 else None
 
 
-def _read_pads(footprint: list, table, copper: Sequence[str]) -> tuple[list[Pad], list[Shape]]:
+def _margin(node: list) -> float | None:
+    found = sexpr.value(node, "solder_mask_margin")
+    return float(found) if isinstance(found, (int, float)) and not isinstance(found, bool) else None
+
+
+def _mask_sides(names: Sequence[str]) -> set[str]:
+    """The sides (``F``, ``B``) a pad's layers open the solder mask on: ``F.Mask``, ``B.Mask``, ``*.Mask``."""
+    sides = set()
+    for name in names:
+        side, _, kind = name.partition(".")
+        if kind == "Mask":
+            sides |= {"F", "B"} if side in ("*", "F&B") else {side}
+    return sides
+
+
+def _read_pads(footprint: list, table, copper: Sequence[str], expansion: float = 0.0) -> tuple[list[Pad], list[Shape]]:
+    """A footprint's pads and its unplated holes; ``expansion`` the board's pad-to-mask clearance, a pad's
+    solder-mask expansion where neither it nor its footprint gives one (KiCad's order)."""
     frame = FootprintFrame(footprint)
     ref = footprint_property(footprint, "Reference") or ""
     own = _clearance_of(footprint)
+    own_margin = _margin(footprint)
     pads: list[Pad] = []
     holes: list[Shape] = []
     for node in sexpr.find_all(footprint, "pad"):
@@ -359,10 +388,15 @@ def _read_pads(footprint: list, table, copper: Sequence[str]) -> tuple[list[Pad]
         end = center if any(shape.contains(*center) for shape in inside) else middle
         if stack:
             inside, end = _common_inside(name, layers, inside, stack, (center, middle))
+        margin = _margin(node)
+        margin = margin if margin is not None else own_margin if own_margin is not None else expansion
+        sides = _mask_sides(item_layers(node))
+        outer = {"F": copper[0], "B": copper[-1]} if copper else {}
+        mask = tuple((outer[side], margin) for side in ("F", "B") if side in sides and outer.get(side) in layers)
         pads.append(Pad(
             ref=f"{ref}.{number}" if ref and number else "", part=ref, number=number, net=net_of(node, table),
             layers=layers, at=center, copper=tuple(copper_shapes), inner=tuple(inside),
-            hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own, end=end,
+            hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own, end=end, mask=mask,
         ))
     return pads, holes
 
@@ -420,6 +454,35 @@ def _span(layers: Sequence[str], kind: str, copper: Sequence[str]) -> tuple[str,
         return tuple(copper)
     a, b = sorted(copper.index(layer) for layer in named[:2])
     return tuple(copper[a:b + 1])
+
+
+def _tenting(node: list | None) -> dict[str, bool]:
+    """The sides a ``(tenting ...)`` names tented or not: ``(tenting (front yes) (back no))`` (KiCad 10), or the
+    tented sides listed, ``(tenting front back)``, ``(tenting none)`` (KiCad 9); empty where it says nothing."""
+    found = sexpr.find(node, "tenting") if node is not None else None
+    if found is None:
+        return {}
+    sides: dict[str, bool] = {}
+    listed = False
+    for child in found[1:]:
+        if isinstance(child, list) and sexpr.head(child) in ("front", "back"):
+            sides[sexpr.head(child)] = len(child) < 2 or str(child[1]) in ("yes", "true")
+        elif isinstance(child, sexpr.Sym) and str(child) in ("front", "back", "none"):
+            listed = True
+            if str(child) != "none":
+                sides[str(child)] = True
+    if listed:
+        sides = {"front": sides.get("front", False), "back": sides.get("back", False)}
+    return sides
+
+
+def _untented(tenting: dict[str, bool], copper: Sequence[str], layers: Sequence[str]) -> tuple[str, ...]:
+    """The outer copper layers of ``layers`` a via is untented on, by ``tenting`` (a side it does not name is
+    tented: KiCad's default)."""
+    if not copper:
+        return ()
+    sides = (("front", copper[0]), ("back", copper[-1]))
+    return tuple(dict.fromkeys(layer for side, layer in sides if not tenting.get(side, True) and layer in layers))
 
 
 def _keepout(node: list, copper: Sequence[str], frame: FootprintFrame | None) -> Keepout | None:
@@ -809,14 +872,20 @@ def _drawn_copper(tree: list, copper: Sequence[str]) -> list[Graphic]:
     return found
 
 
-def read_copper(text: str | list) -> BoardCopper:
-    """The board ``text`` (a ``.kicad_pcb``'s, or its parsed tree), as the router sees it."""
+def read_copper(text: str | list, *, mask_to_copper: float = 0.0) -> BoardCopper:
+    """The board ``text`` (a ``.kicad_pcb``'s, or its parsed tree), as the router sees it. ``mask_to_copper`` is
+    the board's solder-mask-to-copper clearance (a rule of its project's, which the text does not hold: KiPy's
+    ``get_design_rules()``; KiCad's default 0)."""
     tree = sexpr.parse(text) if isinstance(text, str) else text
     if sexpr.head(tree) != "kicad_pcb":
         raise ValueError("not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)")
     tree = canonical_copper(tree)
     table = net_table(tree)
     copper = tuple(copper_layers(tree))
+    setup = sexpr.find(tree, "setup")
+    expansion = sexpr.number(sexpr.value(setup, "pad_to_mask_clearance"), 0.0) if setup is not None else 0.0
+    min_width = sexpr.number(sexpr.value(setup, "solder_mask_min_width"), 0.0) if setup is not None else 0.0
+    tenting = _tenting(setup)
     pads: list[Pad] = []
     holes: list[Shape] = []
     tracks: list[Track] = []
@@ -825,7 +894,7 @@ def read_copper(text: str | list) -> BoardCopper:
     for node in tree[1:]:
         head = sexpr.head(node)
         if head in ("footprint", "module"):
-            found, unplated = _read_pads(node, table, copper)
+            found, unplated = _read_pads(node, table, copper, expansion)
             pads += found
             holes += unplated
             frame = FootprintFrame(node)
@@ -851,8 +920,10 @@ def read_copper(text: str | list) -> BoardCopper:
                 continue
             kind = next((str(atom) for atom in node[1:] if isinstance(atom, sexpr.Sym)
                          and str(atom) in ("blind", "buried", "micro")), "through")
+            span = _span(item_layers(node), kind, copper)
             vias.append(Via(net_of(node, table), at, sexpr.number(sexpr.value(node, "size")),
-                            sexpr.number(sexpr.value(node, "drill")), _span(item_layers(node), kind, copper), item_id(node)))
+                            sexpr.number(sexpr.value(node, "drill")), span, item_id(node),
+                            _untented({**tenting, **_tenting(node)}, copper, span)))
         elif head == "zone":
             keepout = _keepout(node, copper, None)
             if keepout is not None:
@@ -867,4 +938,5 @@ def read_copper(text: str | list) -> BoardCopper:
                   if len(line) > 3 and math.dist(line[0], line[-1]) <= CHAIN)
     open_ = tuple(tuple(line) for line in index.outline if tuple(line) not in rings)
     return BoardCopper(copper, tuple(pads), tuple(tracks), tuple(vias), tuple(graphics), tuple(keepouts),
-                       tuple(holes), rings, open_)
+                       tuple(holes), rings, open_, _untented(tenting, copper, copper), expansion, min_width,
+                       mask_to_copper)

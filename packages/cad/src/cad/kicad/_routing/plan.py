@@ -312,18 +312,57 @@ class Router:
     def _read_obstacles(self) -> None:
         board, rules, fields, obstacles = self.board, self.rules, self.fields, self.obstacles
         every = list(range(len(self.copper)))
-        # Copper DRC holds to more than its net's clearance (a barcode's visual separation): the fields and the
-        # exact check reach as far as that needs, before anything is read into them.
+        # The solder mask (DRC's solder_mask_bridge): new copper keeps out of every opening of another net's pad or
+        # untented via (its expansion past the copper, and the mask-to-copper clearance past that); where the
+        # board leaves new vias untented, a new via's own opening keeps the mask's least width from another's.
+        # A new untented via's opening is refused where the clearance it keeps would not hold it so.
+        apart = board.mask_to_copper
+        vias = [w for w in self.wants if w.vias != 0 and len(w.layers) > 1]
+        opened = set(board.untented) if vias and board.via_mask + max(apart, board.mask_min_width) > 0 else set()
+        need = max(board.via_mask + apart, 2 * board.via_mask + board.mask_min_width)
+        if opened and need > min(w.clearance for w in vias):
+            low = min(vias, key=lambda w: w.clearance)
+            raise ValueError(
+                f"route would place vias for {low.net} that KiCad leaves untented on {' and '.join(sorted(opened))} "
+                f"(the board's via tenting), each with a solder-mask opening {board.via_mask:g} mm round it (the "
+                f"board's pad-to-mask clearance), which needs {need:g} mm from other nets' copper and openings (with "
+                f"the mask's least width {board.mask_min_width:g} mm and its mask-to-copper clearance {apart:g} mm), "
+                f"past the {low.clearance:g} mm they keep: DRC would call them solder-mask bridges; tent the board's "
+                f"vias, give the entry vias: 0, or a clearance of at least {need:g} mm")
+
+        def masked(keep: float, layers: Sequence[str], mask: Iterable[tuple[str, float]]) -> dict[float, list[int]]:
+            """The layers numbered ``layers`` grouped by what other nets keep from the copper there: ``keep``, or
+            more where it has a solder-mask opening (layer, its expansion)."""
+            out = dict(mask)
+            found: dict[float, list[int]] = {}
+            for name in layers:
+                if name not in self.layer_of:
+                    continue
+                need = keep
+                if name in out:
+                    need = max(need, out[name] + apart)
+                    if name in opened:
+                        need = max(need, out[name] + board.via_mask + board.mask_min_width)
+                found.setdefault(need, []).append(self.layer_of[name])
+            return found
+
+        # Copper DRC holds to more than its net's clearance (a barcode's visual separation, a solder-mask opening):
+        # the fields and the exact check reach as far as that needs, before anything is read into them.
         widest = max([w.width / 2 for w in self.wants] + [w.via_diameter / 2 for w in self.wants] + [0.0])
-        reach = max([graphic.clearance or 0.0 for graphic in board.graphics] + [0.0]) + widest + 0.2
+        far = [graphic.clearance or 0.0 for graphic in board.graphics]
+        far += [margin + apart + board.via_mask + board.mask_min_width for pad in board.pads for _, margin in pad.mask]
+        far += [board.via_mask + apart for via in board.vias if via.mask]
+        reach = max(far + [0.0]) + widest + 0.2
         if reach > self.reach:
             self.reach = fields.reach = obstacles.reach = reach
         for pad in board.pads:
             keep, net, layers = rules.clearance(pad.net, pad.clearance), self._net(pad.net), self._ids(pad.layers)
-            fields.add_copper(pad.copper, layers, net, keep)
+            for need, ids in masked(keep, pad.layers, pad.mask).items():
+                fields.add_copper(pad.copper, ids, net, need)
+                for shape in pad.copper:
+                    obstacles.add("copper", shape, ids, net, need)
             fields.add_pad(pad.copper)
             for shape in pad.copper:
-                obstacles.add("copper", shape, layers, net, keep)
                 obstacles.add("pad", shape, [], net)
             if pad.hole is not None:
                 fields.add_hole(pad.hole, net, rules.holes, every)
@@ -337,9 +376,10 @@ class Router:
         for via in board.vias:
             keep, net, layers = rules.clearance(via.net), self._net(via.net), self._ids(via.layers)
             disc, drill = Shape.point(*via.at, via.diameter / 2), Shape.point(*via.at, via.drill / 2)
-            fields.add_copper([disc], layers, net, keep)
+            for need, ids in masked(keep, via.layers, [(name, board.via_mask) for name in via.mask]).items():
+                fields.add_copper([disc], ids, net, need)
+                obstacles.add("copper", disc, ids, net, need)
             fields.add_hole(drill, net, rules.holes, every)
-            obstacles.add("copper", disc, layers, net, keep)
             obstacles.add("hole", drill, every, net)
             self._item(via.net, _Item("via", via.layers, (disc,), (via.at,), via=via))
         for graphic in board.graphics:

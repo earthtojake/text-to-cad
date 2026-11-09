@@ -15,7 +15,8 @@ KiCad, so the keep-out lands on the back, in the footprint's frame -- and routes
   router's dangling.
 
 KiCad's DRC of the saved board finds no error but the connections left unrouted: WALL's, and OLD's, which the
-plan leaves to the agent. A copy of the placed board
+plan leaves to the agent; no ``solder_mask_bridge`` where SIG and VCC leave R1, whose pads open the solder mask
+0.4 mm past their copper. A copy of the placed board
 with a track drawn through the keep-out where the router read it is flagged ``items_not_allowed`` by the same
 DRC: the keep-out is there, so the router's going round it is the proof. The same script on a second copy of the
 board writes the same copper. Runs in the KiCad job (``scripts/test/test-kicad.sh``).
@@ -61,12 +62,12 @@ def _reference(ref: str, side: str = "F") -> str:
             f'(effects (font (size 1 1) (thickness 0.15))))')
 
 
-def _resistor(ref: str, x: float, y: float, one: str, two: str) -> str:
+def _resistor(ref: str, x: float, y: float, one: str, two: str, extra: str = "") -> str:
     pads = "".join(f'(pad "{n}" smd roundrect (at {dx} 0) (size 0.8 0.95) (layers "F.Cu" "F.Mask") '
                    f'(roundrect_rratio 0.25) (net "{net}") (uuid "{_uuid()}"))'
                    for n, dx, net in (("1", -0.825, one), ("2", 0.825, two)))
     return (f'(footprint "R_0603" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate {x} {y}) (rotate 0) '
-            f'(scale 1 1)) {_reference(ref)} {pads})')
+            f'(scale 1 1)) {extra}{_reference(ref)} {pads})')
 
 
 def _header(ref: str, x: float, y: float, nets: list[str]) -> str:
@@ -91,7 +92,9 @@ BOARD = (
     '(1 "F.Mask" user) (3 "B.Mask" user)) (setup (pad_to_mask_clearance 0)) '
     f'(gr_rect (start 0 0) (end 40 30) (stroke (width 0.1) (type default)) (fill no) (layer "Edge.Cuts") (uuid "{_uuid()}")) '
     + _header("J1", 5, 15, ["KEEP", "VCC"]) + _header("J2", 35, 15, ["KEEP", "OLD"])
-    + _resistor("R1", 12, 25, "SIG", "VCC") + _resistor("R2", 28, 25, "SIG", "OLD")
+    # R1's pads open the solder mask 0.4 mm past their copper (its footprint's margin), past both netclasses'
+    # clearances: SIG and VCC, which leave it side by side, keep that from each other's pad.
+    + _resistor("R1", 12, 25, "SIG", "VCC", "(solder_mask_margin 0.4) ") + _resistor("R2", 28, 25, "SIG", "OLD")
     + _resistor("R3", 32, 5, "WALL", "N3") + _resistor("R4", 8, 5, "WALL", "N4")
     # TEE's three pads: the third joins the first two's track where it passes, a T.
     + _resistor("R5", 12, 9.5, "TEE", "N5") + _resistor("R6", 20, 9.5, "TEE", "N6")
@@ -187,6 +190,7 @@ class Route(unittest.TestCase):
         found = kicode.call(self, "drc", board)["measurements"]["drc"]
         errors = sorted({f["type"] for f in found if f["severity"] == "error"})
         self.assertEqual(["unconnected_items"], errors, found)
+        self.assertNotIn("solder_mask_bridge", {f["type"] for f in found}, "no new copper in R1's mask openings")
         dangling = {item["description"].split("[")[1].split("]")[0] for f in found if f["type"].endswith("_dangling")
                     for item in f["items"]}
         self.assertEqual({"OLD"}, dangling, "no end the router left: OLD's own track and via join nothing")

@@ -176,5 +176,59 @@ class DrawnCopper(unittest.TestCase):
         self.assertIn("open and save the board in KiCad", str(caught.exception))
 
 
+def masked(*items: str, setup: str = "(pad_to_mask_clearance 0.3)", **size) -> str:
+    """A board whose pads' solder-mask openings reach 0.3 mm past their copper, past the 0.2 mm clearance."""
+    return board(*items, **size).replace("(setup (pad_to_mask_clearance 0))", f"(setup {setup})")
+
+
+class SolderMask(unittest.TestCase):
+    """DRC's solder_mask_bridge fires where another net's copper lies in a pad's solder-mask opening (KiCad 10.99,
+    measured: a track 0.25 mm from a pad whose mask expands 0.3 mm is a bridge, one 0.32 mm away is not; the pad's
+    own margin, else its footprint's, else the board's), so new copper keeps the opening's reach from it."""
+
+    #: R1.1 and R2.1 of A, either side of R3 (X and Y) on the straight line between them.
+    PARTS = (resistor("R1", 5, 10, 0, "A", "B"), resistor("R2", 25, 10, 0, "A", "C"), resistor("R3", 15, 10, 90, "X", "Y"))
+
+    def clear(self, text: str, layer: str = "F.Cu"):
+        router = Router(read_copper(text), RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)), vias=0)])
+        return router._clear(want("A"), router._net("A"), router.layer_of[layer], None, None)
+
+    def passes(self, clear, gap: float) -> bool:
+        """Whether a track of A may run straight down the right of R3's pads (0.95 x 0.8 mm, turned a quarter
+        round), ``gap`` from their copper."""
+        x = 15 + 0.475 + gap + 0.125
+        return clear((round(x * 1e6), 5_000_000), (round(x * 1e6), 15_000_000))
+
+    def test_new_copper_keeps_out_of_another_nets_opening(self) -> None:
+        clear = self.clear(masked(*self.PARTS))
+        self.assertFalse(self.passes(clear, 0.29), "inside R3's openings")
+        self.assertTrue(self.passes(clear, 0.31))
+        self.assertTrue(self.passes(self.clear(masked(*self.PARTS), "B.Cu"), 0.21), "R3 opens no mask on B.Cu")
+        own = masked(*self.PARTS).replace('(net "X")', '(net "X") (solder_mask_margin 0.05)')
+        self.assertFalse(self.passes(self.clear(own), 0.21), "R3.2's opening, the board's")
+        own = own.replace('(net "Y")', '(net "Y") (solder_mask_margin 0.05)')
+        self.assertTrue(self.passes(self.clear(own), 0.21), "the pads' own margins")
+
+    def test_a_routed_track_keeps_the_opening_from_another_nets_pad(self) -> None:
+        copper = read_copper(masked(*self.PARTS))
+        router = Router(copper, RULES, [want("A")])
+        done = router.run()
+        self.assertTrue(done[0].routed, done[0].line())
+        for track in router.tracks:
+            a, b = (tuple(v / 1e6 for v in end) for end in (track.start, track.end))
+            for pad in copper.pads:
+                if pad.net != "A":
+                    gap = min(shape.segment_distance(a, b) for shape in pad.copper) - track.width / 2
+                    self.assertGreaterEqual(gap, 0.3 - 1e-6, (track, pad.ref))
+
+    def test_untented_vias_whose_openings_the_clearance_cannot_hold_are_refused(self) -> None:
+        text = masked(*self.PARTS, setup="(pad_to_mask_clearance 0.3) (tenting (front no) (back yes))")
+        with self.assertRaises(ValueError) as caught:
+            Router(read_copper(text), RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)))])
+        self.assertIn("untented on F.Cu", str(caught.exception))
+        self.assertIn("tent the board's vias, give the entry vias: 0", str(caught.exception))
+        Router(read_copper(text), RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)), vias=0)])
+
+
 if __name__ == "__main__":
     unittest.main()
