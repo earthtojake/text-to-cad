@@ -53,6 +53,7 @@ def health_findings(model: Any, path: Path, where: str) -> FindingsReport:
         ("scale_suspect", lambda: _scale_suspect(mujoco, model, poses, findings, where)),
         ("joint_limits_at_rest", lambda: _joint_limits_at_rest(mujoco, model, poses, findings, where)),
         ("defaults_not_recommended", lambda: _defaults_not_recommended(mujoco, model, findings, where)),
+        ("defaults_after_include", lambda: _defaults_after_include(path, findings, where)),
         ("home_key", lambda: _home_key(model, findings, where)),
         ("mass_summary", lambda: _mass_summary(model, poses, findings, where)),
     ]
@@ -320,6 +321,63 @@ def _defaults_not_recommended(mujoco: Any, model: Any, findings: FindingsReport,
                      f"MuJoCo defaults the modelling guide advises against: {'; '.join(notes)}", path=where,
                      hint="set them once in <option> and the top-level <default> (MuJoCo's modelling guide, "
                           "\"Tuning defaults\")")
+
+
+def _defaults_after_include(path: Path, findings: FindingsReport, where: str) -> None:
+    """A top-level ``<default>`` written after an ``<include>`` of a file that defines default classes, setting
+    defaults of elements that file holds: a class takes its parent's defaults where it is defined, so the included
+    model's classes keep what stood at the include (MuJoCo's own) and the late defaults miss every element in them
+    -- a generated robot's are all in its class. Read from the authored files, whose order the compiled model no
+    longer holds."""
+    import xml.etree.ElementTree as ET
+
+    from cad._internal.xml_common import local_name
+
+    root = ET.parse(path).getroot()
+    included: list[str] = []
+    late: list[tuple[str, set[str]]] = []
+    for child in root:
+        tag = local_name(child.tag)
+        if tag == "include" and child.get("file"):
+            included.append(str(child.get("file")))
+        elif tag == "default" and included:
+            kinds = {local_name(item.tag) for item in child if local_name(item.tag) != "default"}
+            if kinds:
+                late.extend((file, kinds) for file in included)
+    for file, kinds in late:
+        held = _classes_in(path.parent / file)
+        if held is None:
+            continue
+        classes, elements = held
+        reached = sorted(kinds & elements)
+        if not classes or not reached:
+            continue
+        findings.add("warning", "defaults_after_include",
+                     f"the top-level <default> after <include file=\"{file}\"> sets {', '.join(reached)} defaults, "
+                     f"which miss the {', '.join(reached)} elements in its classes ({_listed(sorted(classes))}): a "
+                     "class takes its parent's defaults where it is defined, so they keep what stood at the include",
+                     path=where, hint="move the <default> above the <include>")
+
+
+def _classes_in(path: Path) -> tuple[set[str], set[str]] | None:
+    """The default classes an included file defines and the element kinds it holds outside its ``<default>``, or
+    None where it does not read."""
+    import xml.etree.ElementTree as ET
+
+    from cad._internal.xml_common import local_name
+
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    classes = {str(item.get("class")) for item in root.iter() if local_name(item.tag) == "default" and item.get("class")}
+    elements: set[str] = set()
+    pending = [item for item in root if local_name(item.tag) != "default"]
+    while pending:
+        item = pending.pop()
+        elements.add(local_name(item.tag))
+        pending.extend(item)
+    return classes, elements
 
 
 def _home_key(model: Any, findings: FindingsReport, where: str) -> None:

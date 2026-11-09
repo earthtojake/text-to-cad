@@ -172,6 +172,33 @@ class Health(unittest.TestCase):
             self.assertIn(said, defaults.message)
         self.assertEqual("info", self.only(findings, "home_key").severity)
 
+    def test_a_default_after_an_include_does_not_reach_the_included_model_and_says_so(self) -> None:
+        # The robot's elements are in its class, as a generated robot's are.
+        (self.folder / "arm.xml").write_text(
+            '<mujoco model="arm"><default><default class="arm"><geom rgba="1 0 0 1"/></default></default>'
+            '<worldbody><body name="link" pos="0 0 0.5" childclass="arm"><joint name="hinge" range="-90 90"/>'
+            '<geom name="link_geom" type="box" size="0.05 0.05 0.1"/></body></worldbody></mujoco>', encoding="utf-8")
+        default = ('<default><geom solref="0.005 1"/><joint armature="0.01"/>'
+                   '<default class="servo"><position kp="10"/></default></default>')
+        scene = ('<mujoco model="scene"><include file="arm.xml"/>{late}<worldbody>'
+                 '<geom name="floor" type="plane" size="1 1 0.1"/></worldbody></mujoco>')
+        finding = self.only(self.findings(scene.format(late=default), "scene.xml"), "defaults_after_include")
+        self.assertEqual("warning", finding.severity)
+        self.assertIn('after <include file="arm.xml"> sets geom, joint defaults', finding.message)
+        # MuJoCo agrees: the robot's geom keeps the default solref and its joint no armature.
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(self.folder / "scene.xml"))
+        self.assertEqual((list(model.geom("link_geom").solref), float(model.dof_armature[0])), ([0.02, 1.0], 0.0))
+        # Above the include, both apply and nothing is said; a late default of the scene's own classes alone is fine,
+        # as is one after a file that defines no class (its elements take the top-level default as it ends).
+        moved = scene.replace('<include file="arm.xml"/>{late}', default + '<include file="arm.xml"/>')
+        self.assertNotIn("defaults_after_include", {f.code for f in self.findings(moved, "scene.xml")})
+        model = mujoco.MjModel.from_xml_path(str(self.folder / "scene.xml"))
+        self.assertEqual((list(model.geom("link_geom").solref), float(model.dof_armature[0])), ([0.005, 1.0], 0.01))
+        classes = '<default><default class="servo"><position kp="10"/></default></default>'
+        self.assertNotIn("defaults_after_include", {f.code for f in self.findings(scene.format(late=classes), "scene.xml")})
+
     def test_a_check_that_fails_inside_is_a_note(self) -> None:
         with mock.patch.object(_health, "_scale_suspect", side_effect=RuntimeError("boom")):
             findings = self.findings(CLEAN)

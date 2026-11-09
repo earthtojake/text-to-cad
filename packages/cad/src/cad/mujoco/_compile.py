@@ -26,6 +26,8 @@ Then the model-health checks of MuJoCo's modelling guide ("Model tuning"), on th
 - ``scale_suspect`` (warning): the moving geometry spans over 50 m or under 5 mm, or a mesh over 100 units.
 - ``joint_limits_at_rest`` (warning): a limited hinge or slide lies outside its range at qpos0 or at home.
 - ``defaults_not_recommended`` (info): Euler, a pyramidal cone, the default solref, or a long timestep with contacts.
+- ``defaults_after_include`` (warning): a top-level ``<default>`` after an ``<include>`` of a file that defines default
+  classes sets defaults of its elements, which its classes, defined before, do not take.
 - ``home_key`` (info): no key named home, the Menagerie convention.
 - ``mass_summary`` (info): moving mass, moving bodies, nv, nu and the extents, one line.
 - ``check_unavailable`` (info): a check failed inside and was skipped; it names the check.
