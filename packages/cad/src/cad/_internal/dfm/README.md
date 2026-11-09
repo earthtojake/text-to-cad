@@ -244,8 +244,12 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
 - **holes** — a connected set of coaxial concave cylinders and cones (plus the planes square to the axis whose
   every neighbour is one of them: a counterbore step, a flat floor); sets on one axis whose cylinders of one
   radius overlap along it are one hole (a hole a slot splits); one radius's cylinders sweep >= 300 degrees
-  together. `diameter_mm` (narrowest full cylinder), `depth_mm` (the drilled length: that cylinder's extent along
-  the axis, below any counterbore), `overall_depth_mm` (every cylinder's extent),
+  together; a wider cylinder with a narrower one of the hole beyond it toward the opening (either way along a
+  through hole) is an internal groove, no counterbore: it and the planes beside it leave the hole, a keyseat
+  cutter's recess (`sharp_edges`, `access`), `grooves` [{diameter_mm, width_mm, location}] saying it.
+  `diameter_mm` (narrowest full cylinder), `depth_mm` (the drilled length: that cylinder's axis between its two
+  ends, each at its middle along the axis -- 25 / cos 30 deg for a 30 degree hole through 25 mm, where its
+  longest side is longer --, below any counterbore), `overall_depth_mm` (every cylinder's extent),
   `depth_to_diameter`, `through` / `bottom` (`through`, `drill_point`, `flat`, `closed`, `other`: an exact
   ray along the axis from inside the hole meets the hole's own floor or not), `point_angle_deg` (a drill
   point's included angle), `counterbores` [{diameter_mm, depth_mm, depth_to_diameter}] (each its own feature:
@@ -273,10 +277,13 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   `inclination_deg`, `wall_count`, `floor` (its
   floor's ref), `width_faces` (the two walls the width is between; `location` is the first of them, else the
   floor). An open step that reads both ways (floor+wall or wall+floor seen from the side) keeps the shallower
-  reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, through T-slots and
-  dovetails, no floor) are faces along a world axis joined by concave or tangent edges along it, none a floor
-  pocket's, none meeting a plane square to the axis by a concave edge, closed around the axis (their normals
-  seen along it in no one half-plane: an open valley is no window), with a corner -- a concave cylinder along
+  reading. **Through** cavities (`kind` `through`: windows, through slots, cut-outs, no floor) are faces along
+  a world axis joined by concave or tangent edges along it, none a floor pocket's, none meeting a plane square
+  to the axis by a concave edge, closed around the axis -- every edge of theirs along the axis joins two of
+  them, else no ray across the axis from inside the cavity (from each face along its normal, then from the
+  middle of that ray every 10 degrees and toward the middle of each pair of the edges leading out of it)
+  leaves the part: an open valley, or a T-slot or a dovetail open at its neck, is no window, whatever way its
+  faces look --, with a corner -- a concave cylinder along
   it that is no floor's root fillet (no tangent plane neighbour seen end-on), or a sharp concave edge along
   it; `depth_mm` is the walls' extent along the axis, `depth_from_top_mm` the shallower side's reach,
   `width_mm` / `depth_to_width` as for a pocket, `floor` null.
@@ -293,8 +300,10 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   third of its height, the radius the hint gives in millimetres.
 - **sharp_edges** — every other sharp concave edge no rotating tool makes (each with `void_angle_deg`,
   `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees, and `reason`,
-  the first that holds: `other_axes` -- a tool along a direction the machine lacks would make it;
-  `vertical_corner` -- both faces lie along a machine direction the edge runs along, a corner where the
+  the first that holds: `vertical_corner` where it is a profile's corner -- both faces lie along a machine
+  direction the edge runs along, the part's thinnest (a plate's outline, a gear's tooth root, cut along its
+  axis), whatever a tool tilted square to one face would make --; `other_axes` -- a tool along a direction the
+  machine lacks would make it; `vertical_corner` along any other machine direction -- a corner where the
   tool's side leaves its radius; `acute`; `blocked` -- a face is a plane square to a machine direction, the
   way along it blocked; `no_square_face`). A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
@@ -302,6 +311,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   end mill where one face is a plane square to an approach direction (a floor or a ceiling), the void angle
   >= 90 and a ray from that face along the direction escapes; a T-slot cutter where a face of the cavity
   the edge bounds is seen along that direction; a 45/60 degree dovetail cutter likewise (its face a plane);
+  a keyseat cutter where the recess has a floor and a ceiling square to that direction and its way in is a
+  face it meets by a convex edge seen along it (a groove inside a bore: the bore's wall);
   a 60/90/120 degree chamfer mill along the bisector, and its shoulder (a 150/135/120 degree void: one face
   along the mill's axis, the other looking along it); a ball end mill where the void angle is >= 150 degrees
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
@@ -320,7 +331,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   segment leaves the face within ~45 degrees of its inward normal and its middle is in the material or on the
   boundary: `refined` true, `xyz` the thinnest point. A face and its `opposite` are one item (the thinner
   reading): one web is one finding; gaps likewise.
-- **gaps** — the same ray outward across the void (holes and threads excluded); the narrowest per face under
+- **gaps** — the same ray outward across the void (holes and threads excluded, and a face sharing an edge with
+  the ray's own: the two close to nothing at that edge -- a dovetail's flank over its floor, a V groove's
+  flanks --, the void's angle, `sharp_edges`' to judge); the narrowest per face under
   10 mm: `width_mm`, `opposite`, `surface`, `made_by` (`end_mill`; `slot_cutter` where the two faces are the
   floor and ceiling of a recess a special cutter makes -- planes facing each other square to one direction --,
   `cutter_recess` its ref: the cutter's thickness cuts that height, not an end mill's diameter); refined the same
@@ -330,8 +343,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   straight line from the machine's directions reaches (exact rays must escape the part; back-facing points
   never count): `unreached_fraction`, `unreached_any_direction_fraction` (200 directions over the sphere),
   `kind` (`undercut`: five axes would reach it; `no_line_of_sight`: nothing straight would), `hole` and
-  `hole_axis` (a hole's face, and its axis). Items of `kind` `special_cutter` are the edges only a T-slot or
-  dovetail cutter makes, joined by the faces they share, whatever line of sight says: `cutter`,
+  `hole_axis` (a hole's face, and its axis). Items of `kind` `special_cutter` are the edges only a T-slot,
+  dovetail or keyseat cutter makes, joined by the faces they share, whatever line of sight says: `cutter`,
   `edge_count`, `edges` (their fractions 0). Directions: 3
   axes the six world axes; 4 axes those plus every 15 degrees about the rotary axis (X, Y or Z, the one
   that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and 200

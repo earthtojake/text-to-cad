@@ -490,6 +490,74 @@ class OneCauseTest(unittest.TestCase):
         self.assertIn("3 mm is under the 6 mm minimum", found[0].message)
 
 
+def _judged(result: Any) -> set[str]:
+    return {finding.code for finding in result.findings if finding.severity in ("error", "warning")}
+
+
+class OpenRecessTest(unittest.TestCase):
+    """A slot open at its neck is no through cavity, and two faces that share an edge are no gap's walls."""
+
+    @staticmethod
+    def _slot(flank_deg: float) -> Any:
+        # a slot along x, 8 deep, 20 wide at its floor (z = 12), narrowing to its neck at the top (z = 20)
+        inset = 8 / math.tan(math.radians(flank_deg))
+        section = bd.Plane.YZ * bd.make_face(bd.Polyline((-(10 - inset), 20.001), (10 - inset, 20.001), (10, 12),
+                                                        (-10, 12), close=True))
+        return _part(bd.Box(60, 40, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.extrude(section, 40, both=True))
+
+    def test_a_dovetail_s_flank_is_no_gap_over_its_floor_and_its_slot_is_open(self) -> None:
+        for flank, tools in ((45.0, "3,6"), (76.0, None)):
+            result = cnc(self._slot(flank), material="aluminum", **({"tools": tools} if tools else {}))
+            with self.subTest(flank=flank):
+                # its flank meets its floor: the gap between them closes to nothing, the void's angle
+                self.assertFalse([g for g in result.measurements["gaps"]["items"] if g["width_mm"] < 2.5])
+                # open at its neck: no through cavity 60 mm deep along its length, no corner 60 mm tall
+                self.assertFalse([p for p in result.measurements["pockets"]["items"] if p["kind"] == "through"])
+                self.assertEqual(result.measurements["internal_corners"]["items"], [])
+                self.assertFalse({"cnc.gap_width", "cnc.gap_width_small", "cnc.pocket_depth_to_width",
+                                  "cnc.internal_corner_sharp"} & _judged(result))
+        # 45 degrees is a dovetail cutter's: one special cutter, nothing else
+        self.assertEqual(_judged(cnc(self._slot(45.0), material="aluminum")), {"cnc.special_cutter"})
+
+    def test_a_v_groove_s_flanks_are_no_gap(self) -> None:
+        half = 10 * math.tan(math.radians(15))
+        groove = bd.Plane.YZ * bd.make_face(bd.Polyline((-half, 20.001), (half, 20.001), (0, 10), close=True))
+        part = _part(bd.Box(60, 40, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.extrude(groove, 40, both=True))
+        result = cnc(part, material="aluminum")
+        self.assertFalse([g for g in result.measurements["gaps"]["items"] if g["width_mm"] < 2.5])
+        self.assertIn("cnc.sharp_internal_edge", _judged(result))  # its 30-degree root is the edge's to judge
+
+    def test_an_internal_groove_is_one_keyseat_recess(self) -> None:
+        part = bd.Box(80, 60, 25)  # top at z = 12.5
+        part -= bd.Pos(0, 0, -2.5) * bd.extrude(bd.Circle(8), 15.001)
+        part -= bd.Pos(0, 0, 2.5) * bd.extrude(bd.Circle(10), 3)
+        result = cnc(_part(part), material="aluminum")
+        self.assertEqual(_judged(result), {"cnc.special_cutter"})
+        [special] = [i for i in result.measurements["access"]["items"] if i["kind"] == "special_cutter"]
+        self.assertEqual((special["cutter"], len(special["unreached_faces"])), ("keyseat cutter", 3))
+        [hole] = result.measurements["holes"]["items"]
+        self.assertEqual((hole["diameter_mm"], hole["counterbores"]), (16.0, []))
+        self.assertEqual([(g["diameter_mm"], g["width_mm"]) for g in hole["grooves"]], [(20.0, 3.0)])
+
+    def test_a_tilted_hole_s_depth_is_its_drilled_length(self) -> None:
+        result = cnc(_part(bd.Box(80, 60, 25) - bd.Rot(30, 0, 0) * bd.Cylinder(3, 100)), material="aluminum", axes=5)
+        [hole] = result.measurements["holes"]["items"]
+        self.assertAlmostEqual(hole["depth_mm"], 25 / math.cos(math.radians(30)), places=4)
+        self.assertGreater(hole["overall_depth_mm"], hole["depth_mm"] + 3)  # its longest side, entry to exit
+
+    def test_a_profile_s_root_is_a_vertical_corner_on_three_axes(self) -> None:
+        # a 10 mm plate's outline with a 110-degree notch turned off the axes: a tool tilted square to a flank
+        # would make its root sharp, but the outline is cut along the plate's axis, whose tool leaves a radius
+        notch = bd.Pos(20, 0, 0) * bd.Rot(0, 0, 17) * bd.extrude(bd.make_face(bd.Polyline(
+            (0, 0), (30 * math.cos(math.radians(55)), 30 * math.sin(math.radians(55))),
+            (30 * math.cos(math.radians(55)), -30 * math.sin(math.radians(55))), close=True)), 20, both=True)
+        result = cnc(_part(bd.Box(60, 60, 10) - notch), material="aluminum")
+        [root] = [i for i in result.measurements["sharp_edges"]["items"] if abs(i["void_angle_deg"] - 110) < 1e-3]
+        self.assertEqual(root["reason"], "vertical_corner")
+        finding = next(f for f in result.findings if f.code == "cnc.sharp_internal_edge")
+        self.assertEqual(finding.severity, "error")
+
+
 class FrameTest(unittest.TestCase):
     """A part is machined in its own frame: turned in its model, its verdicts and figures stay."""
 

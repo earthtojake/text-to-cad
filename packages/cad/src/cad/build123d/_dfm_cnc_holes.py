@@ -5,8 +5,11 @@ counterbore, a countersink, a drill point, a flat floor -- and the standard dril
 the planes square to that axis whose every neighbour is one of them (a counterbore's step, a flat floor);
 sets on one axis whose cylinders of one radius overlap along it are one hole (a hole a slot splits in two). At
 least one radius's cylinders must sweep 300 degrees or more about the axis together (a pocket's quarter-round
-corner or a slot's half-round end is not a hole). Its **diameter** is its narrowest full cylinder's; its **depth** the extent
-of its cylinders along the axis; **blind** where an exact ray along the axis from inside the narrowest
+corner or a slot's half-round end is not a hole). A wider cylinder with a narrower one of the hole beyond it
+toward the opening (either way along a through hole) is an internal **groove**, no counterbore: it and the
+planes beside it leave the hole (``grooves`` lists it), a recess a keyseat cutter makes. Its **diameter** is its
+narrowest full cylinder's; its **depth** the drilled length -- that cylinder's axis between its two ends, each
+end at its middle along the axis (a hole drilled into an inclined face), below any counterbore; **blind** where an exact ray along the axis from inside the narrowest
 cylinder meets a face of the hole itself (its floor) and **through** where neither way does. A blind hole's
 floor is a ``drill_point`` (a concave cone closing to a point: its included angle, 118 degrees for a jobber
 drill) or ``flat`` (a plane).
@@ -176,11 +179,54 @@ def holes(model: Model) -> tuple[list[dict[str, Any]], set[int]]:
         full = sorted(radius for radius, span in by_radius.items() if span >= math.radians(300.0))
         if not full:
             continue
-        holed |= group
         hole = _describe(model, group, full)
+        if hole is not None:
+            grooves, walls = _grooves(model, group, hole)
+            if walls:
+                # an internal groove is no counterbore: no drill or counterbore tool comes to it along the axis
+                # past the narrower bore; its faces are left to the families that judge a recess (a keyseat
+                # cutter's, ``_dfm_cnc._way``) and the hole is described without them
+                group = group - walls
+                hole = _describe(model, group, full) or hole
+                hole["grooves"] = grooves
+        holed |= group
         if hole is not None:
             found.append(hole)
     return found, holed
+
+
+def _grooves(model: Model, group: set[int], hole: dict[str, Any]) -> tuple[list[dict[str, Any]], set[int]]:
+    """The internal grooves of a hole: a wider cylinder that a narrower one of the hole lies beyond toward the
+    hole's opening (either way along a through hole), with the planes of the hole beside it (its walls). Each
+    ``diameter_mm``, ``width_mm`` (its extent along the axis), ``location``; and every face of them."""
+    a = unit(hole["_axis"])
+    cylinders = [i for i in group if model.surface(i).kind == "cylinder"]
+    least = min(float(model.surface(i).radius) for i in cylinders)
+    opening = np.asarray(hole["opening"], dtype=float) if hole.get("opening") is not None else None
+    found, walls = [], set()
+    for i in cylinders:
+        radius = float(model.surface(i).radius)
+        if radius <= least + 1e-6:
+            continue
+        low, high = model.extent(i, a)
+        beyond = {1: False, -1: False}
+        for j in cylinders:
+            if float(model.surface(j).radius) < radius - 1e-6:
+                j_low, j_high = model.extent(j, a)
+                if j_low >= high - 1e-6:
+                    beyond[1] = True
+                if j_high <= low + 1e-6:
+                    beyond[-1] = True
+        if opening is None:
+            inner = beyond[1] and beyond[-1]
+        else:
+            inner = beyond[1 if float(opening @ a) > 0 else -1]
+        if not inner:
+            continue
+        sides = {other for _, other in model.neighbours(i) if other in group and model.surface(other).kind == "plane"}
+        walls |= {i} | sides
+        found.append({"diameter_mm": round(2 * radius, 4), "width_mm": round(high - low, 4), "location": model.ref(i)})
+    return found, walls
 
 
 def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any] | None:
@@ -247,6 +293,10 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
     # the drilled length: the narrowest cylinder's run along the axis, below any counterbore (a counterbore
     # is its own feature, listed in ``counterbores`` with its own depth); ``overall_depth_mm`` is the whole
     depth = max(n_high) - min(n_low)
+    if len(narrow) == 1:
+        # an end that is no circle square to the axis (a hole drilled into an inclined face) is reached at its
+        # middle: the drill's axis runs that far, the extent of the cylinder's longest side further
+        depth = _axis_length(model, narrow[0], a) or depth
     label, deviation = standard_drill(diameter)
     drilled = diameter <= LARGEST_DRILL + MATCH_MM
     aligned = any(abs(float(a @ w)) > 0.9999 for w in WORLD[::2])
@@ -274,6 +324,35 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
     hole["_axis"] = a
     hole["_origin"] = o
     return hole
+
+
+def _axis_length(model: Model, ordinal: int, a: np.ndarray) -> float | None:
+    """The length of a cylinder face's axis between its two ends: each end's edges (those reaching the face's
+    extreme along the axis: not a seam, a side along it or an opening in its side) over the middle of their
+    extent along it; None where the face has no two ends."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+
+    low, high = model.extent(ordinal, a)
+    whole = high - low
+    ends: dict[bool, list[float]] = {True: [], False: []}
+    for edge in model.face(ordinal).edges():
+        try:
+            curve = BRepAdaptor_Curve(edge.wrapped)
+            first, last = curve.FirstParameter(), curve.LastParameter()
+            t = [float(np.array(curve.Value(first + (last - first) * k / 16).Coord()) @ a) for k in range(17)]
+        except Exception:  # noqa: BLE001
+            return None
+        if max(t) - min(t) > 0.5 * whole:
+            continue  # a seam or a side along the axis, no end
+        near = 0.02 * whole + 1e-6  # the face's extent is read on its triangulation, an edge on 17 points
+        if max(t) >= high - near:
+            ends[True] += t
+        elif min(t) <= low + near:
+            ends[False] += t
+        # else an opening in its side (a cross hole's): no end
+    if not ends[True] or not ends[False]:
+        return None
+    return (max(ends[True]) + min(ends[True])) / 2.0 - (max(ends[False]) + min(ends[False])) / 2.0
 
 
 _ANALYTIC = ("plane", "cylinder", "cone", "sphere", "torus")

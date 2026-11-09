@@ -30,8 +30,8 @@ rules' numbers, general practice from Protolabs Network's guide; `--tools` moves
   gaps 2.5 mm or wider (or the smallest tool).
 - **Reach.** Every face seen straight from one of the part's six axis directions (3 axes; its own
   frame, not the world's); no undercut, and a
-  T-slot or dovetail, through or blind, only where the person planned the cutter (`cnc.special_cutter`,
-  a warning); no closed void.
+  T-slot or dovetail, through or blind, or a groove inside a bore (a keyseat cutter's), only where the
+  person planned the cutter (`cnc.special_cutter`, a warning); no closed void.
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
   as wide as the shop's grooving tool, cross holes square to the axis (through it or beside it); a
   flat, a keyway or an off-axis hole is live tooling.
@@ -73,12 +73,14 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
 - `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
-  machine lacks would make it, a warning) and the hint follows it. The fix is a radius or a relief
+  machine lacks would make it, a warning) and the hint follows it. A profile's corner along the part's
+  thinnest axis (a plate's outline, a gear's tooth root) is a `vertical_corner`, an error, whatever a
+  tilted tool would do: the outline is cut along that axis. The fix is a radius or a relief
   where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
-  `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot or dovetail
-  cutter makes.
+  `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
+  keyseat cutter makes.
 - `setups.setup_count` estimates clampings from the reachable directions.
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a
   tap drill, not a callout.

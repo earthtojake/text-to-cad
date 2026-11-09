@@ -928,5 +928,49 @@ def walk_faces(document: Document) -> Iterator[tuple[Part, int, Any]]:
             yield part, ordinal, face
 
 
+def least_segments(face: Any, across: Any, whole_across: bool = False) -> list[tuple[float, np.ndarray, np.ndarray,
+                                                                                   np.ndarray, np.ndarray]]:
+    """The least distance between two faces (``BRepExtrema_DistShapeShape``), each of its solutions as
+    (length, point on ``face``, point on ``across``, the outward normals there), shortest first. With
+    ``whole_across`` the face across is its surface over its (u, v) box, four edges: a face of many edges
+    (a web around many holes) costs with its edges, and a least found where it is trimmed away (in a hole)
+    fails the caller's checks. Each wall and gap check keeps the solutions that pass its own (the segment's
+    way, the faces' turn, a ray along it), and refines its sampled figure with the first."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    from OCP.Extrema import Extrema_ExtFlag_MIN
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+
+    target = across.wrapped
+    if whole_across:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+        from OCP.BRepTools import BRepTools
+
+        umin, umax, vmin, vmax = BRepTools.UVBounds_s(target)
+        made = BRepBuilderAPI_MakeFace(BRep_Tool.Surface_s(target), umin, umax, vmin, vmax, 1e-7)
+        if not made.IsDone():
+            return []
+        target = made.Face()
+    dist = BRepExtrema_DistShapeShape(face.wrapped, target, Extrema_ExtFlag_MIN)
+    if not dist.IsDone() or dist.NbSolution() == 0:
+        return []
+    found = []
+    for k in range(1, dist.NbSolution() + 1):
+        a, b = dist.PointOnShape1(k), dist.PointOnShape2(k)
+        pa, pb = np.array([a.X(), a.Y(), a.Z()]), np.array([b.X(), b.Y(), b.Z()])
+        length = float(np.linalg.norm(pb - pa))
+        if length <= 1e-9:
+            continue
+        here = GeomAPI_ProjectPointOnSurf(a, BRep_Tool.Surface_s(face.wrapped))
+        there = GeomAPI_ProjectPointOnSurf(b, BRep_Tool.Surface_s(across.wrapped))
+        if here.NbPoints() == 0 or there.NbPoints() == 0:
+            continue
+        _, normal = point_normal(face, *here.LowerDistanceParameters())
+        _, other = point_normal(across, *there.LowerDistanceParameters())
+        found.append((length, pa, pb, normal, other))
+    found.sort(key=lambda row: row[0])
+    return found
+
+
 def rounded(values: Iterable[float], digits: int = 4) -> list[float]:
     return [round(float(value), digits) for value in values]
