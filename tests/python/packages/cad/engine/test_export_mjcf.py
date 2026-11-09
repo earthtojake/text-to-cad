@@ -268,6 +268,20 @@ class ContactTest(_Folder):
         mujoco.mj_forward(bare, data)
         self.assertGreater(data.ncon, 0)
 
+    def test_the_summary_counts_the_contact_excludes_the_file_holds_declared_and_automatic(self) -> None:
+        from cad.engine.export.contact import touching
+        from cad.engine.said import robot
+
+        # The file's two: base/arm touching at rest, base/hand declared; and a declared pair that touches too is one.
+        rig = jointed()
+        said = robot(rig.summary("mjcf", touching=touching(rig)))
+        self.assertIn("2 contact excludes (1 declared, 1 automatic)", said[-1])
+        rig.excludes = (("base", "hand"), ("arm", "base"))
+        self.assertIn("2 contact excludes (2 declared, 0 automatic)", robot(rig.summary("mjcf", touching=touching(rig)))[-1])
+        # A URDF writes none, and says the declared ones are not written.
+        self.assertIn("2 declared contact excludes not written (a URDF has none; an MJCF has them)",
+                      robot(rig.summary("urdf"))[-1])
+
     def test_a_joint_s_dynamics_and_a_part_s_contact_friction_are_written_as_mujoco_reads_them(self) -> None:
         description = jointed()
         arm = description.joints[1]

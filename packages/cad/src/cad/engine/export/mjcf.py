@@ -126,20 +126,23 @@ def write(view: Any, path: Path) -> None:
     from cad.engine.describe import describe
     from cad.engine.export import described
 
+    from cad.engine.export.contact import touching
+
     description = describe(view, zero=getattr(view, "zero", None))
     for text in description.warnings:
         note(text)
-    write_description(description, path, scene=True)
-    described(description.summary("mjcf"))
+    found = touching(description)
+    write_description(description, path, scene=True, touching=found)
+    described(description.summary("mjcf", touching=found))
 
 
 def write_description(description: Description, path: Any, *, assets: str = "assets",
-                      scene: bool = False) -> list[Path]:
+                      scene: bool = False, touching: list[tuple[str, str]] | None = None) -> list[Path]:
     """Write ``description`` as an MJCF at ``path`` and its meshes in ``<path.parent>/<assets>``, and, given
     ``scene``, a ``scene.xml`` beside it where there is none (the module's **The scene**); the files it
-    wrote, the MJCF first."""
+    wrote, the MJCF first. ``touching``: the pairs ``contact.touching`` found of it, where the caller has them."""
     path = Path(path)
-    text, files = rendered(description, assets)
+    text, files = rendered(description, assets, touching=touching)
     written = place(path, text, files, assets)
     if scene and path.name.lower() != SCENE:
         beside = path.parent / SCENE
@@ -266,8 +269,10 @@ def place(path: Path, text: str, files: dict[str, bytes], assets: str) -> list[P
 # --- the rendering ---------------------------------------------------------------------------------
 
 
-def rendered(description: Description, assets: str = "assets") -> tuple[str, dict[str, bytes]]:
-    """``description`` as MJCF text and its mesh files' bytes by file name, nothing written."""
+def rendered(description: Description, assets: str = "assets", *,
+             touching: list[tuple[str, str]] | None = None) -> tuple[str, dict[str, bytes]]:
+    """``description`` as MJCF text and its mesh files' bytes by file name, nothing written. ``touching``: the
+    pairs ``contact.touching`` found of it, found here where None."""
     for closure in description.closures:
         if closure.kind in ("prismatic", "cylindrical"):
             raise ExportRefused(f"{description.name}: joint {closure.name!r} closes the loop through "
@@ -277,7 +282,7 @@ def rendered(description: Description, assets: str = "assets") -> tuple[str, dic
         description.check()
     except DescriptionError as error:
         raise ExportRefused(f"{description.name}: {error}") from error
-    return _Writer(description, assets).render()
+    return _Writer(description, assets, touching).render()
 
 
 class _Names:
@@ -332,9 +337,10 @@ class _Element:
 
 
 class _Writer:
-    def __init__(self, description: Description, assets: str) -> None:
+    def __init__(self, description: Description, assets: str, touching: list[tuple[str, str]] | None = None) -> None:
         self.description = description
         self.assets = assets
+        self.touching = touching
         self.geoms, self.sites, self.materials_named, self.meshes_named = _Names(), _Names(), _Names(), _Names()
         self.files_named = _Names()
         # Bodies and joints, each its own namespace (MuJoCo's): a body and a joint may share a name.
@@ -542,7 +548,8 @@ class _Writer:
 
         contact = _Element("contact")
         seen: set[frozenset[str]] = set()
-        for first, second in [*touching(self.description), *self.description.excludes]:
+        found = touching(self.description) if self.touching is None else self.touching
+        for first, second in [*found, *self.description.excludes]:
             key = frozenset((first, second))
             if key in seen:
                 continue

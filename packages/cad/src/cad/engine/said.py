@@ -243,7 +243,8 @@ def _named(names: Any) -> str:
 def robot(summary: dict[str, Any]) -> list[str]:
     """What a robot description an export wrote holds (``Description.summary``), in a line or two: its links
     and how its base stands, its joints by kind, its mass; then, where it has any, its couplings, closures,
-    frames, collisions by kind, exclusions, keys (or, of a URDF, the states it does not write) and zero state,
+    frames, collisions by kind, contact excludes (an MJCF's as the file holds them, declared and automatic; a
+    URDF's declared ones, which it does not write), keys (or, of a URDF, the states it does not write) and zero state,
     and the links with no mass. Its warnings and
     the writer's notes are the export's log lines, said as it wrote the file; the summary does not say them
     again."""
@@ -272,8 +273,13 @@ def robot(summary: dict[str, Any]) -> list[str]:
     collisions = summary.get("collisions") or {}
     if collisions and set(collisions) != {"mesh"} or len(links) > 1:
         rest.append("collisions " + (", ".join(f"{count_} {kind}" for kind, count_ in collisions.items()) or "none"))
-    if summary.get("excludes"):
-        rest.append(f"{len(summary['excludes'])} excluded pair{'s' if len(summary['excludes']) != 1 else ''}")
+    declared, automatic = len(summary.get("excludes") or ()), len(summary.get("touching") or ())
+    if summary.get("kind") == "urdf" and declared:
+        rest.append(f"{declared} declared contact exclude{'s' if declared != 1 else ''} not written (a URDF has none; "
+                    "an MJCF has them)")
+    elif declared or automatic:
+        rest.append(f"{declared + automatic} contact exclude{'s' if declared + automatic != 1 else ''} "
+                    f"({declared} declared, {automatic} automatic)")
     if summary.get("poses"):
         rest.append(f"keys {_named(summary['poses'])}")
     if summary.get("unwritten"):  # a URDF's: it holds no state

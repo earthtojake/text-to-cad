@@ -186,8 +186,9 @@ cad step export vendor/part.step sim/part.xml
 ```
 
 Each robot export says what it wrote after the file's line: its links and how its base stands, its
-joints by kind, its total mass, then its couplings, loops, frames, collisions by kind, exclusions,
-keys and zero; every warning (a link with no mass, a joint left out) is a line of the export's log
+joints by kind, its total mass, then its couplings, loops, frames, collisions by kind, the contact
+excludes the file holds (`6 contact excludes (1 declared, 5 automatic)`: yours, and the jointed pairs
+touching at rest), keys and zero; every warning (a link with no mass, a joint left out) is a line of the export's log
 before it. `--json` gives the same as the file row's `robot`. Read it before anything else: a mass of
 0, a link you did not expect or a missing joint is a model to fix.
 

@@ -321,13 +321,15 @@ class Description:
     def children(self, name: str) -> list[Joint]:
         return [joint for joint in self.joints if joint.parent == name]
 
-    def summary(self, kind: str) -> dict[str, Any]:
+    def summary(self, kind: str, touching: Any = ()) -> dict[str, Any]:
         """What the description holds, as an export of ``kind`` (``mjcf``, ``urdf``) says it (``said.robot``):
         its links but the ground (the robot's own), its joints but those it hangs from the ground by, whether
         its base floats, its couplings (``[follower, leader, ratio]``), closures, total mass (kg, None where no
         link has one) and the links with none, named frames, collisions by kind (a decomposed part's hulls are
-        ``hull``), exclusions, the poses the file holds (an MJCF's keys; a URDF holds none, and its
-        ``unwritten`` names them), its zero state and its warnings. JSON's types alone."""
+        ``hull``), exclusions (``excludes``, the declared link pairs; ``touching``, the pairs a writer excludes
+        on its own, given as it found them, less the declared ones), the poses the file holds (an MJCF's keys; a
+        URDF holds none, and its ``unwritten`` names them), its zero state and its warnings. JSON's types
+        alone."""
         ground = self.root
         mounts = {joint.name for joint in self.joints if joint.parent == ground.name}
         links = [link for link in self.links if link is not ground or link.visuals or link.collisions
@@ -342,6 +344,12 @@ class Description:
                 kind_of = "hull" if collision.part else collision.geometry.kind
                 collisions[kind_of] = collisions.get(kind_of, 0) + 1
         weighed = [link.inertial.mass for link in links if link.inertial is not None]
+        seen = {frozenset(pair) for pair in self.excludes}
+        automatic: list[list[str]] = []
+        for pair in touching:
+            if frozenset(pair) not in seen:
+                seen.add(frozenset(pair))
+                automatic.append(list(pair))
         return {"kind": kind, "name": self.name, "links": [link.name for link in links], "joints": joints,
                 "base": "free" if any(joint.kind == "floating" for joint in self.joints) else "fixed",
                 "couplings": [[joint.name, joint.follows[0], float(joint.follows[1])] for joint in self.joints
@@ -351,6 +359,7 @@ class Description:
                 "massless": [link.name for link in links if link.inertial is None and link.parts],
                 "frames": [name for link in links for name in link.frames],
                 "collisions": collisions, "excludes": [list(pair) for pair in self.excludes],
+                "touching": automatic,
                 "poses": [] if kind == "urdf" else [pose.name for pose in self.poses],
                 **({"unwritten": [pose.name for pose in self.poses]} if kind == "urdf" and self.poses else {}),
                 "zero": self.zero, "warnings": list(self.warnings)}
