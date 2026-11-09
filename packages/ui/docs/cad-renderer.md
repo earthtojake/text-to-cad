@@ -892,7 +892,8 @@ carries — the view on screen, from `ShellViewport.promptCamera` and the render
 makes of them, with the annotations as an annotation file), the viewer's Escape, and the box's size
 as the person drags it, kept across files. `quickEditPrompt.js` builds the context at
 the press, from what is live then (`createQuickEditContext`), and the text a copy writes
-(`copiedQuickEdit`, over core's `formatPromptMessage`). The drawing tools hand it whether there is
+(`copiedQuickEdit`, over core's `formatPromptMessage`), its files named from the workspace
+(`host.promptFiles.folders()`), the inline packet's `input` too. The drawing tools hand it whether there is
 ink, and the Annotation chip copies its `.annotation.json` file's path. Copying without
 Quick Edit is the copy shortcut — the selection's references, or, while Pencil or Shapes is up, the
 view with its annotations — which writes the clipboard directly. See

@@ -289,5 +289,36 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=old", guard=False)[0], 405)
 
 
+class ScratchDirectoryTest(unittest.TestCase):
+    """A message names the packet by its path: on POSIX a folder of this process's in /tmp, never the per-user
+    temporary folder (macOS's /var/folders/<hash>/T) or a home; elsewhere, or where /tmp refuses one, the
+    system's temporary folder."""
+
+    def made(self, files: PromptFiles) -> Path:
+        directory = files.directory
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        return directory
+
+    def test_on_posix_it_is_this_processs_own_folder_in_tmp(self) -> None:
+        import os
+        import stat
+
+        if os.name != "posix":
+            self.skipTest("POSIX only")
+        directory = self.made(PromptFiles())
+        self.assertEqual(Path("/tmp"), directory.parent)
+        self.assertTrue(directory.name.startswith("cad-quick-edit-"))
+        self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode), "this user's alone")
+
+    def test_a_tmp_that_refuses_one_falls_back_to_the_systems_temporary_folder(self) -> None:
+        from unittest import mock
+
+        from cad_server.viewer import prompt_files
+
+        with mock.patch.object(prompt_files, "SHORT_TEMP", str(self.made(PromptFiles(directory=tempfile.mkdtemp())) / "missing")):
+            directory = self.made(PromptFiles())
+        self.assertEqual(Path(tempfile.gettempdir()).resolve(), directory.parent.resolve())
+
+
 if __name__ == "__main__":
     unittest.main()
