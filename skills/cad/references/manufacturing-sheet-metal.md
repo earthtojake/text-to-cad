@@ -16,8 +16,10 @@ the thickness `t`; a shop's tooling and bend table move them):
   No boss, pocket, countersink, second thickness or solid block. A chamfered or rounded cut edge is
   allowed but is a second operation (`sheet.edge_break`, a warning); a cone or a torus between
   flanges is formed, not bent (`sheet.formed_surface`, a warning: not measured): a formed feature the
-  person wants -- an emboss, a louver, a bead -- is quoted as one and checked by hand. Two bends may meet
-  with no flat between (a joggle): both unroll, `sheet.joggle` says it.
+  person wants -- an emboss, a louver, a bead -- is quoted as one and checked by hand. Two bends that
+  turn opposite ways with no flat, or a web under a flange's minimum, between them are a joggle: both
+  unroll, and `sheet.joggle` (a warning) says it needs an offset (joggle) die; two the same way round
+  with no flat between are one compound bend.
 - **A bend is two arcs.** Inside radius `r` of at least `t` (the shop's tooling sets it; `--bend-radius`
   when known) and outside radius `r + t` at the same corner. Build the legs, union them and fillet
   both edges of the corner:

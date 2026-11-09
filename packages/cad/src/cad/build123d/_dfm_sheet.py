@@ -23,8 +23,9 @@ the axis, and its tangent lines where the cylinders meet the flanges.
 (r + K t)`` (the length of the neutral surface, ``K`` the K-factor), the bend itself unrolled into a strip
 ``BA`` wide. The flanges' faces are moved exactly (a rigid transform each), so their holes and arcs stay
 exact; a bend's strip is its cylinder's outline unrolled (exact for straight-ended bends, sampled where an
-end is curved). Two bends meeting tangent with no flat between (a joggle) meet at a joint, a flange of no
-faces the walk passes through (``_joints``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
+end is curved). Two bends meeting tangent with no flat between meet at a joint, a flange of no faces the
+walk passes through (``_joints``): a joggle where they turn opposite ways, a compound bend where they turn the
+same way; a flange between two opposed bends is an offset's web (``web_of``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
 to each other, to each bend in four conventions), flanges' lengths, reliefs, notches, tabs and webs are all
 measured on it, in the plane, by ``cad._internal.meshops_sheet``; each found place is mapped back onto the
 part for its ref.
@@ -171,6 +172,16 @@ class _Flange:
     # a joint, no flange: the line where two bends meet tangent with no flat between them (a joggle), as a
     # flange of no faces the unfold passes through, the two bends' numbers
     joint: tuple[int, int] | None = None
+
+
+def _opposed(first: _Bend, second: _Bend, flange: _Flange) -> bool:
+    """Whether two parallel bends either side of a flange (or a joint) turn opposite ways: their axes on
+    opposite sides of its plane (an S, a joggle), not the same side (a U, a compound bend)."""
+    if abs(float(first.axis @ second.axis)) < _PARALLEL:
+        return False
+    a = float((first.origin - flange.origin) @ flange.normal)
+    b = float((second.origin - flange.origin) @ flange.normal)
+    return a * b < 0.0
 
 
 @dataclass
@@ -871,9 +882,10 @@ class _Analysis:
         self._joints()
 
     def _joints(self) -> None:
-        """Bends that meet tangent with no flat between them (an S-jog, a joggle): each meeting a joint, a flange
-        of no faces at the tangent line both bends' ends share, so the unfold runs on from one bend to the next
-        -- each bend's strip laid on where the last one ends, as a flange between them would be."""
+        """Bends that meet tangent with no flat between them: each meeting a joint, a flange of no faces at the
+        tangent line both bends' ends share, so the unfold runs on from one bend to the next -- each bend's strip
+        laid on where the last one ends, as a flange between them would be. Two that turn opposite ways are a
+        joggle (``joggles``); two the same way round, a compound bend, are unrolled and no more."""
         of: dict[int, _Bend] = {face: bend for bend in self.bends for face in bend.side_faces}
         seen: set[tuple[int, int]] = set()
         for edge in self.edges:
@@ -903,8 +915,10 @@ class _Analysis:
             self.flanges.append(joint)
             first.flanges[joint.number] = ends[0]
             second.flanges[joint.number] = ends[1]
-            self.joggles.append({"bends": [self.ref(first.inner[0]), self.ref(second.inner[0])],
-                                 "location": self.ref(first.inner[0]), "xyz": _xyz(point)})
+            if _opposed(first, second, joint):
+                self.joggles.append({"bends": [self.ref(first.inner[0]), self.ref(second.inner[0])], "web_mm": 0.0,
+                                     "location": self.ref(first.inner[0]), "xyz": _xyz(point)})
+            # two bends the same way round are one compound bend: unrolled through the joint, no joggle
 
     def find_sharp(self) -> None:
         """Corners joined without a bend (``sharp_bends``): two skins at an angle meeting at an edge (a sharp
@@ -1525,8 +1539,12 @@ def _flanges(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], 
             inside = bend.inside_radius * tangent if tangent is not None else None
             outside = bend.outside_radius * tangent if tangent is not None else None
             flange = analysis.flanges[flange_number]
+            # a flange between two bends that turn opposite ways is an offset's web: its two bends
+            pair = [b for b in analysis.bends if flange_number in b.flanges]
+            web = ([analysis.ref(b.inner[0]) for b in pair]
+                   if len(pair) == 2 and _opposed(pair[0], pair[1], flange) else None)
             item = {
-                "bend": analysis.ref(bend.inner[0]), "side": side,
+                "bend": analysis.ref(bend.inner[0]), "side": side, "web_of": web, "joggle_web": None,
                 "length_tangent_mm": _r(least), "length_tangent_half_mm": _r(half),
                 "length_inside_mm": _r(least + inside) if inside is not None else None,
                 "length_inside_half_mm": _r(half + inside) if inside is not None else None,

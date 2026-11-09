@@ -221,6 +221,7 @@ def _hubs_rules(source: Source) -> tuple[Rule, ...]:
            fix="open the inside radius to at least the thickness, {limit:.3g} mm", **_SCALED),
         _r("flange_length", "flanges", "length_outside_minus_radius_mm", "min", 2.0, "mm",
            "flange height less the inside radius (from the outside of the bend)", source, scale_by="thickness",
+           item_when={"joggle_web": (False, None)},  # a joggle's short web is sheet.joggle's (``_joggle_webs``)
            fix="lengthen the flange: its height from the outside of the bend at least twice the thickness plus "
                "the inside radius ({limit:.3g} mm plus the radius)",
            note="minimum bend height 2 t + r; the page does not say where the height is measured, read here "
@@ -446,8 +447,44 @@ def _thickness_unknown(report: dict[str, Any], resolved: dict[str, Any]) -> list
                          f"evaluated ({names})", "rules", "give --thickness (the stock's, in mm)")]
 
 
+def _joggle_webs(report: dict[str, Any], resolved: dict[str, Any]) -> None:
+    """A web between two bends that turn opposite ways (a flange item's ``web_of``) under the flange minimum
+    (``flange_length``'s limit times the thickness, from the outside of the bend) is a joggle's: its flange
+    items say so (``joggle_web``, which flange_length then leaves alone) and its part lists it in ``joggles``
+    beside the tangent pairs, once. A web at or over the minimum is two ordinary bends."""
+    thickness = _thickness(report, resolved)
+    rule = next((r for r in RULES.rules if r.id == "sheet.flange_length"), None)
+    flanges = _items(report, "flanges")
+    if thickness is None or rule is None or not flanges:
+        return
+    least = float(rule.limit) * float(thickness)
+    webs: dict[str, list[dict[str, Any]]] = {}
+    for item in flanges:
+        if item.get("web_of") and isinstance(item.get("length_outside_minus_radius_mm"), (int, float)):
+            webs.setdefault(str(item.get("location")), []).append(item)
+        elif item.get("joggle_web") is None:
+            item["joggle_web"] = False
+    parts = _items(report, "parts")
+    for location, items in webs.items():
+        web = min(float(item["length_outside_minus_radius_mm"]) for item in items)
+        short = web < least - 1e-9 * max(1.0, least)
+        for item in items:
+            item["joggle_web"] = short
+        if not short:
+            continue
+        owner = _owner(location)
+        part = next((p for p in parts if _owner(p.get("location")) == owner), parts[0] if parts else None)
+        if part is None:
+            continue
+        joggles = part.setdefault("joggles", [])
+        if not any(j.get("web_location") == location for j in joggles):
+            joggles.append({"bends": list(items[0]["web_of"]), "web_mm": round(web, 9), "web_min_mm": least,
+                            "web_location": location, "location": location, "xyz": items[0].get("xyz")})
+
+
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
+    _joggle_webs(report, resolved)
     given = resolved.get("thickness")
     for part in _items(report, "parts"):
         where = part.get("location")
@@ -489,12 +526,17 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                 f"the flat pattern holds {100 * float(fraction):.0f}% of the part's material: {why}; it is not the "
                 "part's blank", missing[0] if missing else where, fix))
         for joggle in part.get("joggles") or ():
+            web = joggle.get("web_mm") or 0.0
+            between = ("no flat between them" if web <= 0 else
+                       f"a web of {web:.4g} mm between them, under the {joggle['web_min_mm']:.4g} mm a flange "
+                       "needs (flange_length)")
             found.append(CheckFinding(
-                "info", "sheet.joggle",
-                f"two bends ({' and '.join(joggle.get('bends') or ())}) meet tangent with no flat between them: a "
-                "joggle (an offset bend), unrolled into the flat; the flange between them (none) and a joggle "
-                "die's limits are not measured", joggle.get("location"),
-                "a joggle is formed in one hit by a joggle die: confirm its offset and run with the shop"))
+                "warning", "sheet.joggle",
+                f"two bends ({' and '.join(joggle.get('bends') or ())}) turn opposite ways with {between}: a "
+                "joggle (an offset bend), unrolled into the flat; it needs an offset/joggle die; not measured",
+                joggle.get("location"),
+                "a joggle is formed in one hit by an offset (joggle) die: confirm its offset and run with the shop, "
+                "or lengthen the web to a flange's minimum and bend it as two bends"))
         if part.get("flat_overlap_mm2"):
             found.append(CheckFinding("error", "sheet.flat_overlap",
                                       f"the flat pattern overlaps itself by {part['flat_overlap_mm2']:.4g} mm2: "

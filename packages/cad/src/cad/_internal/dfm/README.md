@@ -523,9 +523,13 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   cylinder's outline unrolled into a strip `BA` wide (exact for straight ends, sampled where an end is
   curved). A bend about the same axis, radius and angle as the bend that placed its flange (a bend line a
   cut interrupts) is laid along the same line with its own strip, no loop. Two bends meeting tangent with no
-  flat between them (an S-jog, a joggle) meet at a joint, a flange of no faces at their shared tangent line:
-  the unfold runs on through it, the second strip laid where the first ends (`parts.joggles`; no flange there
-  for the flange rules). Fused, this is the flat pattern;
+  flat between them meet at a joint, a flange of no faces at their shared tangent line: the unfold runs on
+  through it, the second strip laid where the first ends (no flange there for the flange rules). Two that
+  turn opposite ways (their axes either side of the sheet there: an S-jog) are a joggle (`parts.joggles`);
+  two the same way round are a compound bend, unrolled and no more. A flange between two parallel bends that
+  turn opposite ways is an offset's web (`flanges.web_of`, its two bends); the type side lists one under the
+  flange minimum (`sheet.flange_length`'s 2 t, from the outside of the bend) among the joggles too, its items
+  `joggle_web` (which flange_length leaves alone). Fused, this is the flat pattern;
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
   faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
@@ -585,8 +589,10 @@ outside radius r + t at the corner"), `sheet.flat_incomplete` (error: `flat_mate
 than 3%, the flat is not the part's blank, where no `sheet.sharp_bend` or judged `not_sheet` face already says
 why: it names what did not unfold, `not_in_flat`, at the first of them, or says that every flange and bend
 did; context `sharp_bends_found`), `sheet.thickness_mismatch` (error), `sheet.flat_overlap` (error),
-`sheet.not_unfolded` (warning: a loop of bends, a flange no bend reaches), `sheet.joggle` (info: two bends
-meeting tangent with no flat between, unrolled; a joggle die's limits not measured), `sheet.formed_surface`
+`sheet.not_unfolded` (warning: a loop of bends, a flange no bend reaches), `sheet.joggle` (warning, one per
+joggle: two bends that turn opposite ways with no web or one under a flange's minimum between them, unrolled;
+it needs an offset/joggle die, not measured; a web at or over the minimum is two ordinary bends, and the
+joggle's bends keep their own `bend_radius`), `sheet.formed_surface`
 (warning, one per part: its `formed` faces, not measured -- a cone, a torus or a free-form face is rolled,
 spun or stamped, an emboss, a louver or a bead, not brake-bent, and no source gives a stamped form's
 feasibility limit: quote it as a formed feature), `sheet.edge_break` (warning, one per part: its chamfered or

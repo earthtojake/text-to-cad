@@ -584,6 +584,31 @@ class ModellingMistakeTest(unittest.TestCase):
             self.assertFalse(codes & {"sheet.flat_incomplete", "sheet.not_unfolded", "sheet.flange_length"})
             self.assertNotIn("-0.0", json.dumps(result.measurements))
 
+    def test_a_joggle_is_two_opposed_bends_a_short_web_apart_and_a_compound_bend_is_none(self) -> None:
+        def joggles(steps: list[tuple], turn: bd.Location) -> tuple[list, set[str]]:
+            result = checked(turn * bent(steps, 1.5, 40, "jog"), material="aluminum", k_factor=0.4)
+            self.assertAlmostEqual(result.measurements["parts"]["items"][0]["flat_material_fraction"], 1.0, places=4)
+            return [f for f in result.findings if f.code == "sheet.joggle"], {f.code for f in result.findings}
+
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            # opposed, no web and a 1 mm web (under the 3 mm minimum): one joggle warning, no flange_length
+            for web in ([], [("line", 1.0)]):
+                found, codes = joggles([("line", 40), ("bend", 90, 1.5), *web, ("bend", -90, 1.5), ("line", 40)],
+                                       turn)
+                self.assertEqual([f.severity for f in found], ["warning"], (web, turn))
+                self.assertIn("needs an offset/joggle die; not measured", found[0].message)
+                self.assertNotIn("sheet.flange_length", codes)
+            # opposed with a web at a flange's length: two ordinary bends
+            found, codes = joggles([("line", 40), ("bend", 90, 1.5), ("line", 6.0), ("bend", -90, 1.5),
+                                    ("line", 40)], turn)
+            self.assertEqual(found, [])
+            # the same way round, tangent: a compound bend, unrolled, no joggle
+            found, codes = joggles([("line", 40), ("bend", 45, 2.0), ("bend", 45, 6.0), ("line", 40)], turn)
+            self.assertEqual(found, [])
+            # a joggle's tight radii keep their own warning
+            _, codes = joggles([("line", 40), ("bend", 90, 0.1), ("bend", -90, 0.1), ("line", 40)], turn)
+            self.assertIn("sheet.bend_radius", codes)
+
     def test_a_part_s_formed_faces_and_broken_edges_are_one_finding_each_and_named_as_its_ref_names_it(self) -> None:
         # an unnamed part's refs are bare (face 7): its chamfers are one finding, not one a face
         plate = bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
