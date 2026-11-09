@@ -6,7 +6,10 @@
  * This is a port of the engine's `cad.engine.formats.kicad.stroke_font` (the same table, the same
  * layout; the Python suite holds the two tables equal). KiCad draws text with its own stroke font
  * (newstroke), which is GPL, so the board's picture draws text with Hershey Simplex instead: the
- * same positions, sizes, rotations, mirroring and justification, different glyphs.
+ * same positions, sizes, rotations, mirroring and justification, different glyphs. With `markup`, KiCad's
+ * text markup is drawn as KiCad draws it (`parseMarkup`: the engine's `parse_markup`, the one reading of
+ * it both sides hold to `strokeFont.parity.json`): `~{...}` overbarred, `_{...}` and `^{...}` sub- and
+ * superscripts, the markers never drawn and the width measured on what is.
  *
  * Hershey Simplex is one of the Hershey fonts, created by Dr. A. V. Hershey while working at the
  * U.S. National Bureau of Standards, and distributed since 1986 in the format James Hurt
@@ -61,6 +64,14 @@ const CAP_HEIGHT = BASELINE - CAP_TOP;
 const LINE_SPACING = 1.62;
 // KiCad's italic: a point moves right by this share of its height above the baseline (ITALIC_TILT).
 const ITALIC_TILT = 1 / 8;
+// KiCad's sub- and superscript: this share of the text's size (font.h's SUPER_SUB_SIZE_MULTIPLIER), a
+// subscript's baseline that share of its own size below, a superscript's above.
+const SUPER_SUB_SIZE = 0.8;
+const SUB_OFFSET = 0.15;
+const SUPER_OFFSET = 0.35;
+// KiCad's overbar: this many times the size above the baseline, each end trimmed by a share of the size.
+const OVERBAR_HEIGHT = 1.26;
+const OVERBAR_TRIM = 0.1;
 
 function decode(glyph) {
   const left = glyph.charCodeAt(0) - 82;
@@ -105,6 +116,117 @@ function lineStrokes(line, scaleX, scaleY, tilt) {
   return { width: pen * scaleX, strokes };
 }
 
+const IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*/y;
+
+// Where an escape sequence (`{slash}`: a brace, an identifier, a brace) at `index` ends, or -1.
+function escapeEnd(text, index) {
+  if (text[index] !== "{") return -1;
+  IDENTIFIER.lastIndex = index + 1;
+  const found = IDENTIFIER.exec(text);
+  const end = found ? index + 1 + found[0].length : -1;
+  return found && text[end] === "}" ? end + 1 : -1;
+}
+
+// Where a URL at `index` (`http://` or `https://`, then at least one character, to the next space) ends, or -1.
+function urlEnd(text, index) {
+  for (const scheme of ["http://", "https://"]) {
+    const after = index + scheme.length;
+    if (text.startsWith(scheme, index) && after < text.length && text[after] !== " ") {
+      const space = text.indexOf(" ", after);
+      return space < 0 ? text.length : space;
+    }
+  }
+  return -1;
+}
+
+/**
+ * `text` as KiCad's markup parser reads it (`markup_parser.h`) — the engine's `parse_markup`, run for
+ * run: each run a plain string or `[marker, runs]` for an overbar (`~`), a subscript (`_`) or a
+ * superscript (`^`). Markup nests. A marker whose brace never closes, a lone `~`, `_` or `^`, a stray
+ * brace, an escape sequence inside markup (`{slash}`, whose brace closes nothing) and a URL (`http://`
+ * or `https://` to the next space) are text, as written. One pass with a stack of the markers open; a
+ * marker still open at the end is KiCad's failed match, text, and the text is read again with it so.
+ *
+ * @param {string} text
+ * @returns {(string | [string, any[]])[]}
+ */
+export function parseMarkup(text) {
+  text = String(text);
+  const failed = new Set();
+  for (;;) {
+    const top = [];
+    const stack = [];
+    const put = (piece) => {
+      const runs = stack.length ? stack.at(-1).runs : top;
+      if (typeof piece === "string" && typeof runs.at(-1) === "string") runs[runs.length - 1] += piece;
+      else runs.push(piece);
+    };
+    let at = 0;
+    while (at < text.length) {
+      const character = text[at];
+      let end;
+      if (stack.length && character === "}") {
+        const { marker, runs } = stack.pop();
+        put([marker, runs]);
+        at += 1;
+      } else if ("~_^".includes(character) && text[at + 1] === "{" && !failed.has(at)) {
+        stack.push({ where: at, marker: character, runs: [] });
+        at += 2;
+      } else if (stack.length && (end = escapeEnd(text, at)) > 0) {
+        put(text.slice(at, end));
+        at = end;
+      } else if (!stack.length && (end = urlEnd(text, at)) > 0) {
+        put(text.slice(at, end));
+        at = end;
+      } else {
+        put(character);
+        at += 1;
+      }
+    }
+    if (!stack.length) return top;
+    for (const { where } of stack) failed.add(where);
+  }
+}
+
+// One line's strokes with its markup drawn, the pen from x = 0 on the baseline: the engine's `_markup_strokes`.
+function markupStrokes(runs, scaleX, scaleY, tilt) {
+  const strokes = [];
+  const baseline = BASELINE * scaleY;
+  // `scale` the run's size against the text's, `lift` its baseline above the text's (mm, up).
+  const lay = (list, pen, scale, lift) => {
+    for (const run of list) {
+      if (typeof run === "string") {
+        for (const character of run) {
+          const { left, right, strokes: glyph } = glyphStrokes(character);
+          for (const stroke of glyph) {
+            strokes.push(stroke.map(([x, y]) => {
+              const up = -(y - BASELINE) * scaleY * scale + lift;
+              return [pen + (x - left) * scaleX * scale + up * tilt, baseline - up];
+            }));
+          }
+          pen += (right - left) * scaleX * scale;
+        }
+        continue;
+      }
+      const [marker, inner] = run;
+      if (marker === "~") {
+        const start = pen;
+        pen = lay(inner, pen, scale, lift);
+        const height = CAP_HEIGHT * scaleY * scale;
+        const trim = CAP_HEIGHT * scaleX * scale * OVERBAR_TRIM;
+        const bar = lift + height * OVERBAR_HEIGHT;
+        if (pen - start > 2 * trim) strokes.push([[start + trim + bar * tilt, baseline - bar], [pen - trim + bar * tilt, baseline - bar]]);
+        continue;
+      }
+      const small = scale * SUPER_SUB_SIZE;
+      const size = CAP_HEIGHT * scaleY * small;
+      pen = lay(inner, pen, small, marker === "_" ? lift - size * SUB_OFFSET : lift + size * SUPER_OFFSET);
+    }
+    return pen;
+  };
+  return { width: lay(runs, 0, 1, 0), strokes };
+}
+
 /**
  * `text` as stroke polylines in millimetres, y down, placed as KiCad places text — the engine's
  * `text_strokes`, point for point.
@@ -116,17 +238,22 @@ function lineStrokes(line, scaleX, scaleY, tilt) {
  *   HEIGHT` as wide as the font draws them. `at` is the anchor the text is justified about: the
  *   centre of the capitals' box unless `justify` names `left`, `right`, `top` or `bottom`. `mirror`
  *   flips it about its anchor's vertical; `angle` is degrees counter-clockwise as seen on the
- *   board, applied last.
+ *   board, applied last. `markup` draws KiCad's `~{overbar}`, `_{subscript}` and `^{superscript}` as
+ *   KiCad does (`parseMarkup`).
  * @returns {[number, number][][]}
  */
-export function textStrokes(text, { size, at = [0, 0], angle = 0, justify = [], mirror = false, italic = false }) {
+export function textStrokes(text, { size, at = [0, 0], angle = 0, justify = [], mirror = false, italic = false, markup = false }) {
   const height = Number(size[0]);
   const width = Number(size[1]);
   if (!(height > 0)) return [];
   const scaleY = height / CAP_HEIGHT;
   const scaleX = (width > 0 ? width : height) / CAP_HEIGHT;
   const lines = String(text).split("\n");
-  const laid = lines.map((line) => lineStrokes(line, scaleX, scaleY, italic ? ITALIC_TILT : 0));
+  const tilt = italic ? ITALIC_TILT : 0;
+  const laid = lines.map((line) => {
+    const runs = markup ? parseMarkup(line) : null;
+    return runs && runs.some((run) => typeof run !== "string") ? markupStrokes(runs, scaleX, scaleY, tilt) : lineStrokes(line, scaleX, scaleY, tilt);
+  });
   const lineHeight = height * LINE_SPACING;
   const blockHeight = height + lineHeight * (lines.length - 1);
   let firstCentre = 0;

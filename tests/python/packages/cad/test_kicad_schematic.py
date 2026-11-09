@@ -92,6 +92,76 @@ class TheNets(SchematicFixture):
         self.assertEqual({wire.net for wire in bus}, {"/D[0..1]"})
 
 
+def _wire(start: tuple[float, float], end: tuple[float, float], uuid: str) -> str:
+    """A wire between two points in grid steps, as KiCad writes one."""
+    (x0, y0), (x1, y1) = at(*start), at(*end)
+    return f'(wire (pts (xy {x0:g} {y0:g}) (xy {x1:g} {y1:g})) (stroke (width 0) (type default)) (uuid "{uuid}"))'
+
+
+ACROSS, TEE, RAIL = ("5c4e0000-0000-4000-8000-0000000000e1", "5c4e0000-0000-4000-8000-0000000000e2",
+                     "5c4e0000-0000-4000-8000-0000000000e4")
+#: C9, a capacitor on the root sheet, its pin 1 at (120, 27) and nothing on it; a rail across that pin, as KiCad
+#: saves a straight run through a pin drawn as wires ending on it (one wire, no junction).
+RAILED = (f'(symbol (lib_id "Device:C") (at {at(120, 30)[0]:g} {at(120, 30)[1]:g} 0) (unit 1) (exclude_from_sim no) '
+          '(in_bom yes) (on_board yes) (dnp no) (uuid "5c4e0000-0000-4000-8000-0000000000e5") '
+          '(property "Reference" "C9" (at 0 0 0) (effects (font (size 1.27 1.27)))) '
+          '(property "Value" "100n" (at 0 0 0) (effects (font (size 1.27 1.27)))) '
+          '(pin "1" (uuid "5c4e0000-0000-4000-8000-0000000000e6")) (pin "2" (uuid "5c4e0000-0000-4000-8000-0000000000e7")) '
+          f'(instances (project "divider" (path "/{ROOT_UUID}" (reference "C9") (unit 1))))) '
+          + _wire((114, 27), (126, 27), RAIL))
+#: What a test adds to the divider's root sheet: a wire drawn across R1's pin 1 (its end at (80, 44)) on its way
+#: elsewhere; a wire from the middle of the MID wire, a T with no junction; the same T with KiCad's junction; the
+#: rail across C9's pin 1 alone, and with a wire ending on that pin besides, or a label on it.
+ON_SPANS = {
+    "across": _wire((74, 44), (86, 44), ACROSS),
+    "tee": _wire((90, 51), (90, 56), TEE),
+    "tee with a junction": _wire((90, 51), (90, 56), TEE) + f' (junction (at {at(90, 51)[0]:g} {at(90, 51)[1]:g}) '
+                           '(diameter 0) (color 0 0 0 0) (uuid "5c4e0000-0000-4000-8000-0000000000e3"))',
+    "rail": RAILED,
+    "rail and a wire's end": RAILED + " " + _wire((120, 27), (120, 22), "5c4e0000-0000-4000-8000-0000000000e8"),
+    "rail and a label": RAILED + f' (label "X" (at {at(120, 27)[0]:g} {at(120, 27)[1]:g} 0) '
+                        '(effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "5c4e0000-0000-4000-8000-0000000000e9"))',
+}
+
+
+def with_on_root(root: Path, extra: str) -> Path:
+    """The divider at ``root`` with ``extra`` on its root sheet."""
+    text = root.read_text(encoding="utf-8")
+    root.write_text(text.replace("  (sheet_instances", f"  {extra}\n  (sheet_instances", 1), encoding="utf-8")
+    return root
+
+
+class TheSpans(SchematicFixture):
+    """KiCad joins a pin, and a wire's end, that lies on a wire's span (``tests/python/packages/kicad/
+    test_schematic_files.py`` holds the reader's nets to its netlist for them): the reader names each that
+    no junction marks, and none of the divider's own joins (wire ends on pins, a label on a wire's span, a
+    T with its junction)."""
+
+    def joins(self, extra: str | None) -> list[tuple]:
+        from cad.engine.formats.kicad.schematic import read_schematic_index, span_joins
+
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-spans-") as folder:
+            root = write_schematic(Path(folder))
+            if extra:
+                with_on_root(root, extra)
+            index, _ = read_schematic_index(root)
+            return [(join.sheet, join.at, join.pin and f"{join.pin.ref}.{join.pin.number}", join.end and join.end.uuid,
+                     join.wire.uuid, join.wire.net) for join in span_joins(index)]
+
+    def test_a_pin_or_a_wires_end_on_a_span_is_named_and_the_joins_kicad_draws_are_not(self) -> None:
+        self.assertEqual([], self.joins(None))
+        self.assertEqual([("/", at(80, 44), "R1.1", None, ACROSS, "+5V")], self.joins(ON_SPANS["across"]))
+        self.assertEqual([("/", at(90, 51), None, TEE, UUIDS["mid wire"], "/MID")], self.joins(ON_SPANS["tee"]))
+        self.assertEqual([], self.joins(ON_SPANS["tee with a junction"]))
+
+    def test_a_pin_whose_one_connection_is_a_span_is_kicads_own_straight_run_and_not_named(self) -> None:
+        # KiCad saves a run through C9's pin 1 as one wire across it; the pin joined some other way besides is named.
+        self.assertEqual([], self.joins(ON_SPANS["rail"]))
+        for case, net in (("rail and a wire's end", "unconnected-(C9-Pad1)"), ("rail and a label", "/X")):
+            with self.subTest(case):
+                self.assertEqual([("/", at(120, 27), "C9.1", None, RAIL, net)], self.joins(ON_SPANS[case]))
+
+
 class TheReferences(SchematicFixture):
     def test_a_reference_names_what_the_board_would(self) -> None:
         from cad.engine.formats.kicad.refs import parse_board_selector
@@ -212,11 +282,75 @@ class ThePayload(SchematicFixture):
         with self.assertRaisesRegex(ValueError, "no sheet /Power/; its sheets are /, /Load/"):
             build_schematic_plot(self.root, sheets=["/Power/"])
 
+    def test_kicads_drawing_sheet_is_a_layer_only_when_asked(self) -> None:
+        from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
+
+        def drawing_sheet(payload: dict) -> list[dict]:
+            return [item for layer in payload["sheets"][0]["layers"] if layer["id"] == "drawing_sheet" for item in layer["items"]]
+
+        self.assertEqual(drawing_sheet(build_schematic_plot(self.root, sheets=["/"], index=False)), [])
+        payload = build_schematic_plot(self.root, sheets=["/"], index=False, drawing_sheet=True)
+        items = drawing_sheet(payload)
+        texts = [item["text"] for item in items if item["t"] == "text" and not item.get("frame")]
+        # The title block, its variables the sheet's: "${COMPANY}" and the comments are empty, so not drawn.
+        self.assertEqual(texts, ["Date: ", "KiCad E.D.A. 9.0", "Rev: 1", "Size: A4", "Id: 1/2", "Title: Divider",
+                                 "File: divider.kicad_sch", "Sheet: /"])
+        # Its box, 110 by 32 mm from the 10 mm margin's bottom-right corner, 2 mm in.
+        self.assertEqual(next(item for item in items if item["t"] == "path" and not item.get("frame"))["pts"],
+                         [[177.0, 166.0], [285.0, 166.0], [285.0, 198.0], [177.0, 198.0], [177.0, 166.0]])
+        # The frame: an A4 page's columns 1 to 6 along the top and bottom, rows A to D down both sides.
+        frame = [item["text"] for item in items if item["t"] == "text" and item.get("frame")]
+        self.assertEqual(frame, [*"123456", *"123456", *"ABCD", *"ABCD"])
+        self.assertEqual(payload["warnings"], [])
+        project = self.root.with_suffix(".kicad_pro")
+        saved = project.read_text(encoding="utf-8")
+        self.addCleanup(project.write_text, saved, encoding="utf-8")
+        named = json.loads(saved)
+        named.setdefault("schematic", {})["page_layout_descr_file"] = "house.kicad_wks"
+        project.write_text(json.dumps(named), encoding="utf-8")
+        warned = build_schematic_plot(self.root, sheets=["/"], index=False, drawing_sheet=True)["warnings"]
+        self.assertEqual(len(warned), 1)
+        self.assertIn("house.kicad_wks", warned[0])
+        self.assertEqual(build_schematic_plot(self.root, sheets=["/"], index=False)["warnings"], [])
+
+    def test_kicads_text_markup_is_drawn_not_spelled(self) -> None:
+        from cad.engine.formats.kicad.stroke_font import text_strokes
+
+        def box(strokes) -> tuple[float, float, float, float]:
+            xs, ys = [p[0] for s in strokes for p in s], [p[1] for s in strokes for p in s]
+            return min(xs), min(ys), max(xs), max(ys)
+
+        size = (1.27, 1.27)
+        plain = text_strokes("RESET", size=size, justify=["left"])
+        barred = text_strokes("~{RESET}", size=size, justify=["left"], markup=True)
+        # The letters where RESET's are (the same advance: no tilde or brace drawn), and one bar over them.
+        def rounded(strokes) -> list:
+            return [[(round(x, 9), round(y, 9)) for x, y in stroke] for stroke in strokes]
+
+        self.assertEqual(rounded(barred[:-1]), rounded(plain))
+        [(x0, y0), (x1, y1)] = barred[-1]
+        self.assertEqual(y0, y1)
+        self.assertLess(y0, box(plain)[1])
+        self.assertTrue(box(plain)[0] - 0.2 < x0 < x1 < box(plain)[2] + 0.2)
+        self.assertEqual(text_strokes("RESET", size=size, markup=True), text_strokes("RESET", size=size))
+        self.assertGreater(len(text_strokes("~{RESET}", size=size)), len(barred))  # spelled out without markup
+        # A subscript and a superscript: smaller, below the baseline and above the capitals.
+        three = box(text_strokes("3", size=size, justify=["left"]))
+        sub = box(text_strokes("IO_{3}", size=size, justify=["left"], markup=True)[-1:])
+        sup = box(text_strokes("IO^{3}", size=size, justify=["left"], markup=True)[-1:])
+        self.assertLess(sub[3] - sub[1], three[3] - three[1])
+        self.assertGreater(sub[3], three[3])
+        self.assertLess(sup[1], three[1])
+        # Unbalanced markup stays literal.
+        self.assertEqual(text_strokes("~{RESET", size=size, markup=True), text_strokes("~{RESET", size=size))
+
     def test_the_javascript_fixture_is_this_schematics_payload(self) -> None:
         from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
 
         fixture = repo_path("packages", "ui", "src", "renderers", "schematic", "__fixtures__", "schematic.plot.json")
-        self.assertEqual(json.loads(fixture.read_text(encoding="utf-8")), json.loads(json.dumps(build_schematic_plot(self.root))),
+        # The route's payload: every page on KiCad's drawing sheet.
+        built = build_schematic_plot(self.root, drawing_sheet=True)
+        self.assertEqual(json.loads(fixture.read_text(encoding="utf-8")), json.loads(json.dumps(built)),
                          "regenerate the fixture: see its README")
 
 
@@ -230,7 +364,7 @@ class TheStill(SchematicFixture):
         super().setUpClass()
         isolate(cls.addClassCleanup)
 
-    def draw(self, name: str, display: dict | None = None, center=(114.3, 64.77)):
+    def draw(self, name: str, display: dict | None = None, center=(114.3, 64.77)):  # 10 px per mm about center
         from PIL import Image
 
         from cad.engine.api import snapshot
@@ -257,12 +391,25 @@ class TheStill(SchematicFixture):
         # R3's VOUT wire, y = 38.1 mm, from x = 50.8 to 58.42, the centre at x = 54.61: 2 mm right of it.
         self.assertTrue(any(self.near(image.getpixel((220, row)), (0, 150, 0)) for row in (199, 200, 201)))
 
+    def test_the_title_block_is_drawn_unless_left_out_and_the_frame_with_the_border(self) -> None:
+        center = (231.0, 182.0)  # the A4 title block, 177 to 285 mm across and 166 to 198 mm down
+
+        def ink(image, row: int) -> bool:
+            return any(self.near(image.getpixel((column, row)), (132, 0, 0), 60) for column in range(40, 360))
+
+        shown = self.draw("title", center=center)
+        self.assertTrue(ink(shown, 255))  # the title row's top line, 187.5 mm down
+        self.assertFalse(ink(shown, 380))  # no frame at the margin, 200 mm, without the border
+        self.assertFalse(ink(self.draw("untitled", {"title": False}, center=center), 255))
+        self.assertTrue(ink(self.draw("framed", {"border": True}, center=center), 380))
+
     def test_what_a_schematic_does_not_draw_is_refused(self) -> None:
         from cad.engine.snapshot import SnapshotRefused
 
         for display, words in (({"sheet": "/Power/"}, "no sheet /Power/"), ({"mode": "copper"}, "takes border, sheet"),
-                               ({"appearance": "dark"}, "^a schematic's display takes border, sheet:"),
-                               ("dark", "^--display is not JSON"), ({"border": "yes"}, "border is true or false")):
+                               ({"appearance": "dark"}, "^a schematic's display takes border, sheet, title:"),
+                               ("dark", "^--display is not JSON"), ({"border": "yes"}, "border is true or false"),
+                               ({"title": "no"}, "title is true or false")):
             with self.subTest(display=display), self.assertRaisesRegex(SnapshotRefused, words):
                 self.draw("refused", display)
 
@@ -307,6 +454,27 @@ class TheType(SchematicFixture):
         self.assertEqual([(finding.severity, finding.code) for finding in checked.findings],
                          [("warning", "label_dangling"), ("info", "libraries_not_checked")])
         self.assertTrue(checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
+
+    def test_erc_lists_a_pin_on_a_wires_span_beside_kicads_findings(self) -> None:
+        from unittest import mock
+
+        import cad
+        from cad.kicad import _schematic
+
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-erc-span-") as folder:
+            root = with_on_root(write_schematic(Path(folder)), ON_SPANS["across"])
+            with mock.patch.object(_schematic, "ready", lambda: Path("kicad-cli")), \
+                    mock.patch.object(_schematic, "run_erc", lambda cli, target: []):
+                checked = cad.kicad_sch.erc(root)
+        [found] = checked.findings
+        x, y = at(80, 44)
+        self.assertEqual(("warning", "pin_on_wire_span", f"/ ({x:g}, {y:g}) mm"),
+                         (found.severity, found.code, found.location))
+        self.assertIn("Pin R1.1 lies on a wire's span with no junction, and KiCad joins it to that wire's net (+5V) as well "
+                      "as to what else meets it there",
+                      found.message)
+        self.assertEqual([("pin", "#R1.1"), ("wire", f"#wire:{ACROSS}")], [(item["kind"], item["ref"]) for item in found.items])
+        self.assertTrue(checked.ok and checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
 
     def test_a_file_that_is_no_schematic_is_refused(self) -> None:
         folder = Path(self.folder.name)

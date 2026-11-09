@@ -377,12 +377,13 @@ function SchematicSurface({ view, data }) {
   useEffect(() => { handlers.hover(null, null); }, [toolMode, handlers]);
 
   // The view on screen as a prompt carries it: the plan view's camera, the pane's shape, and the sheet shown,
-  // which `cad kicad_sch snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is.
+  // which `cad kicad_sch snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is,
+  // and on the whole drawing sheet the viewer shows (`border`: its frame and zone labels with the title block).
   const currentView = useCallback(() => {
     const current = viewRef.current, size = current?.sizeRef.current;
     const camera = current && size ? planCamera(current.transformRef.current, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
-    return seen ? { ...seen, display: { sheet: pageRef.current?.path || "/", border: false } } : null;
+    return seen ? { ...seen, display: { sheet: pageRef.current?.path || "/", border: true } } : null;
   }, []);
 
   const measureCanvasRef = useRef(null);
@@ -450,7 +451,7 @@ function SchematicSurface({ view, data }) {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
       loading: document.loading || document.updating, selection: references, camera: null, display: {},
-      schematicDisplay: { sheet: pageRef.current?.path || "/", border: false }
+      schematicDisplay: { sheet: pageRef.current?.path || "/", border: true }
     }),
     setCamera() { throw new Error(SCHEMATIC_NO_CAMERA); },
     resetCamera() { fit(); },

@@ -282,11 +282,16 @@ zero-based UTF-16 with an exclusive end. CAD selectors use the engine's
 grammar, validated by core, not STEP entity numbers. Preserve a revision when available;
 references do not promise to survive edits. Shared serialization handles quoting.
 
-`formatPromptMessage(context, { attachmentPath })` is the one
+`formatPromptMessage(context, { attachmentPath, folders })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
 then `File: <path>`; then `References:` and one reference per line; then each
 JSON file by its label and path (the views' `.snapshot.json`, an
-`.annotation.json`), where `attachmentPath` says where it was saved.
+`.annotation.json`), where `attachmentPath` says where it was saved. Every path in it is
+named by the context's `folders` (`displayPath`): relative to the workspace the agent
+works in (`start`), else from `~/`, else as it is, so an agent app that shows the message
+verbatim never shows the person's home. Quick Edit asks `host.promptFiles.folders()` at
+the press (the viewer server's `start` and `home`: a CAD app card's workspace is the folder its
+agent app started the server's transport in); a host without it names every file whole.
 No pictures are rendered, attached or sent.
 
 

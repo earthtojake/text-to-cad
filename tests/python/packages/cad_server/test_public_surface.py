@@ -72,8 +72,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
-                             "kicad_pcb")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A KiCad board's still: the engine's snapshot with the box of the board to frame.
+    "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),

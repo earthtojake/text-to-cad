@@ -7,7 +7,10 @@ import { cadApiUrl } from './client.js';
  *   `references`: what the prompt names in the file, a board's selectors, which the packet carries for its snapshot to light.
  * @typedef {{ snapshot: string, inline?: never } | { inline: string, snapshot?: never }} PromptFiles
  * @param {{ origin?: string, fetch?: typeof globalThis.fetch }} [options]
- * @returns {{ create(request: PromptFilesRequest): Promise<PromptFiles>, read(path: string): Promise<Blob> }}
+ * `folders` asks the viewer server for the folders a message names files by: the workspace it was started
+ * in (`start`: an agent app's, for a CAD app card) and the person's home.
+ * @returns {{ create(request: PromptFilesRequest): Promise<PromptFiles>, read(path: string): Promise<Blob>,
+ *   folders(): Promise<{ start?: string, home?: string }> }}
  */
 export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalThis.fetch } = {}) {
   const headers = { 'x-cad-viewer': '1' };
@@ -24,6 +27,12 @@ export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalTh
       if (typeof body.inline === "string") return { inline: body.inline };
       if (typeof body.snapshot === "string") return { snapshot: body.snapshot };
       throw new Error("The prompt response has neither inline JSON nor a snapshot path.");
+    },
+    async folders() {
+      const response = await fetchImpl(cadApiUrl('/api/v1/server', { origin }), { headers });
+      const body = response.ok ? await response.json().catch(() => null) : null;
+      const text = value => (typeof value === 'string' && value ? value : undefined);
+      return { start: text(body?.start), home: text(body?.home) };
     },
     async read(path) {
       const name = String(path).split(/[\\/]/).pop();
