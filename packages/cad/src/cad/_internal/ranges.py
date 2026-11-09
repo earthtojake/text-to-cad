@@ -176,17 +176,9 @@ def _own(found: Any) -> list[float | None]:
 NEAR_SAID = 3
 
 
-def closing(contact: Any) -> str:
-    """A pair near as built that met, said by its gap closing (``Contact.near``): ``, closed to 0.18 from 0.42 mm
-    as built``; nothing for any other pair."""
-    if contact.near is None:
-        return ""
-    if contact.gap is None:
-        return f", closed from {contact.near:.2f} mm as built"
-    return f", closed to {contact.gap:.2f} from {contact.near:.2f} mm as built"
-
-
 def _words(found: Any) -> str:
+    from cad.engine.ranges import closing
+
     def end(name: str, value: float | None, own: float | None, contact: Any, clash: Any) -> str:
         if contact is None:
             said = f"{name} clear{' over a full turn' if found.unit == 'deg' else ''}"

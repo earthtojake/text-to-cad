@@ -28,7 +28,7 @@ parts that met one step past it. Where two parts of one link meet (a part split 
 in its hole), that surface is inside the link and is not tested.
 
 **A pair near at zero** is measured, not counted: each pair's gap at zero is the least distance between
-its two sides' samples (a KD-tree's, out to the grid's reach, ``REACH`` clearances). A pair under
+its two sides' samples (an exact search of the cells around each, ``_Cells``, out to the grid's reach, ``REACH`` clearances). A pair under
 ``TOUCHING`` of the clearance apart touches (a horn on its servo, a part on the bearing it turns on): it
 keeps its count as it turns about the shared axis, and the count rule holds for it. A pair farther apart
 but within the reach is near: a count of its points within the clearance changes with every hundredth of
@@ -647,50 +647,118 @@ class _Sweep:
 def _gaps_at_rest(points: np.ndarray, owners: np.ndarray, still: np.ndarray, still_owners: np.ndarray, reach: float,
                   excluded: Callable[[tuple[int, int]], bool]) -> dict[tuple[int, int], float]:
     """Each (moving part, still part) pair's least distance at zero, in mm, between their samples, for the pairs
-    within ``reach`` metres: the four nearest still samples of each moving one, so a part behind a nearer one is
-    found too."""
+    within ``reach`` metres (``_Cells``)."""
     if not len(points) or not len(still):
         return {}
-    from scipy.spatial import cKDTree
+    found = _Cells(still, reach).least_by_pair(points, owners, still_owners)
+    return {pair: gap * 1000.0 for pair, gap in found.items() if not excluded(pair)}
 
-    distances, indices = cKDTree(still).query(points, k=min(4, len(still)), distance_upper_bound=reach)
-    distances, indices = distances.reshape(len(points), -1), indices.reshape(len(points), -1)
-    rows, columns = np.nonzero(np.isfinite(distances))
-    if not len(rows):
-        return {}
-    width = int(still_owners.max()) + 1
-    codes = owners[rows].astype(np.int64) * width + still_owners[indices[rows, columns]]
-    order = np.argsort(codes, kind="stable")
-    codes, least = codes[order], distances[rows, columns][order]
-    unique, first = np.unique(codes, return_index=True)
-    smallest = np.minimum.reduceat(least, first)
-    found = {(int(code) // width, int(code) % width): float(gap) * 1000.0 for code, gap in zip(unique, smallest)}
-    return {pair: gap for pair, gap in found.items() if not excluded(pair)}
+
+#: The 27 cells around a cell, itself among them.
+_AROUND = tuple((x, y, z) for x in (-1, 0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1))
+
+
+class _Cells:
+    """Points hashed into cubic cells of a size: every point within that distance of a query point lies in one of
+    the 27 cells around the query's, so the least distance out to it is an exact search of those cells alone (numpy:
+    the engine's libraries hold no KD-tree). ``dilated`` files each point in its 27 cells at once, so a query looks
+    up its own cell alone: 27 times the memory, for the one part a near pair is tested against at every pose."""
+
+    #: Query points looked up at once: their candidate pairs, some tens a point, held in memory together.
+    CHUNK = 20_000
+
+    def __init__(self, points: np.ndarray, size: float, dilated: bool = False) -> None:
+        self.size = float(size)
+        self.low = points.min(axis=0) - 2 * self.size
+        cells = np.floor((points - self.low) / self.size).astype(np.int64)
+        self.shape = cells.max(axis=0) + 3
+        self.offsets: tuple[tuple[int, int, int], ...] = ((0, 0, 0),) if dilated else _AROUND
+        held = np.arange(len(points))
+        if dilated:
+            cells = np.concatenate([cells + offset for offset in _AROUND])
+            held = np.tile(held, len(_AROUND))
+        keys = self._key(cells)
+        order = np.argsort(keys, kind="stable")
+        self.keys, self.order = keys[order], held[order]
+        self.points = points
+
+    def _key(self, cells: np.ndarray) -> np.ndarray:
+        return (cells[:, 0] * self.shape[1] + cells[:, 1]) * self.shape[2] + cells[:, 2]
+
+    def pairs(self, query: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Each (query index, held index, distance) within the size, the held index into the points as given."""
+        found_query, found_held, found_distance = [], [], []
+        for first in range(0, len(query), self.CHUNK):
+            block = query[first:first + self.CHUNK]
+            cells = np.floor((block - self.low) / self.size).astype(np.int64)
+            for offset in self.offsets:
+                near = cells + offset
+                inside = np.flatnonzero(np.all((near >= 0) & (near < self.shape), axis=1))
+                if not len(inside):
+                    continue
+                keys = self._key(near[inside])
+                lo, hi = np.searchsorted(self.keys, keys, "left"), np.searchsorted(self.keys, keys, "right")
+                counts = hi - lo
+                if not counts.any():
+                    continue
+                asking = np.repeat(inside, counts)
+                at = np.repeat(lo - np.cumsum(counts) + counts, counts) + np.arange(int(counts.sum()))
+                held = self.order[at]
+                distance = np.linalg.norm(block[asking] - self.points[held], axis=1)
+                close = distance < self.size
+                found_query.append(asking[close] + first)
+                found_held.append(held[close])
+                found_distance.append(distance[close])
+        if not found_query:
+            empty = np.zeros(0, dtype=np.int64)
+            return empty, empty, np.zeros(0)
+        return np.concatenate(found_query), np.concatenate(found_held), np.concatenate(found_distance)
+
+    def least(self, query: np.ndarray) -> float | None:
+        """The least distance from ``query`` to the points, in metres; None over the size."""
+        _asking, _held, distance = self.pairs(query)
+        return float(distance.min()) if len(distance) else None
+
+    def least_by_pair(self, query: np.ndarray, owners: np.ndarray, held_owners: np.ndarray
+                      ) -> dict[tuple[int, int], float]:
+        """The least distance, in metres, of each (query owner, held owner) pair within the size."""
+        asking, held, distance = self.pairs(query)
+        if not len(asking):
+            return {}
+        width = int(held_owners.max()) + 1
+        codes = owners[asking].astype(np.int64) * width + held_owners[held]
+        order = np.argsort(codes, kind="stable")
+        codes, distance = codes[order], distance[order]
+        unique, first = np.unique(codes, return_index=True)
+        return {(int(code) // width, int(code) % width): float(gap)
+                for code, gap in zip(unique, np.minimum.reduceat(distance, first))}
 
 
 class _Trees:
-    """A KD-tree of each still part's samples and their box, made as a near pair first asks for it."""
+    """Each still part's samples hashed in cells of each size asked (``_Cells``), and their box, made as a near pair
+    first asks."""
 
     def __init__(self, points: np.ndarray, owners: np.ndarray) -> None:
         self.points, self.owners = points, owners
-        self.trees: dict[int, tuple[Any, np.ndarray, np.ndarray]] = {}
+        self.boxes: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+        self.cells: dict[tuple[int, float], _Cells] = {}
 
     def gap(self, part: int, points: np.ndarray, reach: float) -> float | None:
         """The least distance from ``points`` to the still ``part``'s samples, in mm; None over ``reach`` metres. Only
         the points inside the part's box grown by ``reach`` are looked up: a pose's few, of a part beside it."""
-        held = self.trees.get(part)
-        if held is None:
-            from scipy.spatial import cKDTree
-
+        box = self.boxes.get(part)
+        if box is None:
             mine = self.points[self.owners == part]
-            held = self.trees[part] = (cKDTree(mine), mine.min(axis=0), mine.max(axis=0))
-        tree, low, high = held
+            box = self.boxes[part] = (mine, mine.min(axis=0), mine.max(axis=0))
+        mine, low, high = box
         points = points[np.all((points >= low - reach) & (points <= high + reach), axis=1)]
         if not len(points):
             return None
-        distances, _ = tree.query(points, k=1, distance_upper_bound=reach)
-        least = float(np.min(distances))
-        return None if not math.isfinite(least) else least * 1000.0
+        cells = self.cells.get((part, reach))
+        if cells is None:
+            cells = self.cells[(part, reach)] = _Cells(mine, reach, dilated=True)
+        least = cells.least(points)
+        return None if least is None else least * 1000.0
 
 
 def _duration(seconds: float) -> str:
@@ -698,9 +766,17 @@ def _duration(seconds: float) -> str:
     return f"{seconds:.0f} s" if seconds < 120 else f"{seconds / 60:.0f} min"
 
 
-def _said(stops: JointStops) -> str:
-    from cad._internal.ranges import closing
+def closing(contact: Any) -> str:
+    """A pair near as built that met, said by its gap closing (``Contact.near``): ``, closed to 0.18 from 0.42 mm
+    as built``; nothing for any other pair."""
+    if contact.near is None:
+        return ""
+    if contact.gap is None:
+        return f", closed from {contact.near:.2f} mm as built"
+    return f", closed to {contact.gap:.2f} from {contact.near:.2f} mm as built"
 
+
+def _said(stops: JointStops) -> str:
     if not stops.swept:
         return f"not swept: {stops.why}"
 
