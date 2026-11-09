@@ -23,6 +23,5 @@
     "sdf",
     "gcode"
   ],
-  "skills": "./skills/",
-  "mcpServers": "./claude.mcp.json"
+  "skills": "./skills/"
 }
