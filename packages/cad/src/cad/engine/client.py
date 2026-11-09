@@ -341,13 +341,22 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
                 if on_progress is not None:
                     on_progress(answer["progress"])
                 continue
-            notice = answer.pop("notice", None)
-            # The request that bound the engine's port, when that start moved the port
-            # (``daemon.bind``): a line each.
-            for said in (notice or "").splitlines():
-                print(f"cad: {said}", file=sys.stderr)
+            _notice(answer.pop("notice", None))
             return answer
     raise ConnectionError("the engine server closed the connection")
+
+
+def _notice(notice: str | None) -> None:
+    """The request that bound the engine's port, when that start moved the port (``daemon.bind``): a line each on
+    stderr, after whatever the command has printed on stdout so far (flushed first) and before anything it prints
+    next, so that a terminal reading both, or a pipe of ``2>&1``, never has the note inside a command's output."""
+    lines = (notice or "").splitlines()
+    if not lines:
+        return
+    sys.stdout.flush()
+    for said in lines:
+        print(f"cad: {said}", file=sys.stderr)
+    sys.stderr.flush()
 
 
 def sweep(*, stop: bool) -> dict[str, list[str]]:

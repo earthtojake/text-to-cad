@@ -18,6 +18,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from tests.python.support import engine_daemon
@@ -442,6 +443,37 @@ class BuildBoundNoticeTest(unittest.TestCase):
                 self.assertEqual(asked("status"), [{"log": "building"}, {"ok": True}])
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True, "notice": said}])
                 self.assertEqual(asked("build"), [{"log": "building"}, {"ok": True}])
+
+
+    def test_the_notice_is_said_on_stderr_after_what_stdout_has_printed_never_inside_it(self) -> None:
+        """A command's output piped with its stderr (``2>&1``): stdout buffered, stderr not. The notice comes
+        after the lines the command printed before the request, not ahead of them in the pipe."""
+        import io
+
+        from cad.engine import client
+
+        class Pipe(io.RawIOBase):
+            def __init__(self) -> None:
+                self.bytes = bytearray()
+
+            def writable(self) -> bool:
+                return True
+
+            def write(self, data: Any) -> int:
+                self.bytes += bytes(data)
+                return len(data)
+
+        pipe = Pipe()
+        out = io.TextIOWrapper(io.BufferedWriter(pipe, 1 << 16))  # a pipe's stdout: block-buffered
+        err = io.TextIOWrapper(pipe, write_through=True)
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            print("structure: 270 parts")
+            client._notice("3245 is held by another cad-server; the engine serves on 3247 and keeps it")
+            print("  Base_SO101")
+            out.flush()
+        self.assertEqual(pipe.bytes.decode().splitlines(), [
+            "structure: 270 parts", "cad: 3245 is held by another cad-server; the engine serves on 3247 and keeps it",
+            "  Base_SO101"])
 
 
 class PortHolderTest(unittest.TestCase):
