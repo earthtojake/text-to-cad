@@ -51,11 +51,11 @@ and joints apart, so a link and a joint may share a name; a name already held in
 | Contact friction (`friction()`) | `friction` on the part's collision geoms (one value, or three) | not written: URDF has none (the export's log says so) |
 | A free base (`free()`) | a `<freejoint>` on the base body, its position and quaternion in every key | the root, which floats already; no world link or joint |
 | A bolted base (the default) | the base body with no joint, welded to the world | the root too: a URDF bolts nothing (a consumer adds its own `world` link) |
-| A root link with mass, or placed off the world's frame | as any body | an empty `base_link` (`base_link_root` where the root is named `base_link`) on a fixed joint before it, at the root's placement: KDL takes no inertia on the root |
+| A root link with mass, or placed off the world's frame | as any body | an empty `base_link` (`base_footprint` where the root is named `base_link`, as REP 105 roots a base) on a fixed joint before it, at the root's placement: KDL takes no inertia on the root |
 | A zero state (`--zero home`) | every body at the state, ranges and keys around it | every link at the state, limits around it |
 | A scene | `scene.xml` beside it, written once when there is none, never written over | none |
 
-The URDF's root is the link hung from the ground, under an empty `base_link` where it has a mass or stands off the world's frame. Never edit a
+The URDF's root is the link hung from the ground, under an empty `base_link` (`base_footprint` above a root named `base_link`) where it has a mass or stands off the world's frame. Never edit a
 generated file (the `scene.xml` an MJCF export writes once is yours), and
 never derive one format from another: export each from the model. An SRDF is always hand-written,
 over the generated URDF's names ([srdf-authoring.md](srdf-authoring.md)).

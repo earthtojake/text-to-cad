@@ -87,6 +87,11 @@ mechanism):
   180)` around the pose its encoder centres on), which is a limited hinge in MJCF and a `revolute`
   in URDF. Where the hardware turns without end (a slip ring, a wheel), use `angular_range=(-math.inf,
   math.inf)`: a hinge with no range in MJCF, a `continuous` joint in URDF.
+- **The base link.** Name the link the robot stands on `base_link` (`link(base, "base_link")`), the
+  frame ROS tools expect. Where that link has a mass or stands off the world's origin, the URDF
+  roots at an empty `base_footprint` on a fixed joint above it, as REP 105 roots a base, because
+  KDL takes no inertia on the root; `base_link` keeps its name and stays the robot's base frame. A
+  root of another name gets an empty `base_link` above it instead.
 - **Mechanism states** (`mechanism_state(assembly, "home", ...)`) are the named poses, MJCF keys
   (a URDF holds no poses). Name one `home`, the pose a person and a controller start from.
 - **Couplings** (`gear_pair`, `rack_and_pinion_pair`) are a follower joint on its leader: MJCF's

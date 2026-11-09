@@ -293,7 +293,7 @@ class HandBuiltTest(_Folder):
         from dataclasses import replace
 
         weight = Inertial(1.0, np.zeros(3), np.diag([1e-3, 1e-3, 1e-3]))
-        for named, empty in (("base", "base_link"), ("base_link", "base_link_root")):
+        for named, empty in (("base", "base_link"), ("base_link", "base_footprint")):
             description = rig()
             base = description.link("base")
             base.inertial, base.name = weight, named
@@ -306,7 +306,7 @@ class HandBuiltTest(_Folder):
             self.assertTrue(checked.ok, [finding.message for finding in checked.findings])
             robot = read_urdf(path)
             # KDL takes no inertia on the root: an empty link before it, where the base stands; the description's
-            # names kept.
+            # names kept, and a base named base_link under REP 105's base_footprint.
             self.assertEqual((robot.root, robot.joints[0].name, robot.joints[0].parent, robot.joints[0].child),
                              (empty, f"{empty}_joint", empty, named))
             np.testing.assert_allclose(robot.links[named], base.frame, atol=1e-12)

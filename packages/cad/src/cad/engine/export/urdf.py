@@ -25,9 +25,10 @@ nothing and has no fixed child stays, an empty root link, as a ROS ``world`` lin
 **The base link.** KDL, which ``robot_state_publisher`` and MoveIt read a URDF with, takes no inertia on
 the root link and drops it with a warning. So where the root link has an ``<inertial>``, the file roots
 at an empty link before it, ``base_link``, joined to it by a ``fixed`` joint ``base_link_joint`` at its
-origin, as ROS names a robot's base; where the root is itself named ``base_link``, the empty one is
-``base_link_root`` (and its joint ``base_link_root_joint``), so the description's names stay as they
-are. The file's space is the world's, as an MJCF's is: where the root link's frame is not the world's (its
+origin, as ROS names a robot's base (REP 105, REP 120); where the root is itself named ``base_link`` (as
+a model names its base for ROS), the empty one is ``base_footprint`` (and its joint
+``base_footprint_joint``), the root REP 105 puts above ``base_link``, so ``base_link`` stays the robot's
+base frame and the description's names stay as they are. The file's space is the world's, as an MJCF's is: where the root link's frame is not the world's (its
 first part's own frame, moved or turned in the world), the empty link roots it the same way, its joint at
 the root's placement, so every link stands where the MJCF of the same document stands it. A root with no
 inertial at the world's frame is the root as it is.
@@ -336,7 +337,7 @@ class _Writer:
         if self.root.inertial is not None or not np.allclose(self.placed, np.eye(4), rtol=0.0, atol=1e-12):
             # An empty root before one with an inertia, which KDL drops, or one the world does not stand at (the
             # module's **The base link**).
-            wanted = "base_link" if self.links[self.root.name] != "base_link" else "base_link_root"
+            wanted = "base_link" if self.links[self.root.name] != "base_link" else "base_footprint"
             base = self._name(self.link_names, wanted, "link")
             joint = Xml("joint", [("name", self._name(self.joint_names, f"{base}_joint", "joint")), ("type", "fixed")])
             joint.add("origin", _origin(self.placed))
