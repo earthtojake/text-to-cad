@@ -3839,6 +3839,7 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get("_frames") or {}, state),
         state_dict.get("_body"),
         _normalize(state_dict.get("_exclude") or (), state),
+        _normalize(state_dict.get("_excluded") or (), state),
         _normalize(state_dict.get("_drives") or {}, state),
         _normalize(state_dict.get("_mass"), state),
         _normalize(state_dict.get("_points") or {}, state),

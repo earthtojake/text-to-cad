@@ -279,6 +279,11 @@ its case and internals, or its label, and every part below it goes:
 exclude(jaw, "jaw_servo")   # the label of the jaw servo's assembly: each shell of its case alike
 ```
 
+A label names every node of that label, in every link, and a vendor STEP repeats labels (the same
+bracket in each hip, the same servo in each joint): give the shape instead, `exclude(jaw, jaw_servo)`,
+which names that one alone, and check the export's count (`5 contact excludes (3 declared, 2
+automatic)`) against the pairs you meant.
+
 `exclude()` is one declaration with two effects, and there is no way to have one without the other:
 `ranges` sets the two parts aside, and the MJCF writes a `<contact><exclude>` of their two links, so
 the simulator never collides those links, whole (MuJoCo excludes bodies, not single geoms). That is

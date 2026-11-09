@@ -13,8 +13,8 @@ a tool tip, a camera mount, a sensor -- for a writer's sites or fixed frames.
 ``body(part, name=None)`` keeps a part a body of its own, fixed to the link it would have merged
 into (a camera mount, a fingertip a simulator addresses): its mass, visuals, collision and frames go
 with it. ``exclude(a, b)`` says two parts, or what they are part of, never collide (a hull pair that
-touches at rest); ``b`` is a part, an assembly or the label of one, which names every part at or
-below it. ``limits(assembly, joint, effort=, velocity=)`` bounds the drive of every revolute or
+touches at rest); ``b`` is a part or an assembly, which names that occurrence and the parts below it
+alone, or a label, which names every part at or below a node of that label. ``limits(assembly, joint, effort=, velocity=)`` bounds the drive of every revolute or
 linear joint of that label on the assembly or below it: its effort in N*m (a revolute joint) or N
 (a linear one), its speed in rad/s or m/s, SI as the description is. ISO 10303-105 names which
 values a pair is driven in (``actuated_kinematic_pair``) and no bound on the drive, so the limits
@@ -85,7 +85,11 @@ COLLISION = "_collision"
 DECOMPOSITION = "_decomposition"  # a decomposed collision's options: {"maxHulls"?, "threshold"?}, those given
 FRAMES = "_frames"
 BODY = "_body"  # the body's name, "" for the part's own
-EXCLUDE = "_exclude"  # the labels it does not collide with, sorted
+EXCLUDE = "_exclude"  # the labels it does not collide with, and the marks of the shapes, sorted
+EXCLUDED = "_excluded"  # the marks a shape given to ``exclude`` is named by, sorted
+#: How a mark begins (``exclude``): no label does, and the document never holds one (``document.collect`` names
+#: each by the occurrence it marks).
+MARK = "\x00shape:"
 DRIVES = "_drives"  # {joint label: {"effort": ..., "velocity": ..., ...}}, the keys it declares (``DRIVE``)
 MASS = "_mass"  # grams, the part's or the assembly's whole
 POINTS = "_points"  # {name: (grams, Location in the part's own frame, (ixx, iyy, izz) kg*m^2 or None)}
@@ -193,11 +197,19 @@ def body(part: Any, name: str | None = None) -> Any:
 
 
 def exclude(a: Any, b: Any) -> Any:
-    """Say that ``a`` never collides with ``b``: each a part or an assembly (every part below it), or
-    the label of one -- a part's label names its link too -- in either order, one of the two a shape:
-    the declaration is kept on it, as every declaration is, and names the other by its label. A
-    simulator that filters contacts by pair is told so (MJCF's ``<contact><exclude>``). Returns the
-    shape that keeps it."""
+    """Say that ``a`` never collides with ``b``, one of the two a shape -- a part or an assembly (every
+    part below it), which keeps the declaration, as every declaration is -- in either order. The other
+    is a shape too, which names that shape alone (that occurrence and the parts below it, wherever the
+    model places it, however many other parts share its label), or a label, which names every part at
+    or below a node of that label (a part's label names its link too). A simulator that filters
+    contacts by pair is told so (MJCF's ``<contact><exclude>``). Returns the shape that keeps it.
+
+    A shape is named by a mark kept on both (``EXCLUDED`` on it, ``EXCLUDE`` on the keeper), as a
+    material is kept: a copy, ``moved`` and ``located`` carry it, and the document names the
+    occurrence that carries it by its path (``document.collect``); a shape the model's result does not
+    hold excludes nothing."""
+    import uuid
+
     import build123d as bd
 
     if not isinstance(a, bd.Shape) and isinstance(b, bd.Shape):
@@ -207,16 +219,19 @@ def exclude(a: Any, b: Any) -> Any:
             raise TypeError(f"exclude({a!r}, {b!r}): one of the two is the part or the assembly itself, which keeps "
                             f"the declaration, and the other may be its label: exclude(part, {b!r})")
         _shape(a, "exclude")
+    if b is a:
+        raise ValueError(f"exclude: {a.label or 'a shape'!r} with itself; a body never collides with itself")
     if isinstance(b, bd.Shape):
-        other = b.label
-        if not isinstance(other, str) or not other:
-            raise ValueError("exclude: the other part has no label, and the exclusion names it by its label")
+        # A mark of its own, never a label: shapes of one label (a vendor's repeated parts) stay apart. Unique
+        # in every run, so a model body the engine replays keeps its marks and a later one never meets them.
+        other = f"{MARK}{uuid.uuid4().hex}"
+        b.__dict__[EXCLUDED] = tuple(sorted({*(b.__dict__.get(EXCLUDED) or ()), other}))
     elif isinstance(b, str) and b:
         other = b
+        if other == a.label:
+            raise ValueError(f"exclude: {other!r} with itself; a body never collides with itself")
     else:
         raise TypeError(f"exclude: a build123d shape or a part's label, not {b!r}")
-    if other == a.label:
-        raise ValueError(f"exclude: {other!r} with itself; a body never collides with itself")
     a.__dict__[EXCLUDE] = tuple(sorted({*(a.__dict__.get(EXCLUDE) or ()), other}))
     return a
 

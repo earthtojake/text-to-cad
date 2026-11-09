@@ -47,7 +47,9 @@ of several parts), whose parts carry its limits with how many levels above them 
 qualifier's path, for a label two pairs share). A declaration no pair's joint takes is warned, by the
 node that holds it, and left out. A declared exclusion (``declarations.exclude``) is
 each link holding the part that declares it, with each link holding a part at or below a node of
-the label it names (a part's own label names it); a label that names no node is refused by name,
+the label it names (a part's own label names it), or at or below the one occurrence a shape it was
+given names (``excludePaths``: never the others of that shape's label); a label or a path that
+names no node is refused by name,
 and two links' pair is kept once. The part pairs themselves are kept too (``part_excludes``, by
 occurrence path): a joint stop sweep sets aside those two parts alone, where a simulator filters
 their links.
@@ -405,8 +407,14 @@ class _Describer:
         found: set[tuple[int, int]] = set()
         parts: set[tuple[str, str]] = set()
         for index, at in sorted(owner.items()):
-            for label in self._declared(index).get("exclude") or ():
-                named = [other for other in owner if label in self.instances[other]["path"].split("/")]
+            declared = self._declared(index)
+            # A label names every part at or below a node of it; a shape, the path of its occurrence, that alone.
+            named_by = [(label, [other for other in owner if label in self.instances[other]["path"].split("/")])
+                        for label in declared.get("exclude") or ()]
+            named_by += [(path, [other for other in owner if self.instances[other]["path"] == path
+                                 or self.instances[other]["path"].startswith(path + "/")])
+                         for path in declared.get("excludePaths") or ()]
+            for label, named in named_by:
                 if not named:
                     raise DescriptionError(f"part {self._name(index)!r} excludes {label!r}, which names no part or "
                                            "assembly of the document")

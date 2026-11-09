@@ -2680,7 +2680,8 @@ whole, `max_hulls=` and `threshold=` bounding it (**A decomposed collision**, be
 assembly, for every part below it that declares none, its options with it); `frame(part, "tool",
 bd.Pos(160, 0, 25))` (in the part's own frame, before its placement); `body(part, name=None)`, a body
 of its own fixed to the link it would merge into; `exclude(a, b)`, a pair that never collides (`b` a
-part, an assembly or a label; on an assembly, for every part below it); and `limits(assembly,
+part or an assembly, that occurrence alone, the document naming it by its path; or a label, every node
+of it; on an assembly, for every part below it); and `limits(assembly,
 "elbow", effort=27, velocity=6.28, armature=0.01, damping=0.4, friction=0.15)` (N*m or N, rad/s or
 m/s; the joint's dynamics in kg*m^2 or kg, N*m*s/rad or N*s/m, N*m or N), kept on the part that holds
 each revolute or linear joint of that label; `mass(shape, grams)`, what a part or an assembly weighs

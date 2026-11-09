@@ -282,6 +282,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     signatures: dict[int, tuple] = {}
     order: list = []
     parts: list[Part] = []
+    # The occurrences each ``exclude`` mark names (``declarations.EXCLUDED``), by their component indices.
+    marked: dict[str, list[tuple[int, ...]]] = {}
 
     def visit(obj: Any, topods: Any, inherited: tuple | None, inherited_material: Any,
               path: str, inherited_collision: str | None = None,
@@ -289,8 +291,11 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
               inherited_friction: tuple[float, ...] | None = None,
               inherited_decomposition: dict[str, Any] | None = None,
               inherited_nodes: tuple[tuple[int, str, Any], ...] = (),
-              inherited_drives: dict[str, tuple[int, Any]] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
+              inherited_drives: dict[str, tuple[int, Any]] | None = None,
+              occurrence: tuple[int, ...] = ()) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
+        for mark in state.get(declarations.EXCLUDED) or ():
+            marked.setdefault(str(mark), []).append(occurrence)
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
         own_material = _material(state.get("_material"))
@@ -326,7 +331,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                                                           excluded, tuple((up + 1, grams) for up, grams in masses),
                                                           surface, decomposition,
                                                           tuple((up + 1, key, value) for up, key, value in nodes),
-                                                          {label: (up + 1, bounds) for label, (up, bounds) in drives.items()})
+                                                          {label: (up + 1, bounds) for label, (up, bounds) in drives.items()},
+                                                          occurrence + (at - 1,))
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -382,6 +388,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         holder = Assembly(root_name, [Component(root, location, root.name, color)])
         order.append(holder)
         root = holder
+    _named_excludes(root, parts, marked, (0,) if held else ())
     tree = Tree(root, order, parts, (signature, _location_key(location), root_name))
     found = harvested(tree.signature) if harvested is not None else None
     if found is None:
@@ -398,6 +405,36 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
     tree.harvest, tree.mechanism, tree.animations = found, found.mechanism, found.animations
     tree.signature = (*tree.signature, *found.signature)
     return tree
+
+
+def _named_excludes(root: Any, parts: list[Part], marked: dict[str, list[tuple[int, ...]]],
+                    prefix: tuple[int, ...]) -> None:
+    """Each part's ``exclude`` marks (``declarations.exclude`` given a shape) made the paths of the occurrences
+    they mark, as the document names its instances (``excludePaths``): a shape names that occurrence alone, never
+    the others of its label. A mark no occurrence carries (a shape the result does not hold) names nothing."""
+    from cad.engine.declarations import MARK
+
+    def named(occurrence: tuple[int, ...]) -> str:
+        node, names = root, [root.name]
+        for at in occurrence:
+            component = node.components[at]
+            names.append(component.name or component.prototype.name or f"{names[-1]}.{at + 1}")
+            node = component.prototype
+        return "/".join(names)
+
+    for part in parts:
+        given = part.declared.get("exclude") or []
+        marks = [entry for entry in given if str(entry).startswith(MARK)]
+        if not marks:
+            continue
+        labels = [entry for entry in given if not str(entry).startswith(MARK)]
+        if labels:
+            part.declared["exclude"] = labels
+        else:
+            del part.declared["exclude"]
+        paths = sorted({named(prefix + occurrence) for mark in marks for occurrence in marked.get(mark, ())})
+        if paths:
+            part.declared["excludePaths"] = paths
 
 
 def merge(tree: Tree) -> None:
@@ -2075,7 +2112,8 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 
 
 #: What a part declares beside its collision and its frames, by the key the structure and the label hold it
-#: under: its body's name ("" for the part's own), the labels it does not collide with, its joints' drive
+#: under: its body's name ("" for the part's own), the labels it does not collide with and the paths of the
+#: occurrences it does not collide with (``excludePaths``: a shape given to ``exclude``), its joints' drive
 #: limits and dynamics (``{label: {"effort": ..., "damping": ..., "up"?}}``, the keys declared, and ``up``, how
 #: many levels above the part the node holding the joint is, where an assembly holds it), the masses
 #: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the
@@ -2084,7 +2122,8 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 #: (``{"maxHulls"?, "threshold"?}``, those given, the part's or its assembly's with the collision), the nodes
 #: declared free at or above it (``[levels above the part, ...]``, the outermost first) and the link names
 #: declared at or above it (``[[levels above the part, name], ...]``, the outermost first).
-DECLARED = ("body", "exclude", "drives", "mass", "pointMasses", "friction", "decomposition", "free", "link")
+DECLARED = ("body", "exclude", "excludePaths", "drives", "mass", "pointMasses", "friction", "decomposition", "free",
+            "link")
 
 
 def _nodes(state: dict[str, Any], path: str) -> tuple[tuple[int, str, Any], ...]:

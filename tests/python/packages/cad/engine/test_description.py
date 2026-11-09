@@ -603,6 +603,53 @@ class BodiesTest(_Folder):
                                                                      (("bodies/base", "bodies/cam"),)))
 
 
+# Two arms on a base, each link holding a part labelled "bracket", as a vendor's STEP repeats a part's label: the
+# base excludes the left arm's bracket, that shape, and (in the variant) the label "bracket".
+REPEATED = """
+import build123d as bd
+from cad.build123d import exclude
+from cad.engine import xbf
+
+
+@xbf("XBF/repeated.xbf")
+def repeated():
+    base = bd.Box(100, 60, 20)
+    base.label = "base"
+    links = []
+    for side, y in (("left", 20), ("right", -20)):
+        bracket = bd.Pos(0, y, 20) * bd.Box(10, 10, 20)
+        bracket.label = "bracket"
+        link = bd.Compound(children=[bracket], label=side)
+        joint = bd.RevoluteJoint(side, base, axis=bd.Axis((0, y, 10), (0, 1, 0)), angular_range=(-90, 90))
+        bd.RigidJoint(side, link, joint.location)
+        joint.connect_to(link.joints[side], angle=0)
+        links.append(link)
+    exclude(base, {other})
+    return bd.Compound(children=[base, *links], label="repeated")
+"""
+
+
+class RepeatedLabelsTest(_Folder):
+    def test_a_shape_excluded_names_that_occurrence_alone_and_a_label_every_part_of_it(self) -> None:
+        shape, structure = self.described("repeated", REPEATED.format(other="links[0].children[0]"))
+        # The left bracket alone: the right one, of the same label, still collides with the base.
+        self.assertEqual(shape.excludes, (("base", "left"),))
+        self.assertEqual(shape.part_excludes, (("repeated/base", "repeated/left/bracket"),))
+        by_name = {prototype["name"]: prototype for prototype in structure["prototypes"]}
+        self.assertEqual((by_name["base"].get("exclude"), by_name["base"]["excludePaths"]),
+                         (None, ["repeated/left/bracket"]))
+        # Rebuilt from the document, the base and the left bracket carry one mark, the right bracket none: placed in
+        # another model, the tree names that occurrence still.
+        rebuilt = Source.read(self.folder / "XBF/repeated.xbf").shape()
+        base, left, right = rebuilt.children[0], rebuilt.children[1].children[0], rebuilt.children[2].children[0]
+        self.assertEqual(len(base.__dict__["_exclude"]), 1)
+        self.assertEqual(base.__dict__["_exclude"], left.__dict__["_excluded"])
+        self.assertNotIn("_excluded", right.__dict__)
+        # The label names every part at or below a node of it: both brackets.
+        label, _structure = self.described("repeated", REPEATED.format(other='"bracket"'))
+        self.assertEqual(label.excludes, (("base", "left"), ("base", "right")))
+
+
 # The hinge's links each a compound of parts, the moving joint on the base's compound: limits declared on the
 # assembly above reach it, and a limit on a joint no pair takes is warned.
 LINKED = """
