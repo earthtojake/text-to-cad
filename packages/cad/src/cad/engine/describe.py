@@ -83,7 +83,8 @@ instances that belong to it, and its inner nodes the declared nodes below it who
 node above is it. Innermost first, each node's solids are scaled by one factor so that they, the
 point masses on them and its inner nodes' totals weigh ``grams``: a solid's weight before the scale
 is its volume at its material's density, or at one density for all where none of the node's own
-solids has one (one that has none, among some that do, carries no mass, and is warned). A node is
+solids has one (one that has none, among some that do, carries none of the total, which the others make
+up, and is warned by the node's name: no density is guessed for it). A node is
 refused by name where its inner nodes and point masses weigh its total or more while it holds solids
 of its own, where it has a remainder and its own solids no volume, or where it holds none and its
 inner nodes and point masses do not weigh its total (within a part in 10^9). A declared node is
@@ -736,7 +737,7 @@ class _Describer:
             if measured is False:
                 measured = self._mass(prototype, material)
             if measured is None:
-                if not points:
+                if not points and index not in self.masses:  # one below a declared mass is said there (``_masses``)
                     massless.append(name)
                 continue
             mass, center, inertia = measured
@@ -810,6 +811,14 @@ class _Describer:
                 material = (prototype.get("material") or {}).get("material") or {}
                 weighed.append((index, self._density(prototype, material)))
             uniform = all(density is None for _index, density in weighed)
+            unweighed = [index for index, density in weighed if density is None and not uniform]
+            if unweighed:
+                shown = ", ".join(repr(self._name(index)) for index in unweighed[:3]) + (
+                    f" and {len(unweighed) - 3} more" if len(unweighed) > 3 else "")
+                one = len(unweighed) == 1
+                self.warn(f"{shown} below {said} {'has' if one else 'have'} no density, unlike the other parts "
+                          f"there: {'it carries' if one else 'they carry'} none of the {grams:g} g, which they make "
+                          f"up (give {'it' if one else 'them'} a material to share it)")
             for index, density in weighed:
                 if density is None and not uniform:
                     found[index] = None

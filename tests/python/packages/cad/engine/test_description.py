@@ -7,7 +7,8 @@ through the xbf and through a warm build; a part kept a body of its own, an excl
 limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
 wrong; limits on a joint an assembly holds (a link of several parts) described and round-tripped, and one no
 pair takes warned; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
-and a mass that cannot be made refused; a turned link's inertia in its own frame, as the description, the
+a part with no density among parts that have one carrying none of their mass, said by the mass, and a mass that
+cannot be made refused; a turned link's inertia in its own frame, as the description, the
 MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop a tree and the closure
 its last pair, two frames that coincide as built, one closing at a slide moved to its nearest turn, and a
 state moving it left out; a pinion that holds no part no link, its racks following the first; a part with no
@@ -716,6 +717,15 @@ class MassTest(_Folder):
                          {"masses": None, "housing": 350.0, "hand": 120.0, "palm": None, "finger": 50.0,
                           "pad_a": None, "pad_b": None})
         self.assertEqual(nodes["housing"].__dict__["_points"]["motor"][0], 200.0)
+
+    def test_a_part_with_no_density_beside_parts_that_have_one_carries_none_of_their_mass_and_is_said(self) -> None:
+        source = MASSES.format(housing=350, hand=120).replace("    pad_b.material = metals.brass()\n", "")
+        description, _structure = self.described("masses", source)
+        # The finger's 50 g are all the aluminium pad's; the hand still weighs its 120 g, said once, by the mass.
+        self.assertAlmostEqual(description.link("hand").inertial.mass, 0.12, delta=1e-12)
+        self.assertEqual(description.warnings, ("'pad_b' below 'finger', declared to weigh 50 g, has no density, unlike "
+                                                "the other parts there: it carries none of the 50 g, which they make up "
+                                                "(give it a material to share it)",))
 
     def test_a_mass_its_lumps_or_its_inner_masses_cannot_make_is_refused_by_name(self) -> None:
         import build123d as bd
