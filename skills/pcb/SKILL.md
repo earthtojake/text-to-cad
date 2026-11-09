@@ -305,7 +305,7 @@ sheet is on KiCad's default drawing sheet, as its schematic editor shows it: the
 numbers and letters, and the title block filled from that sheet's own title block (a project's own
 `.kicad_wks` is not drawn; the default stands in). ERC findings are not drawn: run `cad kicad_sch erc`. The file
 menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
-a Quick Edit packet carries the sheet the view showed. A still is always on KiCad's light paper,
+a Quick Edit packet carries the sheet the view showed, on the whole drawing sheet as the viewer showed it (`border`). A still is always on KiCad's light paper,
 whatever the viewer's theme, with KiCad's default title block (`"title": false` leaves it out; `border`
 adds the page's edge and frame) and text markup (`~{RESET}`, `IO_{3}`) drawn as KiCad draws it:
 

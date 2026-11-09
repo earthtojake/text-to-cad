@@ -147,14 +147,15 @@ class PromptFilesRouteTest(unittest.TestCase):
         schematic = self.tmp / "divider.kicad_sch"
         schematic.write_text("(kicad_sch (version 20260901))\n", encoding="utf-8")
         plan = {"position": [114, -65, 60], "target": [114, -65, 0], "up": [0, 1, 0], "orthographicHalfHeight": 20}
-        display = {"sheet": "/Load/", "border": False}
+        display = {"sheet": "/Load/", "border": True}  # the viewer's: the whole drawing sheet it shows
         request = {"name": "divider.kicad_sch", "input": str(schematic), "annotation": ANNOTATION,
                    "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]}
         status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
         self.assertEqual(status, 200, body)
         packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
         [source, _out, prepared] = job_pictures(packet)[0]
-        # The still draws KiCad's title block where the window reaches it (``title``, on unless the view says false).
+        # The still draws KiCad's drawing sheet where the window reaches it: the frame with ``border``, the title
+        # block (``title``, on unless the view says false).
         self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, {**display, "title": True}))
         self.assertNotIn("output", packet["jobs"][0])
         dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
