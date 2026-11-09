@@ -642,6 +642,10 @@ class Daemon:
         from cad_server.engine import registry
 
         registry.FORGOTTEN.append(self.checks.deleted)
+        # Told of each document whose cache folder went with its unreadable cache file: its kept checks went too.
+        from cad_server.engine import cache as _cache
+
+        _cache.DROPPED.append(self.checks.dropped)
         # The whole documents a worker of an older release gave for a check (``_whole``), by id: each at its
         # version, the most recent last.
         self.wholes: dict[str, tuple[str, bytes]] = {}
@@ -651,10 +655,11 @@ class Daemon:
         self.asked: dict[str, _Asked] = {}
         self.running: dict[tuple[str, str | None, str], _Asked] = {}
         self.asked_lock = threading.Lock()
-        # What measures in each process a check was answered by (``contract.measuring``'s), by its route: a
-        # script's worker (its key and Python) or the checks processes (``CHECKS``), with the process that said
-        # it, while it lives (``_learned``).
-        self.measurers: dict[tuple[str, str | None], tuple[Any, dict[str, Any]]] = {}
+        # What measures in each process is that process's own, kept with it (its ``state``'s ``measures``) and
+        # gone with it. The base's, as the checks processes started from it since it was last made said it
+        # (``_base_measures``; an installation carrying the kernel reads its own instead), and when it was made.
+        self.base_measures: dict[str, Any] | None = None
+        self.base_since = time.time()
 
     def touch(self) -> None:
         self.last = time.monotonic()
@@ -688,9 +693,14 @@ class Daemon:
 
     def made_base(self) -> None:
         """The base made here (``base.Making``): each service's standby, when standbys are enabled,
-        stands in it now."""
+        stands in it now; and the checks processes of a base made before it retired -- an idle one now, a busy
+        one as its check ends -- so a fresh one, of the base as it is now, says what measures in it."""
         if self.stopping.is_set():
             return
+        with self.asked_lock:
+            self.base_since, self.base_measures = time.time(), None
+        for process in self.supervisor.processes(CHECKS):
+            self.supervisor.retire(process, "base")
         for service in SERVICES:
             if service.standby is not None:
                 self.supervisor.stand(service.name, self.environment())
@@ -1113,16 +1123,20 @@ class Daemon:
                             send({"failed": STOPPED, "stopped": True})  # the engine stops for an update
                             return
                         # A slot of the checks processes' pool, waiting for one, said once, when all are busy;
-                        # while it waits with its caller there, a check no one waits for gives up its slot.
+                        # while it waits with its caller there, a check no one waits for gives up its slot, and one
+                        # whose callers have gone leaves a free slot to one someone waits for.
                         if asked is not None:
                             asked.waiting = True
                         try:
                             slot = self.pool.take(_checked_document(request.get("source") or {}), gave_up,
                                                   lambda said: send({"log": said, "stream": "waiting"}),
-                                                  None if asked is None else lambda: self._reap(asked))
+                                                  None if asked is None else lambda: self._reap(asked),
+                                                  None if asked is None else lambda: self._defers(asked))
                         finally:
                             if asked is not None:
                                 asked.waiting = False
+                        if asked is not None:
+                            asked.freed = False  # a slot held again, after a process that never started
                         worker = self.lease(slot, environment, cwd, service="checks", gave_up=gave_up)
                     else:
                         worker = self.lease(key, environment, cwd, python=python, python_key=python_key,
@@ -1146,7 +1160,7 @@ class Daemon:
                             return
                     answer = worker.request(ordered, send, payload)
                     if asked is not None:
-                        self._learn(key, python_key, worker, answer)
+                        asked.stale = self._learn(key, worker, answer)
                     held = (request.get("source") or {}).get("document")
                     if held and answer.get("kind") == UNREADABLE:
                         # The bytes a held document was read from (its cache file's) do not read.
@@ -1185,6 +1199,9 @@ class Daemon:
                     if slot is not None:
                         self.pool.give(slot)
                         slot = None
+                        if asked is not None:
+                            with self.asked_lock:
+                                asked.freed = True  # its slot free again: a waiter takes it (``_reap``)
         finally:
             if counted:
                 with self.busy_lock:
@@ -1195,11 +1212,14 @@ class Daemon:
     def check(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None],
               gone: threading.Event | None = None) -> None:
         """A manufacturing check (an ``export`` with ``check``, ``api.check``) of the document the request
-        names, measured in memory (``worker._check``) and kept by the version it measured (``checks``). Who
-        measures it is decided first (``_measurer``), by the release of the library that asks (``caller``) and
-        what measures in it (``measures``, ``contract.measuring``: no process known to be unlike it, and one not
-        known yet measures nothing for it unless it is alike), so the report is one that library can finish and
-        nothing is measured to be thrown away:
+        names, measured in memory (``worker._check``) and kept by the version it measured (``checks``). A model
+        document's kept result is looked for first, by the version its record says, so a check answered from what
+        was kept reads none of the document's bytes. Who measures it is decided next (``_measurer``), by the
+        release of the library that asks (``caller``) and what measures in it (``measures``,
+        ``contract.measuring``: no process known to be unlike it -- a model's worker by what it said, the checks
+        processes by what the base says (``_base_measures``) -- and one not known yet measures nothing for it
+        unless it is alike), so the report is one that library can finish and nothing is measured to be thrown
+        away:
 
         - a model's, in the warm worker that holds it, when that worker's library is the caller's;
         - in a checks process (``CHECKS``, a slot of ``pool``), when the server's library is the caller's: a
@@ -1209,17 +1229,21 @@ class Daemon:
         - otherwise no one: answered at once with no ``checked``.
 
         The same check of the same version is answered from what was kept (``reused``) -- in memory, else on
-        disk, where a restarted engine finds it -- with no process asked; one asked while it runs waits for it
-        and answers with its result, saying so, so it is measured once. A version is a model's generation, read
-        before its bytes and again after the check, or the digest of the bytes a file's check measured: a result
-        is kept under the version it was measured at, or not at all. A check runs to its end whoever asked it, as
-        a build does: its caller going leaves it running and its result kept -- but in a checks process, while
-        another check whose caller is there waits for a slot (``_reap``: ``gone`` is set at its caller's end of
-        file, and each caller attached to it says its own). A build of its model's script cancels it
-        (``_cancel_check``), and an update's drain stops a checks process's (``_halt_checks``), its callers told it
-        stopped (``STOPPED``). A model's worker retired between the document read and its lease (which
-        refuses it as no longer held) is no refusal: the document is read once more, from the server or the
-        cache that now holds it, and checked in a checks process."""
+        disk, where a restarted engine finds it -- with no process asked, whoever asks, when the process that
+        measured it measures for the caller (``contract.measures_for``); one asked while it runs waits for it
+        and answers with its result, saying so, so it is measured once (one its measurer does not measure for is
+        measured for it after). A version is a model's generation, read before its bytes and again after the
+        check, or the digest of the bytes a file's check measured: a result is kept under the version it was
+        measured at, or not at all. A check runs to its end whoever asked it, as a build does: its caller going
+        leaves it running and its result kept -- but in a checks process, while another check whose caller is
+        there waits for a slot, its process is killed and the slot is that one's (``_reap``: ``gone`` is set at
+        its caller's end of file, and each caller attached to it says its own). A build of its model's script
+        cancels it (``_cancel_check``), an update's drain kills the checks processes measuring (``_halt_checks``),
+        and a stop ends every process: its callers told it stopped (``STOPPED``). A checks process that answers
+        unlike its caller and unlike the base as it is now is retired and the check asked once more, of a fresh
+        one. A model's worker retired between the document read and its lease (which refuses it as no longer
+        held) is no refusal: the document is read once more, from the server or the cache that now holds it, and
+        checked in a checks process."""
         from cad.engine.contract import measures_for
         from cad.engine.ids import file_id
 
@@ -1232,6 +1256,18 @@ class Daemon:
                 pass  # its caller went: the check goes on, and its result is kept for the next to ask
 
         spec = request.get("source") or {}
+        caller = request.get("caller")
+        measures = request.get("measures")
+        # The check, its library's release and code: what a result is kept under. What measured it is kept with
+        # it, and it is served to a caller its measurer measures for.
+        key = Checks.key(request["check"], str(caller), measures.get("code") if isinstance(measures, dict) else None)
+
+        def serves(by: Any) -> bool:
+            return measures_for(measures, by)
+
+        def reused(kept: dict[str, Any]) -> dict[str, Any]:
+            return {"done": {"reports": [], "files": [], "checked": kept, "reused": True}}
+
         payload = b""
         ident = ""
         version_was = None
@@ -1241,6 +1277,13 @@ class Daemon:
                 self.models.adopt(ident)  # held on disk, after a restart: its record first
                 # Before its bytes: a build landing after this is seen after the check, and keeps nothing.
                 version_was = self._version(ident)
+                if isinstance(measures, dict) and version_was is not None:
+                    # Its kept result, by the version its record says: found, none of its bytes is read.
+                    kept = self.checks.get(f"model:{ident}", version_was, key, self._durable(ident, version_was),
+                                           serves)
+                    if kept is not None:
+                        told(reused(kept))
+                        return
                 source, payload = self.document(ident)
             except ValueError as error:
                 told(refused(error))
@@ -1250,18 +1293,18 @@ class Daemon:
         else:
             told({"failed": "a check reads a document the engine holds, or a STEP's or an xbf's file"})
             return
-        caller = request.get("caller")
-        measures = request.get("measures")
         nobody = {"done": {"reports": [], "files": [], "release": version()}}
         if not isinstance(measures, dict):
             told(nobody)  # a caller that does not say what measures it: it measures the document its own way
             return
         # Who measures it, decided before anything is measured: no process known to measure unlike the caller.
         held_by = self._routed({**request, "source": source}) if "script" in source else None
-        routes = {"worker": None if held_by is None else (held_by[0], held_by[2]), CHECKS: (CHECKS, None)}
 
         def unlike(route: str) -> bool:
-            known = self._learned(*routes[route]) if routes[route] is not None else None
+            if route == CHECKS:
+                known = self._base_measures()
+            else:
+                known = None if held_by is None else self._worker_measures(held_by[0], held_by[2])
             return known is not None and not measures_for(measures, known)
 
         measurer = _measurer(source.get("python_key") if "script" in source else None, "script" in source,
@@ -1284,47 +1327,53 @@ class Daemon:
             durable = self._durable(ident, before)
             what["document"] = ident
         since = self.checks.epoch(durable[0] if durable is not None else ident or None)
-        # Which library measures it and what measures it, in the key: the caller's, which is the worker's or the
-        # checks process's where the caller has it, and theirs, as last said, for the libraries it has not.
-        route = routes["worker" if measurer == "worker" else CHECKS]
-        known = self._learned(*route) if route is not None else None
-        keys = [Checks.key(request["check"], str(caller), measures)]
-        if known is not None and measures_for(measures, known):
-            keys.insert(0, Checks.key(request["check"], str(caller), known))
-        keys = list(dict.fromkeys(keys))
         token = str(request["check"].get("token") or secrets.token_hex(8))
         worker_key, _cwd, python_key = (self._routed({**request, "source": source}) if measurer != CHECKS
                                         else (CHECKS, None, None))
-        same = (document, before, keys[0])
-        with self.asked_lock:
-            # Under one lock with what a check that ends does (it keeps its result, then leaves ``running``): a
-            # check of this version is kept, or running, or this one is the one to run.
-            running = self.running.get(same) if before is not None else None
-            asked = None
+        same = (document, before, key)
+        while True:
+            with self.asked_lock:
+                # Under one lock with what a check that ends does (it keeps its result, then leaves ``running``)
+                # and with a reaping (which takes its victim out of ``running``): a check of this version is
+                # kept, or running, or this one is the one to run.
+                running = self.running.get(same) if before is not None else None
+                asked = None
+                if running is None:
+                    asked = _Asked(token, worker_key, python_key, what, gone)
+                    self.asked[token] = asked
+                    if before is not None:
+                        asked.same = same
+                        self.running[same] = asked
+                else:
+                    running.callers.append(gone)  # a caller of it too: while one is there, it is no one's to cut short
             if running is None:
-                asked = _Asked(token, worker_key, python_key, what, gone)
-                self.asked[token] = asked
-                if before is not None:
-                    self.running[same] = asked
-            else:
-                running.callers.append(gone)  # a caller of it too: while one is there, it is no one's to cut short
-        if running is not None:
+                break
             self.checks.attached()
             told({"log": f"waiting for the same manufacturing check, started {time.time() - running.began:.0f} s ago",
                   "stream": "waiting"})
             running.finished.wait()  # no timer: it ends with its process, as the build a rerun waits for does
+            done = (running.answer or {}).get("done")
+            checked = done.get("checked") if isinstance(done, dict) else None
+            if isinstance(done, dict) and not (isinstance(checked, dict) and serves(checked.get("measures"))):
+                continue  # measured by a process that does not measure for this caller, or by none: its own now
             told(_attached(running.answer))
             return
         assert asked is not None
         lost: list[dict[str, Any]] = []
+        again: list[dict[str, Any]] = []
 
         def answered(message: dict[str, Any]) -> None:
             if "script" in source and not lost and _not_held(message):
                 lost.append(message)  # its worker retired as it was leased: read once more (below)
                 return
-            if "failed" in message and (asked.halted or (self.stopping.is_set() and asked.key == CHECKS)):
-                message = {"failed": STOPPED, "stopped": True}  # the engine stops under it: run it again
             done = message.get("done")
+            if asked.stale and not again and isinstance(done, dict) and "checked" not in done:
+                again.append(message)  # a checks process of a base gone, retired: asked once more, of a fresh one
+                return
+            if "failed" in message and (asked.halted or self.stopping.is_set()):
+                message = {"failed": STOPPED, "stopped": True}  # the engine stops under it: run it again
+            elif "failed" in message and asked.reaped:
+                message = {"failed": REAPED, "reaped": True}
             if "done" in message or "failed" in message:
                 asked.answer = message
                 asked.answered = True  # no cancel reaches it from now on
@@ -1335,24 +1384,22 @@ class Daemon:
                 current = measured.get("digest") == before if "path" in source else self._version(ident) == before
                 by = measured.get("measures")
                 if before is not None and current and _clean(measured) and measures_for(measures, by):
-                    self.checks.keep(document, before, Checks.key(request["check"], str(caller), by),
-                                     _result(measured), durable, since)
+                    self.checks.keep(document, before, key, _result(measured), durable, since, by)
             told(message)
 
         try:
             kept = None
             if before is not None:
                 # Read inside, as this check's own: one asked meanwhile waits for it.
-                for key in keys:
-                    kept = self.checks.get(document, before, key, durable)
-                    if kept is not None:
-                        break
+                kept = self.checks.get(document, before, key, durable, serves)
             if kept is not None:
-                asked.answer = {"done": {"reports": [], "files": [], "checked": kept, "reused": True}}
+                asked.answer = reused(kept)
                 told(asked.answer)
                 return
             for attempt in (1, 2):
-                if attempt == 2:
+                if attempt == 2 and again:
+                    asked.stale = False  # a fresh checks process this time, which says for itself
+                elif attempt == 2:
                     if not lost:
                         return
                     # The worker that held it retired between the read and the lease: the server or the cache
@@ -1383,72 +1430,128 @@ class Daemon:
                 order = {"id": 1, "op": "export", "source": source, "destinations": [],
                          "cwd": None if worker_key == CHECKS else request.get("cwd"), "check": check}
                 self._call({**request, "source": source, "check": check}, order, answered, payload)
+                if again and attempt == 1:
+                    continue
+                if not lost:
+                    return
+            if again:
+                answered(again[0])  # past a worker gone, a checks process of a base gone: answered as it said
         finally:
             with self.asked_lock:
                 self.asked.pop(token, None)
-                self.running.pop(same, None)
+                if self.running.get(same) is asked:
+                    self.running.pop(same)
             asked.finished.set()
 
-    def _learn(self, key: str, python_key: str | None, process: Any, answer: dict[str, Any]) -> None:
-        """What measures in ``process``, as its answer to a check says it (``contract.measuring``'s), kept for
-        its route while it lives (``_learned``)."""
+    def _learn(self, key: str, process: Any, answer: dict[str, Any]) -> bool:
+        """What measures in ``process``, as its answer to a check says it (``contract.measuring``'s), kept with
+        it while it lives (its ``state``). A checks process's says what measures in the base it was started from:
+        the base's, once a process started since the base was last made says it; and one unlike the base as it
+        is now (its own, an installation carrying the kernel's, read now; else as the latest said) is retired --
+        now, or as its check lets it go -- so the next check starts a fresh one. Whether it was retired so."""
         done = answer.get("done") if isinstance(answer, dict) else None
         if not isinstance(done, dict):
-            return
+            return False
         said = (done.get("checked") or {}).get("measures") if isinstance(done.get("checked"), dict) else done.get("measures")
-        if isinstance(said, dict):
-            with self.asked_lock:
-                self.measurers[(key, python_key if key != CHECKS else None)] = (process, said)
+        if not isinstance(said, dict):
+            return False
+        process.state["measures"] = said
+        if key != CHECKS:
+            return False
+        current = self._base_measures(said if getattr(process, "started", 0.0) >= self.base_since else None)
+        if current is None or said == current:
+            return False
+        self.supervisor.retire(process, "base")
+        return True
 
-    def _learned(self, key: str, python_key: str | None) -> dict[str, Any] | None:
-        """What measures on a route, as its process last said it, while that process lives; for the checks
-        processes, where the engine's kernel environment is the server's own, the server's (``measuring``)."""
+    def _worker_measures(self, key: str, python_key: str | None) -> dict[str, Any] | None:
+        """What measures in the warm worker of ``key`` (of ``python_key``'s Python), as it said it, while it
+        lives; None while it has said nothing, or none lives: a fresh worker says for itself."""
+        live = self.supervisor.live("worker", key, python_key)
+        if live is None or live.retired or not live.alive():
+            return None
+        return live.state.get("measures")
+
+    def _base_measures(self, said: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        """What measures in a checks process started now: where the engine's kernel environment is the server's
+        own (an installation that carries the kernel), the server's own, read now (``contract.measure``: a
+        checkout's edits included); else the base's as a checks process started since it was last made said it
+        (``said``: one such process's, kept), None until one has. A base made again starts unknown
+        (``made_base``)."""
+        try:
+            own = bool((_places.kernel(make=False) or {}).get("own"))
+        except Exception:  # noqa: BLE001 - no base to tell: nothing known
+            own = False
+        if own:
+            from cad.engine.contract import measure
+
+            return measure()
         with self.asked_lock:
-            found = self.measurers.get((key, python_key if key != CHECKS else None))
-        if found is not None and found[0].alive() and not found[0].retired:
-            return found[1]
-        if key == CHECKS:
-            try:
-                own = bool((_places.kernel(make=False) or {}).get("own"))
-            except Exception:  # noqa: BLE001 - no base to tell: nothing known
-                own = False
-            if own:
-                from cad.engine.contract import measuring
+            if said is not None:
+                self.base_measures = said
+            return self.base_measures
 
-                return measuring()
-        return None
+    def _defers(self, waiter: "_Asked") -> bool:
+        """Whether a check waiting for a slot of the checks processes leaves a free one to another: its callers
+        have all gone, and a check someone waits for waits too."""
+        if not _abandoned(waiter):
+            return False
+        with self.asked_lock:
+            return any(asked.key == CHECKS and asked.waiting and not _abandoned(asked) for asked in self.asked.values())
 
     def _reap(self, waiter: "_Asked") -> None:
         """A check waiting for a slot of the checks processes (``waiter``), its caller there: one check whose
-        callers and every caller attached to it have gone gives up its slot -- cancelled at its next checkpoint,
-        nothing of it kept -- one for each such waiter, the oldest first. A check someone waits for is never cut
-        short this way, and nothing is by a timer."""
+        callers and every caller attached to it have gone gives up its slot -- its checks process killed at once
+        (it holds nothing of anyone's: a kernel call it is in never holds the slot), nothing of it kept, and the
+        pool starts a fresh one for the waiter -- one for each such waiter, the oldest first, a reaped one counted
+        until its slot is free again. Taken out of ``running`` as it is reaped, so no one asking the same check
+        meanwhile waits for it. A check someone waits for is never cut short this way, a model's worker's never
+        is, and nothing is by a timer."""
         if _abandoned(waiter):
             return
         with self.asked_lock:
             checks = [asked for asked in self.asked.values() if asked.key == CHECKS]
             waiters = sum(1 for asked in checks if asked.waiting and not _abandoned(asked))
-            reaping = sum(1 for asked in checks if asked.reaped and not asked.answered)
+            reaping = sum(1 for asked in checks if asked.reaped and not asked.freed)
             victims = [asked for asked in checks if asked.worker is not None and not asked.answered
                        and not asked.reaped and _abandoned(asked)]
             if reaping >= waiters or not victims:
                 return
             victim = min(victims, key=lambda asked: asked.began)
             victim.reaped = True
-        self._stop(victim)
+            if victim.same is not None and self.running.get(victim.same) is victim:
+                self.running.pop(victim.same)
+        self._kill([victim])
 
     def _halt_checks(self) -> None:
         """Every check in a checks process stopped as the engine stops for an update (``drain``): its callers
-        told it stopped (``api.Stopped``: run it again), the running ones cancelled at their next checkpoint,
-        those waiting for a slot gone from the queue."""
+        told it stopped (``api.Stopped``: run it again) -- those waiting for a slot gone from the queue, and the
+        checks processes measuring killed, all at once: they hold nothing of anyone's, so nothing is waited for,
+        not even a kernel call."""
         with self.asked_lock:
             halted = [asked for asked in self.asked.values() if asked.key == CHECKS and not asked.answered]
             for asked in halted:
                 asked.halted = True
-        for asked in halted:
+        self._kill(halted)
+
+    def _kill(self, checks: list["_Asked"]) -> None:
+        """Checks in the checks processes stopped at once: a waiting one leaves the queue (``stopped``), a
+        running one's process is killed -- every one signalled before any is waited for -- and its request
+        answers that it is gone, which its caller is told in the words of why (``check``'s ``answered``)."""
+        processes = []
+        for asked in checks:
+            asked.stopped.set()
+            if asked.worker is not None:
+                processes.append(asked.worker)
+        for process in processes:
             try:
-                self._stop(asked)
-            except Exception:  # noqa: BLE001 - a process gone already: the stop goes on
+                process.popen.kill()
+            except Exception:  # noqa: BLE001 - gone already
+                pass
+        for process in processes:
+            try:
+                process.kill()  # waited for, its pipe let go
+            except Exception:  # noqa: BLE001 - gone already
                 pass
 
     def running_checks(self) -> list[dict[str, Any]]:
@@ -1572,15 +1675,15 @@ class Daemon:
             if asked.cancelled:
                 send({"log": f"cancelled the manufacturing check of {Path(key).name}'s model", "stream": "waiting"})
 
-    def _stop(self, asked: "_Asked") -> bool:
-        """``asked`` cancelled: not started, it never will; started, its worker asked to stop it (``cancel``,
-        answered at once). Whether it was cancelled -- a check that had answered is not."""
+    def _stop(self, asked: "_Asked") -> None:
+        """``asked`` cancelled: not started, it never will; started, its worker told to stop it (``cancel``), its
+        answer not waited for -- a worker in a kernel call answers once it is out, and the check's own answer
+        says whether it was cancelled -- so a build cancelling several tells them all at once."""
         asked.stopped.set()
         worker = asked.worker
         if worker is None:
-            return True  # waiting for its worker: ``_call`` sees it stopped once leased
-        answer = worker.question({"op": "cancel", "token": asked.token})
-        return bool(answer and answer.get("cancelled"))
+            return  # waiting for its worker: ``_call`` sees it stopped once leased
+        worker.question({"op": "cancel", "token": asked.token}, timeout=0)
 
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None],
                gone: threading.Event | None = None) -> None:
@@ -2067,6 +2170,10 @@ class Daemon:
 
         if self.checks.deleted in registry.FORGOTTEN:
             registry.FORGOTTEN.remove(self.checks.deleted)
+        from cad_server.engine import cache as _cache
+
+        if self.checks.dropped in _cache.DROPPED:
+            _cache.DROPPED.remove(self.checks.dropped)
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
@@ -2197,6 +2304,10 @@ CANCEL_PATIENCE = 600.0
 # A check the engine's stop cut short, as its caller raises it (``api.Stopped``).
 STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
            "run the check again")
+# A check whose checks process was killed for another check's slot, its callers all gone (``Daemon._reap``): said
+# to any caller still reading.
+REAPED = ("the manufacturing check was stopped, its process given to another check: every caller of it had gone; "
+          "check it again")
 # A check cancelled before it started, as a running one's worker answers (``worker.CANCELLED``).
 CHECK_CANCELLED = ("the manufacturing check was cancelled before it finished: its document is being replaced by a "
                    "build of its script; check it again once the build is done")
@@ -2207,15 +2318,17 @@ class _Asked:
     key's Python, what it is (``what``: its type, process and document or file), its callers (each one's
     ``gone``, set at its end of file: its own, then every one attached to it), the process once leased, when it
     was asked, its answer, whether it was cancelled and whether it has answered; whether it waits for a slot of
-    the checks processes (``waiting``), gave its slot up to one (``reaped``) or was stopped by a drain
-    (``halted``)."""
+    the checks processes (``waiting``), gave its slot up to one (``reaped``) and has given it back (``freed``),
+    was stopped by a drain (``halted``), or was answered by a checks process retired as of a base gone
+    (``stale``); and its place in ``running`` (``same``), None for a check kept under no version."""
 
     def __init__(self, token: str, key: str, python_key: str | None, what: dict[str, Any] | None = None,
                  gone: threading.Event | None = None) -> None:
         self.token, self.key, self.python_key = token, key, python_key
         self.what = dict(what or {})
         self.callers: list[threading.Event | None] = [gone]
-        self.waiting = self.reaped = self.halted = False
+        self.waiting = self.reaped = self.freed = self.halted = self.stale = False
+        self.same: tuple[str, str | None, str] | None = None
         self.began = time.time()
         self.answer: dict[str, Any] | None = None
         self.worker: Process | None = None

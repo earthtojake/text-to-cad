@@ -777,12 +777,29 @@ class Supervisor:
                 gone = self.table.get(place) is process
                 if gone:
                     del self.table[place]
-                    self._note(process, "RSS" if process.retired else "exited")
+                    why = getattr(process, "state", {}).get("retired_for")
+                    self._note(process, why or ("RSS" if process.retired else "exited"))
             self._grant()
         if gone:
             self._retire(process)
         self.shed()
         self._restand()
+
+    def retire(self, process: Any, reason: str) -> None:
+        """``process`` retired for ``reason`` (``status`` notes it): at once when no lease holds it, else as its
+        lease lets it go (``release``). A process the supervisor no longer holds is left alone."""
+        with self.lock:
+            place = (process.service.name, process.key)
+            if self.table.get(place) is not process:
+                return
+            process.retired = True
+            if process.leased:
+                getattr(process, "state", {})["retired_for"] = reason
+                return
+            del self.table[place]
+            self._note(process, reason)
+            self._grant()
+        self._retire(process)
 
     def _restand(self) -> None:
         """Each standby owed -- retired for the slot of a lease in its caller's Python (``_Standing.owed``) --

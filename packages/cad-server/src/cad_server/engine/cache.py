@@ -63,11 +63,11 @@ import os
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 
 from cad.engine.records import FILE
 
-__all__ = ["CACHE_IDLE_SECONDS", "FILE", "SHUTDOWN_SECONDS", "Cache", "idle"]
+__all__ = ["CACHE_IDLE_SECONDS", "DROPPED", "FILE", "SHUTDOWN_SECONDS", "Cache", "idle"]
 
 # How long a document sits with no build and no read before it is saved: past the gap between a
 # script's calls and between an edit loop's runs (each run a new revision, saved for nothing), and
@@ -77,6 +77,9 @@ CACHE_IDLE_SECONDS = 10.0
 SHUTDOWN_SECONDS = 10.0
 # The failed saves ``status`` lists, the latest first.
 FAILURES_KEPT = 12
+# Told of each document whose folder in the cache went with its cache file (``Cache.remove``): what is kept
+# in that folder beside it goes too (``checks.Checks.dropped``).
+DROPPED: list[Callable[[str], None]] = []
 
 
 def idle() -> float:
@@ -333,8 +336,9 @@ class Cache:
             self.written += 1
 
     def remove(self, ident: str) -> None:
-        """Document ``ident``'s cache file, gone, because its bytes do not read; its record kept,
-        saying so (no ``cache``), so its next build writes it again. The record stops naming the file
+        """Document ``ident``'s cache file, gone, because its bytes do not read -- its folder with it, and
+        what else is kept there (``DROPPED`` told); its record kept, saying so (no ``cache``), so its next
+        build writes it again. The record stops naming the file
         before the file goes, so no record ever names a file that is not there (``_write`` writes the
         file before its record names it)."""
         held = self.registry()
@@ -345,6 +349,11 @@ class Cache:
         held.update(ident, lambda found: {key: value for key, value in found.items() if key != "cache"}
                     if found is not None and "cache" in found else None)
         held.cache.remove(f"{self.inside(ident).rsplit('/', 1)[0]}")  # documents/<id>, nothing outside it
+        for dropped in list(DROPPED):
+            try:
+                dropped(ident)  # the checks kept in that folder went with it
+            except Exception:  # noqa: BLE001 - what is kept beside it never fails the removal
+                pass
 
     def forget(self, ident: str) -> None:
         """Document ``ident`` deleted (``models.delete``): nothing of it is saved from now on -- its idle
