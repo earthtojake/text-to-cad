@@ -8,10 +8,13 @@ widens a range, and two parts declared never to collide are set aside, those two
 nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
 is cut into hulls for the collision geometry alone. The stops are said as a table, and a long sweep says each joint as
 it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
-joint turns, stops nothing until it truly closes, and is reported with its gaps."""
+joint turns, stops nothing until it truly closes, and is reported with its gaps. A pair drawn one inside the other
+stops nothing where its overlap shrinks or slides, only where it deepens, and is reported with its volume and
+depth."""
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import tempfile
@@ -109,6 +112,39 @@ def chain():
     bd.RigidJoint("elbow", fore, elbow.location)
     elbow.connect_to(fore.joints["elbow"], angle=0)
     return bd.Compound(children=[base, upper, fore], label="chain")
+"""
+
+
+# A rail with a stop block on it and an end block off its end; a carriage 36 mm wide drawn sunk 1 mm into the rail's
+# top over its last 5 mm (an overlap of 180 mm^3), sliding along it; and a pad sunk 1 mm into the rail's top
+# (100 mm^3), sliding up and down. The carriage leaving the rail's end shrinks its overlap, and sliding on along the rail moves it: neither
+# stops it, and it slides until it meets the end block one way and the stop block the other. The pad pushed down
+# deepens its overlap, which stops it; lifted, it leaves the rail.
+OVERLAP = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/overlap.xbf")
+def overlap():
+    rail = bd.Box(100, 60, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    rail.label = "rail"
+    end = bd.Pos(-40, 0, 15) * bd.Box(10, 60, 30)
+    end.label = "end_block"
+    stop = bd.Pos(65, 0, 20) * bd.Box(10, 20, 20)
+    stop.label = "stop_block"
+    base = bd.Compound(children=[rail, end, stop], label="base")
+    carriage = bd.Pos(0, 0, 14) * bd.Box(10, 36, 10)
+    carriage.label = "carriage"
+    pad = bd.Pos(35, 25, 11.5) * bd.Box(10, 10, 5)
+    pad.label = "pad"
+    slide = bd.LinearJoint("slide", base, axis=bd.Axis((0, 0, 0), (1, 0, 0)), linear_range=(-100, 100))
+    bd.RigidJoint("slide", carriage, bd.Location())
+    slide.connect_to(carriage.joints["slide"], position=0)
+    lift = bd.LinearJoint("lift", base, axis=bd.Axis((35, 25, 0), (0, 0, 1)), linear_range=(-50, 50))
+    bd.RigidJoint("lift", pad, bd.Location((35, 25, 0)))
+    lift.connect_to(pad.joints["lift"], position=0)
+    return bd.Compound(children=[base, carriage, pad], label="overlap")
 """
 
 
@@ -226,6 +262,45 @@ class Ranges(unittest.TestCase):
         [line] = [line for line in result.human_lines() if line.startswith("hinge: ")]
         self.assertIn("near as built: Upper_arm v9/SOLID (Upper_arm v9) and plate (base) 0.", line)
 
+    def test_a_pair_drawn_overlapping_stops_only_where_its_overlap_deepens(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "overlap.py"
+        script.write_text(textwrap.dedent(OVERLAP), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["overlap"], cwd=self.folder)[0]["ok"])
+        swept = {clearance: {found["joint"]: found for found in
+                             xbf.ranges(self.folder / "XBF/overlap.xbf", clearance=clearance).measurements["joints"]}
+                 for clearance in (1.0, 0.3)}
+        slide, lift = swept[0.3]["slide"], swept[0.3]["lift"]
+        # The carriage's 5 mm overlap shrinking off the rail's end, and sliding along it, stop nothing: it meets the end
+        # block 30 mm one way and the stop block 55 mm the other, a clearance short of each.
+        self.assertEqual(("end_block", "stop_block"), (slide["lower_contact"]["still"], slide["upper_contact"]["still"]),
+                         slide)
+        self.assertTrue(-30.0 < slide["lower"] <= -28.0, slide)
+        self.assertTrue(53.0 <= slide["upper"] < 55.0, slide)
+        # The overlap is said: the carriage in the rail by about 180 mm^3, 1 mm deep.
+        [drawn] = slide["overlapping"]
+        self.assertEqual(("carriage", "rail"), (drawn["moving"], drawn["still"]))
+        self.assertTrue(160.0 <= drawn["volume"] <= 200.0 and 0.9 <= drawn["depth"] <= 1.3, drawn)
+        # The pad pushed down deepens its overlap: it stops within a few millimetres, at the rail, the overlap said; lifted
+        # off the rail it is clear.
+        self.assertEqual("rail", lift["lower_contact"]["still"], lift)
+        self.assertTrue(-4.0 <= lift["lower"] <= -0.0, lift)
+        contact = lift["lower_contact"]
+        self.assertEqual((100.0, 1.0, None), (round(contact["overlap"], -1), round(contact["depth"]), contact["gap"]))
+        self.assertIsNone(lift["upper"], lift)
+        [line] = [line for line in xbf.ranges(self.folder / "XBF/overlap.xbf", joint=("lift",)).human_lines()
+                  if line.startswith("lift: ")]
+        self.assertIn(", deeper than drawn (overlapping ", line)
+        self.assertIn("; overlapping as drawn, stopping only where that deepens: pad (pad) in rail (base) by ", line)
+        # Nothing of it reads the clearance: a smaller one never narrows a range.
+        for name in ("slide", "lift"):
+            wide, narrow = swept[1.0][name], swept[0.3][name]
+            self.assertLessEqual(narrow["lower"], wide["lower"], name)
+            self.assertGreaterEqual(math.inf if narrow["upper"] is None else narrow["upper"],
+                                    math.inf if wide["upper"] is None else wide["upper"], name)
+
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib
         import io
@@ -247,6 +322,13 @@ class Ranges(unittest.TestCase):
         heard = said.getvalue().splitlines()
         self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 2): up to about "), heard)
         self.assertTrue(heard[1].startswith("ranges: elbow swept in "), heard)
+        # A sweep running long says each joint as it starts, though each is short (on the collision geometry too).
+        said = io.StringIO()
+        with mock.patch("cad.engine.ranges.LONG", 1e9), mock.patch("cad.engine.ranges.QUIET", 0.0), \
+                contextlib.redirect_stderr(said):
+            xbf.ranges(document, geometry="collision")
+        self.assertEqual(["ranges: sweeping elbow (1 of 2)", "ranges: sweeping slide (2 of 2)"],
+                         said.getvalue().splitlines())
         # Verbose, each step is said as it starts, the reading and the sampling before any joint: a fine sweep's
         # minutes of sampling are not minutes of silence.
         said = io.StringIO()

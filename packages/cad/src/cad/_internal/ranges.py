@@ -79,7 +79,10 @@ def ranges_for(document_type: str) -> Any:
         surfaces are sampled to), or where their contact grows by about 15 mm^2: parts touching already as built
         (a horn on its servo) meet only when their contact grows, parts near as built (apart, within the
         clearance) only where their gap halves, and each joint's finding names them with their gap as built and
-        at each stop. A larger clearance only narrows a range. Each joint's finding says its stops in degrees
+        at each stop. Parts drawn one inside the other (overlapping as built, a vendor's simplified parts sunk
+        into each other) meet only where one is pushed deeper into the other than drawn, by 0.6 mm more: each
+        joint's finding names them with the volume they share and how deep, and a stop they make lies past the
+        true one by up to about that depth. A larger clearance only narrows a range. Each joint's finding says its stops in degrees
         or millimetres around the as-built pose (and in its own values where that is not zero) and which two
         parts meet past each; a part declared collision none takes no part, and two parts declared exclude(a, b)
         never meet each other. The model is not changed: adopt the numbers into its joints' ranges. --json
@@ -202,7 +205,7 @@ NEAR_SAID = 3
 
 
 def _words(found: Any) -> str:
-    from cad.engine.ranges import closing
+    from cad.engine.ranges import closing, volume
 
     def end(name: str, value: float | None, own: float | None, contact: Any, clash: Any) -> str:
         if contact is None:
@@ -234,6 +237,14 @@ def _words(found: Any) -> str:
                         + (f" ({', '.join(ends)})" if ends else ""))
         more = f" and {len(near) - NEAR_SAID} more (--json)" if len(near) > NEAR_SAID else ""
         said += f"; near as built: {'; '.join(rows)}{more}"
+    overlapping = list(getattr(found, "overlapping", None) or ())
+    if overlapping:
+        # Pairs drawn one inside the other stop the joint only where the overlap deepens: said, with how much, so
+        # that a stop past them reads as approximate by their depth.
+        rows = [f"{pair.moving} ({pair.moving_link}) in {pair.still} ({pair.still_link}) by {volume(pair.volume)}, "
+                f"{pair.depth:.1f} mm deep" for pair in overlapping[:NEAR_SAID]]
+        more = f" and {len(overlapping) - NEAR_SAID} more (--json)" if len(overlapping) > NEAR_SAID else ""
+        said += (f"; overlapping as drawn, stopping only where that deepens: {'; '.join(rows)}{more}")
     return said
 
 

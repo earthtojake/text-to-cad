@@ -327,6 +327,13 @@ cad step ranges arm.step --step 0.5 --json
   for a 0.5 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
   pairs within it as built, `near as built:`, with the gap as built and at each stop, and a stop
   one of them makes says `closed to 0.2 from 0.5 mm as built`.
+- **Overlapping as drawn.** A vendor's simplified parts are often drawn sunk into each other (a link
+  a little too wide for its clevis, a carriage drawn inside its rail). Such a pair meets only where
+  one is pushed deeper into the other than drawn, by 0.6 mm more, wherever that is: its overlap
+  shrinking, or sliding along with the joint, stops nothing, and the joint sweeps on to its real
+  stop. The finding lists each such pair, `overlapping as drawn ... by 180 mm^3, 1.0 mm deep`, and a
+  stop one makes says `deeper than drawn (overlapping 180 mm^3, 1.0 mm deep, as built)`: it lies
+  past the true stop by up to about that depth, so read it against the geometry or the datasheet.
 - **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
   against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
   pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
@@ -352,17 +359,20 @@ cad step ranges arm.step --step 0.5 --json
   its warning says so. A document with no joint fails with
   `no_joints`.
 - **Cost.** The sweep runs on one core. Each surface is sampled to within 0.3 mm whatever the
-  clearance, and the default is the fastest: an arm of a few hundred parts and six joints takes
-  tens of seconds at the defaults on a laptop, by its parts' detail and the machine, and a little
-  more at `--clearance 1`; a finer `--step` costs in proportion, and `--joint` only the joints it
-  names. Answer a narrower question (do the jaws close?) with `--joint jaw` or a posed snapshot.
-  `--verbose` says each step on stderr as it starts: reading the model, sampling its surfaces, each
-  joint.
+  clearance, so the time follows the parts' surface area and detail, not how many parts there are:
+  an arm of a few hundred small parts and six joints takes tens of seconds at the defaults on a
+  laptop, and one of a few large freeform shells (an industrial arm's covers) minutes. A larger
+  `--clearance` costs a little more; a finer `--step` costs in proportion, and `--joint` only the
+  joints it names. Answer a narrower question (do the jaws close?) with `--joint jaw` or a posed
+  snapshot. A long sweep says each joint on stderr as it starts, with either geometry; `--verbose`
+  says each step as it starts: reading the model, sampling its surfaces, each joint.
 
 `--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`,
 `range` (the joint's own values), the `*_contact` and `*_clash` parts (each with its `gap` there in mm, and a pair within the
-clearance as built with its `near`, that gap as built), the pairs touching as built (`resting`) and the
-pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop).
+clearance as built with its `near`, that gap as built; a pair drawn overlapping with its `overlap` in mm^3
+and `depth` in mm, and no `gap`), the pairs touching as built (`resting`), the
+pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop) and the pairs drawn
+overlapping (`overlapping`: `volume` and `depth`).
 
 ### Check scripts
 

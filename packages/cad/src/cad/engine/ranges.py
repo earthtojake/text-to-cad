@@ -43,6 +43,21 @@ between the two meshes, and at most ``2 * RESOLUTION`` over it (each side's near
   it comes into contact, not where it slides along what it touches. A sample counted truly came nearer:
   its gap now is at least its true gap, and its gap as built at most ``RESOLUTION`` over its true one.
 
+**Parts drawn overlapping.** A pair touching as built may be drawn one inside the other (a vendor's simplified
+envelope sunk into its neighbour, a carriage drawn inside its rail, a link drawn a little too wide for its
+clevis): their surfaces cross. Such a pair is **overlapping** where any of its moving samples lies inside the still
+part (``_inside``: a ray from it crosses the still part's surface an odd number of times) more than ``2 *
+RESOLUTION`` from the still part's samples; its **depth** is the farthest one does (``_Sweep._depth``). Neither half
+above reads such a pair: its buried samples coming out through the still surface as the overlap shrinks are no
+contact, nor is a part drawn too wide grooving its neighbour's wall as it turns, though that contact grows over a
+whole face. It meets, as a near pair meets where its gap halves, where its overlap deepens: where more than ``STOP``
+of the moving part's samples lie inside the still part deeper than its depth as built and ``2 * RESOLUTION`` more
+(``_Sweep._deep``: a grid of the still part's inside, less the cells near its surface) -- the moving part pushed
+into the still one past what was drawn, wherever that is. A stop so found lies past the true one by up to the
+depth drawn: said with it. Its volume shared as built, measured on a grid (``_Sweep._overlap``), and its depth are
+reported (``JointStops.overlapping``; ``Contact.overlap`` and ``Contact.depth`` where it stops a joint). None of it
+reads the clearance, so the rule below holds.
+
 Two parts meet where either holds at a pose and the next (a graze past a corner, at one pose alone, is no
 contact). The stop reported each way is the last clear pose and the two parts that met one step past it,
 with their gap there (``Contact.gap``) and, for a pair within the clearance as built, that gap too
@@ -78,7 +93,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "sweep", "unknown"]
+__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "Overlap", "sweep", "unknown"]
 
 #: Every point of a tested surface is within this many millimetres of one of its samples, at any clearance: a gap
 #: is measured to within twice it, and a clearance under it is refused.
@@ -91,6 +106,12 @@ CLOSED = 0.5
 #: ``RESOLUTION`` squared): a contact grown, not a corner grazed.
 STOP_AREA = 15.0
 STOP = int(STOP_AREA / RESOLUTION ** 2)
+#: The most grid points the volume two parts drawn overlapping share is measured on (``_Sweep._overlap``), and the
+#: most cells a still part's inside is told on (``_Sweep._deep``).
+OVERLAP_POINTS = 400_000
+INSIDE_CELLS = 1_000_000
+#: The most buried samples a pair's depth as built is measured from (``_Sweep._depth``), every so many of them.
+DEPTH_SAMPLES = 4_000
 #: How many times a still part's samples are hashed at half the size again, for samples whose bound is that small.
 LEVELS = 4
 #: The size, in mm, of the cells a moving link's samples are clustered in, and how many cells of the still side's
@@ -111,7 +132,9 @@ class Contact:
     anonymous one by its path from its nearest named ancestor, ``shown``) and its link's, the pose, in the
     joint's unit around zero, where they did, and ``gap`` their gap there, in mm. ``near`` is their gap as
     built, in mm, where it was within the clearance (the module's **Where two parts meet**); None for any other
-    pair."""
+    pair. ``overlap`` and ``depth`` are the volume, in mm^3, the two share as built and how deep one is drawn
+    inside the other, in mm, where they are drawn overlapping (the module's **Parts drawn overlapping**); None for
+    any other pair, and ``gap`` None for that one."""
 
     moving: str
     moving_link: str
@@ -120,6 +143,8 @@ class Contact:
     at: float
     near: float | None = None
     gap: float | None = None
+    overlap: float | None = None
+    depth: float | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +161,20 @@ class Near:
     rest: float
     lower: float | None = None
     upper: float | None = None
+
+
+@dataclass(frozen=True)
+class Overlap:
+    """A pair drawn one inside the other as built (the module's **Parts drawn overlapping**): the moving part and the
+    still one, as a ``Contact`` names them, ``volume`` the volume they share as built, in mm^3, measured on a grid
+    to about a tenth, and ``depth`` the farthest the moving part's surface lies inside the still one, in mm."""
+
+    moving: str
+    moving_link: str
+    still: str
+    still_link: str
+    volume: float
+    depth: float
 
 
 @dataclass
@@ -163,6 +202,7 @@ class JointStops:
     why: str = ""
     resting: list[tuple[str, str]] = field(default_factory=list)  # part pairs under RESOLUTION as built (moving, still)
     near: list[Near] = field(default_factory=list)  # the other part pairs within the clearance as built, with gaps
+    overlapping: list[Overlap] = field(default_factory=list)  # the resting pairs drawn one inside the other
 
 
 #: Sample points past which the sampling is said as it starts whatever ``told`` hears: tens of seconds and gigabytes.
@@ -170,6 +210,9 @@ SAMPLED_LONG = 20_000_000
 #: Seconds past which a joint's sweep is said as it starts and as it ends (``sweep``'s ``progress``): a fine step or
 #: clearance on a vendor STEP's thousands of faces takes minutes a joint.
 LONG = 15.0
+#: Seconds into a sweep past which every joint is said as it starts, however short its own sweep: many joints of
+#: some seconds each are minutes too.
+QUIET = 15.0
 
 
 def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: str = "parts",
@@ -180,7 +223,8 @@ def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION,
     ``clearance`` millimetres (at least ``RESOLUTION``, and that by default), ``geometry`` what is tested
     (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears, of a joint whose sweep
     may take more than ``LONG`` seconds (its first pose's time times its poses, a full turn each way at most),
-    a line as it starts saying about how long, and one as it ends. A name in ``joints`` that is no control
+    a line as it starts saying about how long, and one as it ends; once the sweep has run ``QUIET`` seconds, every
+    joint's start. A name in ``joints`` that is no control
     (``Description.controls``) is refused, naming the controls."""
     if geometry not in GEOMETRY:
         raise ValueError(f"geometry {geometry!r} is none of {', '.join(GEOMETRY)}")
@@ -317,6 +361,83 @@ def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float) -> np.n
     return start + on_row[:, None] * (end - start)
 
 
+#: Where a ray of ``_inside`` starts, off each point, in metres: a hair off the round numbers surfaces are drawn on,
+#: so that no ray runs through an edge or a corner of the surface it counts.
+_NUDGE = np.array([1.37e-9, 0.71e-9])
+#: The (triangle, cell) entries ``_inside`` files a surface under at most: past it the cells are made coarser.
+_FILED = 4_000_000
+#: The (point, triangle) pairs ``_inside`` tests at once.
+_TESTED_AT_ONCE = 2_000_000
+
+
+def _inside(points: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Which ``points`` lie inside the closed surface of ``vertices`` and ``faces``: a ray from each, up Z, crosses it
+    an odd number of times. The triangles are filed by the cells of a grid across X and Y that they span, so each
+    ray is tested against those of its own cell alone; a triangle seen edge-on from below (a wall) crosses no ray."""
+    found = np.zeros(len(points), dtype=bool)
+    if not len(points) or not len(faces):
+        return found
+    low, high = vertices.min(axis=0), vertices.max(axis=0)
+    within = np.flatnonzero(np.all((points >= low) & (points <= high), axis=1))
+    if not len(within):
+        return found
+    corners = vertices[faces]
+    a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
+    doubled = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
+    seen = np.flatnonzero(doubled != 0.0)
+    if not len(seen):
+        return found
+    flat_low, flat_high = corners[seen, :, :2].min(axis=1), corners[seen, :, :2].max(axis=1)
+    extent = np.maximum(high[:2] - low[:2], 1e-12)
+    size = float(extent.max()) / max(1.0, math.sqrt(len(seen)))
+    while True:
+        first = np.floor((flat_low - low[:2]) / size).astype(np.int64)
+        last = np.floor((flat_high - low[:2]) / size).astype(np.int64)
+        spans = last - first + 1
+        counts = spans[:, 0] * spans[:, 1]
+        if int(counts.sum()) <= _FILED:
+            break
+        size *= 2.0
+    columns = int(np.floor(extent[1] / size)) + 2
+    owner = np.repeat(np.arange(len(seen)), counts)
+    within_triangle = np.arange(len(owner)) - np.repeat(np.cumsum(counts) - counts, counts)
+    cell_x = first[owner, 0] + within_triangle % spans[owner, 0]
+    cell_y = first[owner, 1] + within_triangle // spans[owner, 0]
+    keys = cell_x * columns + cell_y
+    order = np.argsort(keys, kind="stable")
+    keys, filed = keys[order], seen[owner[order]]
+    query = points[within]
+    xy = query[:, :2] + _NUDGE
+    asked = np.floor((xy - low[:2]) / size).astype(np.int64)
+    asked_keys = asked[:, 0] * columns + asked[:, 1]
+    start, stop = np.searchsorted(keys, asked_keys, "left"), np.searchsorted(keys, asked_keys, "right")
+    many = stop - start
+    crossings = np.zeros(len(query), dtype=np.int64)
+    total = np.cumsum(many)
+    at = 0
+    while at < len(query):
+        # As many points as their (point, triangle) pairs allow at once, one at least.
+        done = int(total[at - 1]) if at else 0
+        upto = max(at + 1, int(np.searchsorted(total, done + _TESTED_AT_ONCE, "right")))
+        span = many[at:upto]
+        point = np.repeat(np.arange(at, upto), span)
+        triangle = filed[np.repeat(start[at:upto] - np.cumsum(span) + span, span) + np.arange(int(span.sum()))]
+        px, py = xy[point, 0], xy[point, 1]
+        ta, tb, tc = a[triangle], b[triangle], c[triangle]
+        w0 = (tc[:, 0] - tb[:, 0]) * (py - tb[:, 1]) - (tc[:, 1] - tb[:, 1]) * (px - tb[:, 0])
+        w1 = (ta[:, 0] - tc[:, 0]) * (py - tc[:, 1]) - (ta[:, 1] - tc[:, 1]) * (px - tc[:, 0])
+        w2 = (tb[:, 0] - ta[:, 0]) * (py - ta[:, 1]) - (tb[:, 1] - ta[:, 1]) * (px - ta[:, 0])
+        area = doubled[triangle]
+        sign = np.sign(area)
+        hit = (w0 * sign >= 0) & (w1 * sign >= 0) & (w2 * sign >= 0)
+        height = (w0 * ta[:, 2] + w1 * tb[:, 2] + w2 * tc[:, 2]) / area
+        hit &= height > query[point, 2]
+        crossings[at:upto] += np.bincount(point[hit] - at, minlength=upto - at)
+        at = upto
+    found[within] = crossings % 2 == 1
+    return found
+
+
 def _outside(points: np.ndarray, owners: np.ndarray, cell: float) -> np.ndarray:
     """Which of a link's surface samples are its outside: not within about a cell of another part of the same
     link. Two parts of one link meet where it holds them together -- a part split in two meets its other half
@@ -439,7 +560,7 @@ class _Clusters:
         self.link_clusters = np.searchsorted(self.links, np.arange(len(local) + 1))
         self.sorted_points = self.points[self.order]
 
-    def placed(self, frames: list[np.ndarray], coarse: "_Occupied") -> tuple[np.ndarray, np.ndarray]:
+    def placed(self, frames: list[np.ndarray], coarse: "_Occupied | _Deep") -> tuple[np.ndarray, np.ndarray]:
         """The samples of the clusters the coarse mask passes at a pose (each link at ``frames``): their indices
         among the joint's moving samples, and where they are."""
         if not len(self.centres):
@@ -462,6 +583,45 @@ class _Clusters:
             mine = slice(int(upto[ends[link]]), int(upto[ends[link + 1]]))
             placed[mine] = self.sorted_points[at[mine]] @ frame[:3, :3].T + frame[:3, 3]
         return self.order[at], placed
+
+
+class _Deep:
+    """A moving part's samples, clustered (``_Clusters``), against where a still part's inside lies deeper than its
+    overlap as drawn (``_Sweep._deep``): the grid's low corner, its pitch and its cells, and a coarse mask of them in
+    blocks a cluster across, grown by a block, so a pose places only the clusters that may reach a deep cell."""
+
+    def __init__(self, points: np.ndarray, low: np.ndarray, pitch: float, deep: np.ndarray) -> None:
+        self.low, self.pitch, self.deep = low, pitch, deep
+        self.clusters = _Clusters([points], CLUSTER * 1e-3)
+        self.block = max(1, int(math.ceil((self.clusters.radius + pitch) / pitch)))
+        padded = [-(-size // self.block) * self.block for size in deep.shape]
+        full = np.zeros(padded, dtype=bool)
+        full[:deep.shape[0], :deep.shape[1], :deep.shape[2]] = deep
+        coarse = full.reshape(padded[0] // self.block, self.block, padded[1] // self.block, self.block,
+                              padded[2] // self.block, self.block).any(axis=(1, 3, 5))
+        grown = np.zeros(tuple(n + 2 for n in coarse.shape), dtype=bool)  # by a block each way, an edge of none
+        for x in (0, 1, 2):
+            for y in (0, 1, 2):
+                for z in (0, 1, 2):
+                    grown[x:x + coarse.shape[0], y:y + coarse.shape[1], z:z + coarse.shape[2]] |= coarse
+        self.coarse = grown
+        self.any = bool(deep.any())
+
+    def near(self, centres: np.ndarray) -> tuple[np.ndarray, None]:
+        """The clusters (by their centres) whose block, or one beside it, holds a deep cell."""
+        at = np.floor((centres - self.low) / (self.pitch * self.block)).astype(np.int64) + 1
+        inside = np.flatnonzero(np.all((at >= 0) & (at < self.coarse.shape), axis=1))
+        at = at[inside]
+        return inside[self.coarse[at[:, 0], at[:, 1], at[:, 2]]], None
+
+    def count(self, frame: np.ndarray) -> int:
+        """How many of the samples, the part at ``frame``, lie in a deep cell."""
+        if not self.any:
+            return 0
+        _indices, placed = self.clusters.placed([frame], self)
+        cells = np.floor((placed - self.low) / self.pitch).astype(np.int64)
+        cells = cells[np.all((cells >= 0) & (cells < self.deep.shape), axis=1)]
+        return int(self.deep[cells[:, 0], cells[:, 1], cells[:, 2]].sum())
 
 
 class _Reach:
@@ -505,6 +665,7 @@ class _Sweep:
         self.clearance = float(clearance)
         self.place = ""  # which joint of how many is swept, as ``progress`` says it
         self.long = False  # whether the joint swept now was said to be long
+        self.began = time.perf_counter()  # when the sweep started (``run``), for ``QUIET``
         self.step = float(step)
         self.pitch = float(clearance) * 1e-3  # metres
         self.resolution = RESOLUTION * 1e-3  # metres
@@ -541,11 +702,14 @@ class _Sweep:
         by_link: dict[str, list[tuple[str, str, np.ndarray, np.ndarray]]] = {}
         for link_name, name, path, vertices, faces in surfaces:
             by_link.setdefault(link_name, []).append((name, path, vertices, faces))
+        # Each part's triangles in its link's frame, by part index: what a point inside it is told by (``_inside``).
+        self.meshes: list[tuple[np.ndarray, np.ndarray]] = []
         for link in description.links:
             found, owners = [], []
             for name, path, vertices, faces in by_link.get(link.name, ()):
                 index = len(self.parts)
                 self.parts.append((name, link.name))
+                self.meshes.append((vertices, faces))
                 paths.append(path)
                 sampled = _samples(vertices, faces, self.resolution)
                 found.append(sampled)
@@ -556,6 +720,12 @@ class _Sweep:
                 self.points[link.name], self.owners[link.name] = points[keep], owners[keep]
         self.hashed: dict[tuple[int, float], _Cells] = {}  # each part's samples as built, by cell size (``_hashed``)
         self.as_built: dict[int, np.ndarray] | None = None
+        # Of a moving part's samples, which lie inside a still part as built, by (moving, still) (``_buried``); and
+        # the volume two parts share as built, in mm^3, by the pair (``_overlap``): the same for every joint.
+        self.buried: dict[tuple[int, int], np.ndarray] = {}
+        self.shared: dict[tuple[int, int], float] = {}
+        self.depths: dict[tuple[int, int], float] = {}  # how deep a moving part lies in a still one, mm (``_depth``)
+        self.insides: dict[int, tuple[np.ndarray, float, np.ndarray, np.ndarray]] = {}  # a still part's (``_deep``)
         # The part pairs set aside (``exclude(a, b)``), by part index: a part's hulls are each that part.
         self.excluded = np.zeros((len(self.parts), len(self.parts)), dtype=bool)
         by_path: dict[str, list[int]] = {}
@@ -584,15 +754,107 @@ class _Sweep:
         that holds the part still (every joint's sweep starts from the as-built frames), made once."""
         found = self.hashed.get((part, size))
         if found is None:
-            if self.as_built is None:
-                frames = self.frames({})
-                self.as_built = {}
-                for link, points in self.points.items():
-                    placed = points @ frames[link][:3, :3].T + frames[link][:3, 3]
-                    owners = self.owners[link]
-                    for index in np.unique(owners):
-                        self.as_built[int(index)] = placed[owners == index]
-            found = self.hashed[(part, size)] = _Cells(self.as_built[part], size)
+            found = self.hashed[(part, size)] = _Cells(self._rest()[part], size)
+        return found
+
+    def _rest(self) -> dict[int, np.ndarray]:
+        """Each part's samples where it stands as built, by part index, made once."""
+        if self.as_built is None:
+            frames = self.frames({})
+            self.as_built = {}
+            for link, points in self.points.items():
+                placed = points @ frames[link][:3, :3].T + frames[link][:3, 3]
+                owners = self.owners[link]
+                for index in np.unique(owners):
+                    self.as_built[int(index)] = placed[owners == index]
+        return self.as_built
+
+    def _rest_mesh(self, part: int) -> tuple[np.ndarray, np.ndarray]:
+        """A part's triangles where it stands as built."""
+        vertices, faces = self.meshes[part]
+        frame = self.frames({})[self.parts[part][1]]
+        return vertices @ frame[:3, :3].T + frame[:3, 3], faces
+
+    def _buried(self, moving: int, still: int) -> np.ndarray:
+        """Which of ``moving``'s samples (in its link's order) lie inside ``still`` as built (``_inside``), made once
+        a pair."""
+        found = self.buried.get((moving, still))
+        if found is None:
+            found = self.buried[(moving, still)] = _inside(self._rest()[moving], *self._rest_mesh(still))
+        return found
+
+    def _depth(self, moving: int, still: int) -> float:
+        """How deep ``moving``'s surface lies inside ``still`` as built, in mm: the farthest of its samples inside it
+        from the still part's samples (``DEPTH_SAMPLES`` of them at most, evenly), made once a pair."""
+        found = self.depths.get((moving, still))
+        if found is None:
+            inner = self._rest()[moving][self._buried(moving, still)]
+            inner = inner[::max(1, -(-len(inner) // DEPTH_SAMPLES))]
+            deepest, size = 0.0, 2 * self.resolution
+            while len(inner):
+                left = []
+                for first in range(0, len(inner), 500):  # a few hundred at once: a coarse cell holds thousands
+                    block = inner[first:first + 500]
+                    asked, _held, apart = self._hashed(still, size).pairs(block)
+                    if len(asked):
+                        deepest = max(deepest, float(_least(asked, apart)[1].max()))
+                    left.append(block[np.setdiff1d(np.arange(len(block)), asked)])
+                inner, size = np.vstack(left), 2 * size
+            found = self.depths[(moving, still)] = deepest * 1000.0
+        return found
+
+    def _deep(self, still: int, depth: float) -> tuple[np.ndarray, float, np.ndarray]:
+        """Where a point lies inside ``still`` as built deeper than ``depth`` mm: the cells of a grid over it
+        (``INSIDE_CELLS`` at most, ``RESOLUTION`` at least) whose centre is inside it (``_inside``) and that lie more
+        cells from every cell holding one of its samples than ``depth`` and ``RESOLUTION`` span -- so a point in
+        one is at least that far from the still surface, whatever the grid's pitch: the grid's low corner, its
+        pitch in metres, and the cells."""
+        found = self.insides.get(still)
+        if found is None:
+            vertices, faces = self._rest_mesh(still)
+            low, high = vertices.min(axis=0), vertices.max(axis=0)
+            extent = np.maximum(high - low, 1e-9)
+            pitch = max(self.resolution, float(np.prod(extent) / INSIDE_CELLS) ** (1 / 3))
+            shape = np.maximum(1, np.ceil(extent / pitch).astype(np.int64))
+            axes = [low[at] + pitch * (np.arange(shape[at]) + 0.5) for at in range(3)]
+            centres = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
+            inside = _inside(centres, vertices, faces).reshape(tuple(shape))
+            surface = np.zeros(tuple(shape), dtype=bool)
+            cells = np.clip(np.floor((self._rest()[still] - low) / pitch).astype(np.int64), 0, shape - 1)
+            surface[cells[:, 0], cells[:, 1], cells[:, 2]] = True
+            found = self.insides[still] = (low, pitch, inside, surface)
+        low, pitch, inside, surface = found
+        near = surface.copy()
+        for axis in range(3):  # grown by as many cells each way, an axis at a time
+            for _time in range(int(math.ceil((depth * 1e-3 + self.resolution) / pitch))):
+                ahead, behind = [slice(None)] * 3, [slice(None)] * 3
+                ahead[axis], behind[axis] = slice(1, None), slice(None, -1)
+                grown = near.copy()
+                grown[tuple(ahead)] |= near[tuple(behind)]
+                grown[tuple(behind)] |= near[tuple(ahead)]
+                near = grown
+        return low, pitch, inside & ~near
+
+    def _overlap(self, first: int, second: int) -> float:
+        """The volume two parts share as built, in mm^3: the points of a grid over the samples each has inside the
+        other (the box their common volume lies in) that lie inside both, ``OVERLAP_POINTS`` at most."""
+        pair = (min(first, second), max(first, second))
+        found = self.shared.get(pair)
+        if found is None:
+            rest = self._rest()
+            inner = np.vstack([rest[first][self._buried(first, second)], rest[second][self._buried(second, first)]])
+            found = 0.0
+            if len(inner):
+                low, high = inner.min(axis=0), inner.max(axis=0)
+                extent = np.maximum(high - low, 1e-9)
+                pitch = max(self.resolution / 3, float(np.prod(extent) / OVERLAP_POINTS) ** (1 / 3))
+                axes = [low[at] + pitch * (np.arange(max(1, int(math.ceil(extent[at] / pitch)))) + 0.5)
+                        for at in range(3)]
+                grid = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
+                within = _inside(grid, *self._rest_mesh(first))
+                within[within] = _inside(grid[within], *self._rest_mesh(second))
+                found = float(within.sum()) * pitch ** 3 * 1e9
+            self.shared[pair] = found
         return found
 
     def _pair_least(self, query: np.ndarray, query_parts: np.ndarray, still: np.ndarray, owners: np.ndarray,
@@ -720,6 +982,7 @@ class _Sweep:
     def run(self) -> list[JointStops]:
         found = []
         controls = [joint for joint in self.description.controls() if not self.only or joint.name in self.only]
+        self.began = time.perf_counter()
         for at, joint in enumerate(controls, 1):
             started = time.perf_counter()
             self.place, self.long = f"{at} of {len(controls)}", False
@@ -807,6 +1070,24 @@ class _Sweep:
         bound = np.full((width, width), clearance)
         bound[pair_codes // width, pair_codes % width] = np.minimum(clearance, CLOSED * (pair_rest - self.resolution))
         close = {pair: gap for pair, gap in rest_gaps.items() if gap < self.clearance}  # within the clearance as built
+        # A pair touching as built drawn one inside the other meets only where its overlap deepens (the module's
+        # **Parts drawn overlapping**): each with its depth and volume as built, the moving part's samples in its
+        # link's frame, and where the still part's inside lies deeper than that depth and a margin.
+        overlaps: dict[tuple[int, int], tuple[float, float]] = {}
+        deepened: dict[tuple[int, int], tuple[str, _Deep]] = {}
+        overlapped = np.zeros((width, width), dtype=bool)
+        for (moving_part, still_part), gap in sorted(close.items()):
+            if gap >= RESOLUTION or not self._buried(moving_part, still_part).any():
+                continue
+            depth = self._depth(moving_part, still_part)
+            if depth <= 2 * RESOLUTION:
+                continue
+            overlaps[(moving_part, still_part)] = (round(self._overlap(moving_part, still_part), 1), round(depth, 2))
+            link_name = self.parts[moving_part][1]
+            deepened[(moving_part, still_part)] = (link_name, _Deep(
+                self.points[link_name][self.owners[link_name] == moving_part],
+                *self._deep(still_part, depth + 2 * RESOLUTION)))
+            overlapped[moving_part, still_part] = True
         occupied = _Occupied(still_points, still_owners, clearance)
         # Each still part's samples, hashed at the clearance, at halves of it and at ``RESOLUTION`` (``_hashed``):
         # a sample is looked up against a part only where it may close on it, and only as far as its bound.
@@ -819,6 +1100,18 @@ class _Sweep:
 
         clusters = _Clusters(local, CLUSTER * 1e-3)
         coarse = _Occupied(still_points, still_owners, (clusters.radius + clearance) / GROWN, grown=GROWN)
+
+        def deeper_at(frames: dict[str, np.ndarray], own: bool) -> dict[tuple[int, int], float]:
+            """The pairs drawn overlapping whose overlap has deepened at a pose (``frames``), each with no gap: more
+            than ``STOP`` of the moving part's samples inside the still part past its depth as built and a margin
+            (the module's **Parts drawn overlapping**)."""
+            found: dict[tuple[int, int], float] = {}
+            for (moving_part, still_part), (link_name, deep) in deepened.items():
+                if own and (link_name not in child_side or self.parts[still_part][1] not in parent_side):
+                    continue
+                if deep.count(frames[link_name]) > STOP:
+                    found[(moving_part, still_part)] = 0.0
+            return found
 
         def met_at(value: float, own: bool = False) -> dict[tuple[int, int], float]:
             """The part pairs met at a pose, each with its gap there in mm: a sample of the moving part closes on the
@@ -833,15 +1126,15 @@ class _Sweep:
             if own:
                 keep = own_movers[movers[candidates]]
                 candidates, bits, placed = candidates[keep], bits[keep], placed[keep]
+            found = deeper_at(frames, own)
             if not len(candidates):
-                return {}
+                return found
             moving_part = movers[candidates]
-            found: dict[tuple[int, int], float] = {}
             for part in of_part:
                 if own and self.parts[part][1] not in parent_side:
                     continue
                 asking = (bits & occupied.bit(part)) != 0
-                asking &= ~excluded[moving_part, part]
+                asking &= ~(excluded[moving_part, part] | overlapped[moving_part, part])
                 if not asking.any():
                     continue
                 sample, where, of = candidates[asking], placed[asking], moving_part[asking]
@@ -911,14 +1204,19 @@ class _Sweep:
             self.long = True
             self.progress(f"sweeping {joint.name} ({self.place}): up to about {_duration(most)} at {self.step:g} "
                           f"{unit} a step and {self.clearance:g} mm clearance (a coarser --step is faster)")
+        elif time.perf_counter() - self.began > QUIET:
+            # A sweep running long says each joint as it starts, however short each is: no minutes of silence.
+            self.progress(f"sweeping {joint.name} ({self.place})")
         else:
             self.told(f"sweeping {joint.name} ({self.place})")
 
         def contact_at(pair: tuple[int, int], value: float, gap: float) -> Contact:
             moving_part, still_part = self.parts[pair[0]], self.parts[pair[1]]
             rested = close.get(pair)
+            volume, depth = overlaps.get(pair, (None, None))
             return Contact(moving_part[0], moving_part[1], still_part[0], still_part[1], round(value * scale, 6),
-                           near=None if rested is None else round(rested, 4), gap=round(gap, 4))
+                           near=None if rested is None else round(rested, 4),
+                           gap=None if volume is not None else round(gap, 4), overlap=volume, depth=depth)
 
         at_stop: dict[int, dict[tuple[int, int], float | None]] = {}
         for sign in (-1, 1):
@@ -956,6 +1254,8 @@ class _Sweep:
                            rounded(at_stop[-1].get((a, b))) if -1 in at_stop else None,
                            rounded(at_stop[1].get((a, b))) if 1 in at_stop else None)
                       for (a, b), gap in near]
+        stops.overlapping = [Overlap(self.parts[a][0], self.parts[a][1], self.parts[b][0], self.parts[b][1], *shared)
+                             for (a, b), shared in sorted(overlaps.items(), key=lambda item: -item[1][0])]
         return stops
 
 
@@ -1041,7 +1341,12 @@ def _duration(seconds: float) -> str:
 
 def closing(contact: Any) -> str:
     """A pair within the clearance as built that met, said by its gap (``Contact.near``): ``, closed to 0.18 from
-    0.42 mm as built``, or ``, touching as built`` for one under ``RESOLUTION`` then; nothing for any other pair."""
+    0.42 mm as built``, or ``, touching as built`` for one under ``RESOLUTION`` then, or ``, deeper than drawn
+    (overlapping 180 mm^3, 1.0 mm deep, as built)`` for one drawn one inside the other (``Contact.overlap``); nothing
+    for any other pair."""
+    overlap = getattr(contact, "overlap", None)
+    if overlap is not None:
+        return f", deeper than drawn (overlapping {volume(overlap)}, {contact.depth:.1f} mm deep, as built)"
     if contact.near is None:
         return ""
     if contact.near < RESOLUTION:
@@ -1049,6 +1354,11 @@ def closing(contact: Any) -> str:
     if contact.gap is None:
         return f", closed from {contact.near:.2f} mm as built"
     return f", closed to {contact.gap:.2f} from {contact.near:.2f} mm as built"
+
+
+def volume(mm3: float) -> str:
+    """A volume as a person reads it: ``180 mm^3``, ``0.42 mm^3``."""
+    return f"{mm3:.0f} mm^3" if mm3 >= 10 else f"{mm3:.2g} mm^3"
 
 
 def _said(stops: JointStops) -> str:
