@@ -367,7 +367,7 @@ info: geom_not_drawn at sim/scene.xml <worldbody> geom 'floor': an unbounded pla
 info: joint_not_posable at sim/scene.xml body 'block/block' joint 'block/free': a free joint is not posable in the viewer: body 'block/block' is drawn where it is authored
 info: compiled at sim/scene.xml: compiled by MuJoCo 4.0.0: 13 bodies, 10 joints, 68 geoms, 62 meshes, 4 keyframes
 info: mass_summary at sim/scene.xml: moving mass 16.27 kg in 12 moving bodies, 15 degrees of freedom (nv), 8 actuators (nu); moving geometry spans 0.622 x 0.302 x 1.12 m at qpos0
-OK sim/scene.xml: MJCF 'pick', 13 bodies, 8 controls, 53 visuals, 62 mesh files, 3 keyframes
+OK sim/scene.xml: MJCF 'pick', 13 bodies, 10 joints (1 coupled), 8 actuators, 53 visuals, 62 mesh files, 3 keyframes
 ```
 
 Read every line:

@@ -41,9 +41,13 @@ class Validate(unittest.TestCase):
         result = cad.mjcf.validate(self.write(GOOD), compile="never")
         self.assertTrue(result.ok)
         self.assertTrue(result.summary.startswith("OK "), result.summary)
-        self.assertTrue(result.summary.endswith("robot.xml: MJCF 'arm', 1 bodies, 1 controls, 1 visuals, 0 mesh files, "
-                                                "0 keyframes"), result.summary)
+        self.assertTrue(result.summary.endswith("robot.xml: MJCF 'arm', 1 bodies, 1 joint, 0 actuators, 1 visuals, "
+                                                "0 mesh files, 0 keyframes"), result.summary)
         self.assertEqual({}, self.codes(result))
+        # Its joints and its actuators are each counted as such, never one named for the other.
+        driven = GOOD.replace("</worldbody>", '</worldbody><actuator><position joint="j" kp="10"/>'
+                                              '<motor joint="j"/></actuator>')
+        self.assertIn(", 1 joint, 2 actuators, ", cad.mjcf.validate(self.write(driven), compile="never").summary)
 
     def test_a_broken_model_is_not_ok(self) -> None:
         result = cad.mjcf.validate(self.write(BROKEN), compile="never")

@@ -250,7 +250,7 @@ class MjcfValidate(unittest.TestCase):
         self.assertEqual(0, code)
         answer = json.loads(said)
         self.assertTrue(answer["ok"])
-        self.assertIn("MJCF 'arm', 1 bodies, 1 controls", answer["summary"])
+        self.assertIn("MJCF 'arm', 1 bodies, 1 joint, 0 actuators", answer["summary"])
         code, said, err = _run(["mjcf", "validate", str(self.model), "--compile", "bogus"])
         self.assertEqual((code, said), (2, ""))
         self.assertIn("argument --compile: invalid choice: 'bogus'", err)

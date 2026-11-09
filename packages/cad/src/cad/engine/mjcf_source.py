@@ -28,7 +28,8 @@ the CAD Viewer and ``cad mjcf snapshot`` open an MJCF on any device.
   default; 3 and up are a model's collision geoms and are not visuals), ``<joint type axis pos range
   limited ref>`` and ``<freejoint>``;
 - ``<equality><joint joint1 joint2 polycoef>``: a linear coupling as a mimic;
-- ``<keyframe><key name qpos>``: each a pose of the model's hinge and slide joints.
+- ``<keyframe><key name qpos>``: each a pose of the model's hinge and slide joints;
+- ``<actuator>``: its actuators counted, for the summary (MuJoCo's ``nu``), none of them read.
 
 **What is refused, by name** (an error): a root that is not ``<mujoco>``, no ``<worldbody>``, an
 include that is not there or is included twice, a class, a mesh or a material no asset declares, a
@@ -382,6 +383,8 @@ class MjcfModel:
     keyframes: dict[str, dict[str, float]] = field(default_factory=dict)  # key name: joint name -> radians or metres
     #: The element kinds the compiler expands that this reader passed over, each named once.
     compile_only: list[str] = field(default_factory=list)
+    #: How many actuators ``<actuator>`` declares (MuJoCo's ``nu``): counted, not read.
+    actuators: int = 0
 
     @property
     def joints(self) -> list[MjcfJoint]:
@@ -982,8 +985,9 @@ class _Reader:
         if self.findings.errors:
             return None
         name = str(root.attrib.get("model") or "").strip() or self.path.stem
+        actuators = sum(len(list(section)) for section in children(root, "actuator"))
         return MjcfModel(name, self.path, self.files, dict(self.compiler), self.bodies, self.meshes, self.materials,
-                         couplings, keyframes, list(self.compile_only))
+                         couplings, keyframes, list(self.compile_only), actuators)
 
 
 def read_mjcf(path: Path) -> tuple[MjcfModel | None, Findings]:

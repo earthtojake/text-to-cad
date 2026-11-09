@@ -72,11 +72,15 @@ def validate(
     summary = ""
     if model is not None and not blocks(findings, strict=strict):
         articulation = articulate(model)
-        controls = [joint for joint in articulation.joints if joint.type != "fixed" and joint.mimic is None]
         visuals = sum(len(found) for found in articulation.visuals.values())
-        summary = (f"OK {_display(target)}: MJCF {model.name!r}, {len(model.bodies) - 1} bodies, "
-                   f"{len(controls)} controls, {visuals} visuals, {len(model.mesh_files())} mesh files, "
-                   f"{len(model.keyframes)} keyframes")
+        # The joints as MuJoCo counts them (njnt), the coupled among them said, and the actuators (nu): a joint
+        # moves only where an actuator drives it.
+        coupled = len(model.couplings)
+        joints = f"{len(model.joints)} joint{'s' if len(model.joints) != 1 else ''}" + (
+            f" ({coupled} coupled)" if coupled else "")
+        summary = (f"OK {_display(target)}: MJCF {model.name!r}, {len(model.bodies) - 1} bodies, {joints}, "
+                   f"{model.actuators} actuator{'s' if model.actuators != 1 else ''}, {visuals} visuals, "
+                   f"{len(model.mesh_files())} mesh files, {len(model.keyframes)} keyframes")
     return result_from_findings(target, findings, strict=strict, summary=summary)
 
 

@@ -10,7 +10,7 @@ The validator writes nothing; it prints structured diagnostics and sets the exit
 - `warning`: likely problem, or a part of the model the viewer draws as less than MuJoCo makes of it; non-blocking unless `--strict`;
 - `info`: context, a skipped check, or a passed compile; never blocking.
 
-A clean run exits 0 and prints one `OK <file>: MJCF '<model>', N bodies, N controls, N visuals, N mesh files, N keyframes` line. Read the counts: a robot of seven joints that says 0 controls has its joints in the wrong place, and 0 visuals means every geom sits in a collision group.
+A clean run exits 0 and prints one `OK <file>: MJCF '<model>', N bodies, N joints, N actuators, N visuals, N mesh files, N keyframes` line (the joints as MuJoCo counts them, the coupled ones said in brackets; the actuators those `<actuator>` declares). Read the counts: a robot of seven joints that says 0 joints has its joints in the wrong place, one that says 0 actuators has nothing to drive them yet, and 0 visuals means every geom sits in a collision group.
 
 ## Bundled checks
 
