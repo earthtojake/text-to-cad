@@ -83,3 +83,25 @@ class NativeFiles(unittest.TestCase):
             # KiCad 11 also writes its local project state (.kicad_prl) during export.
             self.assertLessEqual({p.suffix for p in root.iterdir() if p.is_file()},
                                  {'.kicad_pcb', '.kicad_prl', '.step', '.stl'})
+
+    def test_drc_names_each_item_on_the_board_and_finds_its_copper_sliver(self):
+        # KiCad's report names a finding's items by uuid and words, and a copper sliver by its layer alone: the
+        # check adds what the board says each item is, and finds the sliver in the layer's saved copper.
+        from tests.python.support.kicad_board import write_board
+
+        spike = ('(gr_poly (pts (xy 24 4) (xy 34 4.25) (xy 24 4.5) (xy 23.5 6) (xy 23 6) (xy 22.5 5) (xy 22.5 3.5) '
+                 '(xy 23 3)) (stroke (width 0) (type solid)) (fill yes) (layer "F.Cu"))')
+        with tempfile.TemporaryDirectory(prefix="kicad-drc-") as folder:
+            board = write_board(Path(folder))
+            text = board.read_text(encoding="utf-8").rstrip()
+            board.write_text(text[:-1] + spike + "\n)\n", encoding="utf-8")
+            result = kicode.call(self, "drc", board)
+        by_code = {finding["code"]: finding for finding in result["findings"]}
+        sliver = by_code["copper_sliver"]
+        self.assertEqual("(34, 4.25) mm", sliver["location"], sliver)
+        [measured] = [found for found in result["measurements"]["drc"] if found["type"] == "copper_sliver"]
+        self.assertEqual(([34.0, 4.25], "board", "F.Cu"), (measured["at"], measured["at_source"], measured["layer"]))
+        unrouted = by_code["unconnected_items"]
+        self.assertEqual({"#D1.2", "#R1.2"}, {item["ref"] for item in unrouted["items"]}, unrouted)
+        self.assertTrue(all(item["kind"] == "pad" and item["net"] == "LED" and len(item["pos"]) == 2
+                            for item in unrouted["items"]), unrouted)

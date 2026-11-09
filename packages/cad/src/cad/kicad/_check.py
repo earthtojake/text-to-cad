@@ -5,7 +5,10 @@ board and the ``.kicad_pro`` beside it, with no display to reach and every KiCad
 documents, cache, temp) in a temporary folder of its own (``_program.private_run``): it opens no window
 and never reads, writes or locks anything of the person's KiCad. The JSON report is temporary and the
 board is not rewritten. The result is a ``CheckResult`` whose ``measurements["drc"]`` is every finding as
-KiCad reported it, each item with its uuid and its position in board millimetres.
+KiCad reported it, each item with its uuid and its position in board millimetres, and what the board says
+that uuid is (``_located``): its kind, layers, net and the board reference that names it. Each finding
+carries the same items. A copper sliver, which KiCad reports with no item and no position, is found again
+in the saved copper of its layer, and says so; where it cannot be, the finding says that instead.
 """
 
 from __future__ import annotations
@@ -38,12 +41,21 @@ class Finding:
     items: tuple[str, ...]
     #: Where the first item is, in millimetres from the board's origin.
     at: tuple[float, float] | None
-    #: Each item as KiCad named it: ``{"uuid", "description", "pos": [x, y]}`` (mm), for a page to find it by.
+    #: Each item as KiCad named it: ``{"uuid", "description", "pos": [x, y]}`` (mm), for a page to find it by,
+    #: with what the board says it is (``with_board``): ``kind``, ``layers``, ``net``, ``ref``, ``part``.
     located: tuple[dict, ...] = field(default=(), compare=False)
+    #: The layer KiCad marked it on, as its description ends with it (``Copper sliver (F.Cu)``), by the
+    #: board file's name for it; ``None`` where the description names none.
+    layer: str | None = field(default=None, compare=False)
+    #: Where ``at`` came from: ``"kicad"`` (its report's first item), ``"board"`` (found in the saved board: a
+    #: copper sliver), or ``None`` (no position); ``note`` says why for any but KiCad's.
+    at_source: str | None = field(default=None, compare=False)
+    note: str | None = field(default=None, compare=False)
 
     def as_data(self) -> dict:
         return {"check": self.check, "severity": self.severity, "type": self.type, "description": self.description,
-                "items": [dict(item) for item in self.located], "at": list(self.at) if self.at else None}
+                "items": [dict(item) for item in self.located], "at": list(self.at) if self.at else None,
+                "layer": self.layer, "at_source": self.at_source if self.at else None, "note": self.note}
 
 
 def issues(findings) -> tuple[CheckFinding, ...]:
@@ -54,11 +66,69 @@ def issues(findings) -> tuple[CheckFinding, ...]:
         CheckFinding(
             severity=finding.severity,
             code=finding.type,
-            message=finding.description + (": " + "; ".join(finding.items) if finding.items else ""),
+            message=finding.description + (": " + "; ".join(finding.items) if finding.items else "")
+            + (f" ({finding.note})" if finding.note else ""),
             location=f"({finding.at[0]:g}, {finding.at[1]:g}) mm" if finding.at else None,
+            items=tuple(dict(item) for item in finding.located),
         )
         for finding in order
     )
+
+
+def with_board(findings: list[Finding], board: Path) -> list[Finding]:
+    """``findings`` with what the saved ``board`` says of them (``_located``): each item's kind, layers, net,
+    reference and part by its uuid, each finding's layer from its description, and each copper sliver's place
+    found in that layer's copper -- paired with KiCad's slivers of the layer in reading order when the board
+    shows as many, else listed as ``candidates`` with a note. A board that cannot be read leaves them as KiCad
+    said them."""
+    from dataclasses import replace
+
+    from ._located import LAYER_SUFFIX, PAD_WORDS, board_items, slivers
+
+    try:
+        known, names = board_items(board)
+    except (OSError, ValueError, UnicodeDecodeError):
+        return findings
+    blank = {"kind": None, "layers": [], "net": None, "ref": None, "part": None}
+    out: list[Finding] = []
+    for finding in findings:
+        suffix = LAYER_SUFFIX.search(finding.description)
+        layer = names.get(suffix.group(1)) if suffix else None
+        def what(item: dict) -> dict:
+            found = known.get(str(item.get("uuid") or "").lower())
+            words = PAD_WORDS.search(str(item.get("description") or "")) if found is None else None
+            return (found or (known.get(f"pad:{words.group(2)}.{words.group(1)}") if words else None)) or blank
+
+        located = tuple({**item, **what(item)} for item in finding.located)
+        out.append(replace(finding, located=located, layer=layer, at_source="kicad" if finding.at else None))
+    by_layer: dict[str | None, list[int]] = {}
+    for number, finding in enumerate(out):
+        if finding.type == "copper_sliver" and finding.at is None:
+            by_layer.setdefault(finding.layer, []).append(number)
+    for layer, numbers in by_layer.items():
+        unsaid = "KiCad's report gives a copper sliver no position"
+        if layer is None:
+            for number in numbers:
+                out[number] = replace(out[number], note=f"{unsaid}, and names no layer for this one")
+            continue
+        try:
+            found = slivers(board, layer)
+        except (OSError, ValueError, UnicodeDecodeError) as error:
+            found, failed = [], f": the board could not be read ({error})"
+        else:
+            failed = ""
+        if found and len(found) == len(numbers):
+            for number, point in zip(numbers, found):
+                out[number] = replace(out[number], at=point, at_source="board", note=(
+                    f"{unsaid}; found at a corner sharper than 20 degrees in {layer}'s saved copper"
+                    + (f", paired with KiCad's {len(numbers)} on {layer} top to bottom" if len(numbers) > 1 else "")))
+            continue
+        said = (f"{unsaid}; {layer}'s saved copper has {len(found)} corner(s) sharper than 20 degrees for "
+                f"KiCad's {len(numbers)}: {', '.join(f'({x:g}, {y:g})' for x, y in found)} mm") if found else (
+                f"{unsaid}, and none was found in {layer}'s saved copper{failed or ' (refill the zones and check again)'}")
+        for number in numbers:
+            out[number] = replace(out[number], note=said)
+    return out
 
 
 def _findings(report: dict) -> list[Finding]:
@@ -106,7 +176,7 @@ def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> lis
         if completed.returncode not in (0, 5) or not report.is_file():
             said = _quiet(completed.stderr) or _quiet(completed.stdout) or f"exit status {completed.returncode}"
             raise KicadRunError(f"kicad-cli pcb drc failed on {board}: {said}")
-        return _findings(json.loads(report.read_text(encoding="utf-8")))
+        return with_board(_findings(json.loads(report.read_text(encoding="utf-8"))), board)
 
 
 def check(board: Path) -> CheckResult:

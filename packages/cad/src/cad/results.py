@@ -48,6 +48,10 @@ class CheckFinding:
     location: str | None = None
     #: How to fix it, when the checker has something specific to say.
     hint: str | None = None
+    #: What the finding names, when the checker reports its items: each a dict of what the checker knows of
+    #: it (a board's DRC: ``uuid``, ``description``, ``pos`` [x, y] mm, ``kind``, ``layers``, ``net``, ``ref``,
+    #: ``part``). Empty for a checker that names none.
+    items: tuple[dict[str, Any], ...] = field(default_factory=tuple, compare=False, hash=False)
 
     @property
     def element(self) -> str | None:
