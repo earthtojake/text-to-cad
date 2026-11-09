@@ -12,7 +12,8 @@ checker (``tighten.Obstacles``) once, then ``run()`` routes each wanted connecti
 
 Each connection is searched in a window round its two ends (``search``), wider each time it fails (a margin,
 a larger margin, the whole region), on the layers its entry allows, at its width and clearance, under its via
-limit (the entry's: the vias its earlier connections placed count against it). A pad whose free lane is narrower
+limit (the entry's: the vias its earlier connections placed count against it; and a custom rule's via count for
+its net, the vias on the board counted too). A pad whose free lane is narrower
 than the grid (a fine-pitch pin) starts or ends at a free node just outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
 flood and said as such, with what walls it in (the nets nearest the rim of its room, a keep-out, the edge): an
 earlier entry of the plan is said so, for the agent to reorder. A path found is turned into copper: its runs
@@ -255,6 +256,12 @@ class Router:
         names = sorted({pad.net for pad in board.pads if pad.net} | {t.net for t in board.tracks if t.net}
                        | {v.net for v in board.vias if v.net} | {want.net for want in wants})
         self.net_id = {name: k for k, name in enumerate(names)}
+        self.tracks: list[NewTrack] = []
+        self.vias: list[NewVia] = []
+        self._board_vias: dict[str, int] = {}  # each net's vias on the board, for a custom rule's via count
+        for via in board.vias:
+            if via.net:
+                self._board_vias[via.net] = self._board_vias.get(via.net, 0) + 1
         self.pitch = pitch_for([w.width for w in wants], [w.clearance for w in wants])
         self.g_nm = round(self.pitch * NM)
         self.epsilon = rules.epsilon
@@ -273,8 +280,6 @@ class Router:
         self._region()
         self.fields = Fields(self.i0, self.j0, self.nx, self.ny, self.pitch, self.copper, self.reach)
         self.obstacles = Obstacles(len(self.copper), self.reach)
-        self.tracks: list[NewTrack] = []
-        self.vias: list[NewVia] = []
         self._own: dict[str, list[_Item]] = {}  # each net's copper as items, the new copper added as it lands
         self._last: list[_Item] = []  # the copper the last connection added
         self.routed: set[str] = set()  # the nets this plan has added copper to
@@ -301,8 +306,8 @@ class Router:
         self.nx, self.ny = math.ceil(x1 / g) - self.i0 + 1, math.ceil(y1 / g) - self.j0 + 1
         fields = self.nx * self.ny * (28 * len(self.copper) + 16)
         searching = (self.nx + 2) * (self.ny + 2) * max(
-            ((want.vias or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES + len(want.layers) * LAYER_BYTES
-            for want in self.wants)
+            ((self._vias_left(want, 0)[0] or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES
+            + len(want.layers) * LAYER_BYTES for want in self.wants)
         if fields + searching > MAX_BYTES:
             raise ValueError(f"the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
                              f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
@@ -324,7 +329,7 @@ class Router:
         # board leaves new vias untented, a new via's own opening keeps the mask's least width from another's.
         # A new untented via's opening is refused where the clearance it keeps would not hold it so.
         apart = board.mask_to_copper
-        vias = [w for w in self.wants if w.vias != 0 and len(w.layers) > 1]
+        vias = [w for w in self.wants if self._vias_left(w, 0)[0] != 0 and len(w.layers) > 1]
         opened = set(board.untented) if vias and board.via_mask + max(apart, board.mask_min_width) > 0 else set()
         need = max(board.via_mask + apart, 2 * board.via_mask + board.mask_min_width)
         if opened and need > min(w.clearance for w in vias):
@@ -421,7 +426,8 @@ class Router:
             second = next(island for island in islands if any(item.pad is b for item in island))
             if first is second:
                 return [Connection(want.net, want.pads, True, "already joined by the copper on the board")]
-            return [self._join(want, first, second, want.pads)]
+            left, limit = self._vias_left(want, 0)
+            return [self._join(replace(want, vias=left), first, second, want.pads, limit)]
         islands = [island for island in _islands(self._own.get(want.net, [])) if any(item.kind == "pad" for item in island)]
         if len(islands) < 2:  # every entry answers a line: a net whole already, or of one pad
             pads = sorted((item.name for island in islands for item in island if item.kind == "pad"), key=_natural)
@@ -436,9 +442,9 @@ class Router:
         while apart:
             nearest = min(range(len(apart)), key=lambda k: (self._gap(tree, apart[k]), _natural(_island_name(apart[k]))))
             island = apart.pop(nearest)
-            left = want if want.vias is None else replace(want, vias=max(want.vias - spent, 0))
-            outcome = self._join(left, tree, island, (self._nearest_name(tree, island), _island_name(island)),
-                                 spent if want.vias is not None else 0)
+            left, limit = self._vias_left(want, spent)
+            outcome = self._join(replace(want, vias=left), tree, island,
+                                 (self._nearest_name(tree, island), _island_name(island)), limit)
             spent += outcome.vias
             done.append(outcome)
             if outcome.routed:
@@ -448,6 +454,25 @@ class Router:
                 for k in reversed(crossed):
                     tree = tree + apart.pop(k)
         return done
+
+    def _vias_left(self, want: Want, spent: int) -> tuple[int | None, str]:
+        """The most vias the next connection of ``want`` may place (None: no limit), once its entry has placed
+        ``spent``, and that limit as a failure reason says it: what is left of the entry's own, or of the via count a
+        custom rule holds every net to (its vias on the board and those this plan placed counted), the lesser."""
+        entry = None if want.vias is None else max(want.vias - spent, 0)
+        bound = self.rules.sizes.get("via_count")
+        if bound is not None and bound.most is not None:
+            most = int(bound.most)
+            used = self._board_vias.get(want.net, 0) + sum(via.net == want.net for via in self.vias)
+            net = max(most - used, 0)
+            if entry is None or net < entry:
+                return net, (f" with {'no via' if net == 0 else f'at most {net} via' + ('s' if net != 1 else '')} "
+                             f"left of the {most} the custom rule {bound.most_rule!r} allows a net ({want.net} has "
+                             f"{used})")
+        if entry is None:
+            return None, ""
+        return entry, ((" with no via" if entry == 0 else f" with at most {entry} via{'s' if entry != 1 else ''}")
+                       + (f" left of the entry's {entry + spent}" if spent else ""))
 
     @staticmethod
     def _nearest_name(tree: Sequence[_Item], island: Sequence[_Item]) -> str:
@@ -551,9 +576,9 @@ class Router:
         return swap
 
     def _join(self, want: Want, source: Sequence[_Item], target: Sequence[_Item], between: tuple[str, str],
-              spent: int = 0) -> Connection:
-        """One connection from ``source`` to ``target``, under ``want.vias``: what is left of its entry's limit once
-        ``spent`` vias are placed."""
+              limit: str = "") -> Connection:
+        """One connection from ``source`` to ``target``, under ``want.vias`` (what is left of its limits, said in a
+        reason as ``limit``: ``_vias_left``)."""
         self._last = []
         net = self._net(want.net)
         allowed = [self.layer_of[layer] for layer, _ in want.layers]
@@ -566,9 +591,6 @@ class Router:
         reason = None
         own = self._own.get(want.net, [])
         layers = " and ".join(self.copper[k] for k in allowed)
-        limit = ("" if want.vias is None else (" with no via" if want.vias == 0 else
-                                                 f" with at most {want.vias} via{'s' if want.vias != 1 else ''}")
-                 + (f" left of the entry's {want.vias + spent}" if spent else ""))
         for margin in (*MARGINS, None):
             window = self._window(boxes, margin)
             sources = self._terminals(source, window, allowed)

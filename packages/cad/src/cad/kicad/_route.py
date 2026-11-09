@@ -18,10 +18,12 @@ how many vias and at what cost. The router routes only that, each connection rou
 board (copper a person drew, copper an earlier entry routed) by the board's own rules, and moves, changes or
 deletes nothing that is there. A connection it cannot route is said by name, with why, and the rest go on, so
 the copper that did land is saved with the block. It raises before anything is routed for a plan or a board it
-cannot route by: a mistake in the plan (a differential pair in it too), an outline that does not close, a custom
-rule it cannot keep or read, a pad primitive it cannot read, a region past its memory; and after only when KiCad
-drops what it wrote or a route fails its own exact check (a bug): the edit then saves nothing. The copper is written in one commit into the open board, which the edit saves at the block's end;
-nothing else is written anywhere. The search and the pull-tight pass are ``cad.kicad._routing``'s.
+cannot route by: a mistake in the plan (a differential pair in it too, a width or via a custom rule forbids), an
+outline that does not close, a custom rule it cannot keep or read, a pad primitive it cannot read, a region past
+its memory; and after only when KiCad drops what it wrote or a route fails its own exact check (a bug): the edit
+then saves nothing. A custom rule it does not keep is a warning naming the rule, said before routing. The copper
+is written in one commit into the open board, which the edit saves at the block's end; nothing else is written
+anywhere. The search and the pull-tight pass are ``cad.kicad._routing``'s.
 """
 
 from __future__ import annotations
@@ -51,14 +53,17 @@ _HOW = ("route needs a plan: the connections to route, in order -- each a net (\
 @dataclass(frozen=True)
 class Routed:
     """What a ``route`` call did: every connection it was asked for, in the order routed (``connections``: each
-    its net, its two ends, routed or not and why not, the copper it added), and the totals. ``ok`` when every
-    one is routed."""
+    its net, its two ends, routed or not and why not, the copper it added, the plan entry it came from), and the
+    totals. ``ok`` when every one is routed. ``warnings``: each custom rule the router does not keep (it holds where
+    a condition only KiCad's DRC evaluates, or is of a kind the router does not route by), said on stderr before
+    routing too: DRC judges those after."""
 
     connections: tuple[Any, ...]
     tracks: int
     vias: int
     length: float
     seconds: float
+    warnings: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -69,8 +74,9 @@ class Routed:
         return tuple(connection for connection in self.connections if not connection.routed)
 
     def human_lines(self) -> list[str]:
-        """One line per connection, then the totals."""
-        lines = [connection.line() for connection in self.connections]
+        """One line per warning, one per connection, then the totals."""
+        lines = [f"warning: {warning}" for warning in self.warnings]
+        lines += [connection.line() for connection in self.connections]
         apart = len(self.failed)
         lines.append(f"{'OK' if not apart else 'NOT ROUTED'}: {len(self.connections) - apart} of {len(self.connections)} "
                      f"connection(s) routed, {self.tracks} segment(s), {self.vias} via(s), {self.length:.1f} mm of "
@@ -232,9 +238,17 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         netclass = rules.of(net)
         least = rules.clearance(net)
         width = _number(entry.get("width", netclass.track_width), "width", where)
+        said = f"width {width:g} mm" if "width" in entry else f"its netclass {netclass.name}'s width, {width:g} mm,"
         if width < rules.min_track_width - 1e-9 or width <= 0:
-            raise ValueError(f"{where}: width {width:g} mm is under the board's least track width "
-                             f"({rules.min_track_width:g} mm)")
+            raise ValueError(f"{where}: {said} is under the board's least track width ({rules.min_track_width:g} mm): "
+                             "give the entry a width of at least that")
+        track = rules.sizes.get("track_width")
+        if track is not None and track.least is not None and width < track.least - 1e-9:
+            raise ValueError(f"{where}: {said} is under the {track.least:g} mm the custom rule {track.least_rule!r} "
+                             f"holds every track to (track_width min): give the entry a width of at least that")
+        if track is not None and track.most is not None and width > track.most + 1e-9:
+            raise ValueError(f"{where}: {said} is over the {track.most:g} mm the custom rule {track.most_rule!r} "
+                             f"holds every track to (track_width max): give the entry a width of at most that")
         clearance = _number(entry.get("clearance", least), "clearance", where)
         if clearance < least - 1e-9:
             raise ValueError(f"{where}: clearance {clearance:g} mm is under the {least:g} mm DRC holds {net} to (its "
@@ -247,11 +261,39 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         diameter = max(netclass.via_diameter, rules.min_via_diameter)
         drill = max(netclass.via_drill, rules.min_via_drill)
         annulus = rules.min_annulus
-        if len(layers) > 1 and vias != 0 and (diameter - drill) / 2 < annulus - 1e-9:
-            raise ValueError(f"{where}: the netclass's via ({diameter:g}/{drill:g} mm) leaves a ring under the board's "
-                             f"least {annulus:g} mm: set its via in the .kicad_pro")
+        if len(layers) > 1 and vias != 0:
+            diameter, drill = _via(diameter, drill, rules.sizes, where)
+            if (diameter - drill) / 2 < annulus - 1e-9:
+                raise ValueError(f"{where}: its via ({diameter:g}/{drill:g} mm, from its netclass {netclass.name}) "
+                                 f"leaves a ring under the board's least {annulus:g} mm: set the netclass's via in the "
+                                 ".kicad_pro, or give the entry vias: 0")
         wants.append(Want(net, ends, layers, width, clearance, diameter, drill, vias, via_cost))
     return wants
+
+
+def _via(diameter: float, drill: float, sizes: Mapping[str, Any], where: str) -> tuple[float, float]:
+    """The via an entry places (``diameter``, ``drill``: its netclass's, at least the board's least) under the custom
+    sizes that hold everywhere: its drill and diameter taken up to each rule's least (``hole_size``,
+    ``via_diameter``; the diameter to the ``annular_width``'s least round the drill), refused past a rule's most."""
+    hole, size, ring = sizes.get("hole_size"), sizes.get("via_diameter"), sizes.get("annular_width")
+    if hole is not None and hole.least is not None:
+        drill = max(drill, hole.least)
+    if size is not None and size.least is not None:
+        diameter = max(diameter, size.least)
+    if ring is not None and ring.least is not None and (diameter - drill) / 2 < ring.least - 1e-9:
+        diameter = round((drill + 2 * ring.least) * 1_000_000) / 1_000_000  # whole nanometres, as KiCad holds it
+    fix = "set the netclass's via in the .kicad_pro, or give the entry vias: 0"
+    via = f"its via ({diameter:g}/{drill:g} mm)"
+    if hole is not None and hole.most is not None and drill > hole.most + 1e-9:
+        raise ValueError(f"{where}: {via} has a drill over the {hole.most:g} mm the custom rule {hole.most_rule!r} "
+                         f"allows (hole_size max): {fix}")
+    if size is not None and size.most is not None and diameter > size.most + 1e-9:
+        raise ValueError(f"{where}: {via} is wider than the {size.most:g} mm the custom rule {size.most_rule!r} "
+                         f"allows (via_diameter max): {fix}")
+    if ring is not None and ring.most is not None and (diameter - drill) / 2 > ring.most + 1e-9:
+        raise ValueError(f"{where}: {via} has a ring over the {ring.most:g} mm the custom rule {ring.most_rule!r} "
+                         f"allows (annular_width max): {fix}")
+    return diameter, drill
 
 
 # --- the board, read and written through KiPy ---------------------------------------------------------------------
@@ -285,10 +327,10 @@ def _max_error(board: Any) -> float:
         return MAX_ERROR
 
 
-def _rules(board: Any, names: Sequence[str]) -> Any:
+def _rules(board: Any, names: Sequence[str]) -> tuple[Any, list[str]]:
     """The board's rules as KiCad holds them: each net's class, its minimums, its custom rules (refused by name
-    where the router cannot keep them)."""
-    from ._routing.rules import NetClass, Rules, custom_limits
+    where the router cannot keep them); and the warnings for the custom constraints it does not keep, one a rule."""
+    from ._routing.rules import Constraint, NetClass, Rules, read_custom, scale
 
     nm = 1e-6
 
@@ -304,7 +346,8 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
     default = netclass(found[""]) if "" in found else next((c for c in classes.values() if c.name == "Default"), None)
     if default is None:
         raise ValueError("route: KiCad gave no Default netclass (none for copper of no net, nor a net of it): the "
-                         "router keeps the class of every net KiCad gives, and guesses none")
+                         "router keeps the class of every net KiCad gives, and guesses none; give the project a "
+                         "Default netclass (its .kicad_pro)")
     constraints = board.get_design_rules().rules.constraints
     rules = Rules(classes, default, min_clearance=constraints.min_clearance * nm,
                   min_track_width=constraints.min_track_width * nm, edge_clearance=constraints.copper_edge_clearance * nm,
@@ -326,19 +369,29 @@ def _rules(board: Any, names: Sequence[str]) -> Any:
     if response is not None:
         from kicode.proto.board.board_commands_pb2 import CustomRulesStatus  # pyrefly: ignore[missing-import]
         from kicode.proto.board.board_rules_pb2 import CustomRuleConstraintType  # pyrefly: ignore[missing-import]
+        from kicode.proto.board.board_types_pb2 import BoardLayer  # pyrefly: ignore[missing-import]
+        from kicode.proto.common.types.base_types_pb2 import RuleSeverity  # pyrefly: ignore[missing-import]
 
         if CustomRulesStatus.Name(response.status) == "CRS_INVALID":
             raise ValueError(f"route: KiCad cannot read the board's custom rules (.kicad_dru: {response.error_text}), "
                              "so the router cannot keep them: fix them first")
-        custom = [(rule.name, CustomRuleConstraintType.Name(constraint.type),
-                   (constraint.numeric.min * nm) if constraint.numeric is not None else 0.0)
-                  for rule in response.rules for constraint in rule.constraints]
-    limits, refused = custom_limits(custom)
-    if refused:
-        raise ValueError(f"route: the board's custom rules {', '.join(map(repr, refused))} disallow items, or assert of "
-                         "them, where a condition only KiCad's DRC evaluates holds; the router cannot promise to keep "
-                         "them: route by hand there, or take the rules out while routing")
-    return rules.with_custom(limits)
+        for rule in response.rules:
+            layer = rule.single_layer
+            layer = BoardLayer.Name(layer).removeprefix("BL_").replace("_", ".") if layer else ""
+            ignored = RuleSeverity.Name(rule.severity) == "RS_IGNORE"
+            for constraint in rule.constraints:
+                kind = CustomRuleConstraintType.Name(constraint.type)
+                numeric, factor = constraint.numeric, scale(kind)
+                bound = {name: getattr(numeric, name) * factor for name in ("min", "opt", "max")
+                         if numeric is not None and numeric.HasField(name)}
+                custom.append(Constraint(rule.name, kind, rule.condition, layer, bound.get("min"), bound.get("opt"),
+                                         bound.get("max"), ignored))
+    kept = read_custom(custom)
+    if kept.refused:
+        raise ValueError(f"route: the board's custom rules {', '.join(map(repr, kept.refused))} disallow items or "
+                         "assert of them, and the router cannot tell which items they match (only KiCad's DRC "
+                         "evaluates a rule's condition): route by hand there, or take the rules out while routing")
+    return rules.with_custom(kept.limits, kept.sizes), kept.warnings
 
 
 def _write(board: Any, tracks: Sequence[Any], vias: Sequence[Any], copper: Sequence[str]) -> None:
@@ -392,8 +445,13 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
     - ``via_cost``: what a via costs, in mm of track (default 2); the search settles for a path within 1.2 times the
       cheapest, so it trades a via for track at about that cost, not exactly.
 
-    Answers a ``Routed``: each connection's outcome; ``.ok``, ``.failed``, ``.human_lines()``. A connection that
-    cannot be routed is said on stderr too. ``ValueError`` for a plan or a board it cannot route by, before anything is
+    The board's custom rules (its ``.kicad_dru``) are kept as ``cad.kicad._routing.rules`` says: each clearance
+    everywhere, each size a rule holds everywhere at the entry (a track's width refused outside it, the via taken up
+    to it, a net's via count lowering the entry's via limit), a ``disallow`` or ``assertion`` refused; every other
+    one that can bear on new copper is a warning naming the rule, on stderr (``route: warning: ...``) before routing.
+
+    Answers a ``Routed``: each connection's outcome; ``.ok``, ``.failed``, ``.warnings``, ``.human_lines()``. A
+    connection that cannot be routed is said on stderr too. ``ValueError`` for a plan or a board it cannot route by, before anything is
     routed (see the module's doc); ``TypeError`` for a board no edit has open."""
     from ._routing.board import read_copper
     from ._routing.plan import Router
@@ -413,7 +471,9 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
         raise ValueError("route keeps copper inside the board's outline, and this board's Edge.Cuts "
                          + (f"does not close: it ends apart at {', '.join(ends)}" if copper.open_outline else "draws none")
                          + "; draw the outline closed first")
-    rules = _rules(board, sorted({pad.net for pad in copper.pads if pad.net}))
+    rules, warnings = _rules(board, sorted({pad.net for pad in copper.pads if pad.net}))
+    for warning in warnings:  # before routing: what the router does not keep, DRC's to judge after
+        print(f"route: warning: {warning}", file=sys.stderr)
     router = Router(copper, rules, _wants(entries, copper, rules))
     outcomes = router.run()
     _write(board, router.tracks, router.vias, copper.copper)
@@ -421,4 +481,5 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
         if not outcome.routed:
             print(f"route: {outcome.line()}", file=sys.stderr)
     length = sum(math.dist(track.start, track.end) for track in router.tracks) / 1_000_000
-    return Routed(tuple(outcomes), len(router.tracks), len(router.vias), length, time.monotonic() - started)
+    return Routed(tuple(outcomes), len(router.tracks), len(router.vias), length, time.monotonic() - started,
+                  tuple(warnings))

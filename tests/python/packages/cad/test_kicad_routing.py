@@ -10,8 +10,11 @@ to every other net's copper and drill, every hole (a via's drill), every keep-ou
 
 from __future__ import annotations
 
+import contextlib
+import io
 import math
 import random
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -25,12 +28,13 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
+from cad.kicad import _route  # noqa: E402
 from cad.kicad._route import Routed, _entries, _rules, _wants, complement, route  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing import plan  # noqa: E402
 from cad.kicad._routing.plan import Router, Want, pitch_for  # noqa: E402
-from cad.kicad._routing.rules import NetClass, Rules, custom_limits  # noqa: E402
+from cad.kicad._routing.rules import Bound, Constraint, NetClass, Rules, read_custom  # noqa: E402
 from cad.kicad._routing.shapes import Shape  # noqa: E402
 from cad.kicad._routing.tighten import octolinear  # noqa: E402
 
@@ -505,13 +509,120 @@ class Plans(unittest.TestCase):
             route(Open(), ["A"], layers=["F.Cu"])
         self.assertEqual(0.05, read.call_args.kwargs["mask_to_copper"])
 
-    def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
-        limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
-                                         ("no", "CRCT_DISALLOW", 0.0), ("len", "CRCT_LENGTH", 10.0),
-                                         ("power", "CRCT_TRACK_WIDTH", 1.5), ("is", "CRCT_ASSERTION", 0.0)])
-        self.assertEqual({"clearance": 0.5, "edge_clearance": 0.4}, limits)
-        self.assertEqual(["is", "no"], refused)
-        self.assertEqual(0.5, RULES.with_custom(limits).clearance("A"))
+    def test_a_custom_size_that_holds_everywhere_is_kept_at_the_entry(self) -> None:
+        """A custom rule's track width, with no condition, refuses an entry's width outside it, naming the rule; its
+        via sizes take the via up to their least and refuse it past their most, unless the entry places no via."""
+        def rules(**sizes: Bound) -> Rules:
+            return RULES.with_custom({}, sizes)
+
+        width = rules(track_width=Bound(0.3, "w", 1.0, "w"))
+        with self.assertRaises(ValueError) as caught:
+            _wants(_entries(["A"], {"layers": ["F.Cu"]}), self.copper, width)
+        self.assertIn("route: entry 1 (net A): its netclass Default's width, 0.25 mm, is under the 0.3 mm the custom "
+                      "rule 'w' holds every track to (track_width min): give the entry a width of at least that",
+                      str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            _wants(_entries([{"net": "A", "width": 1.2}], {"layers": ["F.Cu"]}), self.copper, width)
+        self.assertIn("width 1.2 mm is over the 1 mm the custom rule 'w' holds every track to (track_width max)",
+                      str(caught.exception))
+        self.assertEqual(0.5, _wants(_entries([{"net": "A", "width": 0.5}], {"layers": ["F.Cu"]}), self.copper,
+                                     width)[0].width)
+
+        two = ["F.Cu", "B.Cu"]
+        vias = rules(hole_size=Bound(0.45, "hs"), via_diameter=Bound(0.9, "vd"), annular_width=Bound(0.25, "aw"))
+        (taken,) = _wants(_entries(["A"], {"layers": two}), self.copper, vias)
+        self.assertEqual((0.95, 0.45), (taken.via_diameter, taken.via_drill), "its drill to 0.45, its ring to 0.25")
+        (none,) = _wants(_entries([{"net": "A", "vias": 0}], {"layers": two}), self.copper, vias)
+        self.assertEqual((0.8, 0.4), (none.via_diameter, none.via_drill), "no via placed: its netclass's")
+        narrow = rules(via_diameter=Bound(None, "", 0.7, "vd"))
+        with self.assertRaises(ValueError) as caught:
+            _wants(_entries(["A"], {"layers": two}), self.copper, narrow)
+        self.assertIn("its via (0.8/0.4 mm) is wider than the 0.7 mm the custom rule 'vd' allows (via_diameter max): "
+                      "set the netclass's via in the .kicad_pro, or give the entry vias: 0", str(caught.exception))
+        self.assertTrue(_wants(_entries([{"net": "A", "vias": 0}], {"layers": two}), self.copper, narrow))
+
+
+class CustomRules(unittest.TestCase):
+    """Every constraint of every custom rule is kept, refused or said: none left to DRC unsaid."""
+
+    def test_each_constraint_is_kept_refused_said_or_passed_over_with_why(self) -> None:
+        qfn = "A.NetClass == 'QFN'"
+        found = read_custom([
+            Constraint("hv", "CRCT_CLEARANCE", condition=qfn, least=0.5), Constraint("edge", "CRCT_EDGE_CLEARANCE", least=0.4),
+            Constraint("no", "CRCT_DISALLOW"), Constraint("is", "CRCT_ASSERTION"),
+            Constraint("early", "CRCT_TRACK_WIDTH", condition=qfn, least=0.5),  # a later rule holds everywhere instead
+            Constraint("w1", "CRCT_TRACK_WIDTH", least=0.3), Constraint("w2", "CRCT_TRACK_WIDTH", most=1.0),
+            Constraint("fanout", "CRCT_TRACK_WIDTH", condition=qfn, least=0.15),
+            Constraint("back", "CRCT_VIA_DIAMETER", layer="B.Cu", least=1.0),
+            Constraint("len", "CRCT_LENGTH", most=50.0), Constraint("len", "CRCT_SKEW", most=1.0),
+            Constraint("angles", "CRCT_TRACK_ANGLE", least=45.0),
+            Constraint("court", "CRCT_COURTYARD_CLEARANCE", least=0.2),
+            Constraint("off", "CRCT_TRACK_WIDTH", least=5.0, ignored=True), Constraint("off", "CRCT_DISALLOW", ignored=True),
+        ])
+        self.assertEqual({"clearance": 0.5, "edge_clearance": 0.4}, found.limits)
+        self.assertEqual({"track_width": Bound(0.3, "w1", 1.0, "w2")}, found.sizes, "each bound the last rule's")
+        self.assertEqual(["is", "no"], found.refused)
+        self.assertEqual([
+            "the custom rule 'fanout' (track_width min 0.15 mm, where (A.NetClass == 'QFN')) holds where a condition "
+            "only KiCad's DRC evaluates; the router does not keep it: give those entries a width it allows, and read "
+            "DRC after",
+            "the custom rule 'back' (via_diameter min 1 mm, on B.Cu) holds on B.Cu alone; the router does not keep it: "
+            "give those nets' netclass a via it allows (the .kicad_pro), or those entries vias: 0, and read DRC after",
+            "the custom rule 'len' (length max 50 mm; skew max 1 mm) holds everywhere; the router does not keep it: "
+            "route those nets by hand, to length, and read DRC after",
+            "the custom rule 'angles' (track_angle min 45 deg) holds everywhere; the router does not keep it: route by "
+            "hand where it binds, and read DRC after",
+        ], found.warnings)
+        self.assertEqual(0.5, RULES.with_custom(found.limits).clearance("A"))
+
+    def test_kicads_rules_reach_the_plan_and_the_warnings_are_said_before_routing(self) -> None:
+        """Through KiPy's answer (a fake board, as KiCad gives the rules: nm, enum names): a track width a rule
+        holds everywhere refuses the plan's narrower width, and the rules the router does not keep are each a
+        warning, on stderr and in the answer."""
+        board_text = board(resistor("R1", 5, 10, 0, "A", "B"), resistor("R2", 25, 10, 0, "A", "C"))
+        rules = [kipy_rule("fanout", ("CRCT_TRACK_WIDTH", {"min": 150_000}), condition="A.NetClass == 'QFN'"),
+                 kipy_rule("angles", ("CRCT_TRACK_ANGLE", {"min": 45})),
+                 kipy_rule("court", ("CRCT_COURTYARD_CLEARANCE", {"min": 200_000})),
+                 kipy_rule("wide", ("CRCT_TRACK_WIDTH", {"min": 400_000}), severity="RS_IGNORE")]
+        found, warnings = self.rules(OpenBoard("", rules))
+        self.assertEqual({}, dict(found.sizes), "a rule DRC ignores holds nothing")
+        self.assertEqual(2, len(warnings), warnings)
+        rules.append(kipy_rule("min", ("CRCT_TRACK_WIDTH", {"min": 300_000, "opt": 350_000})))
+        with self.assertRaises(ValueError) as caught, kicode_enums(), mock.patch.object(_route, "_write"):
+            route(OpenBoard("", rules, board_text), ["A"], layers=["F.Cu"])
+        self.assertIn("is under the 0.3 mm the custom rule 'min' holds every track to", str(caught.exception))
+        rules.pop()
+        said = io.StringIO()
+        with kicode_enums(), mock.patch.object(_route, "_write"), contextlib.redirect_stderr(said):
+            routed = route(OpenBoard("", rules, board_text), ["A"], layers=["F.Cu"])
+        self.assertTrue(routed.ok, routed.human_lines())
+        self.assertEqual(tuple(warnings), routed.warnings)
+        self.assertEqual([f"route: warning: {warning}" for warning in warnings], said.getvalue().splitlines())
+        self.assertEqual([f"warning: {warning}" for warning in warnings], routed.human_lines()[:2])
+        self.assertIn("the custom rule 'fanout' (track_width min 0.15 mm, where (A.NetClass == 'QFN'))", warnings[0])
+
+    @staticmethod
+    def rules(board):
+        with kicode_enums():
+            return _rules(board, ["A"])
+
+    def test_a_custom_via_count_lowers_each_entrys_via_limit_the_boards_vias_counted(self) -> None:
+        """A rule holding every net to 2 vias: net A's first connection takes two, so the next has none left and
+        says the rule is why; a via of the net already on the board counts against it too."""
+        walls = [segment("", "W", (x, -1.0), (x, 7.0), width=1.0) for x in (6.0, 12.0)]
+        pads = [resistor(f"R{k}", 6 * k - 3, 3, 0, "A", f"N{k}") for k in (1, 2, 3)]
+        two = (("F.Cu", 1.0), ("B.Cu", 1.0))
+        rules = RULES.with_custom({}, {"via_count": Bound(None, "", 2, "vc")})
+        router = Router(read_copper(board(*walls, *pads, width=18.0, height=6.0)), rules, [want("A", layers=two)])
+        done = router.run()
+        self.assertEqual([True, False], [c.routed for c in done], [c.line() for c in done])
+        self.assertEqual(2, len(router.vias))
+        self.assertIn("with no via left of the 2 the custom rule 'vc' allows a net (A has 2)", done[1].reason)
+        old = f'(via (at 16.5 5) (size 0.8) (drill 0.4) (layers "F.Cu" "B.Cu") (net "A") (uuid "{_uuid()}"))'
+        router = Router(read_copper(board(*walls, *pads, old, width=18.0, height=6.0)), rules, [want("A", layers=two)])
+        self.assertEqual((1, " with at most 1 via left of the 2 the custom rule 'vc' allows a net (A has 1)"),
+                         router._vias_left(want("A", layers=two), 0))
+        self.assertEqual((0, " with no via"), router._vias_left(want("A", layers=two, vias=0), 0), "the entry's, less")
 
 
 class Edges(unittest.TestCase):
@@ -580,10 +691,15 @@ class ApiError(Exception):
 
 
 class OpenBoard:
-    """The open board as far as ``_rules`` asks it, on a KiCad that cannot give its custom rules."""
+    """The open board as far as ``route`` asks it: KiPy's answers, faked. ``rules``: its custom rules
+    (``kipy_rule``), None for a KiCad that cannot give them; ``text``: the board's file."""
 
-    def __init__(self, folder: str) -> None:
+    def __init__(self, folder: str, rules: list | None = None, text: str = "") -> None:
         self.document = SimpleNamespace(project=SimpleNamespace(path=folder, name="b"))
+        self.rules, self.text = rules, text
+
+    def get_as_string(self) -> str:
+        return self.text
 
     def get_nets(self) -> list:
         return [SimpleNamespace(name="")]
@@ -600,7 +716,39 @@ class OpenBoard:
             solder_mask_paste=SimpleNamespace(mask_to_copper_clearance=0)))
 
     def get_custom_design_rules(self):
-        raise ApiError("no such request")
+        if self.rules is None:
+            raise ApiError("no such request")
+        return SimpleNamespace(status="CRS_OK", error_text="", rules=self.rules)
+
+
+class _Numeric:
+    """KiPy's MinOptMax: the bounds a rule sets, in nm (or a count, or degrees)."""
+
+    def __init__(self, bounds: dict) -> None:
+        self.__dict__.update(bounds)
+
+    def HasField(self, name: str) -> bool:  # noqa: N802 - protobuf's
+        return name in self.__dict__
+
+
+def kipy_rule(name: str, *constraints: tuple[str, dict], condition: str = "", layer: str = "",
+              severity: str = "RS_ERROR") -> SimpleNamespace:
+    """A custom rule as KiPy gives it, each enum its name (``kicode_enums``)."""
+    return SimpleNamespace(name=name, condition=condition, single_layer=layer, severity=severity,
+                           constraints=[SimpleNamespace(type=kind, numeric=_Numeric(bounds) if bounds else None)
+                                        for kind, bounds in constraints])
+
+
+def kicode_enums():
+    """kicode's enums as far as ``_rules`` reads them, each value its own name: the unit tests have no kicode."""
+    named = SimpleNamespace(Name=lambda value: value)
+    modules = {name: SimpleNamespace() for name in ("kicode", "kicode.proto", "kicode.proto.board",
+                                                    "kicode.proto.common", "kicode.proto.common.types")}
+    modules["kicode.proto.board.board_commands_pb2"] = SimpleNamespace(CustomRulesStatus=named)
+    modules["kicode.proto.board.board_rules_pb2"] = SimpleNamespace(CustomRuleConstraintType=named)
+    modules["kicode.proto.board.board_types_pb2"] = SimpleNamespace(BoardLayer=named)
+    modules["kicode.proto.common.types.base_types_pb2"] = SimpleNamespace(RuleSeverity=named)
+    return mock.patch.dict(sys.modules, modules)
 
 
 class KiCadRules(unittest.TestCase):
@@ -609,7 +757,7 @@ class KiCadRules(unittest.TestCase):
         with rules, naming the file: never routed by its netclasses alone."""
         with tempfile.TemporaryDirectory() as folder:
             board = OpenBoard(folder)
-            self.assertAlmostEqual(0.2, _rules(board, []).default.clearance)
+            self.assertAlmostEqual(0.2, _rules(board, [])[0].default.clearance)
             Path(folder, "b.kicad_dru").write_text('(version 1)\n(rule "hv" (constraint clearance (min 1mm)))\n',
                                                    encoding="utf-8")
             with self.assertRaises(ValueError) as caught:
