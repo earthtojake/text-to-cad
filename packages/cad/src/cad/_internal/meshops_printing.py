@@ -500,24 +500,35 @@ def nearest_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray,
 
 
 def spread_points(tri: np.ndarray, cap: int = 4000) -> np.ndarray:
-    """About ``cap`` points spread over the triangles ``tri`` (k, 3, 3) by area: each triangle cut into a
-    barycentric grid fine enough for its share, its vertices and every grid node."""
+    """About ``cap`` points spread over the triangles ``tri`` (k, 3, 3) by area: each triangle's corners and a
+    grid across it about the spacing the cap gives -- rows from the corner opposite its shortest side to that
+    side, each row as many points across as its width needs (at most 60 rows, 60 a row). A sliver (a long thin
+    facet of a strut) is laid out along its length alone: a square grid by its longest side put 1891 points on
+    each, 183000 on a 97-triangle region of a lattice."""
     edges = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     areas = 0.5 * np.linalg.norm(edges, axis=1)
     total = float(areas.sum())
     if total <= 0:
         return tri.reshape(-1, 3)
     spacing = math.sqrt(total / cap)
-    found = []
-    for t, area in zip(tri, areas):
-        size = max(float(np.linalg.norm(t[1] - t[0])), float(np.linalg.norm(t[2] - t[0])),
-                   float(np.linalg.norm(t[2] - t[1])))
-        n = int(min(60, max(1, math.ceil(size / spacing))))
-        i, j = np.meshgrid(np.arange(n + 1), np.arange(n + 1))
-        keep = (i + j) <= n
-        wa, wb = i[keep] / n, j[keep] / n
-        found.append(t[0] + wa[:, None] * (t[1] - t[0]) + wb[:, None] * (t[2] - t[0]))
-    return np.vstack(found)
+    tri = np.array(tri, dtype=float)  # a plain array: a mesh's tracked one costs a hash a slice
+    sides = np.stack([np.linalg.norm(tri[:, (k + 2) % 3] - tri[:, (k + 1) % 3], axis=1) for k in range(3)], axis=1)
+    apex = np.argmin(sides, axis=1)  # side k is opposite corner k
+    at = np.arange(len(tri))
+    a, b, c = tri[at, apex], tri[at, (apex + 1) % 3], tri[at, (apex + 2) % 3]
+    rows = np.clip(np.ceil(sides.max(axis=1) / spacing), 1, 60).astype(int)
+    across = sides[at, apex]
+    # every row of every triangle: its triangle and its place s from the apex (0) to the shortest side (1)
+    owner = np.repeat(at, rows + 1)
+    start = np.cumsum(rows + 1) - (rows + 1)
+    s = (np.arange(len(owner)) - start[owner]) / rows[owner]
+    count = np.where(s > 0, np.clip(np.ceil(s * across[owner] / spacing), 1, 60), 0).astype(int)
+    # every point of every row: its row and its place w across it
+    row = np.repeat(np.arange(len(owner)), count + 1)
+    first = np.cumsum(count + 1) - (count + 1)
+    w = np.where(count[row] > 0, (np.arange(len(row)) - first[row]) / np.maximum(count[row], 1), 0.0)[:, None]
+    k, sr = owner[row], s[row][:, None]
+    return a[k] + sr * ((1.0 - w) * (b[k] - a[k]) + w * (c[k] - a[k]))
 
 
 def in_triangles_xy(tri: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
@@ -538,6 +549,47 @@ def in_triangles_xy(tri: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     return test
 
 
+#: Point-segment pairs a block of ``_least_distances`` holds at once: about 16 MB a table.
+PAIRS_PER_BLOCK = 2_000_000
+
+
+def _segment_distances(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """The (points, segments) table of distances from each point to each segment ``a[k] -> b[k]`` (as
+    ``_least_distances`` reads them: for a few points)."""
+    points, a, b = (np.asarray(x, dtype=float).reshape(-1, 3) for x in (points, a, b))
+    centre = points.mean(axis=0)
+    P, A, E = points - centre, a - centre, b - a
+    ee = np.einsum("ij,ij->i", E, E)
+    pe = P @ E.T - np.einsum("ij,ij->i", A, E)[None, :]
+    t = np.clip(pe / np.where(ee > 0, ee, 1.0)[None, :], 0.0, 1.0)
+    rr = np.einsum("ij,ij->i", P, P)[:, None] - 2.0 * (P @ A.T) + np.einsum("ij,ij->i", A, A)[None, :]
+    return np.sqrt(np.maximum(rr - 2.0 * t * pe + t * t * ee[None, :], 0.0))
+
+
+def _least_distances(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Each point's distance to the nearest of the segments ``a[k] -> b[k]``, from matrix products in blocks of
+    ``PAIRS_PER_BLOCK`` pairs -- no (points, segments, 3) table: a lattice's overhang of 3000 points over
+    twenty thousand supporting edges took 121 s and 6 GB that way. Centred on the points first, so the products
+    keep their digits wherever the part stands."""
+    points, a, b = (np.asarray(x, dtype=float).reshape(-1, 3) for x in (points, a, b))
+    centre = points.mean(axis=0)
+    P, A = points - centre, a - centre
+    E = b - a
+    ee = np.einsum("ij,ij->i", E, E)
+    safe = np.where(ee > 0, ee, 1.0)
+    ae, aa = np.einsum("ij,ij->i", A, E), np.einsum("ij,ij->i", A, A)
+    found = np.empty(len(P))
+    step = max(1, PAIRS_PER_BLOCK // max(1, len(A)))
+    for at in range(0, len(P), step):
+        block = P[at:at + step]
+        pe = block @ E.T - ae[None, :]            # (p - a) . e
+        t = np.clip(pe / safe[None, :], 0.0, 1.0)
+        rr = np.einsum("ij,ij->i", block, block)[:, None] - 2.0 * (block @ A.T) + aa[None, :]   # |p - a|^2
+        d2 = rr - 2.0 * t * pe + t * t * ee[None, :]
+        found[at:at + step] = np.sqrt(np.maximum(d2.min(axis=1), 0.0))
+    return found
+
+
 def span(points: np.ndarray, a: np.ndarray, b: np.ndarray, inside: Callable[[np.ndarray], np.ndarray] | None = None,
          refine: float | None = None) -> dict[str, Any]:
     """The span of a flat overhang whose ``points`` (spread over it) are carried by the support segments
@@ -549,8 +601,7 @@ def span(points: np.ndarray, a: np.ndarray, b: np.ndarray, inside: Callable[[np.
     if not len(a) or not len(points):
         return {"kind": "unsupported", "length_mm": None, "reach_mm": None,
                 "xyz": points[0].tolist() if len(points) else None}
-    chunks = [_nearest(points[i:i + 2000], a, b)[0].min(axis=1) for i in range(0, len(points), 2000)]
-    d = np.concatenate(chunks)
+    d = _least_distances(points, a, b)
     best = int(d.argmax())
     point, reach = points[best], float(d[best])
     if refine and inside is not None:
@@ -564,7 +615,10 @@ def span(points: np.ndarray, a: np.ndarray, b: np.ndarray, inside: Callable[[np.
             local = local[inside(local)]
             better = False
             if len(local):
-                dl = _nearest(local, a, b)[0].min(axis=1)
+                # only a support within the reach plus twice the grid's half-diagonal of the point can be any
+                # grid point's nearest: the others are left out, the answer the same
+                near = _segment_distances(point[None], a, b)[0] <= reach + 2.0 * math.sqrt(2.0) * scale * (1 + 1e-9)
+                dl = _least_distances(local, a[near], b[near]) if near.any() else _least_distances(local, a, b)
                 if dl.max() > reach + 1e-12:
                     point, reach, better = local[int(dl.argmax())], float(dl.max()), True
             if not better:

@@ -460,6 +460,28 @@ def _outside_knives(points: np.ndarray, normals: np.ndarray, zones: list[_Knife]
     return keep
 
 
+#: Rays cast at once (``_first_hits``): trimesh tests a ray against every triangle whose box its line crosses,
+#: so a dense mesh's rays together hold candidate tables of gigabytes -- a 100k-triangle lattice's 20000 gap
+#: rays peaked at 6 GB; in blocks, one block's.
+RAY_BLOCK = 1000
+
+
+def _first_hits(mesh: trimesh.Trimesh, origins: np.ndarray, directions: np.ndarray) -> tuple[np.ndarray, ...]:
+    """``mesh.ray.intersects_location`` (first hits), ``RAY_BLOCK`` rays at a time: each ray's first hit is its
+    own, so the blocks' answers joined are the whole cast's."""
+    found_l, rays_l, hit_l = [], [], []
+    for at in range(0, len(origins), RAY_BLOCK):
+        locations, rays, hit = mesh.ray.intersects_location(ray_origins=origins[at:at + RAY_BLOCK],
+                                                            ray_directions=directions[at:at + RAY_BLOCK],
+                                                            multiple_hits=False)
+        found_l.append(np.asarray(locations, dtype=float).reshape(-1, 3))
+        rays_l.append(np.asarray(rays, dtype=int) + at)
+        hit_l.append(np.asarray(hit, dtype=int))
+    if not found_l:
+        return np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    return np.concatenate(found_l), np.concatenate(rays_l), np.concatenate(hit_l)
+
+
 def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
            zones: list[_Knife] | None = None) -> tuple[np.ndarray, ...]:
     """One ray from every triangle's centre (``COVER`` of them, by area, on a larger mesh), into the material
@@ -477,8 +499,7 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None,
     normals = mesh.face_normals[faces]
     directions = -normals if inward else normals
     origins = mesh.triangles_center[faces] + directions * NUDGE
-    locations, rays, hit = mesh.ray.intersects_location(ray_origins=origins, ray_directions=directions,
-                                                        multiple_hits=False)
+    locations, rays, hit = _first_hits(mesh, origins, directions)
     if not len(rays):
         return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
     # measured from the surface: the origin was nudged 1e-4 along the ray off its own triangle
@@ -674,8 +695,7 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
     directions = -mesh.face_normals[face_idx]
     origins = origins + directions * NUDGE
 
-    locations, ray_ids, hit_tri = mesh.ray.intersects_location(
-        ray_origins=origins, ray_directions=directions, multiple_hits=False)
+    locations, ray_ids, hit_tri = _first_hits(mesh, origins, directions)
 
     if len(ray_ids) == 0:
         return {"error": "ray casting produced no hits", "samples_requested": n}

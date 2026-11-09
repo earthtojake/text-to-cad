@@ -681,6 +681,19 @@ class MeshopsTest(unittest.TestCase):
         self.assertEqual(outcome(result, "printing.hole_diameter")[0]["status"], "not_evaluated")
         json.dumps(report, allow_nan=False)
 
+    def test_a_sliver_is_sampled_along_its_length_and_spans_read_far_from_the_origin(self) -> None:
+        # a 100 x 0.01 mm facet (a lattice strut's): points along its length at the cap's spacing, not a square
+        # grid by its longest side (1891 points a facet, 183000 on a 97-triangle region)
+        sliver = np.array([[[0, 0, 0], [100, 0, 0], [100, 0.01, 0]]], dtype=float)
+        points = mo.spread_points(np.vstack([sliver, sliver + [0, 1, 0]]), cap=200)
+        self.assertLess(len(points), 400)
+        self.assertAlmostEqual(float(np.ptp(points[:, 0])), 100.0, places=9)
+        # the distances to the supports, by products, keep their digits 1000 mm off the origin
+        far = np.array([1000.0, -700.0, 300.0])
+        ring = np.array([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], dtype=float) + far
+        found = mo.span(np.array([[5.0, 5.0, 0.0]]) + far, ring, np.roll(ring, -1, axis=0))
+        self.assertEqual((found["kind"], found["length_mm"]), ("bridge", 10.0))
+
 
 if __name__ == "__main__":
     unittest.main()

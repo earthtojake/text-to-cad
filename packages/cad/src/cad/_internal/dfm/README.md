@@ -890,3 +890,7 @@ tips' (accessed 2026-11-08), a "should": a warning.
 - Soundness: the kernel's boolean check on parts while their faces add up to 200; the rest BRepCheck topology alone
   (`solid.items[].check`).
 - Flat ceilings: the 40 largest refined to the exact farthest point; the rest read on their samples (`refined`).
+- A mesh: each overhang region spread over about 3000 points (`meshops_printing.spread_points`: rows from a
+  facet's sharpest corner, as wide as each row needs, so a strut's sliver is sampled along its length) and its
+  span read by matrix products in blocks (`_least_distances`); every ray cast 1000 at a time (`RAY_BLOCK`).
+  A 100k-triangle open lattice (FDM) took 137 s and 7.3 GB, now 14.5 s and 1 GB, its findings the same.
