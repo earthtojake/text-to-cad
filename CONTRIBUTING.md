@@ -1354,7 +1354,11 @@ never CAD or mesh assets: a test makes the STEP, GLB or mesh it needs in a tempo
 folder, a sample exports on request into its project's gitignored `STEP/`, `STL/`,
 `GLB/`, `3MF/`, `DXF/` or `XBF/`, and `tests/python/global/test_no_cad_assets_tracked.py`
 fails on any tracked CAD or mesh file but the few tiny fixtures it lists, each with the
-reason no test can make it.
+reason no test can make it. The KiCad files an electronics sample's scripts write (its board,
+schematic, project and libraries) are build output in the same way: gitignored, made again by
+the sample's `cad run build.py`, and held untracked by
+`tests/python/global/test_generated_kicad_files_untracked.py`, which lists what each build writes
+and the few KiCad files beside it that no script makes. A board no script makes is source.
 
 A security problem is reported privately, as [SECURITY.md](SECURITY.md) says, never as an
 issue or a pull request.

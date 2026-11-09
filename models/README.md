@@ -25,21 +25,25 @@ and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git hi
 `examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
 (`src/<group>/`), and a 2D drawing a script in `drawings/src/`, its DXF added to
 `drawings/src/exports.py`. A model that needs helper modules, several scripts or notes
-of its own gets a project of its own here. A KiCad board is no model: its native files
-(`.kicad_pcb`, `.kicad_pro`, `.kicad_dru`, `fp-lib-table`, and where it has them its schematic's sheets and
-the project's own libraries) are the source, one folder each in `electronics/`, with the pcb skill's checks
-of it as a script (`cad run check_<board>.py`). Four are boards alone (`blinky`, `usb_uart`, `servo_power`,
-`pi_servo_hat`); three are ECAD samples, a board with the CAD built around it in the cad skill's layout
-beside it (`src/`), read from the board file, and the scripts that made the board (`scripts/`):
-[`macropad`](electronics/macropad/README.md), [`eurorack_lfo`](electronics/eurorack_lfo/README.md) and
-[`orbit_clock`](electronics/orbit_clock/README.md). The fourth, [`pinball`](electronics/pinball/README.md), runs
-the other way: the design model (`src/`) is the source of the board's outline, holes and art, and the board, its
-scripts and checks live in `board/`. Its board is kept without its zones' fills, under the 5 MiB a file may be
-(`board/scripts/board.py refill` puts them back).
+of its own gets a project of its own here. A KiCad board is no model: it lives one folder each in
+`electronics/`, with the pcb skill's checks of it as a script (`cad run check_<board>.py`). Four are boards alone
+(`blinky`, `usb_uart`, `servo_power`, `pi_servo_hat`): no script makes them, so their native files (`.kicad_pcb`,
+`.kicad_pro`, `.kicad_dru`, `fp-lib-table`) are the source, committed. Four are ECAD samples, each board made by
+its scripts: the KiCad files those scripts write (the board, the schematic's sheets, the project file and its rules, the
+project's own libraries and their tables) are build output, gitignored and made again by the sample's one command,
+`cad run build.py`, which its README puts first; build before opening the board in the CAD Viewer or in KiCad, or
+running anything that reads it. A KiCad file beside such a build that no script writes stays source (macropad's
+library tables, eurorack_lfo's project file), and `tests/python/global/test_generated_kicad_files_untracked.py`
+holds both lists. Three have the CAD built around the board in the cad skill's layout beside it (`src/`), read from
+the board file, and the scripts that make the board (`scripts/`): [`macropad`](electronics/macropad/README.md),
+[`eurorack_lfo`](electronics/eurorack_lfo/README.md) and [`orbit_clock`](electronics/orbit_clock/README.md). The
+fourth, [`pinball`](electronics/pinball/README.md), runs the other way: the design model (`src/`) is the source of
+the board's outline, holes and art, and the board's scripts, build and checks live in `board/`.
 
-Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, KiCad's board files, docs); never what a run
-or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
-XBF), review media (`.gitignore` keeps images and video out of this tree) or runtime debris.
+Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, the KiCad files no script writes, docs); never
+what a run, a build or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
+XBF, and no KiCad file a sample's scripts write), review media (`.gitignore` keeps images and video out of this
+tree) or runtime debris.
 
 ## The files the corpus writes
 
@@ -56,8 +60,9 @@ project delivers them and because something outside the model reads them:
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
 | `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.model.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
+| `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | the KiCad project: the board, the schematic's sheets, the project file and rules, the project's libraries and their tables (each sample's `.gitignore` names them) | `cad run build.py` (`pinball`: `board/build.py`), the board's scripts in order | the board is made by its scripts, which are its source; ERC, DRC, the checks, the CAD Viewer, KiCad and the CAD scripts read it, so build before any of them |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/`, `board/pinball.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`, `board/scripts/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
-| `electronics` (the same three) | `3MF/`, `STEP/`, `GLB/`, `DXF/` | `src/exports.py` | the printed parts in their print orientation, the panel's cut and art DXFs, the assemblies' STEP and GLB (the GLB carries the explode) |
+| `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`) | `3MF/`, `STEP/`, `GLB/`, `DXF/` | `src/exports.py` | the printed parts in their print orientation, the panel's cut and art DXFs, the assemblies' STEP and GLB (the GLB carries the explode) |
 
 ## Build and snapshot
 
