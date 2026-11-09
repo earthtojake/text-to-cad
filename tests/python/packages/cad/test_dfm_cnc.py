@@ -883,6 +883,23 @@ class TurnedLiveToolingTest(unittest.TestCase):
         self.assertNotIn("cnc.internal_corner_sharp", _codes(cnc(_part(rounded, "shaft"), turning=True)))
 
 
+class NarrowCornerTest(unittest.TestCase):
+    def test_a_corner_too_narrow_for_its_radius_names_how_it_is_made(self) -> None:
+        # a hub's 6 mm keyway off its bore, 22 deep: a third of the depth (7.3 mm) does not fit its 6 mm width --
+        # the hint says so and names the broach; a 6 mm slot in a block, the same depth, names EDM
+        hub = bd.Cylinder(20, 22) - bd.Cylinder(8, 30) - bd.Pos(0, 9, 0) * bd.Box(6, 6, 30)
+        block = bd.Box(60, 40, 22) - bd.Pos(0, 0, 3) * bd.Box(30, 6, 22)
+        for part, said in ((hub, "broached or slotted"), (bd.Rot(0, 0, 30) * bd.Pos(1, 2, 0) * hub, "broached"),
+                           (block, "plan EDM")):
+            result = cnc(_part(part), material="aluminum")
+            hints = {f.hint for f in result.findings if f.code == "cnc.internal_corner_sharp"}
+            self.assertTrue(hints, said)
+            for hint in hints:
+                self.assertIn("6 mm width takes a radius of 3 mm at most", hint)
+                self.assertIn(said, hint)
+                self.assertNotIn("7.33", hint.split("recommended")[-1])
+
+
 class UnroundedTest(unittest.TestCase):
     def test_a_ratio_a_hair_over_its_limit_fails(self) -> None:
         # 20.0002 / 5 = 4.00004: four decimals would read 4.0 and pass the 4 D recommendation

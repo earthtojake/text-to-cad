@@ -83,7 +83,9 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   are formed as drawn: nothing said (a slot's 45-degree floor chamfers need no slot cutter). A tool makes an edge only where it reaches its whole length: a window or a low lip that
   opens part of a corner leaves the rest unmade, and the finding says how much and where. A gear's
   curved tooth root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
-  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
+  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. Where the
+  recommended radius does not fit the cavity's width, the hint names the process instead (a keyway: broached
+  or slotted; another corner: EDM). A
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
   A corner of 150 degrees or more along the tool's axis (a many-sided pocket's, a faceted arc's) is the
   end mill's flank's: made, the radius it leaves said (`end_mill_flank`, `deviation_mm`; `cnc.flank_corners`),

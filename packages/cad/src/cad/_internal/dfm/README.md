@@ -300,7 +300,10 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   rather than listed under sharp_edges). A through cavity's concave cylinders and unmade sharp edges along it
   are its corners the same way. `radius_mm` is read to 0.01 mm (`RADIUS_TOLERANCE`: 1.4999
   is 1.5). Floor-to-wall roots are never corners (a flat end mill makes them sharp). `third_of_depth_mm`: a
-  third of its height, the radius the hint gives in millimetres.
+  third of its height, the radius the hint gives in millimetres; `opening_mm` its cavity's width, `fits_mm`
+  half of it and `radius_fits` whether that third fits -- where it does not (a 6 mm keyway 22 deep) the hint
+  says so and names how such a corner is made instead (`instead`: a keyway, a through slot off a bore along it
+  (`keyway`), broached or slotted; any other by EDM).
 - **sharp_edges** — every other sharp concave edge no rotating tool makes (each with `void_angle_deg`,
   `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees, and `reason`,
   the first that holds: `other_axes` -- a tool along a direction the machine lacks would make it (a tool tilted

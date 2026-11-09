@@ -1942,7 +1942,31 @@ def _pockets(model: Model, state: dict[str, Any], only: set[int] | None = None) 
     if only is not None:
         claimed |= {i for i in range(1, model.n + 1) if i not in only}
     through, through_corners = _through(model, state, claimed, gaps)
+    # a corner names its pocket by its floor, a through cut's by the cut's own face
+    by_ref = {pocket["floor"] or pocket["location"]: pocket for pocket in kept + through}
+    for corner in corners + through_corners:
+        _fits(model, corner, by_ref.get(corner["pocket"]))
     return {"pockets": kept + through, "corners": corners + through_corners}
+
+
+def _fits(model: Model, corner: dict[str, Any], pocket: dict[str, Any] | None) -> None:
+    """Whether the radius a corner is recommended (a third of its cavity's depth) fits the cavity's width
+    (``radius_fits``; at most half of it, ``fits_mm``), and if not how such a corner is made instead
+    (``instead``): a keyway (a through slot off a bore, along it) broached or slotted, any other by EDM."""
+    if pocket is None or not pocket.get("width_mm"):
+        return
+    width = float(pocket["width_mm"])
+    corner["opening_mm"] = round(width, 4)
+    corner["fits_mm"] = round(width / 2.0, 4)
+    corner["radius_fits"] = corner["third_of_depth_mm"] <= width / 2.0 + 1e-9
+    axis = np.asarray(pocket["axis"], dtype=float)
+    keyway = pocket["kind"] == "through" and any(
+        not edge.concave and model.surface(other).kind == "cylinder" and model.surface(other).concave
+        and abs(float(unit(model.surface(other).axis) @ axis)) > SAME
+        for wall in pocket["_walls"] for edge, other in model.neighbours(wall))
+    corner["instead"] = ("make it as a keyway is made, broached or slotted (shaped), which leaves its corners "
+                         "as drawn" if keyway else "plan EDM, which leaves the corner as drawn")
+    corner["keyway"] = keyway
 
 
 def _narrowest(walls: set[int], gaps: dict[int, list[tuple[float, int]]]) -> tuple[float | None, tuple[int, int] | None]:

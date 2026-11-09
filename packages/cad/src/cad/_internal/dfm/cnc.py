@@ -107,6 +107,12 @@ _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
 FLANK_RESIDUE_MM = 0.05
 
 
+#: A sharp corner's hint where its cavity is narrower than twice the radius its depth asks.
+_UNFIT_FIX = ("sharp vertical corner: no round tool makes it, and its {opening_mm:g} mm width takes a radius of "
+              "{fits_mm:g} mm at most, under the third of the cavity's depth ({third_of_depth_mm:g} mm) recommended: "
+              "{instead}; or round it to {fits_mm:g} mm at most with a long, small end mill")
+
+
 def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
     """A sharp vertical corner and a sharp concave edge: no round tool makes either (the error); judged against
     half the smallest tool with ``--tools``, else the least radius a micro tool leaves (``_MICRO_TOOL_RADIUS``),
@@ -129,7 +135,13 @@ def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
                                      ({**_NO_TOOLS}, None, _MICRO_TOOL_RADIUS, sharp_note + "; " + _MICRO_NOTE)):
         found.append(Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
                           "sharp vertical corner (no round tool makes it): radius", source, scale_by=scale, when={**_POCKETS, **when},
-                          item_when={"sharp": True}, fix=corner_fix[scale], note=note, detail=_CORNER_DETAIL))
+                          item_when={"sharp": True, "radius_fits": (True, None)}, fix=corner_fix[scale], note=note,
+                          detail=_CORNER_DETAIL))
+        # a cavity too narrow for the radius its depth asks: the hint names how such a corner is made instead
+        found.append(Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
+                          "sharp vertical corner (no round tool makes it): radius", source, scale_by=scale, when={**_POCKETS, **when},
+                          item_when={"sharp": True, "radius_fits": False}, fix=_UNFIT_FIX, note=note,
+                          detail=_CORNER_DETAIL))
         for reason, (what, fix) in _EDGE_REASONS.items():
             fix = fix.replace("at least {limit:g} mm", "at least {limit:g} mm" if scale else recommended)
             found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
@@ -187,8 +199,14 @@ _RULES: tuple[Rule, ...] = (
               'inches) in diameter. Anything below this limit is considered micro-machining."'),
     Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 1.0 / 3.0, "ratio",
          "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_POCKETS,
-         item_when={"sharp": False},
+         item_when={"sharp": False, "radius_fits": (True, None)},
          fix="make the corner radius {third_of_depth_mm:g} mm or more, a third of the cavity's {height_mm:g} mm depth",
+         note='vertical corner radius "Recommended: ⅓ times cavity depth (or larger)"'),
+    Rule("cnc.corner_radius_to_depth", "internal_corners", "radius_to_depth", "min", 1.0 / 3.0, "ratio",
+         "corner radius to cavity depth", "hubs-cnc", severity="warning", when=_POCKETS,
+         item_when={"sharp": False, "radius_fits": False},
+         fix="a third of the cavity's {height_mm:g} mm depth ({third_of_depth_mm:g} mm) does not fit its "
+             "{opening_mm:g} mm width: round the corner to {fits_mm:g} mm at most, or {instead}",
          note='vertical corner radius "Recommended: ⅓ times cavity depth (or larger)"'),
     Rule("cnc.corner_reach", "internal_corners", "reach_ratio", "max", 4.0, "ratio",
          "depth to the diameter of the largest tool that fits the corner", "hubs-cnc", severity="warning",
