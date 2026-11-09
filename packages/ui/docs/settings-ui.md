@@ -952,6 +952,17 @@ names, in both: the strip's view controls and the zoom pill stand where they sto
 There is no cube (a board turns over by Flip), and Projection is Display's menu's. The key **3** switches,
 as KiCad's Alt+3 opens its 3D view.
 
+A board whose file names its stack-up's colours (`(stackup ... (color "Black") ... (copper_finish "ENIG"))`)
+is shown in 3D as it is made, in Board mode: each face its substrate, its copper in the finish, its solder
+mask laid over with the pads' openings cut, its silkscreen, its edge the substrate's colour, in KiCad's
+3D viewer's colours for those names (`@cad/core/lib/plot2d/stackup.js`), the same in either theme. The
+Layers tab's rows still choose among what a made board has (the facing copper, mask and silkscreen, the
+drills and vias): unticking the mask shows the bare copper. Copper, Assembly and Placement, and a layer in
+focus with the others dimmed or hidden, are views for working on layers, so 3D draws them in the layers'
+colours, as 2D does. 2D keeps the layers' colours always, as KiCad's PCB editor does (its 2D canvas is
+for telling layers apart and editing them; a black mask and gold copper would hide which copper is
+which), and so does every snapshot. A board that saved no stack-up colours looks as it always did.
+
 | Control | In 3D |
 | --- | --- |
 | Select: a click, Shift, a click on nothing | the same pick where the pointer's ray meets the face it enters, from that side, with the same filter and the layers that side draws |
