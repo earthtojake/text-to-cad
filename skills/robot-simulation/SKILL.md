@@ -161,7 +161,11 @@ mechanism):
   never invent a coefficient for a material.
 - **`free(assembly)`** says the robot is not bolted to the world (a humanoid, a quadruped, a mobile
   base, a part dropped on a table): on the top assembly, its base floats, an MJCF `<freejoint>` (its
-  seven values in every key, the base where it stands) and a URDF's root, which floats already. Bolted
+  seven values in every key, the base where it stands) and a URDF's root, which floats already. The
+  floating base's frame stands at its link's centre of mass, its axes the model's: a humanoid's at its
+  torso, not on the floor between its feet, so a key's first three values and the simulator's base
+  position read where the base is (a URDF fixes it to an empty root at the model's origin, `base_link`,
+  or `base_footprint` where the base is named `base_link`). Mount an IMU or a camera on a `frame()` of the torso's part, not on the base frame. Bolted
   is the default, an arm on a bench. On a part or a sub-assembly of a model with no joints, that
   node's body alone floats.
 - **`link(part_or_assembly, name)`** names the link its parts make (`base_link`, `upper_arm_link`)

@@ -26,7 +26,10 @@ ground's, ``world``.
 
 **The base.** A node declared free (``declarations.free``) floats what it holds: each link hung from
 ``world`` that holds a part at or below it hangs by a ``floating`` joint in place of its ``fixed`` one. A
-free node none of whose parts is in a link hung from ``world`` is refused by name.
+free node none of whose parts is in a link hung from ``world`` is refused by name. A floating link is
+framed at its centre of mass, its axes the ones its frame had (``_centred``): the base's own place (a
+humanoid's torso), not the model's origin on the floor below it, so a simulator's base position (an
+MJCF key's first three values, the freejoint's) reads where the base is.
 
 **The zero.** Given ``zero``, a mechanism state's name, the description is taken there (``description``'s
 **Units and frames**): each joint the state moves has its origin turned or slid by its value there (its
@@ -100,6 +103,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -240,6 +244,7 @@ class _Describer:
         self.hulls = self._decompositions(links, meshes) if self.decompose else {}
         for link in links[1:]:
             self._geometry(link)
+        self._centred(links, joints, closures)
         if self.zero is not None:
             poses = self._zeroed(kinematics, links, joints, poses)
         found = Description(self.structure["name"], links, joints, meshes, poses, closures, excludes=excludes,
@@ -306,6 +311,36 @@ class _Describer:
                                        "assembly or part that holds the base")
             for joint in hung:
                 joint.kind = "floating"
+
+    def _centred(self, links: list[Link], joints: list[Joint], closures: list[Closure]) -> None:
+        """Each floating base framed at its centre of mass, its axes the frame's it had (the module's **The base**):
+        what its link holds, the joints and closures it holds and its floating joint moved to keep every part where
+        it stands."""
+        for joint in joints:
+            if joint.kind != "floating" or joint.parent != links[0].name:
+                continue
+            link = next(found for found in links if found.name == joint.child)
+            if link.inertial is None or not np.any(link.inertial.center):
+                continue
+            shift, back = np.eye(4), np.eye(4)
+            shift[:3, 3], back[:3, 3] = link.inertial.center, -link.inertial.center
+            link.frame = link.frame @ shift
+            joint.origin = joint.origin @ shift
+            link.visuals = [replace(visual, geometry=replace(visual.geometry, placement=back @ visual.geometry.placement))
+                            for visual in link.visuals]
+            link.collisions = [replace(collision, geometry=replace(collision.geometry,
+                                                                   placement=back @ collision.geometry.placement))
+                               for collision in link.collisions]
+            link.frames = {name: back @ frame for name, frame in link.frames.items()}
+            link.inertial = replace(link.inertial, center=np.zeros(3))
+            for other in joints:
+                if other.parent == link.name:
+                    other.origin = back @ other.origin
+            for at, closure in enumerate(closures):
+                if link.name in (closure.parent, closure.child):
+                    closures[at] = replace(closure, origin=back @ closure.origin if closure.parent == link.name
+                                           else closure.origin,
+                                           frame=back @ closure.frame if closure.child == link.name else closure.frame)
 
     def _zeroed(self, kinematics: dict[str, Any], links: list[Link], joints: list[Joint],
                 poses: list[Pose]) -> list[Pose]:

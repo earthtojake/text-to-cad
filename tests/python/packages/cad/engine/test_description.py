@@ -1065,6 +1065,30 @@ class BaseAndZeroTest(_Folder):
         self.assertEqual({child.label: child.__dict__.get("_link") for child in rebuilt.children},
                          {"plate": "base_link", "upper": None, "fore": None})
 
+    def test_a_free_base_is_framed_at_its_centre_of_mass_and_a_key_says_it_there(self) -> None:
+        from cad.engine.export.mjcf import _qpos
+
+        # The plate drawn from the model's origin, its centre of mass at (50, 30, 10) mm: the base's frame stands
+        # there, its axes the model's, and every part where it was drawn.
+        source = TWO.format(declare="pass", root="free(root)").replace(
+            "plate = bd.Box(100, 60, 20)", "plate = bd.Box(100, 60, 20, align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN))")
+        description, structure = self.described("two", source)
+        base, floating = description.link("plate"), description.joints[0]
+        centre = np.array([0.05, 0.03, 0.01])
+        np.testing.assert_allclose(base.frame[:3, 3], centre, atol=1e-9)
+        np.testing.assert_allclose(base.frame[:3, :3], np.eye(3), atol=1e-12)
+        np.testing.assert_allclose(base.inertial.center, [0, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(floating.origin[:3, 3], centre, atol=1e-9)
+        np.testing.assert_allclose(description.joints[1].origin[:3, 3], np.array([0.04, 0.0, 0.02]) - centre,
+                                   atol=1e-9)
+        np.testing.assert_allclose(base.visuals[0].geometry.placement[:3, 3], -centre, atol=1e-9)
+        self.assert_placed_as_the_mechanism_places(description, structure)
+        # A key's base values are where the base is: its centre, unturned.
+        np.testing.assert_allclose(_qpos(floating, 7, {}), [*centre, 1, 0, 0, 0], atol=1e-9)
+        # Bolted, the base keeps the model's frame.
+        bolted, _structure = self.described("two", source.replace("free(root)", "pass"))
+        np.testing.assert_allclose(bolted.link("plate").frame, np.eye(4), atol=1e-12)
+
     def test_a_name_or_a_free_node_that_names_no_link_rightly_is_refused_by_name(self) -> None:
         with self.assertRaisesRegex(DescriptionError, "link name 'arm' is declared on parts of two links, 'upper' and "
                                                       "'fore'"):
