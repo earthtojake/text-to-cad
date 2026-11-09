@@ -40,6 +40,7 @@ and joints apart, so a link and a joint may share a name; a name already held in
 | Ball joints | `ball` | refused by name: URDF has no ball joint |
 | Cylindrical joints | a hinge and a slide on one body | `<name>` and `<name>_slide` with a massless link `<name>_turn` between |
 | Capsule collisions | `capsule` | a cylinder and a sphere at each end |
+| Decomposed collisions (`collision(part, "decomposed")`) | a `collision` geom and a mesh asset per convex hull, `<part>_hull<i>` | a `<collision>` per hull, `<part>_hull<i>`, each its own mesh file |
 | Named frames | sites | an empty link on a fixed joint `<frame>_joint`, as a ROS `tool0` |
 | A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) |
 | Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of |

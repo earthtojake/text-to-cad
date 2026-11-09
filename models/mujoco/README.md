@@ -126,8 +126,11 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
 4. **Fixed: no contact exclusion.** Hulls of adjacent links that overlap at rest needed `<exclude>`; the
    MJCF writer now excludes every jointed pair touching at rest (the world-welded first joint's too),
    and `exclude(a, b)` declares any other pair.
-5. **One convex hull per part.** A concave part (a link with a pocket, a gripper body) collides as its
-   hull; a convex decomposition or per-face primitives would be closer.
+5. **Fixed: one convex hull per part.** A concave part (a link with a pocket, a gripper body) collided
+   as its hull. `collision(part, "decomposed", max_hulls=, threshold=)` now collides it as the convex
+   hulls CoACD cuts its mesh into (`cad[coacd]`), one geom each (`<part>_hull<i>`) in the MJCF and the
+   URDF, while its visual stays whole; the hulls are cached by the part's mesh and options, and the
+   contact rule tests each hull.
 6. **Fixed: the joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip
    build123d's default plane X, turning a link 90 deg at angle 0. kinematics.md's recipe now builds the
    rigid joint from the hinge's own frame (`hinge.location`) and snaps a direction read from geometry,

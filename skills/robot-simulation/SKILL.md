@@ -59,7 +59,9 @@ nothing beyond the Python standard library; a snapshot and a generated descripti
 kernel. `cad mjcf validate --compile required` and `cad run mujoco-studio` use MuJoCo's headless core
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
-`mujoco` gets the same. `cad <verb> --help` gives the complete current interface.
+`mujoco` gets the same. A part declared `collision(part, "decomposed")` uses CoACD, `cad[coacd]`
+(one wheel, about 3 MB), which the model's own environment holds once its header names it. `cad
+<verb> --help` gives the complete current interface.
 
 ## Generate from CAD
 
@@ -101,8 +103,15 @@ mechanism):
   izz)` (kg*m^2) gives it. A `mass()` above it counts it: the lumps are fixed and the solids make up
   the rest, and a total the lumps reach or pass is refused.
 - **`collision(part, kind)`** says what a simulator collides a part as: `mesh` (the default, which
-  MuJoCo hulls), a `box`, `sphere`, `cylinder` or `capsule` the kernel fits to the part, or `none`.
-  On an assembly it applies to every part below it that declares none.
+  MuJoCo hulls), a `box`, `sphere`, `cylinder` or `capsule` the kernel fits to the part,
+  `decomposed`, or `none`. On an assembly it applies to every part below it that declares none.
+  `decomposed` is for a concave part whose one hull would fill its pocket or the gap between a
+  gripper's jaws: CoACD cuts its mesh into convex hulls, each a collision geom of its own (MJCF and
+  URDF alike, `<part>_hull<i>`), while the visual stays whole. `max_hulls=` caps the count (no limit
+  by default) and `threshold=` (0.01 to 1, CoACD's 0.05 by default) is the concavity it leaves:
+  smaller cuts finer. It needs `cad[coacd]` where the robot is described: name
+  `cad[build123d,coacd]` in the model's header, or the export refuses, naming the part and the extra.
+  The hulls are cached by the part's mesh and options, so only a changed part decomposes again.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a

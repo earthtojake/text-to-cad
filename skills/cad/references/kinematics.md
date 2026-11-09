@@ -318,6 +318,7 @@ from cad.build123d import body, collision, exclude, frame, friction, limits, mas
 
 collision(arm, "capsule")                   # what a simulator collides it as
 collision(cover, "none")                    # shown, never collides
+collision(jaw, "decomposed", max_hulls=8)   # convex hulls of its mesh (cad[coacd]); its visual whole
 frame(arm, "tool", bd.Pos(240, 0, 25))      # a named frame, in the arm's own frame (mm)
 body(camera, "camera_mount")                # its own body, fixed to the link it is fastened to
 exclude(camera, "wrist")                    # never collides with the wrist (a part, assembly or label)
@@ -331,9 +332,14 @@ friction(pads, 1.1)                         # the pads' contact friction (slidin
 - **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
   declared; MuJoCo collides it as its convex hull), `box`, `sphere`, `cylinder` or `capsule` (fitted
   by the kernel to the part's oriented bounding box, a cylinder's and a capsule's axis its longest
-  side), or `none`. On an assembly it is inherited by every part below it that declares none, as a
-  material is; a part's own declaration wins. A concave part that must collide as its shape is split
-  into convex parts in the model.
+  side), `decomposed`, or `none`. On an assembly it is inherited by every part below it that declares
+  none, as a material is; a part's own declaration wins. `decomposed` is for a concave part that must
+  collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
+  `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`
+  caps the count (no limit by default), `threshold=` (0.01 to 1, 0.05 by default) is the concavity left,
+  smaller cutting finer. The hulls are cached by the part's mesh and options; a decomposition not in the
+  cache needs CoACD, `cad[coacd]`: name `cad[build123d,coacd]` in the model's header, or the export is
+  refused, naming the part and the extra.
 - **`frame(part, name, location)`** names a frame on a part (a tool tip, a camera mount, a sensor):
   `location` is a `Location` (`Pos`, `Rot`) or a `Plane` in the part's OWN frame, the one its
   geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the

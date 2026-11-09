@@ -79,7 +79,7 @@ Defaults are how a model stays short and consistent. Give the robot one class na
 MuJoCo collides every geom unless told not to, so a visual mesh needs `contype="0" conaffinity="0"`. The convention:
 
 - **visual** geoms: `group="2"`, no contacts. Full-detail meshes, materials.
-- **collision** geoms: `group="3"`. Primitives (`box`, `capsule`, `cylinder`, `sphere`) sized from the part, or a coarse convex mesh; name a collision mesh with a `_c` suffix (`link1_c`). MuJoCo hulls every mesh it collides, so a concave visual mesh used for collision collides as its convex hull.
+- **collision** geoms: `group="3"`. Primitives (`box`, `capsule`, `cylinder`, `sphere`) sized from the part, or a coarse convex mesh; name a collision mesh with a `_c` suffix (`link1_c`). MuJoCo hulls every mesh it collides, so a concave visual mesh used for collision collides as its convex hull; a concave part that must keep its pocket collides as several convex meshes, one geom each (a model generated from CAD: `collision(part, "decomposed")`, whose hulls are `<part>_hull<i>`).
 
 The CAD Viewer and `cad mjcf snapshot` draw groups 0 to 2, as MuJoCo's own viewer does by default, and leave 3 and up out, so a model following this convention shows its visuals and hides its collision geoms. A geom left in group 0 is drawn whether it is meant for collision or not.
 

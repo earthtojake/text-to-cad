@@ -10,7 +10,7 @@ A description generated from a CAD model (`cad model export <id> robot.xml` or `
 - beside the file: in `assets/` for an MJCF (its `meshdir`), in `meshes/` for a URDF, each named by relative path, so the file and its meshes move together as one folder;
 - with `cad.mujoco.spec(..., assets="dir")`, written in that folder (relative to the working directory), and without it in the engine's cache; either way the spec names every mesh by absolute path, as it does an MJCF's own (a Menagerie robot's), so a scene saved from it loads anywhere on this computer and nowhere else. A robot meant to travel as a folder is an export, its meshes relative beside it ([mujoco-environment.md](mujoco-environment.md#the-scene-in-code));
 - meshed at the viewer's tolerance unless the export or `spec` is given `tolerance=` (millimetres);
-- collision shapes as each part's `collision()` declares: its own mesh (which MuJoCo hulls), a fitted primitive, or none.
+- collision shapes as each part's `collision()` declares: its own mesh (which MuJoCo hulls), a fitted primitive, the convex hulls CoACD cuts its mesh into (`decomposed`: one STL per hull, `<model>_<part>_hull<i>.stl`, beside the part's whole visual), or none.
 
 A wrong mesh is fixed in the model and exported again; a mesh file in such a folder is never edited or replaced by hand. The rest of this file is for a description written by hand.
 
