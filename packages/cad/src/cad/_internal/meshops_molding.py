@@ -757,8 +757,8 @@ def _replays(release: dict[str, Any], probe: np.ndarray, normals: np.ndarray, pu
 
 
 def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast, *, scale: float,
-                      zero_tol_deg: float, stroke_limit: float | None = None,
-                      cache: dict | None = None) -> dict[str, Any]:
+                      zero_tol_deg: float, stroke_limit: float | None = None, lip_limit: float | None = None,
+                      depth: bool = True, cache: dict | None = None) -> dict[str, Any]:
     """What releases a trapped feature, from its points (already offset off the surface), their outward
     normals, the pull and ``cast``. Directions tried: eight round the parting plane, the feature's own mean
     lateral normal, and each of those tilted 45 degrees toward either pull (an angled slide).
@@ -773,9 +773,10 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
       direction serves (an internal groove or thread round the pull);
     - ``none``: some point is cleared by none of these (a sealed pocket, an interlock).
 
-    Each says how deep it is (``interference``): ``depth_mm`` against the straight pull (``depth_limited``
-    where no move up to the stroke limit frees it), and one released by none ``slide_depth_mm`` against its
-    best slide too (a re-entrant lip).
+    Each says how deep it is (``interference``, at ``DEPTH_POINTS`` of its points): ``depth_mm`` against the
+    straight pull (``depth_limited`` where no move up to the stroke limit frees it), and one released by none
+    ``slide_depth_mm`` against its best slide too (a re-entrant lip, at every tested point; searched up to
+    ``lip_limit``, ``slide_depth_limited`` past it).
 
     With ``cache`` (one dict per part), a feature of the same shape as one already classified (a row of
     identical contacts) is given its release once that release frees a probe of its own points too.
@@ -812,10 +813,16 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     # How deep it is: against the straight pull (a bump-off's strain); one nothing releases, against its
     # best slide too (a re-entrant lip the slide's steel would scrape over).
     reach = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
-    found["depth_mm"] = interference(pts, nrm, (p, -p), cast, limit=reach, zero_tol_deg=zero_tol_deg)
-    found["depth_limited"] = found["depth_mm"] >= reach
+    deep = _subset(len(pts), DEPTH_POINTS)
+    if depth:  # (a pull only ranked asks no depth against it: only whether a lip frees it)
+        found["depth_mm"] = interference(pts[deep], nrm[deep], (p, -p), cast, limit=reach, zero_tol_deg=zero_tol_deg,
+                                         rungs=8)
+        found["depth_limited"] = found["depth_mm"] >= reach
     if found["release"] == "none":
-        found["slide_depth_mm"] = interference(pts, nrm, lateral, cast, limit=reach, zero_tol_deg=zero_tol_deg)
+        # only as deep as a lip is worth telling apart (``lip_limit``): past it, "deeper than that"
+        lip = float(lip_limit) if lip_limit is not None else reach
+        found["slide_depth_mm"] = interference(pts, nrm, lateral, cast, limit=lip, zero_tol_deg=zero_tol_deg, rungs=5)
+        found["slide_depth_limited"] = found["slide_depth_mm"] >= lip
     if key is not None:
         cache[key] = found
     return found
@@ -917,8 +924,12 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
     return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
 
 
+#: A feature's points its depth against the pull is measured at, at most (evenly chosen).
+DEPTH_POINTS = 48
+
+
 def interference(points: np.ndarray, normals: np.ndarray, ways: Sequence[np.ndarray], cast: Cast, *,
-                 limit: float, zero_tol_deg: float) -> float:
+                 limit: float, zero_tol_deg: float, rungs: int = 12) -> float:
     """How far a feature's material overlaps its best way out (mm): per point, the least offset square to a
     way (along its own normal's part square to it, or eight round it) from which a ray along that way leaves
     the part -- the material between is bent past as the part strips off, so the offset need not be clear
@@ -936,7 +947,7 @@ def interference(points: np.ndarray, normals: np.ndarray, ways: Sequence[np.ndar
     for way in units:
         open_ = (nrm @ way >= -tol) & ~np.isfinite(cast(pts, np.repeat(way[None, :], len(pts), axis=0)))
         best[open_] = 0.0
-    offsets = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
+    offsets = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, rungs), [limit]]))
 
     def free(index: np.ndarray, offset: np.ndarray, square: np.ndarray, way: np.ndarray) -> np.ndarray:
         step = square[index] if square.ndim == 2 else np.broadcast_to(square, (len(index), 3))

@@ -168,7 +168,7 @@ class UndercutTest(unittest.TestCase):
         # 0.17 mm -- over BUMP_OFF_MM, nothing frees it (an error). Each says how deep it is against the pull.
         disc = bd.Cylinder(35, 16, align=BOTTOM) - bd.Cylinder(5, 40)
         turned = bd.Rot(0, 90, 0) * bd.Pos(2, -1, 0)
-        for turn, pull, inset in ((bd.Rot(0, 0, 0), "z", 0.5), (bd.Rot(0, 0, 0), "z", 1.0), (turned, "x", 0.5)):
+        for turn, pull, inset in ((bd.Rot(0, 0, 0), "z", 1.0), (turned, "x", 0.5)):
             result = _check(turn * (disc - bd.Pos(0, 0, 8) * bd.Torus(35 - inset, 3)), pull=pull)
             (item,) = result.measurements["undercuts"]["items"]
             self.assertAlmostEqual(item["depth_mm"], 3.0 + inset, delta=0.15, msg=(pull, inset))

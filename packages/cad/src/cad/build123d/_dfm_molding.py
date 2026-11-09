@@ -863,7 +863,8 @@ def _face_groups(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
     return groups
 
 
-def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True) -> dict[str, Any]:
+def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True,
+                   depth: bool = True) -> dict[str, Any]:
     trapped = _trap(geo, pull, zero_tol)
     features = _features(geo, trapped)
     groups = [sorted({int(face) for face in geo.owner[mask]}) for mask in features]
@@ -898,7 +899,8 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
         if classify:
             if spent[0] < _RELEASE_RAYS:
                 release = ops.classify_undercut(points, normals, pull, counted, scale=geo.diagonal,
-                                                zero_tol_deg=zero_tol, cache=releases)
+                                                zero_tol_deg=zero_tol, lip_limit=2.0 * BUMP_OFF_MM, depth=depth,
+                                                cache=releases)
             else:
                 release = {"release": "unknown", "kind": None, "directions": [], "vectors": [], "angled": [],
                            "stroke_mm": None}
@@ -953,7 +955,9 @@ def _release_fields(release: dict[str, Any], points: np.ndarray, pull: np.ndarra
                                 if release.get("depth_limited") else f"{mm(_r(depth, 3))} mm deep against the pull")
     if slide is not None:
         fields["slide_depth_mm"] = _r(slide, 4)
-        fields["depth_said"] += f", {mm(_r(slide, 3))} mm against its best slide"
+        fields["depth_said"] += (f", more than {mm(_r(slide, 3))} mm against its best slide"
+                                 if release.get("slide_depth_limited") else
+                                 f", {mm(_r(slide, 3))} mm against its best slide")
     if over:
         if over == "a slide":
             fields["kind"] = "external"  # the slides' steel scrapes over the lip from outside
@@ -1129,8 +1133,11 @@ _THICK_REFINED_SHARE = 1.2
 #: from each of its starts, a gain under ``_THICK_GAIN`` of the nominal wall counting as none.
 _THICK_REFINED_FACES = 32
 _THICK_ROUNDS = 16
-_THICK_STARTS = 4
+_THICK_STARTS = 2
 _THICK_GAIN = 0.01
+#: A search settles once its step is this share of the face's (u, v) span: near its greatest the ball changes
+#: with the square of the distance, so the last hundredth moves the figure by less than the gain.
+_THICK_SETTLED = 1e-2
 
 
 def _thick_limit() -> float:
@@ -1146,7 +1153,7 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
     (between ``_THICK_REFINED_SHARE`` and the rule's limit times the nominal wall), not at its samples alone: a
     pattern search over the face's own (u, v) from each of its ``_THICK_STARTS`` thickest samples, every start's
     eight neighbours solved together a round (``ops.ball_thickness``, as the samples are), the step halved where
-    none gains ``_THICK_GAIN`` of the nominal wall, each trial inside the face (on its boundary a convex edge's
+    none gains ``_THICK_GAIN`` of the nominal wall, settled at ``_THICK_SETTLED`` of the face's span, each trial inside the face (on its boundary a convex edge's
     other face passes through the point) and no ball held across a convex edge of it. Only the triangles and
     samples within the limit's diameter of the face are tried: a ball under it is bound there, so the figure is
     exact below the limit, and the search stops once a ball reaches it (the face is thick, whatever more). Four
@@ -1164,6 +1171,9 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
     vertices, triangles, owners = geo.mesh
     order = sorted(((face["max"], ordinal) for ordinal, face in per_face.items()
                     if _THICK_REFINED_SHARE * nominal <= face["max"] < limit), reverse=True)
+    if order:
+        corners = vertices[triangles]
+        tri_hi, tri_lo = corners.max(axis=1), corners.min(axis=1)
     for _, ordinal in order[:_THICK_REFINED_FACES]:
         checkpoint()
         face = per_face[ordinal]
@@ -1177,8 +1187,7 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
         box = shape.bounding_box()
         lo = np.array([box.min.X, box.min.Y, box.min.Z]) - limit * 1.05
         hi = np.array([box.max.X, box.max.Y, box.max.Z]) + limit * 1.05
-        corners = vertices[triangles]
-        near = np.flatnonzero(np.all((corners.max(axis=1) >= lo) & (corners.min(axis=1) <= hi), axis=1))
+        near = np.flatnonzero(np.all((tri_hi >= lo) & (tri_lo <= hi), axis=1))
         local_tris, local_owner = triangles[near], owners[near]
         around = np.flatnonzero(np.all((geo.points >= lo) & (geo.points <= hi), axis=1))
         bend = cap[mine[0]]
@@ -1208,7 +1217,8 @@ def _refine_thick(geo: _Geometry, per_face: dict[int, dict[str, Any]], nominal: 
                                  "du": (umax - umin) / 4.0, "dv": (vmax - vmin) / 4.0})
         for _ in range(_THICK_ROUNDS):
             live = [search for search in searches
-                    if search["du"] > 1e-3 * max(umax - umin, 1e-12) or search["dv"] > 1e-3 * max(vmax - vmin, 1e-12)]
+                    if search["du"] > _THICK_SETTLED * max(umax - umin, 1e-12)
+                    or search["dv"] > _THICK_SETTLED * max(vmax - vmin, 1e-12)]
             if not live or max(search["best"] for search in searches) >= limit:
                 break  # each search settled, or the face is thick whatever more it holds
             trials, owner_of = [], []
@@ -2075,7 +2085,8 @@ def _candidates(geos: list[_Geometry], wall_limit: float, zero_tol: float) -> di
         def row(axis: np.ndarray = axis) -> dict[str, Any]:
             drafts = [_face_drafts(geo, axis, zero_tol) for geo in geos]
             draft = _draft(geos, drafts, axis, wall_limit, zero_tol)
-            parts = [_undercut_part(geo, axis, zero_tol) for geo in geos]
+            # a candidate pull is ranked by its releases: no depth against it (only whether a lip frees it)
+            parts = [_undercut_part(geo, axis, zero_tol, depth=False) for geo in geos]
             under = _undercuts(geos, axis, zero_tol, parts)
             projected = [_projection_part(geo, axis) for geo in geos]
             parting = _parting([_parting_part(geo, d, p, v, axis, wall_limit,
