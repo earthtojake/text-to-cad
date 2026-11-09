@@ -370,18 +370,20 @@ CASES = [
                  ("cnc.hole_depth_limit", None, box(39.5, -0.5, -21, 40.5, 0.5, 25))]),
     # the T open at both ends is in line of sight along x, but only a T-slot cutter makes it: an undercut too
     Case("tslots", tslots, {"material": "aluminum"},
-         # the closed T's faces no straight line reaches are its slot cutter's recess: one finding, which names
-         # them (special_cutter's message), not a no_line_of_sight of their own
+         # the closed T has no way in: closed at both ends and its 8 mm neck narrower than the 12 mm disc that
+         # reaches its undercut -- no cutter gets there (no_way_in), so its edges and corners are errors and
+         # its faces no straight line reaches are said as such
          expect=[("cnc.internal_corner_sharp", None, box(-25, 5, 3, 25, 25, 15)),
                  ("cnc.special_cutter", None, box(-45, -25, 3, 45, -5, 15)),
-                 ("cnc.special_cutter", None, box(-25, 5, 3, 25, 25, 15))],
-         # the closed T's square ends: the cutter's disc leaves them round, so the edges across them, which its
-         # shank cannot travel along, are unmade too (the planted corners' consequence)
+                 ("cnc.sharp_internal_edge", None, box(-25, 5, 3, 25, 25, 15))],
          allow=[("cnc.undercut", None, box(-25, 5, 3, 25, 25, 15)),
-                ("cnc.sharp_internal_edge", None, box(-25, 5, 3, 25, 25, 15))]),
+                ("cnc.no_line_of_sight", None, box(-25, 5, 3, 25, 25, 15))]),
     # the dovetail through along x is a dovetail cutter's: an undercut
+    # the 30-degree V is a V cutter's of its angle (no standard chamfer mill's: a special cutter, said); the
+    # lopsided 100-degree V's root is obtuse, side-milling leaves a radius in it (obtuse_root, a warning)
     Case("grooves", grooves, {"material": "aluminum"},
-         expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+         expect=[("cnc.special_cutter", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+                 ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15)),
                  ("cnc.special_cutter", None, box(-40, -29.7, 7, 40, -10.3, 15))],
          # the 30-degree groove narrows to nothing at its root: a gap no tool enters; the dovetail's foot
          # (y = -29.62) stands 0.38 mm from the part's side (y = -30): a real wall the exact distance finds
@@ -390,7 +392,8 @@ CASES = [
                 ("cnc.wall_thickness", None, box(-40, -30, 7, 40, -29.6, 7.1)),
                 ("cnc.wall_thickness_recommended", None, box(-40, -30, 7, 40, -29.6, 7.1))]),
     Case("grooves-5axis", grooves, {"material": "aluminum", "axes": 5},
-         expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+         expect=[("cnc.special_cutter", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+                 ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15)),
                  ("cnc.special_cutter", None, box(-40, -29.7, 7, 40, -10.3, 15))],
          allow=[("cnc.gap_width", None, box(-40, 4.2, 9, 40, 7.8, 15)),
                 ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15)),
@@ -459,8 +462,10 @@ CASES = [
     Case("knife", knife, {"material": "aluminum"}, expect=[("cnc.knife_edge", None, box(-0.1, -7.5, -0.1, 0.1, 7.5, 0.1))]),
     Case("valley", valley(), {"material": "aluminum"}),
     Case("valley-160", valley(160.0), {"material": "aluminum"}),
-    # under BALL_VOID_DEG: an obtuse crease whose flanks each face out is made facing each from its own setup
-    Case("valley-140", valley(140.0), {"material": "aluminum"}),
+    # under BALL_VOID_DEG: an obtuse crease whose flanks each face out is sharp only facing each from its own
+    # direction (a ball or a side-milling tool leaves its radius): obtuse_root, a warning
+    Case("valley-140", valley(140.0), {"material": "aluminum"},
+         expect=[("cnc.sharp_internal_edge", None, box(-30, -20, 9.9, 30, 20, 10.1))]),
     # its floor's edges are a square end mill's along the pocket's own direction: the inclined setup makes them,
     # judged once, as that setup (one cause, one finding)
     Case("inclined_pocket", inclined_pocket, {"material": "aluminum"},

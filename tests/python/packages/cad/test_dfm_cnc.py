@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import build123d as bd
+import numpy as np
 
 import cad.step
 from cad._internal import manufacturing
@@ -288,11 +289,15 @@ class SharpEdgesTest(unittest.TestCase):
             self.assertEqual((crease["made_by"], crease["radius_mm"]), ("ball_mill", 1.25))
             self.assertAlmostEqual(crease["deviation_mm"], 1.25 * (1 / math.sin(math.radians(void / 2)) - 1), places=4)
             self.assertIn("cnc.ball_creases", _codes(result))
-        # under BALL_VOID_DEG: obtuse, made sharp in the setups that make its two flanks -- none of its own
+        # under BALL_VOID_DEG: obtuse, sharp only faced from each flank's own direction -- no setup of its own
+        # counted, and said: a ball or a side-milling tool leaves its radius (obtuse_root, a warning)
         for axes in (3, 5):
             sharp = _check(self._valley(140.0), axes=axes)
-            self.assertEqual(sharp.measurements["sharp_edges"]["items"], [], axes)
+            self.assertEqual([(i["reason"], i["made_by"]) for i in sharp.measurements["sharp_edges"]["items"]],
+                             [("obtuse_root", "end_mill")], axes)
             self.assertEqual(sharp.measurements["sharp_edges"]["by_tool"], {"end_mill": 1}, axes)
+            self.assertEqual([f.severity for f in sharp.findings if f.code == "cnc.sharp_internal_edge"],
+                             ["warning"], axes)
         setup = _check(self._valley(140.0)).measurements["setups"]["items"][0]
         self.assertFalse([d for d in setup["directions"] if d.get("sharp_edges")])
 
@@ -537,7 +542,10 @@ class OpenRecessTest(unittest.TestCase):
         part = _part(bd.Box(60, 40, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.extrude(groove, 40, both=True))
         result = cnc(part, material="aluminum")
         self.assertFalse([g for g in result.measurements["gaps"]["items"] if g["width_mm"] < 2.5])
-        self.assertIn("cnc.sharp_internal_edge", _judged(result))  # its 30-degree root is the edge's to judge
+        # its 30-degree root is no standard chamfer mill's: a V cutter ground to it, said with its angle
+        [special] = [i for i in result.measurements["access"]["items"] if i["kind"] == "special_cutter"]
+        self.assertIn("v cutter of 30 deg (no standard angle)", special["cutter"])
+        self.assertEqual(_judged(result), {"cnc.special_cutter"})
 
     def test_an_internal_groove_is_one_keyseat_recess(self) -> None:
         part = bd.Box(80, 60, 25)  # top at z = 12.5
@@ -566,8 +574,8 @@ class OpenRecessTest(unittest.TestCase):
             (30 * math.cos(math.radians(55)), -30 * math.sin(math.radians(55))), close=True)), 20, both=True)
         for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
             result = cnc(_part(turn * (bd.Box(60, 60, 10) - notch)), material="aluminum")
-            self.assertFalse([i for i in result.measurements["sharp_edges"]["items"]
-                              if abs(i["void_angle_deg"] - 110) < 1e-3], turn)
+            [root] = [i for i in result.measurements["sharp_edges"]["items"] if abs(i["void_angle_deg"] - 110) < 1e-3]
+            self.assertEqual((root["reason"], root["made_by"]), ("obtuse_root", "end_mill"), turn)
             setup = result.measurements["setups"]["items"][0]
             self.assertEqual(sum(d.get("sharp_edges") or 0 for d in setup["directions"]), 0)
 
@@ -641,12 +649,14 @@ class SideMillTest(unittest.TestCase):
 
     def test_v_notches_and_obtuse_roots_are_made_at_any_turn_each_direction_a_setup(self) -> None:
         plate = bd.Box(100, 60, 8)
-        for angle, own in ((60.0, [1]), (120.0, [None])):
+        for angle, own, judged in ((60.0, [1], set()), (120.0, [None], {"cnc.sharp_internal_edge"})):
             w = 60 * math.tan(math.radians(angle / 2))
             v = bd.extrude(bd.make_face(bd.Polyline((0, 0), (-w, 60), (w, 60), close=True)), 20, both=True)
             for turn in (0.0, 20.0):
                 result = cnc(_part(plate - bd.Pos(0, 18, 0) * bd.Rot(0, 0, turn) * v), material="aluminum")
-                self.assertEqual(_judged(result), set(), (angle, turn))
+                # a 120 deg V's root is obtuse: said (obtuse_root, a warning), the same at every turn
+                self.assertEqual(_judged(result), judged, (angle, turn))
+                self.assertTrue(result.ok)
                 # a 60 deg V's chamfer mill is a setup of its own along its bisector, counted even along a machine
                 # axis; a 120 deg one is obtuse, made in the setups of its flanks
                 setup = result.measurements["setups"]["items"][0]
@@ -658,7 +668,9 @@ class SideMillTest(unittest.TestCase):
                                                        close=True)), 20, both=True)
             for cut, turn in ((0, bd.Rot(0, 0, 0)), (20, bd.Rot(0, 0, 0)), (20, bd.Rot(23, -37, 61)), (35, bd.Rot(0, 0, 0))):
                 result = cnc(_part(turn * (plate - bd.Pos(0, 5, 0) * bd.Rot(0, 0, cut) * wedge)), material="aluminum")
-                self.assertNotIn("cnc.sharp_internal_edge", _codes(result), (void, cut))
+                self.assertEqual({i["reason"] for i in result.measurements["sharp_edges"]["items"]
+                                  if abs(i["void_angle_deg"] - void) < 1e-3}, {"obtuse_root"}, (void, cut))
+                self.assertTrue(result.ok, (void, cut))
                 # an obtuse root: made in the setups that make its flanks, whatever the turn -- none of its own
                 setup = result.measurements["setups"]["items"][0]
                 self.assertEqual(sum(d.get("sharp_edges") or 0 for d in setup["directions"]), 0, (void, cut))
@@ -688,6 +700,98 @@ class SideMillTest(unittest.TestCase):
         read = [cnc(_part(socket(point)), material="aluminum").measurements["setups"]["items"][0]["setup_count"]
                 for point in (False, True)]
         self.assertEqual(read[0], read[1])
+
+
+class DiscCutterTest(unittest.TestCase):
+    """A disc cutter -- T-slot, keyseat, dovetail -- makes an edge only where its disc can get in; one of no standard
+    angle is a special cutter, said with its angle."""
+
+    def test_a_disc_must_pass_its_way_in(self) -> None:
+        blk = bd.Box(40, 40, 30, align=(A.CENTER, A.CENTER, A.MIN))
+        chamber = bd.Pos(0, 0, 15) * bd.Cylinder(10, 6)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            # a 20 mm chamber behind a 4 mm bore: a disc reaching its wall from inside the bore is wider than it
+            bottle = cnc(_part(turn * (blk - bd.Cylinder(2, 80) - chamber)), material="aluminum")
+            self.assertEqual({i["reason"] for i in bottle.measurements["sharp_edges"]["items"]}, {"no_way_in"}, turn)
+            self.assertFalse(bottle.ok)
+            # behind a 12 mm bore it is a keyseat cutter's (its disc no wider than the bore)
+            groove = cnc(_part(turn * (blk - bd.Cylinder(6, 80) - chamber)), material="aluminum")
+            self.assertEqual(groove.measurements["sharp_edges"]["by_tool"], {"keyseat_cutter": 2}, turn)
+            self.assertTrue(groove.ok)
+        # a round chamber under a 5 mm square port: no disc passes it, the chamber open to no side
+        square = bd.Box(40, 40, 20, align=(A.CENTER, A.CENTER, A.MIN))
+        round_chamber = square - bd.Pos(0, 0, 10) * bd.Cylinder(10, 3, align=(A.CENTER, A.CENTER, A.MIN)) \
+            - bd.Pos(0, 0, 13) * bd.Box(5, 5, 8, align=(A.CENTER, A.CENTER, A.MIN))
+        result = cnc(_part(round_chamber), material="aluminum")
+        self.assertIn("no_way_in", {i["reason"] for i in result.measurements["sharp_edges"]["items"]})
+        self.assertFalse(result.ok)
+
+    def test_a_v_or_a_dovetail_of_no_standard_angle_is_a_special_cutter(self) -> None:
+        plate = bd.Box(80, 40, 12, align=(A.CENTER, A.CENTER, A.MIN))
+        h = 3.0 * math.tan(math.radians(75 / 2))
+        v75 = plate - bd.extrude(bd.Plane.YZ.offset(-41) * bd.make_face(
+            bd.Polyline((-h, 12.01), (h, 12.01), (0, 9), close=True)), 82)
+        three = cnc(_part(v75), material="aluminum")
+        [special] = [i for i in three.measurements["access"]["items"] if i["kind"] == "special_cutter"]
+        self.assertIn("v cutter of 75 deg", special["cutter"])
+        self.assertEqual(_judged(three), {"cnc.special_cutter"})
+        # five axes tilt a standard chamfer mill to each flank in turn: no special cutter
+        five = cnc(_part(v75), material="aluminum", axes=5)
+        self.assertEqual(five.measurements["sharp_edges"]["by_tool"], {"chamfer_mill": 1})
+        self.assertEqual(_judged(five), set())
+        # a Parker O-ring dovetail (66 deg): its cutter plunges through the 3 mm neck and moves under each lip
+        off = 2.5 / math.tan(math.radians(66))
+        ring = bd.revolve(bd.Plane.XZ * bd.make_face(bd.Polyline(
+            (23.5, 12.01), (26.5, 12.01), (26.5 + off, 9.5), (23.5 - off, 9.5), close=True)), bd.Axis.Z)
+        result = cnc(_part(bd.Box(80, 80, 12, align=(A.CENTER, A.CENTER, A.MIN)) - ring), material="aluminum")
+        [special] = [i for i in result.measurements["access"]["items"] if i["kind"] == "special_cutter"]
+        self.assertIn("dovetail cutter of 66 deg", special["cutter"])
+        self.assertTrue(result.ok)
+
+    def test_a_slot_cutter_s_narrow_neck_is_said_where_it_narrows(self) -> None:
+        # a T-slot through along x, its neck 12 wide for half its length and 4 for the rest, the undercut 8 tall
+        part = bd.Box(80, 40, 40) - bd.Pos(-20, 0, 13) * bd.Box(41, 12, 14.01) - bd.Pos(20, 0, 13) * bd.Box(41, 4, 14.01) \
+            - bd.Pos(0, 0, 2) * bd.Box(82, 20, 8)
+        result = cnc(_part(part), material="aluminum")
+        narrow = [i for i in result.measurements["sharp_edges"]["items"] if i["reason"] == "narrow_opening"]
+        self.assertTrue(narrow)
+        self.assertTrue(all(abs(i["opening_mm"] - 4.0) < 0.05 and abs(i["recess_mm"] - 8.0) < 0.05 for i in narrow))
+        self.assertEqual({f.severity for f in result.findings if f.code == "cnc.sharp_internal_edge"}, {"warning"})
+        self.assertTrue(result.ok)
+
+    def test_an_obstacle_between_stations_is_found_and_measured(self) -> None:
+        # a 10 mm channel along a 100 mm block, a 5 mm bridge over it: the floor's edges under it are unmade for
+        # its 5 mm, wherever it stands between the stations
+        block = bd.Box(100, 30, 20, align=(A.CENTER, A.CENTER, A.MIN)) - bd.Pos(0, 0, 15) * bd.Box(102, 10, 10.01)
+        for x in (0.0, -43.75):
+            result = cnc(_part(block + bd.Pos(x, 0, 18.5) * bd.Box(5, 10, 3)), material="aluminum")
+            under = [i for i in result.measurements["sharp_edges"]["items"] if i.get("unreached_mm")]
+            self.assertEqual(len(under), 2, x)
+            for item in under:
+                self.assertAlmostEqual(item["unreached_mm"], 5.0, delta=0.25)
+                self.assertEqual(item["reason"], "blocked")
+                self.assertLess(abs(item["xyz"][0] - x), 1.0)
+
+    def test_a_slot_cutter_s_groove_adds_no_setup(self) -> None:
+        # an O-ring groove round a boss: cut by a slot cutter from above, its bottom asks no side of its own
+        boss = bd.Box(80, 80, 6, align=(A.CENTER, A.CENTER, A.MIN)) + bd.Pos(0, 0, 6) * bd.Cylinder(
+            15, 25, align=(A.CENTER, A.CENTER, A.MIN))
+        groove = bd.Pos(0, 0, 16.25) * bd.Cylinder(16, 2.5) - bd.Pos(0, 0, 16.25) * bd.Cylinder(13, 2.6)
+        setup = cnc(_part(boss - groove), material="aluminum").measurements["setups"]["items"][0]
+        self.assertEqual(setup["setup_count"], 1)
+
+    def test_the_least_angle_is_searched_at_an_end_too(self) -> None:
+        # sampled least at an end: the least between it and its neighbour is found (here at a tenth of the edge)
+        from cad.build123d import _dfm_brep
+
+        real = _dfm_brep.edge_angles
+        try:
+            _dfm_brep.edge_angles = lambda part, edge, f: (None, 10.0 + 100.0 * (np.asarray(f) - 0.1) ** 2)
+            fractions = np.array([0.0, 0.5, 1.0])
+            _, angles = _dfm_brep.least_edge_angle(None, None, fractions, 10.0 + 100.0 * (fractions - 0.1) ** 2)
+        finally:
+            _dfm_brep.edge_angles = real
+        self.assertAlmostEqual(float(angles.min()), 10.0, places=6)
 
 
 class FrameTest(unittest.TestCase):

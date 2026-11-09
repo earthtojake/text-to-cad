@@ -307,15 +307,28 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   square to one face whose other face is no flank along it: an angled setup or more axes); `vertical_corner` --
   both faces lie along a machine direction the edge runs along, a corner of a profile or a cavity cut along
   it where the tool's side leaves its radius (a gear's curved tooth root, a closed pocket's corner); `acute`;
-  `blocked` -- a face is a plane square to a machine direction, the way along it blocked; `no_square_face`). The
+  `blocked` -- a face is a plane square to a machine direction, the way along it blocked, or some way reaches
+  part of the edge (here or with more axes) and an obstacle the rest; `no_square_face`; and before them
+  `no_way_in`, an error -- a disc cutter reaches every station but no disc gets there, see below). Two more
+  reasons are warnings on edges that are made: `narrow_opening` (a slot cutter's opening narrower than its
+  recess is tall, `opening_mm` and `recess_mm`: a text-to-cad figure, not a passage) and `obtuse_root` (an
+  obtuse root between two planes seen end-on along a machine direction -- a profile's, a valley's: a tool
+  side-milling it, or a ball, leaves its radius; it is sharp only facing each side from its own direction,
+  two more setups the count leaves out, the same at every turn). The
   rule is the part's, whatever its turn: a notch in a plate turned 30 degrees reads as one along the plate's
   axes. A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
-  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Each way is tried at 9 stations
-  along the edge (its ends 0.05 mm inside, and between) and makes it only where it reaches every one: a
-  0.5 mm window at a corner's mid-height, or a front wall cut down to a 2 mm lip, side-mills no 10 mm corner.
-  Where some way reaches part of an edge, the stretch none reaches is unmade: the item (or the corner) sits
-  there, `unreached_mm` its length by the stations' share, and its message says so. Made by: an
+  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Each way is tried at stations
+  along the edge (its ends 0.05 mm inside, and between), 9 at least and at most the smallest tool's radius
+  apart (`--tools`, else 1.25 mm; 129 at most) so an obstacle a tool could not pass between two is never
+  missed, and makes it only where it reaches every one: a 0.5 mm window at a corner's mid-height, or a front
+  wall cut down to a 2 mm lip, side-mills no 10 mm corner; a disc cutter's costlier walk is tried at the 9
+  first. Where some way reaches part of an edge, the stretch none reaches is unmade: between a reached station
+  and an unreached one the boundary is found by bisection (every way tried there) to 0.1 mm (1% of an edge
+  under 10 mm); the item (or the corner) sits at the middle of the longest such stretch, `unreached_mm` their
+  length (a 5 mm bridge over a 100 mm channel's edges reads 5.0, wherever it stands), and its message says so.
+  An edge shorter than 0.025 mm (or a hundred-thousandth of the part) is a sliver of the model's own and not
+  judged (`by_tool` `sliver`). Made by: an
   end mill where one face is a plane square to an approach direction (a floor or a ceiling), the void angle
   >= 90 and a ray from that face along the direction escapes; a square end mill along any direction a setup
   presents (the part clamped to present it, 3 axes' re-fixturing) where one face is a plane square to it (the
@@ -326,11 +339,20 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   every station the cutter's shank (0.5 mm about its axis) leaves the part along the direction from some
   place across the void and the disc that reaches the station from there touches no material short of the
   edge's own ends, slid back along the edge where it passes them (the shank travels along the edge: an 8 mm
-  port in a wall is no way to a 25 mm corner; an edge shorter than the disc is no run for one),
-  through an opening at least as wide as the recess is tall (the disc's thickness); a 45/60 degree dovetail
-  cutter likewise (its face a plane, no width asked: a dovetail's neck is narrower than it is deep); a
+  port in a wall is no way to a 25 mm corner; an edge shorter than the disc is no run for one); a dovetail
+  cutter of any acute angle likewise, its floor a plane square to one of the part's axes (45 and 60 degrees
+  are standard; another, Parker's 66, is a cutter ground to it, the special cutter's finding naming the
+  angle). The disc must get there, by geometry alone (the least disc that reaches the station from the
+  opening, its shank of no breadth): a keyseat cutter's no wider than the bore it comes down, so every
+  station within twice the bore's radius of its axis (a 20 mm chamber behind a 4 mm bore: none); a slot or
+  dovetail cutter's plunged through an opening as wide as the disc somewhere along the edge (its sides found by
+  bisection), or fed in at its own level from a side the recess opens to (a T-slot from its open end; a round
+  chamber under a 5 mm port: neither). Else the edge is unmade, `no_way_in`. A slot cutter's opening is read at
+  every station: narrower than the recess is tall, `narrow_opening` (a warning). A
   60/90/120 degree chamfer mill along a V's bisector where the bisector keeps to one axis along the edge
-  (five axes tilt it along a curved one), and its shoulder (a 150/135/120 degree void: one face
+  (five axes tilt it along a curved one); a V of another angle under 90.5 degrees is a V cutter's ground to it
+  along its bisector (a special cutter, its angle named), or on five axes a 60 degree mill tilted to each
+  flank in turn, its cone's side on the flank (each flank an orientation); and a chamfer mill's shoulder (a 150/135/120 degree void: one face
   along the mill's axis, the other the cone's, its normal's cosine to the axis the half angle's sine within
   0.01 -- a face along the axis, 1e-16 off square in a turned part, is none); a ball end mill where the void
   angle is >= 150 degrees
@@ -350,7 +372,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   stations (on 3 and 3+2 axes, one direction an edge). A gear's curved roots and a closed pocket's corners
   stay unmade. `by_tool` counts every concave edge by the tool. A recess a special cutter makes takes in the
   faces across its edges no tool makes (its square ends, which the disc leaves round): what no straight line
-  reaches there is the recess's. An edge sharing a vertex with a reported corner and a face with it (or with a round
+  reaches there is the recess's; and its own faces ask the setup cover no direction (the cutter's axis, either
+  way, is its edges' need): an O-ring groove round a boss reads one setup, not three. An edge sharing a vertex with a reported corner and a face with it (or with a round
   tangent to its faces) is folded into that corner.
 - **knife_edges** — convex edges whose material angle, read along the edge (a curved one at 17 points: an
   edge where a cone meets a sphere runs from 63 to 42 degrees), falls under 45 degrees (`KNIFE_DEG`,
@@ -473,8 +496,9 @@ for CNC machining".
 ### What it cannot measure
 
 Tool holder and spindle collisions (access is a line of sight, a tool of zero diameter; width and corner
-radius cover the diameter separately); a T-slot or dovetail cutter's way into its recess (its shank's way out and its disc's
-clearance at each station are, not how the disc got there); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
+radius cover the diameter separately); a disc cutter's path from where it gets in to each station (its way in -- a bore, an
+opening as wide as the disc, an open side -- and its shank's way out and clearance at each station are judged,
+the travel between them not); an angled fixture's reach (an inclined feature is counted as one more setup); fixturing and
 workholding; tolerances, surface finish, cycle time or cost; thread callouts on a drawing (only modelled
 threads and tap-drill diameters); hole axes other than a cylinder's (a slot milled as a hole); pockets whose
 floor is not planar (a 3D-contoured cavity is reported through access and walls, not as a pocket); sharp

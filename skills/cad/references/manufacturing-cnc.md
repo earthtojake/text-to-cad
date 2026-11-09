@@ -84,8 +84,13 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
   `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
-  keyseat cutter makes -- only where its shank finds a way out beside the whole edge and its disc
-  clears the part (a small port in a cavity's wall is no way in for one).
+  keyseat cutter makes -- only where its shank finds a way out beside the whole edge, its disc
+  clears the part and the disc can get there (a keyseat's down a bore no narrower than it; a T-slot's
+  through an opening as wide as it or from a side the slot opens to): a chamber behind a small bore or
+  port is `no_way_in`, an error. A V or dovetail of no standard angle (the 66 degree O-ring dovetail, a
+  75 degree V) is a special cutter ground to it, named with its angle. A slot cutter's neck narrower than
+  the recess is tall (`narrow_opening`) and a profile's obtuse root, which side-milling rounds
+  (`obtuse_root`), are warnings.
 - `setups.setup_count` estimates clampings from the reachable directions and the sides square corners
   are side-milled from (a direction's `sharp_edges`).
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a

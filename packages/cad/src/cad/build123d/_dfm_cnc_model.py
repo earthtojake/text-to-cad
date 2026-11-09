@@ -20,7 +20,7 @@ from cad._internal.dfm import checkpoint
 from cad.build123d import _dfm_brep as brep
 
 __all__ = ["Hit", "Model", "Stations", "WORLD", "about", "directions_for", "edge_normals", "fibonacci", "framed",
-           "machine_frame", "stations", "unit"]
+           "machine_frame", "stations", "stations_at", "unit"]
 
 #: The six directions a three-axis machine approaches from.
 WORLD = tuple(np.array(axis, dtype=float) for axis in
@@ -740,13 +740,19 @@ class Stations:
 
 
 def stations(model: Model, edge: brep.Edge, count: int) -> Stations:
-    """``count`` stations evenly along ``edge`` by its length, the end ones inset from its vertices by a
-    twentieth of a millimetre (a tenth of the edge where it is shorter), where a ray from the end itself would
-    graze the face the edge's end meets; each computed once."""
+    """``count`` stations evenly along ``edge`` by its length (``stations_at``), each set computed once."""
     key = (edge.ordinal, count)
     found = model._stations.get(key)
-    if found is not None:
-        return found
+    if found is None:
+        found = stations_at(model, edge, np.linspace(0.0, 1.0, count))
+        model._stations[key] = found
+    return found
+
+
+def stations_at(model: Model, edge: brep.Edge, fractions: np.ndarray) -> Stations:
+    """Stations at ``fractions`` (0 to 1) of ``edge``'s length, the ends inset from its vertices by a twentieth
+    of a millimetre (a tenth of the edge where it is shorter), where a ray from the end itself would graze the
+    face the edge's end meets."""
     from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Curve2d
     from OCP.GCPnts import GCPnts_AbscissaPoint
     from OCP.gp import gp_Pnt, gp_Vec
@@ -759,7 +765,7 @@ def stations(model: Model, edge: brep.Edge, count: int) -> Stations:
     faces = [model.face(ordinal) for ordinal in edge.faces]
     on = [BRepAdaptor_Curve2d(shape.wrapped, face.wrapped) for face in faces]
     rows: list[list[np.ndarray]] = [[], [], [], []]
-    for fraction in np.linspace(0.0, 1.0, count):
+    for fraction in np.asarray(fractions, dtype=float):
         along = inset + float(fraction) * (length - 2 * inset)
         try:
             at = GCPnts_AbscissaPoint(curve, along, first)
@@ -774,9 +780,8 @@ def stations(model: Model, edge: brep.Edge, count: int) -> Stations:
         for k, (face, adaptor) in enumerate(zip(faces, on)):
             uv = adaptor.Value(t)
             rows[2 + k].append(brep.point_normal(face, uv.X(), uv.Y())[1])
-    found = Stations(*(np.array(row) for row in rows), length / max(1, count - 1))  # type: ignore[arg-type]
-    model._stations[key] = found
-    return found
+    spacing = length / max(1, len(rows[0]) - 1)
+    return Stations(*(np.array(row).reshape(-1, 3) for row in rows), spacing)  # type: ignore[arg-type]
 
 
 def edge_normals(model: Model, edge: brep.Edge) -> tuple[np.ndarray, np.ndarray]:

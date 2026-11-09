@@ -75,10 +75,26 @@ _EDGE_REASONS = {
     "blocked": ("sharp concave edge (its square face blocked)",
                 "a face is square to a machine direction but the way to the edge along it is blocked, so no "
                 "tool's end reaches it: give it a radius of at least {limit:g} mm, open that way, or plan EDM"),
+    "no_way_in": ("sharp concave edge (its disc cutter cannot get in)",
+                  "a disc cutter reaches it from its shank, but its disc cannot get there -- wider than the bore "
+                  "it would come down, or than any opening, with no side the recess opens to at its own level: "
+                  "widen the way in, open the recess to a side, give it a radius of at least {limit:g} mm, or "
+                  "plan EDM"),
     "no_square_face": ("sharp concave edge (no face square to a machine direction)",
                        "neither face at its {void_angle_deg:.0f}-degree void is a plane square to a machine "
                        "direction, so no tool's corner makes it sharp: round it to at least {limit:g} mm (a ball "
                        "end mill's radius), square one face to an approach direction, or give more axes"),
+}
+#: Sharp edges a tool makes, said as warnings (text-to-cad's own judgements, ``reason``): the words and the fix.
+_EDGE_WARNINGS = {
+    "narrow_opening": ("sharp concave edge (a slot cutter's opening narrower than its recess)",
+                       "its slot cutter's way in is {opening_mm:g} mm wide where the recess is {recess_mm:g} mm "
+                       "tall (the disc's thickness): a disc that thick on a shank that thin is a special, fragile "
+                       "cutter -- widen the opening to the recess's height, or plan the cutter with the shop"),
+    "obtuse_root": ("sharp concave edge (an obtuse root a side-milling tool rounds)",
+                    "a tool side-milling the profile leaves its radius in this root; it is sharp only by facing "
+                    "each side from its own direction (two more setups): round it to at least {limit:g} mm, or "
+                    "plan those setups"),
 }
 #: A sharp edge a tool along a direction the machine lacks would make: the access warning's severity and words.
 _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
@@ -114,6 +130,12 @@ def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
             found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
                               what + " radius", source, scale_by=scale, when={**_MILLING, **when},
                               item_when={"reason": reason}, fix=fix, note=note, detail=_EDGE_DETAIL))
+        for reason, (what, fix) in _EDGE_WARNINGS.items():
+            found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
+                              what + " radius", source, severity="warning", scale_by=scale,
+                              when={**_MILLING, **when}, item_when={"reason": reason},
+                              fix=fix.replace("at least {limit:g} mm", "at least {limit:g} mm" if scale else recommended),
+                              note=note, detail=_EDGE_DETAIL))
         found.append(Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
                           _OTHER_AXES[0] + " radius", source, severity="warning", scale_by=scale,
                           when={**_MILLING, **when}, item_when={"reason": "other_axes"},
