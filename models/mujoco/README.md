@@ -19,11 +19,22 @@ A robot is here only if its maker publishes the raw CAD. Of the four robots
 i2rt YAM and Unitree G1 publish a URDF and meshes but no STEP: there is nothing upstream of their
 descriptions to convert, so they are not benchmarked.
 
+Three more from beyond Playground are fetched and pinned, not yet converted:
+
+| Robot | Raw CAD | Maker's description | Menagerie model |
+| --- | --- | --- | --- |
+| UFACTORY xArm7 (`xarm7`) | `xArm 7 (XS1305).step`, the arm alone, [UFACTORY's downloads page](https://www.ufactory.cc/downloads) (no license stated) | `xarm_device.urdf.xacro` (dof 7), xarm_ros (BSD-3-Clause) | `ufactory_xarm7/xarm7.xml` (with the gripper; `xarm7_nohand.xml` without), from the maker's URDF |
+| Seeed reBot DevArm, RS build (`rebot_devarm`) | `reBot_B601_RS_v1.0_20260625.step`, the full assembly beside per-part STEPs, reBot-DevArm (CERN-OHL-W-2.0) | `ReBot_Arm_RS.urdf`, reBot-Isaacsim (MIT; its `urdf/RS/` carries CERN-OHL-W-2.0) | `seeed_rebot_devarm/seeed_rebot_devarm.xml`, from that URDF |
+| ROBOTIS OP3 (`op3`) | `ROBOTIS-OP3_part_asm.stp`, ROBOTIS-OP-Series-Data (no license stated) | `robotis_op3.urdf.xacro`, ROBOTIS-OP3-Common (Apache-2.0) | `robotis_op3/op3.xml`, from the maker's URDF |
+
+The xArm7's and the OP3's descriptions are xacro, expanded with `xacro` before a comparison reads
+them.
+
 ### Candidates beyond Playground
 
 Other Menagerie robots whose makers publish raw CAD without a login, found by reading every
 Menagerie model's provenance and checking each maker's files (as of November 2026; none is wired in
-yet):
+yet but the three above):
 
 | Menagerie model | Raw CAD | License | Why it is worth adding |
 | --- | --- | --- | --- |
@@ -31,9 +42,8 @@ yet):
 | `robotiq_2f85`, `robotiq_2f85_v4` | the assembly STEP Menagerie's v4 README names as its own source | not stated | a small, well-known gripper with a linkage: low risk |
 | `trs_so_arm100` | `SO_5DOF_ARM100_Assembly.step` in the same SO-ARM100 repository | Apache-2.0 | the SO-101's predecessor: almost free given SO-101 |
 | `low_cost_robot_arm` | `arm.step` and per-part STEPs in AlexanderKoch-Koch/low_cost_robot | MIT | printed parts and servos, as SO-101, from another maker |
-| `ufactory_xarm7`, `ufactory_lite6` | one STEP per arm on UFACTORY's downloads page | not stated | industrial arms, likely fused bodies: the link split must be recovered |
+| `ufactory_lite6` | one STEP per arm on UFACTORY's downloads page (the xArm7's is benchmarked above) | not stated | a second industrial arm, likely fused bodies: the link split must be recovered |
 | `tetheria_aero_hand_open` | left and right STEP in TetherIA/aero-hand-open | CC BY-NC-SA 4.0 | a second hand; non-commercial |
-| `robotis_op3`, `seeed_rebot_devarm` | one assembly STEP / per-part STEPs | none stated / CERN-OHL-W | a humanoid; an arm without its actuators |
 
 Not benchmarkable: Pollen Robotics' Microduck (not in Menagerie; its CAD is an Onshape document that needs an account to export, its public meshes are CC BY-NC-SA, and its MJCF in microduck_rl was made from that same document by onshape-to-robot, so there is no independent hand-made reference), Universal Robots (STEP behind a login), Franka (SolidWorks native, no STEP), the
 Onshape-sourced models (an export needs an account, and Menagerie's model was made from the same
@@ -44,6 +54,7 @@ document), and most others (no raw CAD published).
 ```bash
 cd models/mujoco
 python3 src/fetch.py              # the STEPs, the makers' URDFs and Menagerie, pinned (src/sources.py)
+python3 src/fetch.py op3          # one robot: so101, wxai, xarm7, rebot_devarm, op3
 python src/so101.py               # the model: reads the STEP, exports out/so101/so101.{xml,urdf}
 python src/wxai.py
 python src/compare.py             # reports/<robot>.md and .json

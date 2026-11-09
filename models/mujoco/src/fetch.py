@@ -5,8 +5,8 @@
 
 Everything lands under models/mujoco/ in folders Git ignores (``upstream/``, ``menagerie/``):
 nothing fetched is ever committed. A Git source is a sparse, blob-filtered clone checked out at its
-pinned commit, so only the named paths are downloaded; a download is checked against its pinned
-SHA-256 and refused when the bytes differ (the maker changed the file: update the pin on purpose).
+pinned commit, so only the named paths are downloaded; a download (a zip found on its page, or one
+file at its URL) is checked against its pinned SHA-256 and refused when the bytes differ (the maker changed the file: update the pin on purpose).
 Running it again is cheap: a checkout already at its commit and a file already matching its pin
 are left as they are.
 
@@ -26,7 +26,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from sources import MENAGERIE, MENAGERIE_REPO, ROBOTS, Download, GitSource
+from sources import MENAGERIE, MENAGERIE_REPO, ROBOTS, Download, File, GitSource
 
 USER_AGENT = "text-to-cad-benchmark-fetch"
 
@@ -93,6 +93,25 @@ def download(source: Download, folder: Path) -> None:
     stamp.write_text(source.sha256 + "\n")
 
 
+def download_file(source: File, folder: Path) -> None:
+    """The file at ``source``'s URL, checked against its pin and saved as ``source.name`` in ``folder``."""
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / source.name
+    if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == source.sha256:
+        print(f"  {folder.relative_to(MENAGERIE.parent)}: {source.name} at {source.sha256[:12]}")
+        return
+    print(f"  {folder.relative_to(MENAGERIE.parent)}: fetching {source.url}")
+    try:
+        data = _get(source.url)
+    except OSError as error:
+        raise SystemExit(f"{source.url}: {error}. Find {source.name} on {source.page} and update sources.py")
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != source.sha256:
+        raise SystemExit(f"{source.name} is not the pinned file: sha256 {digest}, pinned {source.sha256}. "
+                         f"The maker changed it; check what changed, then update the pin in sources.py")
+    target.write_bytes(data)
+
+
 def _get(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=120) as response:
@@ -104,6 +123,8 @@ def fetch(name: str) -> None:
     print(f"{robot.title}:")
     if isinstance(robot.cad, GitSource):
         checkout(robot.cad, robot.folder)
+    elif isinstance(robot.cad, File):
+        download_file(robot.cad, robot.folder)
     else:
         download(robot.cad, robot.folder)
     vendor = robot.folder / "vendor"
