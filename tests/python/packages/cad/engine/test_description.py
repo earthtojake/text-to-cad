@@ -5,7 +5,8 @@ forward kinematics does, a pair followed backwards and a chain with a slide too;
 on the joints that follow; a part's collision and named frames, declared on the part and round-tripped
 through the xbf and through a warm build; a part kept a body of its own, an exclusion and a joint's drive
 limits and dynamics, declared, described and round-tripped through the xbf, and refused where they are
-wrong; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
+wrong; limits on a joint an assembly holds (a link of several parts) described and round-tripped, and one no
+pair takes warned; a declared mass scaling its solids with point masses and nested masses, a part's contact friction,
 and a mass that cannot be made refused; a turned link's inertia in its own frame, as the description, the
 MJCF and the URDF write it; a model with no mechanism a link per top-level part; a loop a tree and the closure
 its last pair, two frames that coincide as built, one closing at a slide moved to its nearest turn, and a
@@ -585,6 +586,47 @@ class BodiesTest(_Folder):
             limits(assembly, "elbow")
         with self.assertRaisesRegex(DescriptionError, "part 'cam' excludes 'nothing', which names no part"):
             self.described("bodies", BODIES.replace('exclude(cam, "base")', 'exclude(cam, "nothing")'))
+
+
+# The hinge's links each a compound of parts, the moving joint on the base's compound: limits declared on the
+# assembly above reach it, and a limit on a joint no pair takes is warned.
+LINKED = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import limits
+from cad.engine import xbf
+
+
+@xbf("XBF/linked.xbf")
+def linked():
+    base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    base.label, arm.label = "base_part", "arm_part"
+    base.material = arm.material = metals.aluminum()
+    lower = bd.Compound(children=[base], label="lower")
+    upper = bd.Compound(children=[arm], label="upper")
+    elbow = bd.RevoluteJoint("elbow", lower, axis=bd.Axis((40, 0, 20), (0, -1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", upper, elbow.location)
+    elbow.connect_to(upper.joints["elbow"], angle=0)
+    bd.RevoluteJoint("spare", lower, axis=bd.Axis((0, 0, 0), (0, 0, 1)))
+    limits(lower, "spare", effort=1)
+    root = bd.Compound(children=[lower, upper], label="linked")
+    return limits(root, "elbow", effort=2, velocity=3, damping=0.1)
+"""
+
+
+class CompoundLinkTest(_Folder):
+    def test_limits_on_a_joint_an_assembly_holds_are_described_and_round_trip_and_an_unpaired_one_warned(self) -> None:
+        description, _structure = self.described("linked", LINKED)
+        elbow = next(joint for joint in description.joints if joint.name == "elbow")
+        self.assertEqual((elbow.effort, elbow.velocity, elbow.damping), (2.0, 3.0, 0.1))
+        self.assertEqual(description.warnings, ("'lower' limits joint 'spare', which is no joint of the description: "
+                                                "the limits are left out",))
+        # A shape rebuilt from the document carries them on the compound that holds the joint, as the model gave them.
+        rebuilt = {child.label: child for child in Source.read(self.folder / "XBF/linked.xbf").shape().children}
+        self.assertEqual(rebuilt["lower"].__dict__["_drives"],
+                         {"elbow": {"effort": 2.0, "velocity": 3.0, "damping": 0.1}, "spare": {"effort": 1.0}})
+        self.assertNotIn("_drives", rebuilt["lower"].children[0].__dict__)
 
 
 # A filled housing with no material, declared to weigh 350 g with a 200 g motor inside it; a hand of

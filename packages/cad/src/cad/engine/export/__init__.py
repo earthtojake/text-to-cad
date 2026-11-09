@@ -419,7 +419,15 @@ class Source:
             if prototype.get("exclude"):
                 made.__dict__["_exclude"] = tuple(prototype["exclude"])
             if prototype.get("drives"):
-                made.__dict__["_drives"] = {label: dict(bounds) for label, bounds in prototype["drives"].items()}
+                # A joint's limits back on the node holding it, ``up`` levels above the part (``declare``).
+                own = {label: {key: value for key, value in bounds.items() if key != "up"}
+                       for label, bounds in prototype["drives"].items() if not bounds.get("up")}
+                if own:
+                    made.__dict__["_drives"] = own
+                above = [(int(bounds["up"]), label, {key: value for key, value in bounds.items() if key != "up"})
+                         for label, bounds in prototype["drives"].items() if bounds.get("up")]
+                if above:
+                    made.__dict__[_DRIVES] = above
             if prototype.get("pointMasses"):
                 points = {}
                 for point_name, point in prototype["pointMasses"].items():
@@ -455,6 +463,10 @@ class Source:
             for up, key, value in made.__dict__.pop(_NODES, ()):
                 if up < len(chain):
                     chain[-1 - up].__dict__[key] = value
+            for up, label, bounds in made.__dict__.pop(_DRIVES, ()):
+                if up < len(chain):
+                    held = chain[-1 - up].__dict__
+                    held["_drives"] = {**(held.get("_drives") or {}), label: bounds}
             for child in made.__dict__.get("_NodeMixin__children") or ():
                 declare(child, chain)
 
@@ -464,10 +476,11 @@ class Source:
 
 
 _STRUCTURES: dict[int, tuple[Any, Any, dict[str, Any]]] = {}
-# A rebuilt part's masses, and its ``free`` and ``link`` declarations, until ``Source.shape`` puts each on the
-# node that declared it.
+# A rebuilt part's masses, its ``free`` and ``link`` declarations and the drive limits of the joints its
+# assemblies hold, until ``Source.shape`` puts each on the node that declared it.
 _MASSES = "_cad_masses"
 _NODES = "_cad_nodes"
+_DRIVES = "_cad_drives"  # and the joints' limits an assembly above it holds
 
 
 def structure_of(tree: Any, path: Path | None) -> dict[str, Any]:

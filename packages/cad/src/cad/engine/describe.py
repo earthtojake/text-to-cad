@@ -41,9 +41,11 @@ link of its own, named for the declaration (its name, else the part's), framed a
 placement, hung from that link by a ``fixed`` joint of the same name, after it in link order. A link
 every part of which is declared a body keeps its first, and says so.
 
-**Drives and exclusions.** A pair's joint takes the drive limits (``declarations.limits``) its moving
-joint's part declares for its label: the part in the pair's link 1 that holds it (the one at the
-qualifier's path, for a label two pairs share). A declared exclusion (``declarations.exclude``) is
+**Drives and exclusions.** A pair's joint takes the drive limits (``declarations.limits``) declared for
+its label on the node that holds its moving joint: a part in the pair's link 1, or an assembly (a link
+of several parts), whose parts carry its limits with how many levels above them it is (the one at the
+qualifier's path, for a label two pairs share). A declaration no pair's joint takes is warned, by the
+node that holds it, and left out. A declared exclusion (``declarations.exclude``) is
 each link holding the part that declares it, with each link holding a part at or below a node of
 the label it names (a part's own label names it); a label that names no node is refused by name,
 and two links' pair is kept once.
@@ -409,31 +411,38 @@ class _Describer:
         return tuple((links[a].name, links[b].name) for a, b in sorted(found))
 
     def _drives(self, kinematics: dict[str, Any]) -> None:
-        """Each pair's joint given the drive limits its moving joint's part declares (the module's **Drives and
-        exclusions**); a declaration no joint takes is warned."""
+        """Each pair's joint given the drive limits declared on the node holding its moving joint -- a part, or an
+        assembly whose parts carry them (``document.DECLARED``'s ``up``) -- (the module's **Drives and
+        exclusions**); a declaration no joint takes is warned, once per node that holds it."""
         blocks = kinematics["links"]
-        declared = {(index, label) for block in blocks for index in block.get("instances") or ()
-                    for label in self._declared(index).get("drives") or {}}
+
+        def holder(index: int, bounds: dict[str, Any]) -> str:
+            """The path of the node that holds the joint: the part's own, or an assembly ``up`` levels above it."""
+            names = self.instances[index]["path"].split("/")
+            return "/".join(names[:len(names) - int(bounds.get("up") or 0)])
+
+        declared = {(holder(index, bounds), label) for block in blocks for index in block.get("instances") or ()
+                    for label, bounds in (self._declared(index).get("drives") or {}).items()}
         for pair in kinematics.get("pairs") or ():
             joint = getattr(self, "pair_joints", {}).get(pair["label"])
             if joint is None:
                 continue
             qualifier, _sep, label = pair["label"].rpartition(":")
             for index in blocks[pair["links"][0]].get("instances") or ():
-                path = self.instances[index]["path"]
-                if qualifier and path != qualifier and not path.endswith("/" + qualifier):
-                    continue
                 bounds = (self._declared(index).get("drives") or {}).get(label)
                 if bounds is None:
                     continue
-                declared.discard((index, label))
+                path = holder(index, bounds)
+                if qualifier and path != qualifier and not path.endswith("/" + qualifier):
+                    continue
+                declared.discard((path, label))
                 if any(getattr(joint, key) is not None for key in DRIVE):
                     continue
                 for key in DRIVE:
                     if bounds.get(key) is not None:
                         setattr(joint, key, float(bounds[key]))
-        for index, label in sorted(declared):
-            self.warn(f"part {self._name(index)!r} limits joint {label!r}, which is no joint of the description: "
+        for path, label in sorted(declared):
+            self.warn(f"{path.rsplit('/', 1)[-1]!r} limits joint {label!r}, which is no joint of the description: "
                       "the limits are left out")
 
     def _fixed(self, name: str, parent: Link, child: Link) -> Joint:

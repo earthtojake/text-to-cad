@@ -288,7 +288,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
               inherited_exclude: tuple[str, ...] = (), inherited_masses: tuple[tuple[int, float], ...] = (),
               inherited_friction: tuple[float, ...] | None = None,
               inherited_decomposition: dict[str, Any] | None = None,
-              inherited_nodes: tuple[tuple[int, str, Any], ...] = ()) -> tuple[Part | Assembly, tuple, tuple | None]:
+              inherited_nodes: tuple[tuple[int, str, Any], ...] = (),
+              inherited_drives: dict[str, tuple[int, Any]] | None = None) -> tuple[Part | Assembly, tuple, tuple | None]:
         state = obj.__dict__ if obj is not None else {}
         own_color = _rgba(state.get("_color"))
         color = own_color or inherited
@@ -306,6 +307,10 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
         masses = inherited_masses + (((0, _grams(own_mass, path)),) if own_mass is not None else ())
         # And each ``free`` and ``link`` declared at or above it, as (levels above it, key, value), the outermost first.
         nodes = inherited_nodes + _nodes(state, path)
+        # And each joint's drive limits declared at or above it, by the joint's label: (levels above it, bounds), the
+        # nearest declaration of a label the one kept (``declarations.limits`` keeps them on the node holding the joint).
+        drives = {**(inherited_drives or {}), **{label: (0, bounds) for label, bounds in
+                                                 (state.get(declarations.DRIVES) or {}).items()}}
         surface = _friction(state.get(declarations.FRICTION), path) or inherited_friction
         children = state.get("_NodeMixin__children") or ()
         label = state.get("label") or ""
@@ -320,7 +325,8 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
                                                           path + "/" + (child_label or f"{own}.{at}"), collision,
                                                           excluded, tuple((up + 1, grams) for up, grams in masses),
                                                           surface, decomposition,
-                                                          tuple((up + 1, key, value) for up, key, value in nodes))
+                                                          tuple((up + 1, key, value) for up, key, value in nodes),
+                                                          {label: (up + 1, bounds) for label, (up, bounds) in drives.items()})
                 components.append((prototype, child_topods.Location(), child_label, child_color))
                 parts_signature.append((signature, _location_key(child_topods.Location()), child_label, child_color))
             # An assembly is its components: the compound holding them is no content of its
@@ -346,7 +352,7 @@ def collect(result: Any, name: str, harvested: Callable[[tuple], "Harvest | None
             face_colors[ordinal] = face_color
         painted = tuple(sorted(face_colors.items()))
         frames = _frames(state.get(declarations.FRAMES), path)
-        declared = _declared(state, excluded, path, masses, surface, decomposition, nodes)
+        declared = _declared(state, excluded, path, masses, surface, decomposition, nodes, drives)
         signature = ("part", topods.TShape(), int(topods.Orientation()), painted, material_key(material),
                      tuple((o, material_key(m)) for o, m in sorted(face_materials.items())),
                      declarations_key(collision, frames, declared))
@@ -2070,7 +2076,8 @@ def _frames(value: Any, path: str) -> dict[str, tuple[float, ...]]:
 
 #: What a part declares beside its collision and its frames, by the key the structure and the label hold it
 #: under: its body's name ("" for the part's own), the labels it does not collide with, its joints' drive
-#: limits and dynamics (``{label: {"effort": ..., "damping": ...}}``, the keys declared), the masses
+#: limits and dynamics (``{label: {"effort": ..., "damping": ..., "up"?}}``, the keys declared, and ``up``, how
+#: many levels above the part the node holding the joint is, where an assembly holds it), the masses
 #: declared on it or above it (``[[levels above the part, grams], ...]``, the outermost first: 0 is the
 #: part's own), its point masses (``{name: {"grams", "at": 16 floats column-major mm, "inertia"?}}``), its
 #: contact friction (``[sliding]`` or ``[sliding, torsional, rolling]``), a decomposed collision's options
@@ -2118,9 +2125,12 @@ def _friction(value: Any, path: str) -> tuple[float, ...] | None:
 def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
               masses: tuple[tuple[int, float], ...] = (), surface: tuple[float, ...] | None = None,
               decomposition: dict[str, Any] | None = None,
-              nodes: tuple[tuple[int, str, Any], ...] = ()) -> dict[str, Any]:
+              nodes: tuple[tuple[int, str, Any], ...] = (),
+              drives: dict[str, tuple[int, Any]] | None = None) -> dict[str, Any]:
     """A part's ``DECLARED`` (``declarations.body``, ``exclude``, ``limits``, ``mass``, ``point_mass``,
-    ``friction``, ``collision``'s decomposition options) as JSON holds them: a key only where it declares one."""
+    ``friction``, ``collision``'s decomposition options) as JSON holds them: a key only where it declares one.
+    ``drives`` are the joints' limits declared at or above the part (``{label: (levels above it, bounds)}``),
+    the part's own where None."""
     from cad.engine import declarations
     from cad.engine.mechanism import _numpy
 
@@ -2132,10 +2142,13 @@ def _declared(state: dict[str, Any], excluded: tuple[str, ...], path: str,
         found["body"] = body
     if excluded:
         found["exclude"] = list(excluded)
-    drives = state.get(declarations.DRIVES)
+    if drives is None:
+        drives = {label: (0, bounds) for label, bounds in (state.get(declarations.DRIVES) or {}).items()}
     if drives:
-        found["drives"] = {str(label): {key: float(bounds[key]) for key in declarations.DRIVE if key in bounds}
-                           for label, bounds in sorted(drives.items())}
+        # A node's limits, ``up`` levels above the part, say how far up (a part's own say nothing more).
+        found["drives"] = {str(label): {**{key: float(bounds[key]) for key in declarations.DRIVE if key in bounds},
+                                        **({"up": int(up)} if up else {})}
+                           for label, (up, bounds) in sorted(drives.items())}
     if masses:
         found["mass"] = [[up, grams] for up, grams in masses]
     points = state.get(declarations.POINTS)

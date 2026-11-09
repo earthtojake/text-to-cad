@@ -56,8 +56,9 @@ the tree and kept, as ``mass`` is, on every part below it with how many levels a
 declared, so the document carries them on the parts' prototypes and gives them back to the node.
 
 Each is an attribute of the object, as a material is, and travels as build123d moves it: a copy,
-``moved`` and ``located`` keep them. ``limits`` is kept on the part that holds the joint, so it is
-declared after the joint is made. A frame is given in the part's OWN frame, the one its geometry
+``moved`` and ``located`` keep them. ``limits`` is kept on the node that holds the joint -- a part, or
+an assembly (a link of several parts), which the document keeps on every part below it with how many
+levels above the part it is, as ``mass`` -- so it is declared after the joint is made. A frame is given in the part's OWN frame, the one its geometry
 is in before its placement (``part.location`` not applied: ``bd.Box(240, 40, 50)`` is centred on
 it), so it moves with the part however a joint or a placement moves it::
 
