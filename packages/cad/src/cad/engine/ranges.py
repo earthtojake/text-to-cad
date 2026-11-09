@@ -18,7 +18,11 @@ the default: its mesh, as the viewer draws it), or what it declares a simulator 
 (``"collision"``: the primitive fitted to it where it declares one, its hulls where it is decomposed, else
 its mesh), with a part declared ``collision(part, "none")`` taking no part either way (a fastener seated in
 the hole it holds, a servo's internals), and two parts declared ``exclude(a, b)`` never meeting each other
-(``Description.part_excludes``: those two alone, not the rest of their links). Each surface is sampled so
+(``Description.part_excludes``: those two alone, not the rest of their links). On the collision geometry the
+sweep is the simulator's: the link pairs the MJCF never collides (``export.contact.never``: MuJoCo's own
+filter of a body and its parent, the pairs touching as built, the pairs declared) never meet, so a joint whose
+child is filtered against its parent has no stop there, as MuJoCo has none, and its clashes are what it hits.
+Each surface is sampled so
 that every point of it is within ``RESOLUTION`` of a sample (``_samples``), the same samples whatever the
 clearance. A **gap** is the least distance between two sides' samples: never under the true distance
 between the two meshes, and at most ``2 * RESOLUTION`` over it (each side's nearest point is within
@@ -74,7 +78,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "sweep"]
+__all__ = ["CLOSED", "GEOMETRY", "RESOLUTION", "Contact", "JointStops", "Near", "sweep", "unknown"]
 
 #: Every point of a tested surface is within this many millimetres of one of its samples, at any clearance: a gap
 #: is measured to within twice it, and a clearance under it is refused.
@@ -168,20 +172,32 @@ SAMPLED_LONG = 20_000_000
 LONG = 15.0
 
 
-def sweep(description: Any, *, step: float = 1.0, clearance: float = 1.0, geometry: str = "parts",
-          told: Callable[[str], None] | None = None,
+def sweep(description: Any, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: str = "parts",
+          joints: tuple[str, ...] = (), told: Callable[[str], None] | None = None,
           progress: Callable[[str], None] | None = None) -> list[JointStops]:
-    """Each controlled joint's stops (see the module docstring): ``step`` degrees for a turning joint and
-    millimetres for a sliding one, ``clearance`` millimetres (at least ``RESOLUTION``), ``geometry`` what is
-    tested (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears, of a joint whose
-    sweep may take more than ``LONG`` seconds (its first pose's time times its poses, a full turn each way at
-    most), a line as it starts saying about how long, and one as it ends."""
+    """Each controlled joint's stops (see the module docstring), or only those ``joints`` names, in the
+    description's order: ``step`` degrees for a turning joint and millimetres for a sliding one,
+    ``clearance`` millimetres (at least ``RESOLUTION``, and that by default), ``geometry`` what is tested
+    (``GEOMETRY``); ``told`` hears a line per joint as it is done. ``progress`` hears, of a joint whose sweep
+    may take more than ``LONG`` seconds (its first pose's time times its poses, a full turn each way at most),
+    a line as it starts saying about how long, and one as it ends. A name in ``joints`` that is no control
+    (``Description.controls``) is refused, naming the controls."""
     if geometry not in GEOMETRY:
         raise ValueError(f"geometry {geometry!r} is none of {', '.join(GEOMETRY)}")
     if not clearance >= RESOLUTION:
         raise ValueError(f"clearance {clearance:g} mm is under the sweep's resolution, {RESOLUTION:g} mm")
+    unknown(description, joints)
     return _Sweep(description, step, clearance, told or (lambda _line: None), geometry,
-                  progress or (lambda _line: None)).run()
+                  progress or (lambda _line: None), tuple(joints)).run()
+
+
+def unknown(description: Any, joints: tuple[str, ...]) -> None:
+    """Refuse a joint name the sweep moves no joint by, naming the ones it does (``Description.controls``)."""
+    controls = [joint.name for joint in description.controls()]
+    missing = [name for name in joints if name not in controls]
+    if missing:
+        raise ValueError(f"{', '.join(repr(name) for name in missing)} {'is' if len(missing) == 1 else 'are'} "
+                         f"no joint the sweep moves; its joints: {', '.join(controls) or 'none'}")
 
 
 def _tested(link: Any, geometry: str) -> list[tuple[str, str, Any]]:
@@ -481,8 +497,10 @@ class _Reach:
 
 class _Sweep:
     def __init__(self, description: Any, step: float, clearance: float, told: Callable[[str], None],
-                 geometry_of: str = "parts", progress: Callable[[str], None] = lambda _line: None) -> None:
+                 geometry_of: str = "parts", progress: Callable[[str], None] = lambda _line: None,
+                 only: tuple[str, ...] = ()) -> None:
         self.description = description
+        self.only = only
         self.progress = progress
         self.clearance = float(clearance)
         self.place = ""  # which joint of how many is swept, as ``progress`` says it
@@ -547,6 +565,19 @@ class _Sweep:
             for a in by_path.get(first, ()):
                 for b in by_path.get(second, ()):
                     self.excluded[a, b] = self.excluded[b, a] = True
+        if geometry_of == "collision":
+            # The simulator's own stops: the link pairs the MJCF never collides set aside whole (``never``).
+            from cad.engine.export.contact import never
+
+            by_link: dict[str, list[int]] = {}
+            for index, (_part, link_name) in enumerate(self.parts):
+                by_link.setdefault(link_name, []).append(index)
+            for pair in never(description):
+                first, second = sorted(pair)
+                rows, columns = by_link.get(first, []), by_link.get(second, [])
+                if rows and columns:
+                    self.excluded[np.ix_(rows, columns)] = True
+                    self.excluded[np.ix_(columns, rows)] = True
 
     def _hashed(self, part: int, size: float) -> _Cells:
         """A part's samples where it stands as built, hashed in cells of ``size`` metres: the same for every joint
@@ -688,7 +719,7 @@ class _Sweep:
 
     def run(self) -> list[JointStops]:
         found = []
-        controls = list(self.description.controls())
+        controls = [joint for joint in self.description.controls() if not self.only or joint.name in self.only]
         for at, joint in enumerate(controls, 1):
             started = time.perf_counter()
             self.place, self.long = f"{at} of {len(controls)}", False

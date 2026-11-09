@@ -291,12 +291,12 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
 
 
 def _ranges(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> ranges SOURCE [--step S] [--clearance MM]``: the library's joint stops (``cad.<type>.ranges``),
+    """``cad <type> ranges SOURCE [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops (``cad.<type>.ranges``),
     run here when this environment holds the kernel, else in the installation's base, which does
     (``cad_server._internal.integration_env``), its options refused here first."""
 
     def run(argv: list[str], prog: str) -> int:
-        from cad._internal.ranges import INTEGRATION, StopsResult, options
+        from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options
         from cad.results import CheckFinding, CheckResult
         from cad_server._internal import integration_env
         from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
@@ -314,8 +314,8 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
             print(f"{prog}: {line}", file=sys.stderr, flush=True)
 
         def swept() -> CheckResult:
-            options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", 1.0),
-                    geometry=keywords.get("geometry", "parts"))
+            options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
+                    geometry=keywords.get("geometry", "parts"), joint=tuple(keywords.get("joint") or ()))
             python = integration_env.environment(INTEGRATION, said)
             sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
                        for value in positional]

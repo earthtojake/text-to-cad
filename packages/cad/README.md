@@ -831,9 +831,11 @@ calling process, as a study reads one (a model exported by the engine to an `.xb
 first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
 (`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as
 built): its stop is where its child link meets its parent link, and a clash with any other link before it is
-said beside; a smaller clearance only widens a range, and two parts declared `exclude(a, b)` never meet. It writes
+said beside; a larger clearance only narrows a range, and two parts declared `exclude(a, b)` never meet. It writes
 nothing and changes nothing: a model is code, and its ranges are written in it (law 23). Its options
-describe the sweep, never the model (law 22): `step` (degrees or millimetres), `clearance` (millimetres)
-and `geometry` (`parts`, each part's own surface; `collision`, what each declares a simulator collides it
-as). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
+describe the sweep, never the model (law 22): `step` (degrees or millimetres), `clearance` (millimetres,
+0.3 by default and at the least: the surfaces' sampling), `geometry` (`parts`, each part's own surface;
+`collision`, what each declares a simulator collides it as, less the link pairs the MJCF never collides,
+so its stops are MuJoCo's) and `joint` (the joints to sweep, every one a person moves by default; a name
+the document has no such joint by is refused, naming its joints). The kernel reads and meshes the document, so the `cad` command runs it where the kernel is: its own
 process when its environment holds it, else the installation's base (law 29).

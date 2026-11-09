@@ -85,6 +85,33 @@ def near():
 """
 
 
+# A two-joint arm: an upper arm on a shoulder 2 mm over the base, a forearm on an elbow 1 mm over the upper arm. The
+# forearm turning meets the upper arm, its parent, which MuJoCo never collides it with (``filterparent``: the
+# upper arm hangs from the base by its joint, so neither is welded to the world); the upper arm meets the base, the
+# world's, which MuJoCo does collide it with.
+CHAIN = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/chain.xbf")
+def chain():
+    base = bd.Box(80, 80, 10)
+    base.label = "base"
+    upper = bd.Pos(0, 0, 7) * bd.Box(10, 10, 60, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    upper.label = "upper"
+    fore = bd.Pos(0, 0, 69) * bd.Box(10, 10, 50, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    fore.label = "fore"
+    shoulder = bd.RevoluteJoint("shoulder", base, axis=bd.Axis((0, 0, 7), (0, 1, 0)), angular_range=(-180, 180))
+    bd.RigidJoint("shoulder", upper, shoulder.location)
+    shoulder.connect_to(upper.joints["shoulder"], angle=0)
+    elbow = bd.RevoluteJoint("elbow", upper, axis=bd.Axis((0, 0, 68), (0, 1, 0)), angular_range=(-180, 180))
+    bd.RigidJoint("elbow", fore, elbow.location)
+    elbow.connect_to(fore.joints["elbow"], angle=0)
+    return bd.Compound(children=[base, upper, fore], label="chain")
+"""
+
+
 class Ranges(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
@@ -111,14 +138,17 @@ class Ranges(unittest.TestCase):
         joints = {found["joint"]: found for found in result.measurements["joints"]}
         elbow, slide = joints["elbow"], joints["slide"]
         # The arm stands up from the hinge at 30 mm: 0.31 mm from the wall at -30 degrees, touching it at -31;
-        # 0.09 mm from the base at +101, touching it at +102 (build123d's exact distances). Within the clearance (1
-        # mm) is touching, so each stop is the pose before: the arm is over a millimetre clear at -29 and +100.
-        self.assertEqual(("deg", -29.0, 100.0), (elbow["unit"], elbow["lower"], elbow["upper"]))
+        # 0.09 mm from the base at +101, touching it at +102 (build123d's exact distances). Within the clearance
+        # (0.3 mm by default, the least: where the parts all but touch) is touching, so each stop is the pose
+        # before: the arm is 0.31 mm clear at -30 and over a millimetre at +100.
+        self.assertEqual(0.3, result.measurements["clearance"])
+        self.assertEqual(("deg", -30.0, 100.0), (elbow["unit"], elbow["lower"], elbow["upper"]))
         self.assertEqual(("arm", "wall", "arm", "base"),
                          (elbow["lower_contact"]["moving"], elbow["lower_contact"]["still"],
                           elbow["upper_contact"]["moving"], elbow["upper_contact"]["still"]))
-        # The gap said at each contact is measured, at most twice the resolution over the exact one.
-        self.assertTrue(0.31 <= elbow["lower_contact"]["gap"] <= 0.31 + 0.6, elbow["lower_contact"])
+        # The gap said at each contact (-31, touching; +101, 0.09 mm) is measured, at most twice the resolution over
+        # the exact one.
+        self.assertTrue(0.0 <= elbow["lower_contact"]["gap"] <= 0.6, elbow["lower_contact"])
         self.assertTrue(0.09 <= elbow["upper_contact"]["gap"] <= 0.09 + 0.6, elbow["upper_contact"])
         # The carriage, built 40 mm along the slide: 70 mm from the wall behind it and 25 mm from the end stop
         # ahead, so about a clearance short of each; seated on the base all along, which stops nothing.
@@ -163,7 +193,7 @@ class Ranges(unittest.TestCase):
         result = xbf.ranges(self.rig('exclude(arm, "wall")'))
         joints = {found["joint"]: found for found in result.measurements["joints"]}
         elbow, slide = joints["elbow"], joints["slide"]
-        # The arm passes the wall it stopped at (-29 degrees) and turns on until it meets the base; the carriage,
+        # The arm passes the wall it stopped at (-30 degrees) and turns on until it meets the base; the carriage,
         # a part of no excluded pair, still stops at that wall.
         self.assertEqual("base", elbow["lower_contact"]["still"], elbow)
         self.assertLess(elbow["lower"], -60.0)
@@ -178,7 +208,7 @@ class Ranges(unittest.TestCase):
         script.write_text(textwrap.dedent(NEAR), encoding="utf-8")
         report = engine_build.build(script, ["near"], cwd=self.folder)[0]
         self.assertTrue(report["ok"], report)
-        result = xbf.ranges(self.folder / "XBF/near.xbf")
+        result = xbf.ranges(self.folder / "XBF/near.xbf", clearance=1.0)  # the plate 0.4 mm away: within it
         [hinge] = result.measurements["joints"]
         # The plate narrowing from 0.4 to 0.35 mm stops nothing: the arm turns on until it meets the wall, its corner
         # there at +58 degrees (a stop a few degrees on: the count wants about 15 mm^2 of the narrow arm in contact).
@@ -208,10 +238,10 @@ class Ranges(unittest.TestCase):
             result = xbf.ranges(document)
         lines = result.human_lines()
         self.assertEqual([line.split() for line in lines[:3]],
-                         [["joint", "lower", "upper", "range"], ["elbow", "-29", "deg", "+100", "deg", "-29", "to",
+                         [["joint", "lower", "upper", "range"], ["elbow", "-30", "deg", "+100", "deg", "-30", "to",
                                                                  "100", "deg"],
                           ["slide", *lines[2].split()[1:]]])
-        self.assertTrue(lines[3].startswith("elbow: lower -29 deg: arm (arm) meets wall"), lines)
+        self.assertTrue(lines[3].startswith("elbow: lower -30 deg: arm (arm) meets wall"), lines)
         self.assertFalse([line for line in lines if line.startswith("info:")], lines)
         # Each joint said as it starts, about how long it may take, and as it ends, though not verbose.
         heard = said.getvalue().splitlines()
@@ -231,7 +261,7 @@ class Ranges(unittest.TestCase):
 
         calls: list[int] = []
 
-        def stand_in(meshes: Any) -> list[list[tuple[Any, Any]]]:  # each mesh its own one hull
+        def stand_in(meshes: Any, _done: Any = None) -> list[list[tuple[Any, Any]]]:  # each mesh its own one hull
             calls.append(len(meshes))
             return [[(positions, triangles)] for positions, triangles, _options in meshes]
 
@@ -244,8 +274,53 @@ class Ranges(unittest.TestCase):
             self.assertEqual(calls, [1])
         lower = [{found["joint"]: found for found in result.measurements["joints"]}["elbow"]["lower"]
                  for result in (parts, collided)]
-        self.assertEqual(lower[0], -29.0, "on the parts the arm still stops at the wall")
+        self.assertEqual(lower[0], -30.0, "on the parts the arm still stops at the wall")
         self.assertIsNotNone(lower[1], "and at the wall's hull on the collision geometry")
+
+    def test_on_the_collision_geometry_the_pairs_the_mjcf_never_collides_never_meet(self) -> None:
+        from cad import xbf
+        from cad.engine import build as engine_build
+
+        script = self.folder / "chain.py"
+        script.write_text(textwrap.dedent(CHAIN), encoding="utf-8")
+        self.assertTrue(engine_build.build(script, ["chain"], cwd=self.folder)[0]["ok"])
+        swept = {geometry: {found["joint"]: found
+                            for found in xbf.ranges(self.folder / "XBF/chain.xbf", geometry=geometry,
+                                                    step=2.0).measurements["joints"]}
+                 for geometry in ("parts", "collision")}
+        # The parts: the forearm meets the upper arm each way.
+        elbow = swept["parts"]["elbow"]
+        self.assertEqual(("upper", "upper"), (elbow["lower_contact"]["still"], elbow["upper_contact"]["still"]), elbow)
+        # MuJoCo filters a body against its parent: on the collision geometry the elbow turns all the way round,
+        # as it would in the simulator, where its range is what holds it.
+        elbow = swept["collision"]["elbow"]
+        self.assertEqual((None, None, None, None), (elbow["lower"], elbow["upper"], elbow["lower_clash"],
+                                                    elbow["upper_clash"]), elbow)
+        # The shoulder's parent is the world's, which MuJoCo does collide: the base stops it either way, alike.
+        shoulder = [(swept[geometry]["shoulder"]["lower"], swept[geometry]["shoulder"]["upper"])
+                    for geometry in ("parts", "collision")]
+        self.assertEqual(shoulder[0], shoulder[1])
+        self.assertEqual("base", swept["collision"]["shoulder"]["upper_contact"]["still"])
+        # A pair touching as built across a joint from the world (the carriage seated on the base) is excluded in
+        # the MJCF, its two bodies whole: the carriage slides through the wall in MuJoCo, and on the collision
+        # geometry; the arm, clear of the base as built, still stops at the wall.
+        document = self.rig()
+        parts, collision = ({found["joint"]: found for found in xbf.ranges(document, geometry=geometry)
+                             .measurements["joints"]} for geometry in ("parts", "collision"))
+        self.assertEqual("wall", parts["slide"]["lower_contact"]["still"])
+        self.assertEqual((None, None), (collision["slide"]["lower"], collision["slide"]["upper"]), collision["slide"])
+        self.assertEqual(parts["elbow"]["lower"], collision["elbow"]["lower"])
+
+    def test_one_joint_is_swept_alone_and_an_unknown_one_is_refused_by_name(self) -> None:
+        from cad import xbf
+
+        document = self.rig()
+        result = xbf.ranges(document, joint=("slide",))
+        self.assertEqual(["slide"], [found["joint"] for found in result.measurements["joints"]])
+        self.assertIn("1 joint swept", result.summary)
+        with self.assertRaisesRegex(ArgumentRefused, r"^--joint 'elbo' is no joint the sweep moves; its joints: "
+                                                     r"elbow, slide$"):
+            xbf.ranges(document, joint=("elbo",))
 
     def test_a_document_with_no_joint_has_nothing_to_sweep(self) -> None:
         import build123d as bd

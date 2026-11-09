@@ -118,24 +118,27 @@ cad run src/arm.py
 cad model ranges "$ID"
 ```
 
-At its defaults (1 mm clearance, 1 degree steps), `ranges` took 23 s for six joints, and 19 s at
-`--clearance 0.3`, the least it takes. A smaller clearance only widens a range:
-the defaults stop each joint where its parts first come within 1 mm, and 0.3 where they all but
-touch. Start at the defaults, and narrow one question with a posed snapshot instead.
+At its defaults (0.3 mm clearance, 1 degree steps), `ranges` took 19 s for six joints. The
+defaults stop each joint where its parts all but touch: write those stops. A larger `--clearance`
+only narrows a range (at 1 mm a gripper stopped 50 degrees short of closing), so keep the default.
+To ask again about one joint after a change, sweep it alone:
+`cad model ranges "$ID" --joint gripper`.
 
 Each stop names the two parts that met one step past it, and they should be parts of neighbouring
 links. One that names a part of a link that is not a neighbour means a part is in the wrong link.
 A stop at 0 means the same, unless the vendor drew the arm at that stop: an arm drawn folded flat
 (a forearm resting on its upper arm) has a real stop at 0, which a posed snapshot a few degrees
 the other way confirms. Vendor parts often sit a fraction of a millimetre apart (a jaw beside its
-servo's cover): the finding lists them as `near as built`, and such a pair stops a joint only
-where its gap closes to half, `closed to ... from ... mm as built`. Check such a stop with a posed
-snapshot at it. Where it is not the hardware's stop (the jaws still 20 mm apart when the jaw meets
-the cover), set the pair aside in the model, `exclude(jaw, "servo6_bottom_cover")`, and sweep
-again: the two parts never stop the sweep, every other pair of their links still does, and the
-jaw then stops on the other jaw. The same declaration tells the MJCF their links never collide.
-Write the stops into `angular_range`, rounded towards zero. A joint found clear all the way round
-has no stop in the parts: give it the actuator's own travel, or make it continuous
+servo's cover): such a pair stops a joint only where its contact grows or its gap closes to half,
+and the stop says so (`touching as built`). Check such a stop with a posed snapshot at it. Where
+it is not the hardware's stop (the jaws still 20 mm apart when the jaw meets the cover), set the
+pair aside in the model, `exclude(jaw, "servo6_bottom_cover")`, and sweep again: the two parts
+never stop the sweep, every other pair of their links still does, and the jaw then stops on the
+other jaw. The same declaration tells the MJCF their links never collide. `--geometry collision`
+sweeps the collision shapes as MuJoCo collides them, the pairs the MJCF never collides set aside
+(a body and its parent among them): what a joint hits in the simulator before its range holds
+it. Write the stops into `angular_range`, rounded towards zero. A joint found clear all the way
+round has no stop in the parts: give it the actuator's own travel, or make it continuous
 ([Generate from CAD](../SKILL.md#generate-from-cad)).
 
 Then declare `limits(arm, joint, effort=, velocity=, armature=)` from the actuator's datasheet:

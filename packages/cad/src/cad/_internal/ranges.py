@@ -43,10 +43,11 @@ _TESTED = {"parts": "parts' surfaces", "collision": "parts' collision shapes"}
 RESOLUTION = 0.3
 
 
-def options(*, step: float, clearance: float, geometry: str = "parts") -> None:
+def options(*, step: float, clearance: float, geometry: str = "parts", joint: tuple[str, ...] = ()) -> None:
     """Refuse a step or a clearance the sweep cannot use: each a positive finite number, the step at most 45 (degrees
     or millimetres: past it a part passes through a thin wall unseen), the clearance at least ``RESOLUTION`` (the
-    samples resolve no finer) and at most 10 mm."""
+    samples resolve no finer) and at most 10 mm; and a joint named by anything but a name. Which joints the
+    document has is the kernel's to say (``engine.ranges.unknown``), once it is read."""
     for flag, value, most in (("--step", step, 45.0), ("--clearance", clearance, 10.0)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
             raise ArgumentRefused(f"{flag} is a positive number, not {value!r}")
@@ -57,13 +58,16 @@ def options(*, step: float, clearance: float, geometry: str = "parts") -> None:
                               "surface is sampled to within it, so a gap is measured no finer")
     if geometry not in _TESTED:
         raise ArgumentRefused(f"--geometry is parts or collision, not {geometry!r}")
+    for name in (joint,) if isinstance(joint, str) else joint:
+        if not isinstance(name, str) or not name:
+            raise ArgumentRefused(f"--joint names a joint, not {name!r}")
 
 
 def ranges_for(document_type: str) -> Any:
     """``cad.<document_type>.ranges``: the joint stops, for a source of that type."""
 
-    def ranges(source: Path, *, step: float = 1.0, clearance: float = 1.0, geometry: Geometry = "parts",
-               verbose: bool = False) -> CheckResult:
+    def ranges(source: Path, *, step: float = 1.0, clearance: float = RESOLUTION, geometry: Geometry = "parts",
+               joint: tuple[str, ...] = (), verbose: bool = False) -> CheckResult:
         """Each joint's stops, found from the geometry: where its parts first meet another part.
 
         Each joint a person moves is turned (or slid) alone from the as-built pose, the joints that follow it
@@ -75,7 +79,7 @@ def ranges_for(document_type: str) -> Any:
         surfaces are sampled to), or where their contact grows by about 15 mm^2: parts touching already as built
         (a horn on its servo) meet only when their contact grows, parts near as built (apart, within the
         clearance) only where their gap halves, and each joint's finding names them with their gap as built and
-        at each stop. A smaller clearance only widens a range. Each joint's finding says its stops in degrees
+        at each stop. A larger clearance only narrows a range. Each joint's finding says its stops in degrees
         or millimetres around the as-built pose (and in its own values where that is not zero) and which two
         parts meet past each; a part declared collision none takes no part, and two parts declared exclude(a, b)
         never meet each other. The model is not changed: adopt the numbers into its joints' ranges. --json
@@ -84,22 +88,26 @@ def ranges_for(document_type: str) -> Any:
         source: the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or
           the handle its call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
-        clearance: how near two parts' surfaces come before they count as touching, in millimetres, 0.3 at the
-          least; default 1.
+        clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 0.3,
+          the least (where they all but touch): a larger one stops each joint where its parts first come that near.
         geometry: what meets: parts, each part's own surface (the default: the physical stops), or collision, what
-          each part declares a simulator collides it as (a fitted box where it declares one: the simulator's
-          stops). A part declared collision none takes no part either way.
+          each part declares a simulator collides it as (a fitted box where it declares one), less the link pairs
+          the MJCF never collides (a body and its parent, the pairs touching as built, those declared exclude):
+          MuJoCo's stops. A part declared collision none takes no part either way.
+        joint: sweep this joint alone (repeat it for several); default every joint a person moves. A name the
+          document has no such joint by is refused, naming its joints.
         verbose: say on stderr each step as it starts (reading the document, sampling its surfaces, each joint)
           and each joint's stops as it ends (a joint or a sampling that takes long is said either way).
         """
-        options(step=step, clearance=clearance, geometry=geometry)
+        joints = (joint,) if isinstance(joint, str) else tuple(joint)
+        options(step=step, clearance=clearance, geometry=geometry, joint=joints)
         from cad._internal.document_type import refuse_other
 
         refuse_other(document_type, source)
         try:
             from cad.engine.describe import describe
             from cad.engine.export import Source
-            from cad.engine.ranges import sweep
+            from cad.engine.ranges import sweep, unknown
         except ModuleNotFoundError as error:
             _missing(error)
             raise
@@ -112,8 +120,12 @@ def ranges_for(document_type: str) -> Any:
         with _readable(document_type, source) as (target, label):
             # A part's hulls are tested on the collision geometry alone: on the parts, a decomposed one is whole.
             description = describe(Source.read(target).view(), decompose=geometry == "collision")
+        try:
+            unknown(description, joints)
+        except ValueError as error:
+            raise ArgumentRefused(f"--joint {error}") from None
         # A long joint is said as it starts and ends whatever ``verbose`` says: a fine sweep takes minutes.
-        stops = sweep(description, step=float(step), clearance=float(clearance), geometry=geometry,
+        stops = sweep(description, step=float(step), clearance=float(clearance), geometry=geometry, joints=joints,
                       told=say if verbose else None, progress=say)
         return _result(label or Path(target), stops, step=float(step), clearance=float(clearance), geometry=geometry,
                        seconds=time.perf_counter() - started)
@@ -140,8 +152,9 @@ def _result(path: Path, stops: list[Any], *, step: float, clearance: float, geom
                                      "a joint is a model's mechanism: build123d's RevoluteJoint or LinearJoint "
                                      "connected between two parts"))
     swept = sum(1 for found in stops if found.swept)
+    aside = ", the link pairs the MJCF never collides set aside" if geometry == "collision" else ""
     summary = (f"{swept} joint{'s' if swept != 1 else ''} swept against the {_TESTED[geometry]} at {step:g} deg or mm "
-               f"a step, {clearance:g} mm clearance, in {seconds:.1f} s: nothing written")
+               f"a step, {clearance:g} mm clearance{aside}, in {seconds:.1f} s: nothing written")
     return StopsResult(ok=bool(stops), path=Path(path), findings=tuple(findings), summary=summary,
                        measurements={"joints": joints, "step": step, "clearance": clearance, "geometry": geometry})
 
@@ -199,8 +212,9 @@ def _words(found: Any) -> str:
             said = (f"{name} {value:+g} {found.unit}{own_words}: {contact.moving} ({contact.moving_link}) meets "
                     f"{contact.still} ({contact.still_link}) at {contact.at:+g}{closing(contact)}")
         if clash is not None:
-            said += (f", and before it, at {clash.at:+g} with the other joints as built, {clash.moving} "
-                     f"({clash.moving_link}) meets {clash.still} ({clash.still_link}){closing(clash)}")
+            said += (f", {'and before it' if contact is not None else 'but'}, at {clash.at:+g} with the other joints "
+                     f"as built, {clash.moving} ({clash.moving_link}) meets {clash.still} ({clash.still_link})"
+                     f"{closing(clash)}")
         return said
 
     def gap(value: float | None, way: str) -> str | None:
