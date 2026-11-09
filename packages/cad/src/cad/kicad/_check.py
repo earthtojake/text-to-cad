@@ -69,7 +69,7 @@ def issues(findings) -> tuple[CheckFinding, ...]:
             message=finding.description + (": " + "; ".join(finding.items) if finding.items else "")
             + (f" ({finding.note})" if finding.note else ""),
             location=f"({finding.at[0]:g}, {finding.at[1]:g}) mm" if finding.at else None,
-            items=tuple(dict(item) for item in finding.located),
+            items=[dict(item) for item in finding.located],
         )
         for finding in order
     )

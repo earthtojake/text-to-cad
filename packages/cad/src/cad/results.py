@@ -51,7 +51,8 @@ class CheckFinding:
     #: What the finding names, when the checker reports its items: each a dict of what the checker knows of
     #: it (a board's DRC: ``uuid``, ``description``, ``pos`` [x, y] mm, ``kind``, ``layers``, ``net``, ``ref``,
     #: ``part``). Empty for a checker that names none.
-    items: tuple[dict[str, Any], ...] = field(default_factory=tuple, compare=False, hash=False)
+    #: A list, as its JSON is, so ``dataclasses.asdict`` of a finding equals what the result reports.
+    items: list[dict[str, Any]] = field(default_factory=list, compare=False, hash=False)
 
     @property
     def element(self) -> str | None:
