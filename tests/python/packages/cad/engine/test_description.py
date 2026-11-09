@@ -768,7 +768,7 @@ class InertiaRotationTest(_Folder):
 # A declared part moved after its declarations: an edit of one rebuilds what the memo hands back.
 MOVED = """
 import build123d as bd
-from cad.build123d import collision, frame, mass
+from cad.build123d import collision, frame, free, link, mass
 from cad.engine import xbf
 
 
@@ -779,18 +779,23 @@ def moved():
     collision(block, "{kind}")
     frame(block, "tip", bd.Pos({at}, 0, 15))
     mass(block, {at} * 10)
+    link(block, "{name}")
+    {free}
     return bd.Compound(children=[block.moved(bd.Pos(50, 0, 0))], label="moved")
 """
 
 
 class WarmEditTest(_Folder):
     def test_an_edit_of_a_declaration_reaches_the_document_through_a_warm_build(self) -> None:
-        for kind, at in (("box", 5), ("sphere", 7), ("box", 5)):
-            path = self.build("moved", MOVED.format(kind=kind, at=at))
+        for kind, at, name, floats in (("box", 5, "alpha", False), ("sphere", 7, "alpha", True),
+                                       ("sphere", 7, "beta", True), ("sphere", 7, "beta", False)):
+            source = MOVED.format(kind=kind, at=at, name=name, free="free(block)" if floats else "pass")
+            path = self.build("moved", source)
             (prototype,) = document.Loaded(path).structure()["prototypes"]
             self.assertEqual(prototype["collision"], kind)
             self.assertEqual(prototype["frames"]["tip"][12:15], [at, 0, 15])
             self.assertEqual(prototype["mass"], [[0, at * 10.0]])
+            self.assertEqual((prototype["link"], prototype.get("free")), ([[0, name]], [0] if floats else None))
 
 
 class UnjointedTest(_Folder):

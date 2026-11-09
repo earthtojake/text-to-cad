@@ -3843,6 +3843,8 @@ def _shape_key(shape: Any, state: _Run) -> int:
         _normalize(state_dict.get("_mass"), state),
         _normalize(state_dict.get("_points") or {}, state),
         _normalize(state_dict.get("_friction") or (), state),
+        bool(state_dict.get("_free")),
+        state_dict.get("_link"),
     )
     children = tuple(_shape_key(child, state) for child in state_dict.get("_NodeMixin__children") or ())
     return _intern((placed, attrs, children))
