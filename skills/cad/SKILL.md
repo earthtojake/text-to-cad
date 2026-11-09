@@ -320,7 +320,8 @@ cad step ranges arm.step --step 0.5 --json
   tests what each part declares a simulator collides it as. A part declared
   `collision(part, "none")` (a fastener in its hole, a servo's internals) is left out either way.
 - **Not swept.** A turn is swept a full turn each way, a slide the document's extent. A cylindrical
-  or spherical joint is not swept, and its warning says so. A document with no joint fails with
+  or spherical joint is not swept, nor is a joint of a closed loop (it moves only with its loop), and
+  its warning says so. A document with no joint fails with
   `no_joints`.
 
 `--json` carries every number in `measurements.joints`: `lower`, `upper`, `range` (the joint's own

@@ -28,7 +28,7 @@ written twice:
 | Visual meshes (STL, metres) and their colours | The floor, lights, cameras | Solver settings: timestep, cone, `impratio`, `solref` |
 | Collision shapes (`collision()`) and their contact friction (`friction()`), named frames as sites (`frame()`) | Robots from elsewhere (Menagerie), and the prefixes that keep their names apart | `condim`, contact softness (`solref`, `solimp` on the geoms) |
 | Joint armature, damping and frictionloss, the drive's force bound (`limits()`) | | |
-| Couplings as `<equality><joint>`, mechanism states as keys | The scene's own `home` key over every joint | Controllers, policies, the simulation loop |
+| Couplings as `<equality><joint>`, a loop's closing joint as `connect`s of two sites, mechanism states as keys | The scene's own `home` key over every joint | Controllers, policies, the simulation loop; an equality's `solref` where a loop must hold stiffer than MuJoCo's default |
 
 The first column is regenerated from the model on every change, never edited. The second and third
 are written in the scene script, so the scene is rebuilt from the regenerated pieces and keeps its
@@ -386,4 +386,5 @@ in the model (a material, a `collision()` kind) and is regenerated.
 - Converting between URDF and MJCF beyond what MuJoCo's own loader does with a URDF
   ([interoperability.md](interoperability.md#mjcf)). A robot with a CAD model is generated in each
   format from that model instead.
-- A mechanism with a closed loop: every writer refuses it by name.
+- A closed loop's joints posed by name: a loop has no pose without a solver, so a mechanism state
+  moving one is left out of the keys; MuJoCo closes the loop when the simulation runs.

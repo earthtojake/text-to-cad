@@ -79,7 +79,16 @@ mechanism):
 - **Mechanism states** (`mechanism_state(assembly, "home", ...)`) are the named poses, MJCF keys
   (a URDF holds no poses). Name one `home`, the pose a person and a controller start from.
 - **Couplings** (`gear_pair`, `rack_and_pinion_pair`) are a follower joint on its leader: MJCF's
-  `<equality><joint>`, URDF's `<mimic>`.
+  `<equality><joint>`, URDF's `<mimic>`. Two slides a pinion drives (a parallel gripper) couple
+  through a `RevoluteJoint` on the palm connected to nothing, named first in the
+  `rack_and_pinion_pair`, where the CAD draws no pinion: the file has no body or joint for it, and
+  the second slide follows the first, one control as on the hardware.
+- **Closed loops** (a four-bar, a slider-crank): connect the joints of a tree from the ground,
+  then pair the loop's last joint by label where both parts already stand. The MJCF closes the
+  loop there with an equality between a site on each body (a hinge two `connect`s, a ball one;
+  where the last joint is a slide, at the loop's nearest hinge or ball instead); the URDF leaves
+  that joint out and says so. A loop's joints have no named pose and no stops from `cad model
+  ranges`.
 - **Materials** (`bd_materials`, `part.material = metals.aluminum()`) give each part a density, so
   each link's mass, centre of mass and inertia tensor are the kernel's, exact. A part with no material
   weighs nothing, and a link of such parts has no inertial ([Inertials](references/inertials.md)).
@@ -145,8 +154,6 @@ A generated MJCF is laid out as MuJoCo Menagerie lays out a robot (radians, `mes
 format drops is in [Interoperability](references/interoperability.md#one-description-two-writers).
 It holds no floor, light, actuator, sensor or solver setting: those belong to the scene and the
 consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world.
-A mechanism with a closed loop is refused by name by every writer.
-
 In code, `from cad.mujoco import spec` makes a model call's handle, a build123d shape, a `.step`,
 an `.xbf` or an MJCF path (a Menagerie robot) a `mujoco.MjSpec`, its files named by absolute path,, MuJoCo's own editable model, and everything after is
 native MuJoCo: `scene.attach(spec(gripper(), assets="sim/assets"), prefix="gripper/", site=...)`,

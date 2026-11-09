@@ -233,8 +233,8 @@ contributes:
   part or an assembly weighs and the lumps its CAD leaves out, and each surface's contact friction.
 
 A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
-top-level part is a body fixed to the world. A mechanism with a closed loop, and a ball joint in a
-URDF, are refused by name. Never edit the written file: change the model and export again. Composing
+top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left
+out of a URDF ([Loops](kinematics.md#loops)); a ball joint in a URDF is refused by name. Never edit the written file: change the model and export again. Composing
 a MuJoCo scene around it in code (`from cad.mujoco import spec`), checking it, tuning it and
 writing the descriptions no model can (an SRDF, a hand-written MJCF) are the `robot-simulation` skill's.
 

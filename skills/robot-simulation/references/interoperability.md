@@ -35,6 +35,8 @@ and joints apart, so a link and a joint may share a name; a name already held in
 | --- | --- | --- |
 | Named poses (mechanism states) | keys | not written: URDF has none (an SRDF's group states hold them for MoveIt) |
 | Couplings | `<equality><joint>` | `<mimic>` on the follower |
+| A pinion that holds no part (two slides on one `rack_and_pinion_pair`) | no body or joint: the second slide's `<equality><joint>` on the first | no link or joint: the second slide's `<mimic>` of the first |
+| A joint that closes a loop | a `site` on each body where it stands and an `<equality>`: two `connect`s for a hinge, one for a ball | left out, and said in the export's log: URDF is a tree |
 | Ball joints | `ball` | refused by name: URDF has no ball joint |
 | Cylindrical joints | a hinge and a slide on one body | `<name>` and `<name>_slide` with a massless link `<name>_turn` between |
 | Capsule collisions | `capsule` | a cylinder and a sphere at each end |

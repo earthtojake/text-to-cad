@@ -12,6 +12,7 @@ or any movement that is not the mechanism's is a GLB's `animation()`: read
 - [Joints place parts and make the mechanism](#joints-place-parts-and-make-the-mechanism)
 - [Mechanism states](#mechanism-states)
 - [Couplings](#couplings)
+- [Loops](#loops)
 - [Declaring for a simulator](#declaring-for-a-simulator)
 - [Configuration sequences](#configuration-sequences)
 - [Reviewing motion](#reviewing-motion)
@@ -44,10 +45,17 @@ bakes each configuration sequence into an animation clip of its name.
 ## Joints place parts and make the mechanism
 
 Build each part where it stands, give the parent the moving joint on an `Axis`, and give
-the child a `RigidJoint` on the plane of that same axis, or, for a `LinearJoint`, at the
-axis's position with no rotation (below). Connected at 0, the child stays
+the child a `RigidJoint` at the frame that joint places it at: a revolute's own frame,
+`hinge.location` (the parent's placement times the joint's axis in it), or, for a
+`LinearJoint`, the axis's position with no rotation (below). Connected at 0, the child stays
 where it was built; connected at another value, it moves there, and that value is as
-built. A joint's `Axis` and a `RigidJoint`'s location are in world coordinates, not the
+built. The server enforces it: a child whose `RigidJoint` stood at its joint's origin and that
+`connect_to` turned at 0 fails the run, naming the joint, the turn and the frame to use
+instead. A `RigidJoint` on `bd.Plane(origin=axis.position, z_dir=axis.direction)` takes its X
+from its Z, and a part read turned (a STEP's leaf) or an axis read from geometry, whose
+direction carries `1e-17` of noise, gives the hinge another X, so the child turns at 0. Snap a
+direction read from geometry before making an `Axis` of it (a component within `1e-9` of 0 is
+0). A joint's `Axis` and a `RigidJoint`'s location are in world coordinates, not the
 part's own frame: an axis written in the part's frame is `axis.located(part.location)`, and
 a moving joint's axis that passes farther from its part, and from every part rigidly joined
 to it, than each one's own size is warned as a local one, since `connect_to` moves the child
@@ -67,10 +75,9 @@ def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"
-    elbow = bd.Axis(*ELBOW)
-    bd.RevoluteJoint("elbow", base, axis=elbow, angular_range=(-10, 120))
-    bd.RigidJoint("elbow", arm, bd.Plane(origin=elbow.position, z_dir=elbow.direction).location)
-    base.joints["elbow"].connect_to(arm.joints["elbow"], angle=30)   # as built: elbow 30
+    elbow = bd.RevoluteJoint("elbow", base, axis=bd.Axis(*ELBOW), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", arm, elbow.location)   # the hinge's own frame: at 0 the arm stays put
+    elbow.connect_to(arm.joints["elbow"], angle=30)   # as built: elbow 30
     assembly = bd.Compound(children=[base, arm], label="hinge")
     mechanism_state(assembly, "closed", elbow=0)
     mechanism_state(assembly, "open", elbow=90)
@@ -84,7 +91,8 @@ if __name__ == "__main__":
 A slide places its child by position alone. build123d's `LinearJoint` turns the child by
 nothing but the inverse of the child's `RigidJoint` orientation, so that joint is
 `bd.Location(slide.position)`, the slide's position with no rotation; one on the plane of a
-slide along +Y would stand the child on end:
+slide along +Y would stand the child on end. On a rail that is itself turned, the rail's
+orientation at the slide's position: `rail.location * bd.Location(guide.relative_axis.position)`:
 
 ```python
 # src/linear_guide.py
@@ -137,7 +145,7 @@ if __name__ == "__main__":
   parts contradict (its part moved after `connect_to`, connected after its compound was
   made, a rigid joint off the joint's axis, or two parts rigid joints make one body)
   fails the run by name: fix where the part stands. Pairs closing a loop are kept and not
-  posed. A mechanism state, configuration sequence or coupling naming a joint the
+  posed ([Loops](#loops)). A mechanism state, configuration sequence or coupling naming a joint the
   assembly does not hold fails the run, as does a coupling driving a joint its pair does
   not relate.
 - **No helper joints.** A joint exists because the mechanism moves there. A prismatic
@@ -190,15 +198,15 @@ AP242 pair it is named after and refuses a joint of another kind:
 | Function | Joints | Each joint takes |
 | --- | --- | --- |
 | `gear_pair(assembly, name, **joints)` | two or more revolute joints | a ratio: degrees per unit of the coupling |
-| `rack_and_pinion_pair(assembly, name, **joints)` | the first a revolute (pinion) or prismatic (rack) joint, every other of the other kind | a ratio: degrees or millimetres per unit |
+| `rack_and_pinion_pair(assembly, name, **joints)` | the first a revolute (pinion, or a pinion that holds no part) or prismatic (rack) joint, every other of the other kind | a ratio: degrees or millimetres per unit |
 | `screw_pair(assembly, name, joint=pitch)` | one cylindrical joint | its pitch: millimetres of travel per 360 degrees of turn; the coupling's value is the turn |
 
 At value `c` each joint stands at its as-built value plus its ratio times `c`, so
 `c = 0` is as built. Its range is its joints' limits: the tightest interval of `c` in
 which every joint stays within its own (a joint with no limits bounds nothing), so give
 the joints the limits the mechanism has. A joint takes at most one coupling, and a ball
-joint none. Two joints of other kinds (two slides, a slide and a cylindrical joint's
-turn) have no pair: drive them by a configuration sequence.
+joint none. Two slides couple through a pinion (below), even one the CAD does not draw;
+a slide and a cylindrical joint's turn have no pair: drive them by a configuration sequence.
 
 ```python
 # src/index_finger.py
@@ -219,9 +227,9 @@ def index_finger():
         bones.append(bone)
     for joint, parent, child in zip(CURL, bones, bones[1:]):
         knuckle = bd.Axis(child.location.position, (0, 1, 0))
-        bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, CURL[joint]))
-        bd.RigidJoint(joint, child, bd.Plane(origin=knuckle.position, z_dir=knuckle.direction).location)
-        parent.joints[joint].connect_to(child.joints[joint], angle=0)   # as built: straight
+        hinge = bd.RevoluteJoint(joint, parent, axis=knuckle, angular_range=(0, CURL[joint]))
+        bd.RigidJoint(joint, child, hinge.location)
+        hinge.connect_to(child.joints[joint], angle=0)   # as built: straight
     finger = bd.Compound(children=bones, label="index_finger")
     gear_pair(finger, "index_curl", **CURL)                             # 0 straight, 1 a fist
     return configuration_sequence(finger, "grip", [(0, {"index_curl": 0}), (1.5, {"index_curl": 1}),
@@ -243,6 +251,60 @@ gear_pair(assembly, "drive", sun=1.0, carrier=24 / 84, planet1=-0.952, planet2=-
 rack_and_pinion_pair(assembly, "traverse", pinion=1.0, rack=0.35)   # 0.35 mm of rack per degree
 screw_pair(assembly, "feed", lead_screw=2.0)                        # its value: the screw's turn
 ```
+
+**Two slides, one pinion.** A parallel gripper's fingers are two racks on one pinion. Where
+the CAD draws no pinion, the pinion is a `RevoluteJoint` on the part that carries it,
+connected to nothing: a reference axis. Named first in a `rack_and_pinion_pair`, it holds no
+part and moves nothing, and the two slides move together through it, each by its ratio, the
+pitch circle's millimetres per degree (`2 * pi * r / 360`):
+
+```python
+for side, x, out in (("left", -30, -1), ("right", 30, 1)):
+    slide = bd.LinearJoint(side, palm, axis=bd.Axis((x, 0, 10), (out, 0, 0)), linear_range=(0, 30))
+    bd.RigidJoint(side, fingers[side], bd.Location((x, 0, 10)))
+    slide.connect_to(fingers[side].joints[side], position=0)
+bd.RevoluteJoint("pinion", palm, axis=bd.Axis((0, 0, 10), (0, 1, 0)), angular_range=(-360, 360))
+rack_and_pinion_pair(gripper, "grip", pinion=1, left=0.15272, right=0.15272)   # r = 8.75 mm
+```
+
+The document keeps the pinion as AP242 has it, a revolute pair to a link of no part, and
+`grip` poses the fingers wherever a joint's name does. A robot description has no body or
+joint for it: the right finger follows the left by the ratio of their ratios (MJCF's
+`<equality><joint>`, URDF's `<mimic>`), so the file has the one control the hardware has.
+The pinion's range bounds the coupling, so give it one no narrower than the racks'
+(build123d's default is 0 to 360). A pinion part that turns is a pinion like any other:
+connect it.
+
+## Loops
+
+A linkage whose pairs close a loop (a four-bar, a slider-crank, a parallel gripper's
+fingers on two links each) is built as any mechanism: every part where it stands. Connect
+the joints that make a tree from the ground, each with `connect_to`, then pair the loop's
+last joint by label: a moving joint on one part and a `RigidJoint` of the same label at its
+frame on the other, where both already stand. That joint closes the loop:
+
+```python
+def hinge(name, holder, child, at, connect=True):
+    joint = bd.RevoluteJoint(name, holder, axis=bd.Axis(at, (0, 1, 0)), angular_range=(-360, 360))
+    bd.RigidJoint(name, child, joint.location)
+    if connect:
+        joint.connect_to(child.joints[name], angle=0)
+
+hinge("crank", base, crank, A)
+hinge("knee", crank, coupler, B)
+hinge("rocker", base, rocker, D)
+hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the coupler is placed already
+```
+
+The document keeps every pair; a loop's pairs are not posed (there is no solver), so a
+mechanism state or a configuration sequence that moves one is refused or left out, and
+`cad model ranges` sweeps none of them. A robot description follows the pairs from the
+ground and leaves out the pair that reaches a link a second time, the one paired last: the
+MJCF closes the loop there with an equality between two sites, one on each body where the
+joint stands (a hinge is two `connect`s, a ball one), and the URDF, a tree, leaves it out
+and says so in the export's log. A slide never closes a loop in an MJCF (MuJoCo has no
+slide equality): where the last pair is a slide, the description closes the loop at the
+loop's hinge or ball nearest it instead. The closing joint's range is not enforced.
 
 ## Declaring for a simulator
 

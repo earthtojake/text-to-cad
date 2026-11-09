@@ -2344,7 +2344,15 @@ or that joins two parts rigid joints make one body has no value the standard can
 joint matching two rigid joints alike, a linear joint connected to a revolute one (a pin in a
 slot, which no AP242 lower pair is) and a mechanism state's value a pair cannot take (another
 count of numbers than the joint's, a coupling's value outside the coupling's range) are left
-out and warned; pairs that close a loop are kept and not posed. The warnings are the build's
+out and warned; pairs that close a loop are kept and not posed (a robot description closes them:
+below). A child `connect_to` turned at its joint's zero though it was built where it stands fails the
+build too: where a `RigidJoint` stood at its joint's own origin before the connection, the child at
+the pair's zero must stand where it was built, turned by no more than 1e-9 radian times the model's
+size in millimetres (at least 1), and the refusal names the joint, the turn, how far the parts moved
+and the frame to build the `RigidJoint` at (a revolute's `joint.location`, a slide's position in its
+part's orientation). The engine records each `connect_to` as a model's body runs it
+(`mechanism.watch`, installed with the kernel's patches); a `RigidJoint` elsewhere is a placement,
+which `connect_to` makes as build123d's joints do. The warnings are the build's
 report (`kinematics.warnings`), never the document's. The harvest's errors are a mechanism state,
 a configuration sequence or a coupling naming a joint its assembly does not hold, a mechanism
 state putting a joint outside the joint's range, said in one line (`mechanism state
@@ -2358,7 +2366,7 @@ is written as:
 | Function | Its joints | AP242 |
 | --- | --- | --- |
 | `gear_pair(assembly, name, **joints)` | revolute joints, a ratio each (degrees per unit of its value) | `KinematicPairWithMotionCoupling`, `Kind` `gear_pair`, from the first-named joint to each other one |
-| `rack_and_pinion_pair(assembly, name, **joints)` | the first-named a revolute joint (the pinion) or a prismatic one (the rack), every other of the other kind, a ratio each | `Kind` `rack_and_pinion_pair`, from the first-named joint to each other one |
+| `rack_and_pinion_pair(assembly, name, **joints)` | the first-named a revolute joint (the pinion, which may hold no part) or a prismatic one (the rack), every other of the other kind, a ratio each | `Kind` `rack_and_pinion_pair`, from the first-named joint to each other one |
 | `screw_pair(assembly, name, joint=pitch)` | one cylindrical joint and its pitch, the millimetres it travels per 360 degrees of turn; the coupling's value is its turn | Part 105's `SCREW_PAIR` (`pitch`) |
 
 Its joints move together, each by its ratio, and only through it, each named by its label. At
@@ -2381,6 +2389,14 @@ joint, any coupling's ball joint (no coupler relates a ball's three angles) -- f
 by name, as does a coupling of one value alone and one whose joints' limits leave it no range
 around as built. A function coupling, a cam or a loop is no part of the mechanism: a
 configuration sequence says it.
+
+**A pinion that holds no part.** A rack and pinion's first-named joint may be a `RevoluteJoint` on
+the part that carries it, connected to nothing: a reference axis where the CAD draws no pinion, so
+two slides (a parallel gripper's fingers) couple to each other through it. The harvest makes it a
+revolute pair from its carrier's link to a `KINEMATIC_LINK` of no part (AP242's needs no shape),
+named by its label, at the value its joint holds (0 unless posed): the coupler is AP242's, the
+coupling's name poses wherever a joint's does, and the pinion's range bounds the coupling as any
+joint's does. A robot description has no link for it (below).
 
 ```python
 import build123d as bd
@@ -2653,6 +2669,23 @@ export writes collision geoms (with `friction` where declared), sites, child bod
 joint and a link, `<limit>`'s effort and velocity, and `<dynamics damping friction>` (URDF has
 no armature and no contact friction: a declared one is said in the export's log, not written). Each writer keeps links and
 joints in a namespace each, as MJCF and URDF do, and says a rename in its kind (`export.note`, the export's log).
+
+**Couplings and loops in a robot description** (`describe.py`, `description.py`'s **Loops**). A
+coupling's joints follow its first-named one; a virtual pinion is no link or joint, so its racks
+follow the first of them by the ratio of their ratios: MJCF writes the follower's `<equality><joint
+polycoef="0 r 0 0 0">`, URDF its `<mimic multiplier="r">`, and the file has the one control the
+hardware has. A mechanism whose pairs close a loop is described as a tree and its closures: the
+pairs followed from the ground breadth first in the mechanism's pair order, and each pair that
+reaches a link the tree holds already a `Closure` (its frame on each of its two links, the two
+checked to coincide as built within the tolerance the harvest reads every pair to, else refused by
+name). A closure that would be a slide is traded for its loop's revolute or ball pair nearest it, as
+MuJoCo has no slide equality. The MJCF writes each closure as a site on each body
+(`<name>/1`, `<name>/2`) and `connect` equalities of them: one for a ball, two for a hinge (the
+second pair of sites `export.mjcf.AXIS_SPAN` along the axis), so the point and the axis's direction
+are held and the turn is free; its range is not enforced, and said; `contact` excludes its two
+bodies where they touch at rest. The URDF leaves a closure out and says so; the CAD Viewer's
+`<tcad:four_bar>` is never generated. A mechanism state that moves a joint of a loop is left out of
+the description's poses, and `ranges` sweeps no joint of a loop.
 
 `FinishedMaterial.material` is the native physical dataclass; `.pbr` is a native
 `threejs_materials.PbrProperties`. Catalogue factories return fresh finished materials.

@@ -118,15 +118,21 @@ STEPs say grams, so no test saw it). Open, ranked by how much they cost a CAD-to
 2. **Fixed: a fixed part cannot stay its own body.** Every rigidly joined part merged into its link,
    so a camera mount or a fingertip could not be addressed as Menagerie's can; `body(part, name)` now
    keeps it a body fixed to its link.
-3. **No coupling between two slides.** `rack_and_pinion_pair` and `gear_pair` refuse two prismatic
-   joints, so a parallel gripper's mirrored fingers cannot be one control.
+3. **Fixed: no coupling between two slides.** `rack_and_pinion_pair` and `gear_pair` refused two
+   prismatic joints, so a parallel gripper's mirrored fingers could not be one control. A pinion that
+   holds no part (a `RevoluteJoint` on the palm, connected to nothing, named first) now couples them:
+   the MJCF writes no body for it and the second finger's `<equality><joint>` on the first, the URDF
+   its `<mimic>`, one control as Menagerie has.
 4. **Fixed: no contact exclusion.** Hulls of adjacent links that overlap at rest needed `<exclude>`; the
    MJCF writer now excludes every jointed pair touching at rest (the world-welded first joint's too),
    and `exclude(a, b)` declares any other pair.
 5. **One convex hull per part.** A concave part (a link with a pocket, a gripper body) collides as its
    hull; a convex decomposition or per-face primitives would be closer.
-6. **The joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip build123d's
-   default plane X, turning a link 90 deg at angle 0; build the rigid joint from the hinge's own frame.
+6. **Fixed: the joint recipe is fragile on a vendor STEP.** Face axes carry 1e-17 noise that can flip
+   build123d's default plane X, turning a link 90 deg at angle 0. kinematics.md's recipe now builds the
+   rigid joint from the hinge's own frame (`hinge.location`) and snaps a direction read from geometry,
+   and the engine refuses a child that `connect_to` turned at its joint's zero though it was built
+   where it stands, naming the joint, the turn and the frame to use.
 7. **Fixed: URDF details.** Joint limits were written with effort and velocity 0, and a joint was silently
    renamed when it shared a link's name (`gripper` became `gripper_2`). `limits(assembly, joint,
    effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and

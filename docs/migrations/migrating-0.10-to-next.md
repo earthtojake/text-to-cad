@@ -83,6 +83,11 @@ These do break, where a program relies on them:
   `dataclasses.asdict(result)` is `{ok, path, findings, summary, measurements}`, each finding `{severity,
   code, message, location, hint}`, where 0.10's was `{ok, path, issues, summary}`, each issue `{severity,
   message, element, code, hint}`. Test for `CheckResult`, and read `findings` and `location`.
+- **A child turned at its joint's zero.** A model whose `connect_to` turned a child at the joint's
+  zero, though the child was built where it stands (its `RigidJoint` at the joint's own origin, on a
+  frame whose axes differ from the joint's), built in 0.10 with the child turned. It now fails the
+  run, naming the joint, the turn and the frame to build the `RigidJoint` at: a revolute's own frame,
+  `hinge.location`, or a slide's position in its rail's orientation.
 
 ## The `cad` command (tier 1)
 

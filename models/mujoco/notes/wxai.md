@@ -218,7 +218,12 @@ which text-to-cad cannot declare (Gaps).
 
 ## Gripper coupling
 
-text-to-cad cannot couple two prismatic joints. `rack_and_pinion_pair(asm, "grip", left=1, right=1)`
+Fixed: a pinion that holds no part couples the two slides (gap 2). `src/wxai.py` still writes them
+independent; adding `bd.RevoluteJoint("pinion", link_6, axis=...)` and `rack_and_pinion_pair(asm,
+"gripper", pinion=1, left=0.15272, right=0.15272)` gives Menagerie's one control: no pinion body or
+joint, and `right`'s `<equality><joint>` on `left` (the URDF's `<mimic>`).
+
+When this was written, text-to-cad could not couple two prismatic joints. `rack_and_pinion_pair(asm, "grip", left=1, right=1)`
 fails with "rack and pinion pair 'grip' of slides drives 'left' and 'right', both prismatic: a rack and
 pinion pair relates its first joint, 'left', to joints of the other kind". `gear_pair` fails with "...
 drives the prismatic joint 'left': a gear pair turns revolute joints". The two slides are therefore
@@ -274,10 +279,14 @@ import api; api.snapshot('out/wxai/wxai.xml', ..., daemon=False)"`.
      1000.0`. That assumes g/cm^3, but OCCT returns this file's density as 0.00785.
    - A STEP that text-to-cad wrote itself round-trips (mild steel reads back 7800). Its writer puts
      the density in an odd `DERIVED_UNIT((g^3, cm^2))`.
-2. **No prismatic-prismatic coupling** (above). A symmetric two-slide gripper is common. MuJoCo's
-   `<equality><joint>` and URDF's `<mimic>` both express it, but there is no AP242-named function that
-   makes it.
-3. **kinematics.md's revolute recipe turned a STEP part 90 degrees at angle 0.**
+2. **No prismatic-prismatic coupling** (above). Fixed: `rack_and_pinion_pair` takes a pinion that holds
+   no part (a `RevoluteJoint` connected to nothing) as its first joint, and the writers couple the
+   slides directly. A symmetric two-slide gripper is common. MuJoCo's `<equality><joint>` and URDF's
+   `<mimic>` both express it, but there was no AP242-named function that made it.
+3. **kinematics.md's revolute recipe turned a STEP part 90 degrees at angle 0.** Fixed: the recipe
+   builds the RigidJoint from the hinge's own frame (`hinge.location`) and snaps axis directions, and
+   the engine refuses a child connect_to turns at its joint's zero though it was built where it
+   stands, naming the joint, the turn and the frame to use.
    - With `bd.RigidJoint(name, child, bd.Plane(origin=axis.position, z_dir=axis.direction).location)`
      and a Y-axis hinge on the STEP-read link_1, `connect_to(angle=0)` turned link_2 by 90 deg about Y.
    - First cause: axis directions from `face.axis_of_rotation` carry 1e-17 noise, and
