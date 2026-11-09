@@ -274,7 +274,9 @@ each file renamed over), brings the apps' copies of it along (`cad_server._inter
 that reads the folder in place needs nothing), and then switches (`cad_server._internal.switch`):
 
 1. The engine drains (`Daemon.drain`): once no build, draw, export or agent's MCP call is in flight --
-   open pages and held sessions do not count --, its door and its HTTP listener close, and it exits.
+   open pages and held sessions do not count, nor a manufacturing check in a checks process, which holds
+   nothing of anyone's and whose caller is told to run it again (`api.Stopped`) --, its door and its HTTP
+   listener close, and it exits.
 2. A process that is not that engine -- the button's helper, `cad update --switch`, which the
    engine starts detached as it exits; else `cad setup` itself -- waits for it to be gone, points
    `current` at the release under the engine's lock (so no client starts the release before in the
@@ -1024,24 +1026,38 @@ its parts declare, its process's options refused once the document is read.
 
 **A B-rep's check is measured where the document is held.** The caller (the command, or `cad.<type>.dfm`
 in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
-`check`, its own release (`caller`) and no destinations. The daemon decides who measures it before anything is
-measured (`Daemon.check`, `_measurer`):
+`check`, its own release (`caller`), what measures in it (`measures`, `contract.measuring`: the digest of the
+library's code, every source file of the cad package, and the versions of the libraries a check measures with --
+build123d, OCP, bd_materials, trimesh, scipy, numpy -- read once per process) and no destinations. No process
+measures for a caller unlike it (`contract.measures_for`: other code, or another version of a library the
+caller has; one it has not, a command with no kernel, is the process's to name): the process answers such a
+check with nothing measured, and the daemon, which learns what measures in each process from its answers
+(`Daemon._learned`, while that process lives; the server's own where the kernel environment is the server's),
+sends none to a process it knows to be unlike. So a checkout's edited copy of a release and the published one,
+or an engine started before an edit, never measure for each other. The daemon decides who measures it before
+anything is measured (`Daemon.check`, `_measurer`):
 
 - the warm worker that holds a model's document, when the worker's library is the caller's;
 - a checks process (`services.CHECKS`), when the server's library is the caller's: a STEP's or an xbf's path,
-  read once while its bytes stay as they were (by their digest, four files at most, `worker._file`); a document no
-  warm worker holds, from its bytes, read once per version (four at most, `worker._document`); and a model built at
+  read once while its bytes stay as they were (by their digest, four files and 256 MB of them at most,
+  `worker._file`); a document no warm worker holds, from its bytes, read once per version (four and 256 MB at most,
+  `worker._document`), all of it dropped where the process is over its memory cap after a check or a build
+  (`worker.shed`, before it collects and measures again, so a person's warm worker is not kept large by a check
+  either); and a model built at
   another release, from the bytes the server holds or that worker's protocol-1 `result` gives, asked once per
   version (`Daemon._whole`), so a worker of a release before `contract.CHECKS_SINCE` is never sent a request it does
-  not know. The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them, else half the
-  machine's cores, two at least and four at most, each a kernel process of its own key (`checks`, `checks-2`, ...),
+  not know. The checks processes are a small pool (`checks.Pool`): `CAD_ENGINE_CHECKS` of them (held to one to
+  the machine's cores, which `cad status` says), else half the machine's cores, one at least and four at most,
+  each a kernel process of its own key (`checks`, `checks-2`, ...),
   with the daemon's environment, outside the count cap, measuring one check at a time -- so checks of different
   documents run at once, and a long check, its cancel or its crash costs the documents worker and every other
   document nothing, and a file's check never retires a person's idle worker for its slot. A check takes a free slot
   whose process last measured its document (what it read is still held there), else one whose process is alive,
-  else one whose process is to start, where the memory cap has room for one more of the size the live ones are and
-  the system is not under memory pressure. They are started, held to the memory caps and shed as every service's
-  processes are: an idle one is retired for memory with the render processes, never on a timer;
+  else one whose process is to start, where the memory cap has room for one more beside those being started, each
+  of a checks process's size -- the largest a live one said, else the last one any said, else the standby's (the
+  kernel loaded, nothing built), else the smallest worker's (`Pool.size_of`) -- and the system is not under memory
+  pressure. They are started, held to the memory caps and shed as every service's processes are: an idle one is
+  retired for memory with the render processes, never on a timer;
 - otherwise no one: another release's check, answered at once with no `checked`, nothing measured. The caller
   measures a file in its own process and has a model's document exported and read back there, as before the
   engine measured checks; a `cad` command with no kernel sends either to the base's environment
@@ -1053,7 +1069,8 @@ nothing with the held document, and answers the report (`checked`, with the rele
 it read the document anew: `read`), which the caller finishes into its result; every finding's location is a ref
 `inspect` resolves, and the result equals the one the same document gets read from its file. A model's worker
 reads its build's parts back once per version (`_dfm_brep.of_source`'s `keep`, by their geometry keys, so an edit
-reads only the parts it changed), and every check measures a copy of them, as it does of a read document's.
+reads only the parts it changed; four documents and 256 MB of their parts at most, shed with the rest), and every
+check measures a copy of them, as it does of a read document's.
 
 A model's check runs in its worker as a snapshot of it does, one request at a time. A build of its script
 cancels a check of it (`Daemon._cancel_check`): one waiting for the worker leaves the lease's queue at once
@@ -1066,24 +1083,38 @@ with four running at once, every other a few seconds at most, so that is how lon
 part that size. A check waiting for a busy process says so to its caller on stderr at once, as a build behind a
 build does: what it waits for and since when -- a model's worker (`Daemon._behind_check`), or every checks process
 busy ("waiting for another manufacturing check, started 21 s ago: the 4 checks processes are all busy",
-`Pool.take`). A model's worker retired between the read of its document and the check's lease is no refusal: the
-document is read once more, from the server or the cache that holds it now, and checked in a checks process. An
-engine that stops before it answers (an update, `cad stop`) is said so to the caller, who runs the check again
-(`api.Stopped`): nothing is measured in the caller instead.
+`Pool.take`). A model's worker retired between the read of its document and the check's lease is no refusal --
+the fresh worker in its place refuses it as not held, as the daemon does (`serve.NotHeld`, `worker.failure`) --:
+the document is read once more, from the server or the cache that holds it now, and checked in a checks process.
+An engine that stops before it answers (an update, `cad stop`) is said so to the caller, who runs the check again
+(`api.Stopped`, from the engine's answer or its connection closing; a waiting line to a closed stderr is
+dropped): nothing is measured in the caller instead. An update's drain waits for no check in a checks process: it
+stops each (cancelled at its next checkpoint, or out of the pool's queue) and its callers are answered so; a
+check asked of a checks process while the engine drains is answered so at once.
 
 A check outlives its caller, as a build does: a shell's time limit cutting its caller off leaves it running, in its
 worker or a checks process, and its clean result kept. The same check asked again answers from the store, or,
 while it still runs, waits for it (`Daemon.running`, by document, version and check), says so ("waiting for the same
 manufacturing check, started 21 s ago") and answers with its answer -- its result, or its failure, a cancel too --
-so it is measured once. No timer bounds it, and only a build of a model's script cancels a check; a file's check is
-never cancelled, and a changed file is another digest's check. A process over the workers' memory cap after a check
-is retired (a worker drained first) and the check's caller told so, on stderr. A process that exits in a check is
-not asked again: the check fails saying so, in words of the process it was.
+so it is measured once. No timer bounds it. A build of a model's script cancels a check of it; and a check in a
+checks process whose callers have all gone -- its own and every one attached since, each connection watched for
+its end of file (`daemon._watched`) -- gives its process up while a check whose caller is there waits for one
+with every slot busy (`Daemon._reap`): one for each such waiter, the oldest first, cancelled at its next checkpoint,
+nothing of it kept. A check someone waits for is never cut short so, and an abandoned one no one needs the slot of
+runs to its end and keeps its result. A changed file is another digest's check. A process over the workers' memory
+cap after a check is retired (a worker drained first) and the check's caller told so, on stderr. A process that
+exits in a check is not asked again: the check fails saying so, in words of the process it was.
 
 **The kept results** (`checks.py`): each result by the document's version -- a model's generation (the
 token its record keeps across a run that changed nothing in the worker that holds it), a file's bytes'
 digest -- and the check (type, process, resolved options, candidates, the options given with no process, the
-measuring library's release, which is the caller's). The same check of the same version is answered from the
+measuring library's release, which is the caller's, and what measured it, `contract.measuring`'s: so a result of
+other code at the same release, or of a kernel environment made again with other libraries, is never served; a
+caller with no kernel is answered under what the process that measures for it last said). A file is keyed by
+its device and inode, so its hard links and the spellings of its case share one key in memory and while it runs
+(`daemon._file_key`; by its real path, its case folded where the file system says it folds it, where the system
+gives no inode); on disk each name keeps its own, under its document id. The same
+check of the same version is answered from the
 store, with no process asked and no bytes asked of a worker (`reused`); a version that differs after the check
 keeps nothing, and only a clean result is kept: never a document that did not read, a refused check or a family not
 measured. A document holds one version's results, so none outlives the document it describes. In memory the store
@@ -1095,10 +1126,18 @@ answers the same check of the same document without measuring, and a model built
 inputs is the same document there. Each is written whole, a document keeps one version's, the store holds 1024
 results and 256 MB at most, least recently used (by its time on disk, set again by a read) first, and an entry that
 does not read -- not the JSON written, another version's or check's under its name -- is removed, never served; a
-cache folder that cannot be written keeps nothing there. `cad status --json` counts the store (`checks`: held,
+cache folder that cannot be written keeps nothing there. Each is written under the registry's lock of its
+document, which its deletion holds (`Registry.lock`, `FORGOTTEN`): a deleted document's results leave memory and
+the index, and a check of it that began before keeps nothing; a cache folder wiped (the mark the index was made
+against, `documents/.checks-index`, gone) is indexed again, the half-written files a stopped engine left swept.
+`cad status` lists each check running: its process, its document or file, where it runs, for how long and
+whether its caller is gone; and
+`cad status --json` counts the store (`checks`: held,
 bytes, measured, reused, restored: those reused from disk; read: the documents, or a build's parts, a process read
 for a check; waited: those that waited for the same check; asked: those waiting or running; disk: held and bytes on
-disk, once indexed; pool: its size, how many are busy, and each checks process). A part an edit left untouched is
+disk, once indexed; pool: its size, how many are busy, each checks process, and the line said where
+`CAD_ENGINE_CHECKS` was held to its bounds; running: each check asked of a process and not answered -- type,
+process, document or file, where, since, seconds, whether a caller is attached). A part an edit left untouched is
 measured again with its document: a check is the document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general

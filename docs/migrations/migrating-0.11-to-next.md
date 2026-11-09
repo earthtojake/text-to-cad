@@ -65,12 +65,16 @@ and read back there. The `cad` command, which holds no kernel, runs that in the 
 
 A model's, a STEP's and an xbf's check is measured by the engine where it holds the document (the model's
 warm worker; a file read once, in one of a small pool of the engine's processes, so checks of different files
-run at once: `CAD_ENGINE_CHECKS` of them, by default half the machine's cores, two to four), and the same check
-of an unchanged document answers the result it kept, beside the engine's cache, so a check run again is
-immediate, after a restart too (not after an update: another release measures again). A check outlives its
-caller, as a build does: cut off by a shell's time limit it runs on, and the same command again answers with its
-result, waiting for it if it still runs. A `cad run` of a model's script cancels a check of it still running,
-which says so: run the check again. So does a check the engine was measuring when it stopped (an update).
+run at once: `CAD_ENGINE_CHECKS` of them, by default half the machine's cores, one to four, a setting held to
+one to the machine's cores), and the same check of an unchanged document answers the result it kept, beside the
+engine's cache, so a check run again is immediate, after a restart too (not after an update: another release
+measures again, and so does another build of the library at the same release, or a kernel environment made
+again with other versions of the libraries a check measures with). A check outlives its caller, as a build does:
+cut off by a shell's time limit it runs on, and the same command again answers with its result, waiting for it if
+it still runs -- unless another check is waiting for its process meanwhile, which it then gives way to, keeping
+nothing. `cad status` lists the checks running, for which document, since when and whether their caller still
+waits. A `cad run` of a model's script cancels a check of it still running, which says so: run the check again.
+So does a check of a file the engine was measuring when it stopped: an update does not wait for it.
 
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for
