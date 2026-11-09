@@ -75,11 +75,12 @@ def near():
     base = bd.Compound(children=[plate, wall, marker], label="base")
     arm = bd.Box(45, 4, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(5, 0, 0) * arm
-    arm.label = "arm"
+    arm.label = "SOLID"  # a vendor's anonymous body, named in messages by its component
+    upper = bd.Compound(children=[arm], label="Upper_arm v9")
     hinge = bd.RevoluteJoint("hinge", base, axis=bd.Axis((0, 0, 0), (0, 0, 1)), angular_range=(-360, 360))
-    bd.RigidJoint("hinge", arm, hinge.location)
-    hinge.connect_to(arm.joints["hinge"], angle=0)
-    return bd.Compound(children=[base, arm], label="near")
+    bd.RigidJoint("hinge", upper, hinge.location)
+    hinge.connect_to(upper.joints["hinge"], angle=0)
+    return bd.Compound(children=[base, upper], label="near")
 """
 
 
@@ -144,12 +145,15 @@ class Ranges(unittest.TestCase):
         self.assertTrue(56.0 <= hinge["upper"] <= 66.0, hinge)
         self.assertIsNone(hinge["upper_contact"]["near"])
         [near] = hinge["near"]
-        self.assertEqual(("arm", "plate"), (near["moving"], near["still"]))
+        # The anonymous SOLID is named by its component; its label stays the file's.
+        self.assertEqual(("Upper_arm v9/SOLID", "Upper_arm v9", "plate"),
+                         (near["moving"], near["moving_link"], near["still"]))
+        self.assertEqual("Upper_arm v9/SOLID", hinge["upper_contact"]["moving"])
         self.assertTrue(0.39 <= near["rest"] <= 0.45, near)
         self.assertTrue(0.33 <= near["upper"] < near["rest"], near)
-        self.assertNotIn(["arm", "plate"], [list(pair) for pair in hinge["resting"]])
+        self.assertEqual([], hinge["resting"])
         [line] = [line for line in result.human_lines() if line.startswith("hinge: ")]
-        self.assertIn("near as built: arm (arm) and plate (base)", line)
+        self.assertIn("near as built: Upper_arm v9/SOLID (Upper_arm v9) and plate (base) 0.", line)
 
     def test_the_stops_are_said_as_a_table_and_a_long_sweep_as_it_goes(self) -> None:
         import contextlib

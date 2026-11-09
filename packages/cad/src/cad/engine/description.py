@@ -91,13 +91,31 @@ here: a GLB bakes them; a simulator plays its own.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
 __all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
-           "Link", "Mesh", "Pose", "Visual"]
+           "Link", "Mesh", "Pose", "Visual", "shown"]
+
+#: A label that names no part, only what kind of shape it is: a vendor STEP's ``SOLID``, a ``Body1``, a ``Part.2``.
+_ANONYMOUS = re.compile(r"(solid|body|part|shell|shape|brep|mesh)?[\s_.:#-]*\d*", re.IGNORECASE)
+
+
+def shown(path: str) -> str:
+    """A part as a message names it, by its occurrence ``path``: its own label (the last), or, where that label
+    names no part (``SOLID``, ``Body1``: the vendor's anonymous bodies), its path from the nearest ancestor whose
+    label does (``Upper_arm v9/SOLID``). The labels are the file's and stay as they are; only the message is told
+    apart."""
+    names = str(path).split("/")
+    if not names or not _ANONYMOUS.fullmatch(names[-1]):
+        return names[-1] if names else ""
+    for at in range(len(names) - 2, -1, -1):
+        if not _ANONYMOUS.fullmatch(names[at]):
+            return "/".join(names[at:])
+    return "/".join(names)
 
 #: What a part's collision may be (``cad.build123d.collision``): the mesh itself, a fitted primitive, the
 #: convex hulls of a decomposition of its mesh, or none.
@@ -146,6 +164,7 @@ class Visual:
     geometry: Geometry
     color: tuple[float, float, float, float]  # sRGB, 0..1
     material: str | None = None  # the material's name, where the part has one
+    path: str = ""  # the part's occurrence path in the document, for messages (``shown``); "" where it has none
 
 
 @dataclass(frozen=True)

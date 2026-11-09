@@ -154,17 +154,22 @@ def sweep(description: Any, *, step: float = 1.0, clearance: float = 1.0, geomet
 
 
 def _tested(link: Any, geometry: str) -> list[tuple[str, Any]]:
-    """A link's tested shapes, each with its part's name: ``parts``, the part itself (its visual mesh) for each
-    part that collides at all; ``collision``, what each declares (``Link.collisions``), a decomposed part's hulls
-    each under the part's name. A link's collisions are its visuals' subsequence, in order, the parts declared
-    ``none`` left out and a decomposed part's hulls one after another."""
-    if geometry == "collision":
-        return [(collision.of, collision.geometry) for collision in link.collisions]
+    """A link's tested shapes, each with its part's name as a message names it (``description.shown``: an anonymous
+    ``SOLID`` by its path from its nearest named ancestor): ``parts``, the part itself (its visual mesh) for each part
+    that collides at all; ``collision``, what each declares (``Link.collisions``), a decomposed part's hulls each
+    under the part's name. A link's collisions are its visuals' subsequence, in order, the parts declared ``none``
+    left out and a decomposed part's hulls one after another."""
+    from cad.engine.description import shown
+
     found, at = [], 0
     for visual in link.visuals:
+        name = shown(visual.path) if getattr(visual, "path", "") else visual.name
         if at < len(link.collisions) and link.collisions[at].of == visual.name:
-            found.append((visual.name, visual.geometry))
+            if geometry != "collision":
+                found.append((name, visual.geometry))
             while at < len(link.collisions) and link.collisions[at].of == visual.name:
+                if geometry == "collision":
+                    found.append((name, link.collisions[at].geometry))
                 at += 1
     return found
 

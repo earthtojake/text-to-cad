@@ -710,7 +710,7 @@ class _Describer:
             key = prototype["key"]
             link.visuals.append(Visual(name, Geometry("mesh", placement, mesh=key),
                                        srgb(instance.get("color") or prototype.get("color")),
-                                       material.get("name") or None))
+                                       material.get("name") or None, path=instance["path"]))
             kind = prototype.get("collision") or self.collision_default
             surface = tuple(float(value) for value in prototype.get("friction") or ())
             if kind == "mesh" or (kind == "decomposed" and not self.decompose):

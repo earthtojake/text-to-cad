@@ -41,7 +41,10 @@ between two links:
   boxes leave.
 
 Write the grouping as a table of component name to link, and raise on any component the table does
-not name, so that a new revision of the STEP fails loudly instead of dropping a part. Put each link
+not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
+labels its bodies `SOLID` or `Body1`. `ranges` names such a part by its component
+(`Upper_arm v9/SOLID`), but `inspect` and the exported files show the label, so relabel each one as
+you take it: `if part.label in ("SOLID", "Body1"): part.label = path[-2]`. Put each link
 in a `bd.Compound(children=..., label=...)` and name it for ROS with `link()`. A posed snapshot
 (step 7) shows every link moving as one piece. A part left behind or swinging with the wrong link
 was sorted wrong.
