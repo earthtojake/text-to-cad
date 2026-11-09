@@ -237,8 +237,9 @@ Vite, Jupyter and Next.js take theirs; when another program holds it, the next f
 (`daemon.PORTS_TRIED` above it, then any), which the engine remembers in its record and takes at
 every later start, whatever release it runs, so its links stay what they were. The start that rolls says so once, on the
 stderr of the client whose request bound the port (a build's, when its page bound it; or `cad
-server`'s) and in `cad status`:
-`3245 is held by <name> (pid N); the engine serves on 3246 and keeps it`. A remembered port
+server`'s) and in `cad status`, as a fact with nothing to act on (the engine works on the port it
+took, and whatever holds 3245 -- another installation's server, a test's -- is left running):
+`the engine serves on port 3246 and keeps it for its links: 3245 is in use by <name> (pid N)`. A remembered port
 that is free is used, and one held is rolled from the same way. When 3245 is free again at a start,
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the

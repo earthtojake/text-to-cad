@@ -383,8 +383,8 @@ def _installation_port(host: str, remembered: int | None, token: str,
     except PortHeld as refusal:
         server = _roll(host, first, token, listen)
         return server, {"source": "rolled", "because": refusal.who if first == default else _who(default),
-                        "notice": f"{first} is held by {refusal.who}; the engine serves on {server.port} "
-                                  "and keeps it"}
+                        "notice": f"the engine serves on port {server.port} and keeps it for its links: {first} "
+                                  f"is in use by {refusal.who}"}
     if first == default:
         return server, {"source": "default"}
     return server, {"source": "rolled", "because": _who(default)}
