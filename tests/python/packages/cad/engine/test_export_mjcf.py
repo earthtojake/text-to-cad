@@ -442,6 +442,27 @@ def painted():
 """
 
 
+# A vendor's wire: white, its long face painted red, swept along a curve as a STEP's cable is, which the engine's
+# tessellation folds by 16 to 45 degrees from triangle to triangle all along it.
+WIRE = """
+import build123d as bd
+from cad.engine import paint, xbf
+
+
+@xbf("XBF/wire.xbf")
+def wire():
+    block = bd.Box(40, 40, 40)
+    block.label = "block"
+    block.color = "#808080"
+    path = bd.Spline((-40, 0, 21), (0, 15, 24), (40, 0, 21))
+    cable = bd.sweep(bd.Plane(origin=path @ 0, z_dir=path % 0) * bd.Circle(0.6), path)
+    cable.color = "#ffffff"
+    cable = paint(cable, cable.faces().sort_by(bd.SortBy.AREA)[-1], "#cc1100")
+    cable.label = "wire"
+    return bd.Compound(children=[block, cable], label="wire")
+"""
+
+
 class MaterialNameTest(unittest.TestCase):
     def test_a_material_in_a_second_colour_is_named_for_the_colour_not_numbered(self) -> None:
         from cad.engine.export.mjcf import _Names, material_name
@@ -539,6 +560,32 @@ class EngineTest(_Folder):
         visuals = {visual.get("name"): rgba(colours[visual.find("material").get("name")])
                    for visual in root.iter("visual")}
         self.assertEqual(visuals, {"cable": white, "cable_paint1": [round(value, 3) for value in red]})
+
+    def test_a_painted_wire_is_its_paint_in_mujoco_and_in_the_still(self) -> None:
+        from PIL import Image
+
+        from cad.engine.snapshot import snapshot
+
+        xbf = self.built("wire", WIRE)
+        out = self.folder / "robot" / "wire.xml"
+        api.export(xbf, out, daemon=False, progress=False)
+        # MuJoCo compiles the paint's colour on the paint's geom, no material over it.
+        model = mujoco.MjModel.from_xml_path(str(out))
+        paint = model.geom("wire_paint1")
+        self.assertEqual(-1, int(model.geom_matid[paint.id]))
+        np.testing.assert_allclose(model.geom_rgba[paint.id], [0.8, 0.0667, 0.0, 1.0], atol=1e-3)
+
+        # The still draws the wire red, as the viewer draws a robot's link meshes: faces alone. Its triangles'
+        # folds, lines a pixel apart along a 1.2 mm wire, hid half the red under them.
+        def red(display: dict[str, str]) -> int:
+            png = self.folder / f"{display['mode']}.png"
+            snapshot(out, png, daemon=False, size=(800, 600), display=display)
+            pixels = np.asarray(Image.open(png).convert("RGB")).astype(int)
+            return int(((pixels[..., 0] > 120) & (pixels[..., 1] < 80) & (pixels[..., 2] < 80)).sum())
+
+        shaded = red({"mode": "shaded"})
+        self.assertGreater(shaded, 1000)
+        self.assertGreaterEqual(red({"mode": "solid"}), 0.95 * shaded)
 
     def test_two_slides_a_pinion_couples_are_one_control_and_the_pinion_no_body(self) -> None:
         xbf = self.built("gripper", GRIPPER)

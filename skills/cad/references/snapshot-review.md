@@ -210,9 +210,10 @@ still on it.
   Explode (a file of several parts) and annotations; `--pose` is refused: a
   mesh has no mechanism. A GLB is drawn at rest, its clips not played; its materials
   and base colour textures are drawn.
-- **A robot** (`.urdf`, `.srdf`, MJCF `.xml`) is its links' visuals, each link one colour
-  of the Parts palette, where the viewer opens it. `--pose` names an SRDF group state
-  or an MJCF key, or gives joint values (degrees, metres) over that pose.
+- **A robot** (`.urdf`, `.srdf`, MJCF `.xml`) is its links' visuals in their colours, faces
+  alone as the viewer draws a robot (its meshes' folds only in the line modes), where the viewer
+  opens it. `--pose` names an SRDF group state or an MJCF key, or gives joint values over that
+  pose: degrees for a turn and metres for a slide, though the file holds radians.
 - **A drawing** (`.dxf`) is drawn whole from above in its pens, as the viewer's
   drawing pane draws it, on white paper. It takes no `--display`; the size flags, a plan-view
   `--camera`, `--annotation` and `--measurements` apply, and every other flag is refused by name.

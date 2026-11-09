@@ -19,7 +19,8 @@ The robot opens where the CAD Viewer opens it, every joint at zero. `--pose` giv
 over that, in degrees (metres for a prismatic joint), each naming a joint a person can drive,
 within its limits, or the request is refused before anything renders: a fixed joint or a
 `<mimic>` follower is refused by name (a follower follows its leader). Each link is placed by the
-viewer's own forward kinematics and drawn in one colour of the Parts palette.
+viewer's own forward kinematics and drawn in its visuals' colours (`--display parts`: each link
+one colour of the Parts palette).
 
 - **URDF**: mimic joints and four-bar linkages are followed; a `<tcad:four_bar>` input is refused
   by name (an input follows its driver; [urdf-four-bar.md](urdf-four-bar.md)).
@@ -36,6 +37,10 @@ viewer's own forward kinematics and drawn in one colour of the Parts palette.
   by each in turn. A linear `<equality><joint>` coupling is followed, as a mimic is.
 
 ## What each draws
+
+Each visual is drawn in its colour, its faces alone as the CAD Viewer draws a robot: a mesh file
+carries no edges, and its triangles' folds are drawn only in the line modes (`hidden-line`,
+`wireframe`, `xray`).
 
 ### URDF and SRDF
 

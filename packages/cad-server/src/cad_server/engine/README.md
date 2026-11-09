@@ -2063,8 +2063,10 @@ per file (read again when a file it read changes) or with `daemon=False` in this
 - **A robot** (`.urdf`, `.sdf`, `.srdf`, and an MJCF's `.xml` or `.mjcf`) is its link visuals' meshes (STL, 3MF and GLB files, an MJCF's STL and OBJ, a
   `package://NAME/...` one in the ROS package the description is in: the nearest folder above it
   named NAME or holding a `package.xml` that names it, as the viewer finds it too; a
-  box, cylinder, sphere or capsule made and meshed by the kernel), each link's in one colour of
-  the Parts palette. A URDF (and an SRDF's group states over it), an SDF and an MJCF are each read
+  box, cylinder, sphere or capsule made and meshed by the kernel), each in its colour. Solid and
+  Parts draw its faces alone, as the viewer draws a robot: a link mesh's edges are its triangles'
+  folds, which along a thin curved part (a cable's wires, tessellated at the engine's angle) are
+  lines a pixel apart that hide its colour; the line modes draw them. A URDF (and an SRDF's group states over it), an SDF and an MJCF are each read
   once, in the engine (`urdf_source.py`, `sdf_source.py`, `mjcf_source.py`, into the one
   articulation of `robot_model.py`: every link's frame at rest, its visuals, its joints with their
   mimics and four-bars, its named poses), and the viewer's payload (the server's
