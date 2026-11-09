@@ -138,7 +138,26 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   part's canonical owner and the face's ordinal (`plate/face 7`, `kit/pin.2/face 3`) -- read with the
   engine's own loader, so `cad step inspect FILE REF` and `cad xbf inspect DOC REF` resolve it to the very
   face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres. Each
-  part of an assembly is measured once, placed where its first occurrence stands.
+  part of an assembly is measured once, placed where its first occurrence stands. A part that is another's
+  geometry moved -- an exporter's copies, a pattern written out part by part -- is found by its geometry
+  (`_dfm_brep.copies`: its counts and faces' kinds alike and every vertex, edge middle and face middle where the
+  first's lie moved, ordinal for ordinal, 1e-7 of its size; never by bytes, which a copy does not keep) and, in
+  CNC and sheet metal (each part read in its own frame, so where it stands changes nothing), measured once: the
+  first's items said again at the copy's refs, its places and directions moved onto it, its counts counted again
+  (`_dfm_brep.moved`). A row of 46 copies among 107 parts costs 61 parts' measurement, its report the same.
+  Molding and printing read a part against the world's pull and plate, so they measure every part.
+- **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
+  and of 48 edges or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
+  crossing of the surface beyond the face's trim against every edge again, with a classifier made anew each call:
+  6 ms a ray on a 526-edge face, against microseconds on any other. So a heavy face's candidates are screened by its
+  triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections and the face's
+  tolerance -- a ray that meets none cannot cross the face), and cast with the intersector that does not
+  re-classify, the full one only on the stretches of the line within reach of the face's edges (`Intersector`:
+  the edges walked to 2e-5 of the part, the reach twice the largest edge tolerance and the intersector's own
+  (u, v) tolerance in millimetres, plus three walks' deflections), where alone the two can differ. The crossings
+  are the kernel's: the same faces, their distances to the root's last digits (1e-12). A ray the kernel cannot
+  intersect with a face (`Standard_Failure` on a degenerate patch) loses that one crossing, never the family:
+  it is counted against the face and said (`rays_unintersected`, a warning naming the faces).
 - **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and an error finding
   (`measurement_failed`); the other families are still reported.
 - **Every rule id has one outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
@@ -959,7 +978,15 @@ tips' (accessed 2026-11-08), a "should": a warning.
   nearest pairs first; the rest keep the triangulations' distance (`exact: false`, `uncertainty_mm`); at most 4
   overlap booleans.
 - Soundness: the kernel's boolean check on parts while their faces add up to 200; the rest BRepCheck topology alone
-  (`solid.items[].check`).
+  (`solid.items[].check`). A part with a free-form face of more than 2000 control points (`SOUND_POLES`) is
+  checked edges against faces, not faces against faces (`check: "boolean_edges"`): the kernel's face/face search
+  between a large B-spline and a face meeting it tangentially ran for over three hours on a 3-face part, and no
+  kernel call can be stopped. A self-intersection that crosses an edge is still found; two faces crossing inside
+  both, on such a part, are not.
+- Voxel fields: each part's field dropped once its trapped volumes and sections are read (an assembly's fields
+  held together were most of a 1.8 GB check), and every flood of it reaches a checkpoint each sweep.
+- A flat ceiling the kernel lays no sample on is said not measured (`bridges.items[].unmeasured`), its rules'
+  figure missing, never a crash of the family.
 - Flat ceilings: the 40 largest refined to the exact farthest point; the rest read on their samples (`refined`).
 - A mesh: each overhang region spread over about 3000 points (`meshops_printing.spread_points`: rows from a
   facet's sharpest corner, as wide as each row needs, so a strut's sliver is sampled along its length) and its
