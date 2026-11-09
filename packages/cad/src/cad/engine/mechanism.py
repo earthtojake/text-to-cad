@@ -345,8 +345,9 @@ def mechanism_state(assembly: Any, name: str, **values: Any) -> Any:
     """A named state of ``assembly``'s mechanism, AP242's ``mechanism_state_representation``: a
     value for each joint it names, by the joint's label -- a number, or for a joint of several
     values a sequence of them (a cylindrical joint's angle and position, a ball joint's three
-    angles). A joint it does not name stays as built. Kept in the document beside the as-built
-    state, offered by the viewer as a preset and by ``--pose NAME``. A label names the joint in
+    angles). A joint it does not name stays as built, so a state that names none is the as-built pose
+    under a name of its own (a robot description's key, a ``--zero``). Kept in the document beside the
+    as-built state, offered by the viewer as a preset and by ``--pose NAME``. A label names the joint in
     each placement of a sub-assembly placed several times. Returns ``assembly``."""
     import build123d as bd
 
@@ -361,8 +362,6 @@ def mechanism_state(assembly: Any, name: str, **values: Any) -> Any:
             raise TypeError(f"mechanism state {name!r}: joint {label!r} takes a number, or a sequence of numbers "
                             f"for a joint of several values, not {value!r}")
         checked[label] = found
-    if not checked:
-        raise ValueError(f"mechanism state {name!r} sets no joint")
     held = dict(assembly.__dict__.get(CONFIGURATIONS) or {})
     held[name] = checked
     assembly.__dict__[CONFIGURATIONS] = held

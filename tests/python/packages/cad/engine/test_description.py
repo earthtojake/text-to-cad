@@ -12,8 +12,9 @@ MJCF and the URDF write it; a model with no mechanism a link per top-level part;
 its last pair, two frames that coincide as built, one closing at a slide moved to its nearest turn, and a
 state moving it left out; a pinion that holds no part no link, its racks following the first; a part with no
 density warned, one whose density is not positive refused; a free base floating and a declared link name, both
-round-tripped through the xbf and refused where they name no link rightly; and a description taken at a
-mechanism state, its bodies posed there and its joints, limits and states counted from it."""
+round-tripped through the xbf and refused where they name no link rightly; a description taken at a
+mechanism state, its bodies posed there and its joints, limits and states counted from it; and a state that
+sets no joint, the as-built pose under its name."""
 
 from __future__ import annotations
 
@@ -1016,6 +1017,17 @@ class BaseAndZeroTest(_Folder):
             describe(Source.read(self.folder / "XBF/two.xbf").view(), zero="rest")
         with self.assertRaisesRegex(DescriptionError, "no mechanism state 'home': the document has no mechanism"):
             self.described("pair", PAIR, zero="home")
+
+    def test_a_state_that_sets_no_joint_is_the_as_built_pose_under_its_name(self) -> None:
+        built, structure = self.described("two", TWO.format(declare="pass", root='mechanism_state(root, "drawn")'))
+        self.assertEqual(structure["kinematics"]["configurations"]["drawn"], {})
+        found = describe(Source.read(self.folder / "XBF/two.xbf").view(), zero="drawn")
+        for before, after in zip(built.links, found.links):
+            np.testing.assert_allclose(after.frame, before.frame, atol=1e-12, err_msg=after.name)
+        poses = {pose.name: pose.values for pose in found.poses}
+        self.assertEqual(poses["drawn"], {})
+        np.testing.assert_allclose([poses["home"]["shoulder"], poses["home"]["elbow"]],
+                                   [math.radians(30), math.radians(45)], atol=1e-12)
 
 
 if __name__ == "__main__":
