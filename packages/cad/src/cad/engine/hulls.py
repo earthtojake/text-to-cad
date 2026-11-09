@@ -8,7 +8,8 @@ mesh it cannot repair. So the process that holds the kernel never imports it: ea
 interpreter (``python -m cad.coacd._decomposer JOB RESULT``, the integration's code, which imports coacd and
 numpy alone; this environment's Python or the coacd integration's, **Where coacd is**), handed every mesh the
 cache does not hold at once. A child that dies, or stops past ``TIMEOUT_S``, fails the decomposition in one line
-with the end of what it printed.
+with the end of what it printed. As each mesh is done the child says so on its stderr (``DONE``), and the part is
+said on this process's stderr by its name, its hulls and its seconds: a first export decomposes for minutes.
 
 **What it is asked.** Each mesh is ``(positions, triangles, options)``: positions ``(n, 3)``, triangles ``(m,
 3)``, and ``options`` the declaration's (``maxHulls``: CoACD's ``max_convex_hull``, at most that many hulls,
@@ -48,13 +49,14 @@ import pickle
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-__all__ = ["EXTRA", "PLATFORMS", "PROVIDE", "RECIPE", "TIMEOUT_S", "Failed", "Unavailable", "digest", "hulls",
+__all__ = ["DONE", "EXTRA", "PLATFORMS", "PROVIDE", "RECIPE", "TIMEOUT_S", "Failed", "Unavailable", "digest", "hulls",
            "published"]
 
 EXTRA = "cad[coacd]"
@@ -73,6 +75,11 @@ PROVIDE: Callable[[Callable[[str], None]], str | None] | None = None
 #: The longest one child may take (s): past it the child is stopped and the decomposition says so, rather
 #: than a decomposition that never returns holding an export (and the engine or the worker it runs in).
 TIMEOUT_S = 3600.0
+#: The line the child says on stderr as each mesh is done (``cad.coacd._decomposer.DONE``): ``<DONE> <index>
+#: <hulls> <seconds>``.
+DONE = "cad-coacd-done"
+#: The lines of the child's own output kept, to say why it stopped where it stops.
+TAIL = 12
 
 Mesh = tuple[np.ndarray, np.ndarray, dict[str, Any]]
 Hull = tuple[np.ndarray, np.ndarray]
@@ -104,8 +111,8 @@ def digest(positions: Any, triangles: Any, options: dict[str, Any]) -> str:
 def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[list[Hull]]:
     """Each mesh's hulls (the module docstring), each ``(positions float32 (n, 3), triangles uint32 (m, 3))``:
     the cache's where it holds them, else CoACD's, all the misses in one child, and kept. Misses are said in a
-    line on stderr before CoACD starts, by ``names`` (each mesh's part) where given: a first decomposition takes
-    minutes, a later one none."""
+    line on stderr before CoACD starts, by ``names`` (each mesh's part) where given, and each in a line as it is
+    done, its hulls and its seconds: a first decomposition takes minutes, a later one none and says nothing."""
     from cad.engine.places import cache_dir
 
     folder = cache_dir() / "hulls"
@@ -123,7 +130,15 @@ def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[li
             shown = ": " + ", ".join(named[:4]) + (f" and {len(named) - 4} more" if len(named) > 4 else "")
         print(f"decomposing {len(missing)} part{'s' if len(missing) != 1 else ''} into convex hulls with CoACD{shown} "
               "(seconds to minutes each, once: the hulls are kept for the exports after)", file=sys.stderr, flush=True)
-        made = _decompose([meshes[at] for at in missing])
+
+        def done(index: int, made: int, seconds: float) -> None:
+            if made < 0:
+                return  # its failure is said once the child is done, in CoACD's words
+            name = named[index] if index < len(named) else f"part {index + 1}"
+            print(f"decomposed {name}: {made} hull{'s' if made != 1 else ''} in {seconds:.1f} s "
+                  f"({index + 1} of {len(missing)})", file=sys.stderr, flush=True)
+
+        made = _decompose([meshes[at] for at in missing], done)
         for at, held in zip(missing, made):
             found[at] = held
             _write(folder / f"{keys[at]}.npz", held)
@@ -160,24 +175,20 @@ def _write(path: Path, found: list[Hull]) -> None:
         pass  # a cache that cannot be written decomposes again next time
 
 
-def _decompose(meshes: Sequence[Mesh]) -> list[list[Hull]]:
-    """CoACD's hulls of ``meshes``, made in one child process (the module's **Why a process of its own**)."""
+def _decompose(meshes: Sequence[Mesh],
+               done: Callable[[int, int, float], None] = lambda _index, _made, _seconds: None) -> list[list[Hull]]:
+    """CoACD's hulls of ``meshes``, made in one child process (the module's **Why a process of its own**);
+    ``done`` hears each mesh's index, its hulls (-1 where it failed) and its seconds as the child finishes it."""
     python, own = _python()
     jobs = [{"positions": np.asarray(p, dtype=np.float64).reshape(-1, 3), "triangles": np.asarray(t).reshape(-1, 3),
              "options": dict(options)} for p, t, options in meshes]
     with tempfile.TemporaryDirectory(prefix="cad-coacd-") as tmp:
         job_path, result_path = Path(tmp) / "job.pickle", Path(tmp) / "result.pickle"
         job_path.write_bytes(pickle.dumps(jobs))
-        try:
-            done = subprocess.run([python, "-P", "-m", CHILD, str(job_path), str(result_path)],
-                                  env=_child_env(Path(__file__).resolve().parents[2]) if own else _foreign_env(),
-                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=TIMEOUT_S)
-        except subprocess.TimeoutExpired as error:
-            raise Failed(f"CoACD did not finish in {TIMEOUT_S:.0f} s and was stopped; fewer hulls (max_hulls) or a "
-                         "coarser threshold decomposes sooner") from error
+        returncode, said = _child([python, "-P", "-m", CHILD, str(job_path), str(result_path)],
+                                  _child_env(Path(__file__).resolve().parents[2]) if own else _foreign_env(), done)
         if not result_path.is_file():
-            said = (done.stderr or done.stdout).strip().splitlines()[-12:]
-            raise Failed(f"CoACD stopped (exit {done.returncode}) before it wrote its hulls"
+            raise Failed(f"CoACD stopped (exit {returncode}) before it wrote its hulls"
                          + ("".join(f"\n  {line}" for line in said) if said else ""))
         results = pickle.loads(result_path.read_bytes())
     found = []
@@ -187,6 +198,44 @@ def _decompose(meshes: Sequence[Mesh]) -> list[list[Hull]]:
         found.append([(np.asarray(p, dtype=np.float32).reshape(-1, 3), np.asarray(t, dtype=np.uint32).reshape(-1, 3))
                       for p, t in result["hulls"]])
     return found
+
+
+def _child(argv: list[str], env: dict[str, str], done: Callable[[int, int, float], None]) -> tuple[int, list[str]]:
+    """Run the decomposer child: its exit status and the last ``TAIL`` lines of its own output. Its output is
+    read as it comes, each ``DONE`` line handed to ``done`` (a line that does not parse is its own output), so the
+    parts are said as they are done; past ``TIMEOUT_S`` it is stopped and ``Failed`` says so."""
+    try:
+        process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise Failed(f"cannot run {argv[0]}: {error.strerror or error}") from None
+    tail: list[str] = []
+
+    def read() -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            words = line.split()
+            if len(words) == 4 and words[0] == DONE:
+                try:
+                    done(int(words[1]), int(words[2]), float(words[3]))
+                    continue
+                except ValueError:
+                    pass
+            tail.append(line.rstrip("\n"))
+            del tail[:-TAIL]
+
+    reader = threading.Thread(target=read, name="cad-coacd-output", daemon=True)
+    reader.start()
+    try:
+        process.wait(timeout=TIMEOUT_S)
+    except subprocess.TimeoutExpired as error:
+        process.kill()
+        process.wait()
+        raise Failed(f"CoACD did not finish in {TIMEOUT_S:.0f} s and was stopped; fewer hulls (max_hulls) or a "
+                     "coarser threshold decomposes sooner") from error
+    finally:
+        reader.join(timeout=10.0)  # its output ends with it
+    return process.returncode, [line for line in tail if line.strip()]
 
 
 def published(system: str | None = None, machine: str | None = None, glibc: bool | None = None) -> bool:

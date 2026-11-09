@@ -6,7 +6,8 @@ own and keeps the hulls in the engine's cache): it reads the meshes the parent w
 (exactly equal positions; a triangle that loses a corner goes), so a closed solid reaches CoACD as the
 manifold it is and is decomposed as given rather than remeshed first, runs ``coacd.run_coacd`` with seed 0
 (``max_convex_hull`` and ``threshold`` where the options give them, CoACD's defaults where not), and writes
-each mesh's hulls, or its error in CoACD's words, back. CoACD's native log goes to stderr.
+each mesh's hulls, or its error in CoACD's words, back. CoACD's native log goes to stderr, and so does a line
+as each mesh is done (``DONE``, its index, its hulls and its seconds), which the parent says as that part's progress.
 """
 
 from __future__ import annotations
@@ -14,13 +15,18 @@ from __future__ import annotations
 import os
 import pickle
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-__all__ = ["main", "welded"]
+__all__ = ["DONE", "main", "welded"]
+
+#: The start of the line said on stderr as each mesh is done: ``<DONE> <index> <hulls> <seconds>`` (hulls -1 where it
+#: failed). The parent (``cad.engine.hulls``) reads it; it is never shown as it is.
+DONE = "cad-coacd-done"
 
 
 def welded(positions: np.ndarray, triangles: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -57,11 +63,14 @@ def main(argv: list[str]) -> int:
 
     coacd.set_log_level("error")
     found = []
-    for job in jobs:
+    for index, job in enumerate(jobs):
+        started = time.perf_counter()
         try:
             found.append(_one(coacd, job))
         except Exception as error:  # noqa: BLE001 -- said in the parent, with the part it was
             found.append({"error": f"CoACD failed: {type(error).__name__}: {error}\n{traceback.format_exc()}"})
+        made = len(found[-1].get("hulls") or ()) if "error" not in found[-1] else -1
+        print(f"{DONE} {index} {made} {time.perf_counter() - started:.3f}", file=sys.stderr, flush=True)
     result_path.write_bytes(pickle.dumps(found))
     return 0
 

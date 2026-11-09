@@ -107,7 +107,7 @@ class _Folder(unittest.TestCase):
         self.assertTrue(report["ok"], report)
         return self.folder / "XBF/bracket.xbf"
 
-    def stand_in(self, meshes: Any) -> list[list[tuple[Any, Any]]]:
+    def stand_in(self, meshes: Any, _done: Any = None) -> list[list[tuple[Any, Any]]]:
         """The decomposer's child, stood in for: each mesh as the bracket's two arms."""
         self.calls.append([dict(options) for _positions, _triangles, options in meshes])
         return [[_box(*arm) for arm in ARMS] for _mesh in meshes]
@@ -221,7 +221,7 @@ class WritersTest(_Folder):
         self.assertEqual(len(list((self.folder / "cache" / "hulls").glob("*.npz"))), 2)
 
     def test_parts_of_one_geometry_are_cut_by_their_own_options_and_a_default_decomposed_one_by_16(self) -> None:
-        def stand_in(meshes: Any) -> list[list[tuple[Any, Any]]]:
+        def stand_in(meshes: Any, _done: Any = None) -> list[list[tuple[Any, Any]]]:
             self.calls.append([dict(options) for _positions, _triangles, options in meshes])
             return [[_box(*ARMS[0])] * options["maxHulls"] for _positions, _triangles, options in meshes]
 
@@ -267,20 +267,24 @@ class FirstNeedTest(_Folder):
             asked.append("made")
             return "/elsewhere/bin/python"
 
-        def child(argv: list[str], **given: Any) -> Any:
+        def child(argv: list[str], env: dict[str, str], done: Any) -> tuple[int, list[str]]:
             self.assertEqual(argv[:4], ["/elsewhere/bin/python", "-P", "-m", "cad.coacd._decomposer"])
-            self.assertNotIn("PYTHONPATH", given["env"], "another environment's Python imports its own cad")
+            self.assertNotIn("PYTHONPATH", env, "another environment's Python imports its own cad")
             jobs = pickle.loads(Path(argv[4]).read_bytes())
             Path(argv[5]).write_bytes(pickle.dumps([{"hulls": [_box(*arm) for arm in ARMS]} for _job in jobs]))
-            return mock.Mock(returncode=0, stdout="", stderr="")
+            for index, _job in enumerate(jobs):
+                done(index, len(ARMS), 12.34)
+            return 0, []
 
         said = io.StringIO()
         with self.without_coacd(), mock.patch.object(hulls, "published", return_value=True), \
-                mock.patch.object(hulls, "PROVIDE", provide), mock.patch("subprocess.run", child), \
+                mock.patch.object(hulls, "PROVIDE", provide), mock.patch.object(hulls, "_child", child), \
                 contextlib.redirect_stderr(said):
             description = describe(Source.read(path).view())
         self.assertEqual(asked, ["made"])
         self.assertIn("cad: making the coacd integration's environment, once", said.getvalue())
+        # Each part is said as the child finishes it: a first export decomposes for minutes.
+        self.assertIn("\ndecomposed bracket: 2 hulls in 12.3 s (1 of 1)\n", said.getvalue())
         self.assertEqual([c.name for c in description.link("bracket").collisions], ["bracket_hull0", "bracket_hull1"])
         # Kept: the next description asks for no environment at all.
         with self.without_coacd(), mock.patch.object(hulls, "PROVIDE", lambda _told: self.fail("asked again")):
@@ -354,10 +358,18 @@ class CoacdTest(_Folder):
     def test_coacd_cuts_an_l_shaped_part_into_hulls_that_mujoco_compiles(self) -> None:
         import mujoco
 
+        import contextlib
+        import io
+
         path = self.build('collision(arm, "decomposed")')
-        description = describe(Source.read(path).view())
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            description = describe(Source.read(path).view())
         hulls = description.link("bracket").collisions
         self.assertGreaterEqual(len(hulls), 2)
+        # The part said as the child finishes it, by its name, its hulls and its seconds.
+        self.assertRegex(said.getvalue(), rf"\ndecomposed bracket: {len(hulls)} hulls in \d+\.\d s \(1 of 1\)\n")
+        self.assertNotIn("cad-coacd-done", said.getvalue())
         for hull in hulls:  # each inside the part's box
             points = description.meshes[str(hull.geometry.mesh)].positions
             self.assertGreaterEqual(float(points.min()), -1e-4)

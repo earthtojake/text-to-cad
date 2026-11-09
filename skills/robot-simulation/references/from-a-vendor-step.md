@@ -101,8 +101,8 @@ A material you set replaces the part's colour (the faces the vendor painted keep
 
 - **Printed parts:** `collision(part, "decomposed")`, so that the pocket a servo sits in stays a
   pocket. The first export decomposes each part, at about 15 s per printed part (3 minutes for
-  eleven). The hulls are cached by each part's mesh and options, and only a changed part
-  decomposes again.
+  eleven), and says each part on stderr as it is done. The hulls are cached by each part's mesh
+  and options, and only a changed part decomposes again.
 - **Servo cases:** `"box"` on the case's shell leaves (the body and its covers) and `"none"` on the
   motor, gears and board inside. `collision()` on the servo's assembly applies to every leaf below
   it, so it would box the internals too.
