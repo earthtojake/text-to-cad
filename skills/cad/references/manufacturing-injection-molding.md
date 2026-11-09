@@ -122,7 +122,8 @@ insert molding, obtain applicable guidance rather than reusing thermoplastic lim
 
 The following numbers are illustrative inputs, not default process limits.
 
-`molding.draft_min at cover/face 4: wall draft 0 deg is under the 0.5 deg minimum`, along the
-confirmed `--pull z`. Report the wall as fail and propose at least the rule's draft, more if the
+`molding.draft_min at cover/face 4: wall draft 0 deg is under the 0.5 deg recommended minimum`, along
+the confirmed `--pull z`. A recommendation, not a limit (an unreleasable undercut is what fails a
+molding check): report the wall as at risk of sticking and scuffing and propose at least the rule's draft, more if the
 selected texture needs it, keeping the mating face fixed. Along an unconfirmed pull, report the same
 figure as unverified.

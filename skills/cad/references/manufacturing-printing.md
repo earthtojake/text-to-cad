@@ -22,7 +22,8 @@ technology is named; a machine datasheet moves them):
 - **Walls, pins and holes.** Walls 0.8 mm or more (two nozzle widths; SLA 0.5 supported / 1.0 free,
   SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
   can be; pins 0.8 mm (SLS, a recommendation; SLA 0.5; FDM gives no minimum, a pin under 5 mm being
-  perimeters alone); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule).
+  perimeters alone); embossed text 1 mm high (FDM) and engraving 0.4 mm deep (SLA's rule) -- raised or
+  sunk detail alone: a step running across a face is the part's shape, not text.
 - **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
   its last millimetres: blunt it to the wall minimum (`printing.knife_edge`, a warning: the tip prints
   rounded). Two surfaces meeting at a glancing angle (a sphere emerging from a cone) leave a feather of
@@ -51,7 +52,8 @@ the verdicts:
 - `--technology fdm|sls|sla|mjf|pbf` (`fdm` by default; `pbf` is metal powder bed fusion): every limit
   and the self-supporting angle are the technology's. A technology the rules have no figure for leaves
   that rule not evaluated. With the process unknown, check each candidate and report per technology.
-- `--material`: FDM's warping risk for the materials that warp (`warping_risk`).
+- `--material`: FDM's warping risk for the materials that warp (`warping_risk`). A metal with a plastic
+  technology, or a plastic with `pbf`, is refused.
 - `--build-volume XxYxZ`: the person's printer, else a typical machine of the technology's, assumed.
 - `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail.
 - `--angle-limit`: overrides the technology's self-supporting angle, from the person's datasheet.

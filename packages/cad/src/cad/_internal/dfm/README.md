@@ -51,7 +51,12 @@ between two checkpoints was the whole part's one mesh, 7 to 21 s across the proc
 every other was at most a few seconds (a large face's own mesh, the file's read). A process killed in a check says
 so, and is not asked again.
 
-A mesh and a DXF are measured in the calling process (or the integration's environment) always.
+A mesh and a DXF are measured in the calling process (or the integration's environment) always. A mesh is read
+and cleaned one way for both of its processes (`cad/trimesh/_mesh.py`): corners at one place welded into one
+vertex, a triangle two of whose corners became one dropped (it opens nothing), a connected piece of no area
+dropped, and a boundary loop within 0.2% of the diagonal of one straight line -- a tessellation's crack --
+filled, wound as its neighbours; a wider hole is the part's opening and stays open. Watertightness is judged
+per body (`open_bodies`), the volume the closed bodies'; two bodies sharing a face are each closed.
 
 **Verdicts.** The type side (this folder, the standard library alone, so the command resolves every option
 before it starts an environment) holds each process's options, its rules, the findings its facts call for
@@ -148,13 +153,19 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   differ, listed in `variants`), a variant that applied but had no limit said in `reason`; where none judged,
   the one not evaluated, else one `not_applicable` (or `not_evaluated` for a selector value the rules lack).
   The record holds every failure; the findings are fewer, what a reader acts on:
-  failures of one rule at one ref are one finding (`and N more at this ref`), a warning on a figure of an
-  item that already fails an error (the recommendation beside the feasibility limit it exceeds: `draft`
-  beside `draft_min`) is left to the record, at most eight refs of one rule are findings and the rest are
+  failures of one rule at one ref are one finding (`and N more at this ref`), a failure on a figure of an
+  item that already fails a rule of higher severity, or of the same severity with a limit further off (the
+  recommendation beside the feasibility limit it exceeds; `draft`'s 2 deg beside `draft_min`'s 0.5) is left
+  to the record, a feature another finding names as its cause is judged there alone (a process says which:
+  a special cutter's recess, an undercut's trapped faces), at most eight refs of one rule are findings and the rest are
   counted in one more, at `measurements.rules` with the rule's fix. Findings come in this order: what puts
   every other figure in doubt first, whatever its severity (`not_watertight`, `not_sound`,
   `measurement_failed`, `units_suspect`: `manufacturing._FIRST`), then errors, then warnings, then the facts
   and assumptions (info).
+- **Figures are judged as measured.** Every figure a rule reads is kept to 1e-9 in the report and compared
+  unrounded; only a message rounds it (four figures, more where value and limit would read alike). A limit is
+  its source's number exactly (`molding.thick_section`'s 1 / 0.6, not 1.6667), and the comparison's slack, a
+  billionth of the limit, is floating-point noise alone: a value exactly at its limit passes.
 - **The summary** of a failed check is `<process> <what was measured>; failed: <code> xN, ...`: each rule
   that failed with its count of error failures (the record's, not the findings shown), then every other
   error by its code (`cnc.no_turning_axis`, `sheet.not_sheet`, `measurement_failed`). A check that passed
@@ -176,6 +187,21 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   command's `not_found`, exit 2), a
   document with no part that has a face `document_empty`; a part with no face beside others (an empty
   label an exporter left) is skipped and said, `empty_parts` (info).
+- **Not a solid.** Exact geometry is a part of material: a part holding no closed solid of any volume -- an
+  open shell, a face, a solid of zero volume -- is refused before anything is measured, `not_solid` (an error,
+  as `document_empty`, its message naming each such part and what to fix), in every process. A part whose
+  solid has an open shell or that holds faces beside its solids is `not_watertight`, and one that fails the
+  kernel's topology check (BRepCheck) `not_sound`: errors in every process, said first (printing's `solid`
+  family judges its own solids' shells and soundness, with the boolean check). A mesh's open body is
+  `not_watertight` too, an error in both of its processes.
+- **Units.** A document under 1 mm across is implausible for a made part: `units_suspect` (a warning, said
+  first) gives its size read as metres and as inches. build123d has no unit and a model's is the millimetre,
+  so a part modelled in metres reads a thousand times small; a STEP declares its unit, and one under 1 mm is
+  said all the same.
+- **Sampling.** A face's samples are laid on a mesh whose tolerance is a fiftieth of the face's own size (its
+  oriented box's longest side, `_dfm_brep.face_size`), so a part turned in its model is sampled alike; a
+  process whose verdict must not depend on the pose measures the part in its own frame (CNC's machine frame,
+  molding's frame about the pull) and turns every place back.
 
 The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
 `cad.build123d.cnc(shape)`, `sheet_metal`, `molding`, `printing` (the same `CheckResult`, refs as the
@@ -193,17 +219,26 @@ item has `location` (a face ref, `plate/face 7`) and `xyz`; several-face feature
 of an assembly is measured on its own B-rep; its items carry its refs. A family that raised is
 `{"error": "..."}` and is named in `partial_sections`. `machine` echoes axes, turning, tools, stock.
 
+Each part is machined in its own frame, never the world's: the rotation whose axes the most of its area lies
+along (each plane's normal, each cylinder's, cone's or torus's axis, by its face's area; candidates the world's
+frame and, about each of the six heaviest directions, one whose second axis is the heaviest direction square to
+it; the world's wins a tie, and of a frame's 24 rotations the one nearest the world's is taken). The part is
+measured turned into it and every `xyz`, axis and direction turned back, so a part turned in its model reads as
+drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the part's coordinates, `turned`,
+`aligned_area_fraction`). An assembly's parts each take their own. Below, "world axis" is the frame's axis.
+
 ### Families (what each measures, and how)
 
 - **holes** — a connected set of coaxial concave cylinders and cones (plus the planes square to the axis whose
   every neighbour is one of them: a counterbore step, a flat floor); sets on one axis whose cylinders of one
   radius overlap along it are one hole (a hole a slot splits); one radius's cylinders sweep >= 300 degrees
-  together. `diameter_mm` (narrowest full cylinder), `depth_mm` (the cylinders' extent along the axis),
+  together. `diameter_mm` (narrowest full cylinder), `depth_mm` (the drilled length: that cylinder's extent along
+  the axis, below any counterbore), `overall_depth_mm` (every cylinder's extent),
   `depth_to_diameter`, `through` / `bottom` (`through`, `drill_point`, `flat`, `closed`, `other`: an exact
   ray along the axis from inside the hole meets the hole's own floor or not), `point_angle_deg` (a drill
-  point's included angle), `counterbores` [{diameter_mm, depth_mm}], `countersinks` [{diameter_mm,
-  angle_deg}], `axis`, `aligned` (along a world axis), `reachable` (along a direction the machine has),
-  `inclination_deg` (to the nearest world axis), `opening`, `drilled` (<= 1 3/4 in), `standard_drill`
+  point's included angle), `counterbores` [{diameter_mm, depth_mm, depth_to_diameter}] (each its own feature:
+  its depth is not the hole's), `countersinks` [{diameter_mm, angle_deg}] (included angles, as drawn), `axis`, `aligned` (along an axis of the part's machine frame), `reachable` (along a direction the machine has),
+  `inclination_deg` (to the frame's nearest axis), `opening`, `drilled` (<= 1 3/4 in), `standard_drill`
   (`"6.8 mm"`, `"1/4 in (6.350 mm)"`, `"#7 (5.105 mm)"`, `"letter F (6.528 mm)"`: within 0.005 mm),
   `drill_deviation_mm`, `tap_candidate` (`"M8x1.25"` where the diameter is an ISO 262 coarse tap drill: a
   fact, not a verdict), `tap_drill`, `tap_nominal_mm` (that thread's nominal); with `--turning`, `relation`
@@ -241,7 +276,8 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   axis, or is a face of such a round and under twice its radius long; never a floor-to-wall edge -- folded in
   rather than listed under sharp_edges). A through cavity's concave cylinders and unmade sharp edges along it
   are its corners the same way. `radius_mm` is read to 0.01 mm (`RADIUS_TOLERANCE`: 1.4999
-  is 1.5). Floor-to-wall roots are never corners (a flat end mill makes them sharp).
+  is 1.5). Floor-to-wall roots are never corners (a flat end mill makes them sharp). `third_of_depth_mm`: a
+  third of its height, the radius the hint gives in millimetres.
 - **sharp_edges** — every other sharp concave edge no rotating tool makes (each with `void_angle_deg`,
   `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees, and `reason`,
   the first that holds: `other_axes` -- a tool along a direction the machine lacks would make it;
@@ -272,7 +308,11 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   boundary: `refined` true, `xyz` the thinnest point. A face and its `opposite` are one item (the thinner
   reading): one web is one finding; gaps likewise.
 - **gaps** — the same ray outward across the void (holes and threads excluded); the narrowest per face under
-  10 mm: `width_mm`, `opposite`, `surface`; refined the same way, through the void.
+  10 mm: `width_mm`, `opposite`, `surface`, `made_by` (`end_mill`; `slot_cutter` where the two faces are the
+  floor and ceiling of a recess a special cutter makes -- planes facing each other square to one direction --,
+  `cutter_recess` its ref: the cutter's thickness cuts that height, not an end mill's diameter); refined the same
+  way, through the void. One pocket's or cavity's gaps are one item, its narrowest (`pocket`, the others'
+  refs in `also_at`): one slot is one finding.
 - **access** — faces (stock faces on the part's box excluded when no `--stock`) whose sampled points no
   straight line from the machine's directions reaches (exact rays must escape the part; back-facing points
   never count): `unreached_fraction`, `unreached_any_direction_fraction` (200 directions over the sphere),
@@ -283,6 +323,11 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   axes the six world axes; 4 axes those plus every 15 degrees about the rotary axis (X, Y or Z, the one
   that reaches most); 5 axes those plus every 15 degrees about each world axis, then the part's own and 200
   over the sphere (so five reach at least what four do).
+  One cause, one judged item: an `undercut` or `no_line_of_sight` face of a special cutter's recess is that
+  recess's (`part_of` its ref; the `special_cutter` item lists them in `unreached_faces` and its message names
+  them, saying which no straight line reaches at all), and on 3 and 4 axes an inclined hole's unreached faces
+  are the hole's (`part_of`; `cnc.inclined_feature` judges it). Neither is judged by `cnc.undercut` or
+  `cnc.no_line_of_sight` again.
 - **setups** — one item per part: the greedy set cover of the sampled area by direction (`directions`
   [{direction, area_fraction, faces}]), `orientation_count`, `setup_count` (clampings: each orientation on 3
   axes; directions square to the rotary axis are one on 4; directions within a half-space above one
@@ -293,7 +338,9 @@ of an assembly is measured on its own B-rep; its items carry its refs. A family 
   `height_mm`, `volume_mm3`, `stock_volume_mm3`, `removal_ratio` (null where the part does not fit).
 - **small_features** — faces narrower than 0.5 mm (2 x area / perimeter); scalars `smallest_edge_mm`,
   `smallest_face_mm2`, `fine_faces` (under 1 mm).
-- With `--turning` (pockets and internal_corners are then absent): **turning** (per part: `axis` — the line
+- With `--turning` (pockets and internal_corners are then the live tooling's features alone -- its face groups
+  and the planes they meet at a concave edge, a keyway's square ends --, measured and judged as a mill's):
+  **turning** (per part: `axis` — the line
   whose coaxial cylinders, cones and tori have the most area —, `axis_origin`, `axisymmetric_fraction` (area on
   faces of revolution about it and on planes square to it whose every edge is a circle about it),
   `max_diameter_mm`, `length_mm`,
@@ -311,29 +358,31 @@ design parts for CNC machining", cited as general practice.
 
 | id | family.field | limit |
 |---|---|---|
-| cnc.internal_corner_sharp | internal_corners.radius_mm min, sharp corners: the radius to give | 1.25 (e, a 2.5 mm tool's); tools: 0.5 x min tool |
-| cnc.internal_corner_radius | internal_corners.radius_mm | 0.025 mm (e, micro tools 0.05 mm); tools: 0.5 x min tool (e) |
+| cnc.internal_corner_sharp | internal_corners.radius_mm min, sharp corners | sharp: no round tool makes it (e: Hubs "the internal corners of a CNC part always have a radius"); the limit 0.025 mm, derived from Hubs' "Feasible: 0.05 mm" smallest feature (a 0.05 mm tool's radius); tools: 0.5 x min tool (e); the hint gives 1.25 mm or more recommended (a 2.5 mm end mill's) and a third of the depth in mm |
+| cnc.internal_corner_radius | internal_corners.radius_mm | 0.025 mm (e, derived from Hubs' 0.05 mm small-feature figure, "Feasible: 0.05 mm"); tools: 0.5 x min tool (e) |
 | cnc.internal_corner_small | internal_corners.radius_mm min 1.25 (w) | features under 2.5 mm are micro-machining |
-| cnc.corner_radius_to_depth | internal_corners.radius_to_depth min 0.3333 (w) | a third of the cavity's depth |
+| cnc.corner_radius_to_depth | internal_corners.radius_to_depth min 1/3 (w) | Hubs "Recommended: ⅓ times cavity depth (or larger)"; the hint gives the radius in mm |
 | cnc.corner_reach / _limit | internal_corners.reach_ratio max 4 (w) / 30 (e) | 3-4 D cutting length / 30:1 specialised |
-| cnc.sharp_internal_edge | sharp_edges.radius_mm min, message and fix by `reason` (e; `other_axes` w: an angled setup or more axes) | 1.25; tools: 0.5 x min tool |
+| cnc.sharp_internal_edge | sharp_edges.radius_mm min, message and fix by `reason` (e; `other_axes` w: an angled setup or more axes) | 0.025 (derived, as internal_corner_sharp; the fix gives 1.25 mm or more recommended); tools: 0.5 x min tool |
 | cnc.knife_edge | knife_edges.thickness_mm min (w) | metal 0.5 / plastic 1.0 (the feasible wall) |
 | cnc.pocket_depth_to_width | pockets.depth_to_width max | 4 (w) |
 | cnc.wall_thickness | walls.thickness_mm min | metal 0.5 / plastic 1.0 (e, feasible) |
 | cnc.wall_thickness_recommended | walls.thickness_mm min | metal 0.8 / plastic 1.5 (w) |
-| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a) | align features to the six principal directions, else 5 axes |
+| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a) | align features to the six principal directions of the part's own frame (`machine.frames`), else 5 axes |
 | cnc.hole_diameter | holes.diameter_mm min | 1.0 (e: "Feasible: any diameter larger than 1 mm") |
 | cnc.hole_depth / _limit | holes.depth_to_diameter max | 4 (w) / 40 (e) |
 | cnc.drill_size | holes.drill_deviation_mm max 0.005 (w), drilled holes | standard drill sizes |
 | cnc.thread_size | threads.major_diameter_mm min 6 (w) | M6 or larger recommended |
 | cnc.thread_length / _minimum | threads.length_to_diameter max 3 / min 1.5 (w) | 3 D adds no strength / 1.5 D minimum |
-| cnc.gap_width | gaps.width_mm min | 0.05 (e); tools: min tool (e) |
+| cnc.gap_width | gaps.width_mm min | 0.05 (e, derived from Hubs' "Feasible: 0.05 mm"); tools: min tool (e) for `made_by` end_mill, 0.05 for a slot cutter's recess height |
 | cnc.gap_width_small | gaps.width_mm min 2.5 (w) | features under 2.5 mm are micro-machining |
-| cnc.undercut | access.unreached_fraction max 0.02, kind undercut (w; a hole's face: its fix names the axis) | special cutters |
-| cnc.special_cutter | access.edge_count max 0, kind special_cutter (w) | undercuts are machined with special tools, 3 to 40 mm wide |
-| cnc.no_line_of_sight | access.unreached_any_direction_fraction max 0.02 (w) | special cutters |
+| cnc.undercut | access.unreached_fraction max 0.02, kind undercut, not `part_of` another cause (w; a hole's face: its fix names the axis) | special cutters |
+| cnc.special_cutter | access.edge_count max 0, kind special_cutter (w; its message names the recess's unreached faces) | "The width of an undercut can vary between 3mm and 40mm." |
+| cnc.no_line_of_sight | access.unreached_any_direction_fraction max 0.02, not `part_of` another cause (w) | special cutters |
 | cnc.enclosed_void | voids.volume_mm3 max 0 (e) | a tool reaches only what it can enter |
 | cnc.setups | setups.setup_count max 5 (w) | rotated "up to three or four times" (five clampings) |
+
+The pocket and corner rows apply under `--turning` too, to the live tooling's pockets.
 
 No rule judges a machine's size, a lathe's capacity or a shop's own feature limits (its narrowest engraved
 line, its smallest part, its turned diameters, grooves and cross holes): those are a shop's, and the
@@ -544,7 +593,10 @@ only Hubs's flange height is unstated, read from the outside mold line (the rule
 A STEP, an xbf or a model's document is measured on its B-rep (`cad.build123d._dfm_molding`); every item
 is at a face ref (`plate/face 7`) plus `xyz`. An STL, 3MF or GLB is measured as triangles
 (`cad.trimesh._molding`), every item at `xyz`. Both share one schema and one algorithm for everything but
-draft and feature recognition (`cad._internal.meshops_molding`, numpy only). A mesh report also carries
+draft and feature recognition (`cad._internal.meshops_molding`, numpy only). A part of one solid is measured in
+its own frame about the pull (its long direction in the parting plane along the plane's first axis; `frame`
+says the turn), and every place and side action is reported in the world: a part turned about the pull in its
+model reads the same figures. A mesh report also carries
 `notes`: what a mesh cannot say.
 
 On the B-rep a face's surface is its kernel type, and a B-spline or Bezier face that IS a plane, cylinder,
@@ -557,8 +609,9 @@ their fillets, ribs and bosses unrecognised.
 
 | family | what | how | items (fields the rules read in **bold**) |
 |---|---|---|---|
-| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface; mesh: per region (triangles joined under 20 deg), flat exact, curved 5th percentile of its facets (`spread_deg`), tangent bands excluded | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, `xyz` |
-| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped; touching trapped faces = one group, split where its trapped points lie apart (three sample spacings; on a mesh, 1.5 probe edges): two snaps under one lid are two features. Release: rays along 8 slide directions in the parting plane + the feature's mean lateral normal + each tilted 45 deg (angled slide); fewest slides covering it (each point assigned to its shortest stroke); else a lifter (short lateral move then a pull, stroke <= 1/4 part size); else a collapsible core (each point freed radially, no common direction); else `none` | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/none), `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, **`height_mm`** (along pull), **`width_mm`**, `blocked_by`; scalars: `candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `collapsible_core_count`, `unreleasable_count`, ... |
+| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface; mesh: per region (triangles joined under 20 deg), flat exact, curved 5th percentile of its facets (`spread_deg`), tangent bands excluded | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, `xyz`, `feature` (`wall`; `rib`/`snap`: a rib's side, judged by `molding.rib_draft`; `undercut`: a face an undercut traps, formed by its release, judged by the undercut rules) |
+| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped; a point on another solid of the same part (two solids touching, not fused) is no surface and never trapped; on a mesh a blocked ray whose origin lies in the material (a fold of the tessellation: a planar face's fan crossing its own boundary, its triangles turned to face into the material) is no undercut (`folded_area_mm2`, `folded_note`); touching trapped faces = one group, split where its trapped points lie apart (three sample spacings; on a mesh, 1.5 probe edges): two snaps under one lid are two features. Release: rays along 8 slide directions in the parting plane + the feature's mean lateral normal + each tilted 45 deg (angled slide); fewest slides covering it (each point assigned to its shortest stroke); else a lifter (short lateral move then a pull, stroke <= 1/4 part size); else a collapsible core (each point freed radially, no common direction); else `none` | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/none), `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, **`height_mm`** (along pull), **`width_mm`**, `blocked_by`; scalars: `candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `collapsible_core_count`, `unreleasable_count`, ..., `trapped_faces` (the faces it mostly traps) |
+| `touching` | solids of one part that touch without being fused | each sampled point stepped off its face classified in the part's other solids (in or on: a contact); parts of 2 to 24 solids | `location`, `part`, `solids` [i, j], `faces`, `contact_area_mm2`, `xyz` (present only where some touch) |
 | `thickness` | the wall: nominal, thin, thick, transitions | rolling ball: at each sampled point the diameter of the largest ball tangent there that no surface triangle cuts into (exact per triangle: corners, edges, insides), capped by the exact ray straight through. Points whose ball is held by a face across a convex edge read low and are left out of medians; a narrow face (rib top, plate end) takes its broad neighbours' wall | `location`, **`thickness_mm`** (area median), `min_mm` (p10), `max_mm`, **`ratio_to_nominal`** (max / nominal), `thin_ratio`, **`feature`** (`wall`, or `rib`/`snap`/`boss`: a feature's face, judged by its own rules, not the wall's range), `xyz` (the thickest point); scalars `nominal_mm` (area median of the faces' walls), `min_mm`, `max_mm`, `ratio_max_nominal`, `thick_sections` (> 1.5 x nominal) |
 | `transitions` | abrupt changes of wall | read on the stepped side (`meshops_molding.steps`): two flat faces (mesh: flat regions) facing the same way at two offsets, joined by a chain of at most three faces none parallel to them (a pad's side, a chamfer, a fillet), whose walls differ by a quarter of the nominal or more and by about their offset (one face behind both: not a rib's top, not a wall's rim); its run is the chain's reach across, square to the faces, from one seam to the other. On a mesh a ramp gentler than the regions' 20 deg join merges with its levels and is no abrupt step (3:1 is 18.4 deg). A free-form face no step takes in: the rolling ball's steepest pair of points within four sample spacings whose walls differ by half the nominal (`basis` `ball`) | `location` (the chain's first face), **`transition_ratio`** (run over the change: a vertical step 0, a chamfer its run over its rise), `min_mm` and `max_mm` (the two walls), `change_mm`, `length_mm` (the run), `basis` (`step` or `ball`), `xyz`, `at_xyz` (a point on each seam) |
 | `ribs` | thin slabs standing on a wall | two opposite planar faces (within 12 deg) whose inward rays come out of each other, both meeting one base plane at a concave edge or a concave fillet, height >= thickness, length >= 1.5 x thickness; base = the plane it is shortest from. Its ends (faces joining both sides, no wider than the rib) are its roots too: their fillets are the rib's, not corners, and `base_fillet_mm` is the least of sides' and ends'. A rib a trapped face touches (one of its own, or one beside them no larger than its side, not its base) is a snap arm, the face its barb (B-rep only). On a mesh the base is the plane of the base region's triangles along the root (a floor filleted to its walls elsewhere is one curved region) | **`kind`** (`rib`, `snap`), `barb`, **`thickness_ratio`** (root / base wall), **`height_ratio`** (height / wall), **`height_to_thickness`**, **`base_fillet_ratio`** (fillet / rib), **`base_fillet_wall_ratio`**, **`gap_to_thickness`**, **`gap_to_wall`** (gap = median ray to the next face), **`draft_deg`**, `thickness_mm`, `height_mm`, `length_mm`, `base_fillet_mm` |
@@ -575,7 +628,12 @@ Kept from today's report: `draft` scalars (`wall_area_mm2`, `zero_draft_wall_are
 (`candidate_area_mm2`, `largest_candidate_faces`, `probe_resolution_note` on a mesh; `unintersected_rays` and
 its note where the kernel failed to intersect a ray with a face -- that crossing is not found, the family is
 measured all the same), `projection`, `scale`, `mesh` (meshes). Fact findings: `zero_draft_walls`,
-`undercut_candidates` (now with feature counts), `coarse_curved_face` (info), `probe_resolution`,
+`undercut_candidates` (now with feature counts; both **info** sums of what the rules judge per face and per
+feature, each naming the rule that judges it -- warnings only where they say the pull may be the wrong one),
+`not_watertight` (an error, a mesh: an open body's walls and undercuts are not a part's; its open bodies'
+places), `solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
+left out of draft and undercuts, and the part's `several_bodies` is then not said), `mesh_folds` (info: the
+folded area left out), `coarse_curved_face` (info), `probe_resolution`,
 `rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (also for a multi-part document, and a
 warning for a part of several solids: they shadow each other), `zero_draft_walls` and `undercut_candidates`
 (their hints: when half the wall area or more reads zero draft, or a quarter of the surface or more is
@@ -595,8 +653,8 @@ rules' version 2026-11-08).
 
 | rule id | field | limit (severity; source) |
 |---|---|---|
-| `molding.draft_min` | draft_deg min | 0.5 error (Protolabs) |
-| `molding.draft` | draft_deg min | 2 warning (Hubs "A minimum draft angle of 2° is recommended."; Protolabs "Most situations: 2°"; Hubs' 1-2 deg is a textured face's extra) |
+| `molding.draft_min` | draft_deg min, a wall's face (a rib's sides are `rib_draft`'s, a face an undercut traps its release's) | 0.5 warning (Protolabs' table: "VERTICAL FACES 0.5°", "MOST SITUATIONS 2°"; only its shut-off and texture rows are labelled MINIMUM, so it is a recommendation) |
+| `molding.draft` | draft_deg min, a wall's face, as draft_min | 2 warning (Hubs "A minimum draft angle of 2° is recommended."; Protolabs "Most situations: 2°"; Hubs' 1-2 deg is a textured face's extra) |
 | `molding.undercut` | trapped area, release side_action/lifter/core | warning (Hubs) |
 | `molding.undercut_unreleasable` | trapped area, release none | error |
 | `molding.wall_min` / `wall_max` | thickness_mm (the face's wall, `feature` wall: a junction's thickest point is thick_section's) by `--material` | the wall table by resin (Protolabs), warning |
@@ -610,7 +668,7 @@ rules' version 2026-11-08).
 | `molding.snap_thickness` | `kind` snap: thickness_ratio min 0.5 | warning (Hubs "Design snap-fits with thickness greater than 0.5x the wall thickness") |
 | `molding.boss_root_fillet` | base_fillet_mm min 0.01, any rounding | warning (Hubs "the base of vertical features (like ribs, bosses, snap-fits) must also always be rounded"; no source gives a radius) |
 | `molding.boss_wall` | wall_ratio max 0.6 | warning (Protolabs) |
-| `molding.inside_corner_radius` | ratio_to_wall min 0.5 | warning (Hubs) |
+| `molding.inside_corner_radius` | ratio_to_wall min 0.5 | warning (Hubs); the hint gives the radius in mm (half the wall) |
 
 No rule judges a press or a mold: its projected area, its largest part, its depth from the parting line,
 its shot volume and its side actions' travel are a shop's, read against the measurements (`projection`,
@@ -659,7 +717,9 @@ technology: `--technology fdm|sls|sla|mjf|pbf` (default `fdm`; `pbf` is metal po
 Options: `--build-volume XxYxZ` (mm, the printer's; default a typical machine of the technology's, assumed), `--angle-limit` (deg from
 horizontal; default the technology's: FDM 45, SLA 19, metal 45, SLS/MJF 0), `--layer-height` (mm; default FDM 0.2,
 SLA 0.1, SLS 0.1, MJF 0.08, metal 0.03), `--nozzle` (FDM's only), `--samples` (rays, default 2000), `--material`,
-`--candidates`.
+`--candidates`. A material of the other class from the technology's is refused, the command line's mistake (exit 2):
+metal powder bed fusion (`pbf`) prints a metal, the others a plastic (`--material aluminum` with `fdm`, `pla` with
+`pbf`), as molding refuses a metal.
 
 A STEP, an xbf or a document id is measured on its exact geometry (B-rep), every item at a face ref
 (`bracket/face 7`, resolved by `cad xbf inspect`); an STL, a 3MF or a GLB as triangles, every item at `x, y, z`.
@@ -672,14 +732,14 @@ items worst first, at most 300. A family that fails is `{"error": "..."}` and is
 
 | family | exact geometry (B-rep) | mesh |
 | --- | --- | --- |
-| `solid` / `mesh` | per part: `solids`, `shells`, `closed`, `inner_shells`, `sound` (the kernel's boolean-argument check, `issues` its BRepCheck codes), `volume_mm3`; scalars `body_count`, `volume_mm3`, `watertight`, `sound` | `mesh`: `watertight`, `body_count`, `volume_mm3`, ... (unchanged) |
-| `overhangs` | per down-facing face off the plate: `angle_deg` (a plane's exactly, a curved face's least over its samples), `area_mm2`, `area_below_limit_mm2`, `height_mm`, `kind`: `slope`, `bridge`/`cantilever`/`ceiling` (a flat face, see `bridges`), `hole` (a hole's arch), `plate_edge` (a round or chamfer on the plate's edge whose under-limit part is within 1 mm / 5 layers of it); `reach_mm` (a flat face's, from `bridges`); `counted`: false for a face too small to need support -- under `OVERHANG_AREA_MM2` (1 mm2) below the limit, or a cantilever reaching less than the nozzle's width (`--nozzle`, else `OVERHANG_REACH_MM`, 0.4 mm) -- which no rule judges (both floors text-to-cad's own: no guide states them, and the family's `method` says so); an angle within 1e-6 deg of the limit is at it (`ANGLE_EPS`: a kernel's 45 deg chamfer reads 44.999999999999936); scalars `down_facing_area_below_limit_mm2` (the counted faces, holes, bridges and plate edges aside), `area_floor_mm2`, `reach_floor_mm` | connected regions of the counted triangles, same fields and floors |
+| `solid` / `mesh` | per part: `solids`, `shells`, `closed`, `inner_shells`, `sound` (the kernel's boolean-argument check, `issues` its BRepCheck codes), `volume_mm3`; scalars `body_count`, `volume_mm3`, `watertight`, `sound` | `mesh`: read and cleaned as both processes read a mesh (`cad.trimesh._mesh`: welded, collapsed triangles and zero-area debris dropped, a tessellation's cracks closed); `watertight` judged per body (`open_body_count`, `open_bodies` with each one's `xyz` and `boundary_edges`), `volume_mm3` the closed bodies', `body_count`, ... |
+| `overhangs` | per down-facing face off the plate: `angle_deg` (a plane's exactly, a curved face's least over its samples), `area_mm2`, `area_below_limit_mm2`, `height_mm`, `kind`: `slope`, `bridge`/`cantilever`/`ceiling` (a flat face, see `bridges`), `hole` (a hole's arch), `plate_edge` (a round or chamfer on the plate's edge whose under-limit part is within 1 mm / 5 layers of it); `reach_mm` (a flat face's, from `bridges`); `counted`: false for a face too small to need support -- under `OVERHANG_AREA_MM2` (1 mm2) below the limit, or a cantilever reaching less than the nozzle's width (`--nozzle`, else `OVERHANG_REACH_MM`, 0.4 mm) -- which no rule judges (both floors text-to-cad's own: no guide states them, and the family's `method` says so); an angle within 1e-6 deg of the limit is at it (`ANGLE_EPS`: a kernel's 45 deg chamfer reads 44.999999999999936); scalars `down_facing_area_below_limit_mm2` (the counted faces, holes, bridges and plate edges aside), `area_floor_mm2`, `reach_floor_mm` | connected regions of the counted triangles, same fields and floors; a region that reaches the plate, or runs on into down-facing triangles that do (a round's lowest row), and stays within the plate band is `plate_edge`; `down_facing_area_below_limit_mm2` counts the counted regions, bridges and plate edges aside, as the exact path does |
 | `bridges` | flat (< 5 deg) down-facing planes: `kind` `bridge` (the farthest point lies within the convex hull of its supports: `length_mm` = twice the farthest distance to a supporting edge = the span between the walls), `cantilever` (beyond one support: `length_mm` = its reach), `ceiling` (none); supporting edges are the concave edges whose other face descends. A horizontal hole's arch is no bridge (each layer stands on the one below but the crown's): `printing.horizontal_hole` judges its diameter | the flat regions and any region carried on both sides (a hole's crown among them: a mesh has no axes) |
 | `wall_thickness` | per face, the thinnest exact ray into the material from its samples, `sampled: true` (a face's thinnest sample, which can read above the exact least thickness between samples: a keycap's 0.6129 against 0.5493). A ray counts where the face it lands on looks back along it, its normal there within 45 deg of the ray (`KNIFE_DEG`), whether or not that face shares an edge with the ray's own: past it the ray measured a corner (a rim whose sides meet at 50 deg reads alike on both paths, and a sharp 50 deg tip as the same tip blunted by 0.0001 mm). One landing on a face that shares an edge with its own within `SEAM_HIT_MM` (0.05 mm) met the seam and is dropped; a ray inside a knife edge's `thin_depth_mm` that starts or lands on one of the knife's two faces (its flanks) is that knife's sliver -- from a flank, or from a face meeting them at the knife's end across to one -- reported by `knife_edges` alone, while a ray near it between two other faces (a fin beside the knife, across itself) measures its own wall; pins are the pins' rules'. `thickness_mm`, `opposite`, `supported` (joined to the part on 2+ sides: the face's or its opposite's concave edges, smooth joins into a concave round, or a closed ring), `joined_sides`; scalars `min_mm`, `p05_mm`, `p25_mm`, `median_mm`, `max_mm` | per body, `--samples` rays from points at random over the surface, and on a mesh of at most `COVER_MAX_TRIANGLES` (5000) triangles one more from every triangle's centre (`cover: true`; on 60 real meshes the pass cost 26 times the family's time and found 3 thin places against 9 that are not there, while under 5000 triangles it found a knob's 0.27 mm web 2000 random rays miss, with no false one); a ray counts where it lands on a face turned toward it (within 45 deg) and is no knife's sliver: inside a knife's thin depth, starting or landing on one of its flanks (the triangle's normal within 20 deg of a flank's, `FLANK_DEG`). Items the thinnest per cube of diag/40 (>= 2 mm), `supported: null`; `min_mm` .. `max_mm`, `samples_valid` and `thinnest_samples` are of the same rays as the items, per body too; `method` says which rays ran |
 | `gaps` | per face, the narrowest exact ray out of the material to another face of the same part (not a neighbour, not the same hole), up to 3 mm, each pair once | one ray out of every triangle to a facing wall of the same body (a hole reads as a gap); under `GAP_DEFECT_MM` (0.05 mm) faces lie on faces -- doubled or overlapping triangles, the mesh's defect -- reported once as `overlap` (`mesh_overlap`), never an item |
 | `holes` | concave cylinders round one axis covering >= 250 deg: `diameter_mm`, `depth_mm`, `orientation` (vertical < 10 deg, horizontal > 80 deg, else inclined), `through`, `teardrop` (horizontal and no material within 15 deg of the top), `channel` (depth >= 5 d), `coverage_deg` | not measured (no axes) |
 | `pins` | convex cylinders the same way: `diameter_mm`, `height_mm`, `aspect_ratio` | not measured |
-| `details` | a planar side face between a parallel top (its convex edge) and bottom (its concave edge) at most 2 mm apart, narrower than `DETAIL_ACROSS_MM` (3 mm: text, a logo, a mark; a wider step -- a groove, a land, a ledge -- is the part's geometry): `emboss` where it is narrower through the material (the side's rays in) than across the air (its rays out), else `engrave`; `height_mm` (the step), `width_mm` (that narrower extent) | not measured |
+| `details` | a planar side face between a parallel top (its convex edge) and bottom (its concave edge) at most 2 mm apart, narrower than `DETAIL_ACROSS_MM` (3 mm: text, a logo, a mark; a wider step -- a groove, a land, a ledge -- is the part's geometry), whose steps bound its raised top or its sunk floor all round (an island or a pocket; a step that runs on across a face from edge to edge -- a hinge knuckle's shoulder, a ledge -- is the part's geometry, which the walls and gaps judge): `emboss` where it is narrower through the material (the side's rays in) than across the air (its rays out), else `engrave`; `height_mm` (the step), `width_mm` (that narrower extent) | not measured |
 | `clearances` | each pair of parts within 5 mm: exact `distance_mm` (BRepExtrema), `kind` `gap`/`contact`/`overlap` (`overlap_mm3` by boolean), `parts` | each pair of bodies (inside-out void shells and slivers dropped): closest points of vertices and triangle centres |
 | `trapped_volumes` | cavities: every solid's inner shells exactly (`exact: true`, volume from the shell), and from a voxel field (<= 1.5 M voxels) the air a ball of r = clamp(0.2 x smallest side, 3 voxels, 6 mm) cannot reach from outside (open hollows) and sealed pockets; `sealed` (a voxel pocket under 8 voxels, `POCKET_MIN_CELLS`, is the voxelisation's and dropped), `escape_holes` (each run of an exact hole along its axis with one end in the cavity and the other outside -- one cut through two opposite walls is two holes -- plus voxel openings no hole explains), `escape_hole_diameters_mm`, `min_escape_hole_mm`, `min_wall_mm` (the wall samples whose outside lies in the cavity), `volume_mm3` | the voxel field alone; opening widths estimated ((2 depth + 3) voxels) |
 | `knife_edges` | convex edges whose material angle (at the middle) is under 45 deg (`knife_below_deg`): `location` the edge ref (`lip/edge 14`), `faces`, `angle_deg`, `length_mm`, `thickness_mm` 0, `thin_depth_mm` = min wall / (2 tan(angle / 2)) (how far in the material stays under the rules' unsupported-wall minimum, `min_wall_mm`; at most `THIN_DEPTH_CAP_MM`, 10 mm, past which the sliver is a fin the walls read; none under `FOLD_DEG`, 2 deg), `thin_area_mm2`. Why 45: that depth is half a wall at a 90 deg corner (one bead), 1.2 walls at 45, 1.9 at 30; 45 deg is also the guides' self-supporting chamfer. The sliver is the knife's alone: the walls drop the rays inside `thin_depth_mm` that start or land on its two faces | convex creases between triangles of material under 60 deg (`CREASE_DEG`) and at least `FOLD_DEG` (2 deg: a sharper crease is a fold of the tessellation, two triangles doubled back, whose depth would reach anywhere -- a 0.227 deg one on a watertight shin wiped every wall ray within 201 mm), chained by shared corners; a chain is a knife where its angle, its creases' median by length (as the exact path reads an edge at its middle: a curved 41 deg edge meshes as creases of 4 to 58 deg), is under 45 deg and it is at least as long as its thin depth (a shorter one is a sliver triangle's crease); same fields at `xyz` |
@@ -698,8 +758,11 @@ build height 0.15, overhang area 0.10, stair-step area 0.10, lack of bed contact
 
 ### Findings that are facts
 
-`not_watertight` (every figure of an open surface is suspect), `not_sound`, `several_bodies`, `overhangs` (info
-for powder; with a hint, and on an assembly the sentence that the parts are measured as printed together, in place,
+`not_watertight` (an error, mesh and B-rep: an open surface has no inside to print, and every figure of it is
+suspect; on a mesh it names the open bodies), `not_sound` (an error: the kernel's validity check fails),
+`several_bodies`, `overhangs` (the sum of the down-facing area: info where `printing.overhang_angle` judges each face
+-- FDM, SLA, metal, the angle limit used at or under the rule's -- and for powder, a warning only where no rule judges
+them; with a hint, and on an assembly the sentence that the parts are measured as printed together, in place,
 and a part printed on its own is checked by its own id), `plate_edge_round` (info: rounds on the plate's edge facing
 down under the limit; a 45 deg chamfer is not one), `walls_not_measured`, `internal_void` (FDM: a sealed void prints
 as infill; never on an open mesh, whose voxel "voids" are its holes), `no_bed_contact`,
@@ -719,6 +782,8 @@ check that judged nothing says so (`rules_none_evaluated`).
 The rules' version is 2026-11-08. A rule no fetched guide states cites `text-to-cad-own` ("text-to-cad's own
 figure; no fetched guide states one") and its findings say so: `printing.knife_edge`, `printing.horizontal_hole`.
 Severity follows the source: a feasibility limit is an error, a recommendation or an unsourced figure a warning.
+Every figure a rule judges is kept to 1e-9 (`meshops_printing.JUDGED`), never rounded before the comparison: a
+0.79996 mm wall is under 0.8 mm.
 Sources (accessed 2026-11-03): hubs-thin-walls, hubs-geometry, hubs-fdm, hubs-sla, hubs-sls, hubs-mjf, hubs-metal,
 protolabs-toolkit, protolabs-metal, protolabs-7mistakes, xometry-fdm, xometry-sla (Xometry Pro SLA quick reference),
 xometry-3dp, xometry-guide (Xometry Pro design guide) -- URLs in `cad._internal.dfm.printing.SOURCES`.

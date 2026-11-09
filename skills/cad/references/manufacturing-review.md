@@ -55,17 +55,20 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
 - **The exit.** 1 when a finding is an error (a limit the part breaks as drawn) or a family was not
   measured (`measurement_failed`: the rest is still reported, so never read it as "no findings").
   The last line digests a failure: `FAILED <id>: N blocking finding(s); <what was measured>; failed:
-  molding.draft_min x10, ...`: each failing rule with its count of error failures, then every other
+  cnc.internal_corner_sharp x4, ...`: each failing rule with its count of error failures, then every other
   error by its code. 0 is not an approval: warnings (recommendations, cost, risk) and unverified rules
   remain, and a check that judged nothing says so (`rules_none_evaluated`). 2 means the command itself
   was refused -- an option of another process or kind, no process where none is declared or the parts
   declare several, a file that is not there, a mesh asked for cnc or sheet: fix the command, not the part.
-- **Fix by code.** What puts every figure in doubt comes first, whatever its severity
-  (`not_watertight`, `not_sound`, `measurement_failed`, `units_suspect`), then errors, warnings and
+- **Fix by code.** A part with no closed solid (an open shell, a face) is refused, `not_solid`: close
+  it or check the solid meant. What puts every figure in doubt comes first, whatever its severity
+  (`not_watertight` and `not_sound`, errors in every process; `measurement_failed`, `units_suspect`: a
+  part under 1 mm across, probably modelled in metres or inches), then errors, warnings and
   the facts. A failing rule's finding is coded by its rule id
   (`cnc.internal_corner_radius`), with the measured value, its limit and source, and a hint saying
   what to change; several failures at one ref are one finding (`and 2 more at this ref`), a warning on
-  a figure that already fails an error at the same place is left to `measurements.rules`, and at
+  a figure that already fails an error, or a stricter recommendation, at the same place is left to
+  `measurements.rules`, and at
   most eight refs of one rule are shown. Other codes are facts the figures call for
   (`zero_draft_walls`, `cnc.live_tooling`, `sheet.bend_radius_differs`, `material_declared`: the
   material was read from the part).

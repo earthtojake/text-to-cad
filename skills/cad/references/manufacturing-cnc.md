@@ -11,12 +11,14 @@ rules' numbers, general practice from Protolabs Network's guide; `--tools` moves
 
 - **Stock and setups.** Start from the blank (`--stock`, else the part's box) and put the features on
   as few sides as can be: each side a tool must face is a setup, five at most (Hubs: a part rotated
-  three or four times). A pocket or a hole along no machine direction (`cnc.inclined_feature`) is a
-  setup of its own on an angled fixture, or more axes: square it to a side where the design allows.
+  three or four times). The check machines each part in its own frame, the one its faces and holes
+  square, whatever its pose in the model (`machine.frames`). A pocket or a hole along none of that
+  frame's six directions (`cnc.inclined_feature`) is a setup of its own on an angled fixture, or more
+  axes: align it with the part's faces where the design allows.
 - **Pockets, slots and windows.** Vertical walls on a flat floor (or none: a window). Every vertical
-  internal corner gets a radius -- at least half the smallest end mill (1.25 mm with no `--tools`),
-  and a third of the cavity's depth where the design allows -- never a sharp corner, which no round
-  tool cuts: `part = part.fillet(r, part.edges().filter_by(bd.Axis.Z).filter_by(inside_the_pocket))`
+  internal corner gets a radius -- at least half the smallest end mill (with no `--tools`, 1.25 mm or
+  more is recommended), and a third of the cavity's depth where the design allows -- never a sharp
+  corner, which no round tool cuts (the error): `part = part.fillet(r, part.edges().filter_by(bd.Axis.Z).filter_by(inside_the_pocket))`
   after the cut. Depth at most four times the width (a tool reaches three to four diameters). The
   floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled sharp: give its
   corners a radius or call out a broach.
@@ -25,7 +27,8 @@ rules' numbers, general practice from Protolabs Network's guide; `--tools` moves
   tap-drill hole with a callout, not modelled.
 - **Walls and gaps.** Walls 0.8 mm or more in metal, 1.5 mm in plastic (0.5 / 1.0 are the floor);
   gaps 2.5 mm or wider (or the smallest tool).
-- **Reach.** Every face seen straight from one of the six axis directions (3 axes); no undercut, and a
+- **Reach.** Every face seen straight from one of the part's six axis directions (3 axes; its own
+  frame, not the world's); no undercut, and a
   T-slot or dovetail, through or blind, only where the person planned the cutter (`cnc.special_cutter`,
   a warning); no closed void.
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
