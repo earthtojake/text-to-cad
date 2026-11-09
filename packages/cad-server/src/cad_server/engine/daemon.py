@@ -1576,7 +1576,8 @@ class Daemon:
     def running_checks(self) -> list[dict[str, Any]]:
         """The checks asked of a process and not yet answered, as ``status`` lists them: what (its type and
         process), for which document or file, where (the checks process or the script's worker; None while it
-        waits for one), since when, and whether a caller still waits for it."""
+        waits for one), since when, whether a caller still waits for it and how many do (``callers``: those
+        whose connection has not ended, a caller gone never counted)."""
         now = time.time()
         with self.asked_lock:
             found = list(self.asked.values())
@@ -1586,7 +1587,7 @@ class Daemon:
             rows.append({**asked.what, "where": None if worker is None else getattr(worker, "key", asked.key),
                          "route": "checks" if asked.key == CHECKS else "worker", "since": asked.began,
                          "seconds": round(now - asked.began, 1), "attached": not _abandoned(asked),
-                         "callers": len(asked.callers), "waiting": worker is None or asked.waiting})
+                         "callers": _there(asked), "waiting": worker is None or asked.waiting})
         return rows
 
     def _behind_check(self, key: str, python_key: str | None, send: Callable[[dict[str, Any]], None]) -> None:
@@ -2255,6 +2256,12 @@ def _abandoned(asked: "_Asked") -> bool:
     """Whether every caller of a check, and every caller attached to it since, has gone (its connection's end of
     file, ``_watched``); one asked from within the engine, which says no such thing, never has."""
     return bool(asked.callers) and all(gone is not None and gone.is_set() for gone in asked.callers)
+
+
+def _there(asked: "_Asked") -> int:
+    """How many of a check's callers are still there: its own and each attached to it since whose connection has
+    not ended (``_watched``); one asked from within the engine, which says no such thing, always is."""
+    return sum(1 for gone in asked.callers if gone is None or not gone.is_set())
 
 
 def _result(checked: dict[str, Any]) -> dict[str, Any]:

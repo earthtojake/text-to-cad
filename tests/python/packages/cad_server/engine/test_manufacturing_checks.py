@@ -971,6 +971,25 @@ class ReleaseTest(unittest.TestCase):
             pool.take("file:b", gave_up=lambda: len(said) > before, waiting=said.append)
         self.assertIn("the engine's memory has no room for another checks process", said[-1])
 
+    def test_a_waiter_the_memory_has_no_room_for_reaps_as_one_past_a_full_pool_does(self) -> None:
+        """A slot free but no room for another checks process: the waiter asks its ``reap`` as it waits, as it
+        does with every slot busy; a waiter deferring to another asks nothing."""
+        from cad_server.engine.checks import Pool
+        from cad_server.engine.supervisor import Withdrawn
+
+        pool = Pool(SimpleNamespace(processes=lambda _service: [], pressed=lambda: False, memory=lambda: 1000.0,
+                                    resident=lambda: 900.0, standby=lambda _service: SimpleNamespace(rss=400.0)), 2)
+        self.assertEqual(pool.take("file:a"), "checks")
+        reaped: list[str] = []
+        with self.assertRaises(Withdrawn):
+            pool.take("file:b", gave_up=lambda: bool(reaped), reap=lambda: reaped.append("b"))
+        self.assertEqual(reaped, ["b"], "no room beside the one measuring: an abandoned one's process is wanted")
+        reaped.clear()
+        with self.assertRaises(Withdrawn):
+            calls = iter((False, True))
+            pool.take("file:c", gave_up=lambda: next(calls), reap=lambda: reaped.append("c"), defer=lambda: True)
+        self.assertEqual(reaped, [], "deferring, it reaps nothing")
+
     def test_the_pool_counts_a_process_it_has_not_heard_from_and_those_starting(self) -> None:
         """No checks process has said its memory: the last one's, else the standby's, else the smallest worker's
         stands for it, and each slot being started counts, so a burst of checks never starts past the cap."""
@@ -1382,6 +1401,60 @@ class WorkerTest(unittest.TestCase):
                          "its process killed at once, and a fresh one measured the one waiting")
         cad.step.dfm(step, process="printing")
         self.assertEqual(_counts()["measured"], before["measured"] + 2, "nothing of it was kept")
+
+    def test_a_killed_command_s_check_is_seen_gone_and_gives_its_process_to_a_caller_memory_has_no_room_for(
+            self) -> None:
+        """`cad step dfm` killed (SIGKILL, as a shell's or `subprocess.run`'s time limit kills it): `cad status`
+        says at once that no caller of its check is there. A check whose caller is there, waiting with a slot of
+        the pool free but no room in the engine's memory for another checks process (a cap of 1 MB), takes the
+        abandoned check's place: its process killed, a fresh one measures the one waited for."""
+        import build123d as bd
+
+        from cad.engine import api
+
+        api.stop()  # an engine with the seam, a pool of two and a cap no second checks process fits beside one
+        self.addCleanup(api.stop)
+        folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-dfm-room-")))
+        self.addCleanup(shutil.rmtree, folder, True)
+        hold, reached = folder / "go", folder / "go.reached"
+        self.addCleanup(lambda: hold.write_text("", encoding="utf-8"))  # whatever happens, no check waits on
+        env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_CHECK_WAIT": str(hold),
+                                     "CAD_ENGINE_CHECKS": "2", "CAD_ENGINE_WORKER_RSS_MB": "1"}, self.addCleanup)
+        steps = [folder / f"part{height}.step" for height in (6, 7)]
+        for height, step in zip((6, 7), steps):
+            bd.export_step(bd.Box(30, 20, height), str(step))
+        command = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "step", "dfm", str(steps[0]),
+                                    "--process", "printing", "--json"], env=env, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+        self.addCleanup(command.wait)
+        self.addCleanup(command.kill)
+        _until(self, lambda: reached.exists() and reached.read_text(encoding="utf-8"), "the check reached its seam")
+        abandoned = int(reached.read_text(encoding="utf-8"))
+        (row,) = _counts()["running"]
+        self.assertEqual((row["attached"], row["callers"], row["waiting"], row["where"]), (True, 1, False, "checks"))
+        command.kill()
+        command.wait()
+        _until(self, lambda: [(row["attached"], row["callers"]) for row in _counts()["running"]] == [(False, 0)],
+               "its caller is seen gone")
+        reached.unlink()
+        behind = subprocess.Popen([sys.executable, "-c", f"import cad; cad.step.dfm({str(steps[1])!r}, process='printing')"],
+                                  env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(behind.stderr.close)  # last: once it is gone, its reader is done
+        self.addCleanup(behind.wait)
+        self.addCleanup(behind.kill)
+        said: list[str] = []
+        reader = threading.Thread(target=lambda: said.extend(behind.stderr), daemon=True)
+        reader.start()
+        _until(self, lambda: reached.exists() and reached.read_text(encoding="utf-8"),
+               "the check someone waits for measures")
+        _until(self, lambda: any("no room for another checks process" in line for line in said), "it said why it waited")
+        (row,) = _counts()["running"]
+        self.assertEqual((row["file"], row["attached"], row["callers"], row["waiting"]), (str(steps[1]), True, 1, False))
+        self.assertNotEqual(int(reached.read_text(encoding="utf-8")), abandoned, "in a fresh checks process")
+        self.assertNotIn(abandoned, [row["pid"] for row in _counts()["pool"]["processes"]], "the abandoned one's killed")
+        hold.write_text("", encoding="utf-8")
+        self.assertEqual(behind.wait(JOIN_SECONDS), 0, said)
+        reader.join(JOIN_SECONDS)
 
     def test_an_update_s_drain_waits_for_no_checks_process_and_its_checks_say_stopped(self) -> None:
         """A drain for an update with a check running in the checks process and another waiting for it: neither is

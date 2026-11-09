@@ -465,8 +465,9 @@ class Pool:
     ``_document``), else a free slot whose process is alive, else a free slot whose process is to start -- where
     the engine's memory has room for one more of a checks process's size beside those being started, and the
     system is not under memory pressure; with no room, it waits for a busy one, as it does when every slot is busy,
-    saying so once. While every slot is busy, a check whose caller is still there asks its ``reap`` each time it
-    wakes: a check whose callers have all gone gives up its slot to it (``Daemon._reap``). A process is started,
+    saying so once. While it can take no slot, for either reason, a check whose caller is still there asks its
+    ``reap`` each time it wakes: a check whose callers have all gone gives up its slot, and the memory its process
+    holds, to it (``Daemon._reap``). A process is started,
     held to the memory caps and shed by the supervisor as every service's is: an idle one is retired for memory
     with the render processes, and none on a timer."""
 
@@ -531,7 +532,8 @@ class Pool:
              defer: Callable[[], bool] | None = None) -> str:
         """A slot for a check of ``document``, waiting for one as long as it takes; ``waiting`` told once, at
         once, what it waits for. ``gave_up``, asked while it waits: true, it waits no more (``Withdrawn``).
-        ``reap``, called each time it wakes while every slot is busy: an abandoned check's slot made free.
+        ``reap``, called each time it wakes with no slot to take -- every one busy, or no room in the engine's
+        memory for another process: an abandoned check's process killed, its slot and its memory made free.
         ``defer``, asked before it takes a free slot: true (its callers have gone, and a check someone waits for
         waits too), it leaves the slot to that one and waits on."""
         from cad_server.engine.supervisor import GAVE_UP_SECONDS, Withdrawn
@@ -558,7 +560,9 @@ class Pool:
                 told = True
                 assert waiting is not None
                 waiting(said)
-            if full and reap is not None:
+            if reap is not None and not deferring:
+                # No slot it can take -- every one busy, or the memory has no room for another process: an abandoned
+                # check's process frees both.
                 reap()
             with self.lock:
                 if deferring or self._free(document) is None:

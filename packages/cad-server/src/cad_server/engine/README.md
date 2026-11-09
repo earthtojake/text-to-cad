@@ -1122,8 +1122,8 @@ while it still runs, waits for it (`Daemon.running`, by document, version and ch
 manufacturing check, started 21 s ago") and answers with its answer -- its result, or its failure, a cancel too --
 so it is measured once. No timer bounds it. A build of a model's script cancels a check of it; and a check in a
 checks process whose callers have all gone -- its own and every one attached since, each connection watched for
-its end of file (`daemon._watched`) -- gives its slot up while a check whose caller is there waits for one with
-every slot busy (`Daemon._reap`): its checks process killed at once (it holds nothing of anyone's, so no kernel call
+its end of file (`daemon._watched`) -- gives its slot up while a check whose caller is there can take none -- every
+slot busy, or the engine's memory without room for another checks process (`Daemon._reap`): its checks process killed at once (it holds nothing of anyone's, so no kernel call
 it is in holds the slot), nothing of it kept, and the pool starts a fresh one for the waiter -- one for each such
 waiter, the oldest first, each counted until its slot is free again. It leaves `running` as it is reaped, so the
 same check asked meanwhile runs anew, and a caller still reading it is told why; one killed between its lease and its
@@ -1176,7 +1176,7 @@ bytes, measured, reused, restored: those reused from disk; read: the documents, 
 for a check; waited: those that waited for the same check; asked: those waiting or running; disk: held and bytes on
 disk, once indexed; pool: its size, how many are busy, each checks process, and the line said where
 `CAD_ENGINE_CHECKS` was held to its bounds; running: each check asked of a process and not answered -- type,
-process, document or file, where, since, seconds, whether a caller is attached). A part an edit left untouched is
+process, document or file, where, since, seconds, whether a caller is attached and how many are: `callers`, a caller gone never counted; and `waiting`, true while it has no process, so each is either measuring `where` it says or waiting for one). A part an edit left untouched is
 measured again with its document: a check is the document's whole. A mesh is read as before (an STL as it is; a 3MF or a GLB written as one STL by
 the library's readers), in the calling process. The process measures (`cad.build123d._dfm_<process>`, `cad.trimesh._<process>`),
 the type side judges the report against the process's rules (`cad._internal.dfm.rules.evaluate`: general
