@@ -112,7 +112,8 @@ def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[li
     """Each mesh's hulls (the module docstring), each ``(positions float32 (n, 3), triangles uint32 (m, 3))``:
     the cache's where it holds them, else CoACD's, all the misses in one child, and kept. Misses are said in a
     line on stderr before CoACD starts, by ``names`` (each mesh's part) where given, and each in a line as it is
-    done, its hulls and its seconds: a first decomposition takes minutes, a later one none and says nothing."""
+    done, its hulls (and ``the cap`` where it made as many as its ``maxHulls``: CoACD merged hulls to fit) and its
+    seconds: a first decomposition takes minutes, a later one none and says nothing."""
     from cad.engine.places import cache_dir
 
     folder = cache_dir() / "hulls"
@@ -135,7 +136,10 @@ def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[li
             if made < 0:
                 return  # its failure is said once the child is done, in CoACD's words
             name = named[index] if index < len(named) else f"part {index + 1}"
-            print(f"decomposed {name}: {made} hull{'s' if made != 1 else ''} in {seconds:.1f} s "
+            # At its cap, CoACD merged hulls to fit: said, so the hulls are looked at against the part.
+            cap = meshes[missing[index]][2].get("maxHulls")
+            capped = f", the cap (max_hulls={cap})" if cap is not None and made >= int(cap) else ""
+            print(f"decomposed {name}: {made} hull{'s' if made != 1 else ''}{capped} in {seconds:.1f} s "
                   f"({index + 1} of {len(missing)})", file=sys.stderr, flush=True)
 
         made = _decompose([meshes[at] for at in missing], done)

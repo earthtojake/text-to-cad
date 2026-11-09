@@ -3,7 +3,7 @@ round-tripped through the document, its xbf and a shape rebuilt from it, an asse
 writers' output with a decomposer the test stands in for -- an MJCF geom of a mesh asset per hull, a URDF
 collision per hull, the visual whole, and the contact rule testing the hulls, not the part's one hull; the hulls
 kept in the engine's cache by the mesh and the options, so a second description decomposes nothing, the first
-saying so as it starts; the refusals,
+saying so as it starts, and each part as it is done, at its cap said so; the refusals,
 of an option on another kind and of options out of range; at most 16 hulls by default; a miss where coacd is not
 installed decomposed in the coacd integration's environment, which the engine makes on first need (a stand-in
 here), and refused, saying why, where none can hold it (no wheel, no engine, a making that failed); and,
@@ -239,6 +239,24 @@ class WritersTest(_Folder):
         with mock.patch("cad.engine.hulls._decompose", self.stand_in):
             describe(Source.read(self.build("pass")).view(), collision_default="decomposed")
         self.assertEqual(self.calls, [[{"maxHulls": 16}, {"maxHulls": 16}]])
+
+    def test_a_part_cut_into_as_many_hulls_as_its_cap_says_so_as_it_is_done(self) -> None:
+        import contextlib
+        import io
+
+        from cad.engine import hulls
+
+        def stand_in(meshes: Any, done: Any) -> list[list[tuple[Any, Any]]]:
+            for index, (_positions, _triangles, options) in enumerate(meshes):
+                done(index, options["maxHulls"] if index == 0 else 1, 2.0)
+            return [[_box(*ARMS[0])] for _mesh in meshes]
+
+        said = io.StringIO()
+        with mock.patch.object(hulls, "_decompose", stand_in), contextlib.redirect_stderr(said):
+            hulls.hulls([(*_box(*ARMS[0]), {"maxHulls": 4}), (*_box(*ARMS[1]), {"maxHulls": 4})], ["capped", "under"])
+        # At its cap, CoACD merged hulls to fit: the line says so, so the hulls are looked at.
+        self.assertIn("\ndecomposed capped: 4 hulls, the cap (max_hulls=4) in 2.0 s (1 of 2)\n", said.getvalue())
+        self.assertIn("\ndecomposed under: 1 hull in 2.0 s (2 of 2)\n", said.getvalue())
 
 
 
