@@ -473,7 +473,7 @@ class TheCommand(Fixture):
         self.desktop_with({})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        self.assertTrue(out.rstrip("\n").endswith(f"Next, restart to load it:\n  {providers.RESTART['claude-desktop']}"), out)
+        self.assertTrue(out.rstrip("\n").endswith(f"Next, restart to load it:\n  {providers.restart('claude-desktop')}"), out)
         self.assertIn("quit and reopen it to load CAD's server", providers.RESTART["claude-desktop"])
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
@@ -504,7 +504,7 @@ class TheCommand(Fixture):
                          [("plugin", "plugin", True), ("claude-desktop", "edit", True)])
         self.assertEqual(document["verified"]["apps"]["claude-desktop"], {"verdict": "ok", "release": RELEASE})
         self.assertEqual(document["verified"]["telemetry"], "off: your choice")
-        self.assertEqual(document["restart"], [providers.RESTART["claude-desktop"]])
+        self.assertEqual(document["restart"], [providers.restart("claude-desktop")])
 
 
 class InstallUpdateAndUninstall(Fixture):
@@ -538,7 +538,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(receipt["launcher"]["path"], str(proxy))
         self.assertIn("verify   Claude Desktop: text-to-cad " + RELEASE, out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
-        self.assertIn(providers.RESTART["claude-desktop"], out)
+        self.assertIn(providers.restart("claude-desktop"), out)
         # Run again: nothing to do and nothing written; 0.8's own stop runs again, and stops nothing.
         setup.stop_earlier.side_effect = None
         before = self.snapshot()
@@ -564,7 +564,7 @@ class InstallUpdateAndUninstall(Fixture):
         cad = json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"]["cad"]
         self.assertEqual(cad, {**self.entry(), "env": older["env"]})
         # A new pin takes no restart: the server the app runs keeps working with the newer engine.
-        self.assertNotIn(providers.RESTART["claude-desktop"], out)
+        self.assertNotIn(providers.restart("claude-desktop"), out)
         written = self.desktop_with({"cad": self.entry("99.0.0")})
         code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
