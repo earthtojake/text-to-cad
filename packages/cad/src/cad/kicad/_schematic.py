@@ -168,8 +168,8 @@ def span_findings(schematic: Path) -> tuple[CheckFinding, ...]:
                 message=(f"Pin {pin.ref}.{pin.number}{name} lies on a wire's span, not at its end, and KiCad joins it "
                          f"to that wire's net ({join.wire.net}): {spanned['ref'] or 'a wire'}"),
                 hint="end the wire on the pin if the pin is on that net, else route the wire clear of the pin's end",
-                items=({"kind": "pin", "ref": pin.selector or f"#{pin.ref}.{pin.number}", "uuid": None, "net": pin.net,
-                        "sheet": pin.sheet, "pos": list(pin.at)}, spanned)))
+                items=[{"kind": "pin", "ref": pin.selector or f"#{pin.ref}.{pin.number}", "uuid": None, "net": pin.net,
+                        "sheet": pin.sheet, "pos": list(pin.at)}, spanned]))
         else:
             end = wire(join.end, join.at)
             found.append(CheckFinding(
@@ -177,7 +177,7 @@ def span_findings(schematic: Path) -> tuple[CheckFinding, ...]:
                 message=(f"A wire ends on another wire's span with no junction, and KiCad joins the two "
                          f"({join.wire.net}): {end['ref'] or 'a wire'} on {spanned['ref'] or 'a wire'}"),
                 hint="place a junction where they meet if the join is meant, else move the wire's end off the other",
-                items=(end, spanned)))
+                items=[end, spanned]))
     return tuple(found)
 
 
