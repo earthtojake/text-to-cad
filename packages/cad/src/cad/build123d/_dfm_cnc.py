@@ -38,7 +38,11 @@ the machine frame's. The families, and how each is measured:
   a chamfer mill's shoulder (180 less its half angle) along its axis, a ball end mill one of
   ``BALL_VOID_DEG`` or more along a direction both faces look along, and a keyseat cutter one of a recess
   with a floor and a ceiling whose way in is a face beside it seen along the direction (a groove inside a
-  bore: the bore's wall). The floor or ceiling must be a plane.
+  bore: the bore's wall). The floor or ceiling must be a plane. A square end mill also makes one along any
+  direction a setup presents (the part clamped to present it) where its end lies on one face square to the
+  direction and its flank on the other, which lies along it, seen from outside: a profile's corner
+  side-milled, whatever the part's turn -- that direction one of the ``setups``. The end mill is tried from
+  both faces before any cutter.
   Each unmade edge says why (``reason``: ``other_axes``, ``vertical_corner``, ``acute``, ``blocked``,
   ``no_square_face``, see ``_why``); a ball's crease is an item too (``made_by`` ``ball_mill``, its round's
   ``deviation_mm`` from the drawn edge); an edge only a T-slot, a dovetail or a keyseat cutter makes is an
@@ -55,11 +59,12 @@ the machine frame's. The families, and how each is measured:
   face under 10 mm: the slots and channels a tool must fit in; refined like walls, through the void. One pocket's or
   cavity's gaps are one item, its narrowest (``pocket``, ``also_at``); a recess's floor-to-ceiling height, where a
   slot cutter makes the recess, is that cutter's (``made_by`` ``slot_cutter``), else an end mill's.
-- ``knife_edges``: convex edges whose material angle is under ``KNIFE_DEG`` (printing's notion): the
-  material thins to nothing there, whatever a sampled wall would read.
+- ``knife_edges``: convex edges whose material angle, read along the edge (``brep.edge_angles``), falls under
+  ``KNIFE_DEG`` (printing's notion): the material thins to nothing there, whatever a sampled wall would read.
 - ``access`` and ``setups``: which sampled points of each face a straight tool reaches from each of the
   machine's approach directions (exact rays along the direction must escape the part), the fewest
-  directions that reach them all (greedy set cover) and the fixtures they need; the faces no direction
+  directions that reach them all and make the sharp edges an end mill makes (greedy set cover, ``_setup``)
+  and the fixtures they need; the faces no direction
   reaches, and whether any direction at all (a five-axis machine's) would. Five axes try every direction a
   four-axis machine would (each 15 degrees about each world axis) before probing the sphere, so they reach
   at least what four do. A hole or pocket along no direction the machine has adds its own orientation and

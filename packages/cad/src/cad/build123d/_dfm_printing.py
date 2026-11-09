@@ -20,8 +20,9 @@ families are measured on the B-rep, each item at the ref of the face that names 
 - ``trapped_volumes``: cavities -- every solid's inner shells, exactly, and from a voxel field the air
   a ball cannot reach from outside -- each with its volume, escape holes (the holes from it to outside,
   exactly), the wall around it;
-- ``knife_edges``: convex edges under 45 deg (``meshops_printing.KNIFE_DEG``), where the material thins to
-  nothing, with the depth it stays under the minimum wall;
+- ``knife_edges``: convex edges whose angle, read along the edge (``brep.edge_angles``), falls under 45 deg
+  (``meshops_printing.KNIFE_DEG``), where the material thins to nothing, with the stretch under it and the
+  depth it stays under the minimum wall; the walls leave every tip's sliver to it (``_knife_zones``);
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster of the triangulation),
   ``sections`` (thickest walls, cross-sections), ``scale``; with ``candidates`` the orientations ranked.
 

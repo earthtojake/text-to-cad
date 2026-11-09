@@ -23,7 +23,8 @@ the axis, and its tangent lines where the cylinders meet the flanges.
 (r + K t)`` (the length of the neutral surface, ``K`` the K-factor), the bend itself unrolled into a strip
 ``BA`` wide. The flanges' faces are moved exactly (a rigid transform each), so their holes and arcs stay
 exact; a bend's strip is its cylinder's outline unrolled (exact for straight-ended bends, sampled where an
-end is curved). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
+end is curved). Two bends meeting tangent with no flat between (a joggle) meet at a joint, a flange of no
+faces the walk passes through (``_joints``). The pieces are fused into the flat pattern (``unfold``). Holes, their distances (to the edge,
 to each other, to each bend in four conventions), flanges' lengths, reliefs, notches, tabs and webs are all
 measured on it, in the plane, by ``cad._internal.meshops_sheet``; each found place is mapped back onto the
 part for its ref.
