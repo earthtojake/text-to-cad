@@ -33,6 +33,7 @@ import trimesh
 
 from cad._internal import meshops_molding as ops
 from cad._internal.dfm.molding import pull_doubtful
+from cad.trimesh import _mesh
 
 # Length units a mesh file may carry, as a factor to millimetres: an STL is unitless, so the caller
 # states which one (the check's one table).
@@ -59,31 +60,14 @@ _RASTER_ROW_CELLS = 250_000
 
 
 def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
-    """Read a mesh file and prepare it as ``_prepared`` does."""
-    mesh = trimesh.load(path, force="mesh")
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
-    return _prepared(mesh, units)
+    """Read a mesh file, made millimetres and cleaned as every check's mesh is (``_mesh.load``)."""
+    return _mesh.load(path, units)
 
 
 def _prepared(mesh: trimesh.Trimesh, units: str = "mm") -> trimesh.Trimesh:
-    """Scale a mesh to millimetres and drop degenerate faces.
-
-    A zero-area triangle -- build123d exports a couple on any sphere -- makes
-    trimesh's face normal NaN, and a NaN then reaches the report as a bare
-    `NaN` token that strict JSON parsers reject.
-    """
-    if units not in _UNITS_MM:
-        raise ValueError(f"units is one of {', '.join(sorted(_UNITS_MM))}, not {units!r}")
-    factor = _UNITS_MM[units]
-    if factor != 1.0:
-        mesh.apply_scale(factor)
-    degenerate = int(len(mesh.faces)) - int(mesh.nondegenerate_faces().sum())
-    if degenerate:
-        mesh.update_faces(mesh.nondegenerate_faces())
-    mesh.metadata["degenerate_faces_dropped"] = degenerate
-    mesh.metadata["source_units"] = units
-    return mesh
+    """``mesh`` (changed in place) made millimetres and cleaned (``_mesh.prepared``): welded, its collapsed
+    triangles dropped -- a zero-area triangle has a normal of no direction -- and its cracks closed."""
+    return _mesh.prepared(mesh, units)
 
 
 def _pull_vector(spec: str) -> np.ndarray:
@@ -130,15 +114,11 @@ def _mesh_facts(mesh: trimesh.Trimesh) -> dict:
     facts = {
         "bbox_mm": [round(float(v), 2) for v in mesh.extents],
         "triangle_count": int(len(mesh.faces)),
-        "watertight": bool(mesh.is_watertight),
+        **_mesh.facts(mesh),
         "body_count": len(solids),
         "surface_area_mm2": round(float(mesh.area), 1),
-        "volume_mm3": round(float(abs(mesh.volume)), 1) if mesh.is_volume else None,
         "source_units": mesh.metadata.get("source_units", "mm"),
     }
-    dropped = int(mesh.metadata.get("degenerate_faces_dropped", 0))
-    if dropped:
-        facts["degenerate_faces_dropped"] = dropped
     if voids:
         facts["internal_void_count"] = voids
         facts["internal_void_note"] = (

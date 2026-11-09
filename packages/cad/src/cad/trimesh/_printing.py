@@ -38,6 +38,7 @@ import numpy as np
 import trimesh
 
 from cad._internal import meshops_printing as mo
+from cad.trimesh import _mesh
 
 #: Items a family lists, at most (worst first).
 CAP = 300
@@ -97,11 +98,9 @@ def _cluster(points: np.ndarray, values: np.ndarray, cell: float) -> list[tuple[
     return [(float(values[i]), points[i], int(n)) for i, n in zip(starts, counts)]
 
 
-def _load(path: str) -> trimesh.Trimesh:
-    mesh = trimesh.load(path, force="mesh")
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
-    return mesh
+def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
+    """Read a mesh file, made millimetres and cleaned as every check's mesh is (``_mesh.load``)."""
+    return _mesh.load(path, units)
 
 
 def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
@@ -143,10 +142,9 @@ def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] 
     says why)."""
     facts: dict = {
         "bbox_mm": [round(float(v), 2) for v in mesh.extents],
-        "volume_mm3": round(float(abs(mesh.volume)), 1) if mesh.is_volume else None,
         "surface_area_mm2": round(float(mesh.area), 1),
         "triangle_count": int(len(mesh.faces)),
-        "watertight": bool(mesh.is_watertight),
+        **_mesh.facts(mesh),
         "euler_number": int(mesh.euler_number),
         "body_count": None,
     }

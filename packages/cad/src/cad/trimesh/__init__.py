@@ -15,8 +15,8 @@ facts, never verdicts: nothing here compares a figure against a process's limit:
 
 A family that cannot be measured leaves ``{"error": ...}`` where its facts would be, and the report
 says so (``partial``, ``partial_sections``). The mesh is never changed: each measures a copy, scaled
-by ``units`` to millimetres (molding also drops its zero-area triangles, whose normals have no
-direction).
+by ``units`` to millimetres and cleaned as a file's mesh is (``_mesh``: welded, its collapsed triangles and
+zero-area debris dropped, its tessellation's cracks closed; watertightness judged per body).
 
 A file is measured by its document type's check -- ``cad.stl.dfm("part.stl", process="molding")``,
 ``cad.xbf.dfm(model_handle, process="printing")`` -- which answers a ``CheckResult`` whose
@@ -39,14 +39,10 @@ def _pull(pull: str | Sequence[float]) -> Any:
 
 
 def _copy(mesh: Any, units: str) -> Any:
-    from cad._internal.manufacturing import UNITS_MM
+    """A copy of ``mesh`` made millimetres and cleaned as a file's is (``_mesh.prepared``)."""
+    from cad.trimesh import _mesh
 
-    if units not in UNITS_MM:
-        raise ValueError(f"units is one of {', '.join(UNITS_MM)}, not {units!r}")
-    copied = mesh.copy()
-    if UNITS_MM[units] != 1.0:
-        copied.apply_scale(UNITS_MM[units])
-    return copied
+    return _mesh.prepared(mesh.copy(), units)
 
 
 def molding(mesh: Any, *, pull: str | Sequence[float] = "z", units: str = "mm", wall_limit: float = 45.0,

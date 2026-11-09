@@ -2,7 +2,8 @@
 process=...)`` runs for an STL, a 3MF or a GLB once its options are resolved
 (``cad._internal.manufacturing``).
 
-**The mesh.** An STL is measured as it is; a 3MF or a GLB is read by the library's own readers (its
+**The mesh.** An STL is measured as read and cleaned (``_mesh``: welded, its collapsed triangles and
+debris dropped, its tessellation's cracks closed, the same for every process); a 3MF or a GLB is read by the library's own readers (its
 objects placed by its build, its units -- a 3MF's declared unit, a GLB's glTF metres, Y up -- made
 millimetres, Z up, as the viewer reads it) and written as one STL in a temporary folder, with no CAD
 kernel. The temporary folder is gone when the check returns: the check writes nothing beside its source.
@@ -40,18 +41,13 @@ def _mesh_file(path: Path, folder: Path) -> Path:
 def measure(document_type: str, source: Any, process: str, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
     """The report of the mesh ``source`` for ``process`` (molding or printing), or ``Unmeasured``."""
     from cad._internal.dfm.printing import angle_limit
-    from cad.trimesh import _molding, _printing
+    from cad.trimesh import _mesh, _molding, _printing
 
     path = Path(source).expanduser().resolve()
     with tempfile.TemporaryDirectory(prefix="cad-check-") as folder:
         try:
             stl = _mesh_file(path, Path(folder))
-            if process == "molding":
-                mesh = _molding._load(str(stl), options["units"])
-            else:
-                mesh = _printing._load(str(stl))
-                if options["units"] != "mm":
-                    mesh.apply_scale(_molding._UNITS_MM[options["units"]])
+            mesh = _mesh.load(str(stl), options["units"])
         except Exception as error:  # noqa: BLE001 - a mesh that does not read is the check's answer
             raise Unmeasured("mesh_unreadable", f"failed to load mesh: {error}") from None
         if process == "molding":

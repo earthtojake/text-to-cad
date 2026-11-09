@@ -60,6 +60,50 @@ class MeshFactsTest(unittest.TestCase):
         self.assertAlmostEqual(facts["volume_mm3"], 6000.0, delta=1.0)
 
 
+def _cracked_box(tmp: Path) -> str:
+    """A 10 mm cube's STL as an exporter leaves one: triangle soup, a collapsed triangle, and a T-junction
+    whose sliver crack is 0.001 mm wide."""
+    import numpy as np
+
+    box = trimesh.creation.box((10, 10, 10))
+    vertices, faces = np.asarray(box.vertices, dtype=float), np.asarray(box.faces)
+    a, b, c = (int(v) for v in faces[0])  # split edge a-b of the first triangle at a point just off it
+    middle = (vertices[a] + vertices[b]) / 2 + 0.001 * (vertices[c] - (vertices[a] + vertices[b]) / 2) / 5
+    vertices = np.vstack([vertices, middle])
+    m = len(vertices) - 1
+    faces = np.vstack([[[a, m, c], [m, b, c]], faces[1:], [[a, a, b]]])
+    soup = trimesh.Trimesh(vertices[faces].reshape(-1, 3), np.arange(3 * len(faces)).reshape(-1, 3), process=False)
+    path = tmp / "cracked.stl"
+    soup.export(path)
+    return str(path)
+
+
+class MeshCleanTest(unittest.TestCase):
+    def test_a_welded_mesh_with_a_crack_closed_is_one_watertight_body(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            raw = trimesh.load(_cracked_box(Path(td)), force="mesh")
+            self.assertFalse(raw.is_watertight, "read as written, the cube is open")
+            mesh = dfam_tool._load(_cracked_box(Path(td)))
+        facts = dfam_tool._mesh_facts(mesh)
+        self.assertTrue(facts["watertight"])
+        self.assertEqual(facts["body_count"], 1)
+        self.assertAlmostEqual(facts["volume_mm3"], 1000.0, delta=0.5)
+        self.assertEqual((facts["degenerate_faces_dropped"], facts["cracks_closed"]), (1, 1))
+
+    def test_an_opening_stays_open_and_its_body_is_named(self) -> None:
+        import numpy as np
+
+        from cad.trimesh import _mesh
+
+        box = trimesh.creation.box((10, 10, 10))
+        box.update_faces(np.arange(len(box.faces)) >= 2)  # one side's two triangles gone: a 10 mm opening
+        facts = _mesh.facts(_mesh.prepared(box.copy()))
+        self.assertFalse(facts["watertight"])
+        self.assertEqual(facts["open_body_count"], 1)
+        self.assertEqual(facts["open_bodies"][0]["boundary_edges"], 4)
+        self.assertIsNone(facts["volume_mm3"])
+
+
 class OverhangTest(unittest.TestCase):
     def test_underside_below_limit_is_flagged_above_limit_is_not(self) -> None:
         """A 30 deg underside is a violation at 45 deg and clear at 20 deg."""
