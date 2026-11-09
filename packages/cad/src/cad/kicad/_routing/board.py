@@ -298,10 +298,9 @@ def _placed(shape: Shape, offset: XY, angle: float, center: XY) -> Shape:
     if shape.kind == "polygon":
         return Shape.polygon([place(point) for point in shape.points], shape.radius)
     assert shape.arc is not None
-    (ox, oy), start, end = shape.points
-    big, first, sweep = shape.arc
-    mid = (ox + big * math.cos(first + sweep / 2), oy + big * math.sin(first + sweep / 2))
-    return Shape.arc_through(place(start), place(mid), place(end), shape.radius)
+    _, start, end = shape.points
+    through = shape.arc[1]  # the point it was drawn through: placed with its ends, the same arc
+    return Shape.arc_through(place(start), place(through), place(end), shape.radius)
 
 
 def _hole(node: list, center: XY, angle: float) -> Shape | None:

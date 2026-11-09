@@ -11,6 +11,11 @@ Two questions are asked of a shape: how far each node of a grid is from it (``gr
 numpy, for the clearance fields), and how far a segment is from it (``segment_distance``, exact, in float64,
 for the pull-tight pass and the final check). Both answer 0 where they touch or overlap: the router needs the
 gap, never the depth. Millimetres, KiCad's frame (y down) throughout.
+
+Every answer is the same bits on every platform: IEEE-754's + - * / and sqrt (numpy's elementwise ones as well)
+and CPython's own ``math.hypot``, never the C library's atan2 or hypot, which round some arguments differently on
+glibc, Apple's libm and the MSVC runtime. Whether a point is on an arc's sweep is a cross-product test against the
+arc's ends, not an angle.
 """
 
 from __future__ import annotations
@@ -24,7 +29,6 @@ import numpy as np
 __all__ = ["Shape", "segment_point_distance", "segments_distance"]
 
 XY = tuple[float, float]
-_TAU = 2.0 * math.pi
 
 
 def segment_point_distance(ax: float, ay: float, bx: float, by: float, px: float, py: float) -> float:
@@ -68,9 +72,15 @@ def _grid_segment_distance(X: np.ndarray, Y: np.ndarray, ax: float, ay: float, b
     dx, dy = bx - ax, by - ay
     length2 = dx * dx + dy * dy
     if length2 <= 0.0:
-        return np.hypot(X - ax, Y - ay)
+        return _grid_length(X - ax, Y - ay)
     t = np.clip(((X - ax) * dx + (Y - ay) * dy) / length2, 0.0, 1.0)
-    return np.hypot(X - ax - t * dx, Y - ay - t * dy)
+    return _grid_length(X - ax - t * dx, Y - ay - t * dy)
+
+
+def _grid_length(dx: np.ndarray, dy: np.ndarray) -> np.ndarray:
+    """sqrt(dx^2 + dy^2), elementwise: correctly rounded steps, alike on every platform (``np.hypot`` is the C
+    library's, which is not)."""
+    return np.sqrt(dx * dx + dy * dy)
 
 
 def _grid_inside(X: np.ndarray, Y: np.ndarray, ring: np.ndarray) -> np.ndarray:
@@ -98,24 +108,28 @@ def _inside(px: float, py: float, ring: Sequence[XY]) -> bool:
     return found
 
 
-def _angle_in(angle: float | np.ndarray, start: float, sweep: float) -> bool | np.ndarray:
-    """Whether ``angle`` (radians) lies on the arc that starts at ``start`` and turns ``sweep`` (signed)."""
-    if sweep >= 0:
-        return np.mod(angle - start, _TAU) <= sweep + 1e-12
-    return np.mod(start - angle, _TAU) <= -sweep + 1e-12
+def _on_sweep(vx, vy, sx: float, sy: float, ex: float, ey: float, major: bool):
+    """Whether the direction ``(vx, vy)`` from an arc's centre lies on its sweep, the sweep turning from the
+    direction ``s`` to ``e`` the way x turns to y, by more than half a turn where ``major``: inside both half planes
+    of its ends for a sweep of half a turn or less, inside either for more. Its ends and its centre count. Scalars
+    or numpy arrays alike."""
+    after_start = sx * vy - sy * vx >= 0
+    before_end = vx * ey - vy * ex >= 0
+    return (after_start | before_end) if major else (after_start & before_end)
 
 
 @dataclass(frozen=True)
 class Shape:
     """A core grown by ``radius``: ``kind`` is ``"point"`` (``points`` one point), ``"segment"`` (two),
-    ``"polygon"`` (a closed ring, the last point joined to the first; even-odd inside) or ``"arc"`` (its centre,
-    then ``arc`` = (radius, start angle, signed sweep) in radians, in KiCad's frame). ``box`` is the shape's
+    ``"polygon"`` (a closed ring, the last point joined to the first; even-odd inside) or ``"arc"`` (``points`` its
+    centre, start and end; ``arc`` = (its radius, the point it was drawn through, whether it turns from start to
+    end the way x turns to y, whether by more than half a turn), in KiCad's frame). ``box`` is the shape's
     bounding box, its radius included."""
 
     kind: str
     points: tuple[XY, ...]
     radius: float = 0.0
-    arc: tuple[float, float, float] | None = None
+    arc: tuple[float, XY, bool, bool] | None = None
     box: tuple[float, float, float, float] = field(default=(0.0, 0.0, 0.0, 0.0), compare=False)
     _ring: np.ndarray | None = field(default=None, compare=False, repr=False)
 
@@ -157,13 +171,14 @@ class Shape:
         ox = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / determinant
         oy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / determinant
         big = math.hypot(ax - ox, ay - oy)
-        first = math.atan2(ay - oy, ax - ox)
-        through = (math.atan2(by - oy, bx - ox) - first) % _TAU
-        sweep = (math.atan2(cy - oy, cx - ox) - first) % _TAU
-        if through > sweep:  # the mid point lies the other way round
-            sweep -= _TAU
+        # The way it turns is the way the three points do (the determinant is twice their orientation); it turns by
+        # more than half a turn where the centre is on the mid point's side of the chord from start to end.
+        turns_up = determinant > 0
+        side, centre_side = _cross(ax, ay, cx, cy, bx, by), _cross(ax, ay, cx, cy, ox, oy)
+        major = (side > 0 and centre_side > 0) or (side < 0 and centre_side < 0)
         reach = big + radius  # a box round the whole circle: generous, never short
-        return Shape("arc", ((ox, oy), start, end), radius, (big, first, sweep), (ox - reach, oy - reach, ox + reach, oy + reach))
+        return Shape("arc", ((ox, oy), start, end), radius, (big, (bx, by), turns_up, major),
+                     (ox - reach, oy - reach, ox + reach, oy + reach))
 
     # --- asking them -------------------------------------------------------------------------------------
 
@@ -171,7 +186,7 @@ class Shape:
         """How far each node (``X``, ``Y``: arrays of one shape) is from the shape: 0 inside it."""
         if self.kind == "point":
             (px, py), = self.points
-            core = np.hypot(X - px, Y - py)
+            core = _grid_length(X - px, Y - py)
         elif self.kind == "segment":
             (ax, ay), (bx, by) = self.points
             core = _grid_segment_distance(X, Y, ax, ay, bx, by)
@@ -187,13 +202,25 @@ class Shape:
             core = self._grid_arc(X, Y)
         return np.maximum(core - self.radius, 0.0)
 
+    def _sweep(self) -> tuple[float, float, float, float, bool]:
+        """The arc's end directions from its centre, in the order it turns the way x turns to y, and whether it
+        turns by more than half a turn: what ``_on_sweep`` asks."""
+        (ox, oy), (ax, ay), (cx, cy) = self.points
+        assert self.arc is not None
+        _, _, turns_up, major = self.arc
+        s, e = (ax - ox, ay - oy), (cx - ox, cy - oy)
+        if not turns_up:
+            s, e = e, s
+        return s[0], s[1], e[0], e[1], major
+
     def _grid_arc(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         (ox, oy), start, end = self.points
         assert self.arc is not None
-        big, first, sweep = self.arc
-        on = _angle_in(np.arctan2(Y - oy, X - ox), first, sweep)
-        to_circle = np.abs(np.hypot(X - ox, Y - oy) - big)
-        to_ends = np.minimum(np.hypot(X - start[0], Y - start[1]), np.hypot(X - end[0], Y - end[1]))
+        big = self.arc[0]
+        VX, VY = X - ox, Y - oy
+        on = _on_sweep(VX, VY, *self._sweep())
+        to_circle = np.abs(_grid_length(VX, VY) - big)
+        to_ends = np.minimum(_grid_length(X - start[0], Y - start[1]), _grid_length(X - end[0], Y - end[1]))
         return np.where(on, np.minimum(to_circle, to_ends), to_ends)
 
     def point_distance(self, px: float, py: float) -> float:
@@ -216,9 +243,9 @@ class Shape:
     def _arc_point(self, px: float, py: float) -> float:
         (ox, oy), start, end = self.points
         assert self.arc is not None
-        big, first, sweep = self.arc
+        big = self.arc[0]
         to_ends = min(math.hypot(px - start[0], py - start[1]), math.hypot(px - end[0], py - end[1]))
-        if _angle_in(math.atan2(py - oy, px - ox), first, sweep):
+        if _on_sweep(px - ox, py - oy, *self._sweep()):
             return min(abs(math.hypot(px - ox, py - oy) - big), to_ends)
         return to_ends
 
@@ -247,7 +274,8 @@ class Shape:
         the centre and wherever the segment crosses the circle (0)."""
         (ox, oy), start, end = self.points
         assert self.arc is not None
-        big, first, sweep = self.arc
+        big = self.arc[0]
+        sweep = self._sweep()
         best = min(self._arc_point(ax, ay), self._arc_point(bx, by),
                    segment_point_distance(ax, ay, bx, by, start[0], start[1]),
                    segment_point_distance(ax, ay, bx, by, end[0], end[1]))
@@ -257,7 +285,7 @@ class Shape:
             return best
         t = max(0.0, min(1.0, ((ox - ax) * dx + (oy - ay) * dy) / length2))
         qx, qy = ax + t * dx, ay + t * dy
-        if _angle_in(math.atan2(qy - oy, qx - ox), first, sweep):
+        if _on_sweep(qx - ox, qy - oy, *sweep):
             best = min(best, abs(math.hypot(qx - ox, qy - oy) - big))
         # Where the segment meets the circle: |a + s d - o|^2 = R^2.
         fx, fy = ax - ox, ay - oy
@@ -267,7 +295,7 @@ class Shape:
         if disc >= 0:
             root = math.sqrt(disc)
             for s in ((-bq - root) / (2 * length2), (-bq + root) / (2 * length2)):
-                if 0.0 <= s <= 1.0 and _angle_in(math.atan2(ay + s * dy - oy, ax + s * dx - ox), first, sweep):
+                if 0.0 <= s <= 1.0 and _on_sweep(ax + s * dx - ox, ay + s * dy - oy, *sweep):
                     return 0.0
         return best
 
