@@ -13,6 +13,7 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 - [The xbf is Save As](#the-xbf-is-save-as)
 - [Formats](#formats)
 - [Print tolerance](#print-tolerance)
+- [A GLB for another renderer](#a-glb-for-another-renderer)
 - [Other tools](#other-tools)
 
 ## A file is an action
@@ -47,8 +48,9 @@ written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
 `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
-An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
+An export takes a document and its destinations, and nothing else but a GLB's, an STL's or a
+3MF's mesh tolerance and angle (`--tolerance`, `--angle`: [print tolerance](#print-tolerance),
+[a GLB for another renderer](#a-glb-for-another-renderer)), which a model's, an xbf's and a STEP's
 export take and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
@@ -169,7 +171,11 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
   ([animation](animation.md)); a sub-assembly that moves as one is keyed on its own node. A GLB exported from the model, by its id, by
   `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
-  animations, byte for byte the same file. A transmissive material (`transmission` above zero) is
+  animations, byte for byte the same file. A program that reads it walks the tree for a part's
+  place: a part's `matrix` is in its sub-assembly's frame (an earlier release placed every part in
+  the world, under the root), its name and its place in the world as they were. A clip's
+  `extras.cad` holds its `duration` and its `kind`, `"motion"` or `"animation"` (an earlier
+  release's `extras.cadgen`, the duration alone), and `asset.generator` is `cad`. A transmissive material (`transmission` above zero) is
   written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade
   one too, give its PBR `opacity` below 1 (a translucent `part.color` is not read as a fade).
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
@@ -180,7 +186,7 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance
 (a chord deviation of 0.25% of the mean side of each part's bounding box, and
-28.5 degrees), unless an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
+28.5 degrees), unless a GLB, an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
 face the mesher leaves without triangles is left out, so a mesh export has a hole there; a
 snapshot names such faces in a warning, and they are usually slivers a boolean left. Repair
 the face in the model.
