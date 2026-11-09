@@ -12,6 +12,38 @@ A description generated from a CAD model (`cad model export <id> robot.xml` or `
 - **A part that is not what it is made of** (a hollow shell modelled solid, a motor modelled as its housing): declare what it weighs, `mass(part, grams)` from `cad.build123d`, the measured or datasheet total; its solids are scaled alike to make it up, so the centre of mass and the inertia's shape stay the geometry's. On an assembly, `mass()` is all of it: its parts keep their densities' ratios (one density where none has a material), an inner `mass()` fixes its own subtree and the outer one scales the rest. Say so to the person.
 - **A lump the CAD leaves out** (a motor or a battery inside a filled housing): `point_mass(part, grams, at, name="motor")`, at `at` in the part's own frame, with no inertia of its own unless `inertia=(ixx, iyy, izz)` (kg·m², in `at`'s axes) gives it. It goes into the link's inertial exactly. A `mass()` above it counts it, so declare the measured total and the lumps you know: the solids make up the rest, and a total the lumps reach is refused by name.
 
+## A Printed Part
+
+A printed part is a shell around sparse infill, not the solid its CAD models, so its material's
+density overweighs it. In order of preference, declare with `mass(part, grams)`:
+
+1. **The part weighed on a scale**, or the maker's published weight for it.
+2. **The slicer's filament weight** for that part, at the settings it is printed with.
+3. **An estimate from the print settings**, computed in the model from the part's own B-rep:
+   `grams = density x (shell + infill x (volume - shell))`, where `shell = area x walls x line width`
+   (for example 2 walls x 0.4 mm). Densities in g/cm^3 (1e-3 g/mm^3): PLA 1.24, PETG 1.27, ABS 1.04,
+   ASA 1.07. The estimate treats the top and bottom layers as walls, so expect it to be off by 10-20 %,
+   and say so in a comment beside it.
+
+```python
+PLA_G_PER_MM3, SHELL_MM, INFILL = 1.24e-3, 2 * 0.4, 0.15   # PLA, 2 walls of a 0.4 mm nozzle, 15 %
+
+
+def printed_grams(part):
+    shell = min(part.volume, part.area * SHELL_MM)
+    return PLA_G_PER_MM3 * (shell + INFILL * (part.volume - shell))
+
+
+part.material = plastics.pla()
+mass(part, printed_grams(part))   # an estimate from the print settings, not weighed
+```
+
+A real print carries more of its mass at the surface than the solid does, but `mass()` scales the
+solid uniformly: the centre of mass is the solid's, and the inertia comes out a little low. That is
+close enough for a simulation, and not worth modelling the shell for. A
+servo, a motor or a battery is a bought part with a datasheet: `mass(case, grams)` on its
+sub-assembly with the datasheet's weight, or `point_mass()` where the CAD leaves it out.
+
 ## When Inertials Are Required
 
 - Simulation and dynamics consumers (MuJoCo and other physics engines, torque control): every physical link needs a valid `inertial`. Inertial data is simulation-critical: very small, zero, negative, or guessed inertias are high risk.

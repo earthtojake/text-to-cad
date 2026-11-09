@@ -11,6 +11,7 @@ simulation adds, checked, shown to the person, and tuned. Hand-written MJCF is
 - [What comes from where](#what-comes-from-where)
 - [The model](#the-model)
 - [The generated MJCF](#the-generated-mjcf)
+- [Actuators in the scene](#actuators-in-the-scene)
 - [The scene in code](#the-scene-in-code)
 - [Check and show the scene](#check-and-show-the-scene)
 - [Tuning](#tuning)
@@ -198,6 +199,53 @@ What to read in it:
 The robot file alone validates with `defaults_not_recommended` (a pyramidal cone, the default
 `solref`) and `mass_summary` as infos: solver settings are the scene's, so they are expected here.
 
+## Actuators in the scene
+
+The generated MJCF has no actuators. Compiled as it is, its joints move only under gravity and
+contact, and nothing holds a pose. Drive it from the `scene.xml` the export writes beside it once.
+That file is the person's, and no export writes over it. Add the solver options and the defaults
+above its `<include>`, and one actuator per joint below it. Leave the floor, light and skybox as
+written:
+
+```xml
+<mujoco model="arm scene">
+  <option timestep="0.002" cone="elliptic" impratio="10"/>
+
+  <default>
+    <geom solref="0.005 1"/>
+    <default class="servo">
+      <position kp="10" dampratio="1" inheritrange="1"/>
+    </default>
+  </default>
+
+  <include file="arm.xml"/>
+
+  <actuator>
+    <position class="servo" name="shoulder_pan" joint="shoulder_pan"/>
+    <position class="servo" name="shoulder_lift" joint="shoulder_lift"/>
+    <position class="servo" name="wrist_roll" joint="wrist_roll" inheritrange="0" ctrlrange="-3.1416 3.1416"/>
+  </actuator>
+  ...
+</mujoco>
+```
+
+- **Defaults go above the `<include>`.** The robot's classes copy the scene's top-level defaults at
+  the point where the robot's file is included. A `<geom solref>` written after the `<include>` reaches
+  only the scene's own geoms (the floor), and never the robot's.
+- `inheritrange="1"` takes each control range from its joint's range. A continuous joint has no
+  range, and MuJoCo refuses `inheritrange` on one, so give it a `ctrlrange` of its own.
+- The force is already bounded: `limits(effort=)` in the model writes each joint's
+  `actuatorfrcrange`.
+- `kp` and `dampratio` are the scene's choice: a starting point for the [tuning](#tuning) below,
+  not a datasheet value. The option and `solref` lines clear `defaults_not_recommended`.
+- A key the robot file carries has no `ctrl`. Every position actuator then commands 0, which is the
+  zero pose (`home`, exported with `--zero home`). For a key that commands another pose, write a key
+  of the scene's own in `scene.xml`, named apart from the robot's, with a `ctrl` per actuator in
+  actuator order.
+
+Validate the scene after every edit (`cad mjcf validate sim/scene.xml --compile required`). A scene
+that composes other models goes in code instead (below).
+
 ## The scene in code
 
 `from cad.mujoco import spec` turns each CAD piece into a `mujoco.MjSpec`, MuJoCo's own editable
@@ -373,7 +421,15 @@ What to try, in the order MuJoCo's modelling guide gives:
   rolling) on the gripper's pads when a grasp turns or rolls.
 - **Joints**: `armature` (the reflected rotor inertia, from the actuator's data sheet) and a light
   `damping` on every actuated joint; both steady an implicit integrator without changing the
-  motion much.
+  motion much. Both are the hardware's, so they go in the model's `limits()`. A datasheet that gives
+  no armature still gives the parts of one: the armature is the rotor's inertia times the gear
+  ratio squared. Use the motor's rotor inertia if its datasheet lists one (1 g*cm^2 is 1e-7
+  kg*m^2). Otherwise use `m r^2 / 2` of a solid cylinder the rotor's size, an upper bound, since a
+  coreless motor's cup rotor is far lighter. For example, 2.4e-7 kg*m^2 through a 1:345 gearbox
+  is 0.029 kg*m^2. Write the estimate and how you made it in a comment beside it. With nothing to
+  estimate from, leave `armature=` out of the model, and tune one in the scene as a
+  `<default><joint armature="..."/></default>` above its `<include>`, marked as tuned rather than
+  measured.
 - **Actuators**: gains from the robot's data sheet (`kp`, and `kv` or `dampratio` for a position
   actuator), control ranges inside the joint's limits.
 

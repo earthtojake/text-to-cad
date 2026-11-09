@@ -28,6 +28,7 @@ There are two routes to one:
 | Task | Start with | Reference |
 | --- | --- | --- |
 | **A robot description from a CAD model** (MJCF or URDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`, `friction()`, `free()` and `link()`, then `cad model export <id> robot.xml` (or `.urdf`, `--zero home` to count the joints from a state). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-two-writers) |
+| **A robot from its vendor STEP** (an arm's downloaded assembly) | Read it, group its parts into links, find each axis from the geometry, then declare, export and compare the MJCF with the URDF. | [From a vendor STEP](references/from-a-vendor-step.md) |
 | **Joint limits from the parts** | `cad model ranges <id>`: each joint swept alone until its parts meet, then the stops written into the joint's range in the model. | [Generate from CAD](#generate-from-cad) |
 | **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each CAD piece, composed with MuJoCo's own `MjSpec` in a script, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
@@ -81,6 +82,11 @@ mechanism):
   prints each stop, in degrees or millimetres around the as-built pose; write them into the joint's
   `angular_range` or `linear_range`, rounded towards zero, and run the model again (the `cad` skill's
   Joint stops section has the options). A servo's own travel, narrower than that, is the datasheet's.
+  A joint `ranges` finds clear all the way round (a wrist roll) has no stop in the parts. Give it
+  the actuator's own travel from its datasheet (a position servo's one turn, `angular_range=(-180,
+  180)` around the pose its encoder centres on), which is a limited hinge in MJCF and a `revolute`
+  in URDF. Where the hardware turns without end (a slip ring, a wheel), use `angular_range=(-math.inf,
+  math.inf)`: a hinge with no range in MJCF, a `continuous` joint in URDF.
 - **Mechanism states** (`mechanism_state(assembly, "home", ...)`) are the named poses, MJCF keys
   (a URDF holds no poses). Name one `home`, the pose a person and a controller start from.
 - **Couplings** (`gear_pair`, `rack_and_pinion_pair`) are a follower joint on its leader: MJCF's
@@ -115,7 +121,8 @@ mechanism):
   it leaves: smaller cuts finer. The engine fetches `cad[coacd]` on first need; the export is refused,
   naming the part and the extra, only where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl
   Linux) or no engine runs to fetch it.
-  The hulls are cached by the part's mesh and options, so only a changed part decomposes again.
+  The hulls are cached by the part's mesh and options, so only a changed part decomposes again; the
+  first export decomposes every part, at roughly 15 s for a printed part of a desktop arm.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a
@@ -182,17 +189,20 @@ An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there 
 Menagerie's scene, which includes the robot's file and adds a floor, a light and a skybox, so `cad run
 mujoco-studio --model sim/scene.xml` opens it standing on something. The scene is yours to edit
 (actuators, cameras, other bodies); an export never writes over it and says it kept it. The robot's
-file is the one an export writes again.
+file is the one an export writes again. **The generated MJCF has no actuators**: nothing drives or
+holds its joints until the scene adds one per joint, which takes a few lines in `scene.xml`
+([actuators in the scene](references/mujoco-environment.md#actuators-in-the-scene)).
 
 A generated MJCF is laid out as MuJoCo Menagerie lays out a robot (radians, `meshdir="assets"`,
 `autolimits`, `implicitfast`, a `visual` class in group 2 that collides with nothing and a
 `collision` class in group 3, explicit `<inertial>`s, a site per frame, a key per state); what each
 format drops is in [Interoperability](references/interoperability.md#one-description-two-writers).
 It holds no floor, light, actuator, sensor or solver setting: those belong to the scene (the
-`scene.xml` written beside it, or your own) and the consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world.
+`scene.xml` written beside it, or your own) and the consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world. A robot's
+STEP is articulated in a model first ([from a vendor STEP](references/from-a-vendor-step.md)).
 In code, `from cad.mujoco import spec` makes a model call's handle, a build123d shape, a `.step`,
-an `.xbf` or an MJCF path (a Menagerie robot) a `mujoco.MjSpec`, its files named by absolute path,, MuJoCo's own editable model, and everything after is
-native MuJoCo: `scene.attach(spec(gripper(), assets="sim/assets"), prefix="gripper/", site=...)`,
+an `.xbf` or an MJCF path (a Menagerie robot) into a `mujoco.MjSpec`, MuJoCo's own editable model,
+with its files named by absolute path. Everything after that is native MuJoCo: `scene.attach(spec(gripper(), assets="sim/assets"), prefix="gripper/", site=...)`,
 `add_body`, `add_freejoint`, `add_actuator`, `add_key`, `compile()`, `to_file()`. There is no other
 wrapper. [MuJoCo environment](references/mujoco-environment.md) walks through one, with what is
 generated, what the scene decides and what the consumer owns.
