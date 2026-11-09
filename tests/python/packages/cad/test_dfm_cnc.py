@@ -301,6 +301,19 @@ class SharpEdgesTest(unittest.TestCase):
         setup = _check(self._valley(140.0)).measurements["setups"]["items"][0]
         self.assertFalse([d for d in setup["directions"] if d.get("sharp_edges")])
 
+    def test_an_obtuse_root_beside_a_counted_setup_s_floor_is_one_more_setup(self) -> None:
+        # a through channel's floor meets its 10-degree leaning walls at 100 degrees: the floor is faced in the
+        # top setup the count has, each wall wants its own -- one more setup, said; the same turned
+        lean = math.tan(math.radians(10)) * 10
+        channel = bd.extrude(bd.Plane.YZ * bd.Polygon((-8, 0), (8, 0), (8 + lean, 10.01), (-8 - lean, 10.01),
+                                                      align=None), 40, both=True)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(0, 0, 30) * bd.Pos(2, 3, 1)):
+            result = cnc(_part(turn * (bd.Box(60, 40, 20) - channel)), material="aluminum")
+            roots = result.measurements["sharp_edges"]["items"]
+            self.assertEqual([(i["reason"], i["more_setups"]) for i in roots], [("obtuse_root", "one more setup")] * 2)
+            hint = next(f.hint for f in result.findings if f.code == "cnc.sharp_internal_edge")
+            self.assertIn("one more setup than the count", hint)
+
     def test_a_crease_says_why_no_tool_makes_it(self) -> None:
         # a closed trough's ends: no 3-axis tool makes them; a chamfer mill tilted to their bisector would
         trough = _check(_part(bd.Box(60, 40, 20) - bd.Pos(0, 0, 10) * bd.Rot(0, 90, 0) * bd.Cylinder(8, 40)))
@@ -649,13 +662,14 @@ class SideMillTest(unittest.TestCase):
 
     def test_v_notches_and_obtuse_roots_are_made_at_any_turn_each_direction_a_setup(self) -> None:
         plate = bd.Box(100, 60, 8)
-        for angle, own, judged in ((60.0, [1], set()), (120.0, [None], {"cnc.sharp_internal_edge"})):
+        for angle, own in ((60.0, [1]), (120.0, [None])):
             w = 60 * math.tan(math.radians(angle / 2))
             v = bd.extrude(bd.make_face(bd.Polyline((0, 0), (-w, 60), (w, 60), close=True)), 20, both=True)
             for turn in (0.0, 20.0):
                 result = cnc(_part(plate - bd.Pos(0, 18, 0) * bd.Rot(0, 0, turn) * v), material="aluminum")
-                # a 120 deg V's root is obtuse: said (obtuse_root, a warning), the same at every turn
-                self.assertEqual(_judged(result), judged, (angle, turn))
+                # a 120 deg V is a 120 deg chamfer mill's, its cone the V as drawn: nothing to say at any turn
+                self.assertEqual(_judged(result), set(), (angle, turn))
+                self.assertEqual(result.measurements["sharp_edges"]["by_tool"], {"chamfer_mill": 1}, (angle, turn))
                 self.assertTrue(result.ok)
                 # a 60 deg V's chamfer mill is a setup of its own along its bisector, counted even along a machine
                 # axis; a 120 deg one is obtuse, made in the setups of its flanks
@@ -668,8 +682,11 @@ class SideMillTest(unittest.TestCase):
                                                        close=True)), 20, both=True)
             for cut, turn in ((0, bd.Rot(0, 0, 0)), (20, bd.Rot(0, 0, 0)), (20, bd.Rot(23, -37, 61)), (35, bd.Rot(0, 0, 0))):
                 result = cnc(_part(turn * (plate - bd.Pos(0, 5, 0) * bd.Rot(0, 0, cut) * wedge)), material="aluminum")
-                self.assertEqual({i["reason"] for i in result.measurements["sharp_edges"]["items"]
-                                  if abs(i["void_angle_deg"] - void) < 1e-3}, {"obtuse_root"}, (void, cut))
+                # a 100 deg root is no chamfer mill's: side-milled, it keeps the tool's radius (obtuse_root, its
+                # faces square to no setup counted: two more); a 120 deg one is a 120 deg chamfer mill's
+                roots = [i for i in result.measurements["sharp_edges"]["items"] if abs(i["void_angle_deg"] - void) < 1e-3]
+                self.assertEqual([(i["reason"], i["more_setups"]) for i in roots],
+                                 [("obtuse_root", "two more setups")] if void == 100.0 else [], (void, cut))
                 self.assertTrue(result.ok, (void, cut))
                 # an obtuse root: made in the setups that make its flanks, whatever the turn -- none of its own
                 setup = result.measurements["setups"]["items"][0]

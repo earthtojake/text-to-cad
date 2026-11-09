@@ -447,6 +447,19 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
         setup["inclined_directions"] = [brep.rounded(d, 4) for d in inclined]
         setup["orientation_count"] += len(inclined)
         setup["setup_count"] += len(inclined)
+    if sharp is not None and access:
+        # an obtuse root is sharp only faced from each side's own direction: a side already square to a
+        # setup counted is faced there, one more setup for the other; both, and the root is made as drawn
+        counted = [np.asarray(entry["direction"], dtype=float) for entry in access["setup"].get("directions") or ()]
+        kept = []
+        for item in sharp["items"]:
+            if item.get("reason") == "obtuse_root":
+                faced = sum(1 for n in item["_normals"] if any(float(unit(n) @ unit(d)) > SAME for d in counted))
+                if faced >= 2:
+                    continue
+                item["more_setups"] = "one more setup" if faced else "two more setups"
+            kept.append(item)
+        sharp["items"] = kept
     if sharp is not None:
         totals = scalars.setdefault("sharp_edges", {"by_tool": {}})["by_tool"]
         for way, count in sharp["ways"].items():
@@ -1126,7 +1139,8 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             # made, and said: a slot cutter's opening narrower than its recess is tall, or a profile's obtuse
             # root side-milling leaves the tool's radius in (warnings, text-to-cad's own judgements)
             extra = {"reason": "narrow_opening", "opening_mm": round(note["narrow"][0], 4),
-                     "recess_mm": round(note["narrow"][1], 4)} if note.get("narrow") else {"reason": "obtuse_root"}
+                     "recess_mm": round(note["narrow"][1], 4)} if note.get("narrow") else \
+                {"reason": "obtuse_root", "more_setups": "two more setups", "_normals": (n1, n2)}
             items.append({**record, **extra, "made_by": way})
         if way == "end_mill_flank":
             # made by the flank of the smallest tool, its radius leaving R (1 / sin(void / 2) - 1) in the corner
@@ -1487,12 +1501,31 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
 
         return fn, info
 
+    bisectors = np.array([unit(x + y) for x, y in zip(st.normals_a, st.normals_b)])
+    bisector = bisectors[count // 2]
+    # a chamfer mill along one axis makes a V whose bisector keeps to it; five axes tilt it along the edge
+    straight_v = bool(np.all(bisectors @ bisector > SAME))
+    standard = any(abs(void - angle) < 0.5 for angle in V_MILLS)
+    v_mill = standard and (straight_v or state["axes"] >= 5)
+
+    def chamfer_fn(s: Stations) -> np.ndarray:
+        bis = np.array([unit(x + y) for x, y in zip(s.normals_a, s.normals_b)]).reshape(-1, 3)
+        if straight_v:
+            # a straight V's bisector is one direction: five axes present it as three do, with no lean
+            return model.escape_all(s.points, bis, bisector)
+        # a curved V's turns along it: on five axes the mill follows it, leaning as it goes
+        return path_reach(s, bis)
+
     def made(way: str, needs: Needs | None = None) -> str:
         # an obtuse edge needs no direction of its own: it is made in the setups that make its two faces, which
         # the setups' cover counts; a square corner (an end mill's end and flank) or a V's chamfer mill does
         if directions is not None and needs and void <= OBTUSE_DEG:
             directions[edge.ordinal] = needs
-        if void > OBTUSE_DEG and all(planes) and way in ("end_mill", "chamfer_mill") and _end_on(model, state, edge):
+        if void > OBTUSE_DEG and all(planes) and way == "end_mill" and _end_on(model, state, edge):
+            if v_mill and straight_v and chamfer_fn(st).all():
+                # a V of a standard angle: a chamfer mill along its bisector forms it as drawn, its cone the V,
+                # in one setup -- no radius left, nothing to say (as a chamfer mill's V or shoulder never is)
+                return "chamfer_mill"
             note["obtuse_root"] = True
         return way
 
@@ -1567,21 +1600,6 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                 if not any(abs(void - angle) < 0.5 for angle in DOVETAILS):
                     note["angle"] = void
                 return "dovetail_cutter"
-    bisectors = np.array([unit(x + y) for x, y in zip(st.normals_a, st.normals_b)])
-    bisector = bisectors[count // 2]
-    # a chamfer mill along one axis makes a V whose bisector keeps to it; five axes tilt it along the edge
-    straight_v = bool(np.all(bisectors @ bisector > SAME))
-    standard = any(abs(void - angle) < 0.5 for angle in V_MILLS)
-    v_mill = standard and (straight_v or state["axes"] >= 5)
-
-    def chamfer_fn(s: Stations) -> np.ndarray:
-        bis = np.array([unit(x + y) for x, y in zip(s.normals_a, s.normals_b)]).reshape(-1, 3)
-        if straight_v:
-            # a straight V's bisector is one direction: five axes present it as three do, with no lean
-            return model.escape_all(s.points, bis, bisector)
-        # a curved V's turns along it: on five axes the mill follows it, leaning as it goes
-        return path_reach(s, bis)
-
     if v_mill and (ok(bisector) or not straight_v):
         needs = [[(bisector, True)]] if straight_v else []
         reached = chamfer_fn(st)

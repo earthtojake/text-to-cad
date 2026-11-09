@@ -314,7 +314,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   recess is tall, `opening_mm` and `recess_mm`: a text-to-cad figure, not a passage) and `obtuse_root` (an
   obtuse root between two planes seen end-on along a machine direction -- a profile's, a valley's: a tool
   side-milling it, or a ball, leaves its radius; it is sharp only facing each side from its own direction,
-  two more setups the count leaves out, the same at every turn). The
+  two more setups the count leaves out, one where a face is square to a setup it counts (`more_setups`), none
+  said where both are; the same at every turn). A V of a standard angle (`V_MILLS`) is a chamfer mill's along
+  its bisector, its cone the V as drawn, and no root of a chamfer mill's V or shoulder is `obtuse_root`. The
   rule is the part's, whatever its turn: a notch in a plate turned 30 degrees reads as one along the plate's
   axes. A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`

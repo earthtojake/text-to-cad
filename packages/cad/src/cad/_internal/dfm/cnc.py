@@ -93,8 +93,8 @@ _EDGE_WARNINGS = {
                        "cutter -- widen the opening to the recess's height, or plan the cutter with the shop"),
     "obtuse_root": ("sharp concave edge (an obtuse root a side-milling tool rounds)",
                     "a tool side-milling the profile leaves its radius in this root; it is sharp only by facing "
-                    "each side from its own direction (two more setups): round it to at least {limit:g} mm, or "
-                    "plan those setups"),
+                    "each side from its own direction, {more_setups} than the count: round it to at least "
+                    "{limit:g} mm, or plan for that"),
 }
 #: A sharp edge a tool along a direction the machine lacks would make: the access warning's severity and words.
 _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
