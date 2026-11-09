@@ -73,15 +73,17 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
 - `cnc.sharp_internal_edge` is a concave edge no tool of the machine makes; its item's `reason` says
   why (`acute`, `vertical_corner`, `blocked`, `no_square_face`, or `other_axes`: a direction the
-  machine lacks would make it, a warning) and the hint follows it. A profile's corner along the part's
-  thinnest axis (a plate's outline, a gear's tooth root) is a `vertical_corner`, an error, whatever a
-  tilted tool would do: the outline is cut along that axis. The fix is a radius or a relief
+  machine lacks would make it, a warning) and the hint follows it. A square corner a square end mill
+  forms from some side -- its end on one face, its flank on the other, seen from outside (a plate's
+  notch, however it is turned) -- is made, that side one more setup (`setups`); a gear's curved tooth
+  root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
   where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
   `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
   keyseat cutter makes.
-- `setups.setup_count` estimates clampings from the reachable directions.
+- `setups.setup_count` estimates clampings from the reachable directions and the sides square corners
+  are side-milled from (a direction's `sharp_edges`).
 - `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a
   tap drill, not a callout.
 

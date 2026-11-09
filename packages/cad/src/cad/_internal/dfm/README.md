@@ -255,7 +255,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   point's included angle), `counterbores` [{diameter_mm, depth_mm, depth_to_diameter}] (each its own feature:
   its depth is not the hole's; the **counterbores** family lists each, a stepped bore's larger step too, with
   its face as `location` and its `hole`, judged by the hole-depth rules as a hole of its own), `countersinks` [{diameter_mm, angle_deg}] (included angles, as drawn), `axis`, `aligned` (along an axis of the part's machine frame), `reachable` (along a direction the machine has),
-  `inclination_deg` (to the frame's nearest axis), `opening`, `drilled` (<= 1 3/4 in), `standard_drill`
+  `inclination_deg` (to the frame's nearest axis), `opening`, `drilled` (<= 1 3/4 in, and not flat-bottomed: a
+  drill leaves its point), `floor_tool` (a flat floor's: an end mill or a flat-bottom drill), `standard_drill`
   (`"6.8 mm"`, `"1/4 in (6.350 mm)"`, `"#7 (5.105 mm)"`, `"letter F (6.528 mm)"`: within 0.005 mm),
   `drill_deviation_mm`, `tap_candidate` (`"M8x1.25"` where the diameter is an ISO 262 coarse tap drill: a
   fact, not a verdict), `tap_drill`, `tap_nominal_mm` (that thread's nominal); with `--turning`, `relation`
@@ -273,7 +274,9 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   `depth_mm` (floor to the walls' rim), `depth_from_top_mm` (floor to the part's top along the normal: tool
   reach), `width_mm` (narrowest exact ray between opposite walls of the pocket), `depth_to_width`,
   `open_boundary_fraction`, `floor_radius_mm` (root fillet), `axis`, `aligned`, `reachable` (along a direction
-  the machine has, or none of its edges left unmade: a chamfer mill's V reads as a pocket on one flank),
+  the machine has; or none of its edges left unmade, an edge only a setup of its own makes counted unmade: a
+  chamfer mill's V reads as a pocket on one flank; or every face of it along a machine direction square to its
+  axis: a profile cut along that direction, a plate's notch turned in the plane, never inclined),
   `inclination_deg`, `wall_count`, `floor` (its
   floor's ref), `width_faces` (the two walls the width is between; `location` is the first of them, else the
   floor). An open step that reads both ways (floor+wall or wall+floor seen from the side) keeps the shallower
@@ -300,29 +303,38 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   third of its height, the radius the hint gives in millimetres.
 - **sharp_edges** — every other sharp concave edge no rotating tool makes (each with `void_angle_deg`,
   `length_mm`, `edge`, `faces`, `makeable` 0, `radius_mm` 0, `acute`: void under 90 degrees, and `reason`,
-  the first that holds: `vertical_corner` where it is a profile's corner -- both faces lie along a machine
-  direction the edge runs along, the part's thinnest (a plate's outline, a gear's tooth root, cut along its
-  axis), whatever a tool tilted square to one face would make --; `other_axes` -- a tool along a direction the
-  machine lacks would make it; `vertical_corner` along any other machine direction -- a corner where the
-  tool's side leaves its radius; `acute`; `blocked` -- a face is a plane square to a machine direction, the
-  way along it blocked; `no_square_face`). A crease a ball end mill makes is an item too: `made_by`
+  the first that holds: `other_axes` -- a tool along a direction the machine lacks would make it (a tool tilted
+  square to one face whose other face is no flank along it: an angled setup or more axes); `vertical_corner` --
+  both faces lie along a machine direction the edge runs along, a corner of a profile or a cavity cut along
+  it where the tool's side leaves its radius (a gear's curved tooth root, a closed pocket's corner); `acute`;
+  `blocked` -- a face is a plane square to a machine direction, the way along it blocked; `no_square_face`). The
+  rule is the part's, whatever its turn: a notch in a plate turned 30 degrees reads as one along the plate's
+  axes. A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
   = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Made by: an
   end mill where one face is a plane square to an approach direction (a floor or a ceiling), the void angle
-  >= 90 and a ray from that face along the direction escapes; a T-slot cutter where a face of the cavity
+  >= 90 and a ray from that face along the direction escapes; a square end mill along any direction a setup
+  presents (the part clamped to present it, 3 axes' re-fixturing) where one face is a plane square to it (the
+  end), the other lies along it (the flank) and a ray from the end along it escapes -- a profile's corner
+  side-milled, that direction one setup (`setups`); an end mill is tried from both faces before any cutter;
+  a T-slot cutter where a face of the cavity
   the edge bounds is seen along that direction; a 45/60 degree dovetail cutter likewise (its face a plane);
   a keyseat cutter where the recess has a floor and a ceiling square to that direction and its way in is a
   face it meets by a convex edge seen along it (a groove inside a bore: the bore's wall);
   a 60/90/120 degree chamfer mill along the bisector, and its shoulder (a 150/135/120 degree void: one face
-  along the mill's axis, the other looking along it); a ball end mill where the void angle is >= 150 degrees
+  along the mill's axis, the other the cone's, its normal's cosine to the axis the half angle's sine within
+  0.01 -- a face along the axis, 1e-16 off square in a turned part, is none); a ball end mill where the void
+  angle is >= 150 degrees
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
   R (1 / sin(void / 2) - 1), 0.035 R at 150) along a direction both faces look along whose ray from the crease
-  escapes; a drill or tap for a hole's own edges. `by_tool` counts every concave edge by the tool. Evaluated at
+  escapes (each face's normal more than half a degree's sine along it); a drill or tap for a hole's own edges. `by_tool` counts every concave edge by the tool. Evaluated at
   each edge's midpoint. An edge sharing a vertex with a reported corner and a face with it (or with a round
   tangent to its faces) is folded into that corner.
-- **knife_edges** — convex edges whose material angle is under 45 degrees (`KNIFE_DEG`, printing's): the
-  material thins to nothing there. `angle_deg`, `length_mm`, `thickness_mm` 0, `edge`, `faces`. The two faces
-  of a knife edge are no wall to each other.
+- **knife_edges** — convex edges whose material angle, read along the edge (a curved one at 17 points: an
+  edge where a cone meets a sphere runs from 63 to 42 degrees), falls under 45 degrees (`KNIFE_DEG`,
+  printing's): the material thins to nothing there. `angle_deg` (the least), `length_mm` (the stretch under
+  the limit), `edge_length_mm`, `thickness_mm` 0, `edge`, `faces`. The two faces of a knife edge are no wall to
+  each other.
 - **walls** — under each sampled point of each face, an exact ray into the material to the first face across
   that faces back (normals within ~45 degrees of opposite; not across a knife edge); the thinnest per face
   under 5 mm: `thickness_mm`, `opposite`, `height_mm` (a plane's extent across its longest concave root edge),
@@ -354,8 +366,11 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   them, saying which no straight line reaches at all), and on 3 and 4 axes an inclined hole's unreached faces
   are the hole's (`part_of`; `cnc.inclined_feature` judges it). Neither is judged by `cnc.undercut` or
   `cnc.no_line_of_sight` again.
-- **setups** — one item per part: the greedy set cover of the sampled area by direction (`directions`
-  [{direction, area_fraction, faces}]), `orientation_count`, `setup_count` (clampings: each orientation on 3
+- **setups** — one item per part: the greedy set cover of the sampled area and of the sharp edges an end mill
+  makes, each from one of its directions (the area first, the edges a direction makes breaking a tie; a
+  direction the machine lacks reaches what a straight line along it does), by direction (`directions`
+  [{direction, area_fraction, faces, sharp_edges}]: `sharp_edges` the edges it is the first to make -- a
+  notch side-milled), `orientation_count`, `setup_count` (clampings: each orientation on 3
   axes; directions square to the rotary axis are one on 4; directions within a half-space above one
   clamping face are one on 5), `unreached_area_fraction`, `rotary_axis`, `sampled_points`,
   `inclined_directions` (each inclined hole's or pocket's own direction: one more orientation and clamping).
@@ -394,7 +409,7 @@ design parts for CNC machining", cited as general practice.
 | cnc.pocket_depth_to_width | pockets.depth_to_width max | 4 (w) |
 | cnc.wall_thickness | walls.thickness_mm min | metal 0.5 / plastic 1.0 (e, feasible) |
 | cnc.wall_thickness_recommended | walls.thickness_mm min | metal 0.8 / plastic 1.5 (w) |
-| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a) | align features to the six principal directions of the part's own frame (`machine.frames`), else 5 axes |
+| cnc.inclined_feature | pockets / holes.inclination_deg max 0 where `reachable` is false (w); 3 and 4 axes (5: n/a); a profile cut along a machine direction is reachable | align features to the six principal directions of the part's own frame (`machine.frames`), else 5 axes |
 | cnc.hole_diameter | holes.diameter_mm min | 1.0 (e: "Feasible: any diameter larger than 1 mm") |
 | cnc.hole_depth / _limit | holes.depth_to_diameter, counterbores.depth_to_diameter max | 4 (w) / 40 (e) |
 | cnc.drill_size | holes.drill_deviation_mm max 0.005 (w), drilled holes | standard drill sizes |

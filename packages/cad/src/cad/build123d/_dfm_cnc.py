@@ -113,6 +113,12 @@ DOVETAILS = (45.0, 60.0)
 #: tolerance for any end mill a part this size is cut with. Below it the crease is a corner a radius must
 #: be drawn for. A judgement, not a guide's number: the owner's to confirm.
 BALL_VOID_DEG = 150.0
+#: A face looks along a direction where its normal makes more than half a degree's sine with it: a face along
+#: the direction reads 1e-16 either way in a turned part, and is no face a ball's side sees.
+LOOKS_ALONG = math.sin(math.radians(0.5))
+#: A chamfer mill's cone face makes the mill's half angle with its axis, its normal's cosine to the axis the
+#: half angle's sine, within this (the void's half degree, and noise).
+CONE_TOLERANCE = 0.01
 #: Without ``--tools``, the radius of the ball a crease is judged as rounded by: a 2.5 mm ball end mill's, the
 #: smallest standard tool (Hubs: features under 2.5 mm are micro-machining).
 BALL_RADIUS_MM = 1.25
@@ -356,6 +362,7 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
         families.setdefault("walls", []).extend({**item, "_model": index} for item in walls)
     sharp = run("sharp_edges", lambda: _sharp_edges(model, state))
     state["unmakeable"] = sharp["unmakeable"] if sharp is not None else None
+    state["refixtured"] = sharp["refixtured"] if sharp is not None else set()
     if sharp is not None and access:
         families.setdefault("access", []).extend(sharp["special"])
     reported: set[int] = set()
@@ -372,6 +379,11 @@ def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tup
         else:
             failed.setdefault("internal_corners", failed["pockets"])
     inclined = _inclined(model, state, holes, found_pockets)
+    if access and sharp is not None and sharp["made_from"]:
+        # the setups again, now the sharp edges an end mill makes are known: each needs one of its directions
+        setup = access["setup"]
+        setup.clear()
+        setup.update(_setup(model, access["cover"], sharp["made_from"], [] if turning else inclined))
     if access and inclined and not turning:
         # each inclined feature's direction is an orientation (and a clamping) of its own
         setup = access["setup"]
@@ -527,18 +539,6 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         for d, r in _probe(model, points, normals, owner_a, np.flatnonzero(residual), probes):
             reach[len(candidates)] = r
             candidates.append(d)
-    # greedy set cover over the sampled area
-    covered = np.zeros(len(points), dtype=bool)
-    chosen: list[int] = []
-    while True:
-        gains = {k: float(areas[r & ~covered].sum()) for k, r in reach.items() if k not in chosen}
-        if not gains:
-            break
-        k = max(gains, key=lambda key: (gains[key], -key))
-        if gains[k] <= 1e-12 * max(1.0, model.area):
-            break
-        chosen.append(k)
-        covered |= reach[k]
     reachable_any = np.zeros(len(points), dtype=bool)
     for r in reach.values():
         reachable_any |= r
@@ -563,22 +563,76 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
                       "kind": "no_line_of_sight" if nowhere > 0 else "undercut",
                       "hole": i in state.get("hole_axis", {}), "hole_axis": state.get("hole_axis", {}).get(i),
                       "surface": model.surface(i).kind, "location": model.ref(i), "xyz": brep.rounded(where)})
+    cover = {"reach": reach, "areas": areas, "owner": owner_a, "points": points, "normals": normals, "candidates": candidates, "rotary": rotary,
+             "axes": axes, "unreached": unreached}
+    return {"items": items, "setup": _setup(model, cover), "directions": candidates, "rotary": rotary,
+            "cover": cover}
+
+
+def _setup(model: Model, cover: dict[str, Any], made_from: dict[int, list[tuple[np.ndarray, bool]]] | None = None,
+           known: list[np.ndarray] | None = None) -> dict[str, Any]:
+    """The setups: the fewest directions (greedy set cover) that reach the sampled area and make the sharp edges
+    an end mill makes (``made_from``: each edge's directions; one ``known`` -- an inclined feature's own -- makes
+    it already), the area first and the edges a direction makes breaking a tie, and the clampings they need.
+    An edge made only along a direction no other need picks -- a profile's corner side-milled -- is that
+    direction's setup: one more, each distinct direction once."""
+    reach, areas, owner = cover["reach"], cover["areas"], cover["owner"]
+    candidates = list(cover["candidates"])
+    reach = dict(reach)
+    needs: list[set[int]] = []
+    for made in (made_from or {}).values():
+        if any(float(d @ k) > SAME for d, _ in made for k in known or ()):
+            continue
+        need = set()
+        for d, _ in made:
+            k = next((k for k, c in enumerate(candidates) if float(d @ c) > SAME), None)
+            if k is None:
+                # a setup presenting a direction the machine lacks reaches what a straight line along it does
+                k = len(candidates)
+                candidates.append(d)
+                reach[k] = _reach(model, cover["points"], cover["normals"], d)
+            need.add(k)
+        needs.append(need)
+    tiny = 1e-12 * max(1.0, model.area)
+    covered = np.zeros(len(areas), dtype=bool)
+    met = [False] * len(needs)
+    chosen: list[int] = []
+    edges_of: dict[int, int] = {}
+    while True:
+        gains: dict[int, tuple[float, int]] = {}
+        for k, r in reach.items():
+            if k in chosen:
+                continue
+            area = float(areas[r & ~covered].sum())
+            gains[k] = (area if area > tiny else 0.0, sum(1 for i, need in enumerate(needs) if not met[i] and k in need))
+        if not gains:
+            break
+        k = max(gains, key=lambda key: (gains[key], -key))
+        if gains[k] == (0.0, 0):
+            break
+        chosen.append(k)
+        covered |= reach[k]
+        edges_of[k] = gains[k][1]
+        met = [m or k in need for m, need in zip(met, needs)]
     directions = []
-    covered = np.zeros(len(points), dtype=bool)
+    covered = np.zeros(len(areas), dtype=bool)
     for k in chosen:
         new = reach[k] & ~covered
         covered |= reach[k]
-        directions.append({"direction": brep.rounded(candidates[k], 4),
-                           "area_fraction": round(float(areas[new].sum() / areas.sum()), 4),
-                           "faces": int(len(set(owner_a[new].tolist())))})
-    fixtures = _fixtures([candidates[k] for k in chosen], axes, rotary)
+        entry = {"direction": brep.rounded(candidates[k], 4),
+                 "area_fraction": round(float(areas[new].sum() / areas.sum()), 4),
+                 "faces": int(len(set(owner[new].tolist())))}
+        if edges_of[k]:
+            entry["sharp_edges"] = edges_of[k]  # the sharp edges an end mill makes along it, none before it
+        directions.append(entry)
+    rotary = cover["rotary"]
     largest = model.largest()
-    setup = {"setup_count": fixtures, "orientation_count": len(chosen), "directions": directions,
-             "unreached_area_fraction": round(float(areas[unreached].sum() / areas.sum()), 4),
-             "rotary_axis": brep.rounded(rotary) if rotary is not None else None,
-             "sampled_points": int(len(points)), "part": model.part.name,
-             "location": model.ref(largest), "xyz": model.center(largest)}
-    return {"items": items, "setup": setup, "directions": candidates, "rotary": rotary}
+    return {"setup_count": _fixtures([candidates[k] for k in chosen], cover["axes"], rotary),
+            "orientation_count": len(chosen), "directions": directions,
+            "unreached_area_fraction": round(float(areas[cover["unreached"]].sum() / areas.sum()), 4),
+            "rotary_axis": brep.rounded(rotary) if rotary is not None else None,
+            "sampled_points": int(len(areas)), "part": model.part.name,
+            "location": model.ref(largest), "xyz": model.center(largest)}
 
 
 #: Of the points no machine direction reaches, each face's first few are probed over every direction
@@ -733,7 +787,10 @@ def _inclined(model: Model, state: dict[str, Any], holes: list[dict[str, Any]],
     drilled along its axis, so it is reachable where the machine has that axis. A pocket is reachable there,
     or where no sharp edge between its faces is left unmade (a chamfer mill's V groove reads as a pocket on
     one flank; its tool comes along the bisector)."""
-    unmade = state.get("unmakeable") or set()
+    # an edge only a setup of its own makes (a square end mill along a direction the machine lacks) leaves the
+    # pocket inclined, unless the pocket is a profile along a machine direction: every face of it lies along
+    # one, the tool on that axis cutting it with its side (a plate's notch turned in the plane)
+    unmade = (state.get("unmakeable") or set()) | (state.get("refixtured") or set())
     edge_faces = {edge.ordinal: set(edge.faces) for edge in model.edges if edge.ordinal in unmade}
     found: list[np.ndarray] = []
 
@@ -754,7 +811,9 @@ def _inclined(model: Model, state: dict[str, Any], holes: list[dict[str, Any]],
         if pocket["_floor"]:
             faces.add(pocket["_floor"])
         made = not any(both <= faces for both in edge_faces.values())
-        pocket["reachable"] = bool(_allowed(state, d) or made)
+        profile = any(_allowed(state, w) and abs(float(w @ d)) < 1 - SAME and all(model.along(f, w) for f in faces)
+                      for w in WORLD[::2])
+        pocket["reachable"] = bool(_allowed(state, d) or made or profile)
         if not pocket["reachable"]:
             add(d, False)
     return found
@@ -882,16 +941,36 @@ def _refine(model: Model, item: dict[str, Any], outward: bool) -> None:
         item["height_to_thickness"] = round(item["height_mm"] / best[0], 4)
 
 
+#: Points along a curved edge its material's angle is read at (``brep.edge_angles``), as printing reads it.
+KNIFE_PROFILE = 17
+
+
 def _knife_edges(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Convex edges whose material angle is under ``KNIFE_DEG``: the material thins to nothing there."""
+    """Convex edges whose material angle along them falls under ``KNIFE_DEG``: the material thins to nothing
+    there. A curved edge's angle is read along it, not at its middle alone (an edge where a cone meets a sphere
+    runs from 63 to 42 degrees): ``angle_deg`` the least, ``length_mm`` the stretch under the limit."""
     skip = state["thread_faces"]
     items = []
+    fractions = np.linspace(0.0, 1.0, KNIFE_PROFILE)
     for edge in model.edges:
-        if edge.concave or edge.smooth or not edge.angle_deg < KNIFE_DEG - ANGLE_EPS or set(edge.faces) & skip:
+        if edge.concave or edge.smooth or set(edge.faces) & skip:
             continue
-        items.append({"angle_deg": round(edge.angle_deg, 4), "length_mm": round(edge.length, 4), "thickness_mm": 0.0,
+        if all(model.surface(f).kind == "plane" for f in edge.faces):
+            angles, points = np.full(len(fractions), float(edge.angle_deg)), None
+        else:
+            checkpoint()
+            points, angles = brep.edge_angles(model.part, edge, fractions)
+        under = np.isfinite(angles) & (angles < KNIFE_DEG - ANGLE_EPS)
+        if not under.any():
+            continue
+        # the stretch: each of the profile's segments under the limit at either end, by its share of the length
+        segments = under[:-1] | under[1:]
+        stretch = float(edge.length) * float(segments.sum()) / (len(fractions) - 1)
+        where = edge.midpoint if points is None or under[len(under) // 2] else points[np.flatnonzero(under)[0]]
+        items.append({"angle_deg": round(float(angles[under].min()), 4), "length_mm": round(stretch, 4),
+                      "edge_length_mm": round(edge.length, 4), "thickness_mm": 0.0,
                       "edge": model.part.ref("edge", edge.ordinal), "location": model.ref(edge.faces[0]),
-                      "faces": [model.ref(f) for f in edge.faces], "xyz": brep.rounded(edge.midpoint),
+                      "faces": [model.ref(f) for f in edge.faces], "xyz": brep.rounded(where),
                       "_pair": frozenset(edge.faces)})
     return items
 
@@ -929,6 +1008,7 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
     tools = state.get("tools")
     ball_radius = tools[0] / 2 if tools else BALL_RADIUS_MM
     visible: dict[tuple[int, tuple[float, ...]], bool] = {}
+    made_from: dict[int, list[tuple[np.ndarray, bool]]] = {}
 
     def sees(ordinal: int, d: np.ndarray) -> bool:
         key = (ordinal, tuple(np.round(d, 6)))
@@ -959,7 +1039,7 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             n1, n2 = edge_normals(model, edge)
         except Exception:  # noqa: BLE001
             continue
-        way = _way(model, state, edge, n1, n2, sees, cavity)
+        way = _way(model, state, edge, n1, n2, sees, cavity, made_from)
         ways[way or "none"] = ways.get(way or "none", 0) + 1
         void = 360.0 - edge.angle_deg
         record = {"void_angle_deg": round(void, 4), "length_mm": round(edge.length, 4),
@@ -981,26 +1061,25 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             continue
         unmakeable.add(edge.ordinal)
         items.append({**record, "reason": _why(model, state, edge, n1, n2, sees, cavity)})
+    # an edge a square end mill makes only along a direction the machine lacks needs a setup of its own
+    refixtured = {ordinal for ordinal, made in made_from.items() if not any(machine for _, machine in made)}
     return {"items": items, "balls": balls, "special": _special(model, special), "unmakeable": unmakeable,
-            "ways": ways}
+            "ways": ways, "made_from": made_from, "refixtured": refixtured}
 
 
 def _why(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.ndarray,
          sees: Callable[[int, np.ndarray], bool], cavity: Callable[[tuple[int, int]], set[int]]) -> str:
-    """Why no tool of the machine makes a sharp concave edge, the first that holds: ``vertical_corner`` where
-    it is a profile's corner -- both faces lie along a machine direction the edge runs along, and that is the
-    part's thinnest (a plate's outline, a gear's tooth root, cut along its axis: the tool's side leaves its
-    radius there, whatever a tool tilted square to one face would do) --; ``other_axes`` (a tool along a
-    direction the machine lacks would make it); ``vertical_corner`` along any other machine direction (a
-    corner of a cavity cut along it, whatever its angle); ``acute`` (its void is under 90 degrees: no tool's
-    end or side reaches the root); ``blocked`` (a face is a plane square to a machine direction, but the way
-    along it is blocked) or ``no_square_face`` (no face is a plane square to one)."""
+    """Why no tool of the machine makes a sharp concave edge, the first that holds: ``other_axes`` (a tool
+    along a direction the machine lacks would make it, other than a square end mill's side cut, which a setup
+    of its own makes: ``_way``); ``vertical_corner`` (both faces lie along a machine direction the edge runs
+    along: a corner of a profile or a cavity cut along it, whatever its angle, where the tool's side leaves its
+    radius); ``acute`` (its void is under 90 degrees: no tool's end or side reaches the root); ``blocked`` (a
+    face is a plane square to a machine direction, but the way along it is blocked) or ``no_square_face`` (no
+    face is a plane square to one)."""
     void = 360.0 - edge.angle_deg
     tangent = np.asarray(edge.tangent)
     along = next((d for d in WORLD[::2] if abs(float(tangent @ d)) > SAME and _allowed(state, d)
                   and all(model.along(f, d) for f in edge.faces)), None)
-    if along is not None and _thinnest(model, along):
-        return "vertical_corner"
     if state["axes"] < 5 and _way(model, {**state, "axes": 5, "beyond": state}, edge, n1, n2, sees, cavity) is not None:
         return "other_axes"
     if along is not None:
@@ -1011,14 +1090,6 @@ def _why(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
         if model.surface(face).kind == "plane" and (_allowed(state, normal) or _allowed(state, -normal)):
             return "blocked"
     return "no_square_face"
-
-
-def _thinnest(model: Model, d: np.ndarray) -> bool:
-    """Whether the part is thinnest along machine axis ``d`` (of its frame's three): a plate's or a gear's
-    axis, the way its outline is profiled."""
-    extents = [float(np.subtract(*model.part_extent(w)[::-1])) for w in WORLD[::2]]
-    mine = float(np.subtract(*model.part_extent(d)[::-1]))
-    return mine <= min(extents) * (1 + 1e-9)
 
 
 def _special(model: Model, found: list[tuple[Any, str]]) -> list[dict[str, Any]]:
@@ -1050,13 +1121,17 @@ def _special(model: Model, found: list[tuple[Any, str]]) -> list[dict[str, Any]]
 
 
 def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.ndarray,
-         sees: Callable[[int, np.ndarray], bool], cavity: Callable[[tuple[int, int]], set[int]]) -> str | None:
+         sees: Callable[[int, np.ndarray], bool], cavity: Callable[[tuple[int, int]], set[int]],
+         directions: dict[int, list[tuple[np.ndarray, bool]]] | None = None) -> str | None:
     """How a rotating tool makes a sharp concave edge, or None. A tool's corner makes it where one face is a
     floor or a ceiling square to the tool's axis (an approach direction) and the void's angle is at least 90
     degrees: an end mill where a straight line along the axis from that face leaves the part, a T-slot cutter
     where the cavity the edge bounds opens along the axis somewhere (its shank comes in there); a dovetail
     cutter of 45 or 60 degrees makes that angle with a floor the same way. A chamfer mill
-    of 60, 90 or 120 degrees makes it along the edge's bisector."""
+    of 60, 90 or 120 degrees makes it along the edge's bisector. A square end mill also makes it along any
+    direction a setup presents (the part clamped to present it): its end on one face square to that direction,
+    its flank on the other, which lies along it, seen from outside -- each such direction one more setup. The
+    end mill's directions, and whether the machine has each, go to ``directions`` under the edge's ordinal."""
     beyond = state.get("beyond")  # only the directions a machine of these axes lacks (``_why``)
 
     def ok(d: np.ndarray) -> bool:
@@ -1067,17 +1142,30 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     step = min(0.05, 0.1 * edge.length)
     if void >= 89.9:
         faces = tuple(edge.faces)
-        for na, nb, face in ((n1, n2, faces[0]), (n2, n1, faces[1])):
+        # an end mill first, from either face: its end on that face (a plane square to the tool's axis), seen
+        # from outside along the axis. Along a direction the machine has, any void of 90 degrees or more; along
+        # any other -- a setup the part is clamped in to present it, one more setup -- a square end mill's
+        # end and flank: the other face lies along the axis (a profile's corner side-milled, whatever the turn)
+        made: list[tuple[np.ndarray, bool]] = []
+        for na, nb, face, other_face in ((n1, n2, faces[0], faces[1]), (n2, n1, faces[1], faces[0])):
             if model.surface(face).kind != "plane":
                 continue  # a floor or a ceiling is a plane: a curved face's normal at one point is no floor's
+            machine = ok(na)
+            if not machine and (beyond is not None or not model.along(other_face, na)):
+                continue
             inward = unit(nb - na * float(nb @ na))
+            # just off the edge on the floor, nearer still where the floor is narrower than the step
+            if any(model.escapes(mid + inward * off, na, na) for off in (step, step / 20)):
+                made.append((na, machine))
+        if made:
+            if directions is not None:
+                directions[edge.ordinal] = made
+            return "end_mill"
+        for na, face in ((n1, faces[0]), (n2, faces[1])):
+            if model.surface(face).kind != "plane":
+                continue
             for d in (na, -na):
-                if not ok(d):
-                    continue
-                # just off the edge on the floor, nearer still where the floor is narrower than the step
-                if float(d @ na) > 0 and any(model.escapes(mid + inward * off, na, na) for off in (step, step / 20)):
-                    return "end_mill"
-                if any(sees(other, d) for other in cavity(faces)):  # noqa: B023
+                if ok(d) and any(sees(other, d) for other in cavity(faces)):  # noqa: B023
                     return "slot_cutter"
     if any(abs(void - angle) < 0.5 for angle in DOVETAILS):
         faces = tuple(edge.faces)
@@ -1089,19 +1177,23 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     if any(abs(void - angle) < 0.5 for angle in V_MILLS) and ok(bisector):
         if model.escapes(mid, bisector, bisector):
             return "chamfer_mill"
-    if any(abs(void - (180.0 - angle / 2.0)) < 0.5 for angle in V_MILLS):
+    shoulder = next((angle for angle in V_MILLS if abs(void - (180.0 - angle / 2.0)) < 0.5), None)
+    if shoulder is not None:
         # a chamfer mill's shoulder, where its cone meets its body: one face along the mill's axis (a wall),
         # the other the cone's (a chamfer looking along the axis), the mill coming in along it
         faces = tuple(edge.faces)
         for face, other in ((faces[0], n2), (faces[1], n1)):
             for d in WORLD:
-                if ok(d) and float(other @ d) > 0 and model.along(face, d) \
-                        and model.escapes(mid, bisector, d):
+                # the cone's face makes the mill's half angle with its axis: its normal turned that far
+                # from square to it (noise on a face along the axis is no cone's)
+                if ok(d) and abs(float(other @ d) - math.sin(math.radians(shoulder / 2.0))) < CONE_TOLERANCE \
+                        and model.along(face, d) and model.escapes(mid, bisector, d):
                     return "chamfer_mill"
     if void >= BALL_VOID_DEG:
         # a ball end mill contours the crease along any direction both faces look along
         for d in (bisector, *WORLD):
-            if ok(d) and float(n1 @ d) > 0 and float(n2 @ d) > 0 and model.escapes(mid, bisector, d):
+            if ok(d) and float(n1 @ d) > LOOKS_ALONG and float(n2 @ d) > LOOKS_ALONG \
+                    and model.escapes(mid, bisector, d):
                 return "ball_mill"
     if void >= 89.9:
         # a keyseat cutter: the recess has a floor and a ceiling square to an approach direction and no face

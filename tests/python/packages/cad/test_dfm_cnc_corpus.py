@@ -180,7 +180,8 @@ def inclined() -> Any:
 
 def inclined_pocket() -> Any:
     """A 10 x 8 x 4 mm pocket (R2 corners) cut square into a 45-degree face: no 3-axis direction makes its
-    floor's edges; five axes tilt to it (the face's centre is at x 22.5, z 7.5)."""
+    floor's edges, a setup tilted to it does (its own); five axes tilt to it (the face's centre is at x 22.5,
+    z 7.5)."""
     part = bd.Box(60, 40, 30)
     part = bd.chamfer(part.edges().group_by(bd.Axis.Z)[-1].group_by(bd.Axis.X)[-1], 15)
     face = next(f for f in part.faces() if abs(f.normal_at().Z) > 0.1 and abs(f.normal_at().X) > 0.1)
@@ -453,9 +454,10 @@ CASES = [
     # under BALL_VOID_DEG: a tool tilted square to a face makes it, a direction three axes lack (a warning)
     Case("valley-140", valley(140.0), {"material": "aluminum"},
          expect=[("cnc.sharp_internal_edge", None, box(-30, -20, 9.9, 30, 20, 10.1))]),
+    # its floor's edges are a square end mill's along the pocket's own direction: the inclined setup makes them,
+    # judged once, as that setup (one cause, one finding)
     Case("inclined_pocket", inclined_pocket, {"material": "aluminum"},
-         expect=[("cnc.inclined_feature", None, box(16, -5, 1, 29, 5, 14)),
-                 ("cnc.sharp_internal_edge", None, box(16, -5, 1, 29, 5, 14))]),
+         expect=[("cnc.inclined_feature", None, box(16, -5, 1, 29, 5, 14))]),
     Case("inclined_pocket-5axis", inclined_pocket, {"material": "aluminum", "axes": 5}),
     Case("sharp_window", sharp_window, {"material": "aluminum"},
          expect=[("cnc.internal_corner_sharp", None, box(-15, -7.5, -5, 15, 7.5, 5))]),

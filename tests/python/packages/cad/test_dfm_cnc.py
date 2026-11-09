@@ -109,6 +109,10 @@ class HolesTest(unittest.TestCase):
     def test_drill_sizes_are_named_from_every_series(self) -> None:
         self.assertEqual(self.holes[10]["bottom"], "flat")
         self.assertIsNone(self.holes[10]["standard_drill"])
+        # a drill leaves its point: a flat floor is an end mill's, or a flat-bottom drill's
+        self.assertEqual((self.holes[10]["drilled"], self.holes[10]["floor_tool"]),
+                         (False, "end mill or flat-bottom drill"))
+        self.assertEqual((self.holes[-35]["drilled"], self.holes[-35]["floor_tool"]), (True, None))
         self.assertAlmostEqual(self.holes[10]["drill_deviation_mm"], 4.33 - 0.1695 * 25.4, places=4)  # #18
         self.assertEqual(self.holes[25]["standard_drill"], "1/4 in (6.350 mm)")
         self.assertEqual(_dfm_cnc_holes.standard_drill(0.201 * 25.4)[0], "#7 (5.105 mm)")
@@ -246,6 +250,14 @@ class WallsAndGapsTest(unittest.TestCase):
         self.assertEqual(_codes(result) & {"cnc.wall_thickness", "cnc.knife_edge"}, {"cnc.knife_edge"})
         self.assertTrue(result.ok)  # a warning: blunt it
 
+    def test_a_curved_edge_is_read_along_its_length(self) -> None:
+        # a 10 mm rod cut 60 deg from its axis: its edge runs from 30 deg at the low side to 150 at the high, a
+        # knife over a quarter of it, whatever its middle reads
+        rod = bd.Cylinder(5, 30, align=(A.CENTER, A.CENTER, A.MIN))
+        cut = rod - bd.Pos(0, 0, 20) * bd.Rot(0, 60, 0) * bd.Box(80, 80, 40, align=(A.CENTER, A.CENTER, A.MIN))
+        [knife] = cnc(_part(cut), material="aluminum").measurements["knife_edges"]["items"]
+        self.assertAlmostEqual(knife["angle_deg"], 30.0, delta=0.5)
+        self.assertLess(knife["length_mm"], 0.5 * knife["edge_length_mm"])
 
     def test_wall_thickness_and_gap_width_are_exact(self) -> None:
         part = bd.Box(60, 40, 5, align=(A.CENTER, A.CENTER, A.MAX))
@@ -545,17 +557,59 @@ class OpenRecessTest(unittest.TestCase):
         self.assertAlmostEqual(hole["depth_mm"], 25 / math.cos(math.radians(30)), places=4)
         self.assertGreater(hole["overall_depth_mm"], hole["depth_mm"] + 3)  # its longest side, entry to exit
 
-    def test_a_profile_s_root_is_a_vertical_corner_on_three_axes(self) -> None:
-        # a 10 mm plate's outline with a 110-degree notch turned off the axes: a tool tilted square to a flank
-        # would make its root sharp, but the outline is cut along the plate's axis, whose tool leaves a radius
+    def test_a_profile_s_root_reads_as_any_crease_whatever_the_part_s_thinnest(self) -> None:
+        # a 10 mm plate's outline with a 110-degree notch turned off the axes: no square end mill's end and flank
+        # make it, a tool tilted square to a flank would -- an angled setup's, as a valley's crease of that angle
+        # reads, whichever way the part is thinnest
         notch = bd.Pos(20, 0, 0) * bd.Rot(0, 0, 17) * bd.extrude(bd.make_face(bd.Polyline(
             (0, 0), (30 * math.cos(math.radians(55)), 30 * math.sin(math.radians(55))),
             (30 * math.cos(math.radians(55)), -30 * math.sin(math.radians(55))), close=True)), 20, both=True)
         result = cnc(_part(bd.Box(60, 60, 10) - notch), material="aluminum")
         [root] = [i for i in result.measurements["sharp_edges"]["items"] if abs(i["void_angle_deg"] - 110) < 1e-3]
-        self.assertEqual(root["reason"], "vertical_corner")
-        finding = next(f for f in result.findings if f.code == "cnc.sharp_internal_edge")
-        self.assertEqual(finding.severity, "error")
+        self.assertEqual(root["reason"], "other_axes")
+        finding = next(f for f in result.findings if f.code == "cnc.sharp_internal_edge" and root["edge"] in f.message)
+        self.assertEqual(finding.severity, "warning")
+
+
+class SideMillTest(unittest.TestCase):
+    """A sharp concave edge a square end mill makes from some direction a setup presents -- its end on one face
+    square to the direction, its flank on the other along it, seen from outside -- is made, each such direction
+    a setup; one no tool makes from any direction is an error, however the part is turned."""
+
+    def test_a_notch_in_a_plate_is_side_milled_at_any_angle(self) -> None:
+        plate = bd.Box(100, 60, 8)
+        read = []
+        for angle in (0, 30, 45, 73):
+            notched = plate - bd.Pos(0, 30, 0) * bd.Rot(0, 0, angle) * bd.Box(14, 14, 20)
+            for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61), bd.Rot(90, 0, 0)):
+                result = cnc(_part(turn * notched), material="aluminum")
+                self.assertFalse({"cnc.sharp_internal_edge", "cnc.internal_corner_sharp", "cnc.inclined_feature"}
+                                 & _codes(result), (angle, turn))
+                setup = result.measurements["setups"]["items"][0]
+                self.assertTrue(any(d.get("sharp_edges") for d in setup["directions"]), (angle, turn))
+                read.append(setup["setup_count"])
+        self.assertEqual(set(read), {read[0]})
+
+    def test_a_gear_s_curved_root_and_a_pocket_s_corner_are_made_by_no_tool(self) -> None:
+        edges = []
+        for k in range(12):
+            a0, am, a1 = (2 * math.pi * (k + f) / 12 for f in (0.0, 0.5, 1.0))
+            ends = [(16 * math.cos(a0), 16 * math.sin(a0)), (20 * math.cos(am), 20 * math.sin(am)),
+                    (16 * math.cos(a1), 16 * math.sin(a1))]
+            for p, q in zip(ends, ends[1:]):
+                mx, my = (p[0] + q[0]) / 2, (p[1] + q[1]) / 2
+                bulge = 1 + 0.8 / math.hypot(mx, my)
+                edges.append(bd.Edge.make_three_point_arc(p, (mx * bulge, my * bulge), q))
+        gear = bd.extrude(bd.Face(bd.Wire(edges)), 8)
+        pocket = bd.Box(60, 40, 20) - bd.Pos(0, 0, 5) * bd.Box(30, 20, 10.001)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            roots = cnc(_part(turn * gear), material="aluminum")
+            self.assertEqual({i["reason"] for i in roots.measurements["sharp_edges"]["items"]}, {"vertical_corner"})
+            self.assertEqual(roots.measurements["sharp_edges"]["count"], 12)
+            self.assertFalse(roots.ok)
+            corners = cnc(_part(turn * pocket), material="aluminum")
+            self.assertEqual(sum(c["sharp"] for c in corners.measurements["internal_corners"]["items"]), 4)
+            self.assertIn("cnc.internal_corner_sharp", _codes(corners))
 
 
 class FrameTest(unittest.TestCase):
@@ -586,6 +640,17 @@ class FrameTest(unittest.TestCase):
             hole = min(turned[0].measurements["holes"]["items"], key=lambda h: h["diameter_mm"])
             expected = (turn * bd.Pos(-22, -12, 3)).position
             self.assertLess((bd.Vector(*hole["xyz"]) - expected).length, 0.05)
+
+
+    def test_a_hexagonal_window_s_corners_are_sharp_in_every_turn(self) -> None:
+        # a 120-degree void is a chamfer mill's shoulder only where one face is the mill's cone: a face along
+        # the axis reads its normal's 1e-16 off square in a turned part, and is none
+        window = bd.Box(100, 60, 8) - bd.extrude(bd.RegularPolygon(10, 6), 10, both=True)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(90, 0, 0), bd.Rot(23, -37, 61), bd.Rot(0, 0, 17)):
+            result = cnc(_part(turn * window), material="aluminum")
+            corners = [c for c in result.measurements["internal_corners"]["items"] if c["sharp"]]
+            self.assertEqual(len(corners), 6, turn)
+            self.assertFalse(result.ok)
 
 
 class TurnedLiveToolingTest(unittest.TestCase):

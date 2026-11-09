@@ -12,7 +12,8 @@ narrowest full cylinder's; its **depth** the drilled length -- that cylinder's a
 end at its middle along the axis (a hole drilled into an inclined face), below any counterbore; **blind** where an exact ray along the axis from inside the narrowest
 cylinder meets a face of the hole itself (its floor) and **through** where neither way does. A blind hole's
 floor is a ``drill_point`` (a concave cone closing to a point: its included angle, 118 degrees for a jobber
-drill) or ``flat`` (a plane).
+drill) or ``flat`` (a plane). A flat floor is an end mill's or a flat-bottom drill's (``floor_tool``): a drill
+leaves its point, so such a hole is not ``drilled``, whatever its diameter.
 
 **Standard drills** (Wikipedia, "Drill bit sizes", after ASME B94.11M): metric 0.2-0.98 mm (N x 0.1 + 0,
 0.02, 0.05, 0.08), 1.0-2.95 mm by 0.05, 3.0-13.9 mm by 0.1, 14-25 mm by 0.25; fractional inch by 1/64 to
@@ -298,7 +299,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         # middle: the drill's axis runs that far, the extent of the cylinder's longest side further
         depth = _axis_length(model, narrow[0], a) or depth
     label, deviation = standard_drill(diameter)
-    drilled = diameter <= LARGEST_DRILL + MATCH_MM
+    sized = diameter <= LARGEST_DRILL + MATCH_MM
+    # a drill leaves its point: a flat floor is an end mill's (or a flat-bottom drill's), not a drill's alone
+    drilled = sized and bottom != "flat"
     aligned = any(abs(float(a @ w)) > 0.9999 for w in WORLD[::2])
     hole = {
         "diameter_mm": round(diameter, 9), "depth_mm": round(depth, 4), "overall_depth_mm": round(high - low, 4),
@@ -308,8 +311,9 @@ def _describe(model: Model, group: set[int], full: list[float]) -> dict[str, Any
         "axis": brep.rounded(a), "aligned": aligned,
         "opening": brep.rounded(opening) if opening is not None else None,
         "counterbores": counterbores, "countersinks": countersinks,
-        "drilled": drilled, "standard_drill": label if drilled else None,
-        "drill_deviation_mm": round(deviation, 9) if drilled else None,
+        "drilled": drilled, "standard_drill": label if sized else None,
+        "drill_deviation_mm": round(deviation, 9) if sized else None,
+        "floor_tool": "end mill or flat-bottom drill" if bottom == "flat" else None,
         "tap_candidate": _tap(diameter),
         # the candidate thread's nominal diameter: what a shop's thread range is read against
         "tap_drill": _tap(diameter) is not None,
