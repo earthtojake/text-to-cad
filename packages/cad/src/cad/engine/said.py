@@ -243,7 +243,8 @@ def _named(names: Any) -> str:
 def robot(summary: dict[str, Any]) -> list[str]:
     """What a robot description an export wrote holds (``Description.summary``), in a line or two: its links
     and how its base stands, its joints by kind, its mass; then, where it has any, its couplings, closures,
-    frames, collisions by kind, exclusions, keys and zero state, and the links with no mass. Its warnings and
+    frames, collisions by kind, exclusions, keys (or, of a URDF, the states it does not write) and zero state,
+    and the links with no mass. Its warnings and
     the writer's notes are the export's log lines, said as it wrote the file; the summary does not say them
     again."""
     links = summary.get("links") or []
@@ -275,6 +276,10 @@ def robot(summary: dict[str, Any]) -> list[str]:
         rest.append(f"{len(summary['excludes'])} excluded pair{'s' if len(summary['excludes']) != 1 else ''}")
     if summary.get("poses"):
         rest.append(f"keys {_named(summary['poses'])}")
+    if summary.get("unwritten"):  # a URDF's: it holds no state
+        unwritten = summary["unwritten"]
+        rest.append(f"state{'s' if len(unwritten) != 1 else ''} {_named(unwritten)} not written (a URDF holds none; "
+                    "an MJCF has them as keys)")
     if summary.get("zero"):
         rest.append(f"zero at {summary['zero']}")
     if summary.get("massless"):

@@ -296,7 +296,8 @@ class Description:
         its links but the ground (the robot's own), its joints but those it hangs from the ground by, whether
         its base floats, its couplings (``[follower, leader, ratio]``), closures, total mass (kg, None where no
         link has one) and the links with none, named frames, collisions by kind (a decomposed part's hulls are
-        ``hull``), exclusions, poses, its zero state and its warnings. JSON's types alone."""
+        ``hull``), exclusions, the poses the file holds (an MJCF's keys; a URDF holds none, and its
+        ``unwritten`` names them), its zero state and its warnings. JSON's types alone."""
         ground = self.root
         mounts = {joint.name for joint in self.joints if joint.parent == ground.name}
         links = [link for link in self.links if link is not ground or link.visuals or link.collisions
@@ -320,7 +321,9 @@ class Description:
                 "massless": [link.name for link in links if link.inertial is None and link.parts],
                 "frames": [name for link in links for name in link.frames],
                 "collisions": collisions, "excludes": [list(pair) for pair in self.excludes],
-                "poses": [pose.name for pose in self.poses], "zero": self.zero, "warnings": list(self.warnings)}
+                "poses": [] if kind == "urdf" else [pose.name for pose in self.poses],
+                **({"unwritten": [pose.name for pose in self.poses]} if kind == "urdf" and self.poses else {}),
+                "zero": self.zero, "warnings": list(self.warnings)}
 
     def controls(self) -> list[Joint]:
         """The joints a person or a controller moves: not fixed, not floating, not following another."""

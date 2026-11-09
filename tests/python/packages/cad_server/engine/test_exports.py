@@ -470,7 +470,8 @@ class RobotExportTest(unittest.TestCase):
         said = [line for line in err.splitlines() if line.startswith("  ")]
         self.assertEqual(said, ["  robot two: 3 links (plate, upper, fore) on a free base; 2 joints: 2 revolute "
                                 "(shoulder, elbow); 0.4164 kg",
-                                "    collisions 3 mesh; keys home, up"])
+                                "    collisions 3 mesh; states home, up not written (a URDF holds none; an MJCF has "
+                                "them as keys)"])
         # A zero poses a robot description alone, and a state the document does not have is refused by name.
         status, out, err = self.run_cli("export", str(self.xbf), str(self.folder / "two.stl"), "--zero", "home")
         self.assertEqual((status, out), (2, ""))
