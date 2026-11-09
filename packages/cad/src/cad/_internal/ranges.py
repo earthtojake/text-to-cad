@@ -38,14 +38,23 @@ Geometry = Literal["parts", "collision"]
 _TESTED = {"parts": "parts' surfaces", "collision": "parts' collision shapes"}
 
 
+#: The sweep's resolution, in mm (``engine.ranges.RESOLUTION``, said here where the kernel is not imported): every
+#: point of a tested surface is within it of a sample, so a clearance under it is refused.
+RESOLUTION = 0.3
+
+
 def options(*, step: float, clearance: float, geometry: str = "parts") -> None:
     """Refuse a step or a clearance the sweep cannot use: each a positive finite number, the step at most 45 (degrees
-    or millimetres: past it a part passes through a thin wall unseen), the clearance at most 10 mm."""
+    or millimetres: past it a part passes through a thin wall unseen), the clearance at least ``RESOLUTION`` (the
+    samples resolve no finer) and at most 10 mm."""
     for flag, value, most in (("--step", step, 45.0), ("--clearance", clearance, 10.0)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
             raise ArgumentRefused(f"{flag} is a positive number, not {value!r}")
         if value > most:
             raise ArgumentRefused(f"{flag} {value:g} is over {most:g}: a coarser sweep misses what it passes through")
+    if clearance < RESOLUTION:
+        raise ArgumentRefused(f"--clearance {clearance:g} is under the sweep's resolution, {RESOLUTION:g} mm: every "
+                              "surface is sampled to within it, so a gap is measured no finer")
     if geometry not in _TESTED:
         raise ArgumentRefused(f"--geometry is parts or collision, not {geometry!r}")
 
@@ -61,19 +70,22 @@ def ranges_for(document_type: str) -> Any:
         with it and every other as built, a step at a time each way: a turn a full turn each way, a slide the
         document's extent. Its stop each way is where its child link meets its parent link (each with what is
         fixed to it): a stop whatever the other joints do, what its range declares. Where anything it moves
-        meets another link first, in the pose the others stand in, that clash is said beside the stop. Parts
-        touching already as built (a horn on its servo) meet only when their contact grows; parts near as built
-        (apart, within the clearance) meet only where their gap closes to touching (under a fifth of the
-        clearance, and under half their gap as built), and each joint's finding names them with their gap as
-        built and at each stop. Each joint's finding
-        says its stops in degrees or millimetres around the as-built pose (and in its own values where that is
-        not zero) and which two parts meet past each; a part declared collision none takes no part. The model
-        is not changed: adopt the numbers into its joints' ranges. --json carries every number.
+        meets another link first, in the pose the others stand in, that clash is said beside the stop. Two parts
+        meet where they come within the clearance and within half their gap as built (less the 0.3 mm the
+        surfaces are sampled to), or where their contact grows by about 15 mm^2: parts touching already as built
+        (a horn on its servo) meet only when their contact grows, parts near as built (apart, within the
+        clearance) only where their gap halves, and each joint's finding names them with their gap as built and
+        at each stop. A smaller clearance only widens a range. Each joint's finding says its stops in degrees
+        or millimetres around the as-built pose (and in its own values where that is not zero) and which two
+        parts meet past each; a part declared collision none takes no part, and two parts declared exclude(a, b)
+        never meet each other. The model is not changed: adopt the numbers into its joints' ranges. --json
+        carries every number.
 
         source: the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or
           the handle its call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
-        clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 1.
+        clearance: how near two parts' surfaces come before they count as touching, in millimetres, 0.3 at the
+          least; default 1.
         geometry: what meets: parts, each part's own surface (the default: the physical stops), or collision, what
           each part declares a simulator collides it as (a fitted box where it declares one: the simulator's
           stops). A part declared collision none takes no part either way.

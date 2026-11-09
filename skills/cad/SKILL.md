@@ -315,14 +315,24 @@ cad step ranges arm.step --step 0.5 --json
   joint's own values where its as-built value is not zero. Write them into the joint's
   `angular_range` or `linear_range` in the body, rounded towards zero, and run the model again.
   The command writes nothing.
-- **What touches.** Two surfaces within `--clearance` (1 mm) count as touching. Parts already
-  touching as built (a horn on its servo) meet only when their contact grows.
-- **Near as built.** Two parts apart but within the clearance as built (a jaw 0.4 mm from its
-  servo's cover) meet only where their gap closes to touching: under a fifth of the clearance and
-  under half of what it was as built. The finding
-  lists them, `near as built:`, with the gap as built and at each stop, and a stop one of them
-  makes says `closed to 0.18 from 0.42 mm as built`. Read such a stop against the geometry before
-  you adopt it. A lower `--clearance` does not remove a near pair's stop; the pair's gap decides it.
+- **What touches.** Two surfaces within `--clearance` (1 mm) count as touching, and a smaller
+  clearance only widens a range: a stop at the defaults is where the parts first come within 1 mm,
+  and `--clearance 0.3` (the least it takes) finds where they all but touch. Every gap is measured
+  to within 0.6 mm over the true one, never under it.
+- **Touching or near as built.** Every pair is read against the as-built pose. Parts already
+  touching (a horn on its servo) meet only where their contact grows by about 15 mm^2, not where
+  one slides along the other. Parts apart but within the clearance (a jaw 0.4 mm from its servo's
+  cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.06 mm for a
+  0.42 mm gap), not where it narrows a hair.
+  The finding lists them, `near as built:`, with the gap as built and at each stop, and a stop
+  one of them makes says `closed to 0.18 from 0.42 mm as built`.
+- **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
+  against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
+  pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
+  hardware) is set aside with `exclude(a, b)` in the body (a part, an assembly or a label each,
+  [kinematics](references/kinematics.md)): those two parts never stop or clash in the sweep, and
+  every other pair of their links still does, so the jaw then stops on the other jaw. The same
+  declaration tells a simulator their two links never collide (MJCF's `<contact><exclude>`).
 - **What is tested.** `--geometry parts` (the default) tests each part's own surface; `collision`
   tests what each part declares a simulator collides it as. A part declared
   `collision(part, "none")` (a fastener in its hole, a servo's internals) is left out either way.
@@ -330,16 +340,17 @@ cad step ranges arm.step --step 0.5 --json
   or spherical joint is not swept, nor is a joint of a closed loop (it moves only with its loop), and
   its warning says so. A document with no joint fails with
   `no_joints`.
-- **Cost.** The sweep runs on one core, and its time grows with finer settings: a 270-part
-  six-joint arm took 19 s at the defaults and 7 minutes at `--clearance 0.2 --step 0.5`. Start at
-  the defaults, and answer a narrower question (do the jaws close?) with a posed snapshot.
-  `--verbose` says each step on stderr as it starts: reading the model, sampling its surfaces (minutes
-  at a fine clearance), each joint.
+- **Cost.** The sweep runs on one core. Each surface is sampled to within 0.3 mm whatever the
+  clearance, so a smaller clearance costs no more: a 270-part six-joint arm took 23 s at the
+  defaults and 19 s at `--clearance 0.3`; a finer `--step` costs in proportion. Start at the
+  defaults, and answer a narrower question (do the jaws close?) with a posed snapshot.
+  `--verbose` says each step on stderr as it starts: reading the model, sampling its surfaces, each
+  joint.
 
 `--json` carries every number in `measurements.joints`, each joint under `joint`: `lower`, `upper`,
-`range` (the joint's own values), the `*_contact` and `*_clash` parts (a near pair's with its `near`
-and `gap` in mm), the pairs touching as built (`resting`) and the pairs near as built (`near`: `rest`,
-and the gap at the `lower` and `upper` stop).
+`range` (the joint's own values), the `*_contact` and `*_clash` parts (each with its `gap` there in mm, and a pair within the
+clearance as built with its `near`, that gap as built), the pairs touching as built (`resting`) and the
+pairs near as built (`near`: `rest`, and the gap at the `lower` and `upper` stop).
 
 ### Check scripts
 

@@ -3,7 +3,8 @@
 A base with a wall, an arm on a hinge and a carriage on a slide, built to an xbf: the arm turns until it
 meets the wall one way and the base the other, the carriage slides until it meets the wall one way and an end
 stop the other (touching the base all along, as built, which stops nothing), each stop where an exact
-distance says the parts come within the clearance; the document is not changed. A STEP with no joint has
+distance says the parts come within the clearance; the document is not changed. A smaller clearance only
+widens a range, and two parts declared never to collide are set aside, those two alone. A STEP with no joint has
 nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
 is cut into hulls for the collision geometry alone. The stops are said as a table, and a long sweep says each joint as
 it starts and ends; a verbose one says each step as it starts. A pair near as built, its gap narrowing a hair as the
@@ -25,7 +26,7 @@ from cad._internal.refused import ArgumentRefused
 
 RIG = """
 import build123d as bd
-from cad.build123d import collision
+from cad.build123d import collision, exclude
 from cad.engine import xbf
 
 
@@ -110,11 +111,15 @@ class Ranges(unittest.TestCase):
         joints = {found["joint"]: found for found in result.measurements["joints"]}
         elbow, slide = joints["elbow"], joints["slide"]
         # The arm stands up from the hinge at 30 mm: 0.31 mm from the wall at -30 degrees, touching it at -31;
-        # 0.09 mm from the base at +101, touching it at +102 (build123d's exact distances).
-        self.assertEqual(("deg", -30.0, 101.0), (elbow["unit"], elbow["lower"], elbow["upper"]))
+        # 0.09 mm from the base at +101, touching it at +102 (build123d's exact distances). Within the clearance (1
+        # mm) is touching, so each stop is the pose before: the arm is over a millimetre clear at -29 and +100.
+        self.assertEqual(("deg", -29.0, 100.0), (elbow["unit"], elbow["lower"], elbow["upper"]))
         self.assertEqual(("arm", "wall", "arm", "base"),
                          (elbow["lower_contact"]["moving"], elbow["lower_contact"]["still"],
                           elbow["upper_contact"]["moving"], elbow["upper_contact"]["still"]))
+        # The gap said at each contact is measured, at most twice the resolution over the exact one.
+        self.assertTrue(0.31 <= elbow["lower_contact"]["gap"] <= 0.31 + 0.6, elbow["lower_contact"])
+        self.assertTrue(0.09 <= elbow["upper_contact"]["gap"] <= 0.09 + 0.6, elbow["upper_contact"])
         # The carriage, built 40 mm along the slide: 70 mm from the wall behind it and 25 mm from the end stop
         # ahead, so about a clearance short of each; seated on the base all along, which stops nothing.
         self.assertEqual("mm", slide["unit"])
@@ -128,6 +133,42 @@ class Ranges(unittest.TestCase):
                                                     slide["upper_clash"]), "each stop is its own: nothing else first")
         self.assertEqual({"joint_stops"}, {finding.code for finding in result.findings})
         self.assertEqual(before, document.read_bytes(), "the document is not changed")
+
+    def test_a_smaller_clearance_never_narrows_a_range(self) -> None:
+        from cad import xbf
+        from cad._internal import ranges as options
+        from cad.engine import ranges as engine
+
+        self.assertEqual(options.RESOLUTION, engine.RESOLUTION, "the refusal and the sweep's samples agree")
+        document = self.rig()
+        found = {}
+        for clearance in (2.0, 1.0, 0.6, 0.3):
+            result = xbf.ranges(document, clearance=clearance)
+            found[clearance] = {joint["joint"]: (joint["lower"], joint["upper"])
+                                for joint in result.measurements["joints"]}
+        # Each range holds the one at every larger clearance: its stops at or past them, each way.
+        clearances = sorted(found, reverse=True)
+        for wider, narrower in zip(clearances, clearances[1:]):
+            for name, (lower, upper) in found[narrower].items():
+                with self.subTest(joint=name, clearance=narrower):
+                    self.assertLessEqual(lower, found[wider][name][0])
+                    self.assertGreaterEqual(upper, found[wider][name][1])
+        # And it widens: at 2 mm the arm stops short of where it does at 0.3, the wall closing a degree's worth.
+        self.assertLess(found[0.3]["elbow"][0], found[2.0]["elbow"][0])
+        self.assertGreater(found[0.3]["slide"][1], found[2.0]["slide"][1])
+
+    def test_two_parts_declared_never_to_collide_are_set_aside_alone(self) -> None:
+        from cad import xbf
+
+        result = xbf.ranges(self.rig('exclude(arm, "wall")'))
+        joints = {found["joint"]: found for found in result.measurements["joints"]}
+        elbow, slide = joints["elbow"], joints["slide"]
+        # The arm passes the wall it stopped at (-29 degrees) and turns on until it meets the base; the carriage,
+        # a part of no excluded pair, still stops at that wall.
+        self.assertEqual("base", elbow["lower_contact"]["still"], elbow)
+        self.assertLess(elbow["lower"], -60.0)
+        self.assertEqual(101.0 - 1.0, elbow["upper"])
+        self.assertEqual("wall", slide["lower_contact"]["still"])
 
     def test_a_pair_near_as_built_stops_only_where_its_gap_closes(self) -> None:
         from cad import xbf
@@ -167,10 +208,10 @@ class Ranges(unittest.TestCase):
             result = xbf.ranges(document)
         lines = result.human_lines()
         self.assertEqual([line.split() for line in lines[:3]],
-                         [["joint", "lower", "upper", "range"], ["elbow", "-30", "deg", "+101", "deg", "-30", "to",
-                                                                 "101", "deg"],
+                         [["joint", "lower", "upper", "range"], ["elbow", "-29", "deg", "+100", "deg", "-29", "to",
+                                                                 "100", "deg"],
                           ["slide", *lines[2].split()[1:]]])
-        self.assertTrue(lines[3].startswith("elbow: lower -30 deg: arm (arm) meets wall"), lines)
+        self.assertTrue(lines[3].startswith("elbow: lower -29 deg: arm (arm) meets wall"), lines)
         self.assertFalse([line for line in lines if line.startswith("info:")], lines)
         # Each joint said as it starts, about how long it may take, and as it ends, though not verbose.
         heard = said.getvalue().splitlines()
@@ -183,7 +224,7 @@ class Ranges(unittest.TestCase):
             xbf.ranges(document, verbose=True)
         heard = [line.split(":")[1].strip().split(" ")[0] for line in said.getvalue().splitlines()]
         self.assertEqual(["reading", "sampling", "sweeping", "elbow", "sweeping", "slide"], heard, said.getvalue())
-        self.assertIn("ranges: sampling 5 part surfaces every 0.6 mm: about ", said.getvalue())
+        self.assertIn("ranges: sampling 5 part surfaces to within 0.3 mm: about ", said.getvalue())
 
     def test_a_decomposed_part_is_cut_for_the_collision_geometry_alone(self) -> None:
         from cad import xbf
@@ -203,7 +244,7 @@ class Ranges(unittest.TestCase):
             self.assertEqual(calls, [1])
         lower = [{found["joint"]: found for found in result.measurements["joints"]}["elbow"]["lower"]
                  for result in (parts, collided)]
-        self.assertEqual(lower[0], -30.0, "on the parts the arm still stops at the wall")
+        self.assertEqual(lower[0], -29.0, "on the parts the arm still stops at the wall")
         self.assertIsNotNone(lower[1], "and at the wall's hull on the collision geometry")
 
     def test_a_document_with_no_joint_has_nothing_to_sweep(self) -> None:
@@ -223,6 +264,7 @@ class Ranges(unittest.TestCase):
         from cad import xbf
 
         for options, flag in (({"step": 0}, "--step"), ({"step": 90}, "--step"), ({"clearance": -1}, "--clearance"),
+                              ({"clearance": 0.2}, "--clearance 0.2 is under the sweep's resolution, 0.3 mm"),
                               ({"geometry": "hull"}, "--geometry")):
             with self.subTest(options), self.assertRaisesRegex(ArgumentRefused, flag):
                 xbf.ranges(self.folder / "missing.xbf", **options)

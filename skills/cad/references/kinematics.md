@@ -355,7 +355,7 @@ free(root)                                  # the base is not bolted to the worl
   assembly's; a second frame of one name on a part replaces the first.
 - **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF a link
   on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
-- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>`; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest.
+- **`exclude(a, b)`**: the two never collide (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does.
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
   label on the assembly or below it, in SI: URDF's `<limit>`, MJCF's `actuatorfrcrange`
   (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written

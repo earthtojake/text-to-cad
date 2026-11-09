@@ -829,8 +829,9 @@ A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad
 which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
 calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
 first), described as a robot (`engine.describe`) and each joint swept alone against its parts' surfaces
-(`engine.ranges`: sampled points on a grid of the clearance, the other joints as built): its stop is where
-its child link meets its parent link, and a clash with any other link before it is said beside. It writes
+(`engine.ranges`: surfaces sampled to a fixed resolution and measured gap by gap, the other joints as
+built): its stop is where its child link meets its parent link, and a clash with any other link before it is
+said beside; a smaller clearance only widens a range, and two parts declared `exclude(a, b)` never meet. It writes
 nothing and changes nothing: a model is code, and its ranges are written in it (law 23). Its options
 describe the sweep, never the model (law 22): `step` (degrees or millimetres), `clearance` (millimetres)
 and `geometry` (`parts`, each part's own surface; `collision`, what each declares a simulator collides it
