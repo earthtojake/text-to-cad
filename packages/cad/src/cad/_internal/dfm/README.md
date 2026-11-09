@@ -318,7 +318,12 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   rule is the part's, whatever its turn: a notch in a plate turned 30 degrees reads as one along the plate's
   axes. A crease a ball end mill makes is an item too: `made_by`
   `ball_mill`, `makeable` 1, `radius_mm` the ball's (half the smallest `--tools`, else 1.25), `deviation_mm`
-  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. Each way is tried at stations
+  = R (1 / sin(void / 2) - 1), the round's departure from the drawn edge. A corner of `BALL_VOID_DEG` (150
+  degrees) or more along a machine direction -- a 12- or 24-sided pocket's, a faceted arc's -- is made by the
+  end mill's flank and is an item the same way (`made_by` `end_mill_flank`, `radius_mm`, `deviation_mm` the
+  residue the radius leaves in the corner): `cnc.flank_corners` says it, and `cnc.flank_corner_residue` warns
+  past `FLANK_RESIDUE_MM` (0.05 mm, text-to-cad's own figure); a corner under 150 degrees keeps the corner
+  rules. Each way is tried at stations
   along the edge (its ends 0.05 mm inside, and between), 9 at least and at most the smallest tool's radius
   apart (`--tools`, else 1.25 mm; 129 at most) so an obstacle a tool could not pass between two is never
   missed, and makes it only where it reaches every one: a 0.5 mm window at a corner's mid-height, or a front

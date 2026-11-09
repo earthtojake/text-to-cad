@@ -825,6 +825,23 @@ class FrameTest(unittest.TestCase):
             self.assertEqual(len(corners), 6, turn)
             self.assertFalse(result.ok)
 
+    def test_a_many_sided_pocket_s_corners_are_the_flank_s(self) -> None:
+        # a 24-gon's 165-degree corners along the axis: the end mill's flank makes them, its radius leaving
+        # R (1/sin(v/2) - 1) in each -- said, a warning only past 0.05 mm (a 20 mm tool's 0.086 mm)
+        plate = bd.Box(80, 80, 12, align=(A.CENTER, A.CENTER, A.MIN))
+        pocket = plate - bd.Pos(0, 0, 6) * bd.extrude(bd.RegularPolygon(20, 24), 6.01)
+        residue = 1.25 * (1 / math.sin(math.radians(165 / 2)) - 1)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(0, 0, 7) * bd.Pos(3, -2, 1), bd.Rot(90, 0, 0)):
+            result = cnc(_part(turn * pocket), material="aluminum")
+            self.assertTrue(result.ok, turn)
+            flanks = [i for i in result.measurements["sharp_edges"]["items"] if i["made_by"] == "end_mill_flank"]
+            self.assertEqual(len(flanks), 24, turn)
+            self.assertAlmostEqual(max(i["deviation_mm"] for i in flanks), residue, places=3)
+            self.assertIn("cnc.flank_corners", _codes(result))
+            self.assertNotIn("cnc.flank_corner_residue", _codes(result))
+        coarse = cnc(_part(pocket), material="aluminum", tools="20")
+        self.assertEqual([f.severity for f in coarse.findings if f.code == "cnc.flank_corner_residue"], ["warning"])
+
 
 class TurnedLiveToolingTest(unittest.TestCase):
     def test_a_square_keyway_end_is_a_sharp_corner_a_round_one_is_not(self) -> None:

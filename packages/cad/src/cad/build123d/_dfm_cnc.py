@@ -59,7 +59,8 @@ the machine frame's. The families, and how each is measured:
   before any cutter, the setups' ways last.
   Each unmade edge says why (``reason``: ``other_axes``, ``vertical_corner``, ``acute``, ``blocked``,
   ``no_square_face``, see ``_why``); a ball's crease is an item too (``made_by`` ``ball_mill``, its round's
-  ``deviation_mm`` from the drawn edge); an edge only a T-slot, a dovetail or a keyseat cutter makes is an
+  ``deviation_mm`` from the drawn edge), and so is a corner of ``BALL_VOID_DEG`` or more along the tool's axis
+  that its flank makes (``end_mill_flank``, the residue its radius leaves); an edge only a T-slot, a dovetail or a keyseat cutter makes is an
   ``access`` item of kind ``special_cutter``. ``by_tool`` counts every concave edge by the tool that makes it. An edge
   that is a reported corner's run through a small edge round at its end is folded into that corner
   (``folded_edges``, see ``_fold``), not listed again.
@@ -1127,6 +1128,11 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             extra = {"reason": "narrow_opening", "opening_mm": round(note["narrow"][0], 4),
                      "recess_mm": round(note["narrow"][1], 4)} if note.get("narrow") else {"reason": "obtuse_root"}
             items.append({**record, **extra, "made_by": way})
+        if way == "end_mill_flank":
+            # made by the flank of the smallest tool, its radius leaving R (1 / sin(void / 2) - 1) in the corner
+            deviation = ball_radius * (1.0 / math.sin(math.radians(void) / 2.0) - 1.0)
+            balls.append({**record, "makeable": 1, "radius_mm": round(ball_radius, 4), "made_by": "end_mill_flank",
+                          "deviation_mm": round(deviation, 4)})
         if way == "ball_mill":
             # made, but rounded: the ball leaves a round of its radius in the crease, departing from the
             # drawn edge by R (1 / sin(void / 2) - 1); kept in the record so nothing vanishes from it
@@ -1592,12 +1598,19 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                 if ok(d) and abs(float(other @ d) - math.sin(math.radians(shoulder / 2.0))) < CONE_TOLERANCE \
                         and model.along(face, d) and model.escapes(mid, bisector, d):
                     return made("chamfer_mill")
-    if void >= BALL_VOID_DEG:
+    if void >= BALL_VOID_DEG - 1e-6:  # a regular 12-gon's corners are 150 degrees, a rounding either side
         # a ball end mill contours the crease along any direction both faces look along
         for d in (bisector, *WORLD):
             if ok(d) and float(n1 @ d) > LOOKS_ALONG and float(n2 @ d) > LOOKS_ALONG \
                     and model.escapes(mid, bisector, d):
                 return made("ball_mill")
+        # a corner this open along the tool's axis (a faceted arc's, a many-sided pocket's) is the end mill's
+        # flank's: its radius leaves a residue of R (1 / sin(void / 2) - 1) in it, 0.011 mm for a 2.5 mm mill at 166
+        # degrees -- made, its residue said (``deviation_mm``)
+        for d in WORLD:
+            if ok(d) and bool(np.all(np.abs(st.tangents @ d) > SAME)) and all(model.along(f, d) for f in faces) \
+                    and (model.escapes(mid, bisector, d) or model.escapes(mid, bisector, -d)):
+                return made("end_mill_flank")
     if not standard and straight_v and all(planes) and void <= OBTUSE_DEG:
         if state["axes"] >= 5 and void >= min(V_MILLS) - 0.5:
             # a standard chamfer mill tilted to each flank in turn: its cone's side on that flank, its other

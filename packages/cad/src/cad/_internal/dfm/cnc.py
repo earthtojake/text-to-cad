@@ -102,6 +102,11 @@ _OTHER_AXES = ("sharp concave edge (made along a direction this machine lacks)",
                "(--axes 5), or round it to at least {limit:g} mm")
 
 
+#: A corner along the tool's axis of ``BALL_VOID_DEG`` (150 degrees) or more is made by the tool's flank; the
+#: radius it leaves in the corner is said as a warning past this (mm): text-to-cad's own figure, no guide's.
+FLANK_RESIDUE_MM = 0.05
+
+
 def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
     """A sharp vertical corner and a sharp concave edge: no round tool makes either (the error); judged against
     half the smallest tool with ``--tools``, else the least radius a micro tool leaves (``_MICRO_TOOL_RADIUS``),
@@ -387,6 +392,23 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"up to {mm(worst['deviation_mm'])} mm off the drawn edge ({worst['edge']}, a "
             f"{worst['void_angle_deg']:.0f}-degree void)", worst.get("location"),
             "draw the round if that is outside the part's tolerance"))
+    flanks = [item for item in _items(report, "sharp_edges") if item.get("made_by") == "end_mill_flank"]
+    if flanks:
+        worst = max(flanks, key=lambda item: item.get("deviation_mm") or 0)
+        found.append(CheckFinding(
+            "info", "cnc.flank_corners",
+            f"{len(flanks)} sharp corner(s) of {min(i['void_angle_deg'] for i in flanks):.0f} degrees or more along "
+            f"the tool's axis, made by its flank: its {mm(worst['radius_mm'])} mm radius leaves up to "
+            f"{mm(worst['deviation_mm'])} mm in the corner ({worst['edge']}, a {worst['void_angle_deg']:.0f}-degree "
+            "void)", worst.get("location"), "draw the corner as the tool leaves it if that is outside the tolerance"))
+        over = [item for item in flanks if (item.get("deviation_mm") or 0) > FLANK_RESIDUE_MM]
+        if over:
+            found.append(CheckFinding(
+                "warning", "cnc.flank_corner_residue",
+                f"{len(over)} corner(s) along the tool's axis keep more than {FLANK_RESIDUE_MM:g} mm of the "
+                f"{mm(worst['radius_mm'])} mm tool's radius, up to {mm(worst['deviation_mm'])} mm ({worst['edge']}, "
+                f"a {worst['void_angle_deg']:.0f}-degree corner; {FLANK_RESIDUE_MM:g} mm is text-to-cad's own "
+                "figure, no guide's)", worst.get("location"), "draw the corners' radius, or open the corners"))
     small = report.get("small_features") or {}
     if isinstance(small, dict) and (small.get("fine_faces") or 0) >= 20:
         found.append(CheckFinding("info", "cnc.fine_detail",

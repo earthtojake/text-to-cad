@@ -82,6 +82,9 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   curved tooth root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
   where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A
   crease a ball end mill rounds stays in the record (`made_by`, `deviation_mm`; `cnc.ball_creases`).
+  A corner of 150 degrees or more along the tool's axis (a many-sided pocket's, a faceted arc's) is the
+  end mill's flank's: made, the radius it leaves said (`end_mill_flank`, `deviation_mm`; `cnc.flank_corners`),
+  a warning past 0.05 mm (`cnc.flank_corner_residue`, text-to-cad's own figure).
 - `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
   `no_line_of_sight` faces nothing straight reaches, `special_cutter` edges only a T-slot, dovetail or
   keyseat cutter makes -- only where its shank finds a way out beside the whole edge, its disc
