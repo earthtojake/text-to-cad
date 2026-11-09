@@ -654,7 +654,7 @@ class Router:
             room, met = flood(free, count // nodes, window.nx, window.ny, via_ok, swap,
                               [state for state in ends if free[state]], marks, FLOOD)
             if len(room) < FLOOD and not met:
-                area = len(room) * self.pitch ** 2 / (count // nodes)
+                area = len(room) * self.pitch * self.pitch / (count // nodes)
                 walls = self._walls(room, free, window, want)
                 pocket = "a pocket under 0.1 mm²" if area < 0.1 else f"the {area:.1f} mm²"
                 narrower = (f"; a narrower track (the board allows {self.rules.min_track_width:g} mm) or another layer "

@@ -33,7 +33,7 @@ from cad.engine.formats.kicad.board_index import (
 from cad.engine.formats.kicad.board_index import (  # the board readers' own: a text as KiCad shows it
     _footprint_text, _hidden, _read_dimension, _stroke_width, _text_effects,
 )
-from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, hull, rotate
+from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, cos_sin_degrees, hull, rotate
 
 from .shapes import Shape, segment_point_distance
 
@@ -600,14 +600,12 @@ def _letters(text: str, node: list) -> list[XY]:
 
 def _turned(points: Sequence[XY], at: XY, angle: float) -> list[XY]:
     """``points``, in a text's frame (unturned about its anchor), on the board: turned as KiCad turns text."""
-    radians = math.radians(angle)
-    cos, sin = math.cos(radians), math.sin(radians)
+    cos, sin = cos_sin_degrees(angle)
     return [(at[0] + x * cos + y * sin, at[1] - x * sin + y * cos) for x, y in points]
 
 
 def _unturned(points: Sequence[XY], at: XY, angle: float) -> list[XY]:
-    radians = math.radians(angle)
-    cos, sin = math.cos(radians), math.sin(radians)
+    cos, sin = cos_sin_degrees(angle)
     return [((x - at[0]) * cos - (y - at[1]) * sin, (x - at[0]) * sin + (y - at[1]) * cos) for x, y in points]
 
 
@@ -641,7 +639,7 @@ def _text_copper(node: list, text: str, at: XY, angle: float, layer: str, uprigh
     """A text's copper on ``layer``, the text ``text`` anchored ``at`` and turned ``angle`` as KiCad places it; an
     ``upright`` one (a footprint's, which KiCad turns half round where it would read upside down, about its
     anchor, measured) at both angles."""
-    if upright and sexpr.value(_font(node), "face") is None and math.cos(math.radians(angle)) < 1e-9:
+    if upright and sexpr.value(_font(node), "face") is None and cos_sin_degrees(angle)[0] < 1e-9:
         return (*_text_copper(node, text, at, angle, layer), *_text_copper(node, text, at, angle - 180, layer))
     size, thickness, _, _ = _effects(node)
     if sexpr.value(_font(node), "face") is not None:  # TrueType: the outline KiCad drew, on the board
