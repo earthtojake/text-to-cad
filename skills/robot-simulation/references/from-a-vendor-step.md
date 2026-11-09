@@ -9,7 +9,7 @@ one run: a 270-part, six-servo desktop arm on a laptop.
 
 ## 1. Read it
 
-Copy the STEP to a path with no spaces in it, convert it once, and read the xbf in the model's body:
+Convert the STEP once (quote a path with spaces in it), and read the xbf in the model's body:
 
 ```bash
 cad step export vendor/arm.step vendor/arm.xbf
@@ -44,7 +44,11 @@ Write the grouping as a table of component name to link, and raise on any compon
 not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
 labels its bodies `SOLID` or `Body1`. `ranges` names such a part by its component
 (`Upper_arm v9/SOLID`), but `inspect` and the exported files show the label, so relabel each one as
-you take it: `if part.label in ("SOLID", "Body1"): part.label = path[-2]`. Put each link
+you take it: `if part.label in ("SOLID", "Body1"): part.label = path[-2]`. A vendor's STEP can also
+hold empty bodies, leaves with no volume (a placeholder `Wiring_holder`). Drop them as you take the
+leaves (`if part.volume <= 0: continue`): kept, they weigh nothing (a declared mass over them goes to
+the parts with volume, and one declared on them alone is refused: no volume to carry it), and they
+are only clutter in the links. Put each link
 in a `bd.Compound(children=..., label=...)` and name it for ROS with `link()`. A posed snapshot
 (step 7) shows every link moving as one piece. A part left behind or swinging with the wrong link
 was sorted wrong.
@@ -114,16 +118,25 @@ cad run src/arm.py
 cad model ranges "$ID"
 ```
 
-At its defaults (1 mm clearance, 1 degree steps), `ranges` took 19 s for six joints. With
-`--clearance 0.2 --step 0.5` it took 7 minutes, because it sweeps on one core. Start at the
-defaults, and narrow one question with a posed snapshot instead. Each stop should name two parts of
-neighbouring links. A stop at 0, or one that names a part of a link that is not a neighbour, means
-a part is in the wrong link. Vendor parts often sit a fraction of a millimetre apart (a jaw beside
-its servo's cover): the finding lists them as `near as built`, and such a pair stops a joint only
-where its gap closes to touching. A stop that says `closed to ... from ... mm as built` is one of them; check
-it with a posed snapshot. Write the stops into `angular_range`, rounded towards zero. A joint
-found clear all the way round has no stop in the parts: give it the actuator's own travel, or make
-it continuous ([Generate from CAD](../SKILL.md#generate-from-cad)).
+At its defaults (1 mm clearance, 1 degree steps), `ranges` took 23 s for six joints, and 19 s at
+`--clearance 0.3`, the least it takes. A smaller clearance only widens a range:
+the defaults stop each joint where its parts first come within 1 mm, and 0.3 where they all but
+touch. Start at the defaults, and narrow one question with a posed snapshot instead.
+
+Each stop names the two parts that met one step past it, and they should be parts of neighbouring
+links. One that names a part of a link that is not a neighbour means a part is in the wrong link.
+A stop at 0 means the same, unless the vendor drew the arm at that stop: an arm drawn folded flat
+(a forearm resting on its upper arm) has a real stop at 0, which a posed snapshot a few degrees
+the other way confirms. Vendor parts often sit a fraction of a millimetre apart (a jaw beside its
+servo's cover): the finding lists them as `near as built`, and such a pair stops a joint only
+where its gap closes to half, `closed to ... from ... mm as built`. Check such a stop with a posed
+snapshot at it. Where it is not the hardware's stop (the jaws still 20 mm apart when the jaw meets
+the cover), set the pair aside in the model, `exclude(jaw, "servo6_bottom_cover")`, and sweep
+again: the two parts never stop the sweep, every other pair of their links still does, and the
+jaw then stops on the other jaw. The same declaration tells the MJCF their links never collide.
+Write the stops into `angular_range`, rounded towards zero. A joint found clear all the way round
+has no stop in the parts: give it the actuator's own travel, or make it continuous
+([Generate from CAD](../SKILL.md#generate-from-cad)).
 
 Then declare `limits(arm, joint, effort=, velocity=, armature=)` from the actuator's datasheet:
 the stall torque in N*m, and the no-load speed in rad/s at the supply voltage you use. The armature
