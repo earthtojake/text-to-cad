@@ -160,12 +160,14 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   face, edge and vertex, so a STEP read back keeps them. It drops the rest of a
   material's look and physical fields, a face's material (the face keeps its colour),
   and the mechanism: a STEP is placements only.
-- **GLB**: glTF 2.0, Y up, in metres. One mesh per part, a node per placement named by
-  its occurrence, a PBR material per look (with the glTF extensions for IOR,
+- **GLB**: glTF 2.0, Y up, in metres. One mesh per part and the assembly's tree as nodes: a
+  node per sub-assembly with its components under it, each placed in its parent's frame and
+  named by its path below the root (`arm/head/pin_1`), so Blender and any glTF reader show the
+  sub-assemblies, a PBR material per look (with the glTF extensions for IOR,
   transmission, clear coat, anisotropy and emission where a material has them), each of
   the model's configuration sequences as an animation of its name
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
-  ([animation](animation.md)). A GLB exported from the model, by its id, by
+  ([animation](animation.md)); a sub-assembly that moves as one is keyed on its own node. A GLB exported from the model, by its id, by
   `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
   animations, byte for byte the same file. A transmissive material (`transmission` above zero) is
   written opaque at alpha 1, so another renderer refracts the part and does not also fade it; to fade

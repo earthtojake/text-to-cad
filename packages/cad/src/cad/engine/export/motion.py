@@ -12,6 +12,11 @@ the view places) or its rotation by more than ``ANGULAR_TOLERANCE`` radians. Few
 the sequence is smooth, more where it is not. A placement the sequence does not move has no
 channel. The GLB writes each placement's tracks as LINEAR keys within a tenth of a millimetre and
 of a degree of this bake (``keys.py``).
+
+What a clip keys is a node of the GLB's tree (``Target``): a sub-assembly whose every part is one
+link's, on its own node, so it moves as one, and every other moving part on its own; the topmost
+such node of each branch (``chosen``). Its keys are its place in the document's frame; the GLB makes
+them its parent's (``glb._local_rows``).
 """
 
 from __future__ import annotations
@@ -21,17 +26,65 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["Clip", "clips", "quaternion", "quaternions"]
+__all__ = ["Clip", "Target", "chosen", "clips", "quaternion", "quaternions"]
 
 # The checked fractions of a step between two keys.
 CHECKS = tuple(step / 8 for step in range(1, 8))
 
 
+@dataclass(frozen=True)
+class Target:
+    """A node of the GLB's tree a clip may key: its index (``node``), its parent's (None for one the
+    root holds), the instances it carries (``members``: a part's own, or every part under a
+    sub-assembly the GLB draws), the instance it is (a part's; None for a sub-assembly), its place in
+    the document's frame (``matrix``, 4x4, numpy) and its parent's (``within``)."""
+
+    node: int
+    parent: int | None
+    members: tuple[int, ...]
+    instance: int | None
+    matrix: Any
+    within: Any
+
+
+def chosen(targets: list[Target], signature: Any) -> list[Target]:
+    """The nodes a clip keys, from ``targets`` in the tree's order (a parent before its children):
+    each node whose every member moves alike -- ``signature(instance)`` the same for all, and not None
+    (what moves it nothing) -- unless a node above it is keyed already. A signature is ``(what, alike)``:
+    ``alike`` False keys its instance on its own node alone (a scale is about a part's own origin)."""
+    covered: set[int] = set()
+    found = []
+    for target in targets:
+        if target.parent in covered:
+            covered.add(target.node)
+            continue
+        signs = {signature(index) for index in target.members}
+        if len(signs) != 1:
+            continue
+        (sign,) = signs
+        if sign is None or (target.instance is None and not sign[1]):
+            continue
+        found.append(target)
+        covered.add(target.node)
+    return found
+
+
+def _targets(view: Any, candidates: list[Any]) -> list[Target]:
+    """``candidates`` as targets: instance indices each its own (its node the index), or targets."""
+    if all(isinstance(item, Target) for item in candidates):
+        return list(candidates)
+    instances = view.source.structure["instances"]
+    return [Target(index, None, (index,), index,
+                   np.array(instances[index]["matrix"], dtype=float).reshape(4, 4).T, np.eye(4))
+            for index in candidates]
+
+
 @dataclass
 class Clip:
-    """One motion baked: its name, duration, key times, and per moving instance (``instances``,
-    by instance index) its keys' translations and rotations, each ``(in-tangent, value,
-    out-tangent)`` rows (k x 3 x 3 and k x 3 x 4); the worst deviation found at the checks."""
+    """One motion baked: its name, duration, key times, and per moving node (``instances``, by its
+    target's ``node``) its keys' translations and rotations in the document's frame, each
+    ``(in-tangent, value, out-tangent)`` rows (k x 3 x 3 and k x 3 x 4); the worst deviation found
+    at the checks."""
 
     name: str
     duration: float
@@ -83,11 +136,17 @@ def hermite(first: np.ndarray, second: np.ndarray, span: float, s: float) -> np.
             + (-2 * s ** 3 + 3 * s ** 2) * second[1] + span * (s ** 3 - s ** 2) * second[0])
 
 
-class _Motion:
-    """One motion's true placements over its clip: every moving instance's world matrix in
-    the document's frame at ``t``."""
+def _owners(kinematics: dict[str, Any]) -> dict[int, int]:
+    """Each instance's link, by instance index."""
+    return {index: link for link, entry in enumerate(kinematics["links"]) for index in entry["instances"]}
 
-    def __init__(self, view: Any, name: str, candidates: list[int]) -> None:
+
+class _Motion:
+    """One motion's true placements over its clip: every moving node's world matrix in the
+    document's frame at ``t``. ``candidates`` are the targets a clip keys (``chosen``), or instance
+    indices, each its own node."""
+
+    def __init__(self, view: Any, name: str, candidates: list[Any]) -> None:
         from cad.engine import mechanism
 
         structure = view.source.structure
@@ -97,10 +156,17 @@ class _Motion:
         rest = mechanism.link_worlds(kinematics, {label: mechanism._as_tuple(value)
                                                   for label, value in kinematics["asBuilt"].items()})
         self.unrest = [np.linalg.inv(matrix) for matrix in rest]
-        owner = {index: link for link, entry in enumerate(kinematics["links"]) for index in entry["instances"]}
-        self.base = {index: np.array(structure["instances"][index]["matrix"], dtype=float).reshape(4, 4).T
-                     for index in candidates if index in owner}
+        links = _owners(kinematics)
+        # A node's link is its members' one link (``chosen`` keys no node whose members differ).
+        targets = _targets(view, candidates)
+        owner = {}
+        for target in targets:
+            found = {links.get(index) for index in target.members}
+            if len(found) == 1 and None not in found:
+                owner[target.node] = found.pop()
+        self.base = {target.node: np.asarray(target.matrix, dtype=float) for target in targets if target.node in owner}
         self.owner = owner
+        candidates = [target.node for target in targets]
         # The instances whose link stands anywhere else than as built, at a key or between keys.
         moved_links: set[int] = set()
         breaks = self.timeline.breaks
@@ -189,13 +255,17 @@ def _deviation(keys: _Keys, a: float, b: float) -> tuple[float, float]:
     return worst[0], worst[1]
 
 
-def clips(view: Any, candidates: list[int], size: float) -> list[Clip]:
-    """Every motion of the view's document baked (see the module docstring): ``candidates``
-    the instances the GLB has a node for, ``size`` the model's (mm)."""
+def clips(view: Any, candidates: list[Any], size: float) -> list[Clip]:
+    """Every motion of the view's document baked (see the module docstring): ``candidates`` the
+    GLB's nodes (``Target``, in its tree's order; a clip keys those ``chosen`` by their link) or
+    instance indices, each its own node; ``size`` the model's (mm)."""
     from cad.engine import mechanism
     from cad.engine.export import ExportRefused
 
     kinematics = view.source.structure.get("kinematics") or {}
+    if kinematics.get("motions") and candidates and all(isinstance(item, Target) for item in candidates):
+        links = _owners(kinematics)
+        candidates = chosen(candidates, lambda index: (links[index], True) if index in links else None)
     found = []
     linear, angular = mechanism.LINEAR_TOLERANCE * max(1.0, size), mechanism.ANGULAR_TOLERANCE
     for name in kinematics.get("motions") or {}:

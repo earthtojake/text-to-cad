@@ -23,13 +23,17 @@ deleted it). Both extensions are ratified glTF, so any writer of them can replac
 (meshoptimizer's `gltfpack -c` over a cube) as long as `glbMeshoptRoundTrip.test.js` still
 describes it.
 
-`animation.glb` and `motion.glb` are the engine's GLB export, baked by today's engine from the
-two small models `tests/python/packages/cad/engine/test_animation.py` writes (`CHANNELS` and
-`MOTION`), and that test holds them to what the baker writes now, key for key. `animation.glb`
+`animation.glb`, `motion.glb` and `nested.glb` are the engine's GLB export, baked by today's engine
+from the three small models `tests/python/packages/cad/engine/test_animation.py` writes (`CHANNELS`,
+`MOTION` and `NESTED`), and that test holds them to what the baker writes now, key for key and node
+for node. `animation.glb`
 carries the motion-free box's `animation()`, `showcase` (2 s): every channel path (translation,
 rotation, scale) authored under every interpolation (STEP, LINEAR, CUBICSPLINE) and a `pose`
 through the lid's hinge, written as the engine writes every GLB's keys, STEP as baked and the rest
 LINEAR within a tenth of a millimetre and of a degree of the bake; `motion.glb` a box whose only
-animation is its motion `open_close`, an AP242 configuration sequence. `bakedGlbAnimation.test.js` runs the Khronos glTF-Validator over both and
+animation is its motion `open_close`, an AP242 configuration sequence; `nested.glb` an assembly three
+levels deep written as its tree, placed at every level (a base, and an arm holding a bar and a head of
+one pin placed twice), its motion `sweep` keying the arm's node and its animation `show` the pins' in
+the head's frame. `bakedGlbAnimation.test.js` runs the Khronos glTF-Validator over all three and
 plays them with three.js. When the baker changes, write them again:
 `CAD_WRITE_FIXTURES=1 .venv/bin/python -m unittest tests.python.packages.cad.engine.test_animation`.

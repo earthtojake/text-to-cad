@@ -550,7 +550,8 @@ class GlbTest(_Folder):
         structure = document.Loaded(self.xbf).structure()
         self.assertEqual([animation["name"] for animation in gltf["animations"]], ["lift", "nod", "wave"])
         nodes = {node["name"]: node for node in gltf["nodes"][1:]}
-        self.assertIn("matrix", nodes["base"], "a placement no motion moves stands by its matrix")
+        self.assertNotIn("translation", nodes["base"], "a placement no motion moves stands by its matrix (none: at "
+                                                         "its parent's place)")
         for name in ("link", "tip"):
             self.assertNotIn("matrix", nodes[name], "an animated node stands by translation and rotation")
             self.assertEqual(len(nodes[name]["rotation"]), 4)

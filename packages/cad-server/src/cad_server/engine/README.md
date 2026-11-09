@@ -2155,8 +2155,13 @@ changed or new one fails in one line naming the folder and its mode.
   xbf reads back (written and read once, in memory), since a read moves placements by a last
   bit. So the same document is the same STEP in any process on any day, a build's or a cold
   read's of its xbf.
-- **GLB**: one mesh per prototype (indexed in 16 bits up to 65,535 vertices, in 32 past them), a
-  node per placement named by its path, a PBR material per
+- **GLB**: one mesh per prototype (indexed in 16 bits up to 65,535 vertices, in 32 past them), the
+  document's tree as nodes under one root named by the document, which turns its Z-up millimetres
+  into glTF's Y-up metres: a node per sub-assembly, its components under it, each placed in its
+  parent's frame (a node at its parent's place has no matrix), so Blender and any glTF reader show
+  the sub-assemblies and every part stands where the document places it; every node named by its
+  path below the root (`board/D44/housing`, its sub-assemblies `board` and `board/D44`), unique,
+  and a part's name the one a flat file of an earlier release gave it; a PBR material per
   look (a paint is a primitive of its own) with an extension for each part of the look past
   metallic-roughness (`KHR_materials_ior`, `_transmission`, `_volume`, `_clearcoat`,
   `_anisotropy`, `_emissive_strength`; a transmissive look `OPAQUE` at alpha 1 unless its PBR
@@ -2194,17 +2199,24 @@ changed or new one fails in one line naming the folder and its mode.
   hoc, never cached, never declared.
 
 **Motions in a GLB.** Each motion (**Configuration sequences**) is baked into a glTF animation of its name:
-translation and rotation channels for each placement it moves, baked CUBICSPLINE over one set of
-key times (`export/motion.py`) and written LINEAR (**GLB keys**). The keys start at the motion's waypoints and the halfway point
+translation and rotation channels for each node it moves, baked CUBICSPLINE over one set of
+key times (`export/motion.py`) and written LINEAR (**GLB keys**). A sub-assembly whose every part is one
+link's is keyed on its own node, so it moves as one and its parts stand still in it; every other moving
+part on its own node; the topmost such node of each branch (`motion.chosen`). An `animation()` keys
+alike: a sub-assembly whose every part the same references and link move, none of them scaled (a scale
+is about a part's own origin), on its node. A node's keys are in its parent's frame, worked out from
+the bake's place in the document's (`glb._local_rows`: the parent stands still in that clip, and the
+map is linear, so the curve between two keys is the parent's of the bake's), so at every time every
+part is where the bake puts it. The keys start at the motion's waypoints and the halfway point
 between each two; at a key every moving placement is where forward kinematics through the
 mechanism (its couplings included) puts it,
 its in- and out-tangents the one-sided derivatives there, so a step's speed may jump at a
 waypoint. A step is halved while at any eighth of it the Hermite strays from the true forward
 kinematics by more than 1e-3 of the model's size (the diagonal of what the GLB places) in a
-placement's origin or 1e-3 radian in its rotation, at most 4,097 keys. A moved placement's node
-stands by translation and rotation, every other by its matrix; placements whose keys are the
-same bytes (the parts of one link, each its own node) share one sampler, so a link's motion is
-written once however many parts it carries; the animation's
+placement's origin or 1e-3 radian in its rotation, at most 4,097 keys. A moved node
+stands by translation and rotation, every other by its matrix; nodes whose keys are the
+same bytes (the parts of one link under one parent, each its own node) share one sampler, so a link's
+motion is written once however many parts it carries; the animation's
 `extras.cad` holds the duration and `"kind": "motion"` (an earlier release's file calls it
 `extras.cadgen`, the duration alone; nothing the engine or the viewer runs reads either, a player
 taking a clip's length from its keys). A clip is the motion once, and a player repeats it. STEP,

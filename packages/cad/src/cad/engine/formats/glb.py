@@ -13,6 +13,9 @@ texture drawn on it.
   1000); the viewer's scene draws those metres as millimetres (core's ``lib/render/glbScene.js``), so a
   Quick Edit packet's camera, Measure's points and the ink are millimetres already
   (``millimetresPerSceneUnit`` 1).
+- **Paths**: an instance's path is its nodes' names from the root down, a node named by its whole
+  path below the root (the engine's GLB names every node so) standing in for its parent's
+  (``_below``): ``model/board/D44/housing``, as a flat file's would be.
 - **Parts**: a mesh's triangulations (nodes, triangles, normals, texture coordinates), read from
   OCCT's binary shape format with numpy (``mesh.py``'s way); one face per primitive, with the
   viewer's feature edges (``buffer.py``, three's rounding at 1e-4 of the file's metres).
@@ -323,7 +326,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
                 XCAFDoc_ShapeTool.GetReferredShape_s(component, referred)
                 child = _name(component) or _name(referred) or f"{name}.{at}"
                 node["children"].append(visit(referred, world @ _matrix(XCAFDoc_ShapeTool.GetLocation_s(component)),
-                                              names + [child], child))
+                                              _below(names, child), child))
             return node
         key = entry(label)
         if key not in leaves:
@@ -439,6 +442,15 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
     if unused:
         warnings.append(f"its {', '.join(unused)} are not drawn: the base colour texture is")
     return parts, placed, tree, warnings
+
+
+def _below(names: list[str], child: str) -> list[str]:
+    """A child's names from the root down: its parent's and its own, or -- a node named by its whole path
+    below the root, as the engine's GLB names each (``board/D44`` under ``board``) -- its own in place
+    of its parent's, so its path is the document's (``model/board/D44``), not ``model/board/board/D44``."""
+    if len(names) > 1 and child.startswith(names[-1] + "/"):
+        return [*names[:-1], child]
+    return [*names, child]
 
 
 def glb_file(path: Path) -> Foreign:

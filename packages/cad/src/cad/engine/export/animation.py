@@ -19,6 +19,12 @@ central differences of its samples, in the limit, and zero where a channel start
 -- so a speed may jump where one channel hands over to the next. Every sampler runs from 0 to the
 duration, so a player's clip is the animation once. The GLB writes every channel but a STEP one
 as LINEAR keys within a tenth of a millimetre and of a degree of this bake (``keys.py``).
+
+A channel is a node of the GLB's tree (``motion.Target``): a sub-assembly whose every part the same
+references and the same link move, and none scales, keyed on its own node, so it moves as one; every
+other moving part on its own (a scale is about the part's own origin); the topmost such node of each
+branch (``motion.chosen``). Its values are its place in the document's frame; the GLB makes them its
+parent's (``glb._local_rows``).
 """
 
 from __future__ import annotations
@@ -29,7 +35,7 @@ from typing import Any
 
 import numpy as np
 
-from cad.engine.export.motion import CHECKS, hermite, quaternion
+from cad.engine.export.motion import CHECKS, Target, chosen, hermite, quaternion
 
 __all__ = ["Baked", "Channel", "bake"]
 
@@ -40,8 +46,9 @@ _INTERPOLATION = {"step": "STEP", "linear": "LINEAR", "cubic": "CUBICSPLINE"}
 
 @dataclass
 class Channel:
-    """One glTF channel: its instance, its path, its interpolation, its key times and its outputs
-    (a row per key; three per key, in-tangent, value, out-tangent, for CUBICSPLINE)."""
+    """One glTF channel: its node (``instance``: its target's ``node``), its path, its interpolation,
+    its key times and its outputs in the document's frame (a row per key; three per key, in-tangent,
+    value, out-tangent, for CUBICSPLINE)."""
 
     instance: int
     path: str
@@ -356,6 +363,8 @@ class _Animation:
             for index in members[item.leaves]:
                 self.of.setdefault(index, []).append(item)
         self.base = {index: np.asarray(item.matrix, dtype=float) for index, item in placed.items()}
+        # What a channel moves: a node of the GLB (``aim``), its place at rest, its references and its link.
+        self.targets: dict[int, tuple[np.ndarray, list[_Group], int | None]] = {}
         self.pose: _Pose | None = None
         self.link: dict[int, int] = {}
         if pose_tracks:
@@ -370,9 +379,29 @@ class _Animation:
                 if owner.get(index) in moved:
                     self.link[index] = owner[index]
 
-    def paths(self, index: int) -> dict[str, tuple[set[str], set[float]]]:
-        """The paths the animation changes on an instance: per path, its channels' interpolations
+    def aim(self, target: Target) -> None:
+        """Key ``target``'s node: it stands where its members do, moved by their references and link."""
+        first = target.members[0]
+        self.targets[target.node] = (np.asarray(target.matrix, dtype=float), self.of.get(first, []),
+                                     self.link.get(first))
+
+    def signature(self, index: int) -> tuple | None:
+        """What moves an instance (``motion.chosen``): its references and its link, None for nothing;
+        a part that scales is keyed alone."""
+        paths = self._paths(self.of.get(index, ()), self.link.get(index))
+        if not paths:
+            return None
+        if "scale" in paths:
+            return (("scale", index), False)
+        return ((tuple(id(item) for item in self.of.get(index, ())), self.link.get(index)), True)
+
+    def paths(self, key: int) -> dict[str, tuple[set[str], set[float]]]:
+        """The paths the animation changes on a node (``aim``): per path, its channels' interpolations
         and their key times."""
+        _base, of, link = self.targets[key]
+        return self._paths(of, link)
+
+    def _paths(self, of: Any, link: int | None) -> dict[str, tuple[set[str], set[float]]]:
         found: dict[str, tuple[set[str], set[float]]] = {}
 
         def add(path: str, curve: Any, times: Any) -> None:
@@ -380,7 +409,7 @@ class _Animation:
             kinds.add(curve)
             breaks.update(float(t) for t in times)
 
-        for item in self.of.get(index, ()):
+        for item in of:
             for curve in item.translations:
                 add("translation", curve.interpolation, curve.times)
             for curve, _axis, _pivot in item.rotations:
@@ -388,18 +417,18 @@ class _Animation:
                 add("rotation", curve.interpolation, curve.times)
             for curve in item.scales:
                 add("scale", curve.interpolation, curve.times)
-        if index in self.link:
+        if link is not None:
             for track in self.pose.tracks:
                 for path in ("translation", "rotation"):
                     add(path, track.interpolation, [when for when, _values in track.keys])
         return found
 
-    def matrix(self, index: int, t: float) -> np.ndarray:
+    def matrix(self, key: int, t: float) -> np.ndarray:
         held = self.held_at.setdefault(t, {})
-        found = self.base[index]
-        if index in self.link:
-            found = self.pose.deltas(t)[self.link[index]] @ found
-        for item in reversed(self.of.get(index, ())):
+        found, of, link = self.targets[key]
+        if link is not None:
+            found = self.pose.deltas(t)[link] @ found
+        for item in reversed(of):
             key = id(item)
             moved = held.get(key)
             if moved is None:
@@ -407,13 +436,13 @@ class _Animation:
             found = moved @ found
         return found
 
-    def value(self, index: int, path: str, t: float) -> np.ndarray:
+    def value(self, key: int, path: str, t: float) -> np.ndarray:
         if path == "scale":
             factor = 1.0
-            for item in self.of.get(index, ()):
+            for item in self.targets[key][1]:
                 factor *= item.factor(t)
             return np.full(3, factor)
-        matrix = self.matrix(index, t)
+        matrix = self.matrix(key, t)
         return matrix[:3, 3].copy() if path == "translation" else quaternion(matrix)
 
 
@@ -498,7 +527,7 @@ def _channel(motion: _Animation, index: int, path: str, kinds: set[str], breaks:
         # apart): the key count then never reaches MOST_KEYS and the loop would not end, so a pass
         # that does not grow the keys is refused, as too many keys already is.
         if len(grown) == len(times) or len(grown) > mechanism.MOST_KEYS:
-            raise ExportRefused(f"the {path} of instance {index} does not settle within the tolerance in "
+            raise ExportRefused(f"the {path} of node {index} does not settle within the tolerance in "
                                 f"{mechanism.MOST_KEYS} keys")
         times = grown
     rows = np.array([key(t) for t in times])
@@ -517,23 +546,23 @@ def _signed(path: str, rows: np.ndarray) -> np.ndarray:
     return rows
 
 
-def bake(view: Any, held: dict[int, Any], shown: list[Any], node_of: dict[int, int], size: float) -> list[Baked]:
+def bake(view: Any, held: dict[int, Any], shown: list[Any], targets: list[Target], size: float) -> list[Baked]:
     """Every animation of the view's source baked (see the module): ``shown`` the placements the
-    GLB draws, ``node_of`` their nodes, ``size`` the model's (mm)."""
+    GLB draws, ``targets`` its nodes in its tree's order, ``size`` the model's (mm)."""
     from cad.engine import mechanism
 
     found: list[Baked] = []
     tolerance = {"translation": mechanism.LINEAR_TOLERANCE * max(1.0, size),
                  "rotation": mechanism.ANGULAR_TOLERANCE, "scale": SCALE_TOLERANCE}
-    drawn = [item for item in shown if item.instance in node_of]
     for resolved in (view.source.animations or {}).values():
-        motion = _Animation(view, resolved, held, drawn)
+        motion = _Animation(view, resolved, held, shown)
         baked = Baked(resolved.name, resolved.duration)
         worst = [0.0, 0.0]
-        for item in drawn:
-            for path, (eases, breaks) in sorted(motion.paths(item.instance).items()):
-                channel, deviation = _channel(motion, item.instance, path, eases, breaks, tolerance)
-                matrix = np.asarray(item.matrix, dtype=float)
+        for target in chosen(targets, motion.signature):
+            motion.aim(target)
+            for path, (eases, breaks) in sorted(motion.paths(target.node).items()):
+                channel, deviation = _channel(motion, target.node, path, eases, breaks, tolerance)
+                matrix = np.asarray(target.matrix, dtype=float)
                 rest = {"translation": matrix[:3, 3], "rotation": quaternion(matrix), "scale": np.ones(3)}[path]
                 if not _moves(channel, rest):
                     continue

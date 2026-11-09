@@ -5,9 +5,14 @@ the model declares -- and into a GLB of its xbf, the same bytes -- STEP and LINE
 say; the GLB's LINEAR keys within ``KEY_MM`` and ``KEY_DEGREES`` of the dense bake at 240 Hz, and
 its STEP keys the bake's own.
 
-The two GLBs the core suite plays and validates (``packages/core/src/lib/render/fixtures``:
-``animation.glb``, ``motion.glb``) are this module's ``CHANNELS`` and ``MOTION`` baked; a test
-holds them to what the baker writes now. ``CAD_WRITE_FIXTURES=1`` writes them afresh."""
+A GLB holds the assembly's tree as nested nodes (``NESTED``): every part where the document places it,
+a sub-assembly that moves as one keyed on its own node, every other moving part on its own, in its
+parent's frame.
+
+The three GLBs the core suite plays and validates (``packages/core/src/lib/render/fixtures``:
+``animation.glb``, ``motion.glb``, ``nested.glb``) are this module's ``CHANNELS``, ``MOTION`` and
+``NESTED`` baked; a test holds them to what the baker writes now. ``CAD_WRITE_FIXTURES=1`` writes them
+afresh."""
 
 from __future__ import annotations
 
@@ -135,6 +140,39 @@ def fidelity():
     return box
 '''
 
+# An assembly three levels deep, placed at every level: a base and a jointed arm holding a bar and a
+# head, the head two placements of one pin. Its motion swings the arm as one; its animation lifts the
+# head and then one pin further, so the pins move apart.
+NESTED = '''
+import build123d as bd
+from cad import glb, xbf
+from cad.build123d import animation, configuration_sequence, mechanism_state
+
+
+@xbf("XBF/nested.xbf")
+@glb("nested.glb")
+def nested():
+    base = bd.Box(80, 40, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
+    base.label = "base"
+    bar = bd.Box(40, 10, 4, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    bar.label = "bar"
+    pin = bd.Cylinder(2, 6, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+    pins = [pin.moved(bd.Location((x, 0, 0))) for x in (0, 8)]
+    pins[0].label, pins[1].label = "pin_1", "pin_2"
+    head = bd.Compound(children=pins, label="head").moved(bd.Location((30, 0, 4), (0, 0, 1), 90))
+    arm = bd.Compound(children=[bar, head], label="arm").moved(bd.Location((-20, 0, 0), (0, 0, 1), 30))
+    swing = bd.Axis((-20, 0, 0), (0, 0, 1))
+    bd.RevoluteJoint("swing", base, axis=swing, angular_range=(-90, 90))
+    bd.RigidJoint("swing", arm, bd.Plane(origin=swing.position, z_dir=swing.direction).location)
+    model = bd.Compound(children=[base, arm], label="nested")
+    mechanism_state(model, "out", swing=60)
+    show = animation(model, "show", duration=2)
+    show.translation("arm/head", by=(0, 0, 10))
+    show.translation("arm/head/pin_2", by=(0, 0, 5), start=1, end=2)
+    return configuration_sequence(model, "sweep", [(0, {"swing": 0}), (1, "out"), (2, {"swing": 0})])
+'''
+
+
 def _glb(path: Path) -> tuple[dict, Any]:
     """A GLB's JSON chunk, and a reader of its accessors (as float64 rows)."""
     data = path.read_bytes()
@@ -190,6 +228,44 @@ def _rotation(q: np.ndarray) -> np.ndarray:
 
 def _turn(q_a: np.ndarray, q_b: np.ndarray) -> float:
     return 2 * math.acos(min(1.0, abs(float(np.dot(q_a / np.linalg.norm(q_a), q_b / np.linalg.norm(q_b))))))
+
+
+def _worlds(gltf: dict, posed: dict[int, dict[str, np.ndarray]] | None = None) -> dict[int, np.ndarray]:
+    """Each node below the root, by index, where the node tree places it in the document's frame (the
+    root's units transform left out): the product of the nodes' down the tree, ``posed`` overriding a
+    node's translation, rotation or scale (a clip's at some time)."""
+    nodes, posed, found = gltf["nodes"], posed or {}, {}
+
+    def local(index: int) -> np.ndarray:
+        node = nodes[index]
+        if "matrix" in node:
+            return np.array(node["matrix"], dtype=float).reshape(4, 4).T
+        given = {**node, **posed.get(index, {})}
+        matrix = np.eye(4)
+        matrix[:3, :3] = _rotation(np.asarray(given.get("rotation", (0, 0, 0, 1)), dtype=float)) * np.asarray(
+            given.get("scale", (1, 1, 1)), dtype=float)
+        matrix[:3, 3] = given.get("translation", (0, 0, 0))
+        return matrix
+
+    def visit(index: int, parent: np.ndarray) -> None:
+        found[index] = parent @ local(index)
+        for child in nodes[index].get("children") or ():
+            visit(child, found[index])
+
+    for child in nodes[gltf["scenes"][0]["nodes"][0]].get("children") or ():
+        visit(child, np.eye(4))
+    return found
+
+
+def _posed(gltf: dict, read: Any, animation: dict, t: float) -> dict[int, dict[str, np.ndarray]]:
+    """What ``animation`` puts its nodes at, at ``t``: per node, per path, its sampler's value."""
+    found: dict[int, dict[str, np.ndarray]] = {}
+    for channel in animation["channels"]:
+        sampler = animation["samplers"][channel["sampler"]]
+        path = channel["target"]["path"]
+        found.setdefault(channel["target"]["node"], {})[path] = _sample(
+            read(sampler["input"])[:, 0], read(sampler["output"]), sampler["interpolation"], t, path == "rotation")
+    return found
 
 
 def _smooth(s: float) -> float:
@@ -478,9 +554,10 @@ class GlbTest(_Folder):
         nodes = {node["name"]: node for node in gltf["nodes"][1:]}
         self.assertNotIn("matrix", nodes["knob"], "an animated node stands by translation and rotation")
 
-    def test_parts_that_move_as_one_share_one_sampler(self) -> None:
-        """Two parts of one reference stand where its motion puts them, the same keys: their channels
-        point at one sampler, written once, and each still plays its part's motion."""
+    def test_a_sub_assembly_that_moves_as_one_is_keyed_on_its_own_node_and_parts_alike_share_a_sampler(self) -> None:
+        """A reference to a sub-assembly moves it as one: its node is keyed, once, and its parts keep
+        their places in it. Two parts of it moved alike by references of their own are keyed on their own
+        nodes, and their channels, the same keys, point at one sampler, written once."""
         self.build("""
             import build123d as bd
             from cad import glb
@@ -498,24 +575,31 @@ class GlbTest(_Folder):
                 show = animation(model, "lift", duration=2)
                 show.translation("arm", by=(0, 0, 25), interpolation="LINEAR")
                 show.rotation("arm", axis=(0, 0, 1), by=90, start=1, end=2)
+                pair = animation(model, "pair", duration=1)
+                pair.translation("arm/upper", by=(0, 0, 5), interpolation="LINEAR")
+                pair.translation("arm/lower", by=(0, 0, 5), interpolation="LINEAR")
                 return model
         """, "arm")
         gltf, read = _glb(self.folder / "arm.glb")
         names = [node["name"] for node in gltf["nodes"]]
-        [lift] = gltf["animations"]
+        lift, pair = gltf["animations"]
         sampler = {(names[channel["target"]["node"]], channel["target"]["path"]): channel["sampler"]
                    for channel in lift["channels"]}
-        self.assertEqual(sorted(sampler), [("arm/lower", "rotation"), ("arm/lower", "translation"),
-                                           ("arm/upper", "rotation"), ("arm/upper", "translation")])
-        for path in ("translation", "rotation"):
-            self.assertEqual(sampler[("arm/upper", path)], sampler[("arm/lower", path)], path)
-        self.assertEqual(len(lift["samplers"]), 2, "one sampler per motion, not per part")
-        outputs = [entry["output"] for entry in lift["samplers"]]
-        self.assertEqual(len(set(outputs)), 2)
-        at = {path: lift["samplers"][sampler[("arm/upper", path)]] for path in ("translation", "rotation")}
+        self.assertEqual(sorted(sampler), [("arm", "rotation"), ("arm", "translation")], "the sub-assembly's node")
+        self.assertEqual(len(lift["samplers"]), 2)
+        at = {path: lift["samplers"][sampler[("arm", path)]] for path in ("translation", "rotation")}
         moved = _sample(read(at["translation"]["input"])[:, 0], read(at["translation"]["output"]),
                         at["translation"]["interpolation"], 2.0, False)
         np.testing.assert_allclose(moved, [0, 0, 25], atol=1e-3)
+        arm = gltf["nodes"][names.index("arm")]
+        self.assertEqual([names[child] for child in arm["children"]], ["arm/upper", "arm/lower"])
+        for child in arm["children"]:
+            self.assertNotIn("matrix", gltf["nodes"][child], "a part at its sub-assembly's place has no matrix")
+        sampler = {(names[channel["target"]["node"]], channel["target"]["path"]): channel["sampler"]
+                   for channel in pair["channels"]}
+        self.assertEqual(sorted(sampler), [("arm/lower", "translation"), ("arm/upper", "translation")])
+        self.assertEqual(sampler[("arm/upper", "translation")], sampler[("arm/lower", "translation")])
+        self.assertEqual(len(pair["samplers"]), 1, "one sampler per motion, not per part")
 
     def test_the_glbs_linear_keys_stay_within_a_tenth_of_the_dense_bake_at_240_hz(self) -> None:
         """A configuration sequence and an animation with a pose, an explode, a stagger and a hide,
@@ -622,12 +706,114 @@ class GlbTest(_Folder):
                          "its own animation alone: read_xbf imports a part, never the child's record")
 
 
+class NestedTest(_Folder):
+    """A GLB holds the assembly's tree: every part where the document places it, a clip's keys in each
+    node's parent's frame, and every part at every time where the bake puts it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.build(NESTED, "nested", stem="nested")
+        self.gltf, self.read = _glb(self.folder / "nested.glb")
+        self.structure = document.Loaded(self.folder / "XBF/nested.xbf").structure()
+        names = [node["name"] for node in self.gltf["nodes"]]
+        # Each instance's node: its path below the root, as a flat file named it.
+        self.node = {at: names.index(instance["path"].split("/", 1)[1])
+                     for at, instance in enumerate(self.structure["instances"])}
+
+    def test_its_nodes_are_the_assembly_tree_and_every_part_stands_where_the_document_places_it(self) -> None:
+        from cad.engine.export import translate
+
+        nodes = self.gltf["nodes"]
+
+        def tree(index: int) -> tuple:
+            return (nodes[index]["name"], tuple(tree(child) for child in nodes[index].get("children") or ()))
+
+        self.assertEqual(tree(self.gltf["scenes"][0]["nodes"][0]), ("nested", (
+            ("base", ()), ("arm", (("arm/bar", ()), ("arm/head", (("arm/head/pin_1", ()), ("arm/head/pin_2", ()))))))))
+        by_name = {node["name"]: node for node in nodes}
+        self.assertEqual([name for name, node in by_name.items() if "mesh" in node],
+                         ["base", "arm/bar", "arm/head/pin_1", "arm/head/pin_2"], "a sub-assembly draws nothing")
+        self.assertEqual(by_name["arm/head/pin_1"]["mesh"], by_name["arm/head/pin_2"]["mesh"], "one pin, placed twice")
+        self.assertEqual(len(self.gltf["meshes"]), 3)
+        root = nodes[self.gltf["scenes"][0]["nodes"][0]]
+        self.assertEqual(root["scale"], [0.001, 0.001, 0.001])
+        np.testing.assert_allclose(root["rotation"], [-0.5 ** 0.5, 0, 0, 0.5 ** 0.5])
+        # Placed in its parent's frame at every level: the arm at 30 degrees, the head at 90 in it, a pin along it.
+        np.testing.assert_allclose(by_name["arm"]["translation"], [-20, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(by_name["arm/head"]["matrix"][12:15], [30, 0, 4], atol=1e-12)
+        np.testing.assert_allclose(by_name["arm/head/pin_2"]["translation"], [8, 0, 0], atol=1e-12)
+        self.assertNotIn("matrix", by_name["arm/bar"], "a part at its sub-assembly's place has no matrix")
+        # Walked down the tree, every part is where the document places it: a flat file's matrix.
+        worlds = _worlds(self.gltf)
+        for at, instance in enumerate(self.structure["instances"]):
+            np.testing.assert_allclose(worlds[self.node[at]], np.array(instance["matrix"]).reshape(4, 4).T, atol=1e-9,
+                                       err_msg=instance["path"])
+        again = self.folder / "again.glb"
+        translate(self.folder / "XBF/nested.xbf", None, again)
+        self.assertEqual(again.read_bytes(), (self.folder / "nested.glb").read_bytes(), "the xbf's GLB is the build's")
+        # A still reads the tree with OCCT: its instances' paths are the document's, not each name repeated.
+        from cad.engine.formats.glb import read_glb
+
+        _parts, placed, _tree, _warnings = read_glb(self.folder / "nested.glb")
+        self.assertEqual([item.path for item in placed], [instance["path"] for instance in self.structure["instances"]])
+
+    def test_a_clip_keys_a_sub_assembly_that_moves_as_one_and_every_part_stands_where_the_bake_puts_it(self) -> None:
+        names = [node["name"] for node in self.gltf["nodes"]]
+        sweep, show = self.gltf["animations"]
+        self.assertEqual(sorted({names[channel["target"]["node"]] for channel in sweep["channels"]}), ["arm"],
+                         "the arm's link is a sub-assembly: its node moves, its parts stand in it")
+        self.assertEqual(sorted({names[channel["target"]["node"]] for channel in show["channels"]}),
+                         ["arm/head/pin_1", "arm/head/pin_2"], "the pins move apart: each its own node")
+        size = math.dist((-40, -20, -10), (40, 20, 10))
+        between = mechanism.LINEAR_TOLERANCE * size * 1.5 + keys.KEY_MM
+        turning = mechanism.ANGULAR_TOLERANCE * 1.5 + math.radians(keys.KEY_DEGREES)
+        timeline = mechanism.Timeline(self.structure["kinematics"], "sweep")
+        for t in np.linspace(0.0, 2.0, 41):
+            worlds = _worlds(self.gltf, _posed(self.gltf, self.read, sweep, float(t)))
+            truth = mechanism.posed_instances(self.structure, timeline.values(float(t)))
+            for at, instance in enumerate(self.structure["instances"]):
+                want, got = np.array(truth[at]).reshape(4, 4).T, worlds[self.node[at]]
+                # Within the bake's tolerance and the keys'.
+                self.assertLess(float(np.linalg.norm(got[:3, 3] - want[:3, 3])), between, (instance["path"], t))
+                turned = got[:3, :3].T @ want[:3, :3]
+                self.assertLess(math.acos(max(-1.0, min(1.0, (np.trace(turned) - 1) / 2))), turning, (instance["path"], t))
+        # At its keys (the bake's, or its curve's: ``keys.linear``) the arm's own node is where forward
+        # kinematics puts the arm, its link's motion times its place at rest, within the bake's tolerance.
+        arm, bar = names.index("arm"), next(at for at, node in self.node.items() if names[node] == "arm/bar")
+        at_rest = _worlds(self.gltf)[arm]
+        bar_rest = np.array(self.structure["instances"][bar]["matrix"]).reshape(4, 4).T
+        for channel in sweep["channels"]:
+            sampler = sweep["samplers"][channel["sampler"]]
+            for t, row in zip(self.read(sampler["input"])[:, 0], self.read(sampler["output"])):
+                moved = np.array(mechanism.posed_instances(self.structure, timeline.values(float(t)))[bar]).reshape(4, 4).T
+                want = moved @ np.linalg.inv(bar_rest) @ at_rest
+                if channel["target"]["path"] == "translation":
+                    self.assertLess(float(np.linalg.norm(row - want[:3, 3])), mechanism.LINEAR_TOLERANCE * size * 1.5, t)
+                else:
+                    turned = _rotation(row).T @ want[:3, :3]
+                    self.assertLess(math.acos(max(-1.0, min(1.0, (np.trace(turned) - 1) / 2))),
+                                    mechanism.ANGULAR_TOLERANCE * 1.5, t)
+        rest = {at: np.array(instance["matrix"]).reshape(4, 4).T for at, instance in enumerate(self.structure["instances"])}
+        paths = [instance["path"] for instance in self.structure["instances"]]
+        for t in np.linspace(0.0, 2.0, 41):
+            worlds = _worlds(self.gltf, _posed(self.gltf, self.read, show, float(t)))
+            lift = {"nested/arm/head/pin_1": 10 * _smooth(t / 2),
+                    "nested/arm/head/pin_2": 10 * _smooth(t / 2) + 5 * _smooth(t - 1)}
+            for at, path in enumerate(paths):
+                want = rest[at].copy()
+                want[2, 3] += lift.get(path, 0.0)
+                np.testing.assert_allclose(worlds[self.node[at]][:3, 3], want[:3, 3],
+                                           atol=mechanism.LINEAR_TOLERANCE * size + keys.KEY_MM, err_msg=f"{path} at {t}")
+                np.testing.assert_allclose(worlds[self.node[at]][:3, :3], want[:3, :3], atol=1e-6, err_msg=f"{path} at {t}")
+
+
 class FixturesTest(_Folder):
     """The core suite's animated GLBs are what the baker writes: their animations, key for key."""
 
     def test_the_core_suites_glb_fixtures_are_the_bakers(self) -> None:
         for source, name, glb, fixture in ((CHANNELS.replace("{more}", "pass"), "channels", "channels.glb",
-                                            "animation.glb"), (MOTION, "motion_box", "motion.glb", "motion.glb")):
+                                            "animation.glb"), (MOTION, "motion_box", "motion.glb", "motion.glb"),
+                                           (NESTED, "nested", "nested.glb", "nested.glb")):
             with self.subTest(fixture=fixture):
                 self.build(source, name, stem=name)
                 made = self.folder / glb
@@ -636,7 +822,8 @@ class FixturesTest(_Folder):
                 ours, read_ours = _glb(made)
                 theirs, read_theirs = _glb(FIXTURES / fixture)
                 self.assertEqual(ours["animations"], theirs["animations"])
-                self.assertEqual([node["name"] for node in ours["nodes"]], [node["name"] for node in theirs["nodes"]])
+                self.assertEqual([(node["name"], node.get("children")) for node in ours["nodes"]],
+                                 [(node["name"], node.get("children")) for node in theirs["nodes"]], "its node tree")
                 for animation in ours["animations"]:
                     for sampler in animation["samplers"]:
                         for key in ("input", "output"):
