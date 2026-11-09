@@ -42,9 +42,9 @@ terminal UI show none and are served as text clients.
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
-  newer card retires the older ones. The Claude app's Code tab draws the card too, but carries none of its calls
-  back: there the card tries the engine directly, else links the CAD Viewer (**A card says
-  why it cannot work**, below).
+  newer card retires the older ones. The Claude app's Code tab draws the card of Claude Desktop's own
+  server and carries its calls; a server Claude Code starts there gets cards whose calls it refuses, so
+  that server lists no tools ([Claude: where the card comes from](#claude-where-the-card-comes-from)).
 
 A client that renders no MCP Apps never loads this page. Its `cad_show` opens the
 model's page in this machine's CAD Viewer, `/<id>` (the file registered by its id, as
@@ -93,6 +93,49 @@ The same event is what a view's status line says of a build behind the model it 
 (`@cad/ui`'s `kit/status`, in the view's language), so a card and an agent read one shape. No tool builds source
 text: to build a shape, wrap the shape in a decorated function and run its script.
 Inspection never builds. The web viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
+
+## Claude: where the card comes from
+
+| Host | CAD's server | Cards |
+| --- | --- | --- |
+| Claude Desktop, Chat tab | `mcpServers.cad` in `claude_desktop_config.json`, which `cad setup` writes wherever Claude Desktop is | yes |
+| Claude Desktop, Code tab | the same entry: the desktop app starts it and offers it to the Claude Code session | yes |
+| Claude Code (its plugin, `claude mcp add`) | none: the plugin carries the skills alone, and `cad setup` removes a `claude mcp add` CAD server, the user's or a project's. claude.ai's directory's copy (`claude-plugin`) still names one, which lists no tools when Claude Code starts it | none: the skills' `cad viewer` link, in the browser pane or the browser |
+| Claude Code in a terminal | none | it draws none |
+
+Claude Desktop reads its config only when it starts: once `cad setup` first gives it CAD's server,
+quit and reopen it (setup's last lines say so; on Windows, quit it from the system tray). A new pin
+needs no restart: the server it runs keeps working with the newer engine. No developer mode is needed.
+
+What decides it, measured:
+
+- **The desktop-config server works in the Code tab.** 2026-10-04: its card drew and `cad_view`
+  and `cad_screenshot` answered. 2026-11-09, Claude Desktop 4.23118: the same (the server
+  `CAD_INSTALL_CHANNEL=claude-desktop`), and again with `developer_settings.json` at
+  `"allowDevTools": false`. The first card after the app starts can take a while to connect: a
+  `cad_view` about 6 s after `cad_show` said it had not reached CAD's server, and at about 20 s it
+  answered.
+- **A server Claude Code starts gets cards whose calls the Code tab refuses.** 2026-10-25: "IPC not
+  available for MCP tool call" (**No channel**, below); 2026-11-09, in the same session as the working
+  card above, the plugin's server (`claude-install`) showing the same file never reached CAD's server.
+  anthropics/claude-code#106708 reports the same split. The app carries such calls only with its
+  `quietOrchard` gate on, which needs GrowthBook flag 1824765482, off on the accounts we tried. To see
+  whether an account has it: `~/Library/Application Support/<profile>/fcache` (`Claude`, or the
+  profile's folder) is an 8-byte header, then gzipped JSON whose `features` holds the flags by id.
+- **The marker.** Claude Code sets `CLAUDE_CODE_ENTRYPOINT` for every server it starts (`cli` in a
+  terminal, `sdk-cli` headless, `claude-desktop` in the Code tab, with `CLAUDECODE=1`); the
+  `cad-mcp` processes the desktop app starts have neither (measured 2026-11-09). `cad-mcp` passes it
+  with the host's `initialize` (`claudeCode`), and the server lists no tools for that session
+  (`cad_server/mcp/host.py`'s `claude_code`), its instructions naming the cad skill, the `cad` command
+  and the desktop config. `CAD_MCP_CARDS=1` in `cad-mcp`'s environment keeps the tools, to test the
+  Claude Code path.
+
+Decided 2026-11-09: Claude Code gets the skills from the plugin, and CAD's card from Claude
+Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json` in
+`.claude-plugin/plugin.json` again, drop `CLAUDE_SERVER` from `scripts/release/plugin_branch.py`
+(the directory's copy is then main's), drop the `remove server` step for Claude Code in
+`cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
+server the Code tab gets: with both, it lists CAD twice.
 
 ## The rules
 

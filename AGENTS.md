@@ -105,7 +105,8 @@ which points both at the checkout.
 - `skills/`: agent skills and their references/scripts. They ship byte for byte in the server's
   wheel (`cad_server/_runtime/plugin`, with the plugin manifests), from which the server writes the
   plugin folder (`<state>/plugin`) that `cad setup` points every agent app at.
-- `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`, and the
+- `.claude-plugin/` (the skills alone: Claude Code takes CAD's server from Claude Desktop's config),
+  `.codex-plugin/`, `.cursor-plugin/`, `.grok-plugin/`, `gemini-extension.json`, and the
   [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
   `skills/` directly. Installers take it from the `latest` branch, which
