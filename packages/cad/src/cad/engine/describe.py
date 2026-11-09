@@ -64,10 +64,11 @@ its limits are each angle's range less its as-built angle.
 **Geometry and mass.** Each instance a link holds is a visual of its prototype's mesh, placed in the
 link frame; its collision is what the prototype declares, ``collision_default`` where it declares
 none: its mesh, a primitive fitted to its oriented bounding box (``Bnd_OBB``), or, ``decomposed``, the
-convex hulls CoACD cuts that mesh into with the options it declares (``hulls``: from the engine's
-cache by the mesh's digest and the options, else the coacd integration's CoACD in a process of its own, every decomposed
-prototype in one call; refused by name where neither has them), each hull a mesh of the description's
-(``<key>#hull<i>``, named ``<prototype>_hull<i>``) and a collision ``<part>_hull<i>`` -- each with the
+convex hulls CoACD cuts that mesh into with the options it declares (by ``collision_default``, the
+declaration's default: at most 16) (``hulls``: from the engine's cache by the mesh's digest and the options, else
+the coacd integration's CoACD in a process of its own, every decomposed geometry and option set in one call;
+refused by name where neither has them), each hull a mesh of the description's (``<key>#hull<i>``, or
+``<key>#<options digest>#hull<i>`` where options are given, named ``<prototype>_hull<i>``) and a collision ``<part>_hull<i>`` -- each with the
 contact friction the part declares (``declarations.friction``). Its mass is its solids' at its material's density,
 measured once per prototype in the prototype's frame and moved to the link's (``I' = R I R^T``, then
 the parallel-axis theorem about the link's centre of mass), and each point mass it declares
@@ -89,12 +90,14 @@ the tree's own node, not its label, so two siblings of one label are two nodes.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import Any
 
 import numpy as np
 
-from cad.engine.declarations import DRIVE
+from cad.engine.declarations import DRIVE, MAX_HULLS
 from cad.engine.description import (COLLISIONS, Closure, Collision, Description, DescriptionError, Geometry, Inertial,
                                     Joint, Link, Mesh, Pose, Visual, column_major, srgb)
 
@@ -108,17 +111,19 @@ FLIP = np.diag([1.0, -1.0, -1.0, 1.0])
 WORLD = "world"
 
 
-def describe(view: Any, *, collision_default: str = "mesh", zero: str | None = None) -> Description:
+def describe(view: Any, *, collision_default: str = "mesh", zero: str | None = None,
+             decompose: bool = True) -> Description:
     """The robot ``view``'s document is (see the module docstring): its links, joints, meshes,
     poses and the joints that close its loops, checked (``Description.check``). ``collision_default``
     is a part's collision where it declares none: one of ``description.COLLISIONS``. ``zero`` is the
     mechanism state every joint's zero is taken at (the module's **The zero**), the as-built state where
-    None."""
+    None. ``decompose`` False leaves a decomposed part whole, its one collision its own mesh, and runs no
+    CoACD: for a reader that asks only whether each part collides (``ranges`` on the parts), never a writer."""
     if collision_default not in COLLISIONS:
         raise ValueError(f"collision_default {collision_default!r} is none of {', '.join(COLLISIONS)}")
     if zero is not None and (not isinstance(zero, str) or not zero):
         raise ValueError(f"zero is a mechanism state's name, not {zero!r}")
-    return _Describer(view, collision_default, zero).run()
+    return _Describer(view, collision_default, zero, decompose).run()
 
 
 def _rotation(axis: int, angle: float) -> np.ndarray:
@@ -168,9 +173,10 @@ def _unique(name: str, taken: set[str]) -> str:
 
 
 class _Describer:
-    def __init__(self, view: Any, collision_default: str, zero: str | None = None) -> None:
+    def __init__(self, view: Any, collision_default: str, zero: str | None = None, decompose: bool = True) -> None:
         self.view = view
         self.zero = zero
+        self.decompose = decompose
         self.source = view.source
         self.structure = self.source.structure
         self.collision_default = collision_default
@@ -221,7 +227,7 @@ class _Describer:
         excludes = self._excludes(links)
         self.masses = self._masses()
         meshes = self._meshes()
-        self.hulls = self._decompositions(links, meshes)
+        self.hulls = self._decompositions(links, meshes) if self.decompose else {}
         for link in links[1:]:
             self._geometry(link)
         if self.zero is not None:
@@ -625,45 +631,60 @@ class _Describer:
                                            np.asarray(made.indices, dtype=np.uint32).reshape(-1, 3), normals)
         return found
 
-    def _decompositions(self, links: list[Link], meshes: dict[str, Mesh]) -> dict[str, list[str]]:
-        """Each decomposed prototype's hulls (the module's **Geometry and mass**), by its key: the keys of the
-        hull meshes added to ``meshes``, ``<key>#hull<i>`` named ``<prototype>_hull<i>``, every one decomposed
-        in one call (``hulls``: the engine's cache, else the coacd integration's CoACD in a process of its own)."""
-        wanted: dict[str, dict[str, Any]] = {}
+    def _decompositions(self, links: list[Link], meshes: dict[str, Mesh]) -> dict[tuple[str, str], list[str]]:
+        """Each decomposed prototype's hulls (the module's **Geometry and mass**), by its key and its
+        decomposition options (``_options``): two parts of one geometry cut with other options are cut apart.
+        The keys of the hull meshes added to ``meshes``, ``<key>#hull<i>`` (``<key>#<options>#hull<i>`` where
+        options are given) named ``<prototype>_hull<i>``, every one decomposed in one call (``hulls``: the
+        engine's cache, else the coacd integration's CoACD in a process of its own)."""
+        wanted: dict[tuple[str, str], dict[str, Any]] = {}
         for link in links[1:]:
             for index in link.parts:
                 prototype = self.prototypes[self.instances[index]["prototype"]]
                 if (prototype.get("collision") or self.collision_default) == "decomposed":
-                    wanted.setdefault(prototype["key"], prototype)
-        empty = [key for key in wanted if key not in meshes or not len(meshes[key].triangles)]
-        for key in empty:
-            self.warn(f"part {wanted.pop(key)['name']!r} is declared decomposed and has no triangles: it collides "
+                    wanted.setdefault(self._cut(prototype), prototype)
+        empty = [cut for cut in wanted if cut[0] not in meshes or not len(meshes[cut[0]].triangles)]
+        for cut in empty:
+            self.warn(f"part {wanted.pop(cut)['name']!r} is declared decomposed and has no triangles: it collides "
                       "as nothing")
         if not wanted:
             return {}
         from cad.engine.hulls import Failed, Unavailable, hulls
 
-        keys = list(wanted)
+        cuts = list(wanted)
         try:
-            made = hulls([(meshes[key].positions, meshes[key].triangles, wanted[key].get("decomposition") or {})
-                          for key in keys])
+            made = hulls([(meshes[key].positions, meshes[key].triangles, self._options(wanted[(key, options)]))
+                          for key, options in cuts])
         except Unavailable as error:
-            names = ", ".join(repr(wanted[key]["name"]) for key in keys)
+            names = ", ".join(repr(wanted[cut]["name"]) for cut in cuts)
             raise DescriptionError(f"part {names} collides as convex hulls (collision 'decomposed'), which CoACD "
                                    f"makes: {error}; or declare it another collision") from None
         except Failed as error:
-            named = repr(wanted[keys[error.index]]["name"]) if error.index is not None else ", ".join(
-                repr(wanted[key]["name"]) for key in keys)
+            named = repr(wanted[cuts[error.index]]["name"]) if error.index is not None else ", ".join(
+                repr(wanted[cut]["name"]) for cut in cuts)
             raise DescriptionError(f"part {named} could not be decomposed (collision 'decomposed'): {error}") from None
-        found: dict[str, list[str]] = {}
-        for key, pieces in zip(keys, made):
-            name = wanted[key]["name"]
-            found[key] = []
+        found: dict[tuple[str, str], list[str]] = {}
+        for (key, options), pieces in zip(cuts, made):
+            name = wanted[(key, options)]["name"]
+            stem = key if options == "{}" else f"{key}#{hashlib.sha256(options.encode()).hexdigest()[:12]}"
+            found[(key, options)] = []
             for at, (positions, triangles) in enumerate(pieces):
-                hull = f"{key}#hull{at}"
+                hull = f"{stem}#hull{at}"
                 meshes[hull] = Mesh(hull, f"{name}_hull{at}", positions, triangles)
-                found[key].append(hull)
+                found[(key, options)].append(hull)
         return found
+
+    def _options(self, prototype: dict[str, Any]) -> dict[str, Any]:
+        """A decomposed prototype's options for CoACD, as ``hulls`` takes them: those its ``collision``
+        declares (``max_hulls``, ``threshold``), or, decomposed by ``collision_default``, the declaration's
+        default (at most ``MAX_HULLS`` hulls)."""
+        if prototype.get("collision") != "decomposed":
+            return {"maxHulls": MAX_HULLS}
+        return dict(prototype.get("decomposition") or {})
+
+    def _cut(self, prototype: dict[str, Any]) -> tuple[str, str]:
+        """What one decomposition is of: a prototype's geometry key and its options as canonical JSON."""
+        return prototype["key"], json.dumps(self._options(prototype), sort_keys=True, separators=(",", ":"))
 
     def _geometry(self, link: Link) -> None:
         """A link's visuals, collisions, named frames and inertial, each in its frame."""
@@ -682,10 +703,10 @@ class _Describer:
                                        material.get("name") or None))
             kind = prototype.get("collision") or self.collision_default
             surface = tuple(float(value) for value in prototype.get("friction") or ())
-            if kind == "mesh":
+            if kind == "mesh" or (kind == "decomposed" and not self.decompose):
                 link.collisions.append(Collision(name, Geometry("mesh", placement, mesh=key), surface))
             elif kind == "decomposed":
-                for at, hull in enumerate(self.hulls.get(key, ())):
+                for at, hull in enumerate(self.hulls.get(self._cut(prototype), ())):
                     link.collisions.append(Collision(f"{name}_hull{at}", Geometry("mesh", placement, mesh=hull),
                                                      surface, part=name))
             elif kind != "none":

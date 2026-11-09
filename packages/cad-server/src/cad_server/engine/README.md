@@ -1082,8 +1082,11 @@ prototype's mesh, with its options, to one call (`hulls.py`), which reads each m
 interpreter of the calling environment, or of the coacd integration's environment (`python -m
 cad.coacd._decomposer`: CoACD's native library carries
 a TBB of its own beside OCCT's, logs from native code to file descriptor 1 and can die on a mesh it cannot
-repair, so the process that holds the kernel never loads it), keeping what it made. Each hull is a mesh of
-the description (`<key>#hull<i>`, named `<part>_hull<i>`) and a collision `<part>_hull<i>`, the part's
+repair, so the process that holds the kernel never loads it), keeping what it made. One decomposition is
+one geometry with one set of options: two parts of one shape declared with other options are cut apart, and
+a part decomposed by `collision_default` takes the declaration's default, at most 16 hulls. Each hull is a
+mesh of the description (`<key>#hull<i>`, `<key>#<options digest>#hull<i>` where options are given, named
+`<part>_hull<i>`) and a collision `<part>_hull<i>`, the part's
 contact friction on each: MJCF writes a `collision` geom and a mesh asset per hull, URDF a `<collision>`
 per hull, the contact rule (`export/contact.py`) tests each hull, and `cad.mujoco.spec` holds what the
 MJCF holds. A decomposition the cache does not hold needs coacd: where the environment that describes the

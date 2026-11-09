@@ -4,7 +4,8 @@ A base with a wall, an arm on a hinge and a carriage on a slide, built to an xbf
 meets the wall one way and the base the other, the carriage slides until it meets the wall one way and an end
 stop the other (touching the base all along, as built, which stops nothing), each stop where an exact
 distance says the parts come within the clearance; the document is not changed. A STEP with no joint has
-nothing to sweep: an error, said by code. An option out of range is refused by name."""
+nothing to sweep: an error, said by code. An option out of range is refused by name. A part declared decomposed
+is cut into hulls for the collision geometry alone."""
 
 from __future__ import annotations
 
@@ -15,11 +16,14 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from typing import Any
+from unittest import mock
 
 from cad._internal.refused import ArgumentRefused
 
 RIG = """
 import build123d as bd
+from cad.build123d import collision
 from cad.engine import xbf
 
 
@@ -41,6 +45,7 @@ def rig():
     bd.LinearJoint("slide", base, axis=bd.Axis((0, -25, 15), (1, 0, 0)), linear_range=(-100, 100))
     bd.RigidJoint("seat", carriage, bd.Location())
     base.joints["slide"].connect_to(carriage.joints["seat"], position=40)
+    {declare}
     return bd.Compound(children=[base, wall, end, arm, carriage], label="rig")
 """
 
@@ -50,16 +55,20 @@ class Ranges(unittest.TestCase):
         self.folder = Path(tempfile.mkdtemp(prefix="cad-ranges-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
 
-    def test_each_joint_stops_where_its_parts_meet_another(self) -> None:
-        from cad import xbf
+    def rig(self, declare: str = "pass") -> Path:
         from cad.engine import build as engine_build
 
         script = self.folder / "rig.py"
-        script.write_text(textwrap.dedent(RIG), encoding="utf-8")
+        script.write_text(textwrap.dedent(RIG.format(declare=declare)), encoding="utf-8")
         os.utime(script, ns=(time.time_ns(), time.time_ns()))
         report = engine_build.build(script, ["rig"], cwd=self.folder)[0]
         self.assertTrue(report["ok"], report)
-        document = self.folder / "XBF/rig.xbf"
+        return self.folder / "XBF/rig.xbf"
+
+    def test_each_joint_stops_where_its_parts_meet_another(self) -> None:
+        from cad import xbf
+
+        document = self.rig()
         before = document.read_bytes()
 
         result = xbf.ranges(document)
@@ -85,6 +94,27 @@ class Ranges(unittest.TestCase):
                                                     slide["upper_clash"]), "each stop is its own: nothing else first")
         self.assertEqual({"joint_stops"}, {finding.code for finding in result.findings})
         self.assertEqual(before, document.read_bytes(), "the document is not changed")
+
+    def test_a_decomposed_part_is_cut_for_the_collision_geometry_alone(self) -> None:
+        from cad import xbf
+
+        calls: list[int] = []
+
+        def stand_in(meshes: Any) -> list[list[tuple[Any, Any]]]:  # each mesh its own one hull
+            calls.append(len(meshes))
+            return [[(positions, triangles)] for positions, triangles, _options in meshes]
+
+        document = self.rig('collision(wall, "decomposed")')
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.folder / "cache")}), \
+                mock.patch("cad.engine.hulls._decompose", stand_in):
+            parts = xbf.ranges(document)
+            self.assertEqual(calls, [], "on the parts, nothing is decomposed")
+            collided = xbf.ranges(document, geometry="collision")
+            self.assertEqual(calls, [1])
+        lower = [{found["joint"]: found for found in result.measurements["joints"]}["elbow"]["lower"]
+                 for result in (parts, collided)]
+        self.assertEqual(lower[0], -30.0, "on the parts the arm still stops at the wall")
+        self.assertIsNotNone(lower[1], "and at the wall's hull on the collision geometry")
 
     def test_a_document_with_no_joint_has_nothing_to_sweep(self) -> None:
         import build123d as bd

@@ -66,6 +66,29 @@ def _box(low_x: float, low_y: float, low_z: float, high_x: float, high_y: float,
     return corners, faces
 
 
+# Two cups of one geometry, each cut into its own number of hulls.
+CUPS = """
+import build123d as bd
+from cad.build123d import collision
+from cad.engine import xbf
+
+
+def cup():
+    return bd.Box(40, 40, 20) - bd.Pos(0, 0, 5) * bd.Box(30, 30, 20)
+
+
+@xbf("XBF/cups.xbf")
+def cups():
+    a = cup()
+    a.label = "a"
+    b = bd.Pos(100, 0, 0) * cup()
+    b.label = "b"
+    collision(a, "decomposed", max_hulls={first})
+    collision(b, "decomposed", max_hulls={second})
+    return bd.Compound(children=[a, b], label="cups")
+"""
+
+
 class _Folder(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="engine-decomposition-")).resolve()
@@ -187,6 +210,27 @@ class WritersTest(_Folder):
         self.described(self.build('collision(arm, "decomposed", max_hulls=2)'))
         self.assertEqual(self.calls, [[{"maxHulls": 16}], [{"maxHulls": 2}]])
         self.assertEqual(len(list((self.folder / "cache" / "hulls").glob("*.npz"))), 2)
+
+    def test_parts_of_one_geometry_are_cut_by_their_own_options_and_a_default_decomposed_one_by_16(self) -> None:
+        def stand_in(meshes: Any) -> list[list[tuple[Any, Any]]]:
+            self.calls.append([dict(options) for _positions, _triangles, options in meshes])
+            return [[_box(*ARMS[0])] * options["maxHulls"] for _positions, _triangles, options in meshes]
+
+        for first, second in ((6, 1), (1, 6)):
+            script = self.folder / "cups.py"
+            script.write_text(textwrap.dedent(CUPS.format(first=first, second=second)), encoding="utf-8")
+            os.utime(script, ns=(time.time_ns(), time.time_ns()))
+            self.assertTrue(engine_build.build(script, ["cups"], cwd=self.folder)[0]["ok"])
+            with mock.patch("cad.engine.hulls._decompose", stand_in):
+                description = describe(Source.read(self.folder / "XBF/cups.xbf").view())
+            self.assertEqual([len(description.link(name).collisions) for name in ("a", "b")], [first, second])
+        # Decomposed by the description's default, a part declaring nothing is cut into at most 16, as the
+        # declaration's default.
+        self.calls.clear()
+        with mock.patch("cad.engine.hulls._decompose", self.stand_in):
+            describe(Source.read(self.build("pass")).view(), collision_default="decomposed")
+        self.assertEqual(self.calls, [[{"maxHulls": 16}, {"maxHulls": 16}]])
+
 
 
 class FirstNeedTest(_Folder):

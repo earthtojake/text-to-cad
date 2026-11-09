@@ -88,7 +88,8 @@ def ranges_for(document_type: str) -> Any:
             raise
         started = time.perf_counter()
         with _readable(document_type, source) as (target, label):
-            description = describe(Source.read(target).view())
+            # A part's hulls are tested on the collision geometry alone: on the parts, a decomposed one is whole.
+            description = describe(Source.read(target).view(), decompose=geometry == "collision")
         said = (lambda line: print(f"ranges: {line}", file=sys.stderr, flush=True)) if verbose else None
         stops = sweep(description, step=float(step), clearance=float(clearance), geometry=geometry, told=said)
         return _result(label or Path(target), stops, step=float(step), clearance=float(clearance), geometry=geometry,
