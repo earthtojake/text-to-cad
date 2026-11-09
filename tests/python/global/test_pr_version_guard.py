@@ -32,6 +32,9 @@ class PrVersionGuardTests(unittest.TestCase):
         self.git("config", "gc.autoDetach", "false")
         self.git("config", "maintenance.auto", "false")
         self.write_version("0.5.0")
+        self.contract = self.root / "packages/cad/src/cad/engine/contract.py"
+        self.contract.parent.mkdir(parents=True)
+        self.contract.write_text('PROTOCOL = 1\nCHECKS_SINCE = "0.5.0"\n', encoding="utf-8")
         self.commit("Initial release")
         self.git("tag", "v0.5.0")
         self.git("switch", "-c", "feature")
@@ -116,9 +119,8 @@ class PrVersionGuardTests(unittest.TestCase):
     def test_a_release_may_not_leave_the_checks_release_past_itself(self) -> None:
         """``contract.CHECKS_SINCE`` names, ahead of it, the release that ships workers' checks: a release
         before it is refused, and one at it passes."""
-        contract = self.root / "packages/cad/src/cad/engine/contract.py"
+        contract = self.contract
         self.git("switch", "feature")
-        contract.parent.mkdir(parents=True)
         contract.write_text('PROTOCOL = 1\nCHECKS_SINCE = "0.6.0"\n', encoding="utf-8")
         self.commit("Checks in workers")
         self.bump_feature("0.5.1")
@@ -129,6 +131,22 @@ class PrVersionGuardTests(unittest.TestCase):
         self.bump_feature("0.6.0")
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_release_whose_contract_names_no_checks_release_is_refused(self) -> None:
+        """A contract the guard cannot read is refused out loud, never passed: gone, or without the line."""
+        self.git("switch", "feature")
+        self.contract.write_text("PROTOCOL = 1\nCHECKS_SINCE = SOMETHING_ELSE\n", encoding="utf-8")
+        self.commit("A contract renamed")
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("has no line CHECKS_SINCE", result.stderr)
+        self.git("switch", "feature")
+        self.git("rm", "-q", str(self.contract))
+        self.git("commit", "-m", "No contract")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is not in this commit", result.stderr)
 
     def test_a_release_must_pass_the_latest_tag(self) -> None:
         self.git("tag", "v0.6.0")

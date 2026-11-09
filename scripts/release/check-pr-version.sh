@@ -67,9 +67,18 @@ fi
 # The first release whose worker measures a manufacturing check is named by hand (the library's
 # contract.CHECKS_SINCE), ahead of the release that ships it: a release may not leave it past itself, or the
 # server would never send a check to its own release's workers in a project's Python.
+# A contract this cannot read is refused, never passed: the check would be skipped without a word.
 contract="packages/cad/src/cad/engine/contract.py"
-since="$(git show "HEAD:$contract" 2>/dev/null | sed -n 's/^CHECKS_SINCE = "\([^"]*\)"$/\1/p' || true)"
-if [ -n "$since" ] && version_greater "$since" "$version"; then
+if ! text="$(git show "HEAD:$contract" 2>/dev/null)"; then
+  echo "$contract is not in this commit: the release cannot be held to contract.CHECKS_SINCE." >&2
+  exit 1
+fi
+since="$(printf '%s\n' "$text" | sed -n 's/^CHECKS_SINCE = "\([^"]*\)"$/\1/p')"
+if [ -z "$since" ]; then
+  echo "$contract has no line CHECKS_SINCE = \"X.Y.Z\": the release cannot be held to it." >&2
+  exit 1
+fi
+if version_greater "$since" "$version"; then
   echo "$contract names CHECKS_SINCE = \"$since\", past $version, the release this pull request makes:" >&2
   echo "set it to \"$version\", the first release whose worker measures a check." >&2
   exit 1
