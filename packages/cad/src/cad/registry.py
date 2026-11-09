@@ -209,8 +209,8 @@ _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL,
 _DFM_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
                   "(molding) or 3D printing (printing), measured and judged against general, cited rules")
 _DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's ref", "build123d", "manufacturing")
-_DFM_MESH = Operation("dfm", "check it can be molded (--process molding) or 3D printed (printing), measured "
-                                 "as a mesh and judged against general, cited rules", "trimesh", "manufacturing")
+_DFM_MESH = Operation("dfm", "check it can be 3D printed (--process printing), measured as a mesh and judged "
+                                 "against general, cited rules", "trimesh", "manufacturing")
 _DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "
                                 "twice, features against the kerf and the thickness, the sheet's size", "build123d",
                        "manufacturing")

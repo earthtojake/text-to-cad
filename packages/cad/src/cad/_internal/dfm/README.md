@@ -10,12 +10,14 @@ library README's **Manufacturing checks** says what the check is for and how it 
 square millimetres, cubic millimetres and ratios. Exact geometry -- a STEP, an xbf, a document the engine
 holds (its id or a model's handle), a live build123d shape -- is measured on its B-rep by the build123d
 integration (`cad/build123d/_dfm_<process>.py` over the shared core, `_dfm_brep.py`); a mesh -- an STL, a 3MF,
-a GLB -- by the trimesh integration (`cad/trimesh/_molding.py`, `_printing.py`); a DXF, a sheet's cut file,
-with ezdxf, build123d's own DXF library (`cad/build123d/_dfm_dxf.py`). CNC machining and sheet metal are
-measured on exact geometry alone: a mesh holds no radius, axis or thickness to read, so a mesh type's `dfm`
-takes `molding` and `printing` alone, and a DXF's `sheet` alone (`manufacturing.processes_for`).
-Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`): numpy is the library's one
-required dependency, so neither integration imports the other's.
+a GLB -- by the trimesh integration (`cad/trimesh/_printing.py`), for 3D printing alone; a DXF, a sheet's cut
+file, with ezdxf, build123d's own DXF library (`cad/build123d/_dfm_dxf.py`). CNC machining, sheet metal and
+injection molding are judged on exact geometry alone: a mesh holds no radius, axis or thickness to read, and its
+chords misread a molded part's draft, undercuts and walls. So a mesh type's `dfm` takes `printing` alone (its
+default), and a DXF's `sheet` alone (`manufacturing.processes_for`); a mesh asked for another process is
+refused with the reason and the check to run instead, the STEP's or the model's (`manufacturing._MESH_REFUSED`,
+exit 2). Geometry both paths share is numpy alone (`cad/_internal/meshops_<process>.py`): numpy is the
+library's one required dependency, so neither integration imports the other's.
 
 **Where exact geometry is measured.** In the engine, where the document is held: the caller resolves the
 options (`manufacturing.options`) and asks the engine (`cad.engine.api.check`, an `export` carrying a `check`
@@ -52,7 +54,7 @@ every other was at most a few seconds (a large face's own mesh, the file's read)
 so, and is not asked again.
 
 A mesh and a DXF are measured in the calling process (or the integration's environment) always. A mesh is read
-and cleaned one way for both of its processes (`cad/trimesh/_mesh.py`): corners at one place welded into one
+and cleaned (`cad/trimesh/_mesh.py`): corners at one place welded into one
 vertex, a triangle two of whose corners became one dropped (it opens nothing), a sliver (under 1e-8 of the
 diagonal squared) on an edge more than two triangles use dropped where its edges stay used once each way or
 not at all (an exporter's collapsed chord left doubled or fanned over an edge; never one that closes the
@@ -82,8 +84,9 @@ sentence.
 ## The process and the options
 
 `--process` names the check, one of the type's: `cnc`, `sheet`, `molding` or `printing` for a model, an xbf
-and a STEP; `molding` or `printing` for an STL, a 3MF and a GLB; `sheet` for a DXF, its default, so `cad dxf
-dfm cut.dxf` alone checks the cut file. Each type's signature (`manufacturing.dfm_for`) holds its processes'
+and a STEP; `printing` for an STL, a 3MF and a GLB, its default (the others are offered and refused with the
+reason and the fix: check the STEP or the model); `sheet` for a DXF, its default, so `cad dxf dfm cut.dxf`
+alone checks the cut file. Each type's signature (`manufacturing.dfm_for`) holds its processes'
 options alone: the command's choices and flags are the type's, and a mesh's help offers no `--axes`. Given
 none, an xbf or a model is checked for the process its parts declare (a STEP keeps no process: its parts'
 materials are not written to it, so one given none is refused before anything is read): a part's
@@ -94,8 +97,7 @@ fdm, sls, mjf, pbf and sla, an FDM wall's `pitch_mm` its `--layer-height`. A tec
 wins over the declared one (a technology given takes its own layer height; parts whose layer heights differ
 take the technology's, and `process_declared` says so). Cast and wrought stock have no check, and no route
 is sheet's: those, parts that declare no process and parts that declare different ones are refused with the
-fix (`give --process cnc, sheet, molding or printing`), the command line's mistake (exit 2); a mesh always
-needs `--process`.
+fix (`give --process cnc, sheet, molding or printing`), the command line's mistake (exit 2).
 
 Every option has a kind (`manufacturing.KINDS`): a count is an `int` (never a `bool` or a float: `axes=3.7`
 is refused, not taken as 3), a flag a `bool` (`turning="no"` is refused, not truthy), a length or an angle a
@@ -198,7 +200,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   solid has an open shell or that holds faces beside its solids is `not_watertight`, and one that fails the
   kernel's topology check (BRepCheck) `not_sound`: errors in every process, said first (printing's `solid`
   family judges its own solids' shells and soundness, with the boolean check). A mesh's open body is
-  `not_watertight` too, an error in both of its processes.
+  `not_watertight` too, an error.
 - **Units.** One test for every process, exact geometry and mesh alike (`_common.units_doubt`): a document
   under 1 mm across, or over 10 m (the largest standard sheet is 3048 x 1524, 3.4 m across; gantry mills and
   large-format printers reach a few metres; none of the four processes makes a 10 m part in one piece), is
@@ -216,7 +218,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
 The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
 `cad.build123d.cnc(shape)`, `sheet_metal`, `molding`, `printing` (the same `CheckResult`, refs as the
 engine would name its document) and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
-`cad.trimesh.molding(mesh)`, `pulls`, `printing`, `orientations` (the report as data).
+`cad.trimesh.printing(mesh)`, `orientations` (the report as data).
 
 ## CNC machining
 
@@ -601,14 +603,13 @@ only Hubs's flange height is unstated, read from the outside mold line (the rule
 `cad <type> dfm SRC --process molding [--pull z|-y|x,y,z] [--wall-limit 45] [--zero-tol 0.05]
 [--cavities N] [--material abs|pc|...] [--candidates]`
 
-A STEP, an xbf or a model's document is measured on its B-rep (`cad.build123d._dfm_molding`); every item
-is at a face ref (`plate/face 7`) plus `xyz`. An STL, 3MF or GLB is measured as triangles
-(`cad.trimesh._molding`), every item at `xyz`. Both share one schema and one algorithm for everything but
-draft and feature recognition (`cad._internal.meshops_molding`, numpy only). A part of one solid is measured in
-its own frame about the pull (its long direction in the parting plane along the plane's first axis; `frame`
-says the turn), and every place and side action is reported in the world: a part turned about the pull in its
-model reads the same figures. A mesh report also carries
-`notes`: what a mesh cannot say.
+A STEP, an xbf or a model's document is measured on its B-rep (`cad.build123d._dfm_molding`, its geometry's
+numpy in `cad._internal.meshops_molding`); every item is at a face ref (`plate/face 7`) plus `xyz`. A mesh is
+refused: its chords misread draft (a 2 deg cone's read 1.998), its regions merge a fillet with the faces it
+joins, and its tessellation folds and slivers read as undercuts -- check the STEP or the model. A part of one
+solid is measured in its own frame about the pull (its long direction in the parting plane along the plane's
+first axis; `frame` says the turn), and every place and side action is reported in the world: a part turned
+about the pull in its model reads the same figures.
 
 On the B-rep a face's surface is its kernel type, and a B-spline or Bezier face that IS a plane, cylinder,
 cone, sphere or torus (within a millionth of its size, 1e-4 mm at most: `_dfm_brep.surface`) is read as that
@@ -620,13 +621,13 @@ their fillets, ribs and bosses unrecognised.
 
 | family | what | how | items (fields the rules read in **bold**) |
 |---|---|---|---|
-| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface; mesh: per region (triangles joined under 20 deg), flat exact, curved 5th percentile of its facets (`spread_deg`), tangent bands excluded | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, `xyz`, `feature` (`wall`; `rib`/`snap`: a rib's side, judged by `molding.rib_draft`; `undercut`: a face an undercut traps, formed by its release, judged by the undercut rules) |
-| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped; a point on another solid of the same part (two solids touching, not fused) is no surface and never trapped; on a mesh a blocked ray whose origin lies in the material (a fold of the tessellation: a planar face's fan crossing its own boundary, its triangles turned to face into the material) is no undercut (`folded_area_mm2`, `folded_note`); touching trapped faces = one group, split where its trapped points lie apart (three sample spacings; on a mesh, 1.5 probe edges): two snaps under one lid are two features. Release: rays along 8 slide directions in the parting plane + the feature's mean lateral normal + each tilted 45 deg (angled slide); fewest slides covering it (each point assigned to its shortest stroke); else a lifter (short lateral move then a pull, stroke <= 1/4 part size); else a collapsible core (each point freed radially, no common direction); else `none` | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/none), `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, **`height_mm`** (along pull), **`width_mm`**, `blocked_by`; scalars: `candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `collapsible_core_count`, `unreleasable_count`, ..., `trapped_faces` (the faces it mostly traps) |
+| `draft` | each wall face's draft along the pull and the way it opens | B-rep: plane exact, cylinder/cone with axis along the pull exact (0 / half-angle), other faces the least over points sampled ON the surface | `location`, **`draft_deg`**, `area_mm2`, **`opens`** (`+pull`, `-pull`, `none` = zero draft, `split` = the parting line crosses it), `surface`, `exact`, `depth_mm`, `xyz`, `feature` (`wall`; `rib`/`snap`: a rib's side, judged by `molding.rib_draft`; `undercut`: a face an undercut traps, formed by its release, judged by the undercut rules) |
+| `undercuts` | trapped features and what releases them | points on every face shot along the way their face opens (zero-draft: both ways); blocked = trapped; a point on another solid of the same part (two solids touching, not fused) is no surface and never trapped; touching trapped faces = one group, split where its trapped points lie apart (three sample spacings): two snaps under one lid are two features. Release: rays along 8 slide directions in the parting plane + the feature's mean lateral normal + each tilted 45 deg (angled slide); fewest slides covering it (each point assigned to its shortest stroke); else a lifter (short lateral move then a pull, stroke <= 1/4 part size); else a collapsible core (each point freed radially, no common direction); else `none` | `location` (the mostly-trapped face), `faces`, **`trapped_area_mm2`**, `kind` (external/internal), **`release`** (side_action/lifter/collapsible_core/none), `side_actions` (`+x`, ...), `side_action_count`, `angled`, **`stroke_mm`**, **`height_mm`** (along pull), **`width_mm`**, `blocked_by`; scalars: `candidate_area_mm2`, `undercut_count`, `side_action_count`, `lifter_count`, `collapsible_core_count`, `unreleasable_count`, ..., `trapped_faces` (the faces it mostly traps) |
 | `touching` | solids of one part that touch without being fused | each sampled point stepped off its face classified in the part's other solids (in or on: a contact); parts of 2 to 24 solids | `location`, `part`, `solids` [i, j], `faces`, `contact_area_mm2`, `xyz` (present only where some touch) |
 | `thickness` | the wall: nominal, thin, thick, transitions | rolling ball: at each sampled point the diameter of the largest ball tangent there that no surface triangle cuts into (exact per triangle: corners, edges, insides), capped by the exact ray straight through. Points whose ball is held by a face across a convex edge read low and are left out of medians; a narrow face (rib top, plate end) takes its broad neighbours' wall | `location`, **`thickness_mm`** (area median), `min_mm` (p10), `max_mm`, **`ratio_to_nominal`** (max / nominal), `thin_ratio`, **`feature`** (`wall`, or `rib`/`snap`/`boss`: a feature's face, judged by its own rules, not the wall's range), `xyz` (the thickest point); scalars `nominal_mm` (area median of the faces' walls), `min_mm`, `max_mm`, `ratio_max_nominal`, `thick_sections` (> 1.5 x nominal) |
-| `transitions` | abrupt changes of wall | read on the stepped side (`meshops_molding.steps`): two flat faces (mesh: flat regions) facing the same way at two offsets, joined by a chain of at most three faces none parallel to them (a pad's side, a chamfer, a fillet), whose walls differ by a quarter of the nominal or more and by about their offset (one face behind both: not a rib's top, not a wall's rim); its run is the chain's reach across, square to the faces, from one seam to the other. On a mesh a ramp gentler than the regions' 20 deg join merges with its levels and is no abrupt step (3:1 is 18.4 deg). A free-form face no step takes in: the rolling ball's steepest pair of points within four sample spacings whose walls differ by half the nominal (`basis` `ball`) | `location` (the chain's first face), **`transition_ratio`** (run over the change: a vertical step 0, a chamfer its run over its rise), `min_mm` and `max_mm` (the two walls), `change_mm`, `length_mm` (the run), `basis` (`step` or `ball`), `xyz`, `at_xyz` (a point on each seam) |
-| `ribs` | thin slabs standing on a wall | two opposite planar faces (within 12 deg) whose inward rays come out of each other, both meeting one base plane at a concave edge or a concave fillet, height >= thickness, length >= 1.5 x thickness; base = the plane it is shortest from. Its ends (faces joining both sides, no wider than the rib) are its roots too: their fillets are the rib's, not corners, and `base_fillet_mm` is the least of sides' and ends'. A rib a trapped face touches (one of its own, or one beside them no larger than its side, not its base) is a snap arm, the face its barb (B-rep only). On a mesh the base is the plane of the base region's triangles along the root (a floor filleted to its walls elsewhere is one curved region) | **`kind`** (`rib`, `snap`), `barb`, **`thickness_ratio`** (root / base wall), **`height_ratio`** (height / wall), **`height_to_thickness`**, **`base_fillet_ratio`** (fillet / rib), **`base_fillet_wall_ratio`**, **`gap_to_thickness`**, **`gap_to_wall`** (gap = median ray to the next face), **`draft_deg`**, `thickness_mm`, `height_mm`, `length_mm`, `base_fillet_mm` |
-| `bosses` | cylindrical stands, cored or solid | a convex cylinder, or a cone drafted 5 deg or less, standing on a plane square to its axis (concave edge or fillet), with the largest coaxial concave cylinder or cone inside it reaching half its height; radii at the base | `od_mm`, `id_mm`, `boss_wall_mm` (R - r, or 2R solid), **`wall_ratio`** (boss wall / base wall), `od_to_id`, `height_mm`, `height_to_od`, **`base_fillet_mm`** (its root's: 0 sharp; a mesh finds sharp-rooted bosses only), `hole_floor_above_base_mm` |
+| `transitions` | abrupt changes of wall | read on the stepped side (`meshops_molding.steps`): two flat faces facing the same way at two offsets, joined by a chain of at most three faces none parallel to them (a pad's side, a chamfer, a fillet), whose walls differ by a quarter of the nominal or more and by about their offset (one face behind both: not a rib's top, not a wall's rim); its run is the chain's reach across, square to the faces, from one seam to the other. A free-form face no step takes in: the rolling ball's steepest pair of points within four sample spacings whose walls differ by half the nominal (`basis` `ball`) | `location` (the chain's first face), **`transition_ratio`** (run over the change: a vertical step 0, a chamfer its run over its rise), `min_mm` and `max_mm` (the two walls), `change_mm`, `length_mm` (the run), `basis` (`step` or `ball`), `xyz`, `at_xyz` (a point on each seam) |
+| `ribs` | thin slabs standing on a wall | two opposite planar faces (within 12 deg) whose inward rays come out of each other, both meeting one base plane at a concave edge or a concave fillet, height >= thickness, length >= 1.5 x thickness; base = the plane it is shortest from. Its ends (faces joining both sides, no wider than the rib) are its roots too: their fillets are the rib's, not corners, and `base_fillet_mm` is the least of sides' and ends'. A rib a trapped face touches (one of its own, or one beside them no larger than its side, not its base) is a snap arm, the face its barb. | **`kind`** (`rib`, `snap`), `barb`, **`thickness_ratio`** (root / base wall), **`height_ratio`** (height / wall), **`height_to_thickness`**, **`base_fillet_ratio`** (fillet / rib), **`base_fillet_wall_ratio`**, **`gap_to_thickness`**, **`gap_to_wall`** (gap = median ray to the next face), **`draft_deg`**, `thickness_mm`, `height_mm`, `length_mm`, `base_fillet_mm` |
+| `bosses` | cylindrical stands, cored or solid | a convex cylinder, or a cone drafted 5 deg or less, standing on a plane square to its axis (concave edge or fillet), with the largest coaxial concave cylinder or cone inside it reaching half its height; radii at the base | `od_mm`, `id_mm`, `boss_wall_mm` (R - r, or 2R solid), **`wall_ratio`** (boss wall / base wall), `od_to_id`, `height_mm`, `height_to_od`, **`base_fillet_mm`** (its root's: 0 sharp), `hole_floor_above_base_mm` |
 | `corners` | internal corners | every concave edge with no fillet (radius 0, `edge` ref) and every concave fillet with two tangent joins: a cylinder's or torus's radius, a free-form blend's from its curvature at its middle (concave where its sampled normals turn toward each other); rib (sides and ends) and boss roots excluded | `radius_mm`, `sharp`, **`ratio_to_wall`** (radius / thinner wall meeting there), `wall_mm`, `edge`, `angle_deg` |
 | `projection` | area along the pull | the part triangulated (each triangle naming its face), projected, cells covered on a raster 2000 across the part | per part: **`projected_area_mm2`**, `area_error_mm2` (half the outline's cells), `raster_resolution_mm`, `depth_along_pull_mm`, `span_major_mm`, `span_minor_mm`, `volume_mm3` |
 | `envelope` | size against a mold | from the projection and the parting | per part: **`span_major_mm`**, **`span_minor_mm`**, **`depth_along_pull_mm`**, **`depth_from_parting_mm`**, `volume_mm3` |
@@ -636,15 +637,13 @@ their fillets, ribs and bosses unrecognised.
 
 Kept from today's report: `draft` scalars (`wall_area_mm2`, `zero_draft_wall_area_mm2`, `largest_zero_draft_faces`,
 `min_wall_draft`, `wall_draft_histogram_mm2`, `wall_area_by_opening_mm2`, ...), `undercuts` scalars
-(`candidate_area_mm2`, `largest_candidate_faces`, `probe_resolution_note` on a mesh; `unintersected_rays` and
+(`candidate_area_mm2`, `largest_candidate_faces`; `unintersected_rays` and
 its note where the kernel failed to intersect a ray with a face -- that crossing is not found, the family is
-measured all the same), `projection`, `scale`, `mesh` (meshes). Fact findings: `zero_draft_walls`,
+measured all the same), `projection`, `scale`. Fact findings: `zero_draft_walls`,
 `undercut_candidates` (now with feature counts; both **info** sums of what the rules judge per face and per
 feature, each naming the rule that judges it -- warnings only where they say the pull may be the wrong one),
-`not_watertight` (an error, a mesh: an open body's walls and undercuts are not a part's; its open bodies'
-places), `solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
-left out of draft and undercuts, and the part's `several_bodies` is then not said), `mesh_folds` (info: the
-folded area left out), `coarse_curved_face` (info), `probe_resolution`,
+`solids_touching` (warning: names the part's solids that touch and says to fuse them; their contact is
+left out of draft and undercuts, and the part's `several_bodies` is then not said),
 `rays_unintersected` (warning: the undercut figures are a lower bound there), `several_bodies` (also for a multi-part document, and a
 warning for a part of several solids: they shadow each other), `zero_draft_walls` and `undercut_candidates`
 (their hints: when half the wall area or more reads zero draft, or a quarter of the surface or more is
@@ -691,13 +690,10 @@ PP 0.035-0.150, PS 0.035-0.150 PPS 0.020-0.180, polyurethane 0.080-0.750, long-f
 
 ### What it cannot measure
 
-- Exact draft of a mesh's curved face (chords read low by up to `spread_deg`); fillet radii on a mesh
-  (filleted corners and rib roots merge into one region: corners lists sharp ones, ribs only sharp-rooted
-  ones); bosses on a mesh only with their axis along the pull. A free-form fillet's radius is read at its
+- A mesh at all (STL, 3MF, GLB): refused, check its STEP or model. A free-form fillet's radius is read at its
   middle (a variable one reads one figure).
 - Texture draft (no texture option), tall-feature extra draft (Hubs +1 deg / 25 mm over 50 mm), shut-off
-  draft (3 deg), stripping undercuts (lead angle, 5% of diameter), a snap's barb and a mesh's snap arm (read
-  as a rib), living-hinge proportions,
+  draft (3 deg), stripping undercuts (lead angle, 5% of diameter), a snap's barb, living-hinge proportions,
   threads, boss OD against a screw (no screw size), gating, weld lines, filling, cooling, warpage, shrinkage.
 - The undercut test samples points (2400 per part, at least 12 a face): a feature smaller than the point
   spacing can be missed; the lifter stroke is capped at a quarter of the part; an undercut freed only by a
@@ -743,7 +739,7 @@ items worst first, at most 300. A family that fails is `{"error": "..."}` and is
 
 | family | exact geometry (B-rep) | mesh |
 | --- | --- | --- |
-| `solid` / `mesh` | per part: `solids`, `shells`, `closed`, `inner_shells`, `sound` (the kernel's boolean-argument check, `issues` its BRepCheck codes), `volume_mm3`; scalars `body_count`, `volume_mm3`, `watertight`, `sound` | `mesh`: read and cleaned as both processes read a mesh (`cad.trimesh._mesh`: welded, collapsed triangles, doubled slivers and zero-area debris dropped, a tessellation's cracks closed), its bodies split with no repair; `watertight` judged per body (`open_body_count`, `open_bodies` with each one's `xyz` and `boundary_edges`), `volume_mm3` the closed bodies', `body_count`, ... |
+| `solid` / `mesh` | per part: `solids`, `shells`, `closed`, `inner_shells`, `sound` (the kernel's boolean-argument check, `issues` its BRepCheck codes), `volume_mm3`; scalars `body_count`, `volume_mm3`, `watertight`, `sound` | `mesh`: read and cleaned (`cad.trimesh._mesh`: welded, collapsed triangles, doubled slivers and zero-area debris dropped, a tessellation's cracks closed), its bodies split with no repair; `watertight` judged per body (`open_body_count`, `open_bodies` with each one's `xyz` and `boundary_edges`), `volume_mm3` the closed bodies', `body_count`, ... |
 | `overhangs` | per down-facing face off the plate: `angle_deg` (a plane's exactly, a curved face's least over its samples), `area_mm2`, `area_below_limit_mm2`, `height_mm`, `kind`: `slope`, `bridge`/`cantilever`/`ceiling` (a flat face, see `bridges`), `hole` (a hole's arch), `plate_edge` (a round or chamfer on the plate's edge whose under-limit part is within 1 mm / 5 layers of it); `reach_mm` (a flat face's, from `bridges`); `counted`: false for a face too small to need support -- under `OVERHANG_AREA_MM2` (1 mm2) below the limit, or a cantilever reaching less than the nozzle's width (`--nozzle`, else `OVERHANG_REACH_MM`, 0.4 mm) -- which no rule judges (both floors text-to-cad's own: no guide states them, and the family's `method` says so); an angle within 1e-6 deg of the limit is at it (`ANGLE_EPS`: a kernel's 45 deg chamfer reads 44.999999999999936); scalars `down_facing_area_below_limit_mm2` (the counted faces, holes, bridges and plate edges aside), `area_floor_mm2`, `reach_floor_mm` | connected regions of the counted triangles, same fields and floors; a region that reaches the plate, or runs on into down-facing triangles that do (a round's lowest row), and stays within the plate band is `plate_edge`; `down_facing_area_below_limit_mm2` counts the counted regions, bridges and plate edges aside, as the exact path does |
 | `bridges` | flat (< 5 deg) down-facing planes: `kind` `bridge` (the farthest point lies within the convex hull of its supports: `length_mm` = twice the farthest distance to a supporting edge = the span between the walls), `cantilever` (beyond one support: `length_mm` = its reach), `ceiling` (none); supporting edges are the concave edges whose other face descends. A horizontal hole's arch is no bridge (each layer stands on the one below but the crown's): `printing.horizontal_hole` judges its diameter | the flat regions and any region carried on both sides (a hole's crown among them: a mesh has no axes) |
 | `wall_thickness` | per face, the thinnest exact ray into the material from its samples, `sampled: true` (a face's thinnest sample, which can read above the exact least thickness between samples: a keycap's 0.6129 against 0.5493). A ray counts where the face it lands on looks back along it, its normal there within 45 deg of the ray (`KNIFE_DEG`), whether or not that face shares an edge with the ray's own: past it the ray measured a corner (a rim whose sides meet at 50 deg reads alike on both paths, and a sharp 50 deg tip as the same tip blunted by 0.0001 mm). One landing on a face that shares an edge with its own within `SEAM_HIT_MM` (0.05 mm) met the seam and is dropped; a ray inside a knife edge's `thin_depth_mm` that starts or lands on one of the knife's two faces (its flanks) is that knife's sliver -- from a flank, or from a face meeting them at the knife's end across to one -- reported by `knife_edges` alone, while a ray near it between two other faces (a fin beside the knife, across itself) measures its own wall; pins are the pins' rules'. `thickness_mm`, `opposite`, `supported` (joined to the part on 2+ sides: the face's or its opposite's concave edges, smooth joins into a concave round, or a closed ring), `joined_sides`; scalars `min_mm`, `p05_mm`, `p25_mm`, `median_mm`, `max_mm` | per body, `--samples` rays from points at random over the surface, and on a mesh of at most `COVER_MAX_TRIANGLES` (5000) triangles one more from every triangle's centre (`cover: true`; on 60 real meshes the pass cost 26 times the family's time and found 3 thin places against 9 that are not there, while under 5000 triangles it found a knob's 0.27 mm web 2000 random rays miss, with no false one); a ray counts where it lands on a face turned toward it (within 45 deg) and is no knife's sliver: inside a knife's thin depth, starting or landing on one of its flanks (the triangle's normal within 20 deg of a flank's, `FLANK_DEG`). Items the thinnest per cube of diag/40 (>= 2 mm), `supported: null`; `min_mm` .. `max_mm`, `samples_valid` and `thinnest_samples` are of the same rays as the items, per body too; `method` says which rays ran |

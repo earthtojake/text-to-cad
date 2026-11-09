@@ -9,10 +9,11 @@ wrote; ``dfm``, ``drc``, ``erc`` and ``validate`` their findings (each with a se
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
-check, and a DXF's the check of a sheet's cut file: ``cad stl dfm part.stl --process molding --pull -z``,
+check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
 ``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
 a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
-mesh's (STL, 3MF, GLB) the trimesh integration's, for molding or printing. A B-rep's is the engine's: asked
+mesh's (STL, 3MF, GLB) the trimesh integration's, for printing (molding, CNC and sheet are judged on exact
+geometry: a mesh asked for one is refused with the check to run instead). A B-rep's is the engine's: asked
 from here, measured in the kernel process that holds the document. A DXF's and a mesh's run here when this
 environment holds its integration, else in the environment that does -- for build123d the installation's
 base, for trimesh the one the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``) --
@@ -148,7 +149,7 @@ def pull_value(argv: list[str]) -> list[str]:
 
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
-    type's -- cnc, sheet, molding or printing for a B-rep, molding or printing for a mesh, sheet for a DXF.
+    type's -- cnc, sheet, molding or printing for a B-rep, printing for a mesh, sheet for a DXF.
     A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
     holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
     release's), and for a DXF and a mesh, it runs here when this environment holds the type's integration

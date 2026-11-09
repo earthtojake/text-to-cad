@@ -263,8 +263,15 @@ class OptionsTest(unittest.TestCase):
                 manufacturing.options("step", process, given)
 
     def test_exact_processes_refuse_a_mesh_and_a_dxf_is_a_cut_file(self) -> None:
-        with self.assertRaisesRegex(ValueError, "check the part's STEP, xbf or model"):
+        from cad._internal.refused import ArgumentRefused
+
+        with self.assertRaisesRegex(ValueError, "check the part's STEP or model instead"):
             manufacturing.options("stl", "sheet", {})
+        for document_type in ("stl", "threemf", "glb"):  # molding is judged on exact geometry alone
+            with self.subTest(document_type=document_type), self.assertRaisesRegex(
+                    ArgumentRefused, r"a molding check is judged on exact geometry .*: check the part's STEP or model "
+                                     r"instead \(cad step dfm part.step --process molding"):
+                manufacturing.options(document_type, "molding", {"pull": "z"})
         with self.assertRaisesRegex(ValueError, "--process sheet"):
             manufacturing.options("dxf", "cnc", {})
         with self.assertRaisesRegex(ValueError, "ranks molding's pulls"):
@@ -296,7 +303,7 @@ class OptionsTest(unittest.TestCase):
 
         for document_type, processes, has, lacks in (
                 ("step", ("cnc", "sheet", "molding", "printing"), {"axes", "kerf", "pull", "nozzle"}, set()),
-                ("stl", ("molding", "printing"), {"pull", "nozzle", "candidates", "units"}, {"axes", "kerf"}),
+                ("stl", ("printing",), {"nozzle", "candidates", "units"}, {"axes", "kerf", "pull"}),
                 ("dxf", ("sheet",), {"kerf", "thickness", "k_factor"}, {"axes", "pull", "candidates"})):
             with self.subTest(document_type=document_type):
                 function = getattr(cad, document_type).dfm
@@ -307,8 +314,7 @@ class OptionsTest(unittest.TestCase):
                     function("part", axes=3) if "axes" in lacks else function("part", nonsense=1)
         self.assertEqual(inspect.signature(cad.dxf.dfm).parameters["process"].default, "sheet")
         self.assertIn("source: the .dxf cut file to check.", cad.dxf.dfm.__doc__)
-        with self.assertRaisesRegex(ValueError, "give --process molding or printing$"):
-            manufacturing.options("glb", None, {})
+        self.assertEqual(manufacturing.options("glb", None, {})["technology"], "fdm", "a mesh's one process: printing")
         with self.assertRaisesRegex(ValueError, "a STEP keeps no process: give --process cnc"):
             manufacturing.options("step", None, {})
 
@@ -629,9 +635,8 @@ class DeclaredProcessTest(unittest.TestCase):
         from cad._internal.dfm import processes
 
         self.assertIsNone(manufacturing.options("model", None, {"material": "aluminum"}))
-        for document_type in ("stl", "threemf", "glb", "step"):  # a mesh has no process to declare; a STEP keeps none
-            with self.subTest(document_type=document_type), self.assertRaisesRegex(ValueError, "give --process"):
-                manufacturing.options(document_type, None, {})
+        with self.assertRaisesRegex(ValueError, "give --process"):  # a STEP keeps none
+            manufacturing.options("step", None, {})
         for given, said in (({"units": "cm"}, "an xbf is in millimetres"),
                             ({"material": "cheese"}, "--material is one of")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):

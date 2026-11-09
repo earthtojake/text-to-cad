@@ -27,7 +27,7 @@ check's exit status, its `--json` or its findings changes for these:
 | a STEP, an xbf or a model: `draft.min_facet_draft`, `undercuts.note`, `undercuts.probe_resolution_note`, and the `probe_resolution` finding | gone: an exact face's draft is read exactly, with no facets and no probe to bound it |
 | a finding's `location` on a STEP, an xbf or a model: `x, y, z` | a face's ref (`plate/face 7`), which `cad xbf inspect DOC REF` resolves; a mesh's stays `x, y, z` |
 | `sealed_voids`, one info finding with the count | `internal_void`, an info finding for each sealed void, with its volume |
-| `coarse_curved_face` was a warning | an info finding: the draft rules judge the figure |
+| `cad stl\|threemf\|glb dfm --process molding` measured a mesh for molding (`cad.trimesh.molding`, `pulls`; `coarse_curved_face`, `mesh_folds`, `probe_resolution`) | refused, exit 2 (`invalid_argument`): molding is judged on exact geometry, a mesh's chords misread its draft, undercuts and walls -- check the STEP or the model (`cad step dfm part.step --process molding`); a mesh's `dfm` checks printing, its default |
 
 What to change:
 
@@ -46,7 +46,8 @@ What to change:
 
 `cad.<type>.dfm` takes the same parameters, and its result changes as above. Each option is taken
 only as its kind: a count is an `int`, so `samples=2000.0`, which 0.11 read as 2000, is refused, and a
-pull is text (`"z"`, `"0,0,1"`). `cad.trimesh.molding`, `pulls`, `printing` and `orientations` keep
+pull is text (`"z"`, `"0,0,1"`). `cad.trimesh.molding` and `pulls` are gone (molding is judged on exact
+geometry: `cad.build123d.molding(shape)` or `cad.step.dfm(path, process="molding")`); `printing` and `orientations` keep
 their parameters and every key of their reports, which gain families; `orientations` ranks its rows,
 best first. `cad.model.dfm`, `cad.step.dfm` and `cad.xbf.dfm` keep their signatures and now go through the
 engine, from any Python. Against no engine, an older one (0.11) or another release's, a file is measured in the
@@ -79,6 +80,6 @@ So does a check of a file the engine was measuring when it stopped: an update do
 `--process cnc` and `--process sheet` check a STEP, an xbf or a model for CNC machining and sheet
 metal; `cad dxf dfm` checks a sheet's cut file. A model or an xbf given no `--process` is checked for
 the process its parts declare (`part.material = metals.aluminum(process=machined())`), where 0.11
-refused it; a STEP and a mesh still need one. Each process takes options of its own beside 0.11's
+refused it; a STEP still needs one, and a mesh takes printing, the one process it is checked for. Each process takes options of its own beside 0.11's
 (`--material`, `--cavities`, `--technology`, `--build-volume`, `--layer-height`, `--nozzle`), and
 `--angle-limit 0` is taken.

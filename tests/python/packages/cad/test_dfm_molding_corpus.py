@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 
 """Injection molding's planted-defect corpus: parts built with a known defect, and clean controls, checked
-the way an agent checks them (``cad.step.dfm(..., process="molding")``, and an STL of some of them through
-``cad.stl.dfm``), every verdict compared with the construction's ground truth.
+the way an agent checks them (``cad.step.dfm(..., process="molding")``), every verdict compared with the
+construction's ground truth.
 
 The ground truth is the construction's, here: each part says which rules must fail and in what region (a
-box in millimetres: a finding's place -- its face's centre for a ref, its x, y, z for a mesh -- must fall in
-it), and which must not fail anywhere. A rule failing outside every region it is expected in is a false
-positive; an expected region no failure falls in, a miss. Precision and recall per rule are printed to
-stderr and held at 1.0 on this corpus; where a mesh cannot see a defect (a fillet's radius) the part's mesh
-expectations leave it out and say why.
+box in millimetres: a finding's place -- its face's centre for a ref -- must fall in it), and which must not
+fail anywhere. A rule failing outside every region it is expected in is a false positive; an expected region
+no failure falls in, a miss. Precision and recall per rule are printed to stderr and held at 1.0 on this
+corpus.
 """
 
 from __future__ import annotations
@@ -160,7 +159,7 @@ def hooked_lid():
 
 def tray_ribs():
     """A clean (filleted, drafted) tray with two undrafted 2 mm ribs (as thick as its wall) standing sharp on
-    its floor: a mesh finds them though the floor's fillets join it to the walls."""
+    its floor."""
     part = tray()
     for x in (-10.0, 10.0):
         part = part + bd.Pos(x, 0.0, 2.0) * bd.Box(2.0, 24.0, 5.0, align=(bd.Align.CENTER, bd.Align.CENTER,
@@ -184,9 +183,6 @@ class Case:
     expect: dict[str, list[Box3]] = field(default_factory=dict)   # rule: the regions it must fail in
     absent: tuple[str, ...] = ()                                   # rules that must fail nowhere
     unit: object = None
-    mesh: str | None = None                                       # "fine" or "coarse": an STL of it too
-    mesh_expect: dict[str, list[Box3]] | None = None              # where a mesh's differ, and why (comment)
-    mesh_absent: tuple[str, ...] | None = None
     releases: dict[str, str] = field(default_factory=dict)        # an undercut's release, by its region's key
 
 
@@ -212,7 +208,7 @@ HOOKS: list[Box3] = [_box((-26.0, -5.0, -11.0), (-20.0, 5.0, 1.0)), _box((20.0, 
 TRAY_RIBS: list[Box3] = [_box((-11.5, -13, 1.5), (-8.5, 13, 7.5)), _box((8.5, -13, 1.5), (11.5, 13, 7.5))]
 
 CASES = [
-    Case("clean_tray", tray, absent=CLEAN, mesh="coarse"),
+    Case("clean_tray", tray, absent=CLEAN),
     Case("shallow_draft_tray", lambda: tray(draft=0.75), expect={"molding.draft": SIDES + INSIDES},
          absent=tuple(rule for rule in CLEAN if rule != "molding.draft")),
     Case("sealed_void", lambda: bd.Box(30, 30, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -221,9 +217,9 @@ CASES = [
     Case("undrafted_tray", lambda: tray(draft=0.0, fillet=0.0),
          expect={"molding.draft_min": SIDES + INSIDES, "molding.inside_corner_radius": INNER_EDGES},
          absent=("molding.undercut", "molding.thick_section", "molding.wall_min", "molding.wall_max",
-                 "molding.wall_transition"), mesh="fine"),
+                 "molding.wall_transition")),
     Case("side_hole", side_hole, expect={"molding.undercut": [HOLE]},
-         absent=tuple(rule for rule in CLEAN if rule != "molding.undercut"), mesh="fine",
+         absent=tuple(rule for rule in CLEAN if rule != "molding.undercut"),
          releases={"hole": "side_action"}),
     Case("side_hole_inch", side_hole, expect={"molding.undercut": [HOLE]},
          absent=tuple(rule for rule in CLEAN if rule != "molding.undercut"), unit="in"),
@@ -231,13 +227,13 @@ CASES = [
          absent=("molding.undercut_unreleasable", "molding.wall_max", "molding.thick_section"),
          releases={"lip": "lifter"}),
     Case("thick_ribs", lambda: ribbed(2.0), expect={"molding.rib_thickness": RIBS},
-         absent=("molding.undercut", "molding.rib_height", "molding.wall_max"), mesh="fine"),
+         absent=("molding.undercut", "molding.rib_height", "molding.wall_max")),
     Case("good_ribs", lambda: ribbed(1.0), absent=("molding.undercut", "molding.rib_thickness", "molding.rib_height",
                                                     "molding.thick_section", "molding.wall_max")),
     Case("tall_ribs", lambda: ribbed(1.0, height=9.0), expect={"molding.rib_height": RIBS[:1] + [
         _box((18.5, -26, 1.5), (21.5, 26, 11.5))]}, absent=("molding.rib_thickness", "molding.undercut")),
     Case("thick_boss", lambda: bossed(5.0, 1.5), expect={"molding.boss_wall": [BOSS]},
-         absent=("molding.undercut",), mesh="fine"),
+         absent=("molding.undercut",)),
     Case("good_boss", lambda: bossed(2.5, 1.6), absent=("molding.boss_wall", "molding.thick_section",
                                                          "molding.wall_max", "molding.undercut")),
     Case("thick_cone_boss", lambda: cone_bossed(5.0, 1.5), expect={"molding.boss_wall": [BOSS]},
@@ -249,19 +245,19 @@ CASES = [
     Case("small_fillet_tray", lambda: tray(draft=2.0, fillet=0.5),
          expect={"molding.inside_corner_radius": INNER_EDGES},
          absent=tuple(rule for rule in CLEAN if rule != "molding.inside_corner_radius")),
-    Case("floor_hole", floor_hole, absent=CLEAN, mesh="fine"),
+    Case("floor_hole", floor_hole, absent=CLEAN),
     Case("hooked_lid", hooked_lid, expect={"molding.undercut": HOOKS}, absent=("molding.undercut_unreleasable",)),
     Case("tray_ribs", tray_ribs, expect={"molding.rib_thickness": TRAY_RIBS},
-         absent=("molding.undercut", "molding.wall_max"), mesh="fine"),
+         absent=("molding.undercut", "molding.wall_max")),
     # The pad's section is thick_section's; wall_max judges a face's own wall, not its thickest point.
     Case("thick_pad", thick_pad, expect={"molding.thick_section": [PAD], "molding.wall_transition": [PAD]},
-         absent=("molding.undercut", "molding.wall_min"), mesh="fine"),
+         absent=("molding.undercut", "molding.wall_min")),
     Case("sharp_bracket", bracket, expect={"molding.inside_corner_radius": [CORNER]},
-         absent=("molding.undercut", "molding.thick_section", "molding.wall_min", "molding.wall_max"), mesh="coarse"),
+         absent=("molding.undercut", "molding.thick_section", "molding.wall_min", "molding.wall_max")),
     Case("round_bracket", lambda: bracket(1.5, 3.5),
          absent=("molding.inside_corner_radius", "molding.undercut", "molding.thick_section", "molding.wall_min",
                  "molding.wall_max", "molding.wall_transition")),
-    Case("filleted_all", filleted_all, absent=CLEAN, mesh="coarse"),
+    Case("filleted_all", filleted_all, absent=CLEAN),
     Case("spline_dome", dome, absent=("molding.draft_min", "molding.draft", "molding.undercut",
                                       "molding.thick_section", "molding.wall_min", "molding.wall_max")),
     Case("assembly", assembly, expect={"molding.draft_min": [_box((-40.5, -10.5, -0.5), (-19.5, 10.5, 10.5))]},
@@ -283,8 +279,8 @@ def _inside(point, box: Box3) -> bool:
 
 
 class _Places:
-    """A finding's place as a point: a ref's face centre (the document read as the check reads it), a part's
-    box centre, or a mesh's x, y, z."""
+    """A finding's place as a point: a ref's face centre (the document read as the check reads it) or a part's
+    box centre."""
 
     def __init__(self, path: Path | None) -> None:
         self.parts = {}
@@ -363,15 +359,6 @@ class MoldingCorpusTest(unittest.TestCase):
             result = cad.step.dfm(str(step), process="molding", material="abs")
             cls.results[case.name] = result
             _score(case.name, result, case.expect, case.absent, _Places(step), cls.tallies)
-            if case.mesh:
-                stl = root / f"{case.name}.stl"
-                tolerance, angular = (0.2, 0.6) if case.mesh == "coarse" else (0.01, 0.1)
-                bd.export_stl(shape, str(stl), tolerance=tolerance, angular_tolerance=angular)
-                meshed = cad.stl.dfm(str(stl), process="molding", material="abs")
-                cls.results[f"{case.name}.stl"] = meshed
-                _score(f"{case.name}.stl ({case.mesh})", meshed,
-                       case.expect if case.mesh_expect is None else case.mesh_expect,
-                       case.absent if case.mesh_absent is None else case.mesh_absent, _Places(None), cls.tallies)
         lines = [f"{'rule':34} {'tp':>4} {'fp':>4} {'fn':>4} {'precision':>9} {'recall':>7}"]
         for rule in sorted(cls.tallies):
             tally = cls.tallies[rule]
@@ -398,7 +385,7 @@ class MoldingCorpusTest(unittest.TestCase):
             items = result.measurements["undercuts"]["items"]
             return [item["release"] for item in items if _inside(item["xyz"], region)]
 
-        for name in ("side_hole", "side_hole_inch", "side_hole.stl"):
+        for name in ("side_hole", "side_hole_inch"):
             result = self.results[name]
             with self.subTest(part=name):
                 self.assertEqual(release(name, HOLE), ["side_action"])
@@ -421,11 +408,9 @@ class MoldingCorpusTest(unittest.TestCase):
         tons = clean["projection"]["projected_area_mm2"] / 645.16 * 3.25 * 1.15
         self.assertAlmostEqual(clean["clamp"]["tons"], tons, delta=0.05)
         # a hole through the floor along the pull is a shut-off: the parting stays one flat plane at the rim
-        for name in ("floor_hole", "floor_hole.stl"):
-            with self.subTest(part=name):
-                parting = self.results[name].measurements["parting"]
-                self.assertTrue(parting["flat_parting_possible"], parting.get("items"))
-                self.assertAlmostEqual(parting["parting_plane_height_mm"], 20.0, delta=0.05)
+        parting = self.results["floor_hole"].measurements["parting"]
+        self.assertTrue(parting["flat_parting_possible"], parting.get("items"))
+        self.assertAlmostEqual(parting["parting_plane_height_mm"], 20.0, delta=0.05)
 
     def test_two_hooks_are_two_undercuts_each_at_its_hook(self) -> None:
         items = self.results["hooked_lid"].measurements["undercuts"]["items"]

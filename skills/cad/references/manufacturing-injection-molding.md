@@ -47,8 +47,10 @@ Protolabs Network's guides; a molder's own figures move them):
 cad step dfm cover.step --process molding --pull z --material abs
 cad model dfm "$ID" --process molding --pull y --material pc --cavities 4
 cad step dfm cover.step --process molding --candidates
-cad stl dfm cover.stl --process molding --pull z --units mm
 ```
+
+Molding is judged on exact geometry alone: a mesh (STL, 3MF, GLB) is refused -- check the STEP or the
+model it came from.
 
 The options that change the verdicts:
 
@@ -94,11 +96,6 @@ The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`
 When the pull looks wrong -- most of the wall reads zero draft along it, or a quarter of the surface is
 trapped -- the `zero_draft_walls` or `undercut_candidates` hint names the pull `--candidates` ranks
 first: confirm the pull before budgeting side actions or drafting walls.
-
-On a mesh: an STL has no units, so give `--units` and compare `scale.bbox_mm_if_units` with the part
-you expect. A curved face's draft reads low by up to its `spread_deg` (`coarse_curved_face`, an info:
-measure a finer mesh before citing it); fillets are not seen, so filleted corners and rib roots merge;
-bosses are found only along the pull; a snap arm is not told from a rib.
 
 ## Review the part
 

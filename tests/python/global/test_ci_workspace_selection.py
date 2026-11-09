@@ -229,12 +229,12 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_the_manufacturing_check_runs_the_tests_that_reach_it(self):
         # A leaf of the library: its type side, its exact measurements and its mesh measurements reach the
         # tests that name them and those that read every command, never the whole suite or a skill's.
-        for path in ("packages/cad/src/cad/trimesh/_molding.py", "packages/cad/src/cad/build123d/_dfm_cnc.py",
+        for path in ("packages/cad/src/cad/trimesh/_printing.py", "packages/cad/src/cad/build123d/_dfm_cnc.py",
                      "packages/cad/src/cad/_internal/dfm/rules.py", "packages/cad/src/cad/_internal/manufacturing.py"):
             with self.subTest(path=path):
                 chosen = tests_for(path)
                 self.assertIn(f"{LIBRARY}/test_dfm_core.py", chosen["cadgen_tests"])
-                self.assertIn(f"{LIBRARY}/test_trimesh_molding.py", chosen["cadgen_tests"])
+                self.assertIn(f"{LIBRARY}/test_trimesh_printing.py", chosen["cadgen_tests"])
                 self.assertIn(f"{SERVER}/test_manufacturing_check_cli.py", chosen["cadgen_tests"])
                 self.assertNotIn(CADGEN, chosen["cadgen_tests"])
                 self.assertNotIn(f"{LIBRARY}/engine/test_animation.py", chosen["cadgen_tests"])
@@ -246,8 +246,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for(f"{SHIM}/test_protocol.py")["cadgen_tests"], [f"{SHIM}/test_protocol.py"])
         self.assertEqual(tests_for(f"{POLICY}/test_cli_stream_contract.py")["skills_policy"],
                          [f"{POLICY}/test_cli_stream_contract.py"])
-        self.assertEqual(tests_for(f"{LIBRARY}/test_trimesh_molding.py")["cadgen_tests"],
-                         [f"{LIBRARY}/test_trimesh_molding.py"])
+        self.assertEqual(tests_for(f"{LIBRARY}/test_trimesh_printing.py")["cadgen_tests"],
+                         [f"{LIBRARY}/test_trimesh_printing.py"])
         self.assertEqual(tests_for(f"{LIBRARY}/engine/formats_golden/stl.png")["cadgen_tests"], [CADGEN])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):

@@ -1,7 +1,7 @@
 """Injection molding: its options, rules, findings and summary (``cad._internal.dfm``).
 
-Measured along one pull (``pull``), on exact geometry (``cad.build123d._dfm_molding``) or a mesh
-(``cad.trimesh._molding``), one schema either way:
+Measured along one pull (``pull``), on exact geometry alone (``cad.build123d._dfm_molding``): a mesh's chords
+misread draft, undercuts and walls, so a mesh is refused (``manufacturing._MESH_REFUSED``). The families:
 
 - ``draft``: every wall face's draft and which way it opens (``+pull``, ``-pull``, ``none``, ``split``);
 - ``undercuts``: the trapped features, each with what releases it (``side_action`` and its directions and
@@ -42,7 +42,7 @@ __all__ = ["CLAMP_FACTORS", "MEASURED_FROM", "OPTIONS", "RULES", "WALL_RANGES", 
            "pull_doubtful", "ranked", "summary", "validate"]
 
 OPTIONS: dict[str, Any] = {"pull": "z", "wall_limit": 45.0, "zero_tol": 0.05, "cavities": None}
-MEASURED_FROM = ("brep", "mesh")
+MEASURED_FROM = ("brep",)  # a mesh's chords misread draft, undercuts and walls: judged on exact geometry alone
 _ACCESSED = "2026-11-03"
 _VERSION = "2026-11-08"
 
@@ -396,20 +396,6 @@ def _hint_fields(report: dict[str, Any]) -> None:
 
 def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> list[CheckFinding]:
     found: list[CheckFinding] = []
-    mesh = report.get("mesh") or {}
-    if mesh.get("watertight") is False:
-        opened = mesh.get("open_bodies") or []
-        places = "; ".join(f"at {where(body.get('xyz'))} ({body.get('boundary_edges')} open edge(s))"
-                           for body in opened[:3])
-        found.append(CheckFinding(
-            "error", "not_watertight",
-            f"the mesh is not watertight: {mesh.get('open_body_count') or len(opened) or 'a'} open body(ies)"
-            + (f", {places}" if places else "") + ": an open surface has no inside, so its walls, undercuts and "
-            "volume are not a part's -- every figure below is suspect",
-            where(opened[0].get("xyz")) if opened else "mesh",
-            "close the surface: export the mesh again from the model, or repair it, then check again"))
-    if mesh.get("note"):
-        found.append(CheckFinding("warning", "several_bodies", mesh["note"], "mesh"))
     bodies = report.get("bodies") or []
     if len(bodies) > 1:
         found.append(CheckFinding("warning", "several_bodies",
@@ -454,11 +440,6 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"{faces[0].get('area_mm2', 0):g} mm2 (each face judged by molding.draft_min)", _location(faces[0]),
             (_pull_hint(report, "most of the wall area reads zero draft along this pull") if zero_doubt else "")
             + "draft each of these walls along the pull the part is confirmed to open along"))
-    reading = draft.get("min_wall_draft") or {}
-    if reading.get("reading_note"):
-        # Info: a curved face's reading off its chords, said with its spread; the draft rules judge the figure.
-        found.append(CheckFinding("info", "coarse_curved_face", reading["reading_note"],
-                                  where(reading.get("location_xyz"))))
     if (undercuts.get("candidate_area_mm2") or 0) > 0:
         faces = undercuts.get("largest_candidate_faces") or [{}]
         counts = ", ".join(f"{undercuts[key]} {words}" for key, words in
@@ -480,10 +461,6 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             (_pull_hint(report, f"{undercuts['candidate_area_pct_of_surface']:g}% of the surface is trapped along "
                                 f"this pull (a quarter or more: an engineering trigger, no source's)")
              + "confirm the pull before budgeting side actions") if trapped_doubt else None))
-    if undercuts.get("probe_resolution_note"):
-        found.append(CheckFinding("info", "probe_resolution", undercuts["probe_resolution_note"], "undercuts"))
-    if undercuts.get("folded_note"):
-        found.append(CheckFinding("info", "mesh_folds", undercuts["folded_note"], "undercuts"))
     if undercuts.get("unintersected_note"):
         found.append(CheckFinding("warning", "rays_unintersected", undercuts["unintersected_note"], "undercuts",
                                   "read the undercut figures as a lower bound near the faces the kernel could not "

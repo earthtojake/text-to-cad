@@ -346,7 +346,7 @@ cad model dfm "$ID" --process cnc --material aluminum --tools 3,6,10
 ```
 
 `cad model dfm` checks a model's document by its id; `cad step dfm` (and `xbf`, `stl`, `threemf`,
-`glb`) a file. A mesh is checked for molding and printing only: CNC and sheet need the STEP. A STEP
+`glb`) a file. A mesh is checked for printing only: CNC, sheet and molding need the STEP or the model. A STEP
 needs `--process`, a model or an xbf takes the one its parts declare, and `cad dxf dfm` checks a cut
 file as sheet. A SendCutSend order is the sendcutsend skill's; slicing a print, the print3d skill's.
 

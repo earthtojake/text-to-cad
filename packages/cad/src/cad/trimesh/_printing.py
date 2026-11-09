@@ -113,7 +113,7 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     is a boundary is closed, so its holes are faces another body shares, and are filled; a piece that fills to
     no volume is such a face's copy, no body. A piece of next to no area (``_mesh.SLIVER_AREA``) is never a body.
     A shell's normals point away from its material, so a sealed void's signed volume is negative and a
-    solid's positive (``_molding._shells`` reads them so too): a cavity a part encloses -- a groove that
+    solid's positive: a cavity a part encloses -- a groove that
     does not reach the surface -- is that part's, and its walls are measured with it, never as a body
     of its own. A void goes with the solid that holds its centre, else with the largest. An open sliver of no
     area worth a thousandth of the whole (an exporter's stray facets) is no body: a ray from one measured

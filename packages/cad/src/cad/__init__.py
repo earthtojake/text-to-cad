@@ -11,8 +11,7 @@ operations, one to one with the ``cad <type> <operation>`` commands: ``.export``
 ``.inspect``, and those named for what they do (``.dfm``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
-``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
-``orientations``). Process control (``cad serve``, ``status``, ``stop``,
+``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,

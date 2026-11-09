@@ -1,9 +1,6 @@
-"""Injection molding's geometry that exact and mesh measurements share, numpy alone.
-
-Both integrations measure a part along one pull: the build123d one on its B-rep (``cad.build123d._dfm_molding``,
-points sampled on the faces and exact rays), the trimesh one on a mesh (``cad.trimesh._molding``, triangle
-centres and the mesh's rays). What they do with those points is the same and lives here, so an STL and the
-STEP it came from answer from one algorithm:
+"""Injection molding's geometry, numpy alone: what the build123d integration does with the points it samples
+on a part's B-rep and the exact rays it casts (``cad.build123d._dfm_molding``), measured along one pull
+(molding is judged on exact geometry alone):
 
 - ``basis``, ``direction_name``, ``lateral_directions``: the parting plane's axes and a direction's name;
 - ``raster``, ``near_outline``: a projection's covered cells, its outline and its area;
@@ -30,7 +27,7 @@ import numpy as np
 
 from cad._internal.dfm import checkpoint
 
-__all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "even_points", "lateral_directions",
+__all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "lateral_directions",
            "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster", "steps", "transitions",
            "weighted_median", "weighted_quantile"]
 
@@ -433,43 +430,6 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         radius[index[tighter]] = least[tighter]
         bound[index[tighter]] = columns[pick[tighter]]
     return np.where(np.isfinite(radius), 2.0 * radius, np.nan), bound
-
-
-def even_points(vertices: np.ndarray, triangles: np.ndarray, count: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """About ``count`` points spread over a mesh by area, with no randomness: the triangles in order, each
-    given the points its share of the running area asks for (a running quota, so a small triangle beside a
-    large one is neither always skipped nor always sampled), each point the centre of one of an n x n cut of
-    its triangle, taken evenly. Returns the points, their triangles and the area each stands for. The same
-    mesh gives the same points on every platform; a mesh whose vertices move slightly gives points that move
-    with them."""
-    verts = np.asarray(vertices, dtype=float).reshape(-1, 3)
-    tris = np.asarray(triangles, dtype=int).reshape(-1, 3)
-    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
-    areas = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1)
-    total = float(areas.sum())
-    if total <= 0 or not len(tris):
-        return np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0)
-    quota = total / max(1, count)
-    running = np.cumsum(areas) / quota
-    wanted = np.floor(running + 0.5).astype(int) - np.floor(np.concatenate([[0.0], running[:-1]]) + 0.5).astype(int)
-    points, owner, weights = [], [], []
-    for index in np.nonzero(wanted > 0)[0]:
-        k = int(wanted[index])
-        cuts = int(math.ceil(math.sqrt(k)))
-        bary = []
-        for i in range(cuts):
-            for j in range(cuts - i):
-                bary.append(((i + 1 / 3) / cuts, (j + 1 / 3) / cuts))
-                if i + j <= cuts - 2:
-                    bary.append(((i + 2 / 3) / cuts, (j + 2 / 3) / cuts))
-        chosen = np.array(bary)[np.unique(np.linspace(0, len(bary) - 1, k).astype(int))]
-        wa, wb = chosen[:, 0:1], chosen[:, 1:2]
-        points.append(wa * a[index] + wb * b[index] + (1.0 - wa - wb) * c[index])
-        owner.append(np.full(len(chosen), index))
-        weights.append(np.full(len(chosen), float(areas[index]) / len(chosen)))
-    if not points:
-        return np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0)
-    return np.vstack(points), np.concatenate(owner).astype(int), np.concatenate(weights)
 
 
 def nearest_broad(start: int, neighbours: Callable[[int], Any], broad: Callable[[int], bool],

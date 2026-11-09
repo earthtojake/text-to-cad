@@ -1,5 +1,5 @@
-"""The mesh a manufacturing check measures: read, made millimetres and cleaned the one way both processes
-measure it (``_molding``, ``_printing``).
+"""The mesh a manufacturing check measures: read, made millimetres and cleaned for 3D printing
+(``_printing``), the one process a mesh is checked for.
 
 An STL is triangle soup: each triangle carries its own corners, and an exporter's tessellation leaves
 triangles of no area where it collapsed a chord, and cracks no wider than its chord tolerance where two
@@ -268,7 +268,7 @@ def closure(mesh: trimesh.Trimesh) -> dict[str, Any]:
 
 
 def facts(mesh: trimesh.Trimesh) -> dict[str, Any]:
-    """The mesh facts both processes report of its closure (``closure``): ``watertight``, ``volume_mm3`` (the
+    """The mesh facts printing reports of its closure (``closure``): ``watertight``, ``volume_mm3`` (the
     closed bodies'), the open bodies where any is, and what cleaning it took."""
     closed = closure(mesh)
     found: dict[str, Any] = {"watertight": closed["watertight"], "volume_mm3": closed["closed_volume_mm3"]}

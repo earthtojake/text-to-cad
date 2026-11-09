@@ -137,10 +137,9 @@ class MeshCleanTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "open.stl"
             trimesh.util.concatenate([trimesh.creation.box((10, 10, 10)), far]).export(str(path))
-            for process in ("printing", "molding"):
-                result = cad.stl.dfm(path, process=process, material="pla" if process == "printing" else "abs")
-                self.assertIn("not_watertight", {finding.code for finding in result.findings}, process)
-                self.assertEqual(result.measurements["mesh"]["open_body_count"], 1, process)
+            result = cad.stl.dfm(path, process="printing", material="pla")
+        self.assertIn("not_watertight", {finding.code for finding in result.findings})
+        self.assertEqual(result.measurements["mesh"]["open_body_count"], 1)
 
     def test_slivers_doubled_on_an_edge_are_dropped_and_none_that_closes_the_shell(self) -> None:
         """An exporter's collapsed chord left as slivers on an edge (a gear's 3MF: 95 of them, the mesh open

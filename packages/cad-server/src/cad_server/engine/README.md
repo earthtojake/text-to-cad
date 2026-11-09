@@ -705,7 +705,7 @@ cad model|xbf|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit
                 [--cavities N] [--candidates]
 cad model|xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
                 [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
-cad stl|glb|threemf dfm FILE --process molding|printing [the process's options as above] [--units U]
+cad stl|glb|threemf dfm FILE [--process printing] [printing's options as above] [--units U]
 cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
       ... [--material M] [--json]
@@ -1013,7 +1013,8 @@ its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` di
 **The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library
 makes for each type (`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`), its signature the
-type's: its processes the `--process` choices (a mesh's `molding` and `printing`, a DXF's `sheet`, its
+type's: its processes the `--process` choices (a mesh's `printing`, its default -- `cnc`, `sheet` and
+`molding` offered and refused with the reason and the fix, judged on exact geometry -- a DXF's `sheet`, its
 default), and their options alone; the operation names
 the integration that measures the type: `build123d` for `model`, `step`, `xbf` and `dxf`, `trimesh` for the meshes.
 Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a module of

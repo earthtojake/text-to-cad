@@ -30,8 +30,8 @@ tools, the bend radius, the sheet, the build volume).
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
 (law 16), and so is a value of another kind (``KINDS``: never coerced, law 17). Each type's ``dfm`` takes the
-processes it can be checked for (``processes_for``: a mesh molding and printing, a DXF sheet) and their
-options alone. The standard library alone: the server's command resolves the options here before it starts
+processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet) and their options alone;
+a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
 an environment that holds the integration. An xbf or a model given no process is checked for the one its
 parts declare (``part.material = metals.aluminum(process=machined())``): the options every process shares
 are checked here, and the integration reads the document, takes the declared process and resolves the rest
@@ -94,7 +94,7 @@ if set(KINDS) != set(DEFAULTS):
 
 def processes_for(document_type: str) -> tuple[str, ...]:
     """The processes a source of ``document_type`` is checked for: a B-rep's every one; a mesh's those measured
-    from triangles (molding, printing: no exact radius, axis or thickness is needed); a DXF's sheet alone."""
+    from triangles (printing); a DXF's sheet alone."""
     if document_type in CUT_TYPES:
         return ("sheet",)
     if document_type in BREP_TYPES:
@@ -105,6 +105,12 @@ _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's me
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
              "model": "a model is in millimetres",
              "dxf": "a DXF declares its units ($INSUNITS)"}
+# Why a mesh is not checked for each process measured on exact geometry alone, and what to check instead.
+_MESH_REFUSED = {
+    "cnc": "a cnc check measures exact geometry -- radii, axes, thicknesses -- that a mesh does not hold",
+    "sheet": "a sheet check measures exact geometry -- radii, axes, thicknesses -- that a mesh does not hold",
+    "molding": "a molding check is judged on exact geometry (a mesh's chords misread its draft, undercuts and walls)",
+}
 # The processes that rank candidates: the pulls, the orientations.
 _RANKED = ("molding", "printing")
 
@@ -151,6 +157,10 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
             raise _give_process(document_type)
         return _preflight(document_type, given, candidates)
     module = dfm.module(process)
+    if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
+        reason = _MESH_REFUSED.get(process, f"a {process} check measures exact geometry, which a mesh does not hold")
+        raise ArgumentRefused(f"{reason}: check the part's STEP or model instead (cad step dfm part.step --process "
+                              f"{process}, or cad model dfm <id> --process {process})")
     if document_type in CUT_TYPES and process != "sheet":
         raise ArgumentRefused(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
     own = {**dfm.COMMON, **module.OPTIONS}
@@ -173,9 +183,6 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     from cad._internal.dfm import materials
 
     materials.resolve(resolved.get("material"))
-    if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
-        raise ArgumentRefused(f"a {process} check measures exact geometry -- radii, axes, thicknesses -- that a mesh "
-                         f"does not hold: check the part's STEP, xbf or model (cad step dfm, cad xbf dfm, cad model dfm)")
     module.validate(resolved, document_type)
     return resolved
 
@@ -541,7 +548,7 @@ _ENUMS: dict[str, Any] = {"units": Unit, "technology": Technology}
 
 _SUMMARY = {
     "brep": "Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing.",
-    "mesh": "Check a mesh for a manufacturing process: injection molding or 3D printing.",
+    "mesh": "Check a mesh for 3D printing.",
     "cut": "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: the sheet process.",
 }
 _ABOUT = {
@@ -551,9 +558,9 @@ from a published design guide and no shop's limit, each finding coded by its rul
 and what to change. A rule's feasibility limit broken is an error, as is a family that could not be measured;
 a recommendation is a warning. For a named shop, compare the measurements with its own published limits.
 --json carries every measurement and every rule's outcome.""",
-    "mesh": """A mesh (STL, 3MF, GLB) is measured as triangles, each finding at x, y, z; CNC machining and sheet
-metal need the exact radii, axes and thicknesses a mesh does not hold: check the part's STEP, xbf or model
-for them. The measurements are facts; the verdicts are general rules, each from a published design guide and
+    "mesh": """A mesh (STL, 3MF, GLB) is measured as triangles for 3D printing, each finding at x, y, z; CNC
+machining and sheet metal need the exact radii, axes and thicknesses a mesh does not hold, and injection
+molding's draft, undercuts and walls are judged on exact geometry: check the part's STEP or model for them. The measurements are facts; the verdicts are general rules, each from a published design guide and
 no shop's limit, each finding coded by its rule, with the limit, the source and what to change. A rule's
 feasibility limit broken is an error, as is a family that could not be measured; a recommendation is a
 warning. For a named shop, compare the measurements with its own published limits. --json carries every
@@ -580,6 +587,9 @@ def _source_help(document_type: str) -> str:
 
 
 def _process_help(document_type: str, processes: tuple[str, ...]) -> str:
+    if len(processes) == 1 and document_type not in (*BREP_TYPES, *CUT_TYPES):
+        return (f"{processes[0]}, the one process a mesh is checked for (the default); cnc, sheet and molding are "
+                "judged on exact geometry: check the part's STEP or model for them.")
     if len(processes) == 1:
         return f"{processes[0]}, the one process a {document_type.upper()} is checked for (the default)."
     named = f"{', '.join(processes[:-1])} or {processes[-1]}"
@@ -598,7 +608,10 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
     processes = processes_for(document_type)
     names = [name for name in KINDS if name in dfm.COMMON or any(name in OPTIONS[process] for process in processes)]
     ranked = any(process in _RANKED for process in processes)
-    choice: Any = Literal[processes]  # type: ignore[valid-type]  # the type's processes, the parser's choices
+    # the type's processes, the parser's choices; a mesh's every process, the ones it is not checked for
+    # refused by ``options`` with the reason and the fix
+    offered = PROCESSES if _kind_of(document_type) == "mesh" else processes
+    choice: Any = Literal[offered]  # type: ignore[valid-type]
     one = len(processes) == 1
     keyword = inspect.Parameter.KEYWORD_ONLY
     parameters = [inspect.Parameter("source", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Path),

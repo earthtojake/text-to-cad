@@ -1,4 +1,5 @@
-"""``cad <type> dfm --process cnc|sheet|molding|printing``: a type's manufacturing check, as a command.
+"""``cad <type> dfm --process cnc|sheet|molding|printing``: a type's manufacturing check, as a command (a mesh's:
+printing alone).
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
 command: its options, its one result shape, its refusals before anything is read, a STEP measured
@@ -77,26 +78,28 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.box = self.folder / "box.stl"
         trimesh.creation.box(extents=(20, 20, 15)).export(self.box)
 
-    def test_molding_answers_one_json_line_with_its_measurements(self) -> None:
-        code, out, _ = _run("stl", str(self.box), "--process", "molding", "--pull", "-z", "--json")
-        payload = json.loads(out)
-        # A plain box has no draft: a recommendation, so it passes (exit 0) with warnings that say where.
-        self.assertEqual(code, 0, out)
-        self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
-        self.assertTrue(payload["ok"])
-        self.assertIn("molding.draft_min", [f["code"] for f in payload["findings"] if f["severity"] == "warning"])
-        self.assertEqual([f["code"] for f in payload["findings"] if f["severity"] == "error"], [])
-        self.assertEqual(payload["measurements"]["draft"]["pull_axis"], [0.0, 0.0, -1.0], "--pull -z reached argparse")
-        finding = next(f for f in payload["findings"] if f["code"] == "zero_draft_walls")
-        self.assertEqual((finding["severity"], len(finding["location"].split(", "))), ("warning", 3))
-        self.assertEqual(pull_value(["p.stl", "--pull", "-z"]), ["p.stl", "--pull=-z"])
+    def test_a_mesh_refuses_molding_with_the_reason_and_the_fix(self) -> None:
+        """Molding is judged on exact geometry: each mesh type refuses it before anything is read, the command
+        line's mistake (exit 2, ``invalid_argument``), naming the check to run instead."""
+        for document_type, name in (("stl", "box.stl"), ("threemf", "box.3mf"), ("glb", "box.glb")):
+            with self.subTest(document_type=document_type):
+                path = self.folder / name
+                if not path.exists():
+                    path.write_bytes(b"")
+                code, out, _ = _run(document_type, str(path), "--process", "molding", "--json")
+                found = json.loads(out)
+                self.assertEqual((code, found["ok"], found["reason"]), (2, False, "invalid_argument"))
+                self.assertIn("a molding check is judged on exact geometry", found["error"])
+                self.assertIn("check the part's STEP or model instead (cad step dfm part.step --process molding",
+                              found["error"])
+        self.assertEqual(pull_value(["p.step", "--pull", "-z"]), ["p.step", "--pull=-z"])
 
     def test_a_part_that_fails_its_rules_exits_one_with_its_json_line(self) -> None:
-        """A box missing two triangles is open: no mold fills it, an error of every process (exit 1)."""
+        """A box missing two triangles is open: nothing prints it, an error (exit 1)."""
         opened = self.folder / "open.stl"
         box = trimesh.creation.box(extents=(20, 20, 15))
         trimesh.Trimesh(box.vertices, box.faces[:-2], process=False).export(opened)
-        code, out, _ = _run("stl", str(opened), "--process", "molding", "--json")
+        code, out, _ = _run("stl", str(opened), "--process", "printing", "--json")
         payload = json.loads(out)
         self.assertEqual((code, payload["ok"]), (1, False), out)
         self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
@@ -111,14 +114,9 @@ class ManufacturingCheckCommand(unittest.TestCase):
         """An option's value it refuses is the command line's mistake, exit 2, named by its flag: a choice
         its parser does not take (``usage``), or a value the check refuses (``invalid_argument``)."""
         for argv, words, reason in (
-                ((str(self.box),), "give --process molding or printing", "invalid_argument"),
                 ((str(self.box), "--process", "casting"), "argument --process: invalid choice: 'casting'", "usage"),
-                ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's",
-                 "invalid_argument"),
-                ((str(self.box), "--process", "printing", "--pull", "z"), "--pull is not printing's", "invalid_argument"),
-                ((str(self.box), "--process", "molding", "--candidates", "--pull", "x"), "ranks every pull",
-                 "invalid_argument"),
-                ((str(self.box), "--process", "molding", "--pull", "up"), "--pull is an axis", "invalid_argument"),
+                ((str(self.box), "--process", "cnc"), "a cnc check measures exact geometry", "invalid_argument"),
+                ((str(self.box), "--process", "printing", "--pull", "z"), "unrecognized arguments: --pull", "usage"),
                 ((str(self.box), "--process", "printing", "--samples", "0"), "--samples is a count of at least 1",
                  "invalid_argument"),
                 ((str(self.box), "--process", "printing", "--units", "yd"), "argument --units: invalid choice: 'yd'",
@@ -132,21 +130,21 @@ class ManufacturingCheckCommand(unittest.TestCase):
         code, out, _ = _run("threemf", str(self.folder / "box.3mf"), "--process", "printing", "--units", "cm", "--json")
         self.assertEqual(code, 2)
         self.assertIn("a 3MF declares its unit", json.loads(out)["error"])
-        code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "molding")
+        code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "printing")
         self.assertEqual(code, 2)
         self.assertIn("box.glb is a glb, not a stl: use cad glb dfm", err)
 
     def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
         """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one, nor
         does a file that is not there."""
-        code, _out, err = _run("stl", str(self.box), "--process", "molding", "--not-a-flag")
+        code, _out, err = _run("stl", str(self.box), "--process", "printing", "--not-a-flag")
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --not-a-flag", err)
         # the checks are general: no flag picks a shop's rules
-        code, _out, err = _run("stl", str(self.box), "--process", "molding", "--rules", "generic")
+        code, _out, err = _run("stl", str(self.box), "--process", "printing", "--rules", "generic")
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --rules generic", err)
-        code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "molding", "--json")
+        code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "printing", "--json")
         self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
 
     def test_a_step_is_measured_on_its_exact_geometry(self) -> None:
@@ -168,18 +166,18 @@ class ManufacturingCheckCommand(unittest.TestCase):
 
         step = self.folder / "box.step"
         export_step(Box(20, 20, 15), str(step))
-        argv = (str(self.box), "--process", "molding", "--candidates", "--json")
+        argv = (str(self.box), "--process", "printing", "--candidates", "--json")
         _code, here, _ = _run("stl", *argv)
         with mock.patch.object(integration_env, "carries", return_value=False), \
                 mock.patch.object(integration_env, "environment", return_value=sys.executable) as made:
             code, there, _ = _run("stl", *argv)
-            refused, said, _ = _run("stl", str(self.box), "--process", "molding", "--samples", "3", "--json")
+            refused, said, _ = _run("stl", str(self.box), "--process", "printing", "--samples", "0", "--json")
             # a STEP keeps no process: refused here, not after the file is read there
             unasked, kept, _ = _run("step", str(step), "--json")
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(there), json.loads(here))
         self.assertEqual((refused, made.call_count), (2, 1), "a refusal makes no environment")
-        self.assertIn("--samples is not molding's", json.loads(said)["error"])
+        self.assertIn("--samples is a count of at least 1", json.loads(said)["error"])
         self.assertEqual((unasked, json.loads(kept)["reason"]), (2, "invalid_argument"))
         self.assertIn("a STEP keeps no process: give --process cnc", json.loads(kept)["error"])
 
@@ -233,11 +231,13 @@ class ManufacturingCheckCommand(unittest.TestCase):
             return {action.dest: action for action in build_parser(document_type, "dfm")._actions}  # noqa: SLF001
 
         stl, dxf = flags("stl"), flags("dxf")
-        self.assertEqual((list(stl["process"].choices), "axes" in stl, "pull" in stl), (["molding", "printing"], False, True))
+        # a mesh is checked for printing alone (the default); the rest are refused with the reason and the fix
+        self.assertEqual((list(stl["process"].choices), stl["process"].default, "axes" in stl, "pull" in stl),
+                         (["cnc", "sheet", "molding", "printing"], "printing", False, False))
         self.assertEqual((list(dxf["process"].choices), dxf["process"].default, "pull" in dxf), (["sheet"], "sheet", False))
         code, _, err = _run("stl", str(self.box), "--process", "cnc")
         self.assertEqual(code, 2)
-        self.assertIn("argument --process: invalid choice: 'cnc'", err)
+        self.assertIn("a cnc check measures exact geometry", err)
 
     def test_exact_geometry_runs_in_the_base_and_a_mesh_in_trimeshs(self) -> None:
         """A STEP's check is build123d's, whose environment is the base the engine's kernel runs in: no second

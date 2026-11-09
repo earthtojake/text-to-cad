@@ -617,11 +617,10 @@ src/cad/
                          #   a board or a schematic through its headless api-server and KiPy
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
                          #   and exports (_schematic)
-  trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
-                         #   (draft, undercuts, walls, projection along a pull), pulls (the pulls ranked),
-                         #   printing (overhangs, walls, trapped volumes, support), orientations (ranked) --
-                         #   each taking a trimesh.Trimesh and answering its report as data (_molding,
-                         #   _printing), and the check every mesh type runs with them (_check)
+  trimesh/               # the trimesh integration: a mesh's 3D printing measurements -- printing
+                         #   (overhangs, walls, trapped volumes, support), orientations (ranked) -- each
+                         #   taking a trimesh.Trimesh and answering its report as data (_printing), the
+                         #   mesh read and cleaned (_mesh), and the check every mesh type runs (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -704,8 +703,9 @@ made is removed. Exports and checks of the edited file are explicit calls after 
 
 A 3D document's `dfm` says whether a part can be made by a process, and what to change where it cannot:
 `cad.model.dfm`, `cad.step.dfm`, `cad.xbf.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
-with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `molding` or
-`printing` alone: CNC and sheet need exact geometry), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
+with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `printing`
+alone, its default: CNC, sheet and molding are judged on exact geometry, and a mesh asked for one is refused
+with the check to run instead, the STEP's or the model's), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
 (its one process, `sheet`, the default). The source is a file of the type or, for `model`, a model's document the engine
 holds (its id, or the handle its call returns), so a check script measures the model it builds:
 
@@ -763,8 +763,7 @@ other types declaring their own; an option of another process, and a value of an
 each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
 
 The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
-`cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
-`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
+`cad.trimesh.printing(mesh)` and `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
 `cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
 gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`, `cad.threemf.dfm` and
 `cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.xbf.dfm`, `cad.model.dfm` and `cad.dxf.dfm` build123d -- found by
