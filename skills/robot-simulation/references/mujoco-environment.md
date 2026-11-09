@@ -437,7 +437,11 @@ What to try, in the order MuJoCo's modelling guide gives:
      its `<include>`, marked as tuned rather than measured. Start from the order of magnitude: the
      small brushed motors inside hobby and smart servos have rotors of roughly 1e-8 kg*m^2 (a
      coreless micro motor) to 1e-6 kg*m^2 (an iron-core can motor about 25 mm across), so 1e-7
-     times the gear ratio squared is a fair first value, good to a factor of ten either way. Raise it
+     times the gear ratio squared is a fair first value, good to a factor of ten either way. An
+     industrial or collaborative arm's joint is another class: a brushless motor through a harmonic
+     or cycloidal drive, ratios of about 50 to 160, rotors of about 1e-5 to 1e-4 kg*m^2, so its
+     reflected inertia is of the order of 0.03 to 2 kg*m^2 (the larger at the shoulder, the smaller
+     at the wrist). That is an order of magnitude to start from, not a value: tune it. Raise it
      while a joint rings or chatters under its position actuator; lower it while the joint lags a
      command the hardware follows.
 - **Actuators**: gains from the robot's data sheet (`kp`, and `kv` or `dampratio` for a position
