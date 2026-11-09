@@ -120,7 +120,7 @@ defaults, and narrow one question with a posed snapshot instead. Each stop shoul
 neighbouring links. A stop at 0, or one that names a part of a link that is not a neighbour, means
 a part is in the wrong link. Vendor parts often sit a fraction of a millimetre apart (a jaw beside
 its servo's cover): the finding lists them as `near as built`, and such a pair stops a joint only
-where its gap halves. A stop that says `closed to ... from ... mm as built` is one of them; check
+where its gap closes to touching. A stop that says `closed to ... from ... mm as built` is one of them; check
 it with a posed snapshot. Write the stops into `angular_range`, rounded towards zero. A joint
 found clear all the way round has no stop in the parts: give it the actuator's own travel, or make
 it continuous ([Generate from CAD](../SKILL.md#generate-from-cad)).

@@ -34,8 +34,9 @@ keeps its count as it turns about the shared axis, and the count rule holds for 
 but within the reach is near: a count of its points within the clearance changes with every hundredth of
 a millimetre its gap changes by and with how the grid's cells fall, so it would stop wherever the gap
 narrows a hair (0.42 to 0.35 mm), and a finer clearance only moves that stop. Its gap is tracked
-instead, and it meets where the gap falls under ``CLOSED`` of its gap at zero, at that pose and the next:
-it has closed half the way to touching. Each joint's near pairs are reported with their gap at zero and at
+instead, and it meets where the gap closes to touching, at that pose and the next: under ``TOUCHING`` of the
+clearance, the bound a pair touching at zero is under, and under ``CLOSED`` of its own gap at zero (a
+pair resting just past that bound meets only once it has closed by half). Each joint's near pairs are reported with their gap at zero and at
 each stop (``JointStops.near``), and a stop one of them makes says so (``Contact.near``).
 
 Units are the document's: degrees and millimetres, values around the as-built pose (zero), with the
@@ -63,7 +64,8 @@ SPACING = 0.6
 TOUCHING = 0.2
 #: How far, in clearances, a pair at zero is measured: two points in one grid cell are at most this far apart.
 REACH = math.sqrt(3)
-#: A pair near at zero meets where its gap falls under this share of its gap at zero.
+#: A pair near at zero meets where its gap is under ``TOUCHING`` of the clearance and under this share of its gap
+#: at zero.
 CLOSED = 0.5
 #: A full turn, in degrees: a turning joint clear this far each way has no stop.
 TURN = 360.0
@@ -557,6 +559,14 @@ class _Sweep:
         trees = _Trees(still_points, still_owners)
         moved_by_part = {part: np.flatnonzero(movers == part) for part in {pair[0] for pair in near}}
 
+        # A near pair meets under its own bound (the module's **A pair near at zero**): a pose looks only that far, and the gaps a stop
+        # reports are measured at the stop's pose alone, out to the reach.
+        bound = {pair: min(TOUCHING * self.clearance, CLOSED * rest_gap) * 1e-3 for pair, rest_gap in near.items()}
+
+        def closed(placed: np.ndarray) -> set[tuple[int, int]]:
+            """The near pairs closed to touching at a pose."""
+            return {pair for pair in near if trees.gap(pair[1], placed[moved_by_part[pair[0]]], bound[pair]) is not None}
+
         def gaps(placed: np.ndarray) -> dict[tuple[int, int], float | None]:
             """Each near pair's gap at a pose, in mm: None where it is over the reach apart."""
             return {pair: trees.gap(pair[1], placed[moved_by_part[pair[0]]], REACH * self.pitch) for pair in near}
@@ -586,12 +596,15 @@ class _Sweep:
                            near=None if pair not in near else round(near[pair], 4),
                            gap=None if pair not in near or gap is None else round(gap, 4))
 
+        def gap_at(pair: tuple[int, int], value: float) -> float | None:
+            return gaps(placed_at(value)).get(pair) if pair in near else None
+
         at_stop: dict[int, dict[tuple[int, int], float | None]] = {}
         for sign in (-1, 1):
             if sign == 1 and turning and stops.lower_contact is None and stops.lower_clash is None:
                 break  # nothing met a full turn one way: nothing meets the other way either
             before: dict[tuple[int, int], int] = {}
-            history: list[dict[tuple[int, int], float | None]] = [dict(near)]  # each near pair's gap by pose
+            closed_before: set[tuple[int, int]] = set()
             stop: tuple[float, Contact] | None = None
             clash: Contact | None = None
             for k in range(1, count + 1):
@@ -599,23 +612,21 @@ class _Sweep:
                 placed = placed_at(value)
                 over = {pair: number - zero.get(pair, 0) for pair, number in counted(placed).items()
                         if pair not in near}
-                gapped = gaps(placed)
-                history.append(gapped)
-                # A contact is a pair over STOP (a near pair: closed under CLOSED of its gap at zero) at a pose and
-                # the next: a graze over it at one pose alone is none.
+                closed_now = closed(placed) if near else set()
+                # A contact is a pair over STOP (a near pair: its gap closed to touching) at a pose and the next: a
+                # graze over it at one pose alone is none.
                 met = sorted((pair for pair, number in over.items() if number > STOP and before.get(pair, 0) > STOP),
                              key=lambda pair: -before[pair])
-                met += [pair for pair, rest_gap in near.items() if _closed(gapped[pair], rest_gap)
-                        and _closed(history[-2][pair], rest_gap)]
+                met += sorted(closed_now & closed_before)
                 own = [pair for pair in met if link_of[pair[0]] in child_side and link_of[pair[1]] in parent_side]
                 if met and clash is None and not own:
-                    clash = contact_at(met[0], value - sign * step, history[-2].get(met[0]))
+                    clash = contact_at(met[0], value - sign * step, gap_at(met[0], value - sign * step))
                 if own:
                     stop = (round((value - 2 * sign * step) * scale, 6),
-                            contact_at(own[0], value - sign * step, history[-2].get(own[0])))
-                    at_stop[sign] = history[-3]
+                            contact_at(own[0], value - sign * step, gap_at(own[0], value - sign * step)))
+                    at_stop[sign] = gaps(placed_at(value - 2 * sign * step)) if near else {}
                     break
-                before = over
+                before, closed_before = over, closed_now
             if sign < 0:
                 stops.lower, stops.lower_contact = stop if stop is not None else (None, None)
                 stops.lower_clash = clash
@@ -631,11 +642,6 @@ class _Sweep:
                            rounded(at_stop[1][(a, b)]) if 1 in at_stop else None)
                       for (a, b), gap in sorted(near.items(), key=lambda item: item[1])]
         return stops
-
-
-def _closed(gap: float | None, rest: float) -> bool:
-    """Whether a near pair's gap at a pose has closed under ``CLOSED`` of its gap at zero."""
-    return gap is not None and gap < CLOSED * rest
 
 
 def _gaps_at_rest(points: np.ndarray, owners: np.ndarray, still: np.ndarray, still_owners: np.ndarray, reach: float,
@@ -663,19 +669,23 @@ def _gaps_at_rest(points: np.ndarray, owners: np.ndarray, still: np.ndarray, sti
 
 
 class _Trees:
-    """A KD-tree of each still part's samples, made as a near pair first asks for it."""
+    """A KD-tree of each still part's samples and their box, made as a near pair first asks for it."""
 
     def __init__(self, points: np.ndarray, owners: np.ndarray) -> None:
         self.points, self.owners = points, owners
-        self.trees: dict[int, Any] = {}
+        self.trees: dict[int, tuple[Any, np.ndarray, np.ndarray]] = {}
 
     def gap(self, part: int, points: np.ndarray, reach: float) -> float | None:
-        """The least distance from ``points`` to the still ``part``'s samples, in mm; None over ``reach`` metres."""
-        tree = self.trees.get(part)
-        if tree is None:
+        """The least distance from ``points`` to the still ``part``'s samples, in mm; None over ``reach`` metres. Only
+        the points inside the part's box grown by ``reach`` are looked up: a pose's few, of a part beside it."""
+        held = self.trees.get(part)
+        if held is None:
             from scipy.spatial import cKDTree
 
-            tree = self.trees[part] = cKDTree(self.points[self.owners == part])
+            mine = self.points[self.owners == part]
+            held = self.trees[part] = (cKDTree(mine), mine.min(axis=0), mine.max(axis=0))
+        tree, low, high = held
+        points = points[np.all((points >= low - reach) & (points <= high + reach), axis=1)]
         if not len(points):
             return None
         distances, _ = tree.query(points, k=1, distance_upper_bound=reach)

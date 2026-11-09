@@ -63,8 +63,9 @@ def ranges_for(document_type: str) -> Any:
         fixed to it): a stop whatever the other joints do, what its range declares. Where anything it moves
         meets another link first, in the pose the others stand in, that clash is said beside the stop. Parts
         touching already as built (a horn on its servo) meet only when their contact grows; parts near as built
-        (within the clearance, apart) meet only where their gap closes to half its as-built width, and each
-        joint's finding names them with their gap as built and at each stop. Each joint's finding
+        (apart, within the clearance) meet only where their gap closes to touching (under a fifth of the
+        clearance, and under half their gap as built), and each joint's finding names them with their gap as
+        built and at each stop. Each joint's finding
         says its stops in degrees or millimetres around the as-built pose (and in its own values where that is
         not zero) and which two parts meet past each; a part declared collision none takes no part. The model
         is not changed: adopt the numbers into its joints' ranges. --json carries every number.
@@ -206,7 +207,7 @@ def _words(found: Any) -> str:
                       end("upper", found.upper, upper, found.upper_contact, found.upper_clash)])
     near = list(getattr(found, "near", None) or ())
     if near:
-        # Pairs within the clearance as built stop the joint only where their gap halves: said, so that a stop
+        # Pairs within the clearance as built stop the joint only where their gap closes: said, so that a stop
         # near one of them reads against its gap.
         rows = []
         for pair in near[:NEAR_SAID]:

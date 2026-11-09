@@ -318,7 +318,8 @@ cad step ranges arm.step --step 0.5 --json
 - **What touches.** Two surfaces within `--clearance` (1 mm) count as touching. Parts already
   touching as built (a horn on its servo) meet only when their contact grows.
 - **Near as built.** Two parts apart but within the clearance as built (a jaw 0.4 mm from its
-  servo's cover) meet only where their gap closes to half of what it was as built. The finding
+  servo's cover) meet only where their gap closes to touching: under a fifth of the clearance and
+  under half of what it was as built. The finding
   lists them, `near as built:`, with the gap as built and at each stop, and a stop one of them
   makes says `closed to 0.18 from 0.42 mm as built`. Read such a stop against the geometry before
   you adopt it. A lower `--clearance` does not remove a near pair's stop; the pair's gap decides it.
