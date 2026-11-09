@@ -103,9 +103,10 @@ part once: what a listing weighs, your declarations together weigh.
   settings ([inertials](inertials.md#a-printed-part)).
 - **Servos and motors:** the datasheet's weight is the servo as sold. Check what that includes: a
   hobby or smart servo's listing usually weighs it with one horn fitted, sometimes with its whole
-  bag of horns and screws, sometimes bare. Check the listing; don't count a part twice. When the
-  STEP draws the horns as solids of their own, they are inside that weight, and the horns turn with
-  the child link while the case stays on the parent (step 2), so one `mass()` cannot hold both.
+  bag of horns and screws, sometimes bare. Check the listing; don't count a part twice. Where the
+  CAD leaves the motor out, `point_mass()` adds it. When the STEP draws as solids of their own horns
+  that the listing includes, they are inside its weight, and the horns turn with the child link while
+  the case stays on the parent (step 2), so one `mass()` cannot hold both.
   Split the listing between them: give each horn its share (a spare horn's listed weight, or its
   volume at its metal's density), and the servo's sub-assembly (the `bd.Compound` of its case and
   internals) the rest. Together they weigh what the listing says, so the horns add nothing:
@@ -120,8 +121,6 @@ part once: what a listing weighs, your declarations together weigh.
 
   Subtract only the horns the listing includes. A horn it leaves out (bought apart) adds its own
   weight on top.
-
-  Where the CAD leaves the motor out, `point_mass()` adds it.
 - **Boards and cables:** a weighed figure, or an assumed one written in a comment beside it.
 
 `cad model inspect "$ID"` weighs the result. Read its total against the hardware's: the listed
