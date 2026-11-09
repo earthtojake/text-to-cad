@@ -102,8 +102,10 @@ def _layers(value: Any, copper: Sequence[str], where: str) -> tuple[tuple[str, f
         value = [value]
     if isinstance(value, Mapping):
         pairs = [(str(layer), _number(cost, f"the cost of {layer}", where, 0.0)) for layer, cost in value.items()]
-        if any(cost <= 0 for _, cost in pairs):
-            raise ValueError(f"{where}: each layer's cost per mm is more than 0")
+        for layer, cost in pairs:
+            if cost <= 0:
+                raise ValueError(f"{where}: the cost of {layer} is {cost:g}: each layer's cost per mm is more than 0 "
+                                 "(1 for a plain layer, more for one to keep off)")
     elif isinstance(value, (list, tuple)):
         pairs = [(str(layer), 1.0) for layer in value]
     else:
@@ -114,8 +116,9 @@ def _layers(value: Any, copper: Sequence[str], where: str) -> tuple[tuple[str, f
     for layer, _ in pairs:
         if layer not in copper:
             raise ValueError(f"{where}: {layer!r} is not a copper layer of this board; its copper layers are {', '.join(copper)}")
-    if len({layer for layer, _ in pairs}) != len(pairs):
-        raise ValueError(f"{where}: layers names a layer twice")
+    twice = sorted({layer for layer, _ in pairs if sum(name == layer for name, _ in pairs) > 1})
+    if twice:
+        raise ValueError(f"{where}: layers names {', '.join(twice)} twice: name each layer once")
     return tuple(pairs)
 
 
@@ -127,8 +130,24 @@ def _reference(text: Any, where: str) -> str:
 
 def _entries(connections: Any, defaults: Mapping[str, Any]) -> list[dict[str, Any]]:
     """The plan as dicts with ``net`` or ``pads`` and the options, the call's defaults filled in."""
-    if isinstance(connections, (str, bytes)) or not isinstance(connections, Sequence) or not connections:
+    if connections is None or isinstance(connections, Sequence) and not isinstance(connections, (str, bytes)) \
+            and not connections:
         raise ValueError(_HOW)
+    if isinstance(connections, (str, bytes)):
+        raise ValueError(f"route: a plan is a list of connections, in order, not the "
+                         f"{'string' if isinstance(connections, str) else 'bytes'} {connections!r:.60}: "
+                         f"route(b, [{connections!r:.60}], ...)")
+    if isinstance(connections, (set, frozenset)):
+        raise ValueError("route: a plan is a list, in order (a set has no order, and the order is what routes first): "
+                         f"route(b, [\"/CLK\", (\"U1.3\", \"C4.1\")], ...), not {connections!r:.60}")
+    if isinstance(connections, Mapping):
+        raise ValueError("route: a plan is a list of entries, and a dict is one entry: route(b, [{\"net\": \"/CLK\", "
+                         f"\"layers\": [\"F.Cu\"]}}]), not {connections!r:.60}")
+    if not isinstance(connections, Sequence):
+        if hasattr(connections, "__iter__"):
+            raise ValueError(f"route: a plan is a list, in order, not a {type(connections).__name__}: give it as a "
+                             "list, route(b, list(plan), ...)")
+        raise ValueError(f"{_HOW}; not {connections!r:.60}")
     entries = []
     for index, entry in enumerate(connections):
         where = f"route: entry {index + 1}"
@@ -136,16 +155,21 @@ def _entries(connections: Any, defaults: Mapping[str, Any]) -> list[dict[str, An
             entry = {"net": entry}
         elif isinstance(entry, (tuple, list)):
             if len(entry) != 2:
-                raise ValueError(f"{where}: a pair of pads is two pads (\"U1.3\", \"C4.1\"), not {entry!r}")
+                raise ValueError(f"{where}: a pair of pads is two pads (\"U1.3\", \"C4.1\"), not {entry!r}; to join every "
+                                 "pad of a net, name the net (\"/CLK\"): a net joins all its pads")
             entry = {"pads": list(entry)}
         elif not isinstance(entry, Mapping):
             raise ValueError(f"{where}: {entry!r} is neither a net, a pair of pads nor a dict; {_HOW}")
-        unknown = sorted(set(entry) - set(_KEYS))
+        unknown = sorted(set(entry) - set(_KEYS), key=str)
         if unknown:
-            raise ValueError(f"{where}: unknown key {', '.join(map(repr, unknown))}; an entry takes "
-                             f"{', '.join(_KEYS)} (net or pads, not both)")
+            meant = [close[0] for key in unknown if isinstance(key, str)
+                     for close in [difflib.get_close_matches(key.lower(), _KEYS, n=1)] if close]
+            raise ValueError(f"{where}: unknown key {', '.join(map(repr, unknown))}"
+                             + (f" (did you mean {', '.join(map(repr, meant))}?)" if meant else "")
+                             + f"; an entry takes {', '.join(_KEYS)} (net or pads, not both)")
         if ("net" in entry) == ("pads" in entry):
-            raise ValueError(f"{where}: an entry names a net or a pair of pads, one of the two: {dict(entry)!r}")
+            raise ValueError(f"{where}: an entry names a net or a pair of pads, one of the two ({{\"net\": \"/CLK\"}} or "
+                             f"{{\"pads\": (\"U1.3\", \"C4.1\")}}), not {dict(entry)!r}")
         merged = {**{key: value for key, value in defaults.items() if value is not None}, **dict(entry)}
         if merged.get("layers") is None:
             raise ValueError(f"{where} ({entry.get('net') or entry.get('pads')}) has no layers: say which copper layers "
@@ -203,7 +227,8 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
                     lowered.setdefault(name.lower(), name)
                 close = [lowered[name] for name in difflib.get_close_matches(net.lower(), list(lowered), n=3)]
                 raise ValueError(f"{where}: no pad of the board is on a net {net!r}"
-                                 + (f"; did you mean {', '.join(map(repr, close))}?" if close else ""))
+                                 + (f"; did you mean {', '.join(map(repr, close))}?" if close else
+                                    "; name a net one of its pads is on (kicad_pcb.read(path).nets lists them)"))
             pads, ends = pads_of[net], None
             where = f"{where} (net {net})"
         else:
@@ -216,7 +241,7 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
             except ValueError as error:
                 raise ValueError(f"{where}: {error}") from None
             if first is second:
-                raise ValueError(f"{where}: {a} to itself is no connection")
+                raise ValueError(f"{where}: {a} to itself is no connection: a pair names two pads of one net")
             if not first.net or first.net != second.net:
                 raise ValueError(f"{where}: {a} is on {first.net or 'no net'} and {b} on {second.net or 'no net'}: "
                                  "a connection joins two pads of one net")
@@ -427,7 +452,9 @@ def _write(board: Any, tracks: Sequence[Any], vias: Sequence[Any], copper: Seque
         raise
     board.push_commit(commit, f"Route {len(tracks)} segment(s) and {len(vias)} via(s)")
     if len(made) != len(items):
-        raise RuntimeError(f"route: KiCad kept {len(made)} of the {len(items)} items routed; nothing is saved")
+        raise RuntimeError(f"route: KiCad kept {len(made)} of the {len(items)} items routed, so nothing is saved (the "
+                           "edit saves nothing when its block raises): run the plan again, and report the board and "
+                           "plan if KiCad drops them again")
 
 
 def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any = None, width: float | None = None,

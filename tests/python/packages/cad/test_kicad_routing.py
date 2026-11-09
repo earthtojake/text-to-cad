@@ -280,7 +280,30 @@ class Routes(unittest.TestCase):
 
     def test_a_wall_is_named_by_what_it_is(self) -> None:
         router, done = self.route([want("F", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)))])
-        self.assertIn("R5.1 is walled in by a keep-out", done[0].reason)
+        self.assertIn("R5.1 is walled in by a keep-out at (26, 4)", done[0].reason, "located by its box's centre")
+
+    def test_under_no_via_a_walled_in_end_names_the_layers_it_reaches_and_the_via_limit(self) -> None:
+        """R1 fenced on F.Cu by a ring of another net, B.Cu allowed: with no via it is walled in on F.Cu alone, and
+        the limit is why it cannot reach B.Cu; with vias allowed it goes under the ring."""
+        ring = [segment("", "W", a, b) for a, b in (((3, 1.5), (7, 1.5)), ((7, 1.5), (7, 4.5)), ((7, 4.5), (3, 4.5)),
+                                                    ((3, 4.5), (3, 1.5)))]
+        copper = read_copper(board(resistor("R1", 5, 3, 0, "A", "N1"), resistor("R2", 25, 12, 0, "A", "N2"), *ring))
+        two = (("F.Cu", 1.0), ("B.Cu", 1.0))
+        done = Router(copper, RULES, [want("A", layers=two, vias=0)]).run()
+        self.assertFalse(done[0].routed)
+        self.assertIn("R1.1 is walled in by W and N1: no way out of", done[0].reason)
+        self.assertIn("round it on F.Cu for a 0.25 mm track keeping 0.2 mm", done[0].reason)
+        self.assertTrue(done[0].reason.endswith("; and with no via it cannot reach B.Cu: raise the entry's vias"),
+                        done[0].reason)
+        router = Router(copper, RULES, [want("A", layers=two)])
+        done = router.run()
+        self.assertTrue(done[0].routed, done[0].line())
+        independent_check(self, copper, RULES, router, [want("A")])
+        with mock.patch.object(plan, "FLOOD", 1):  # no flood says it walled in: the search's own failure
+            done = Router(copper, RULES, [want("A", layers=two, vias=0)]).run()
+        self.assertIn("no way through on F.Cu and B.Cu with no via within the plan's region", done[0].reason)
+        self.assertTrue(done[0].reason.endswith("(with no via a route keeps to the layers its ends are on: R1.1 on "
+                                                "F.Cu, R2.1 on F.Cu): raise the entry's vias"), done[0].reason)
 
     def test_one_pair_of_pads_is_one_connection(self) -> None:
         router, done = self.route([want("B", pads=("R3.1", "J1.3"), layers=(("F.Cu", 1.0), ("B.Cu", 1.0)))])
@@ -330,7 +353,8 @@ class ViaLimit(unittest.TestCase):
         self.assertEqual(2, len(router.vias))
         independent_check(self, copper, RULES, router, [want("A")])
         self.assertIn("with no via left of the entry's 2", done[1].reason)
-        self.assertIn("a narrower track (the board allows 0.15 mm) or another layer may fit", done[1].reason)
+        self.assertIn("a narrower track (the board allows 0.15 mm) may fit; and with no via left of the entry's 2 it "
+                      "cannot reach B.Cu: raise the entry's vias", done[1].reason)
 
     def test_every_entry_answers_a_line_even_with_nothing_to_route(self) -> None:
         copper = read_copper(board(resistor("R1", 5, 10, 0, "B", "A"), resistor("R2", 9, 10, 0, "A", "C"),
@@ -338,6 +362,7 @@ class ViaLimit(unittest.TestCase):
         done = Router(copper, RULES, [want("A"), want("B")]).run()
         self.assertEqual(["A: R1.2 to R2.1: already joined by the copper on the board",
                           "B: R1.1: the net's one pad on the board: nothing to route"], [c.line() for c in done])
+        self.assertEqual([1, 2], [c.entry for c in done], "each connection's plan entry, from 1")
 
     def test_a_search_past_the_memory_cap_is_refused_before_anything_is_routed(self) -> None:
         """Each via a limit allows is another copy of the search's states: a limit whose search would not fit the
@@ -363,7 +388,9 @@ class LayerChanges(unittest.TestCase):
         layers = (("F.Cu", 1.0), ("In1.Cu", 1.0), ("B.Cu", 1.0))
         done = Router(copper, RULES, [want("A", layers=layers, vias=0)]).run()
         self.assertFalse(done[0].routed, done[0].line())
-        self.assertIn("on F.Cu and In1.Cu and B.Cu with no via for", done[0].reason)
+        self.assertIn("R2.1 is walled in", done[0].reason)
+        self.assertIn("round it on B.Cu for a 0.25 mm track", done[0].reason)
+        self.assertIn("and with no via it cannot reach F.Cu or In1.Cu: raise the entry's vias", done[0].reason)
         router = Router(copper, RULES, [want("A", layers=layers)])
         done = router.run()
         self.assertTrue(done[0].routed, done[0].line())
@@ -415,12 +442,20 @@ class Plans(unittest.TestCase):
         self.assertIn(said, str(caught.exception))
 
     def test_no_plan_is_refused_naming_what_to_give(self) -> None:
-        for plan in ([], None, "A"):
+        for plan in ([], None, 3):
             self.refused(plan, "route needs a plan")
+        self.refused(3, "; not 3")
         self.refused(["A"], "has no layers")
+        self.refused("A", "a plan is a list of connections, in order, not the string 'A': route(b, ['A'], ...)")
+        self.refused({"A", "C"}, "a plan is a list, in order (a set has no order")
+        self.refused({"net": "A"}, "a plan is a list of entries, and a dict is one entry: route(b, [{\"net\"")
+        self.refused((net for net in ["A"]), "a plan is a list, in order, not a generator: give it as a list")
 
     def test_an_entry_is_a_net_a_pair_of_pads_or_a_dict_of_known_keys(self) -> None:
-        self.refused([{"net": "A", "layer": ["F.Cu"]}], "unknown key 'layer'")
+        self.refused([{"net": "A", "layer": ["F.Cu"]}], "unknown key 'layer' (did you mean 'layers'?)")
+        self.refused([{"net": "A", "widht": 0.3}], "unknown key 'widht' (did you mean 'width'?)", layers=["F.Cu"])
+        self.refused([("R1.1", "R2.1", "R1.2")], "a pair of pads is two pads (\"U1.3\", \"C4.1\"), not ('R1.1', 'R2.1', "
+                     "'R1.2'); to join every pad of a net, name the net (\"/CLK\"): a net joins all its pads")
         self.refused([{"net": "A", "pads": ("R1.1", "R2.1"), "layers": ["F.Cu"]}], "a net or a pair of pads")
         self.refused([("R1.1", "R1.2")], "a connection joins two pads of one net", layers=["F.Cu"])
         self.refused(["Z"], "no pad of the board is on a net 'Z'", layers=["F.Cu"])

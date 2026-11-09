@@ -107,7 +107,7 @@ class Want:
 @dataclass(frozen=True)
 class Connection:
     """What became of one connection: ``net``; ``between``, the two ends (a pad, or the copper of the net it
-    joined); ``routed`` or not, and ``reason`` why not; the copper it added."""
+    joined); ``routed`` or not, and ``reason`` why not; the copper it added; the plan's ``entry`` it came from."""
 
     net: str
     between: tuple[str, str]
@@ -116,6 +116,8 @@ class Connection:
     tracks: int = 0
     vias: int = 0
     length: float = 0.0
+    #: The plan's entry it came from, counted from 1 (a net's entry gives one connection for each island joined).
+    entry: int = 0
 
     def line(self) -> str:
         what = f"{self.net}: {self.between[0]}" + (f" to {self.between[1]}" if self.between[1] else "")
@@ -294,7 +296,8 @@ class Router:
         points = [pad.at for pad in self.board.pads if pad.net in nets]
         edge = [p for ring in self.board.outline for p in ring] or points
         if not points:
-            raise ValueError("the plan's nets have no pad on the board: nothing to route")
+            raise ValueError("route: the plan's nets have no pad on the board: nothing to route; name nets its pads "
+                             "are on")
         g = self.pitch
         x0, y0 = min(p[0] for p in points), min(p[1] for p in points)
         x1, y1 = max(p[0] for p in points), max(p[1] for p in points)
@@ -309,7 +312,7 @@ class Router:
             ((self._vias_left(want, 0)[0] or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES
             + len(want.layers) * LAYER_BYTES for want in self.wants)
         if fields + searching > MAX_BYTES:
-            raise ValueError(f"the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
+            raise ValueError(f"route: the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
                              f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
                              f"{fields / 1e6:.0f} MB of fields and {searching / 1e6:.0f} MB for its largest search (its "
                              f"layers, once more for each via its limit allows), past the router's {MAX_BYTES / 1e6:.0f} "
@@ -414,8 +417,8 @@ class Router:
 
     def run(self) -> list[Connection]:
         done: list[Connection] = []
-        for want in self.wants:
-            done += self._route(want)
+        for index, want in enumerate(self.wants):
+            done += [replace(outcome, entry=index + 1) for outcome in self._route(want)]
         return done
 
     def _route(self, want: Want) -> list[Connection]:
@@ -426,8 +429,8 @@ class Router:
             second = next(island for island in islands if any(item.pad is b for item in island))
             if first is second:
                 return [Connection(want.net, want.pads, True, "already joined by the copper on the board")]
-            left, limit = self._vias_left(want, 0)
-            return [self._join(replace(want, vias=left), first, second, want.pads, limit)]
+            left, limit, fix = self._via_limit(want, 0)
+            return [self._join(replace(want, vias=left), first, second, want.pads, limit, fix)]
         islands = [island for island in _islands(self._own.get(want.net, [])) if any(item.kind == "pad" for item in island)]
         if len(islands) < 2:  # every entry answers a line: a net whole already, or of one pad
             pads = sorted((item.name for island in islands for item in island if item.kind == "pad"), key=_natural)
@@ -442,9 +445,9 @@ class Router:
         while apart:
             nearest = min(range(len(apart)), key=lambda k: (self._gap(tree, apart[k]), _natural(_island_name(apart[k]))))
             island = apart.pop(nearest)
-            left, limit = self._vias_left(want, spent)
+            left, limit, fix = self._via_limit(want, spent)
             outcome = self._join(replace(want, vias=left), tree, island,
-                                 (self._nearest_name(tree, island), _island_name(island)), limit)
+                                 (self._nearest_name(tree, island), _island_name(island)), limit, fix)
             spent += outcome.vias
             done.append(outcome)
             if outcome.routed:
@@ -459,6 +462,10 @@ class Router:
         """The most vias the next connection of ``want`` may place (None: no limit), once its entry has placed
         ``spent``, and that limit as a failure reason says it: what is left of the entry's own, or of the via count a
         custom rule holds every net to (its vias on the board and those this plan placed counted), the lesser."""
+        return self._via_limit(want, spent)[:2]
+
+    def _via_limit(self, want: Want, spent: int) -> tuple[int | None, str, str]:
+        """``_vias_left``, and what the agent does where the limit is what stops a route (its fix)."""
         entry = None if want.vias is None else max(want.vias - spent, 0)
         bound = self.rules.sizes.get("via_count")
         if bound is not None and bound.most is not None:
@@ -468,11 +475,11 @@ class Router:
             if entry is None or net < entry:
                 return net, (f" with {'no via' if net == 0 else f'at most {net} via' + ('s' if net != 1 else '')} "
                              f"left of the {most} the custom rule {bound.most_rule!r} allows a net ({want.net} has "
-                             f"{used})")
+                             f"{used})"), f"route it by hand, or change the custom rule {bound.most_rule!r}"
         if entry is None:
-            return None, ""
+            return None, "", ""
         return entry, ((" with no via" if entry == 0 else f" with at most {entry} via{'s' if entry != 1 else ''}")
-                       + (f" left of the entry's {entry + spent}" if spent else ""))
+                       + (f" left of the entry's {entry + spent}" if spent else "")), "raise the entry's vias"
 
     @staticmethod
     def _nearest_name(tree: Sequence[_Item], island: Sequence[_Item]) -> str:
@@ -502,9 +509,9 @@ class Router:
 
     def _terminals(self, items: Sequence[_Item], window: _Window, allowed: Sequence[int]) -> dict[int, _Item]:
         """The states (layer * nodes + node) a route may start or end on in ``items``: nodes inside a pad's or a
-        via's copper; on the centreline of a track this plan made (split there when the branch lands: KiCad joins
-        a track's ends, and calls one that stops on another track's middle dangling); and at the ends of a track
-        that was on the board, which is never cut. On each allowed layer it is on."""
+        via's copper; on the centreline of a track this plan made (split there when the branch lands, for
+        tidiness: the branch ends where two tracks end, as KiCad's own router leaves a T); and at the ends of a
+        track that was on the board, which is never cut. On each allowed layer it is on."""
         g, nodes = self.pitch, window.nx * window.ny
         found: dict[int, _Item] = {}
         for item in items:
@@ -576,9 +583,9 @@ class Router:
         return swap
 
     def _join(self, want: Want, source: Sequence[_Item], target: Sequence[_Item], between: tuple[str, str],
-              limit: str = "") -> Connection:
+              limit: str = "", fix: str = "") -> Connection:
         """One connection from ``source`` to ``target``, under ``want.vias`` (what is left of its limits, said in a
-        reason as ``limit``: ``_vias_left``)."""
+        reason as ``limit``, with ``fix`` where it binds: ``_via_limit``)."""
         self._last = []
         net = self._net(want.net)
         allowed = [self.layer_of[layer] for layer, _ in want.layers]
@@ -599,17 +606,16 @@ class Router:
             self._escapes(target, targets, free, window, allowed, want, net)
             self._escapes(source, sources, free, window, allowed, want, net)
             if not any(free[s] for s in targets):
-                reason = (f"{between[1]} has no room for a {want.width:g} mm track keeping {want.clearance:g} mm on "
-                          f"{' or '.join(self.copper[k] for k in allowed)}")
+                reason = self._no_room(want, between[1], allowed)
                 break
             if not any(free[s] for s in sources):
                 if margin is None:
-                    reason = f"{between[0]} has no room for a {want.width:g} mm track keeping {want.clearance:g} mm on {layers}"
+                    reason = self._no_room(want, between[0], allowed)
                     break
                 continue
             swap = self._swaps(own, window, allowed)
             if margin is None:  # the last window, the whole region: an end walled in is said before a long search
-                walled = self._walled(want, window, free, via_ok, swap, sources, targets, between, layers + limit)
+                walled = self._walled(want, window, free, via_ok, swap, sources, targets, between, allowed, limit, fix)
                 if walled:
                     reason = walled
                     break
@@ -624,6 +630,10 @@ class Router:
             reason = f"the search gave up after {expanded:,} steps" if out else f"no way through on {layers}{limit}"
             if margin is None:  # the whole region searched: a wider detour lies past it
                 reason += f" within the plan's region (its pads' box and {self.grow:.0f} mm round it)"
+            reason += ((self._kept_to(want, window, free, allowed, sources, targets, between, fix) if not out else "")
+                       or (": its way is too long or tangled for the search; allow it another layer, or route it by "
+                           "hand" if out else ": put it earlier in the plan, allow it another layer, or route it by "
+                           "hand"))
         return Connection(want.net, between, False, reason)
 
     def _escapes(self, items: Sequence[_Item], terminals: dict[int, _Item], free: bytearray, window: _Window,
@@ -661,11 +671,35 @@ class Router:
                         if found >= 4:
                             break
 
+    def _no_room(self, want: Want, end: str, allowed: Sequence[int]) -> str:
+        """Why an end has no free node at all: its track, its clearance and its layers, with the fix."""
+        narrower = (f"a narrower track (the board allows {self.rules.min_track_width:g} mm), "
+                    if want.width > self.rules.min_track_width + 1e-9 else "")
+        return (f"{end} has no room for a {want.width:g} mm track keeping {want.clearance:g} mm on "
+                f"{' or '.join(self.copper[k] for k in allowed)}: give the entry {narrower}another layer, or route "
+                "that pad by hand")
+
+    def _kept_to(self, want: Want, window: _Window, free: bytearray, allowed: Sequence[int], sources: dict,
+                 targets: dict, between: tuple[str, str], fix: str) -> str:
+        """Where no via is left and a route may use several layers: that it keeps to the layers its ends' copper is
+        on (and the net's own through-hole copper joins), naming them, with the fix; empty where its ends are on
+        every layer it may use."""
+        if want.vias != 0 or len(allowed) < 2:
+            return ""
+        nodes = window.nx * window.ny
+        on = [sorted({state // nodes for state in ends if free[state]}) for ends in (sources, targets)]
+        if all(len(layers) == len(allowed) for layers in on):
+            return ""
+        said = [f"{name} on {' and '.join(self.copper[allowed[k]] for k in layers) or 'no layer it may use'}"
+                for name, layers in zip(between, on)]
+        return f" (with no via a route keeps to the layers its ends are on: {', '.join(said)}): {fix}"
+
     def _walled(self, want: Want, window: _Window, free: bytearray, via_ok: bytearray, swap: bytearray, sources: dict,
-                targets: dict, between: tuple[str, str], layers: str) -> str | None:
+                targets: dict, between: tuple[str, str], allowed: Sequence[int], limit: str, fix: str) -> str | None:
         """Why one end of a connection is walled in, when a small flood from it fills its room without meeting the
         other end, naming what walls it (the nets whose copper is nearest the room's rim: those this plan routed
-        first are the agent's to put after it); None when both ends have a way out."""
+        first are the agent's to put after it); None when both ends have a way out. Where no via is left, the room
+        is on the layers it reaches without one: those are named, and the via limit is why it reaches no other."""
         count, nodes = len(free), window.nx * window.ny
         for ends, others, name in ((targets, sources, between[1]), (sources, targets, between[0])):
             marks = bytearray(count)
@@ -677,10 +711,23 @@ class Router:
                 area = len(room) * self.pitch * self.pitch / (count // nodes)
                 walls = self._walls(room, free, window, want)
                 pocket = "a pocket under 0.1 mm²" if area < 0.1 else f"the {area:.1f} mm²"
-                narrower = (f"; a narrower track (the board allows {self.rules.min_track_width:g} mm) or another layer "
-                            "may fit" if want.width > self.rules.min_track_width + 1e-9 else "")
+                reached = sorted({state // nodes for state in room})
+                kept = want.vias == 0 and len(reached) < len(allowed)  # the via limit keeps it off the others
+                narrower = (f"; a narrower track (the board allows {self.rules.min_track_width:g} mm)"
+                            f"{'' if kept else ' or another layer'} may fit"
+                            if want.width > self.rules.min_track_width + 1e-9 else "")
+                if kept:
+                    others = [self.copper[allowed[k]] for k in range(len(allowed)) if k not in reached]
+                    return (f"{name} is walled in{' by ' + walls if walls else ''}: no way out of {pocket} round it on "
+                            f"{' and '.join(self.copper[allowed[k]] for k in reached)} for a {want.width:g} mm track "
+                            f"keeping {want.clearance:g} mm{narrower}; and{limit} it cannot reach "
+                            f"{' or '.join(others)}: {fix}")
+                first = "(routed first in this plan)" in walls
                 return (f"{name} is walled in{' by ' + walls if walls else ''}: no way out of {pocket} round it on "
-                        f"{layers} for a {want.width:g} mm track keeping {want.clearance:g} mm{narrower}")
+                        f"{' and '.join(self.copper[k] for k in allowed)}{limit} for a {want.width:g} mm track "
+                        f"keeping {want.clearance:g} mm{narrower}; "
+                        + ("put this entry before those in the plan, or route it by hand" if first
+                           else "move what walls it in, or route it by hand"))
         return None
 
     def _walls(self, room: Sequence[int], free: bytearray, window: _Window, want: Want) -> str:
@@ -702,11 +749,24 @@ class Router:
                 if found is None:
                     continue
                 kind, owner = found
-                what = {"tracks": "a keep-out", "edge": "the board's edge"}.get(kind) or names.get(owner, "copper of no net")
+                if kind == "tracks":
+                    what = self._keepout_at(allowed[k], ((window.i0 + c) * g, (window.j0 + r) * g))
+                else:
+                    what = "the board's edge" if kind == "edge" else names.get(owner, "copper of no net")
                 count[what] = count.get(what, 0) + 1
         ranked = sorted(count, key=lambda what: (-count[what], what))[:3]
         said = [f"{what} (routed first in this plan)" if what in self.routed else what for what in ranked]
         return ", ".join(said[:-1]) + (" and " if len(said) > 1 else "") + said[-1] if said else ""
+
+    def _keepout_at(self, layer: int, point: XY) -> str:
+        """The track keep-out on ``layer`` nearest ``point``, located by its box's centre (mm)."""
+        name = self.copper[layer]
+        near = min((keepout for keepout in self.board.keepouts if keepout.tracks and name in keepout.layers),
+                   key=lambda keepout: keepout.shape.point_distance(*point), default=None)
+        if near is None:
+            return "a keep-out"
+        x0, y0, x1, y1 = near.shape.box
+        return f"a keep-out at ({(x0 + x1) / 2:g}, {(y0 + y1) / 2:g})"
 
     def _heuristic(self, window: _Window, boxes: Sequence[tuple[float, float, float, float]], cheapest: float) -> array:
         g = self.pitch
@@ -787,7 +847,8 @@ class Router:
             tight = (raw, list(vias))
             if not self._verified(want, net, *tight, allowed):
                 raise AssertionError(f"the route of {want.net} ({between[0]} to {between[1]}) failed its own exact "
-                                     "clearance check: a bug in the router; nothing is written")
+                                     "clearance check: a bug in the router; nothing is written (the edit saves "
+                                     "nothing): route that connection by hand, and report the board and plan")
         runs_out, vias_out = tight
         for item, end in ((first, runs_out[0][1][0]), (last, runs_out[-1][1][-1])):
             if item.kind == "track" and item.new is not None:
