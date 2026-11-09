@@ -71,13 +71,16 @@ it is on that sheet's page. Errors fail it; warnings are said. Fix the cause, ne
 - `bus_to_bus_conflict`: two buses joined graphically whose names share no member. KiCad still joins
   vector members by index (`D3` meets `Q3`), so rename one to say what it is.
 - `different_unit_net`, `multiple_net_names`: two names on one net; keep one.
+- `pin_on_wire_span`, `wire_end_on_wire_span` (the check's own, beside KiCad's; warnings): a pin's end,
+  or a wire's end, that lies on another wire's span, not at one of its ends, with no junction there.
+  KiCad joins them, and ERC and the board comparison both pass, so a wire drawn past a pin on its way
+  elsewhere shorts it into that wire's net (a transistor's drain onto its supply). Each names the pin
+  (`#Q1.3`) or the wire whose end it is and the wire it lies on (`#wire:<uuid>`), in `items`. End the
+  wire on the pin, or route it clear; where a T is meant, place a junction at it.
 
-A clean ERC says no rule broke, not that each pin is on the net the circuit means. A wire that runs
-across a pin's end joins that pin, so one drawn past a pin on its way elsewhere can short it into
-another net, a transistor's drain onto its supply, with every rule met; the pin-by-pin comparison
-with the board agrees too, since the netlist carries the short. Read the pins of each driver,
-regulator and connector back (`sch.resolve("#Q1.3").net`, `sch.net("/Power/VBUS").pins`) against
-the circuit you meant.
+A clean ERC says no rule broke, not that each pin is on the net the circuit means. Read the pins of
+each driver, regulator and connector back (`sch.resolve("#Q1.3").net`, `sch.net("/Power/VBUS").pins`)
+against the circuit you meant.
 
 `libraries_not_checked` is a note, not a finding: the check runs KiCad with private settings, so it
 cannot see your global symbol and footprint library tables (it reads a project's own `sym-lib-table` and

@@ -92,6 +92,54 @@ class TheNets(SchematicFixture):
         self.assertEqual({wire.net for wire in bus}, {"/D[0..1]"})
 
 
+def _wire(start: tuple[float, float], end: tuple[float, float], uuid: str) -> str:
+    """A wire between two points in grid steps, as KiCad writes one."""
+    (x0, y0), (x1, y1) = at(*start), at(*end)
+    return f'(wire (pts (xy {x0:g} {y0:g}) (xy {x1:g} {y1:g})) (stroke (width 0) (type default)) (uuid "{uuid}"))'
+
+
+ACROSS, TEE = "5c4e0000-0000-4000-8000-0000000000e1", "5c4e0000-0000-4000-8000-0000000000e2"
+#: What a test adds to the divider's root sheet: a wire drawn across R1's pin 1 (its end at (80, 44)) on its way
+#: elsewhere; a wire from the middle of the MID wire, a T with no junction; the same T with KiCad's junction.
+ON_SPANS = {
+    "across": _wire((74, 44), (86, 44), ACROSS),
+    "tee": _wire((90, 51), (90, 56), TEE),
+    "tee with a junction": _wire((90, 51), (90, 56), TEE) + f' (junction (at {at(90, 51)[0]:g} {at(90, 51)[1]:g}) '
+                           '(diameter 0) (color 0 0 0 0) (uuid "5c4e0000-0000-4000-8000-0000000000e3"))',
+}
+
+
+def with_on_root(root: Path, extra: str) -> Path:
+    """The divider at ``root`` with ``extra`` on its root sheet."""
+    text = root.read_text(encoding="utf-8")
+    root.write_text(text.replace("  (sheet_instances", f"  {extra}\n  (sheet_instances", 1), encoding="utf-8")
+    return root
+
+
+class TheSpans(SchematicFixture):
+    """KiCad joins a pin, and a wire's end, that lies on a wire's span (``tests/python/packages/kicad/
+    test_schematic_files.py`` holds the reader's nets to its netlist for them): the reader names each that
+    no junction marks, and none of the divider's own joins (wire ends on pins, a label on a wire's span, a
+    T with its junction)."""
+
+    def joins(self, extra: str | None) -> list[tuple]:
+        from cad.engine.formats.kicad.schematic import read_schematic_index, span_joins
+
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-spans-") as folder:
+            root = write_schematic(Path(folder))
+            if extra:
+                with_on_root(root, extra)
+            index, _ = read_schematic_index(root)
+            return [(join.sheet, join.at, join.pin and f"{join.pin.ref}.{join.pin.number}", join.end and join.end.uuid,
+                     join.wire.uuid, join.wire.net) for join in span_joins(index)]
+
+    def test_a_pin_or_a_wires_end_on_a_span_is_named_and_the_joins_kicad_draws_are_not(self) -> None:
+        self.assertEqual([], self.joins(None))
+        self.assertEqual([("/", at(80, 44), "R1.1", None, ACROSS, "+5V")], self.joins(ON_SPANS["across"]))
+        self.assertEqual([("/", at(90, 51), None, TEE, UUIDS["mid wire"], "/MID")], self.joins(ON_SPANS["tee"]))
+        self.assertEqual([], self.joins(ON_SPANS["tee with a junction"]))
+
+
 class TheReferences(SchematicFixture):
     def test_a_reference_names_what_the_board_would(self) -> None:
         from cad.engine.formats.kicad.refs import parse_board_selector
@@ -382,6 +430,26 @@ class TheType(SchematicFixture):
         self.assertEqual([(finding.severity, finding.code) for finding in checked.findings],
                          [("warning", "label_dangling"), ("info", "libraries_not_checked")])
         self.assertTrue(checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
+
+    def test_erc_lists_a_pin_on_a_wires_span_beside_kicads_findings(self) -> None:
+        from unittest import mock
+
+        import cad
+        from cad.kicad import _schematic
+
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-erc-span-") as folder:
+            root = with_on_root(write_schematic(Path(folder)), ON_SPANS["across"])
+            with mock.patch.object(_schematic, "ready", lambda: Path("kicad-cli")), \
+                    mock.patch.object(_schematic, "run_erc", lambda cli, target: []):
+                checked = cad.kicad_sch.erc(root)
+        [found] = checked.findings
+        x, y = at(80, 44)
+        self.assertEqual(("warning", "pin_on_wire_span", f"/ ({x:g}, {y:g}) mm"),
+                         (found.severity, found.code, found.location))
+        self.assertIn("Pin R1.1 lies on a wire's span, not at its end, and KiCad joins it to that wire's net (+5V)",
+                      found.message)
+        self.assertEqual([("pin", "#R1.1"), ("wire", f"#wire:{ACROSS}")], [(item["kind"], item["ref"]) for item in found.items])
+        self.assertTrue(checked.ok and checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)
 
     def test_a_file_that_is_no_schematic_is_refused(self) -> None:
         folder = Path(self.folder.name)

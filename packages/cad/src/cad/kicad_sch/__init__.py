@@ -80,8 +80,10 @@ def erc(schematic: Path) -> CheckResult:
 
     Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
     severity reported, and lists each violation with its sheet and where it is (millimetres on that
-    sheet's page). The schematic fails when any error-severity violation exists; warnings are reported
-    and do not fail it.
+    sheet's page). Beside KiCad's, a warning for every pin, and every wire's end, that lies on a wire's
+    span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``): KiCad joins them and its
+    ERC passes. The schematic fails when any error-severity violation exists; warnings are reported and
+    do not fail it.
 
     schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
     """
