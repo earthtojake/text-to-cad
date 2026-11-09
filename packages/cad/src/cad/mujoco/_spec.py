@@ -34,6 +34,9 @@ outlive the call. Where they go:
 
 ``tolerance`` meshes a document's visual and collision meshes to within it (millimetres, as an
 export's): the engine's own otherwise; an MJCF's meshes are its files, and a tolerance is refused.
+``zero`` takes a document's robot at a mechanism state, as an export's ``--zero`` does (``describe``'s
+**The zero**); an MJCF is a description already, and a zero is refused. A base the model declares free
+(``cad.build123d.free``) is a ``freejoint`` in the spec, so the scene it is attached to holds it nowhere.
 """
 
 from __future__ import annotations
@@ -49,7 +52,8 @@ EXTRA = "cad[mujoco]"
 SUFFIXES = (".xml", ".mjcf")
 
 
-def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | None = None) -> Any:
+def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | None = None,
+         zero: str | None = None) -> Any:
     """``thing`` as a ``mujoco.MjSpec`` (see the module docstring)."""
     try:
         import mujoco
@@ -62,6 +66,8 @@ def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | Non
         path = Path(thing)
         if tolerance is not None:
             raise ValueError(f"{path.name} is an MJCF: its meshes are its files, and no tolerance meshes them again")
+        if zero is not None:
+            raise ValueError(f"{path.name} is an MJCF: its joints' zero is the file's, and no zero state retakes it")
         if not path.is_file():
             raise FileNotFoundError(f"no MJCF {path}")
         return _rooted(mujoco.MjSpec.from_file(str(path)))
@@ -71,7 +77,7 @@ def spec(thing: Any, *, assets: str | Path | None = None, tolerance: float | Non
 
         view = source.view()
         view.tolerance = tolerance
-        description = describe(view)
+        description = describe(view, zero=zero)
     return _written(mujoco, description, assets)
 
 

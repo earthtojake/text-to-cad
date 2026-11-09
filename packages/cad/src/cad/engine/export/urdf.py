@@ -9,13 +9,25 @@ same bytes), staged and moved into place as it moves its own. A mesh is named by
 by ``package://<package>/<meshes>/<file>.stl``, which ROS resolves when the URDF stands at the
 root of that package. Nothing here imports the kernel: the writer is text and numpy (law 3).
 
-**The tree.** URDF has no ground: its root link is where the robot's space is. The description's
-ground (its first link, ``world``) is the root only where it holds something (a visual, a
-collision, a mass); otherwise the first link hung from it by a ``fixed`` joint is the root, the
-``base_link`` of a ROS robot under the name it has, and that joint is not written: the file's space
-is that link's frame, and every other joint from the ground hangs from it, its origin carried into
-that frame (``rooted``). A ground that holds nothing and
-has no fixed child stays, an empty root link, as a ROS ``world`` link is.
+**The tree.** URDF has no ground: its root link is where the robot's space is, and it floats (a
+reader that bolts a robot down adds its own ``world`` link). The description's ground (its first link,
+``world``) is the root only where it holds something (a visual, a collision, a mass); otherwise the
+first link hung from it by a ``fixed`` joint is the root, under the name it has, and that joint is not
+written: the file's space is that link's frame, and every other joint from the ground hangs from it, its
+origin carried into that frame (``rooted``). A base declared free (``cad.build123d.free``: a
+``floating`` joint from the ground) is the root the same way where it is all the ground holds, the
+floating joint not written, as a URDF root floats already; beside another link hung from the ground, the
+ground stays the root, an empty ``world`` link as ROS has one, and the free link is written ``fixed`` to it,
+and said (``export.note``): URDF has one root, and a ``floating`` joint, which URDF names, is one ROS
+tooling and this package's readers pose as no joint at all (the MJCF frees it). A ground that holds
+nothing and has no fixed child stays, an empty root link, as a ROS ``world`` link is.
+
+**The base link.** KDL, which ``robot_state_publisher`` and MoveIt read a URDF with, takes no inertia on
+the root link and drops it with a warning. So where the root link has an ``<inertial>``, the file roots
+at an empty link before it, ``base_link``, joined to it by a ``fixed`` joint ``base_link_joint`` at its
+origin, as ROS names a robot's base; where the root is itself named ``base_link``, the empty one is
+``base_link_root`` (and its joint ``base_link_root_joint``), so the description's names stay as they
+are. A root with no inertial is the root as it is.
 
 **Links.** Each link's frame is its joint's (the description's rule, and URDF's), so a visual's
 and a collision's ``<origin>`` is its placement in the link frame, and a link's ``<inertial>`` is
@@ -90,10 +102,16 @@ UNBOUNDED = 1e16
 
 
 def write(view: Any, path: Path) -> None:
-    """The export ``Kind``'s writer: ``view``'s document described and written to ``path``."""
+    """The export ``Kind``'s writer: ``view``'s document described (at its ``zero``, where it has one) and
+    written to ``path``; what it holds said (``export.described``)."""
     from cad.engine.describe import describe
+    from cad.engine.export import described
 
-    write_description(describe(view), path)
+    description = describe(view, zero=getattr(view, "zero", None))
+    for text in description.warnings:
+        note(text)
+    write_description(description, path)
+    described(description.summary("urdf"))
 
 
 def write_description(description: Description, path: Any, *, meshes: str = "meshes",
@@ -135,8 +153,12 @@ def rooted(description: Description) -> tuple[Link, list[Joint], Joint | None]:
     ground = description.root
     if ground.visuals or ground.collisions or ground.inertial is not None:
         return ground, list(description.joints), None
-    dropped = next((joint for joint in description.joints
-                    if joint.parent == ground.name and joint.kind == "fixed"), None)
+    hung = [joint for joint in description.joints if joint.parent == ground.name]
+    if any(joint.kind == "floating" for joint in hung):
+        # A free base is the root where it is all the ground holds; beside another, the ground stays the root.
+        dropped = hung[0] if len(hung) == 1 else None
+    else:
+        dropped = next((joint for joint in hung if joint.kind == "fixed"), None)
     if dropped is None:
         return ground, list(description.joints), None
     carried = np.linalg.inv(np.asarray(dropped.origin, dtype=float))
@@ -306,6 +328,15 @@ class _Writer:
 
     def render(self) -> tuple[str, dict[str, bytes]]:
         body: list[Xml] = []
+        if self.root.inertial is not None:
+            # An empty root before one with an inertia, which KDL drops (the module's **The base link**).
+            wanted = "base_link" if self.links[self.root.name] != "base_link" else "base_link_root"
+            base = self._name(self.link_names, wanted, "link")
+            joint = Xml("joint", [("name", self._name(self.joint_names, f"{base}_joint", "joint")), ("type", "fixed")])
+            joint.add("origin", _origin(np.eye(4)))
+            joint.add("parent", [("link", base)])
+            joint.add("child", [("link", self.links[self.root.name])])
+            body.extend([Xml("link", [("name", base)]), joint])
         self._subtree(body, self.root)
         sections = self.material_rows + body
         lines = ['<?xml version="1.0" encoding="utf-8"?>',
@@ -341,6 +372,10 @@ class _Writer:
             body.append(self._element(joint, slide, "prismatic", turned, child, np.eye(4), 1, mimic=False))
             return
         kind = self._turn(joint) if joint.kind == "revolute" else joint.kind
+        if kind == "floating":  # beside another link hung from the ground (the module's **The tree**)
+            note(f"link {child!r} is free, and a URDF has one root: it is written fixed to {parent!r} beside the "
+                 "other links hung from it (the MJCF frees it)")
+            kind = "fixed"
         body.append(self._element(joint, name, kind, parent, child, joint.origin, 0))
 
     @staticmethod

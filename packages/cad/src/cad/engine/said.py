@@ -14,8 +14,8 @@ import os
 import sys
 from typing import Any, Callable
 
-__all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "shown", "size", "weighed",
-           "written"]
+__all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "robot", "shown", "size",
+           "weighed", "written"]
 
 # The server's distribution and its command, as every line of the library names them: one place to
 # rename either (the server names them in its own, ``cad_server._internal.launch``).
@@ -217,12 +217,69 @@ def reported(reports: list[dict[str, Any]], wall: float, fresh: bool | None, as_
 
 def written(rows: Any, typed: Any) -> None:
     """A line on stdout per file an export wrote or found holding its bytes already (``rows``), each
-    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's."""
+    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's;
+    after a robot description's, what it holds on stderr (``robot``)."""
     for row in rows:
         if row.written:
             print(f"wrote {given(row.path, typed)} ({size(row.bytes)}) in {row.seconds:.2f}s")
         else:
             print(f"unchanged {given(row.path, typed)} ({size(row.bytes)}): it holds these bytes already")
+        if getattr(row, "robot", None):
+            sys.stdout.flush()
+            for line in robot(row.robot):
+                print(line, file=sys.stderr)
+
+
+#: The names a robot's summary lists before it counts the rest.
+NAMED = 8
+
+
+def _named(names: Any) -> str:
+    names = list(names)
+    shown_ = ", ".join(names[:NAMED])
+    return shown_ + (f" and {len(names) - NAMED} more" if len(names) > NAMED else "")
+
+
+def robot(summary: dict[str, Any]) -> list[str]:
+    """What a robot description an export wrote holds (``Description.summary``), in a line or two: its links
+    and how its base stands, its joints by kind, its mass; then, where it has any, its couplings, closures,
+    frames, collisions by kind, exclusions, keys and zero state, and the links with no mass. Its warnings and
+    the writer's notes are the export's log lines, said as it wrote the file; the summary does not say them
+    again."""
+    links = summary.get("links") or []
+    joints = summary.get("joints") or {}
+    base = "on a free base" if summary.get("base") == "free" else "bolted to the world"
+    count = sum(len(names) for names in joints.values())
+    if count:
+        kinds = "; ".join(f"{len(names)} {kind} ({_named(names)})" for kind, names in joints.items())
+        moving = f"{count} joint{'s' if count != 1 else ''}: {kinds}"
+    else:
+        moving = "no joints"
+    mass = summary.get("mass")
+    weight = "no mass" if mass is None else f"{number(mass)} kg"
+    head = (f"  robot {summary.get('name')}: {len(links)} link{'s' if len(links) != 1 else ''} ({_named(links)}) "
+            f"{base}; {moving}; {weight}")
+    rest = []
+    couplings = summary.get("couplings") or []
+    if couplings:
+        rest.append("couplings " + ", ".join(f"{follower} follows {leader} x{number(ratio)}"
+                                             for follower, leader, ratio in couplings))
+    if summary.get("closures"):
+        rest.append(f"loops closed at {_named(summary['closures'])}")
+    if summary.get("frames"):
+        rest.append(f"frames {_named(summary['frames'])}")
+    collisions = summary.get("collisions") or {}
+    if collisions and set(collisions) != {"mesh"} or len(links) > 1:
+        rest.append("collisions " + (", ".join(f"{count_} {kind}" for kind, count_ in collisions.items()) or "none"))
+    if summary.get("excludes"):
+        rest.append(f"{len(summary['excludes'])} excluded pair{'s' if len(summary['excludes']) != 1 else ''}")
+    if summary.get("poses"):
+        rest.append(f"keys {_named(summary['poses'])}")
+    if summary.get("zero"):
+        rest.append(f"zero at {summary['zero']}")
+    if summary.get("massless"):
+        rest.append(f"no mass in {_named(summary['massless'])}")
+    return [head] + (["    " + "; ".join(rest)] if rest else [])
 
 
 def weighed(structure: dict[str, Any], hit: Any, volumes: dict[str, float]) -> dict[str, Any]:

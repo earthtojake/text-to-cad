@@ -90,13 +90,15 @@ class Report:
 @dataclass
 class Written:
     """One file an export wrote, or found holding its bytes already and left as it was
-    (``written`` False)."""
+    (``written`` False); a robot description's (an MJCF, a URDF) with what it holds (``robot``:
+    ``Description.summary``, with the notes it was written with), None for any other file."""
 
     path: Path
     kind: str
     bytes: int
     seconds: float
     written: bool = True
+    robot: dict[str, Any] | None = None
 
 
 @dataclass
@@ -199,11 +201,12 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any, tolerance: float | None = None) -> list[Written]:
+    def export(self, *destinations: Any, tolerance: float | None = None, zero: str | None = None) -> list[Written]:
         """``export(handle, *destinations)``: the document written to each destination; an STL or a
-        3MF meshed to within ``tolerance`` (mm) when one is given, as ``export`` does."""
+        3MF meshed to within ``tolerance`` (mm) when one is given, a robot description taken at the
+        mechanism state ``zero`` when one is given, as ``export`` does."""
         self._outside("export")
-        return _said(_exporting(self, destinations, tolerance=tolerance), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance, zero=zero), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
                  pose: Any = None, width: int | None = None, height: int | None = None,
@@ -507,7 +510,7 @@ def _source(source: Any) -> dict[str, Any]:
     return {"path": str(path)}
 
 
-def export(source: Any, *destinations: Any, tolerance: float | None = None,
+def export(source: Any, *destinations: Any, tolerance: float | None = None, zero: str | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
@@ -525,7 +528,12 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part), unless
     ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
     print whose fits are finer: each part is then meshed again at the finer of the two for these
-    files, and each file says it; every destination is then an STL or a 3MF. A call the program's own
+    files, and each file says it; every destination is then an STL or a 3MF. An MJCF and a URDF are
+    the robot description at the as-built state, unless ``zero`` names a mechanism state to take every
+    joint's zero at (``describe``'s **The zero**: the bodies posed there, each joint's value there its
+    zero, its limits and the other states around it); every destination is then an MJCF or a URDF.
+    Each robot file's ``Written.robot`` says what it holds, and the program's own call says it on
+    stderr after the file's line (``said.robot``). A call the program's own
     code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
@@ -536,7 +544,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames, tolerance), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, zero), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -557,8 +565,9 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
-               progress: Callable[[dict], None] | None = None, tolerance: float | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, kind_of, tolerance_of
+               progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
+               zero: str | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
@@ -566,6 +575,7 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     for destination in resolved:
         kind_of(destination)
     tolerance = tolerance_of(tolerance, resolved)
+    zero = zero_of(zero, resolved)
     source = _called(source, daemon)
     spec = _source(source)
     if "path" in spec:
@@ -578,14 +588,19 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
     cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
     shown = log or (lambda _text: None)
     order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
-             **({"tolerance": tolerance} if tolerance is not None else {})}
+             **({"tolerance": tolerance} if tolerance is not None else {}),
+             **({"zero": zero} if zero is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
     if tolerance is not None and any(row.get("tolerance") != tolerance for row in done["files"]):
         # A server of a release before the tolerance writes the files at its own, and says no tolerance.
         raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
                           "own tolerance: it is older than this library. Update it (cad update) and export again")
-    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True))
-            for row in done["files"]]
+    if zero is not None and any(row.get("zero") != zero for row in done["files"]):
+        # A server of a release before the zero describes the robot as built, and says no zero.
+        raise EngineError(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
+                          "not at the zero state: it is older than this library. Update it (cad update) and export again")
+    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
+                    row.get("robot")) for row in done["files"]]
 
 
 def _called(source: Any, daemon: bool) -> Any:

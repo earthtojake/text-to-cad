@@ -6,8 +6,9 @@ frictionloss and a part's contact friction, and the contact pairs excluded, a
 link resting on a ground welded to the world and a declared pair, which MuJoCo then leaves out; a loop of
 slides alone refused by name, and a mesh file refused as a source; and models built by the engine and
 exported to ``.xml``: a four-bar whose loop two connects close as built and hold closed as it falls, two
-slides a pinion of no part couples as one control, and a hinge whose bodies stand where the mechanism puts
-its links, as built and at a state."""
+slides a pinion of no part couples as one control, a hinge whose bodies stand where the mechanism puts
+its links, as built and at a state, and a free arm taken at a state, a freejoint in the scene written beside it
+once, its bodies at qpos 0 where the mechanism puts its links there."""
 
 from __future__ import annotations
 
@@ -120,6 +121,36 @@ diaginertia="0.000199501244 0.000400498756 0.0005"/>
     <key name="raised" qpos="1.2 0.7"/>
   </keyframe>
 </mujoco>
+"""
+
+
+# A two-joint arm whose base is free, its zero taken at its home state.
+TWO = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import free, mechanism_state
+from cad.engine import xbf
+
+
+@xbf("XBF/two.xbf")
+def two():
+    plate = bd.Box(100, 60, 20)
+    plate.label = "plate"
+    upper = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    upper.label = "upper"
+    fore = bd.Box(80, 16, 8, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    fore.label = "fore"
+    for part in (plate, upper, fore):
+        part.material = metals.aluminum()
+    bd.RevoluteJoint("shoulder", plate, axis=bd.Axis((40, 0, 20), (0, 1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("shoulder", upper, bd.Location())
+    plate.joints["shoulder"].connect_to(upper.joints["shoulder"], angle=0)
+    bd.RevoluteJoint("elbow", upper, axis=bd.Axis((120, 0, 10), (0, 1, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("elbow", fore, bd.Location())
+    upper.joints["elbow"].connect_to(fore.joints["elbow"], angle=0)
+    root = free(bd.Compound(children=[plate, upper, fore], label="two"))
+    mechanism_state(root, "home", shoulder=30, elbow=45)
+    return mechanism_state(root, "up", shoulder=90)
 """
 
 
@@ -472,6 +503,56 @@ class EngineTest(_Folder):
                 expected = posed[at] @ np.linalg.inv(built[at])
                 expected[:3, 3] *= 0.001
                 np.testing.assert_allclose(moved, expected, atol=1e-9, err_msg=f"{name} at {state}")
+
+    def test_a_free_base_at_its_zero_state_is_a_freejoint_whose_scene_is_written_once(self) -> None:
+        xbf = self.built("two", TWO)
+        out = self.folder / "robot" / "two.xml"
+        told: list[str] = []
+        [written] = api.export(xbf, out, zero="home", daemon=False, progress=False, log=told.append)
+        self.assertEqual((written.robot["base"], written.robot["zero"], written.robot["links"]),
+                         ("free", "home", ["plate", "upper", "fore"]))
+        self.assertIn("two.xml: wrote scene.xml beside it: a floor and a light around the robot, yours to edit (an "
+                      "export never writes over it)", told)
+        # The scene includes the robot and compiles: a free base (seven values) and the two hinges, ranged
+        # around home, every key holding the base where it stands.
+        model = mujoco.MjModel.from_xml_path(str(out.parent / "scene.xml"))
+        self.assertEqual((model.nq, model.njnt, model.joint("two").type), (9, 3, mujoco.mjtJoint.mjJNT_FREE))
+        np.testing.assert_allclose(model.jnt_range[model.joint("shoulder").id], np.radians([-40, 90]), atol=1e-9)
+        np.testing.assert_allclose(model.jnt_range[model.joint("elbow").id], np.radians([-135, 45]), atol=1e-9)
+        np.testing.assert_allclose(model.key("home").qpos, [0, 0, 0, 1, 0, 0, 0, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(model.key("up").qpos[7:], np.radians([60, -45]), atol=1e-9)
+        self.assertIn(model.geom("floor").id, range(model.ngeom))
+        # At qpos 0 every body stands where the mechanism puts its link at home.
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        kinematics = document.Loaded(xbf).structure()["kinematics"]
+        built = mechanism.link_worlds(kinematics, {"shoulder": (0.0,), "elbow": (0.0,)})
+        posed = mechanism.link_worlds(kinematics, {"shoulder": (30.0,), "elbow": (45.0,)})
+        for at, link in enumerate(kinematics["links"]):
+            body = model.body(link["name"]).id
+            moved = posed[at] @ np.linalg.inv(built[at])
+            moved[:3, 3] *= 0.001
+            frame = _metres(data.xpos[body], data.xmat[body])
+            unposed = describe(Source.read(xbf).view()).link(link["name"]).frame
+            np.testing.assert_allclose(frame, moved @ unposed, atol=1e-9, err_msg=link["name"])
+        # Free, the base drops as its limp arm folds onto the floor (bolted, it would stay at the origin), and it
+        # rests on the floor, nowhere through it.
+        for _step in range(1000):
+            mujoco.mj_step(model, data)
+        self.assertLess(float(data.qpos[2]), -0.01)
+        floor = float(model.geom("floor").pos[2])
+        self.assertGreater(min(float(data.geom_xpos[at][2]) for at in range(model.ngeom)
+                               if model.geom_group[at] == 3), floor - 0.03)
+        # Exported again, the scene is the person's.
+        scene = out.parent / "scene.xml"
+        scene.write_text(scene.read_text(encoding="utf-8") + "<!-- mine -->\n", encoding="utf-8")
+        told.clear()
+        api.export(xbf, out, zero="home", daemon=False, progress=False, log=told.append)
+        self.assertIn("two.xml: kept the existing scene.xml: it is yours to edit, and an export never writes over it",
+                      told)
+        self.assertTrue(scene.read_text(encoding="utf-8").endswith("<!-- mine -->\n"))
+        with self.assertRaisesRegex(ExportRefused, "two.stl: a zero state poses a robot description"):
+            api.export(xbf, self.folder / "two.stl", zero="home", daemon=False, progress=False)
 
 
 def _metres(position: np.ndarray, rotation: np.ndarray) -> np.ndarray:

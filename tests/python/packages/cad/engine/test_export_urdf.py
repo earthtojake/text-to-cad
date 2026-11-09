@@ -4,8 +4,10 @@ the repository's own URDF check passing it and the stills reading its links wher
 a ground holding nothing giving way to its fixed child, a cylindrical joint as a turn and a slide, a link
 and a joint keeping one name and a name repeated in its kind renamed and said, a joint's damping and
 friction as its dynamics and its armature and a part's contact friction said and not written, a ball
-refused by name, a joint that closes a loop left out and said; and a jointed model built by the engine and exported to ``.urdf``, its links moving
-as the mechanism moves them."""
+refused by name, a joint that closes a loop left out and said; a root with an inertia hung from an empty
+``base_link`` and a free base the root; and a jointed model built by the engine and exported to ``.urdf``, its
+links moving as the mechanism moves them, and a free arm taken at a state, its links at zero where the
+mechanism puts them there."""
 
 from __future__ import annotations
 
@@ -184,6 +186,36 @@ def rig() -> Description:
     return Description("rig", [Link("world", np.eye(4)), base, post, slider], joints)
 
 
+# A two-joint arm whose base is free, its zero taken at its home state.
+TWO = """
+import build123d as bd
+from bd_materials import metals
+from cad.build123d import free, mechanism_state
+from cad.engine import xbf
+
+
+@xbf("XBF/two.xbf")
+def two():
+    plate = bd.Box(100, 60, 20)
+    plate.label = "plate"
+    upper = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    upper.label = "upper"
+    fore = bd.Box(80, 16, 8, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    fore.label = "fore"
+    for part in (plate, upper, fore):
+        part.material = metals.aluminum()
+    bd.RevoluteJoint("shoulder", plate, axis=bd.Axis((40, 0, 20), (0, 1, 0)), angular_range=(-10, 120))
+    bd.RigidJoint("shoulder", upper, bd.Location())
+    plate.joints["shoulder"].connect_to(upper.joints["shoulder"], angle=0)
+    bd.RevoluteJoint("elbow", upper, axis=bd.Axis((120, 0, 10), (0, 1, 0)), angular_range=(-90, 90))
+    bd.RigidJoint("elbow", fore, bd.Location())
+    upper.joints["elbow"].connect_to(fore.joints["elbow"], angle=0)
+    root = free(bd.Compound(children=[plate, upper, fore], label="two"))
+    mechanism_state(root, "home", shoulder=30, elbow=45)
+    return mechanism_state(root, "up", shoulder=90)
+"""
+
+
 class _Folder(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="export-urdf-")).resolve()
@@ -254,6 +286,41 @@ class HandBuiltTest(_Folder):
             np.testing.assert_allclose(robot.links[name], space @ description.link(name).frame, atol=1e-8)
         slide = robot.joints[2]
         self.assertEqual((slide.lower, slide.upper), (0.0, 1e16))  # the open end: SDFormat's word for none
+
+    def test_a_root_with_an_inertia_hangs_from_an_empty_base_link_and_a_free_base_is_the_root(self) -> None:
+        from dataclasses import replace
+
+        weight = Inertial(1.0, np.zeros(3), np.diag([1e-3, 1e-3, 1e-3]))
+        for named, empty in (("base", "base_link"), ("base_link", "base_link_root")):
+            description = rig()
+            base = description.link("base")
+            base.inertial, base.name = weight, named
+            description.joints = [replace(joint, parent=named) if joint.parent == "base" else
+                                  replace(joint, child=named) if joint.child == "base" else joint
+                                  for joint in description.joints]
+            path = self.folder / f"{named}.urdf"
+            write_description(description, path)
+            checked = urdf.validate(path)
+            self.assertTrue(checked.ok, [finding.message for finding in checked.findings])
+            robot = read_urdf(path)
+            # KDL takes no inertia on the root: an empty link before it, at its origin; the description's names kept.
+            self.assertEqual((robot.root, robot.joints[0].name, robot.joints[0].parent, robot.joints[0].child),
+                             (empty, f"{empty}_joint", empty, named))
+            np.testing.assert_allclose(robot.links[named], np.eye(4), atol=1e-12)
+        # A free base all the ground holds is the root, its floating joint unwritten; beside a bolted post the
+        # ground stays the root and the free base is written fixed to it, and said.
+        description = rig()
+        description.joints[0].kind = "floating"
+        alone = replace(description, links=[link for link in description.links if link.name != "post"],
+                        joints=[joint for joint in description.joints if joint.name != "mount"])
+        write_description(alone, self.folder / "alone.urdf")
+        self.assertEqual((read_urdf(self.folder / "alone.urdf").root, "rig" in {j.name for j in
+                          read_urdf(self.folder / "alone.urdf").joints}), ("base", False))
+        with self.assertWarnsRegex(ExportWarning, "link 'base' is free, and a URDF has one root: it is written fixed "
+                                                  "to 'world'"):
+            write_description(description, self.folder / "beside.urdf")
+        robot = read_urdf(self.folder / "beside.urdf")
+        self.assertEqual((robot.root, next(j.type for j in robot.joints if j.name == "rig")), ("world", "fixed"))
 
     def test_a_name_repeated_in_its_kind_is_renamed_and_said(self) -> None:
         # The rig's slider link keeps its name beside its joint (above); a frame named as a link is not a link's.
@@ -355,6 +422,27 @@ class EngineTest(_Folder):
                 moved = space @ placed[name] @ np.linalg.inv(rest[name]) @ np.linalg.inv(space)
                 np.testing.assert_allclose(moved, posed[at] @ np.linalg.inv(built[at]), atol=1e-6,
                                            err_msg=f"{name} at {state}")
+
+    def test_a_free_arm_taken_at_a_state_stands_at_zero_where_the_as_built_one_stands_there(self) -> None:
+        (self.folder / "two.py").write_text(textwrap.dedent(TWO), encoding="utf-8")
+        api.build_script(self.folder / "two.py", daemon=False)
+        xbf = self.folder / "XBF/two.xbf"
+        built, zeroed = self.folder / "built" / "two.urdf", self.folder / "home" / "two.urdf"
+        api.export(xbf, built, daemon=False, progress=False)
+        [written] = api.export(xbf, zeroed, zero="home", daemon=False, progress=False)
+        self.assertEqual((written.robot["zero"], written.robot["base"]), ("home", "free"))
+        self.assertFalse((zeroed.parent / "scene.xml").exists(), "a scene is an MJCF's")
+        self.assertTrue(urdf.validate(zeroed).ok)
+        then, now = read_robot(built), read_robot(zeroed)
+        # The free base is the root, an empty base_link before it (the plate has an inertia), no world joint.
+        self.assertEqual((now.root, [joint.name for joint in now.joints]), ("base_link", ["base_link_joint", "shoulder",
+                                                                                           "elbow"]))
+        at_home = then.placements(then.values({"shoulder": 30, "elbow": 45})[0])
+        at_zero = now.placements(now.values(None)[0])
+        for name in ("plate", "upper", "fore"):
+            np.testing.assert_allclose(at_zero[name], at_home[name], atol=1e-6, err_msg=name)
+        elbow = {(joint.name): joint for joint in now.joints}["elbow"]
+        np.testing.assert_allclose((elbow.lower, elbow.upper), np.radians([-135, 45]), atol=1e-8)
 
 
 if __name__ == "__main__":

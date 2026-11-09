@@ -2,7 +2,8 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
+    cad <type> export SRC DST [DST ...] [--tolerance MM] [--zero STATE] [--json]   (--tolerance, --zero: a model's,
+        an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
@@ -82,7 +83,12 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
                         help=f"mesh an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
                              "for a print whose fits are finer")
-    export.add_argument("--json", action="store_true", help="print what was written as JSON")
+    export.add_argument("--zero", metavar="STATE",
+                        help="take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each "
+                             "joint's value there its zero, its limits and the other states around it (as built "
+                             "without it)")
+    export.add_argument("--json", action="store_true",
+                        help="print what was written as JSON, a robot description's with what it holds (robot)")
 
 
 def _serve_arguments(serve: argparse.ArgumentParser) -> None:
@@ -470,7 +476,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
 
     try:
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
-                             log=lambda text: print(text, file=sys.stderr))
+                             zero=getattr(args, "zero", None), log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise _refusal(error) from None
     except api.EngineError as error:
@@ -479,7 +485,8 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     if args.json:
         print(json.dumps({"ok": True, "source": str(key(args.source)),
                           "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes, "seconds": row.seconds,
-                                     "written": row.written} for row in written]}))
+                                     "written": row.written, **({"robot": row.robot} if row.robot else {})}
+                                    for row in written]}))
         return 0
     _said.written(written, args.destinations)
     return 0

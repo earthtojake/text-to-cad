@@ -426,8 +426,11 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 22. **A verb's option is about the picture or the path, never the model.** *Every document.* `export` takes a
     document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state; its one option, an
-    STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, not what it holds. `snapshot`'s
+    motion, is what the code built, so no option selects a part or a state; its options say how the
+    file reads that, not what it holds: an STL's or a 3MF's mesh tolerance, how finely the file's
+    triangles follow it, and a robot description's zero (`--zero STATE`), which of the mechanism's
+    states its joints count from -- the file holds every part and every state either way (the states as
+    its keys), and the zero is where its coordinates start, as a unit is. `snapshot`'s
     options describe the picture (the camera, the display, the size, the state the mechanism
     is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
     is, is a function in the model's code: a part's own model, or a model returning the

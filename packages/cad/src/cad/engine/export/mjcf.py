@@ -20,7 +20,8 @@ when the ground is MuJoCo's ``world``, else a body of its own with no joint; eve
 at its joint's origin, which is the link's frame (the description's rule), so a joint stands at its
 body's origin on its Z (``axis="0 0 1"``) with ``ref`` zero. A revolute is a ``hinge`` with its
 range, a continuous one a hinge without; a prismatic a ``slide``; a cylindrical a hinge and a slide
-on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a fixed one no joint, so a part
+on one body (``<name>`` and ``<name>/slide``); a spherical a ``ball``; a floating one (a base declared
+``cad.build123d.free``) a ``freejoint``, its body a child of the world's; a fixed one no joint, so a part
 declared a body (``cad.build123d.body``) is a child ``<body>`` of its link's with none. A joint's drive
 effort (``cad.build123d.limits``) is its ``actuatorfrcrange``, ``-effort effort`` (N*m, N), which bounds
 what any actuator on it applies; MJCF has no bound on a joint's speed, so a drive's velocity is not
@@ -63,8 +64,18 @@ enforced (an equality has none), and the export says so where it has one; ``cont
 bodies where they touch at rest, as it does a joint's.
 
 A pose is a ``key``, its ``qpos`` in MuJoCo's joint order (a ball's a unit quaternion from the three
-angles, x then y then z as the pair turns, a cylindrical's turn then slide), a joint it does not name at
-zero, a follower where its leader puts it.
+angles, x then y then z as the pair turns, a cylindrical's turn then slide, a free joint's its body's
+position and quaternion where the description places it at zero), a joint it does not name at zero, a
+follower where its leader puts it.
+
+**The scene.** An export (``write``) to ``<dir>/<name>.xml`` writes ``<dir>/scene.xml`` beside it where
+there is none, as MuJoCo Menagerie ships one beside each robot: it ``include``s the robot's file and adds
+a ``statistic`` (the robot's centre and extent at zero, so a viewer frames it), Menagerie's ``visual``
+(headlight, haze, camera angle), a gradient skybox, a checker ground ``plane`` and a light, all MuJoCo's
+built-in textures, so the scene is one file. The plane is at ``z = 0``, or at the robot's lowest point
+where it reaches below. A ``scene.xml`` that is there is the person's and is never written over: the
+export says which (``export.note``: wrote it, or kept it). The robot's file is the one an export
+writes again; the scene is the person's to edit. An export named ``scene.xml`` writes no scene.
 
 Numbers are written short and the same every time: nine significant digits at most, ``-0`` as ``0``,
 a length or an angle within 1e-12 of zero as zero (the rounding of a product of frames). The file and its
@@ -90,7 +101,7 @@ from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
 from cad.engine.description import Description, DescriptionError, Geometry, Joint, Link
 from cad.engine.export import ExportRefused, note
 
-__all__ = ["digest", "rendered", "write", "write_description"]
+__all__ = ["SCENE", "digest", "rendered", "scene", "write", "write_description"]
 
 #: The moments a principal inertia may miss the triangle inequality by and be nudged onto it, kg*m^2.
 NUDGE = 1e-9
@@ -98,22 +109,104 @@ NUDGE = 1e-9
 SNAP = 1e-12
 #: How far along a turn that closes a loop its second pair of sites stands, metres (the module's **Loops**).
 AXIS_SPAN = 0.1
+#: The scene an export writes beside the robot where there is none (the module's **The scene**).
+SCENE = "scene.xml"
 _RECORD = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute", "<u2")])
 
 
 def write(view: Any, path: Path) -> None:
-    """The export ``Kind``'s writer: ``view``'s document described and written to ``path``."""
+    """The export ``Kind``'s writer: ``view``'s document described (at its ``zero``, where it has one) and
+    written to ``path``, with a scene beside it where there is none (the module's **The scene**); what it
+    holds said (``export.described``)."""
     from cad.engine.describe import describe
+    from cad.engine.export import described
 
-    write_description(describe(view), path)
+    description = describe(view, zero=getattr(view, "zero", None))
+    for text in description.warnings:
+        note(text)
+    write_description(description, path, scene=True)
+    described(description.summary("mjcf"))
 
 
-def write_description(description: Description, path: Any, *, assets: str = "assets") -> list[Path]:
-    """Write ``description`` as an MJCF at ``path`` and its meshes in ``<path.parent>/<assets>``;
-    the files it holds, the MJCF first."""
+def write_description(description: Description, path: Any, *, assets: str = "assets",
+                      scene: bool = False) -> list[Path]:
+    """Write ``description`` as an MJCF at ``path`` and its meshes in ``<path.parent>/<assets>``, and, given
+    ``scene``, a ``scene.xml`` beside it where there is none (the module's **The scene**); the files it
+    wrote, the MJCF first."""
     path = Path(path)
     text, files = rendered(description, assets)
-    return place(path, text, files, assets)
+    written = place(path, text, files, assets)
+    if scene and path.name.lower() != SCENE:
+        beside = path.parent / SCENE
+        if beside.exists():
+            note(f"kept the existing {SCENE}: it is yours to edit, and an export never writes over it")
+        else:
+            from cad.engine.atomic_replace import put
+
+            put(beside, lambda temporary: Path(temporary).write_text(scene_of(description, path.name), encoding="utf-8"))
+            note(f"wrote {SCENE} beside it: a floor and a light around the robot, yours to edit (an export never "
+                 "writes over it)")
+            written.append(beside)
+    return written
+
+
+def scene_of(description: Description, robot: str) -> str:
+    """A Menagerie scene that includes the MJCF ``robot`` (a file name beside it) of ``description`` (the
+    module's **The scene**)."""
+    low, high = _bounds(description)
+    centre, extent = (low + high) / 2, max(float(np.linalg.norm(high - low)), 0.1)
+    floor = float(low[2]) if low[2] < -1e-6 else 0.0  # a micron's rounding below the origin is on it
+    level = "" if floor == 0 else f' pos="0 0 {_number(floor)}"'
+    lines = [
+        f'<mujoco model="{escape(description.name, {chr(34): "&quot;"})} scene">',
+        f'  <include file="{escape(robot, {chr(34): "&quot;"})}"/>',
+        "",
+        f'  <statistic center="{_numbers(centre)}" extent="{_number(extent)}"/>',
+        "",
+        "  <visual>",
+        '    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>',
+        '    <rgba haze="0.15 0.25 0.35 1"/>',
+        '    <global azimuth="120" elevation="-20"/>',
+        "  </visual>",
+        "",
+        "  <asset>",
+        '    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>',
+        '    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" '
+        'rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>',
+        '    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" '
+        'reflectance="0.2"/>',
+        "  </asset>",
+        "",
+        "  <worldbody>",
+        f'    <light pos="{_numbers((centre[0], centre[1], floor + max(1.5, 2 * extent)))}" dir="0 0 -1" '
+        'directional="true"/>',
+        f'    <geom name="floor"{level} size="0 0 0.05" type="plane" material="groundplane"/>',
+        "  </worldbody>",
+        "</mujoco>",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _bounds(description: Description) -> tuple[np.ndarray, np.ndarray]:
+    """The box around the description's visuals at zero, in metres (a unit box at the origin where it has none)."""
+    found: list[np.ndarray] = []
+    for link in description.links:
+        frame = np.asarray(link.frame, dtype=float)
+        for visual in link.visuals:
+            geometry = visual.geometry
+            placed = frame @ np.asarray(geometry.placement, dtype=float)
+            if geometry.kind == "mesh" and geometry.mesh in description.meshes:
+                points = np.asarray(description.meshes[geometry.mesh].positions, dtype=float).reshape(-1, 3)
+                points = points * float(geometry.scale)
+            else:
+                reach = max([float(value) for value in geometry.size] or [0.0])
+                points = np.array([[x, y, z] for x in (-reach, reach) for y in (-reach, reach) for z in (-reach, reach)])
+            if len(points):
+                found.append(points @ placed[:3, :3].T + placed[:3, 3])
+    if not found:
+        return np.full(3, -0.05), np.full(3, 0.05)
+    every = np.concatenate(found)
+    return every.min(axis=0), every.max(axis=0)
 
 
 def digest(text: str, files: dict[str, bytes]) -> str:
@@ -343,6 +436,9 @@ class _Writer:
         elif joint.kind == "spherical":
             body.add("joint", [("name", name), ("type", "ball")])
             self.qpos.append((joint, 4))
+        elif joint.kind == "floating":
+            body.add("freejoint", [("name", name)])
+            self.qpos.append((joint, 7))
 
     def _content(self, body: _Element, link: Link, frame: np.ndarray) -> None:
         """A link's geoms and sites, each placed in ``body``'s frame (``frame`` the link's in it)."""
@@ -459,7 +555,11 @@ class _Writer:
 
 
 def _qpos(joint: Joint, count: int, values: dict[str, Any]) -> list[float]:
-    """A joint's slice of a key's ``qpos``: its values at the pose, or where its leader puts it, or zero."""
+    """A joint's slice of a key's ``qpos``: its values at the pose, or where its leader puts it, or zero; a free
+    joint's its body's position and quaternion at zero."""
+    if count == 7:
+        origin = np.asarray(joint.origin, dtype=float)
+        return [*(float(value) for value in origin[:3, 3]), *(float(value) for value in _quaternion(origin))]
     given = values.get(joint.name)
     if given is None and joint.follows is not None and values.get(joint.follows[0]) is not None:
         leader, ratio, offset = joint.follows

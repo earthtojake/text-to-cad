@@ -169,7 +169,8 @@ class ModelType(DocumentType):
 
 def _operation(owner: DocumentType, name: str) -> Any:
     """``owner.<name>``: the engine's operation of that name (``cad.engine.api``), for a source of this type.
-    An export of a mesh to the other mesh kinds takes no ``tolerance``: only a document is meshed by it."""
+    An export of a mesh to the other mesh kinds takes no ``tolerance`` and no ``zero``: only a document is meshed
+    or described as a robot."""
     from cad.engine import api
 
     verb = getattr(api, name)
@@ -177,8 +178,9 @@ def _operation(owner: DocumentType, name: str) -> Any:
 
     if name == "export" and not meshed:
         def operation(source: Any, *destinations: Any, **options: Any) -> Any:
-            if "tolerance" in options:
-                raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument 'tolerance'")
+            for option in ("tolerance", "zero"):  # a document's alone: a mesh is meshed by neither, nor described
+                if option in options:
+                    raise TypeError(f"cad.{owner.entry.id}.export() got an unexpected keyword argument {option!r}")
             owner._own(source)
             return verb(source, *destinations, **options)
     else:
