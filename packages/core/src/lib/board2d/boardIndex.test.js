@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createBoardIndex } from "./boardIndex.js";
 import { nearestOnSegment, pointInPolygon } from "./geometry.js";
-import { drawBoardOverlay } from "./boardOverlay.js";
+import { BOARD_OVERLAY_THEMES, drawBoardOverlay } from "./boardOverlay.js";
 
 // A 40 x 30 mm sheet cut from a page whose origin sits at sheet (5, 25): KiCad's (10, -5) is sheet (15, 20).
 const rect = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
@@ -139,6 +139,25 @@ test("Placement draws the pads, the holes and airwires under the highlight; a po
   assert.ok(dimmed > 0, "the board steps back behind the net in focus");
   assert.ok(marks.slice(dimmed).some((mark) => mark.op === "stroke" && mark.style === "#8dc5ff" && mark.points.length === 2),
     "GND's airwire drawn in the selection's colour");
+});
+
+test("a net in focus steps the rest back lightly, at least half its contrast kept, an isolation further; on a face in 3D only the board", () => {
+  const index = createBoardIndex(BOARD);
+  const alpha = (rgba) => Number(/rgba\(.*,\s*([\d.]+)\)/.exec(rgba)[1]);
+  for (const [scheme, colors] of Object.entries(BOARD_OVERLAY_THEMES)) {
+    assert.ok(alpha(colors.dim) <= 0.5, `${scheme}: a net in focus keeps the board readable (${colors.dim})`);
+    assert.ok(alpha(colors.isolatedDim) > alpha(colors.dim), `${scheme}: isolating steps the rest back further`);
+  }
+  const frame = { transform: { scale: 10, offsetX: 0, offsetY: 0 }, width: 400, height: 300, dim: true, selection: [index.resolve("#net:GND")] };
+  // In 2D the wash is the pane's.
+  const flat = recordingContext();
+  drawBoardOverlay(flat.ctx, index, frame);
+  assert.deepEqual(flat.marks[0], { op: "fillRect", style: BOARD_OVERLAY_THEMES.dark.dim, points: [] });
+  // On a face, the board's outline alone (page millimetres, through the face's transform), evenodd: no pane-wide sheet.
+  const face = recordingContext();
+  drawBoardOverlay(face.ctx, index, { ...frame, dimArea: [[[0, 0], [30, 0], [30, 20], [0, 20]]] });
+  assert.equal(face.marks.some((mark) => mark.op === "fillRect"), false);
+  assert.deepEqual(face.marks[0], { op: "fill", style: BOARD_OVERLAY_THEMES.dark.dim, points: [[0, 0], [300, 0], [300, 200], [0, 200]] });
 });
 
 test("a net is highlighted whole, and what is off screen left out", () => {

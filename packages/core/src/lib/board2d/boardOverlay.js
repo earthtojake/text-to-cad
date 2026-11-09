@@ -25,17 +25,26 @@ import { boardAirwires } from "./airwires.js";
 /**
  * The overlay's colours in each theme: the highlight (the CAD views' ink highlight; on the light
  * canvas the same blue darkened to 4.5:1, as `plot2d/theme.js` darkens a layer), what a lit item is
- * filled with, how the rest of the board steps back for a net — darkened on the dark canvas, washed
- * toward white on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad
- * is the side looked at), its holes and its airwires: thin, under everything a person points at.
+ * filled with, how the rest of the board steps back — darkened on the dark canvas, washed toward white
+ * on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad is the side
+ * looked at), its holes and its airwires: thin, under everything a person points at.
+ *
+ * Two steps back. `dim`, for a net in focus (selected, or lit by a prompt's reference), is light: the
+ * board stays a board round it, and the net stands out by its colour and its weight. Measured in 2D on
+ * a routed two-layer board with a 30-pad net lit, the wash this replaced (0.7 white, 0.6 black) left
+ * the rest of the board 36% (light) and 48% (dark) of its L* contrast, pale and murky; these keep 58%
+ * and 67%. The net's luminance contrast with the board beside it falls (3.2:1 to 2.5:1 light, 5.6:1 to
+ * 3.6:1 dark), its colour difference hardly (ΔE76 54 to 52, 68 to 62). `isolatedDim`, for what is
+ * isolated, is the heavier wash as it was: isolating asks for the rest to go.
  */
-const overlayTheme = (selection, rgb, { dim, airwire, inkEdge }) => Object.freeze({
+const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge }) => Object.freeze({
   selection,
   // The ink's keyline (`drawing2d/marks.js`'s `keyline`): ink in a neon over copper of its own hue
   // reads by its edge, as the canvas's contrast, dark on the dark canvas and light on the light one.
   inkKeyline: Object.freeze({ color: inkEdge, width: 1.25 }),
   hover: `rgba(${rgb}, 0.55)`,
   dim,
+  isolatedDim,
   part: `rgba(${rgb}, 0.10)`,
   partPad: `rgba(${rgb}, 0.35)`,
   zone: `rgba(${rgb}, 0.12)`,
@@ -50,8 +59,10 @@ const overlayTheme = (selection, rgb, { dim, airwire, inkEdge }) => Object.freez
   airwire
 });
 export const BOARD_OVERLAY_THEMES = Object.freeze({
-  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)", inkEdge: "rgba(0, 0, 0, 0.85)" }),
-  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)", inkEdge: "rgba(255, 255, 255, 0.95)" })
+  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.4)", isolatedDim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)",
+    inkEdge: "rgba(0, 0, 0, 0.85)" }),
+  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.5)", isolatedDim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)",
+    inkEdge: "rgba(255, 255, 255, 0.95)" })
 });
 /** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
 export function boardOverlayColors(scheme) {
@@ -255,7 +266,10 @@ function draftBox(ctx, view, box, color, fill) {
 
 /**
  * The overlay for one frame. `transform` maps page millimetres to CSS pixels; the context is set to
- * `pixelRatio` here. `dim`: the rest of the board steps back (a net in focus).
+ * `pixelRatio` here. `dim`: the rest of the board steps back, washed in `colors.dim` (a net in focus;
+ * an isolation hands its heavier `isolatedDim` as `dim`): the whole pane, or only `dimArea`, the board's
+ * outline rings in page millimetres, where the overlay is a face of the board in 3D, whose overlay also
+ * lies on a see-through plane round the slab that a pane-wide wash would turn into a floating sheet.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {ReturnType<typeof import("./boardIndex.js").createBoardIndex>} index
@@ -265,9 +279,10 @@ function draftBox(ctx, view, box, color, fill) {
  *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
  *   `placement`: a board's Placement display, its pads and airwires drawn here.
  *   `draft`: the page box an area is being dragged over (a drag under Select), or null.
+ *   `dimArea`: the board's outline rings (page millimetres) the dim is laid on, or null for the whole pane.
  */
 export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
-  mirrorX = null, colors = null, placement = false, draft = null }) {
+  mirrorX = null, colors = null, placement = false, draft = null, dimArea = null }) {
   if (!ctx || !index || !transform || !(transform.scale > 0)) return;
   colors = { ...BOARD_OVERLAY_COLORS, ...colors };
   const view = createView(transform, { width, height, mirrorX });
@@ -282,7 +297,12 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   if (dim && selection.length) {
     ctx.fillStyle = colors.dim;
-    ctx.fillRect(0, 0, width, height);
+    if (dimArea?.length) {
+      pageSpace(ctx, view, pixelRatio);
+      ctx.beginPath();
+      for (const ring of dimArea) addPoints(ctx, ring, true);
+      ctx.fill("evenodd");
+    } else ctx.fillRect(0, 0, width, height);
   }
   pageSpace(ctx, view, pixelRatio);
   if (draft) draftBox(ctx, view, draft, colors.selection, colors.draft);

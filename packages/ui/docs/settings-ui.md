@@ -1013,7 +1013,10 @@ It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
-again in the browser, from the payload it holds.
+again in the browser, from the payload it holds. A net in focus (selected, or lit by a reference)
+steps the rest of the board back lightly, more than half its contrast kept, so the board still reads
+as a board round the lit net; what is isolated steps it back further. In 3D the step back is laid on
+the board alone, never on the see-through plane round the slab.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

@@ -141,6 +141,9 @@ function BoardSurface({ view, data }) {
   const thickness = plot?.board?.thickness > 0 ? plot.board.thickness : BOARD_THICKNESS_MM;
   const thicknessRef = useRef(thickness);
   thicknessRef.current = thickness;
+  // The board's outline (page millimetres): where a face's overlay in 3D lays the dim.
+  const outlineRef = useRef(null);
+  outlineRef.current = plot?.board?.outline ?? null;
   const models = useBoardModels({ client: workspace.client, file, revision: workspace.resource.revision, enabled: Boolean(index) });
 
   // ---- the file's view: the transform, the board's Display, what is isolated ----
@@ -268,11 +271,12 @@ function BoardSurface({ view, data }) {
     if (face && !isolated.length && !hovered.length && !selected.length && !placementRef.current && !session.items.length) return false;
     const mirrorX = face ? frame.mirrorX : mirrorRef.current;
     const colors = boardOverlayColors(schemeRef.current);
-    const base = { transform, pixelRatio, width, height, mirrorX, colors };
-    // What is isolated first, everything else stepped back; then the hover and the selection (a net
-    // in focus steps the rest back).
+    // On a face in 3D the dim is laid on the board alone, not on the see-through plane round the slab.
+    const base = { transform, pixelRatio, width, height, mirrorX, colors, dimArea: face ? outlineRef.current : null };
+    // What is isolated first, everything else stepped back, far (`isolatedDim`); then the hover and the
+    // selection (a net in focus steps the rest back, lightly: the board still reads round it).
     if (isolated.length) {
-      drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...colors, selection: colors.hover } });
+      drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...colors, selection: colors.hover, dim: colors.isolatedDim } });
     }
     const net = selected.some(item => item.kind === "net");
     drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current,
