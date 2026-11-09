@@ -868,6 +868,7 @@ def _face_groups(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
 
 def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True,
                    depth: bool = True) -> dict[str, Any]:
+    checkpoint()  # a part at a time
     trapped = _trap(geo, pull, zero_tol)
     features = _features(geo, trapped)
     groups = [sorted({int(face) for face in geo.owner[mask]}) for mask in features]
@@ -1422,6 +1423,7 @@ def _side_walls(geo: _Geometry, measured: _Thickness, faces: list[int]) -> dict[
 def _transitions_part(geo: _Geometry, measured: _Thickness, skip: set[int]) -> list[dict[str, Any]]:
     """The part's steps (``ops.steps`` over its planar faces) and, on its free-form faces no step takes in, the
     rolling ball's steepest change (``ops.transitions``)."""
+    checkpoint()  # a part at a time
     nominal = measured.nominal
     if nominal is None or nominal <= 0:
         return []
@@ -1585,6 +1587,7 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
     """The part's ribs (see the module). A rib a trapped face touches -- one of its own faces, or a face beside
     them no larger than its side, not its base -- is a snap arm, its barb that face (``kind``: ``snap``, else
     ``rib``): judged by the snap rule, not the rib's height and spacing."""
+    checkpoint()  # a part at a time
     links = geo.neighbours()
     trapped = trapped or set()
     kinds = kinds if kinds is not None else {}
@@ -1700,6 +1703,7 @@ def _radius_at(surface: Any, point: np.ndarray) -> float:
 
 def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int],
                  kinds: dict[int, str] | None = None) -> list[dict[str, Any]]:
+    checkpoint()  # a part at a time
     links = geo.neighbours()
     kinds = kinds if kinds is not None else {}
     items: list[dict[str, Any]] = []
@@ -1753,6 +1757,7 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
 
 
 def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int]) -> list[dict[str, Any]]:
+    checkpoint()  # a part at a time
     links = geo.neighbours()
     items: list[dict[str, Any]] = []
 
@@ -1805,6 +1810,7 @@ def _features_family(name: str, per_part: list[list[dict[str, Any]]], key: str, 
 
 
 def _projection_part(geo: _Geometry, pull: np.ndarray) -> tuple[dict[str, Any], dict[str, Any], np.ndarray]:
+    checkpoint()  # a part at a time
     vertices, triangles, _owners = geo.mesh
     u, v = ops.basis(pull)
     flat = np.stack([vertices @ u, vertices @ v], axis=1)

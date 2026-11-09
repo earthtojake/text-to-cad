@@ -877,20 +877,30 @@ def freeform(face: Any) -> bool:
                                                                GeomAbs_Sphere, GeomAbs_Torus)
 
 
-#: A free-form face of this many edges or more is heavy (``heavy``).
+#: A free-form face of this many edges or more is heavy (``heavy``), and a B-spline of this many control points.
 HEAVY_EDGES = 48
+HEAVY_POLES = 4000
 
 
 def heavy(face: Any) -> bool:
-    """Whether a face's exact intersection is costly: a free-form face of many edges (``HEAVY_EDGES``). The
-    kernel's intersector costs microseconds a ray on most faces, and a millisecond or more on such a face, most of
-    it classifying a crossing against its many edges' curves -- 6 ms a ray its line meets the surface beyond the
-    trim, on a 526-edge face, against 4 to 20 microseconds on a face of under 20 edges."""
+    """Whether a face's exact intersection is costly: a free-form face of many edges (``HEAVY_EDGES``), or a
+    B-spline of many control points (``HEAVY_POLES``). The kernel's intersector costs microseconds a ray on most
+    faces, and a millisecond or more on such a face: classifying a crossing against its many edges' curves -- 6 ms
+    a ray its line meets the surface beyond the trim, on a 526-edge face, against 4 to 20 microseconds on a face of
+    under 20 edges -- or searching a large surface's polyhedron for a line that misses it (an F1 monocoque's
+    panels: 0.4 ms a ray)."""
     if not freeform(face):
         return False
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_BSplineSurface
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp_Explorer
 
+    surface = BRepAdaptor_Surface(face, False)
+    if surface.GetType() == GeomAbs_BSplineSurface:
+        spline = surface.BSpline()
+        if spline.NbUPoles() * spline.NbVPoles() >= HEAVY_POLES:
+            return True
     explorer, edges = TopExp_Explorer(face, TopAbs_EDGE), 0
     while explorer.More() and edges < HEAVY_EDGES:
         edges += 1
