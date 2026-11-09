@@ -748,6 +748,73 @@ class ReleaseTest(unittest.TestCase):
         self.assertIn("checked", said[-1]["done"])
         self.assertEqual(fake.checks.status()["held"], 1)
 
+    def test_a_check_routed_on_from_a_script_s_worker_never_stops_that_worker(self) -> None:
+        """Its worker retired as it was leased, the check goes on to the checks processes: while it waits for a
+        slot, its callers gone, it is no reaping's victim -- the script's worker it was first asked of, a person's
+        warm worker, is not its process -- and status says it waits. Killed between its lease and its request, it
+        is answered reaped, no fresh checks process started for it."""
+        from cad.engine.previous import version
+        from cad.engine.serve import NotHeld
+        from cad_server.engine.daemon import CHECKS, REAPED, Daemon, _Asked, refused
+        from cad_server.engine.supervisor import Gone
+
+        killed: list[str] = []
+        leased: list[str] = []
+
+        def process(key: str, request: Any) -> Any:
+            return SimpleNamespace(key=key, environment={}, popen=SimpleNamespace(kill=lambda: killed.append(key)),
+                                   kill=lambda: None, request=request, progress=None)
+
+        def not_held(_order: Any, _send: Any, _payload: bytes) -> dict[str, Any]:
+            return refused(NotHeld("plate (id) is not held", "unsaved", "python parts.py"))
+
+        script = process("/m/parts.py", not_held)
+        gone = threading.Event()
+        rows: list[dict[str, Any]] = []
+
+        def take(_document: str, _gave_up: Any, _waiting: Any, _reap: Any, _defer: Any) -> str:
+            gone.set()  # its caller hangs up while it waits; another check waits with its caller there
+            other = _Asked("other", CHECKS, None, gone=threading.Event())
+            other.waiting = True
+            fake.asked["other"] = other
+            rows.extend(Daemon.running_checks(fake))
+            Daemon._reap(fake, other)
+            fake.asked.pop("other")
+            return "checks"
+
+        def killed_in_lease(_order: Any, _send: Any, _payload: bytes) -> dict[str, Any]:
+            asked = fake.asked["t"]
+            asked.reaped = True
+            asked.stopped.set()  # killed by a reaping as it was leased: its pipe is broken
+            raise Gone("the checks process's pipe broke")
+
+        def lease(key: str, *_args: Any, **_kwargs: Any) -> Any:
+            leased.append(key)
+            return script if key != CHECKS else process(CHECKS, killed_in_lease)
+
+        records = {"id": {"version": "v1", "revision": "k1"}}
+        held = iter([({"script": "/m/parts.py", "function": "plate", "held": "id", "via": "/m/parts.py"}, b""),
+                     ({"document": "id", "name": "plate"}, b"bytes")])
+        fake = _fake(records, lambda _ident: next(held), None)
+        fake.supervisor = SimpleNamespace(live=lambda _service, _key, _python_key: script)
+        fake.pool = SimpleNamespace(take=take, give=lambda _slot: None)
+        fake.busy, fake.busy_lock = 0, threading.Lock()
+        fake.lease, fake.release, fake.environment = lease, lambda _worker: None, lambda: {}
+        fake._behind_check, fake.touch = (lambda *_args: None), (lambda: None)
+        fake._learn = lambda *_args: False
+        fake._built = lambda *_args, **_kwargs: None
+        for name in ("_call", "_kill", "_reap", "_defers"):
+            setattr(fake, name, getattr(Daemon, name).__get__(fake))
+        said: list[dict[str, Any]] = []
+        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version(),
+                            "measures": MEASURES}, said.append, gone)
+        self.assertEqual(killed, [], "the script's worker it was first asked of is never killed through it")
+        mine = [row for row in rows if row["route"] == "checks" and row.get("document") == "id"]
+        self.assertEqual([(row["where"], row["waiting"]) for row in mine], [(None, True)], "it waits, of no process")
+        self.assertEqual(leased, ["/m/parts.py", CHECKS], "no fresh checks process after the kill")
+        self.assertEqual(said[-1], {"failed": REAPED, "reaped": True})
+        self.assertEqual((fake.asked, fake.running), ({}, {}))
+
     def test_an_engine_that_stops_mid_check_says_to_check_again_and_measures_nothing_here(self) -> None:
         import build123d as bd
 
@@ -1011,6 +1078,7 @@ class ReleaseTest(unittest.TestCase):
         first, second, queued, model = (_Asked(token, key, None) for token, key in
                                         (("a", CHECKS), ("b", CHECKS), ("c", CHECKS), ("d", "/m.py")))
         first.worker, second.worker, model.worker = process("a"), process("b"), process("d")
+        queued.worker, queued.waiting = process("c"), True  # waiting for a slot: what it was leased before is not its own
         fake = SimpleNamespace(asked={found.token: found for found in (first, second, queued, model)},
                                asked_lock=threading.Lock())
         fake._kill = Daemon._kill.__get__(fake)

@@ -1114,10 +1114,13 @@ its end of file (`daemon._watched`) -- gives its slot up while a check whose cal
 every slot busy (`Daemon._reap`): its checks process killed at once (it holds nothing of anyone's, so no kernel call
 it is in holds the slot), nothing of it kept, and the pool starts a fresh one for the waiter -- one for each such
 waiter, the oldest first, each counted until its slot is free again. It leaves `running` as it is reaped, so the
-same check asked meanwhile runs anew, and a caller still reading it is told why. A check waiting for a slot whose
+same check asked meanwhile runs anew, and a caller still reading it is told why; one killed between its lease and its
+request is answered so, never asked again of a fresh process. A check waiting for a slot whose
 callers have all gone leaves a free one to a check someone waits for (`Pool.take`'s `defer`). A check someone waits
 for is never cut short so, nor a model's worker's, and an abandoned one no one needs the slot of runs to its end
-and keeps its result. A changed file is another digest's check. A process over the workers' memory
+and keeps its result. A check's process is the one its own attempt leased alone: one gone on from the script's worker
+it was first asked of (retired as it was leased) to the checks processes holds no process while it waits for a slot,
+so neither a reaping nor a drain ever kills that worker through it, and `cad status` says it waits. A changed file is another digest's check. A process over the workers' memory
 cap after a check is retired (a worker drained first) and the check's caller told so, on stderr. A process that
 exits in a check is not asked again: the check fails saying so, in words of the process it was.
 

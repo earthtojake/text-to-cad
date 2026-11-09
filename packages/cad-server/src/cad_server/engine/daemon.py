@@ -1093,6 +1093,7 @@ class Daemon:
             for attempt in (1, 2):
                 worker = None
                 slot = None
+                asked: _Asked | None = None
                 try:
                     environment = request.get("env") or {}
                     # An export runs in its caller's environment (``worker.adopt``), as a build does; the checks
@@ -1111,10 +1112,13 @@ class Daemon:
                             send(refused(self.models.not_held(named)) if isinstance(named, str) else
                                  {"failed": "The viewed model is no longer held. Reopen it before exporting."})
                             return
-                    asked = None
                     if isinstance(order.get("check"), dict):
                         with self.asked_lock:
                             asked = self.asked.get(str(order["check"].get("token")))
+                            if asked is not None:
+                                # This attempt's own lease alone is its process: an earlier one's (a script's worker
+                                # it was asked of, released) is no one's to stop through it (``_kill``).
+                                asked.worker = None
                         if attempt == 1 and key != CHECKS:
                             self._behind_check(key, python_key, send)
                     gave_up = asked.stopped.is_set if asked is not None else None
@@ -1126,7 +1130,8 @@ class Daemon:
                         # while it waits with its caller there, a check no one waits for gives up its slot, and one
                         # whose callers have gone leaves a free slot to one someone waits for.
                         if asked is not None:
-                            asked.waiting = True
+                            with self.asked_lock:
+                                asked.waiting = True
                         try:
                             slot = self.pool.take(_checked_document(request.get("source") or {}), gave_up,
                                                   lambda said: send({"log": said, "stream": "waiting"}),
@@ -1134,7 +1139,8 @@ class Daemon:
                                                   None if asked is None else lambda: self._defers(asked))
                         finally:
                             if asked is not None:
-                                asked.waiting = False
+                                with self.asked_lock:
+                                    asked.waiting = False
                         if asked is not None:
                             asked.freed = False  # a slot held again, after a process that never started
                         worker = self.lease(slot, environment, cwd, service="checks", gave_up=gave_up)
@@ -1186,6 +1192,12 @@ class Daemon:
                         if worker is not None and not request.get("expected"):
                             self._built(worker, failed, verb=True)
                         send(failed)
+                        return
+                    if asked is not None and asked.stopped.is_set():
+                        # Stopped between its lease and its request -- reaped, halted or cancelled, its process
+                        # killed before the request reached it: answered so (``check``'s ``answered`` says why),
+                        # never asked again of a fresh process.
+                        send({"failed": CHECK_CANCELLED, "cancelled": True})
                         return
                 except RuntimeError as error:
                     if not _no_kernel(error):
@@ -1416,8 +1428,10 @@ class Daemon:
                     if _measurer(None, False, caller, version(), unlike) is None:
                         answered(nobody)
                         return
-                    worker_key = asked.key = CHECKS
-                    asked.python_key = None
+                    with self.asked_lock:
+                        # Routed to the checks processes now: the script's worker it was asked of is not its process.
+                        worker_key = asked.key = CHECKS
+                        asked.python_key, asked.worker = None, None
                 if worker_key == CHECKS and "script" in source:
                     try:
                         source, payload = self._whole(ident, source)
@@ -1513,8 +1527,8 @@ class Daemon:
             checks = [asked for asked in self.asked.values() if asked.key == CHECKS]
             waiters = sum(1 for asked in checks if asked.waiting and not _abandoned(asked))
             reaping = sum(1 for asked in checks if asked.reaped and not asked.freed)
-            victims = [asked for asked in checks if asked.worker is not None and not asked.answered
-                       and not asked.reaped and _abandoned(asked)]
+            victims = [asked for asked in checks if asked.worker is not None and not asked.waiting
+                       and not asked.answered and not asked.reaped and _abandoned(asked)]
             if reaping >= waiters or not victims:
                 return
             victim = min(victims, key=lambda asked: asked.began)
@@ -1539,10 +1553,11 @@ class Daemon:
         running one's process is killed -- every one signalled before any is waited for -- and its request
         answers that it is gone, which its caller is told in the words of why (``check``'s ``answered``)."""
         processes = []
-        for asked in checks:
-            asked.stopped.set()
-            if asked.worker is not None:
-                processes.append(asked.worker)
+        with self.asked_lock:
+            for asked in checks:
+                asked.stopped.set()
+                if asked.worker is not None and not asked.waiting:  # one waiting for a slot holds no process yet
+                    processes.append(asked.worker)
         for process in processes:
             try:
                 process.popen.kill()
@@ -1567,7 +1582,7 @@ class Daemon:
             rows.append({**asked.what, "where": None if worker is None else getattr(worker, "key", asked.key),
                          "route": "checks" if asked.key == CHECKS else "worker", "since": asked.began,
                          "seconds": round(now - asked.began, 1), "attached": not _abandoned(asked),
-                         "callers": len(asked.callers), "waiting": worker is None})
+                         "callers": len(asked.callers), "waiting": worker is None or asked.waiting})
         return rows
 
     def _behind_check(self, key: str, python_key: str | None, send: Callable[[dict[str, Any]], None]) -> None:
