@@ -13,7 +13,8 @@ Every part of the document is measured along the pull on its B-rep, each finding
   releases each is found by more rays (``meshops_molding.classify_undercut``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
   it), the nominal wall (the area-weighted median), each face's thin and thick readings (``feature``: a rib's
-  or a boss's face, else wall); **transitions**: each step read on its stepped side (two parallel faces at two
+  or a boss's face, else wall), the thinnest faces refined to the exact least distance to a face across
+  (``_refine_thin``); **transitions**: each step read on its stepped side (two parallel faces at two
   wall offsets, the chain of faces between them: its run over the change, ``ops.steps``), and on a free-form
   face no step takes in the rolling ball's steepest change;
 - **ribs**: two opposite planar faces close together, both standing on one base face (a concave edge or
@@ -1055,13 +1056,9 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         v, w = values[mine], geo.weights[mine]
         top = int(np.argmax(v))
         tidy = clean[mine]
-        # Narrow: a face the ball cannot sit on -- most of its points held by a face round a convex edge, or
-        # the face narrower (its area over its span) than twice the widest ball it holds.
-        corners = geo.vertices(ordinal)
-        span = 2.0 * float(np.linalg.norm(corners - corners.mean(axis=0), axis=1).max()) if len(corners) else 0.0
-        width = float(geo.areas[ordinal - 1]) / span if span > 0 else 0.0
-        narrow = (float(w[tidy].sum()) < 0.3 * float(w.sum())
-                  or width < 2.0 * float(v.max()))
+        # Narrow: a face the ball cannot sit on -- most of its points held by a face round a convex edge (a
+        # rib's top, a plate's end). A face merely narrow is read as it is: its balls are its own wall.
+        narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
         if narrow:
             median = low = float(v.max())
         else:
@@ -1089,7 +1086,79 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         # so a chunky part whose points all sit near an outside edge still reads its section.
         nominal = ops.weighted_median(np.array([face["median"] for face in per_face.values()]),
                                       np.array([float(geo.areas[ordinal - 1]) for ordinal in per_face]))
+        _refine_thin(geo, per_face, bound, owners, links)
     return _Thickness(values, held, nominal, per_face)
+
+
+#: The thinnest faces (by their least sampled wall) refined to the exact least distance to a face across.
+_REFINED_FACES = 32
+#: The faces across a face refined against, nearest first, at most.
+_REFINED_ACROSS = 8
+#: A face of more edges than this is not refined (a web around many holes: its sampled figure stands).
+_REFINE_EDGES = 16
+#: The least segment leaves the face within 45 degrees of its inward normal, and the face across looks on
+#: along it (a wall's far side), by this cosine.
+_FACING = math.cos(math.radians(45.0))
+
+
+def _refine_thin(geo: _Geometry, per_face: dict[int, dict[str, Any]], bound: np.ndarray, owners: np.ndarray,
+                 links: dict[int, list[tuple[int, Any]]]) -> None:
+    """The thinnest faces' walls refined to the exact least distance between the face and a face across that
+    its balls are held by (``BRepExtrema_DistShapeShape``, ``brep.least_segments``), as printing's and cnc's
+    walls are (the faces across, of those whose box comes nearer than the face's least sampled wall: first those
+    its rays into the material meet and its balls are held by, most often first, then the nearest boxes):
+    the segment leaves the face within 45 degrees of its inward normal, the face across looks on
+    along it, and a ray along it from the face meets that face first, at that length. A real thin wall
+    between two samples -- a cut grazing a drafted corner, whose bounding faces' balls read 0.9 where the
+    wall is 0.6 -- is never hidden: the face's least (``low``) and its wall (``median``) become it where it is
+    thinner. Faces that share an edge or a corner are not refined (their least distance is 0)."""
+    order = sorted((face["low"], ordinal) for ordinal, face in per_face.items() if not face["narrow"])
+    boxes = np.array([[*(lambda b: (b.min.X, b.min.Y, b.min.Z, b.max.X, b.max.Y, b.max.Z))(f.bounding_box())]
+                      for f in geo.faces])
+    for _, ordinal in order[:_REFINED_FACES]:
+        checkpoint()
+        face = per_face[ordinal]
+        if len(links.get(ordinal, [])) > _REFINE_EDGES:
+            continue
+        # the faces across: those whose box comes nearer the face's than its least sampled wall, nearest first,
+        # but its neighbours and the faces it shares a corner with
+        mine = boxes[ordinal - 1]
+        apart = np.linalg.norm(np.maximum(0.0, np.maximum(boxes[:, :3] - mine[3:], mine[:3] - boxes[:, 3:])), axis=1)
+        near = {other for other, _ in links.get(ordinal, [])} | {ordinal}
+        corners = {tuple(np.round([v.X, v.Y, v.Z], 6)) for v in geo.faces[ordinal - 1].vertices()}
+        # those its rays into the material meet and its balls are held by first, most often met first; then
+        # the rest whose box is near enough, nearest first
+        mask = geo.owner == ordinal
+        _, hit = geo.cast_faces(geo.points[mask] - geo.normals[mask] * geo.eps, -geo.normals[mask])
+        met = np.concatenate([hit[hit > 0], owners[bound[mask & (bound >= 0)]]]).astype(int)
+        seen, counts = np.unique(met, return_counts=True)
+        ranked = [int(f) for f in seen[np.argsort(-counts, kind="stable")]]
+        ranked += [int(other) + 1 for other in np.argsort(apart, kind="stable") if int(other) + 1 not in ranked]
+        across = [other for other in ranked if apart[other - 1] < face["low"] and other not in near
+                  and not any(tuple(np.round([v.X, v.Y, v.Z], 6)) in corners for v in geo.faces[other - 1].vertices())]
+        best = None
+        for other in across[:_REFINED_ACROSS]:
+            try:
+                segments = _dfm_brep.least_segments(geo.faces[ordinal - 1], geo.faces[other - 1],
+                                                    len(links.get(other, [])) > _REFINE_EDGES)
+            except Exception:  # noqa: BLE001 - a pair the kernel cannot measure keeps its sampled figure
+                continue
+            for length, pa, pb, normal, there in segments:
+                if best is not None and length >= best[0]:
+                    break
+                way = (pb - pa) / length
+                if float(way @ -normal) < _FACING or float(there @ way) < _FACING:
+                    continue
+                hit, first = geo.cast_faces((pa + way * geo.eps)[None], way[None])
+                if int(first[0]) != other or abs(float(hit[0]) + geo.eps - length) > max(1e-4, 1e-3 * length):
+                    continue
+                best = (length, pa)
+                break
+        if best is not None and best[0] < face["low"]:
+            face["low"] = best[0]
+            face["median"] = min(face["median"], best[0])
+            face["at"] = best[1]
+            face["refined"] = True
 
 
 def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]:
@@ -1108,7 +1177,8 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
             item = {"location": geo.ref(ordinal), "thickness_mm": _r(face["median"], _JUDGED),
                     "min_mm": _r(face["low"], 3), "max_mm": _r(face["max"], 3),
                     "nominal_mm": _r(nominal, 3), "ratio_to_nominal": _r(face["max"] / nominal, _JUDGED),
-                    "thin_ratio": _r((face["median"] or 0) / nominal, 3), "feature": "wall", "xyz": _xyz(face["at"])}
+                    "thin_ratio": _r((face["median"] or 0) / nominal, 3), "feature": "wall",
+                    "refined": bool(face.get("refined")), "xyz": _xyz(face["at"])}
             items.append(item)
             medians.append(face["median"])
             lows.append(face["low"])
@@ -1539,7 +1609,11 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
         if not edge.concave or edge.smooth or a in used or b in used:
             continue
         reference = wall(a, b)
-        first = a if geo.areas[a - 1] <= geo.areas[b - 1] else b
+        # at the smaller face; two of one area (a symmetric pair, equal but for the turn's noise) at the lower
+        # ordinal, whichever way the edge lists them
+        area_a, area_b = float(geo.areas[a - 1]), float(geo.areas[b - 1])
+        same = abs(area_a - area_b) <= 1e-6 * max(area_a, area_b, 1e-12)
+        first = min(a, b) if same else (a if area_a < area_b else b)
         items.append({"location": geo.ref(first), "faces": [geo.ref(a), geo.ref(b)],
                       "edge": geo.part.ref("edge", edge.ordinal), "radius_mm": 0.0, "sharp": True,
                       "angle_deg": _r(edge.angle_deg, 2), "length_mm": _r(edge.length, 3),

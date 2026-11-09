@@ -298,6 +298,31 @@ class ThicknessTest(unittest.TestCase):
             self.assertNotIn("molding.wall_transition", {f.code for f in result.findings})
             self.assertAlmostEqual(result.measurements["thickness"]["nominal_mm"], 2.0, places=6)
 
+    def test_a_thin_wall_between_samples_is_never_hidden(self) -> None:
+        # a drafted 2 mm cup, a cut grazing one corner to a 0.6 mm wall: its two bounding faces are narrow, and
+        # their balls read 0.9 and 1.2; the exact least distance between them is the wall (BRepExtrema)
+        with bd.BuildPart() as cup:
+            with bd.BuildSketch():
+                bd.RectangleRounded(40, 30, 3.2)
+            bd.extrude(amount=80, taper=1.0)
+            bd.offset(amount=-2.0, openings=cup.faces().sort_by(bd.Axis.Z)[0])
+        reach = 1.2 + 0.6 + 5.0
+        cut = cup.part - bd.Pos(16.8 + reach / math.sqrt(2), 11.8 + reach / math.sqrt(2), 40) * bd.Cylinder(5, 100)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            pull = (turn * bd.Pos(0, 0, 1)).position
+            result = _check(turn * cut, pull=f"{pull.X:.15g},{pull.Y:.15g},{pull.Z:.15g}")
+            thickness = result.measurements["thickness"]
+            self.assertAlmostEqual(thickness["min_mm"], 0.6, delta=0.01)
+            thin = [i for i in thickness["items"] if i["thickness_mm"] < 1.5]
+            self.assertEqual(len(thin), 2, thin)  # the two faces either side of the 0.6 wall, refined to it
+            self.assertTrue(all(i["refined"] and abs(i["thickness_mm"] - 0.6) < 0.01 for i in thin), thin)
+            self.assertIn("molding.wall_min", {f.code for f in result.findings})
+            self.assertAlmostEqual(thickness["nominal_mm"], 2.0, places=3)
+        # the uniform cup it was cut from: no face refined under its wall
+        plain = _check(cup.part).measurements["thickness"]
+        self.assertGreater(plain["min_mm"], 1.95)
+        self.assertNotIn("molding.wall_min", {f.code for f in _check(cup.part).findings})
+
     def test_the_ball_against_its_closed_form(self) -> None:
         # One flat face of a 4 mm slab, from above: the ball is half the slab.
         vertices = np.array([[-50, -50, 0], [50, -50, 0], [50, 50, 0], [-50, 50, 0.0]])
@@ -420,6 +445,20 @@ class FeaturesTest(unittest.TestCase):
         rounded = sharp.fillet(1.5, edge)
         (corner,) = _check(rounded).measurements["corners"]["items"]
         self.assertEqual((corner["radius_mm"], corner["sharp"], corner["ratio_to_wall"]), (1.5, False, 0.75))
+
+    def test_a_corner_s_place_is_its_part_s_whatever_the_turn(self) -> None:
+        # a square cup's sharp inside corners sit between walls of one area: each at the same face however the
+        # cup is turned (the findings, one per face, then count alike)
+        with bd.BuildPart() as cup:
+            bd.Box(24, 24, 40, align=BOTTOM)
+            bd.offset(amount=-2.0, openings=cup.faces().sort_by(bd.Axis.Z)[-1])
+        read = []
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            pull = (turn * bd.Pos(0, 0, 1)).position
+            result = _check(turn * cup.part, pull=f"{pull.X:.15g},{pull.Y:.15g},{pull.Z:.15g}")
+            read.append((sorted((c["edge"], c["location"]) for c in result.measurements["corners"]["items"]),
+                         sorted(f.location for f in result.findings if f.code == "molding.inside_corner_radius")))
+        self.assertEqual(read[0], read[1])
 
 
 class ProjectionPartingClampTest(unittest.TestCase):
