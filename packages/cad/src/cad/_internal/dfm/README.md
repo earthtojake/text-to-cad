@@ -140,29 +140,44 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres. Each
   part of an assembly is measured once, placed where its first occurrence stands. A part that is another's
   geometry moved -- an exporter's copies, a pattern written out part by part -- is found by its geometry
-  (`_dfm_brep.copies`: its counts and faces' kinds alike and every vertex, edge middle and face middle where the
-  first's lie moved, ordinal for ordinal, 1e-7 of its size; never by bytes, which a copy does not keep) and, in
-  CNC and sheet metal (each part read in its own frame, so where it stands changes nothing), measured once: the
-  first's items said again at the copy's refs, its places and directions moved onto it, its counts counted again
-  (`_dfm_brep.moved`). A row of 46 copies among 107 parts costs 61 parts' measurement, its report the same.
-  Molding and printing read a part against the world's pull and plate, so they measure every part.
+  (`_dfm_brep.copies`: its counts and faces' kinds alike, its volume and area the first's to 1e-6, and every
+  vertex, each edge at its middle and quarters and each face at the middles and quarters of its parameters where
+  the first's lie moved, ordinal for ordinal, 1e-7 of its size -- probes in one plane, which a mirror fits as well
+  as a turn, are no copy; never by bytes, which a copy does not keep) and, in CNC and sheet metal (each part read in
+  its own frame, so where it stands changes nothing), measured once: the first's items said again at the copy's
+  refs, its places and directions moved onto it, its counts counted again (`_dfm_brep.moved`), the faces the
+  kernel failed on said at the copy's own too. CNC reuses a measurement only where the copy's own machine frame
+  (`machine.frames`, its own) is the measured part's turned with it: a copy turned by a right angle reads square
+  to the world again, a frame of its own, and is measured anew (a mirrored copy too). A row of 46 copies among 107
+  parts costs 61 parts' measurement, its report the same. Molding and printing read a part against the world's
+  pull and plate, so they measure every part.
 - **Exact rays** (`_dfm_brep.Rays`, each process's casts) cost what a crossing costs. On a heavy face -- free-form
   and of 48 edges or more, or a B-spline of 4000 control points or more (`heavy`) -- the kernel's intersector (`IntCurvesFace_Intersector`) classifies a line's
   crossing of the surface beyond the face's trim against every edge again, with a classifier made anew each call:
   6 ms a ray on a 526-edge face, against microseconds on any other. So a heavy face's candidates are screened by its
-  triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections and the face's
-  tolerance -- a ray that meets none cannot cross the face), and cast with the intersector that does not
-  re-classify, the full one only on the stretches of the line within reach of the face's edges (`Intersector`:
-  the edges walked to 2e-5 of the part, the reach twice the largest edge tolerance and the intersector's own
-  (u, v) tolerance in millimetres, plus three walks' deflections), where alone the two can differ. The crossings
-  are the kernel's: the same faces, their distances to the root's last digits (1e-12). A ray the kernel cannot
-  intersect with a face (`Standard_Failure` on a degenerate patch) loses that one crossing, never the family:
-  it is counted against the face and said (`rays_unintersected`, a warning naming the faces).
+  triangulation (`Screen`: chunks of 16 triangles, each box widened by three deflections, the face's tolerance and
+  twice its edges' -- a ray that meets none cannot cross the face), and cast with the intersector that does not
+  re-classify; on the stretches of the line within reach of the face's edges (`Intersector`: the edges walked to
+  2e-5 of the part, the reach twice the edges' largest tolerance, the face's, and the (u, v) tolerance the
+  kernel's classifier accepts at the boundary in millimetres along the surface's finer direction, plus three
+  walks' deflections) the full one is cast too, and its crossings the fast one lacks are added. The full
+  intersector answers differently on different stretches of one line, so neither's crossings are dropped for the
+  other's. What this keeps: every crossing on the face that the kernel's own intersector finds on the whole line
+  (rays grazing a free-form face's edges: none lost); within the boundary's tolerance band, beyond the trim, a
+  crossing is accepted as the kernel accepts it on that stretch, which may differ from its answer on the whole
+  line by its tolerance. A face is read once; one whose triangulation cannot be read is not screened, and the
+  full intersector answers for its whole line. A ray the kernel cannot intersect with a face (`Standard_Failure`
+  on a degenerate patch), or a stretch of it near the boundary it does not finish, loses that crossing alone --
+  the fast intersector's on the rest of the line are kept -- never the family: it is counted against the face
+  and said (`rays_unintersected`, a warning naming the faces), and every family whose rays it cost names those
+  faces (`unmeasured_faces`), so its rules say what was not measured there (below).
 - **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and an error finding
   (`measurement_failed`); the other families are still reported.
 - **Every rule id has one outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
   wall under the family's threshold -- `passed` with `evaluated` 0, reason `none found`, listed in
-  `rules.none_found`; with some items lacking the figure, reason `N item(s) not measured`), `failed` (each
+  `rules.none_found`; with some items lacking the figure, reason `N item(s) not measured`; with faces the family's
+  rays could not be intersected with -- its `unmeasured_faces` -- each counted in `unmeasured`, named in the
+  outcome's `unmeasured_faces` and its reason, `not_evaluated` where nothing else was judged), `failed` (each
   failing item's value, place and the limit), `not_evaluated` (the rules
   give no limit for this material or technology, or the family or the figure was not measured: unverified)
   or `not_applicable` (the rule is for another context -- turning, a sheet given, a cut file -- or reads a
@@ -978,11 +993,13 @@ tips' (accessed 2026-11-08), a "should": a warning.
   nearest pairs first; the rest keep the triangulations' distance (`exact: false`, `uncertainty_mm`); at most 4
   overlap booleans.
 - Soundness: the kernel's boolean check on parts while their faces add up to 200; the rest BRepCheck topology alone
-  (`solid.items[].check`). A part with a free-form face of more than 2000 control points (`SOUND_POLES`) is
-  checked edges against faces, not faces against faces (`check: "boolean_edges"`): the kernel's face/face search
+  (`solid.items[].check`). A part with a free-form face of more than 2000 control points (`SOUND_POLES`; a surface
+  swept or offset from a B-spline counts its basis's: a revolved curve's poles by nine, an extruded curve's by two)
+  is checked edges against faces, not faces against faces (`check: "boolean_edges"`): the kernel's face/face search
   between a large B-spline and a face meeting it tangentially ran for over three hours on a 3-face part, and no
   kernel call can be stopped. A self-intersection that crosses an edge is still found; two faces crossing inside
-  both, on such a part, are not.
+  both, on such a part, are not. A part read sound by either bounded check is said (`soundness_bounded`, a warning
+  naming the parts and the stage not run), never a plain pass.
 - Voxel fields: each part's field dropped once its trapped volumes and sections are read (an assembly's fields
   held together were most of a 1.8 GB check), and every flood of it reaches a checkpoint each sweep.
 - A flat ceiling the kernel lays no sample on is said not measured (`bridges.items[].unmeasured`), its rules'

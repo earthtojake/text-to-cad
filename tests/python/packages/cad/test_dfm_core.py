@@ -775,9 +775,9 @@ def _lofted() -> bd.Shape:
 
 
 class ExactRaysTest(unittest.TestCase):
-    """Exact rays cost what they must (``brep.Screen``, ``brep.Intersector``) and answer what the kernel's own
-    intersector answers, ray for ray: the screen leaves out only faces a ray cannot cross, and the fast
-    intersector stands in for the full one only where the line passes no boundary it could be accepted at."""
+    """Exact rays cost what they must (``brep.Screen``, ``brep.Intersector``) and find every crossing on a face the
+    kernel's own intersector finds: the screen leaves out only faces a ray cannot cross, and the full intersector
+    adds its crossings to the fast one's where the line passes a boundary it could accept one at."""
 
     def test_rays_answer_as_the_kernel_s_intersector_and_skip_faces_they_cannot_cross(self) -> None:
         from unittest import mock
@@ -832,6 +832,153 @@ class ExactRaysTest(unittest.TestCase):
         self.assertTrue(fast.screen.heavy.any())
         self.assertLess(performed["fast"], performed["plain"])
 
+    def test_a_ray_grazing_near_an_edge_keeps_every_crossing_on_the_face(self) -> None:
+        # The full intersector answers differently on a stretch of a ray than on the whole of it: a crossing on
+        # the face that the fast intersector finds is never dropped for the stretch's answer.
+        from unittest import mock
+
+        from OCP.BRep import BRep_Tool
+        from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+        from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+        from OCP.BRepLProp import BRepLProp_SLProps
+        from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector
+        from OCP.TopAbs import TopAbs_EDGE
+        from OCP.TopExp import TopExp_Explorer
+        from OCP.TopoDS import TopoDS
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+        heavy = mock.patch.object(brep, "HEAVY_EDGES", 1)
+        heavy.start()
+        self.addCleanup(heavy.stop)
+        rays = brep.Rays(_lofted())
+        rng = np.random.default_rng(3)
+        lost = checked = 0
+        for index, face in enumerate(rays.faces):
+            if not rays.screen.heavy[index]:
+                continue
+            surface = BRepAdaptor_Surface(face)
+            explorer = TopExp_Explorer(face, TopAbs_EDGE)
+            while explorer.More():
+                edge = TopoDS.Edge(explorer.Current())
+                explorer.Next()
+                if BRep_Tool.Degenerated_s(edge):
+                    continue
+                curve = BRepAdaptor_Curve(edge)
+                for t in np.linspace(curve.FirstParameter(), curve.LastParameter(), 4):
+                    at = curve.Value(float(t))
+                    projected = GeomAPI_ProjectPointOnSurf(at, BRep_Tool.Surface_s(face))
+                    if not projected.NbPoints():
+                        continue
+                    props = BRepLProp_SLProps(surface, *projected.LowerDistanceParameters(), 1, 1e-9)
+                    if not props.IsNormalDefined():
+                        continue
+                    normal = np.array([props.Normal().X(), props.Normal().Y(), props.Normal().Z()])
+                    for off in (0.0, 1e-4, 1e-2, 5e-2):
+                        for angle in (30.0, 5.0, 1.0, 0.2):
+                            jitter, along = rng.normal(size=3), rng.normal(size=3)
+                            jitter -= normal * (jitter @ normal)
+                            along -= normal * (along @ normal)
+                            target = np.array([at.X(), at.Y(), at.Z()]) + off * jitter / np.linalg.norm(jitter)
+                            d = -math.sin(math.radians(angle)) * normal \
+                                + math.cos(math.radians(angle)) * along / np.linalg.norm(along)
+                            d /= np.linalg.norm(d)
+                            line = gp_Lin(gp_Pnt(*(target - 30.0 * d)), gp_Dir(*d))
+                            kernel = IntCurvesFace_Intersector(face, 1e-7)
+                            kernel.Perform(line, 0.0, 1e9)
+                            mine = rays._intersector(index)
+                            mine.Perform(line, 0.0, 1e9)
+                            found = [mine.WParameter(k) for k in range(1, mine.NbPnt() + 1)]
+                            for k in range(1, kernel.NbPnt() + 1):
+                                w = kernel.WParameter(k)
+                                point = kernel.Pnt(k)
+                                on = BRepExtrema_DistShapeShape(BRepBuilderAPI_MakeVertex(point).Vertex(), face)
+                                if not on.IsDone() or on.Value() > 1e-9:
+                                    continue  # in the boundary's tolerance band, beyond the trim
+                                checked += 1
+                                lost += not any(abs(w - x) <= 1e-7 for x in found)
+        self.assertGreater(checked, 500)
+        self.assertEqual(lost, 0)
+
+    def test_a_stretch_the_kernel_fails_on_loses_its_own_crossings_alone(self) -> None:
+        from unittest import mock
+
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+        from OCP.Standard import Standard_Failure
+
+        heavy = mock.patch.object(brep, "HEAVY_EDGES", 1)
+        heavy.start()
+        self.addCleanup(heavy.stop)
+        rays = brep.Rays(_lofted())
+        index = int(np.flatnonzero(rays.screen.heavy)[0])
+        sample = brep.samples(brep.Part("p", "p", _lofted()).faces()[index], 4)[0]
+        line = gp_Lin(gp_Pnt(*(sample.point + 5.0 * sample.normal)), gp_Dir(*(-sample.normal)))
+        intersector = rays._intersector(index)
+        intersector.Perform(line, 0.0, 1e9)
+        crossings = [intersector.WParameter(k) for k in range(1, intersector.NbPnt() + 1)]
+        self.assertTrue(crossings)
+
+        class Broken:
+            def Perform(self, *args: object) -> None:  # noqa: N802 - the kernel's name
+                raise Standard_Failure("the kernel failed")
+
+        intersector._full = Broken()
+        with mock.patch.object(brep.Intersector, "_near_boundary", lambda self, line, a, b: [(0.0, 1e-3)]):
+            intersector.Perform(line, 0.0, 1e9)
+        self.assertTrue(intersector.IsDone())
+        self.assertEqual([intersector.WParameter(k) for k in range(1, intersector.NbPnt() + 1)], crossings)
+        self.assertEqual(rays.screen.failed, {index: 1})
+
+    def test_a_heavy_face_whose_triangulation_cannot_be_read_is_read_once(self) -> None:
+        from unittest import mock
+
+        heavy = mock.patch.object(brep, "HEAVY_EDGES", 1)
+        heavy.start()
+        self.addCleanup(heavy.stop)
+        rays = brep.Rays(_lofted())
+        with mock.patch.object(brep.Screen, "_chunks", return_value=None) as read:
+            for x in np.linspace(-15, 15, 20):
+                rays.hits((x, -50.0, 12.0), (0.0, 1.0, 0.0))
+        self.assertEqual(read.call_count, int(rays.screen.heavy.sum()))
+
+    def test_a_copy_names_its_own_faces_the_kernel_failed_on_and_its_rules_say_they_were_not_measured(self) -> None:
+        from unittest import mock
+
+        from OCP.Standard import Standard_Failure
+
+        import cad.build123d as cb
+
+        parts = []
+        for index in range(2):
+            placed = bd.Pos(60 * index, 0, 0) * (bd.Box(30, 20, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 6))
+            placed.label = f"t{index}"
+            parts.append(placed)
+        original = brep.Intersector.Perform
+
+        class Broken:
+            def Perform(self, *args: object) -> None:  # noqa: N802 - the kernel's name
+                raise Standard_Failure("the kernel failed")
+
+        def one_face_fails(self: brep.Intersector, line: object, start: float, end: float) -> None:
+            if self._index == 0:
+                self._full, self._fast = Broken(), None
+            original(self, line, start, end)
+
+        with mock.patch.object(brep.Intersector, "Perform", one_face_fails):
+            result = cb.cnc(bd.Compound(children=parts, label="kit"), material="aluminum")
+        said = sorted(f.location for f in result.findings if f.code == "rays_unintersected")
+        self.assertEqual(said, ["t0/face 1", "t1/face 1"])
+        lost = {name: family["unmeasured_faces"] for name, family in result.measurements.items()
+                if isinstance(family, dict) and family.get("unmeasured_faces")}
+        self.assertTrue(lost)
+        self.assertTrue(all(faces == ["t0/face 1", "t1/face 1"] for faces in lost.values()), lost)
+        outcomes = [o for o in result.measurements["rules"]["outcomes"] if o.get("unmeasured_faces")]
+        self.assertTrue(outcomes)
+        for outcome in outcomes:
+            self.assertGreaterEqual(outcome["unmeasured"], 2)
+            self.assertIn("t1/face 1", outcome["reason"])
+
     def test_a_face_the_kernel_cannot_intersect_is_said_and_the_family_completes(self) -> None:
         from unittest import mock
 
@@ -876,7 +1023,8 @@ class CopiesTest(unittest.TestCase):
     items are said at its own refs and places: a row of copies costs one part's measurement, and reads as the
     same parts each measured alone."""
 
-    PLACES = ((0, 0, 0, 0), (70, 0, 0, 0), (0, 60, 0, 90), (-70, -10, 15, 180))
+    # turned by less than 45 degrees: each copy's own machine frame is its first's turned with it
+    PLACES = ((0, 0, 0, 0), (70, 0, 0, 0), (0, 60, 0, 30), (-70, -10, 15, -20))
 
     def _kit(self, shape: bd.Shape) -> bd.Compound:
         parts = []
@@ -897,8 +1045,50 @@ class CopiesTest(unittest.TestCase):
         self.assertEqual(sorted(found), [1, 2, 3])
         self.assertTrue(all(found[k].of == 0 and found[k].proper for k in found))
         corner = np.array([20.0, 12.0, 4.0])
-        np.testing.assert_allclose(found[2].point(corner), [-12.0, 80.0, 4.0], atol=1e-9)
-        np.testing.assert_allclose(found[3].point(corner), [-90.0, -22.0, 19.0], atol=1e-9)
+        for index in (2, 3):
+            x, y, z, turn = self.PLACES[index]
+            c, s_ = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+            np.testing.assert_allclose(found[index].point(corner),
+                                       [c * 20.0 - s_ * 12.0 + x, s_ * 20.0 + c * 12.0 + y, 4.0 + z], atol=1e-9)
+
+    def test_a_different_part_that_shares_its_ends_and_middles_is_no_copy(self) -> None:
+        # two plates whose curved edge is a Bezier with the same ends and middle, its other poles apart
+        def plate(poles: list[tuple[float, float]]) -> bd.Shape:
+            spline = bd.Edge.make_bezier(*[bd.Vector(x, y, 0) for x, y in poles])
+            wire = bd.Wire([spline, bd.Edge.make_line((40, 0), (40, 40)), bd.Edge.make_line((40, 40), (0, 40)),
+                            bd.Edge.make_line((0, 40), (0, 0))])
+            return bd.extrude(bd.Face(wire), 5)
+
+        a = plate([(0, 0), (10, 5), (20, 10), (30, 5), (40, 0)])
+        b = bd.Pos(0, 60, 0) * plate([(0, 0), (10, 12.5), (20, 0), (30, 12.5), (40, 0)])
+        a.label, b.label = "a", "b"
+        self.assertEqual(brep.copies(brep.parts_of(bd.Compound(children=[a, b]), "kit").parts), {})
+
+    def test_a_copy_reports_its_own_machine_frame_and_one_square_to_it_is_measured_anew(self) -> None:
+        from unittest import mock
+
+        import cad.build123d as cb
+        from cad.build123d import _dfm_cnc
+
+        def frames(*turns: float) -> tuple[list[dict], int]:
+            parts = []
+            for index, turn in enumerate(turns):
+                placed = bd.Pos(80 * index, 0, 0) * bd.Rot(0, 0, turn) * _bracket()
+                placed.label = f"b{index}"
+                parts.append(placed)
+            with mock.patch.object(_dfm_cnc, "_measure_part", side_effect=_dfm_cnc._measure_part) as measured:
+                result = cb.cnc(bd.Compound(children=parts, label="kit"), material="aluminum")
+            return result.measurements["machine"]["frames"], measured.call_count
+
+        together, count = frames(0, 30)
+        self.assertEqual(count, 1)
+        alone, _ = frames(30)
+        self.assertEqual(together[1]["copy_of"], "b0")
+        self.assertEqual((together[1]["axes"], together[1]["turned"]), (alone[0]["axes"], alone[0]["turned"]))
+        self.assertTrue(together[1]["turned"])
+        # turned a right angle, it reads square to the world again: a frame of its own, so measured anew
+        _, count = frames(0, 90)
+        self.assertEqual(count, 2)
 
     def test_a_row_of_copies_costs_one_part_and_reads_as_its_first_moved(self) -> None:
         from unittest import mock

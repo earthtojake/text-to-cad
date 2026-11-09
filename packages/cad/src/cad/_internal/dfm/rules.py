@@ -285,16 +285,28 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                 failures.append({"value": value, "location": _where(item, rule), "xyz": item.get("xyz")})
                 failing[id(failures[-1])] = item
         failures.sort(key=lambda found: found["value"], reverse=rule.op == "max")
+        # Faces the family's rays could not be intersected with (``unmeasured_faces``: the kernel failed there):
+        # its figures there are not measured, each such face counted not measured -- never a pass.
+        family = report.get(rule.family)
+        lost = [str(ref) for ref in (family.get("unmeasured_faces") or ())] if isinstance(family, Mapping) else []
+        unmeasured += len(lost)
         # Measured and nothing to judge -- no hole, no wall under the family's own threshold -- is a pass: none
         # found. A figure the items do not carry is no pass.
         status = "failed" if failures else "passed" if evaluated or not unmeasured else "not_evaluated"
         outcome.update(status=status, evaluated=evaluated, unmeasured=unmeasured, failures=failures)
+        said = []
+        if unmeasured - len(lost):
+            said.append(f"{unmeasured - len(lost)} item(s) not measured")
+        if lost:
+            outcome["unmeasured_faces"] = lost
+            named = ", ".join(lost[:8]) + (f" and {len(lost) - 8} more" if len(lost) > 8 else "")
+            said.append(f"not measured at {len(lost)} face(s) the kernel failed to intersect rays with ({named})")
         if not evaluated and not failures:
             outcome["reason"] = "none found: no feature it applies to" if not unmeasured else \
-                f"{rule.field} was not measured"
-        elif unmeasured:
+                "; ".join(said) if lost else f"{rule.field} was not measured"
+        elif said:
             # Judged where measured: a pass over some items is not a pass over the rest.
-            outcome["reason"] = f"{unmeasured} item(s) not measured"
+            outcome["reason"] = "; ".join(said)
         outcomes.append(outcome)
         if failures:
             shown.append((rule, limit, failures, failing))
@@ -409,13 +421,20 @@ def _merged(done: list[dict[str, Any]], unjudged: list[dict[str, Any]],
                 if differ else failure for outcome in done for failure in outcome["failures"]]
     read = set().union(*(judged[id(outcome)][0] for outcome in done))
     unread = set().union(*(judged[id(outcome)][1] for outcome in done)) - read
-    merged.update(status="failed" if failures else "passed", evaluated=len(read), unmeasured=len(unread),
-                  failures=failures)
+    lost = sorted({ref for outcome in done for ref in outcome.get("unmeasured_faces") or ()})
+    merged.update(status="failed" if failures else "passed" if read or not lost else "not_evaluated",
+                  evaluated=len(read), unmeasured=len(unread) + len(lost), failures=failures)
+    merged.pop("unmeasured_faces", None)
+    if lost:
+        merged["unmeasured_faces"] = lost
     if differ:
         merged["variants"] = [{"op": outcome["op"], "limit": outcome["limit"], "severity": outcome["severity"],
                                "status": outcome["status"], "failed": len(outcome["failures"])} for outcome in done]
-    reasons = [*(["none found: no feature it applies to"] if not read and not unread else []),
+    reasons = [*(["none found: no feature it applies to"] if not read and not unread and not lost else []),
                *([f"{len(unread)} item(s) not measured"] if read and unread else []),
+               *([f"not measured at {len(lost)} face(s) the kernel failed to intersect rays with ("
+                  + ", ".join(lost[:8]) + (f" and {len(lost) - 8} more" if len(lost) > 8 else "") + ")"]
+                 if lost else []),
                *dict.fromkeys(f"a variant not evaluated: {outcome['reason']}" for outcome in unjudged)]
     merged.pop("reason", None)
     if reasons:

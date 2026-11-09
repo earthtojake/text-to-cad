@@ -198,6 +198,37 @@ class BoundedSoundnessTest(unittest.TestCase):
         (item,) = check(lofted, "loft").measurements["solid"]["items"]
         self.assertEqual(item["check"], "boolean")
 
+    def test_a_bounded_check_still_finds_a_crossing_through_an_edge_and_says_what_it_did_not_run(self) -> None:
+        from unittest import mock
+
+        a = bd.Sketch() + bd.Ellipse(20, 12)
+        b = bd.Pos(3, 2, 25) * (bd.Sketch() + bd.Ellipse(12, 16))
+        lofted = bd.loft([a.faces()[0], b.faces()[0]])
+        with mock.patch.object(measured, "SOUND_POLES", -1):  # every part bounded, its faces' poles notwithstanding
+            # two boxes in one part, their edges through each other's faces: found edges against faces
+            crossing = check(bd.Compound([bd.Box(20, 20, 20), bd.Pos(12, 12, 12) * bd.Box(20, 20, 20)]),
+                             "pair")
+            (item,) = crossing.measurements["solid"]["items"]
+            self.assertEqual((item["check"], item["sound"]), ("boolean_edges", False))
+            self.assertIn("BOPAlgo_SelfIntersect", item["issues"])
+            self.assertIn("not_sound", codes(crossing))
+            # a box inside the loft, no edge of either meeting the other's faces: not found, and said so
+            nested = check(bd.Compound([lofted, bd.Pos(0, 0, 12) * bd.Box(4, 4, 4)]), "nested")
+            (item,) = nested.measurements["solid"]["items"]
+            self.assertEqual((item["check"], item["sound"]), ("boolean_edges", True))
+            (said,) = [f for f in nested.findings if f.code == "soundness_bounded"]
+            self.assertEqual(said.severity, "warning")
+            self.assertIn("edges against faces", said.message)
+
+    def test_a_swept_free_form_face_counts_its_basis_poles(self) -> None:
+        curve = bd.Spline(*[(10 + 3 * math.sin(k / 3), 0, k) for k in range(40)])
+        revolved = bd.Solid.revolve(bd.Face(bd.Wire([curve, bd.Edge.make_line(curve @ 1, (0, 0, 39)),
+                                                     bd.Edge.make_line((0, 0, 39), (0, 0, 0)),
+                                                     bd.Edge.make_line((0, 0, 0), curve @ 0)])),
+                                    360, bd.Axis.Z)
+        poles = max(measured._poles(face) for face in revolved.faces())
+        self.assertGreaterEqual(poles, 9 * 40)
+
 
 class KnifeEdgeTest(unittest.TestCase):
     def test_an_acute_convex_edge_is_a_knife_and_a_corner_or_chamfer_is_not(self) -> None:

@@ -528,6 +528,24 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
                                       f"({', '.join(item.get('issues') or ['invalid'])}{on}): a slicer may "
                                       "misread it",
                                       item.get("location"), "rebuild the faulty feature; export the STEP again"))
+    # A soundness check that ran bounded is said, never read as a full pass: past the boolean check's budget a
+    # part has its topology checked alone, and a part with a large free-form face its edges against faces alone.
+    bounded = {"boolean_edges": [], "topology": []}
+    for item in solid.get("items") or ():
+        if item.get("sound") and item.get("check") in bounded:
+            bounded[item["check"]].append(item)
+    if bounded["boolean_edges"] or bounded["topology"]:
+        said = []
+        if bounded["boolean_edges"]:
+            said.append(f"{_names(bounded['boolean_edges'])} had its self-intersections checked edges against faces "
+                        "alone (a free-form face of over 2000 control points): two faces crossing inside both, no "
+                        "edge of either meeting the other, are not found")
+        if bounded["topology"]:
+            said.append(f"{_names(bounded['topology'])} had its topology checked alone (the boolean check's budget, "
+                        "200 faces, spent): a self-intersection is not found")
+        first = (bounded["boolean_edges"] or bounded["topology"])[0]
+        found.append(CheckFinding("warning", "soundness_bounded", "; ".join(said), first.get("location"),
+                                  "check the parts in the slicer (or one at a time) where a self-intersection matters"))
     if (solid.get("body_count") or 0) > 1:
         found.append(CheckFinding("info", "several_bodies", f"{solid['body_count']} solids in {solid['part_count']} "
                                   "part(s): each is measured on its own, their clearances between", "solid"))
@@ -599,3 +617,8 @@ def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) 
             f"under {mm(overhangs.get('angle_limit_used_deg'))} deg {mm(overhangs.get('down_facing_area_below_limit_mm2'))} "
             f"mm2; walls min {mm(walls.get('min_mm'))}, p05 {mm(walls.get('p05_mm'))}, median {mm(walls.get('median_mm'))} "
             f"mm; support ~{mm(support.get('estimated_support_volume_mm3'))} mm3")
+
+
+def _names(items: list[dict[str, Any]]) -> str:
+    names = [str(item.get("part")) for item in items]
+    return ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")

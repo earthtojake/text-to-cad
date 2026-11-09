@@ -186,7 +186,8 @@ def framed(part: brep.Part, rotation: np.ndarray) -> brep.Part:
     trsf = gp_Trsf()
     trsf.SetValues(r[0, 0], r[0, 1], r[0, 2], 0.0, r[1, 0], r[1, 1], r[1, 2], 0.0, r[2, 0], r[2, 1], r[2, 2], 0.0)
     moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
-    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None)
+    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None,
+                               _edge_context={})
 
 
 def turned(surface: brep.Surface, rotation: np.ndarray) -> brep.Surface:
@@ -316,9 +317,12 @@ class Model:
         self._classifier: Any = None
 
     def shed(self) -> None:
-        """Drop what the part's measurement made and its report no longer reads -- its mesh, samples, grids and
-        stations, made again if asked -- so an assembly's parts are not all held at once."""
+        """Drop what the part's measurement made and its report no longer reads -- its mesh, samples, grids,
+        stations, ray screen and intersectors, made again if asked -- so an assembly's parts are not all held at
+        once."""
         self._meshes = None
+        self._screen = None
+        self._face_intersectors.clear()
         self._quota = None
         self._samples.clear()
         self._outline.clear()

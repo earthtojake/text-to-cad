@@ -229,11 +229,43 @@ class UndercutTest(unittest.TestCase):
         part = _tray() - bd.Pos(30, 0, 10) * bd.Rotation(0, 90, 0) * bd.Cylinder(2, 12)
         with mock.patch("OCP.IntCurvesFace.IntCurvesFace_Intersector", Failing):
             result = _check(part)
-        undercuts = result.measurements["undercuts"]
-        self.assertGreater(undercuts["unintersected_rays"], 0)
         self.assertEqual(result.measurements["partial_sections"], [])
-        self.assertIn("rays_unintersected", {f.code for f in result.findings})
+        (said,) = [f for f in result.findings if f.code == "rays_unintersected"]
+        self.assertRegex(said.location, r"face \d+$")  # at the face, not at a family
         self.assertIn("undercut candidates", result.summary)
+
+    def test_a_face_the_kernel_cannot_intersect_is_not_measured_in_every_family_its_rays_cross(self) -> None:
+        """Thickness, ribs and corners cast rays too: a face the kernel fails on is named in each family whose
+        rays it cost, and the family's rules say it was not measured there -- never a plain pass."""
+        from unittest import mock
+
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector as Real
+        from OCP.Standard import Standard_Failure
+
+        part = _tray()
+        part.label = "tray"
+        floor = min(part.faces(), key=lambda face: face.center().Z)  # the tray's underside, under every wall ray
+
+        class Failing:
+            def __init__(self, face: Any, tolerance: float) -> None:
+                self.inner, self.fails = Real(face, tolerance), face.IsPartner(floor.wrapped)
+
+            def Perform(self, *args: Any) -> None:  # noqa: N802 - the kernel's name
+                if self.fails:
+                    raise Standard_Failure("")
+                self.inner.Perform(*args)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self.inner, name)
+
+        with mock.patch("OCP.IntCurvesFace.IntCurvesFace_Intersector", Failing):
+            result = _check(part)
+        ref = next(f.location for f in result.findings if f.code == "rays_unintersected")
+        self.assertIn(ref, result.measurements["thickness"]["unmeasured_faces"])
+        outcomes = {o["rule"]: o for o in result.measurements["rules"]["outcomes"]}
+        self.assertIn(ref, outcomes["molding.wall_min"]["unmeasured_faces"])
+        self.assertIn("not measured at 1 face(s)", outcomes["molding.wall_min"]["reason"])
+        self.assertGreaterEqual(outcomes["molding.wall_min"]["unmeasured"], 1)
 
     def test_a_family_not_measured_fails_the_check_and_never_raises(self) -> None:
         from unittest import mock

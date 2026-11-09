@@ -1827,10 +1827,19 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                 record["judged"] = None
             record.pop("face", None)
 
+    screens, listed = [analysis.rays.screen], [analysis.rays.faces]
+    # the faces the reading's own rays failed on (its skins, its thickness) are not measured in any family
+    read = brep.failed_ordinals(part, screens, listed)
+    lost: dict[str, set[int]] = {family: set(read) for family in FAMILIES} if read else {}
+    out["_lost"] = lost
     if not is_sheet:
         settle()
         for family in FAMILIES:
             out.setdefault(family, [])
+        out["_failed"] = read
+        missed = brep.unintersected_said(part, read)
+        if missed:
+            out["_findings"] = [missed]
         return out
     try:
         analysis.find_bends()
@@ -1925,11 +1934,16 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         families[name] = (lambda name=name: outline(name))
     for name, run in families.items():
         checkpoint()  # between families
+        was = brep.failures(screens)
         try:
             out[name] = run()
         except Exception as error:  # noqa: BLE001 - one family's failure is reported, the rest measured
             out[name] = error
-    missed = brep.unintersected(part, [analysis.rays.screen], [analysis.rays.faces])
+        new = brep.failed_ordinals(part, screens, listed, was)
+        if new:
+            lost.setdefault(name, set()).update(new)
+    out["_failed"] = brep.failed_ordinals(part, screens, listed)
+    missed = brep.unintersected_said(part, out["_failed"])
     if missed:
         out["_findings"] = [missed]
     return out
@@ -1962,7 +1976,16 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             first = document.parts[copy.of]
             results.append({family: (found if isinstance(found, Exception) else
                                      brep.moved(found, copy, first, part, _PLACES, _DIRECTIONS))
-                            for family, found in results[copy.of].items() if family != "_findings"})
+                            for family, found in results[copy.of].items() if not family.startswith("_")})
+            # its first's faces the kernel failed on are its own, ordinal for ordinal
+            results[-1]["_lost"] = results[copy.of].get("_lost", {})
+            # a web's ends (``across``) are places in a flat pattern: its first's, the same flat
+            for item in results[-1].get("webs") or () if isinstance(results[-1].get("webs"), list) else ():
+                if "across" in item:
+                    item["flat_pattern_of"] = first.owner or first.name
+            said = brep.unintersected_said(part, results[copy.of].get("_failed") or {})
+            if said:
+                results[-1]["_findings"] = [said]
             continue
         try:
             results.append(_part(part, options))
@@ -1985,6 +2008,11 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             continue
         key, reverse = _SORT.get(family, (None, False))
         report[family] = {"items": _capped(items, key, reverse), "count": len(items)}
+        # the faces its rays could not be intersected with: its figures there not measured (``rules``)
+        unmeasured = sorted({part.ref("face", ordinal) for part, result in zip(document.parts, results)
+                             for ordinal in (result.get("_lost") or {}).get(family, ())})
+        if unmeasured:
+            report[family]["unmeasured_faces"] = unmeasured
     report["bent"] = bool((report.get("bends") or {}).get("items"))
     report["partial"] = bool(partial)
     report["partial_sections"] = partial

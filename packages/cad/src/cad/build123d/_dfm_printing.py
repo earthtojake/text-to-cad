@@ -156,6 +156,10 @@ class Context:
         self.faces: list[list[FaceInfo]] = []
         self.rounds: list[Round] = []
         self._rays: dict[int, brep.Rays] = {}
+        #: The faces the samples' shared rays could not be intersected with, per part (``measure_rays``), and
+        #: whether the family being measured read those rays.
+        self.ray_lost: dict[int, set[int]] = {}
+        self.used_rays = False
         self._edges: dict[int, list[brep.Edge]] = {}
         self._adjacent: dict[int, dict[int, list[brep.Edge]]] = {}
         self._mesh: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
@@ -295,10 +299,32 @@ class Context:
 
     def measure_rays(self) -> None:
         """Every sample's wall (a ray into the material) and gap (a ray out of it, up to ``GAP_CEILING``), the
-        rays of a part cast together (``_first_hits``)."""
+        rays of a part cast together (``_first_hits``). The faces the kernel failed to intersect them with are
+        kept (``ray_lost``): every family that reads these rays is not measured there."""
+        self.used_rays = True
         if getattr(self, "_rayed", False):
             return
         self._rayed = True
+        before = self.failures()
+        try:
+            self._measure_rays()
+        finally:
+            self.ray_lost = self.lost_since(before)
+
+    def failures(self) -> dict[int, list[dict[int, int]]]:
+        """Each part's rays' failures so far (``brep.failures``)."""
+        return {part: brep.failures([rays.screen]) for part, rays in self._rays.items()}
+
+    def lost_since(self, before: dict[int, list[dict[int, int]]]) -> dict[int, set[int]]:
+        """Per part, the faces the kernel failed to intersect a ray with since ``before`` (ordinals)."""
+        found: dict[int, set[int]] = {}
+        for part, rays in self._rays.items():
+            new = brep.failed_ordinals(self.parts[part], [rays.screen], [rays.faces], before.get(part))
+            if new:
+                found[part] = set(new)
+        return found
+
+    def _measure_rays(self) -> None:
         for part, infos in enumerate(self.faces):
             rays = self.rays(part)
             owners = [(info, k) for info in infos for k in range(len(info.samples))]
@@ -465,11 +491,19 @@ SOUND_POLES = 2000
 
 
 def _poles(face: Any) -> int:
-    """A B-spline or Bezier face's control points (0 for any other)."""
+    """A free-form face's control points, its surface's own or, for a surface swept from or offset off another,
+    its basis's as a surface of them: a revolved curve's poles by a circle's nine, an extruded curve's by two, an
+    offset surface's its basis surface's (0 for a plane, a cylinder, a cone, a sphere or a torus)."""
     from OCP.BRepAdaptor import BRepAdaptor_Surface
-    from OCP.GeomAbs import GeomAbs_BezierSurface, GeomAbs_BSplineSurface
 
-    surface = BRepAdaptor_Surface(face.wrapped, False)
+    return _surface_poles(BRepAdaptor_Surface(face.wrapped, False))
+
+
+def _surface_poles(surface: Any, depth: int = 0) -> int:
+    from OCP.GeomAbs import (GeomAbs_BezierCurve, GeomAbs_BezierSurface, GeomAbs_BSplineCurve,
+                             GeomAbs_BSplineSurface, GeomAbs_OffsetSurface, GeomAbs_SurfaceOfExtrusion,
+                             GeomAbs_SurfaceOfRevolution)
+
     kind = surface.GetType()
     if kind == GeomAbs_BSplineSurface:
         spline = surface.BSpline()
@@ -477,6 +511,12 @@ def _poles(face: Any) -> int:
     if kind == GeomAbs_BezierSurface:
         bezier = surface.Bezier()
         return int(bezier.NbUPoles() * bezier.NbVPoles())
+    if kind in (GeomAbs_SurfaceOfRevolution, GeomAbs_SurfaceOfExtrusion):
+        curve = surface.BasisCurve()
+        poles = (curve.NbPoles() if curve.GetType() in (GeomAbs_BSplineCurve, GeomAbs_BezierCurve) else 0)
+        return int(poles * (9 if kind == GeomAbs_SurfaceOfRevolution else 2))
+    if kind == GeomAbs_OffsetSurface and depth < 4:
+        return _surface_poles(surface.BasisSurface(), depth + 1)
     return 0
 
 
@@ -1701,7 +1741,17 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         report["orientations"] = _safe(lambda: _orientations(ctx))
     else:
         for name, family in FAMILIES:
+            ctx.used_rays = False
+            before = ctx.failures()
             report[name] = _safe(lambda family=family: family(ctx))
+            # the faces its rays (its own, or the samples' shared ones it read) could not be intersected with:
+            # its figures there not measured (``rules``)
+            lost = ctx.lost_since(before)
+            for part, ordinals in (ctx.ray_lost.items() if ctx.used_rays else ()):
+                lost.setdefault(part, set()).update(ordinals)
+            refs = sorted(ctx.parts[part].ref("face", ordinal) for part, ordinals in lost.items() for ordinal in ordinals)
+            if refs and isinstance(report[name], dict) and "error" not in report[name]:
+                report[name]["unmeasured_faces"] = refs
     failed = sorted(name for name, value in report.items() if isinstance(value, dict) and "error" in value)
     missed = [brep.unintersected(ctx.parts[index], [rays.screen], [rays.faces]) for index, rays in sorted(ctx._rays.items())]
     if any(missed):

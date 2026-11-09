@@ -199,8 +199,6 @@ class _Geometry:
     _rays: Any = None
     _mesh: Any = None
     _intersectors: dict[int, Any] | None = None
-    # Exact intersections of a ray and a face the kernel failed on (``cast_faces``): each a crossing not found.
-    unintersected: int = 0
     _links: dict[int, list[tuple[int, Any]]] | None = None
     _grids: dict | None = None
     _by_face: Any = None
@@ -404,7 +402,6 @@ class _Geometry:
         by every face's box at once; then each meets its candidate faces exactly, nearest box first, until no
         nearer crossing can follow."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
-        from OCP.Standard import Standard_Failure
 
         o_all = np.asarray(origins, dtype=float).reshape(-1, 3)
         d_all = np.asarray(directions, dtype=float).reshape(-1, 3)
@@ -491,14 +488,9 @@ class _Geometry:
                     if intersector is None:
                         intersector = self._intersectors[candidate] = _dfm_brep.Intersector(
                             rays.faces[candidate], 1e-7, rays.screen, candidate)
-                    try:
-                        intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
-                    except Standard_Failure:
-                        # The kernel cannot intersect this ray with this face (a degenerate patch of a
-                        # surface): that one crossing is not found, counted, and the ray goes on to the
-                        # next face, as for an intersection the kernel says it did not finish.
-                        self.unintersected += 1
-                        continue
+                    # a crossing the kernel cannot find (a degenerate patch) is counted against the face by the
+                    # intersector (``Screen.failed``), and the ray goes on to the next face
+                    intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
                     if not intersector.IsDone():
                         continue
                     for hit in range(1, intersector.NbPnt() + 1):
@@ -1002,13 +994,6 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "unsearched_count": releases.count("unknown"),
         "items": items[:_ITEMS],
     }
-    missed = sum(geo.unintersected + sum((geo._rays.screen.failed if geo._rays is not None else {}).values())
-                 for geo in geos)
-    if missed:
-        # Said, never hidden: a crossing not found may be a blocker missed, so the trapped area may be low.
-        result["unintersected_rays"] = missed
-        result["unintersected_note"] = (f"the kernel failed to intersect {missed} ray(s) with a face; each such "
-                                        "crossing was not found, so a blocker may be missed there")
     if len(geos) > 1:
         result["note"] = "several parts: each is tested against itself, none shadows another"
     return result
@@ -1994,17 +1979,31 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
               world: list[_Geometry] | None = None) -> dict[str, Any]:
     """Every family of ``geos`` along ``pull``; ``world``: the parts as they stand, where ``geos`` are turned into
     their own frames (``measure``), which the pulls are ranked on (``pull_check`` names world axes)."""
+    lost: dict[str, set[str]] = {}
+
+    def tracked(names: tuple[str, ...], fn: Any, *args: Any, among: list[_Geometry] | None = None) -> Any:
+        """``_safe(fn, *args)``, the faces its rays the kernel failed to intersect said against each family it
+        measures (``unmeasured_faces``)."""
+        before = _failures(among or geos)
+        try:
+            return _safe(fn, *args)
+        finally:
+            refs = _lost_since(among or geos, before)
+            for name in names if refs else ():
+                lost.setdefault(name, set()).update(refs)
+
     drafts = [_face_drafts(geo, pull, zero_tol) for geo in geos]
     report: dict[str, Any] = {"scale": _scale(geos)}
-    report["draft"] = _safe(_draft, geos, drafts, pull, wall_limit, zero_tol)
-    under_parts = _safe(lambda: [_undercut_part(geo, pull, zero_tol) for geo in geos])
+    report["draft"] = tracked(("draft",), _draft, geos, drafts, pull, wall_limit, zero_tol)
+    under_parts = tracked(("undercuts",), lambda: [_undercut_part(geo, pull, zero_tol) for geo in geos])
     if isinstance(under_parts, dict):
         report["undercuts"] = under_parts
         trapped: list[set[int]] = [set() for _ in geos]
     else:
-        report["undercuts"] = _safe(_undercuts, geos, pull, zero_tol, under_parts)
+        report["undercuts"] = tracked(("undercuts",), _undercuts, geos, pull, zero_tol, under_parts)
         trapped = [{face for group in part["groups"] for face in group} for part in under_parts]
-    touching = _safe(lambda: {"items": [pair for geo in geos for pair in geo.touching]})
+    touching = tracked(("touching", "draft", "undercuts"),
+                       lambda: {"items": [pair for geo in geos for pair in geo.touching]})
     if "error" in touching or touching["items"]:
         touching["count"] = len(touching.get("items") or [])
         report["touching"] = touching
@@ -2016,27 +2015,27 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
     if doubtful:
         # One part whose pull looks wrong (most of the wall zero draft, or a quarter of the surface trapped): the
         # pulls ranked as --candidates ranks them, so the hint names the one it puts first. Measured only then.
-        report["pull_check"] = _safe(_candidates, world if world is not None else
-                                     [_Geometry(geo.part, budget=_CANDIDATE_SAMPLES) for geo in geos],
-                                     wall_limit, zero_tol)
-    thick = _safe(lambda: [_thickness_part(geo) for geo in geos])
+        ranked = world if world is not None else [_Geometry(geo.part, budget=_CANDIDATE_SAMPLES) for geo in geos]
+        report["pull_check"] = tracked(("pull_check",), _candidates, ranked, wall_limit, zero_tol, among=ranked)
+    walled = ("thickness", "transitions", "ribs", "bosses", "corners")
+    thick = tracked(walled, lambda: [_thickness_part(geo) for geo in geos])
     if isinstance(thick, dict):
         for name in ("thickness", "transitions", "ribs", "bosses", "corners"):
             report[name] = dict(thick)
     else:
-        report["thickness"] = _safe(_thickness, geos, thick)
+        report["thickness"] = tracked(("thickness",), _thickness, geos, thick)
         used: list[set[int]] = [set() for _ in geos]
         kinds: list[dict[int, str]] = [{} for _ in geos]
-        report["ribs"] = _safe(lambda: _features_family("ribs", [
+        report["ribs"] = tracked(("ribs",), lambda: _features_family("ribs", [
             _ribs_part(geo, t, d, t.nominal, u, s, k) for geo, t, d, u, s, k in zip(geos, thick, drafts, used, trapped,
                                                                                     kinds)],
             "thickness_ratio", worst_low=False))
-        report["bosses"] = _safe(lambda: _features_family("bosses", [
+        report["bosses"] = tracked(("bosses",), lambda: _features_family("bosses", [
             _bosses_part(geo, t, t.nominal, u, k) for geo, t, u, k in zip(geos, thick, used, kinds)], "wall_ratio",
             worst_low=False))
-        report["corners"] = _safe(lambda: _features_family("corners", [
+        report["corners"] = tracked(("corners",), lambda: _features_family("corners", [
             _corners_part(geo, t, t.nominal, u) for geo, t, u in zip(geos, thick, used)], "ratio_to_wall"))
-        report["transitions"] = _safe(lambda: _transitions([_transitions_part(geo, t, u)
+        report["transitions"] = tracked(("transitions",), lambda: _transitions([_transitions_part(geo, t, u)
                                                             for geo, t, u in zip(geos, thick, used)]))
         # A rib's or a boss's faces are judged by their rules, not the wall's range (``feature``).
         named = {geo.ref(face): kind for geo, part in zip(geos, kinds) for face, kind in part.items()}
@@ -2062,7 +2061,33 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
         report["parting"] = partings if isinstance(partings, dict) else _safe(_parting, partings, pull)
         report["envelope"] = _safe(_envelope, [item for item, _p, _v in projected],
                                    None if isinstance(partings, dict) else partings)
+    for name, refs in lost.items():
+        family = report.get(name)
+        if isinstance(family, dict) and "error" not in family:
+            family["unmeasured_faces"] = sorted(refs)
     return report
+
+
+def _failures(geos: list[_Geometry]) -> list[list[dict[int, int]]]:
+    """Each part's rays' failures so far (``_dfm_brep.failures``)."""
+    return [_dfm_brep.failures([geo._rays.screen]) if geo._rays is not None else [{}] for geo in geos]
+
+
+def _lost_since(geos: list[_Geometry], before: list[list[dict[int, int]]]) -> set[str]:
+    """The refs of the faces the kernel failed to intersect a ray with since ``before`` (``_failures``)."""
+    found: set[str] = set()
+    for geo, was in zip(geos, before):
+        if geo._rays is not None:
+            found |= {geo.ref(ordinal) for ordinal in
+                      _dfm_brep.failed_ordinals(geo.part, [geo._rays.screen], [geo._rays.faces], was)}
+    return found
+
+
+def _unintersected(geos: list[_Geometry]) -> list[dict[str, Any]]:
+    """Each part's ``rays_unintersected`` finding, at its faces."""
+    found = [_dfm_brep.unintersected(geo.part, [geo._rays.screen], [geo._rays.faces])
+             for geo in geos if geo._rays is not None]
+    return [finding for finding in found if finding]
 
 
 def _principal_axes(geos: list[_Geometry]) -> list[np.ndarray]:
@@ -2212,7 +2237,8 @@ def _framed(part: _dfm_brep.Part, rotation: np.ndarray) -> _dfm_brep.Part:
     trsf = gp_Trsf()
     trsf.SetValues(r[0, 0], r[0, 1], r[0, 2], 0.0, r[1, 0], r[1, 1], r[1, 2], 0.0, r[2, 0], r[2, 1], r[2, 2], 0.0)
     moved = bd.Shape.cast(part.shape.wrapped.Moved(TopLoc_Location(trsf)))
-    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None)
+    return dataclasses.replace(part, shape=moved, _faces=None, _edges=None, _face_map=None, _edge_map=None,
+                               _edge_context={})
 
 
 def _side_back(name: Any, back: np.ndarray) -> Any:
@@ -2273,12 +2299,18 @@ def measure(document: _dfm_brep.Document, options: dict[str, Any], candidates: b
             report = _families(geos, pull, wall_limit, zero_tol)
         else:
             geos = [_Geometry(_framed(part, rotation)) for part in document.parts]
-            report = _families(geos, pull, wall_limit, zero_tol,
-                               world=[_Geometry(part, budget=_CANDIDATE_SAMPLES) for part in document.parts])
+            world = [_Geometry(part, budget=_CANDIDATE_SAMPLES) for part in document.parts]
+            report = _families(geos, pull, wall_limit, zero_tol, world=world)
             report = _unframed(report, rotation.T)
+            geos = geos + world
             report["frame"] = {"rotation_about_pull_deg": _r(math.degrees(math.atan2(
                 float(rotation[1, 0]), float(rotation[0, 0]))), 6),
                 "note": "measured in the part's own frame about the pull (its long direction along the "
                         "parting plane's first axis); every place and side action is the world's"}
     _mark_partial(report)
+    # the faces the kernel failed to intersect a ray with, said at each part's own faces (each family it cost names
+    # them too: ``unmeasured_faces``)
+    missed = _unintersected(geos)
+    if missed:
+        report["findings"] = missed
     return report

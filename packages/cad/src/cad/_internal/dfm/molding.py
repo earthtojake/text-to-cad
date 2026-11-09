@@ -479,10 +479,6 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             (_pull_hint(report, f"{undercuts['candidate_area_pct_of_surface']:g}% of the surface is trapped along "
                                 f"this pull (a quarter or more: an engineering trigger, no source's)")
              + "confirm the pull before budgeting side actions") if trapped_doubt else None))
-    if undercuts.get("unintersected_note"):
-        found.append(CheckFinding("warning", "rays_unintersected", undercuts["unintersected_note"], "undercuts",
-                                  "read the undercut figures as a lower bound near the faces the kernel could not "
-                                  "intersect"))
     parting = report.get("parting") or {}
     if parting.get("flat_parting_possible") is False:
         off = [item for item in parting.get("items") or [] if not item.get("on_plane")]
