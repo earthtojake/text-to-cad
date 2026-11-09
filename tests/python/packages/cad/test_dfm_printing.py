@@ -155,6 +155,50 @@ class OverhangTest(unittest.TestCase):
         self.assertAlmostEqual(support["support_contact_mm2"], 200.0, delta=1.0)
 
 
+class UnsampledFaceTest(unittest.TestCase):
+    """A face the kernel lays no sample on (its triangulation failed) is no crash: its span is said not
+    measured, and the overhangs and bridges families measure every other face."""
+
+    def test_a_ceiling_with_no_sample_is_said_not_measured(self) -> None:
+        from unittest import mock
+
+        real = brep.samples
+
+        def none_under_the_slab(face, count=64, deflection=None):
+            box = face.bounding_box()
+            if abs(box.min.Z - 20.0) < 1e-6 and abs(box.max.Z - 20.0) < 1e-6:
+                return []  # the slab's undersides
+            return real(face, count, deflection)
+
+        with mock.patch.object(measured.brep, "samples", none_under_the_slab):
+            result = check(tee(), "tee")
+        self.assertFalse(result.measurements.get("partial_sections"))
+        ceilings = [item for item in result.measurements["bridges"]["items"] if item.get("unmeasured")]
+        self.assertTrue(ceilings)
+        self.assertTrue(all(item["length_mm"] is None and item["reach_mm"] is None for item in ceilings))
+        self.assertNotIn("measurement_failed", codes(result))
+
+
+class BoundedSoundnessTest(unittest.TestCase):
+    """The boolean check's face/face search is bounded: a part with a large free-form face is checked edges
+    against faces (``check`` boolean_edges, said in the item), a self-intersection through an edge still found."""
+
+    def test_a_large_free_form_part_is_checked_edges_against_faces(self) -> None:
+        from unittest import mock
+
+        a = bd.Sketch() + bd.Ellipse(20, 12)
+        b = bd.Pos(3, 2, 25) * (bd.Sketch() + bd.Ellipse(12, 16))
+        lofted = bd.loft([a.faces()[0], b.faces()[0]])
+        with mock.patch.object(measured, "SOUND_POLES", 0):
+            result = check(lofted, "loft")
+            (item,) = result.measurements["solid"]["items"]
+            self.assertEqual((item["check"], item["sound"]), ("boolean_edges", True))
+            crossed = bd.Box(20, 20, 20) + bd.Pos(10, 0, 0) * bd.Box(20, 4, 4)  # fused: sound
+            self.assertTrue(check(crossed, "box").measurements["solid"]["items"][0]["sound"])
+        (item,) = check(lofted, "loft").measurements["solid"]["items"]
+        self.assertEqual(item["check"], "boolean")
+
+
 class KnifeEdgeTest(unittest.TestCase):
     def test_an_acute_convex_edge_is_a_knife_and_a_corner_or_chamfer_is_not(self) -> None:
         result = check(wedge(30.0), "wedge")

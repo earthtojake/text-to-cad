@@ -27,6 +27,8 @@ from typing import Any, Callable
 
 import numpy as np
 
+from cad._internal.dfm import checkpoint
+
 __all__ = ["ANGLE_EPS", "FOLD_DEG", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS",
            "THIN_DEPTH_CAP_MM", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
            "frame", "near_segments", "nearest_segments", "past_segments", "orientation_rows", "ranked", "rotation", "span", "support",
@@ -286,6 +288,7 @@ def components(mask: np.ndarray) -> np.ndarray:
     big = np.iinfo(np.int64).max
     labels = np.where(mask, np.arange(mask.size, dtype=np.int64).reshape(mask.shape), big)
     while True:
+        checkpoint()  # a sweep at a time: a maze of air takes many
         changed = False
         for axis in (2, 1, 0):
             moved = np.moveaxis(labels, axis, -1)
@@ -340,6 +343,7 @@ def _depth(air: np.ndarray, steps: int) -> np.ndarray:
     depth = np.zeros(air.shape, dtype=np.int16)
     current = air.copy()
     for step in range(1, steps + 1):
+        checkpoint()
         current &= ~_near(~current, full=step % 2 == 0)
         if not current.any():
             break
@@ -356,6 +360,7 @@ def inscribed(material: np.ndarray, steps: int) -> np.ndarray:
 def _dilate(mask: np.ndarray, within: np.ndarray, steps: int) -> np.ndarray:
     grown = mask.copy()
     for step in range(1, steps + 1):
+        checkpoint()
         grown |= _near(grown, full=step % 2 == 0) & within
     return grown
 
@@ -413,6 +418,7 @@ def cavities(grid: Grid, ball_radius: float, cap: int = 32) -> tuple[list[Cavity
     cores = np.unique(fit_labels[fits & ~reached])
     inner_air = air & ~outside
     for core in cores[:cap]:
+        checkpoint()
         region = _dilate(fit_labels == core, everywhere, steps + 1) & inner_air & (labels == -3)
         if not region.any():
             continue

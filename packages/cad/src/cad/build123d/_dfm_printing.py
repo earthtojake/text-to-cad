@@ -435,9 +435,10 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
                 continue
             entries = np.maximum(enter[r, index], start)
             order = np.argsort(entries)
+            index, entries = rays.screen.order(o[r, 0], d[r], index[order], entries[order], start, end)
             line = gp_Lin(gp_Pnt(*map(float, o[r, 0])), gp_Dir(*map(float, d[r])))
             best: tuple[float, int, float, float] | None = None
-            for face, entry in zip(index[order], entries[order]):
+            for face, entry in zip(index, entries):
                 if best is not None and entry > best[0]:
                     break
                 intersector = rays._intersector(int(face))
@@ -458,49 +459,100 @@ def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, st
 #: The kernel's boolean-argument check (self-intersections too) runs on the parts while their faces add up
 #: to this many; the rest get its topology check alone (BRepCheck), a fraction of the cost.
 SOUND_FACES = 200
+#: A part with a free-form face of more control points than this has faces checked against edges, not faces
+#: against faces (``_boolean_check``): the boolean check's face/face search grows with them, without end.
+SOUND_POLES = 2000
 
 
-def _boolean_check(part: Any) -> tuple[bool, list[str], list[int]]:
+def _poles(face: Any) -> int:
+    """A B-spline or Bezier face's control points (0 for any other)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_BezierSurface, GeomAbs_BSplineSurface
+
+    surface = BRepAdaptor_Surface(face.wrapped, False)
+    kind = surface.GetType()
+    if kind == GeomAbs_BSplineSurface:
+        spline = surface.BSpline()
+        return int(spline.NbUPoles() * spline.NbVPoles())
+    if kind == GeomAbs_BezierSurface:
+        bezier = surface.Bezier()
+        return int(bezier.NbUPoles() * bezier.NbVPoles())
+    return 0
+
+
+def _boolean_check(part: Any) -> tuple[bool, list[str], list[int], bool]:
     """The boolean kernel's argument check (``BRepAlgoAPI_Check``, as ``_geometry.is_sound``) on the part's own
-    shape: whether it passes, why not (its ``BOPAlgo_CheckStatus`` names, say ``BOPAlgo_SelfIntersect``) and
-    the faces it names (ordinals, a faulty edge's or vertex's faces too). A check the kernel could not finish
-    raises: no verdict."""
-    from OCP.BOPAlgo import BOPAlgo_CheckStatus
+    shape: whether it passes, why not (its ``BOPAlgo_CheckStatus`` names, say ``BOPAlgo_SelfIntersect``), the
+    faces it names (ordinals, a faulty edge's or vertex's faces too), and whether faces were tried against faces.
+    A check the kernel could not finish raises: no verdict.
+
+    A part with a large free-form face (one of more than ``SOUND_POLES`` control points) has its
+    self-intersections checked up to edges against faces (``BOPAlgo_CheckerSI`` to its edge/face level), not
+    faces against faces: the kernel's face/face intersection of a large B-spline meeting a face tangentially
+    searched for hours on a 3-face part (a mirror stalk's 518 x 18-pole sweep against its flat ends), and nothing
+    stops a kernel call. A face crossing a face crosses its edges too, but where two faces cross inside both (no
+    edge of either meets the other) this check does not see it, and says so (the fourth answer False)."""
+    from OCP.BOPAlgo import BOPAlgo_CheckerSI, BOPAlgo_CheckStatus
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.collections import (
         IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedDataMapOfShapeListOfShape)
+    from OCP.collections import List_TopoDS_Shape
 
     part._maps()
     if part.shape.wrapped is None or part.shape.wrapped.IsNull():
-        return False, ["BOPAlgo_BadType"], []
-    checker = BRepAlgoAPI_Check(part.shape.wrapped)
+        return False, ["BOPAlgo_BadType"], [], True
+    whole = max((_poles(face) for face in part.faces()), default=0) <= SOUND_POLES
+    checker = BRepAlgoAPI_Check(part.shape.wrapped, True, whole)
     if checker.HasErrors():
         raise RuntimeError("boolean argument checker failed")
     inconclusive = (BOPAlgo_CheckStatus.BOPAlgo_CheckUnknown, BOPAlgo_CheckStatus.BOPAlgo_OperationAborted)
     names: set[str] = set()
     faces: set[int] = set()
     ancestors = {}
+
+    def faulty(shape: Any) -> None:
+        kind = shape.ShapeType()
+        if kind == TopAbs_FACE:
+            faces.add(int(part._face_map.FindIndex(shape)))
+        elif kind in (TopAbs_EDGE, TopAbs_VERTEX):
+            if kind not in ancestors:
+                found = TopTools_IndexedDataMapOfShapeListOfShape()
+                TopExp.MapShapesAndAncestors_s(part.shape.wrapped, kind, TopAbs_FACE, found)
+                ancestors[kind] = found
+            found = ancestors[kind]
+            index = found.FindIndex(shape)
+            if index:
+                faces.update(int(part._face_map.FindIndex(face)) for face in found.FindFromIndex(index))
+
     for result in checker.Result():
         if result.GetCheckStatus() in inconclusive:
             raise RuntimeError(f"boolean argument check was inconclusive: {result.GetCheckStatus().name}")
         names.add(result.GetCheckStatus().name)
         for shapes in (result.GetFaultyShapes1(), result.GetFaultyShapes2()):
             for shape in shapes:
-                kind = shape.ShapeType()
-                if kind == TopAbs_FACE:
-                    faces.add(int(part._face_map.FindIndex(shape)))
-                elif kind in (TopAbs_EDGE, TopAbs_VERTEX):
-                    if kind not in ancestors:
-                        found = TopTools_IndexedDataMapOfShapeListOfShape()
-                        TopExp.MapShapesAndAncestors_s(part.shape.wrapped, kind, TopAbs_FACE, found)
-                        ancestors[kind] = found
-                    found = ancestors[kind]
-                    index = found.FindIndex(shape)
-                    if index:
-                        faces.update(int(part._face_map.FindIndex(face)) for face in found.FindFromIndex(index))
-    return bool(checker.IsValid()), sorted(names), sorted(face for face in faces if face)
+                faulty(shape)
+    sound = bool(checker.IsValid())
+    if not whole:
+        crossing = BOPAlgo_CheckerSI()
+        arguments = List_TopoDS_Shape()
+        arguments.Append(part.shape.wrapped)
+        crossing.SetArguments(arguments)
+        crossing.SetNonDestructive(True)
+        crossing.SetLevelOfCheck(4)  # vertices, edges, and edges against faces (BOPDS: VV VE EE VF EF)
+        crossing.Perform()
+        if crossing.HasErrors():
+            raise RuntimeError("boolean self-intersection check was inconclusive")
+        data = crossing.DS()  # a reference into the checker's own: read while it lives
+        pairs = [pair.Indices() for pair in data.Interferences()]
+        if pairs:
+            sound = False
+            names.add("BOPAlgo_SelfIntersect")
+            for a, b in pairs:
+                faulty(data.Shape(a))
+                faulty(data.Shape(b))
+    return sound, sorted(names), sorted(face for face in faces if face), whole
 
 
 def _solid(ctx: Context) -> dict[str, Any]:
@@ -540,7 +592,9 @@ def _solid(ctx: Context) -> dict[str, Any]:
         try:
             if check == "boolean":
                 checked += faces
-                sound, faults, faulty = _boolean_check(part)
+                sound, faults, faulty, whole = _boolean_check(part)
+                if not whole:
+                    check = "boolean_edges"
                 if not sound:
                     issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)} | set(faults)) \
                         or ["boolean check"]
@@ -549,7 +603,7 @@ def _solid(ctx: Context) -> dict[str, Any]:
                 sound = not issues
         except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
             sound = None
-        faulty_faces = faulty if issues and check == "boolean" else []
+        faulty_faces = faulty if issues and check in ("boolean", "boolean_edges") else []
         items.append({"part": part.name or part.owner or f"part {index + 1}",
                       "location": ctx.ref(index, faulty_faces[0] if faulty_faces else 1),
                       "faulty_faces": [ctx.ref(index, face) for face in faulty_faces][:20],
@@ -668,7 +722,19 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
                     starts.append(points[:-1])
                     ends.append(points[1:])
             fine = id(info) in refined
-            points = np.array([s.point for s in (brep.samples(info.face, 600) if fine else info.samples)])
+            points = np.array([s.point for s in (brep.samples(info.face, 600) if fine else info.samples)]).reshape(-1, 3)
+            if not len(points):
+                # a face the kernel lays no sample on (its triangulation failed): its span is not measured, and
+                # says so (``unmeasured``) -- the rules count it not measured, never a pass
+                centre = info.box.center()
+                centre = (centre.X, centre.Y, centre.Z)
+                found.append({"part": part, "ordinal": info.ordinal, "kind": "ceiling", "length_mm": None,
+                              "reach_mm": None, "supporting_edges": supported, "area_mm2": _r(info.area, 3),
+                              "refined": fine, "height_mm": _r(z - ctx.z0, 4),
+                              "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
+                              "location": ctx.ref(part, info.ordinal), "xyz": _xyz(centre),
+                              "unmeasured": "the kernel laid no sample on the face (its triangulation failed)"})
+                continue
             face = info.face.wrapped
 
             def inside(candidates: np.ndarray, face: Any = face) -> np.ndarray:
@@ -687,7 +753,7 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
                           "supporting_edges": supported, "area_mm2": _r(info.area, 3), "refined": fine,
                           "height_mm": _r(z - ctx.z0, 4), "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
                           "location": ctx.ref(part, info.ordinal),
-                          "xyz": _xyz(spread["xyz"] or info.samples[0].point)})
+                          "xyz": _xyz(spread["xyz"] if spread["xyz"] is not None else points[0])})
     ctx._ceilings = found  # type: ignore[attr-defined]
     return found
 
@@ -1142,28 +1208,38 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     booleans = 0
     exact_pairs = 0
     candidates: list[tuple[Any, ...]] = []
-    for a in range(len(ctx.parts)):
-        for b in range(a + 1, len(ctx.parts)):
-            (la, ha), (lb, hb) = boxes[a], boxes[b]
-            if la is None or lb is None or float(np.max(np.maximum(la - hb, lb - ha))) > reach:
-                continue
-            # each cloud where the other's box (and the reach) is: the rest cannot be nearest
-            ina = np.all((clouds[a][0] >= lb - reach) & (clouds[a][0] <= hb + reach), axis=1)
-            inb = np.all((clouds[b][0] >= la - reach) & (clouds[b][0] <= ha + reach), axis=1)
-            if not ina.any() or not inb.any():
-                continue
-            pa, oa, sa = _thinned(clouds[a][0][ina], clouds[a][1][ina], CLEARANCE_POINTS)
-            pb, ob, sb = _thinned(clouds[b][0][inb], clouds[b][1][inb], CLEARANCE_POINTS)
-            spacing = max(sa, sb, ctx._deflection * 4)
-            margin = 2.0 * spacing + ctx._deflection
-            rough, ii, jj, _ = _near_pairs(pa, pb, margin + 0.5)
-            if rough > reach + margin:
-                continue
-            keys = oa[ii].astype(np.int64) * (1 << 21) + ob[jj].astype(np.int64)
-            _, first = np.unique(keys, return_index=True)
-            nearest = np.sort(first)[:CLEARANCE_FACES]
-            candidates.append((rough, margin, a, b, [(int(oa[ii[k]]), int(ob[jj[k]])) for k in nearest],
-                               pa[ii[0]], pb[jj[0]]))
+    # the pairs whose boxes come within reach, every pair's boxes tested at once (an assembly of hundreds of
+    # parts has tens of thousands of pairs, few of them near)
+    meshed = np.array([index for index, (low, _high) in enumerate(boxes) if low is not None], dtype=int)
+    lows = np.array([boxes[index][0] for index in meshed]).reshape(-1, 3)
+    highs = np.array([boxes[index][1] for index in meshed]).reshape(-1, 3)
+    near: list[tuple[int, int]] = []
+    for start in range(0, len(meshed), 256):
+        rows = slice(start, start + 256)
+        apart = np.max(np.maximum(lows[rows, None, :] - highs[None, :, :], lows[None, :, :] - highs[rows, None, :]), axis=2)
+        for i, j in zip(*np.nonzero(apart <= reach)):
+            if start + i < j:
+                near.append((int(meshed[start + i]), int(meshed[j])))
+    for a, b in near:
+        checkpoint()
+        (la, ha), (lb, hb) = boxes[a], boxes[b]
+        # each cloud where the other's box (and the reach) is: the rest cannot be nearest
+        ina = np.all((clouds[a][0] >= lb - reach) & (clouds[a][0] <= hb + reach), axis=1)
+        inb = np.all((clouds[b][0] >= la - reach) & (clouds[b][0] <= ha + reach), axis=1)
+        if not ina.any() or not inb.any():
+            continue
+        pa, oa, sa = _thinned(clouds[a][0][ina], clouds[a][1][ina], CLEARANCE_POINTS)
+        pb, ob, sb = _thinned(clouds[b][0][inb], clouds[b][1][inb], CLEARANCE_POINTS)
+        spacing = max(sa, sb, ctx._deflection * 4)
+        margin = 2.0 * spacing + ctx._deflection
+        rough, ii, jj, _ = _near_pairs(pa, pb, margin + 0.5)
+        if rough > reach + margin:
+            continue
+        keys = oa[ii].astype(np.int64) * (1 << 21) + ob[jj].astype(np.int64)
+        _, first = np.unique(keys, return_index=True)
+        nearest = np.sort(first)[:CLEARANCE_FACES]
+        candidates.append((rough, margin, a, b, [(int(oa[ii[k]]), int(ob[jj[k]])) for k in nearest],
+                           pa[ii[0]], pb[jj[0]]))
     # exact where it can decide a verdict, the nearest pairs first, within the document's budget
     for rough, margin, a, b, faces, q1, q2 in sorted(candidates, key=lambda row: row[0]):
         if rough - margin > EXACT_BELOW or exact_pairs + len(faces) > EXACT_QUERIES:
@@ -1215,9 +1291,13 @@ def _clearances(ctx: Context) -> dict[str, Any]:
                       f"{EXACT_BELOW:g} mm (plus their margin); farther pairs keep the triangulations' distance"}
 
 
+#: A part's voxel field read by every family that reads it, and dropped (``_trapped``): made again if asked.
+_DROPPED = object()
+
+
 def _grid(ctx: Context, part: int) -> tuple[Any, list[mo.Cavity], np.ndarray, float] | None:
     """The part's voxel field, its cavities and labels, and the probing ball's radius."""
-    if part in ctx._grids:
+    if part in ctx._grids and ctx._grids[part] is not _DROPPED:
         return ctx._grids[part]
     shape = ctx.parts[part].shape
     box = shape.bounding_box(optimal=False)
@@ -1300,6 +1380,9 @@ def _trapped(ctx: Context) -> dict[str, Any]:
         grid, found, labels, ball = made
         pitches.append(grid.pitch)
         balls.append(ball)
+        # the sections' reading of this part's field now, and the field dropped when the part is done: an
+        # assembly's fields held together are megabytes a part (``_section``)
+        _section(ctx, part)
 
         def label(point: np.ndarray, grid: Any = grid, labels: np.ndarray = labels) -> int:
             return int(labels[grid.index(np.asarray(point))[0]])
@@ -1369,6 +1452,7 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                           "min_escape_hole_mm": _r(diameters[0], JUDGED) if diameters else None,
                           "min_wall_mm": _r(thinnest[0], JUDGED) if thinnest else None,
                           "faces": [ctx.ref(part, ordinal) for ordinal in cavity["faces"][:12]]})
+        ctx._grids[part] = _DROPPED
     items, count = _capped(items, lambda item: (item["escape_holes"], -(item["volume_mm3"] or 0)))
     return {"items": items, "count": count, "sealed_count": sum(1 for item in items if item["sealed"]),
             "trapped_volume_mm3": _r(sum(item["volume_mm3"] or 0 for item in items), 2),
@@ -1502,20 +1586,29 @@ def _support(ctx: Context) -> dict[str, Any]:
                       "plate, from a raster of the triangulation along Z"}
 
 
+def _section(ctx: Context, part: int) -> tuple[dict[str, Any], float] | None:
+    """The part's sections read from its voxel field (``mo.sections``) and the field's pitch, read once."""
+    readings = ctx.__dict__.setdefault("_sections", {})
+    if part not in readings:
+        made = _grid(ctx, part)
+        readings[part] = None if made is None else (mo.sections(made[0]), made[0].pitch)
+    return readings[part]
+
+
 def _sections(ctx: Context) -> dict[str, Any]:
     """The thickest sections -- the largest ball each part's material holds, from its voxel field -- and the
     cross-sections layer by layer (residual stress in metal follows a large flat section)."""
     items: list[dict[str, Any]] = []
     best: dict[str, Any] = {}
     for part in range(len(ctx.parts)):
-        made = _grid(ctx, part)
-        if made is None:
+        reading = _section(ctx, part)
+        if reading is None:
             continue
-        found = mo.sections(made[0])
+        found, pitch = reading
         if found["thickness_mm"] is not None:
             items.append({"location": ctx.ref(part, _face_at(ctx, part, found["center"])), "xyz": _xyz(found["center"]),
                           "thickness_mm": _r(found["thickness_mm"], JUDGED), "at_least": found["at_least"],
-                          "pitch_mm": _r(made[0].pitch, 4)})
+                          "pitch_mm": _r(pitch, 4)})
         if found.get("max_cross_section_mm2", 0) > best.get("max_cross_section_mm2", -1):
             best = found
     items.sort(key=lambda item: -item["thickness_mm"])
@@ -1590,6 +1683,9 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
         for name, family in FAMILIES:
             report[name] = _safe(lambda family=family: family(ctx))
     failed = sorted(name for name, value in report.items() if isinstance(value, dict) and "error" in value)
+    missed = [brep.unintersected(ctx.parts[index], [rays.screen], [rays.faces]) for index, rays in sorted(ctx._rays.items())]
+    if any(missed):
+        report["findings"] = [finding for finding in missed if finding]
     report["partial"] = bool(failed)
     if failed:
         report["partial_sections"] = failed
