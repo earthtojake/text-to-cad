@@ -35,23 +35,54 @@ board at its block's end, and the next step reads what the last one saved. Each 
    still tangle, swap pins or gates in the schematic (two inputs of one gate, two units of a quad
    op-amp, pins the datasheet says are interchangeable), export and import the netlist again, and run
    ERC; never swap on the board alone.
-5. **Route as stated geometry, never with a third-party autorouter** (no Freerouting). Tracks run
-   octolinear (0°, 45°, 90°). Run a bus as parallel tracks at one even pitch. Take the shortest path a
-   signal can, with no detours. Give power the width or pour its current needs. Routes are written as
-   geometry: tracks, arcs and vias in a commit (`b.begin_commit()`, `b.create_items([...])`,
-   `b.push_commit(...)`); headless KiCad has no interactive router. Fast nets and differential pairs
-   follow the next section. A board with more nets than you can lay out one by one (a hundred or more)
-   still starts by hand: power, fast nets and pairs, and each fine-pitch part's fan-out, each placed as
-   you mean it. The remaining signal nets may then be planned by a path search in your own script: on
-   the octolinear grid, each net at its netclass width and clearance, every step written as geometry
-   and held to the same checks (step 6 and the property script) as a hand-placed track. Say in the
-   handover which nets a search placed. A search on a grid sees an obstacle only at cell centres, so its
-   edge can sit up to half a cell's diagonal inside a free cell: grow every obstacle by that much
-   (0.071 mm on a 0.1 mm grid) before searching. KiCad's DRC on the saved board, not the grid, says the
-   result is clear.
+5. **Route the nets whose path matters by hand, then direct the router through the rest; never
+   hand the board to an autorouter** (no Freerouting). Tracks run octolinear (0°, 45°, 90°), and every
+   one is stated geometry: placed by you, or by the router along the plan you give it.
+   - **By hand:** power whose current or noise sets its path, and its return (a regulator's loops,
+     a high-current feed; a low-current rail can go to the router at its netclass's width), analog
+     and reference nodes, crystals, fast nets and differential pairs (the next section), and any net
+     a datasheet's layout notes or the person gives a reason for. A board of a hundred nets or more
+     starts here all the same, with each fine-pitch part's fan-out placed as you mean it. Run a bus
+     as parallel tracks at one even pitch. Take the shortest path a signal can, with no detours.
+     Give power the width or pour its current needs. Routes are written as geometry: tracks, arcs
+     and vias in a commit (`b.begin_commit()`, `b.create_items([...])`, `b.push_commit(...)`);
+     headless KiCad has no interactive router.
+   - **The rest with the router, as you direct it:** `route(b, plan)` (`from cad.kicad import
+     route`) routes only the connections you name, in your order, each on the layers you allow it,
+     at its netclass's width and clearance (or yours, never under the board's rules), within its via
+     limit (for the whole entry) or at your via cost, round all the copper already there; it moves
+     and deletes nothing. It is no autorouter: with no plan it writes no copper, and it chooses
+     neither what is routed nor in what order. It routes no differential pair: a net KiCad pairs by
+     name (`D+`/`D-`, `_P`/`_N`) is refused. Leave a poured net out of the plan: a pour is no
+     connection to the router, so it would track every pad; name as a pair only a pad its pour
+     cannot reach, and refill after. Put the connections with the least room first (a pin between
+     two others, a short link) and the long nets last. A connection it cannot route is answered by
+     name with what walls it in: move it before that net, allow it another layer, or route it by
+     hand. A connection already joined is said so and gets no copper, so the step runs again
+     harmlessly. Route a large board in steps, a group of nets each, checking after each (step 6),
+     and say in the handover which nets the router placed.
+   - **Check** with DRC and the copper stills (step 6), then **fix by hand** whatever reads badly: a
+     detour, a needless via, a track crowding a pad. KiCad's DRC on the saved board, not the plan,
+     says the result is clear.
+
+   ```python
+   from cad import kicad_pcb
+   from cad.kicad import route
+
+   with kicad_pcb.edit("board.kicad_pcb") as b:
+       routed = route(b, [
+           ("U1.3", "C4.1"),                                    # one connection, pad to pad
+           {"net": "/SENSE", "layers": ["F.Cu"], "vias": 0},    # this net on the top alone
+           "/LED", "/BTN",                                      # whole nets, with the options below
+       ], layers={"F.Cu": 1, "B.Cu": 2}, via_cost=2)             # a millimetre on B.Cu costs two on F.Cu
+       b.refill_zones()
+   print("\n".join(routed.human_lines()))   # each connection; one NOT routed says why and what walls it in
+   ```
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
    `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
-   errors are what to fix now. Moving a part after routing is fine: reroute what it touched. A pour's
+   errors are what to fix now. Look at each side's copper too (`cad kicad_pcb snapshot board.kicad_pcb
+   tmp/copper.png --display copper`, and `--display '{"mode":"copper","side":"bottom"}'` for the back).
+   Moving a part after routing is fine: reroute what it touched. A pour's
    thermal reliefs round dense small pads can neck below the minimum connection width
    (`connection_width`); connect such a pour to its pads solid (the zone's pad connection).
    Copper that overlaps another net's pad on any of its layers can be taken onto that pad's net when
@@ -143,8 +174,9 @@ that worked elsewhere, and set it in a netclass.
 - **Skew within the interface's budget** (SPRAAR7J: 50 mil within a USB 2.0 pair), tuned with a
   serpentine near the end where the mismatch arises, not at the far end.
 - **Equal via counts** on both legs, the vias placed side by side.
-- **The script draws both legs.** Headless KiCad has no interactive router or length tuner: route the
-  pair as two offset copies of one centre path, and any tuning bumps as geometry too.
+- **The script draws both legs.** Headless KiCad has no interactive router or length tuner, and
+  `route` routes no pair: route the pair as two offset copies of one centre path, and any tuning bumps
+  as geometry too.
 
 Check each pair from the saved board, appended to the script above: its length difference, its via
 counts, and the gap along the run.
