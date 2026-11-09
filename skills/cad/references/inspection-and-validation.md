@@ -79,6 +79,37 @@ plate = find_part(step.read("kit.step"), "plate")
 arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Upper_arm" in path[1]]
 ```
 
+A vendor STEP's parts take a simulator's declarations the same way: loop its placed leaves,
+match each label by pattern, declare on the leaf, and build the model from those leaves. A
+declaration on a leaf of `leaves()` is the leaf's own (it is a copy, not the tree's node), so
+the model returns them, grouped into one assembly per link where joints join them:
+
+```python
+from fnmatch import fnmatch
+
+import build123d as bd
+from cad import model, step
+from cad.build123d import body, collision, friction, leaves, mass
+
+
+@model
+def arm():
+    parts = []
+    for path, part in leaves(step.read("arm.step"), paths=True):
+        name = part.label.lower()
+        if fnmatch(name, "*screw*") or fnmatch(name, "*nut*"):
+            collision(part, "none")                  # fasteners: seen, never collided
+        elif fnmatch(name, "sts3215*case*"):
+            collision(part, "box")                   # a servo case collides as its box
+            mass(part, 55)                           # the datasheet's grams, not volume x density
+        elif fnmatch(name, "*camera*"):
+            body(part, "camera")                     # a body of its own, for the camera's frame
+        if any(fnmatch(label.lower(), "*gripper*") for label in path):
+            friction(part, 1.2)                      # everything below the gripper grips
+        parts.append(part)
+    return bd.Compound(children=parts, label="arm")
+```
+
 - Calling a model from a plain script builds it in the server (a replay when nothing
   changed) and returns its document, whose `.shape` keeps each assembly's placement.
   Walk it by labels and select within a part with build123d
