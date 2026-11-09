@@ -39,6 +39,8 @@ from cad._internal.dfm.molding import pull_doubtful
 from cad._internal.manufacturing import UNITS_MM as _UNITS_MM
 
 _AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
+#: The digits a figure a rule reads is kept to: the comparison is of the measurement, never of its display.
+_JUDGED = 9
 _BINS_DEG = [0.0, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
 #: The occlusion test casts one ray per triangle and counts the WHOLE triangle,
 #: so a CAD-coarse mesh rounds an undercut to its nearest triangle. Faces are
@@ -686,6 +688,23 @@ def _smoothed(mesh: trimesh.Trimesh, diag: float) -> np.ndarray:
     return total / np.where(size > 0, size, 1.0)[:, None]
 
 
+def _starts_inside(body: trimesh.Trimesh, origins: np.ndarray) -> np.ndarray:
+    """Per point: does it lie in the body's material (``contains``: the surface's crossings counted along a
+    slanted ray, again the other way where that one is doubtful)?
+
+    A fold of the tessellation (a planar face's fan crossing its own boundary) turns triangles over onto the
+    surface they lie in: their normals face into the material, and a ray cast from one along its normal crosses
+    the part, a through hole's plate read as trapped. Its turned triangles lie over as many the right way
+    round, so a crossing count along a slanted ray, which meets them nowhere coplanar, reads the surface
+    whatever the folds. Only a closed body has an inside: an open one answers no point inside."""
+    if not len(origins) or not body.is_watertight:
+        return np.zeros(len(origins), dtype=bool)
+    try:
+        return np.asarray(body.contains(origins), dtype=bool)
+    except Exception:  # noqa: BLE001 - a body the test cannot read keeps every candidate
+        return np.zeros(len(origins), dtype=bool)
+
+
 def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) -> dict:
     """Straight-pull occlusion test for every face.
 
@@ -713,6 +732,7 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
     total_trapped = 0.0
     total_area = 0.0
     total_faces = 0
+    total_folded = 0.0
     pooled: list = []
     features: list = []
     probe_edge = 0.0
@@ -750,6 +770,13 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         blocked_minus = blocked(-np.ones(len(centers)), zero)
         trapped = zero & blocked_plus & blocked_minus
         candidates = blocked_lean | trapped
+        # A blocked ray that starts in the material (a fold's: ``_starts_inside``) crossed the part, not a void.
+        if candidates.any():
+            idx = np.nonzero(candidates)[0]
+            dirs = np.outer(sign[idx], pull)
+            folded = idx[_starts_inside(body, centers[idx] + normals[idx] * eps + dirs * eps)]
+            candidates[folded] = blocked_lean[folded] = trapped[folded] = False
+            total_folded += float(areas[folded].sum())
         body_area = float(areas.sum())
         total_area += body_area
         total_candidate += float(areas[candidates].sum())
@@ -778,6 +805,12 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         "trapped_zero_draft_area_mm2": round(total_trapped, 2),
         "largest_candidate_faces": sorted(pooled, key=lambda g: -g["area_mm2"])[:8],
     }
+    if total_folded:
+        result["folded_area_mm2"] = round(total_folded, 3)
+        result["folded_note"] = (
+            f"{round(total_folded, 3)} mm2 of triangles fold back over the surface they lie in (the "
+            "tessellation's defect: their normals face into the material, their rays cross the part) and are "
+            "no undercut")
     features.sort(key=lambda item: -item["trapped_area_mm2"])
     releases = [item["release"] for item in features]
     result.update({
@@ -1097,7 +1130,7 @@ def _undercut_features(body: trimesh.Trimesh, probe: trimesh.Trimesh, candidates
         if release["release"] == "side_action" and (release["stroke_mm"] or 0.0) <= 2.0 * eps:
             continue  # freed by no travel at all: blocked only by the surface it was cast from
         found.append({
-            "trapped_area_mm2": round(area, 2), "xyz": _xyz((centers[group] * areas[group, None]).sum(0) / area),
+            "trapped_area_mm2": round(area, _JUDGED), "xyz": _xyz((centers[group] * areas[group, None]).sum(0) / area),
             "kind": release["kind"], "release": release["release"], "side_actions": release["directions"],
             "side_action_count": len(release["directions"]) if release["release"] == "side_action" else 0,
             "angled": any(release["angled"]),
@@ -1240,7 +1273,7 @@ def _transition(change: dict) -> dict:
     if ta > tb:
         (a, b), (ta, tb) = (b, a), (tb, ta)
     length = change.get("length")
-    return {"transition_ratio": round(float(change["ratio"]), 3), "min_mm": round(float(ta), 3),
+    return {"transition_ratio": round(float(change["ratio"]), _JUDGED), "min_mm": round(float(ta), 3),
             "max_mm": round(float(tb), 3), "change_mm": round(float(tb - ta), 3),
             "length_mm": round(float(length if length is not None else np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
             "basis": "step" if "chain" in change else "ball",
@@ -1345,9 +1378,9 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
     for region, face in per.items():
         if not nominal:
             break
-        item = {"thickness_mm": round(face["median"], 3), "min_mm": round(face["low"], 3),
+        item = {"thickness_mm": round(face["median"], _JUDGED), "min_mm": round(face["low"], 3),
                 "max_mm": round(face["max"], 3), "nominal_mm": round(nominal, 3),
-                "ratio_to_nominal": round(face["max"] / nominal, 3), "thin_ratio": round(face["median"] / nominal, 3),
+                "ratio_to_nominal": round(face["max"] / nominal, _JUDGED), "thin_ratio": round(face["median"] / nominal, 3),
                 "area_mm2": round(float(regions.areas[region]), 2), "feature": "wall", "_region": region,
                 "xyz": _xyz(face["at"])}
         items.append(item)
@@ -1457,13 +1490,13 @@ def _ribs_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_
                 "kind": "rib", "thickness_mm": round(root, 3), "tip_thickness_mm": round(tip, 3),
                 "height_mm": round(height, 3),
                 "length_mm": round(length, 3), "wall_mm": round(wall, 3) if wall else None,
-                "thickness_ratio": round(root / wall, 3) if wall else None,
-                "height_ratio": round(height / wall, 3) if wall else None,
-                "height_to_thickness": round(height / root, 3), "base_fillet_mm": 0.0, "base_fillet_ratio": 0.0,
-                "base_fillet_wall_ratio": 0.0, "draft_deg": round(float(np.degrees(np.arcsin(min(1.0, lean)))), 3),
+                "thickness_ratio": round(root / wall, _JUDGED) if wall else None,
+                "height_ratio": round(height / wall, _JUDGED) if wall else None,
+                "height_to_thickness": round(height / root, _JUDGED), "base_fillet_mm": 0.0, "base_fillet_ratio": 0.0,
+                "base_fillet_wall_ratio": 0.0, "draft_deg": round(float(np.degrees(np.arcsin(min(1.0, lean)))), _JUDGED),
                 "gap_mm": round(gap, 3) if gap is not None else None,
-                "gap_to_thickness": round(gap / root, 3) if gap is not None else None,
-                "gap_to_wall": round(gap / wall, 3) if gap is not None and wall else None,
+                "gap_to_thickness": round(gap / root, _JUDGED) if gap is not None else None,
+                "gap_to_wall": round(gap / wall, _JUDGED) if gap is not None and wall else None,
                 "xyz": _xyz(regions.centroid[a])})
     return items
 
@@ -1529,7 +1562,7 @@ def _bosses_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
         items.append({"od_mm": round(2 * boss["radius"], 3), "id_mm": round(2 * hole["radius"], 3) if hole else None,
                       "hollow": hole is not None, "boss_wall_mm": round(wall, 3),
                       "wall_mm": round(wall_ref, 3) if wall_ref else None,
-                      "wall_ratio": round(wall / wall_ref, 3) if wall_ref else None,
+                      "wall_ratio": round(wall / wall_ref, _JUDGED) if wall_ref else None,
                       "od_to_id": round(boss["radius"] / hole["radius"], 3) if hole else None,
                       "height_mm": round(height, 3), "height_to_od": round(height / (2 * boss["radius"]), 3),
                       "base_fillet_mm": 0.0, "hole_floor_above_base_mm": round(max(floor, 0.0), 3) if hole else None,
@@ -1678,6 +1711,13 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
     report["ribs"] = _safe(lambda: _family(_ribs_mesh(mesh, regions, pull, wall_of, nominal, used),
                                            "thickness_ratio"))
     kinds = {region: "rib" for region in used}
+    # A rib's sides are judged by its draft rule (molding.rib_draft), not a wall's (``feature``); a region an
+    # undercut traps is formed by what releases it, not along the pull: the undercut's rule is its one finding.
+    trapped = _trapped_regions(mesh, regions, pull, zero_tol)
+    formed = set(np.unique(regions.label[trapped]).tolist()) if trapped.any() else set()
+    for item in (report["draft"].get("items") or []) if isinstance(report.get("draft"), dict) else []:
+        region = item.pop("_region", None)
+        item["feature"] = "rib" if region in kinds else "undercut" if region in formed else "wall"
     report["bosses"] = _safe(lambda: _family(_bosses_mesh(mesh, regions, pull, wall_of, nominal, used), "wall_ratio"))
     kinds.update({region: "boss" for region in used if region not in kinds})
     report["corners"] = _safe(lambda: _family(_corners_mesh(mesh, regions, wall_of, nominal, used), "ratio_to_wall",
@@ -1688,8 +1728,7 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
         region = item.pop("_region", None)
         if region in kinds:
             item["feature"] = kinds[region]
-    parting = _safe(_parting_mesh, mesh, regions, pull, zero_tol, wall_limit, _trapped_regions(mesh, regions, pull,
-                                                                                               zero_tol))
+    parting = _safe(_parting_mesh, mesh, regions, pull, zero_tol, wall_limit, trapped)
     span = parting.pop("_span", None) if isinstance(parting, dict) else None
     report["parting"] = parting
     projection = report.get("projection") or {}
@@ -1712,7 +1751,7 @@ def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
     their smoothed normals (``_Regions.facet_normal``) and a lean counts past half a degree, so vertex noise
     does not tilt a wall."""
     along = regions.facet_normal @ pull
-    draft = np.round(np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0))), 3)
+    draft = np.round(np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0))), _JUDGED)
     tangent = _tangent_faces(mesh, pull, mesh.face_normals @ pull, zero_tol)
     tol = float(np.sin(np.radians(max(zero_tol, _NOISE_DEG))))
     areas = mesh.area_faces
@@ -1741,10 +1780,10 @@ def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
                  "+pull" if up >= down and up > 0 else "-pull" if down > 0 else "none")
         if not curved:
             low = high = float(np.degrees(np.arcsin(min(1.0, abs(float(regions.normal[region] @ pull))))))
-            low = round(low, 3)
+            low = round(low, _JUDGED)
             opens = "none" if low < zero_tol else ("+pull" if float(regions.normal[region] @ pull) > 0 else "-pull")
         centre = (mesh.triangles_center[wall] * weight[:, None]).sum(axis=0) / total
-        items.append({"draft_deg": round(low, 3), "area_mm2": round(total, 2), "opens": opens,
+        items.append({"_region": region, "draft_deg": round(low, _JUDGED), "area_mm2": round(total, 2), "opens": opens,
                       "surface": "curved" if curved else "flat",
                       "depth_mm": round(float(reach[wall].max() - reach[wall].min()), 3), "xyz": _xyz(centre),
                       **({"spread_deg": round(high - low, 3)} if curved else {})})

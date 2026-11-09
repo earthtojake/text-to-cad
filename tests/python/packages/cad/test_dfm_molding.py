@@ -121,7 +121,12 @@ class DraftTest(unittest.TestCase):
         for failure in failures:
             face = _face(result, bd.Box(20, 20, 10), failure["location"])
             self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=9)
-        self.assertFalse(result.ok)
+        # Protolabs' 0.5 deg is a recommendation ("VERTICAL FACES 0.5"; only its shut-off and texture rows are
+        # minimums): a warning, so zero draft alone does not fail the check.
+        self.assertTrue(result.ok)
+        self.assertEqual({f.severity for f in result.findings if f.code == "molding.draft_min"}, {"warning"})
+        hint = next(f.hint for f in result.findings if f.code == "molding.draft_min")
+        self.assertIn("+z back into the material above the parting line", hint)
 
 
 class UndercutTest(unittest.TestCase):
@@ -439,6 +444,19 @@ class CandidatesAndPartsTest(unittest.TestCase):
         (trapped,) = [f for f in _check(cup, pull="z").findings if f.code == "undercut_candidates"]
         self.assertIn("--candidates ranks x first", trapped.hint)
 
+    def test_two_solids_touching_are_said_to_be_fused_and_their_contact_is_no_undercut(self) -> None:
+        pair = bd.Compound([bd.Box(10, 10, 10), bd.Pos(10, 0, 0) * bd.Box(10, 10, 10)])
+        pair.label = "pair"
+        result = _check(pair)
+        (said,) = [f for f in result.findings if f.code == "solids_touching"]
+        self.assertIn("solids 1 and 2", said.message)
+        self.assertIn("fuse", said.hint)
+        self.assertAlmostEqual(result.measurements["touching"]["items"][0]["contact_area_mm2"], 100.0, delta=1.0)
+        self.assertEqual(result.measurements["undercuts"]["candidate_area_mm2"], 0.0)
+        self.assertNotIn("several_bodies", {f.code for f in result.findings})
+        # the contact faces are no walls: six sides of the pair, not eight
+        self.assertEqual(len(result.measurements["draft"]["items"]), 6)
+
     def test_several_solids_in_one_part_are_said(self) -> None:
         pair = bd.Box(10, 10, 10) + bd.Pos(30, 0, 0) * bd.Box(10, 10, 10)
         self.assertEqual(len(pair.solids()), 2)
@@ -465,6 +483,35 @@ class CandidatesAndPartsTest(unittest.TestCase):
         for family in ("draft", "undercuts", "parting"):
             self.assertEqual(len(from_file[family]["items"]), len(live[family]["items"]), family)
         self.assertEqual(from_file["thickness"]["nominal_mm"], live["thickness"]["nominal_mm"])
+
+
+class OrientationTest(unittest.TestCase):
+    def test_a_turn_about_the_pull_keeps_the_verdict_and_the_figures(self) -> None:
+        # A tray with a pad and a side window, off-centre: turned about the pull in its model, it is measured in
+        # its own frame (``frame``), so its walls, its undercut and its findings read the same.
+        part = _tray() + bd.Pos(-10, 5, 2) * bd.Box(12, 8, 3, align=BOTTOM) - bd.Pos(0, 20, 10) * bd.Box(10, 6, 4)
+
+        def read(shape: Any) -> tuple:
+            result = _check(shape)
+            m = result.measurements
+            codes = sorted((f.severity, f.code) for f in result.findings if f.severity != "info")
+            return (result.ok, codes, m["thickness"]["nominal_mm"], m["thickness"]["max_mm"],
+                    m["undercuts"]["candidate_area_mm2"], m["draft"]["wall_area_mm2"], m["undercuts"]["items"])
+
+        ok, codes, nominal, thick, trapped, walls, items = read(part)
+        for turn in (30.0, 90.0, -117.0):
+            got = read(bd.Rot(0, 0, turn) * part)
+            self.assertEqual((ok, codes), got[:2], turn)
+            for want, have in zip((nominal, thick, walls), (got[2], got[3], got[5])):
+                self.assertAlmostEqual(want, have, delta=1e-3 * max(1.0, abs(want)), msg=turn)
+            # the trapped area is sampled: a rectangle's mesh takes either diagonal, and its samples follow it
+            self.assertAlmostEqual(trapped, got[4], delta=0.05 * trapped, msg=turn)
+            # the window's place, turned back into the world
+            here = np.asarray(got[6][0]["xyz"])
+            angle = math.radians(turn)
+            there = np.array([[math.cos(angle), -math.sin(angle), 0], [math.sin(angle), math.cos(angle), 0],
+                              [0, 0, 1]]) @ np.asarray(items[0]["xyz"])
+            self.assertLess(float(np.linalg.norm(here - there)), 0.5, turn)
 
 
 class RulesTest(unittest.TestCase):
@@ -496,6 +543,37 @@ class RulesTest(unittest.TestCase):
         drafted_box = _check(bd.extrude(bd.Rectangle(40, 30), 20, taper=2) - bd.Pos(0, 0, 4) * bd.Box(4, 4, 8))
         (zero,) = [f for f in drafted_box.findings if f.code == "zero_draft_walls"]
         self.assertNotIn("--candidates", zero.hint)
+        # a sum of what molding.draft_min judges face by face: a fact, unless it says the pull looks wrong
+        self.assertEqual(zero.severity, "info")
+
+    def test_a_limit_is_compared_unrounded(self) -> None:
+        (thick,) = [rule for rule in type_side.RULES.rules if rule.id == "molding.thick_section"]
+        self.assertEqual(thick.limit, 1 / 0.6)
+        report = {"thickness": {"nominal_mm": 18.0, "items": [
+            {"location": "p/face 1", "ratio_to_nominal": 30 / 18, "feature": "wall"},
+            {"location": "p/face 2", "ratio_to_nominal": 30.001 / 18, "feature": "wall"}]}}
+        from cad._internal.dfm import rules
+
+        found, _record = rules.evaluate(report, type_side.RULES, type_side.context(report, {"material": "abs"}))
+        self.assertEqual([f.location for f in found if f.code == "molding.thick_section"], ["p/face 2"])
+
+    def test_one_cause_one_finding_and_hints_in_millimetres(self) -> None:
+        # A rib's sides are judged by rib_draft alone, a window's walls (formed by its slide) by the undercut rule
+        # alone; the sums of the faces and features are facts (info), the rules' findings what to act on.
+        plate = bd.Box(60, 40, 2, align=BOTTOM) + bd.Pos(0, 0, 2) * bd.Box(40, 1.2, 8, align=BOTTOM)
+        result = _check(plate)
+        ribs = result.measurements["ribs"]["items"]
+        sides = set(ribs[0]["faces"][:2])
+        drafted = {f.location for f in result.findings if f.code in ("molding.draft_min", "molding.draft")}
+        self.assertFalse(sides & drafted)
+        self.assertIn("molding.rib_draft", {f.code for f in result.findings})
+        cup = _tray() - bd.Pos(0, 20, 10) * bd.Box(10, 6, 4)
+        cupped = _check(cup)
+        window = {face for item in cupped.measurements["undercuts"]["items"] for face in item["trapped_faces"]}
+        self.assertTrue(window)
+        self.assertFalse(window & {f.location for f in cupped.findings if f.code.startswith("molding.draft")})
+        corner = next(f for f in cupped.findings if f.code == "molding.inside_corner_radius")
+        self.assertRegex(corner.hint, r"round this internal corner to [0-9.]+ mm or more")
 
     def test_a_metal_is_refused(self) -> None:
         from cad._internal import manufacturing

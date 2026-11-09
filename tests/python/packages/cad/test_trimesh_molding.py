@@ -501,6 +501,57 @@ class RobustnessTest(unittest.TestCase):
                 mold_tool._pull_vector(bad)
 
 
+class FoldedTessellationTest(unittest.TestCase):
+    """A planar face's triangulation that folds over itself (a fan crossing its own boundary, as an exporter left
+    on a 117 mm plate's faces) turns triangles to face into the material: their rays cross the part and read a
+    plain plate as trapped. Winding consistent and watertight all the same."""
+
+    @staticmethod
+    def _slab(folded: bool):
+        import trimesh
+
+        p, q = ((7, 5), (3, 5)) if folded else ((3, 5), (7, 5))
+        v = np.array([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [0, 0, 2], [10, 0, 2], [10, 10, 2], [0, 10, 2],
+                      [*p, 2], [*q, 2]], float)
+        a0, b0, c0, d0, a, b, c, d, pp, qq = range(10)
+        faces = [(a, b, qq), (b, c, qq), (c, d, pp), (d, a, pp), (a, qq, pp), (qq, c, pp), (a0, c0, b0), (a0, d0, c0),
+                 (a0, b0, b), (a0, b, a), (b0, c0, c), (b0, c, b), (c0, d0, d), (c0, d, c), (d0, a0, a), (d0, a, d)]
+        return trimesh.Trimesh(v, np.array(faces), process=False)
+
+    def test_a_fold_is_no_undercut(self) -> None:
+        for folded in (False, True):
+            mesh = mold_tool._prepared(self._slab(folded))
+            self.assertTrue(mesh.is_watertight and mesh.is_winding_consistent)
+            facts = mold_tool._undercut_facts(mesh, np.array([0.0, 0.0, 1.0]), 0.05)
+            self.assertEqual(facts["candidate_area_mm2"], 0.0, folded)
+            self.assertEqual(facts["undercut_count"], 0, folded)
+            self.assertEqual(facts.get("folded_area_mm2", 0.0), 20.0 if folded else 0.0)
+
+
+class OrientationTest(unittest.TestCase):
+    def test_a_turn_about_the_pull_keeps_the_verdict_and_the_figures(self) -> None:
+        import trimesh
+
+        part = Box(40, 30, 10, align=(Align.CENTER, Align.CENTER, Align.MIN)) - Pos(0, 15, 5) * Box(8, 6, 3)
+        with tempfile.TemporaryDirectory() as td:
+            base = trimesh.load(_stl(part, Path(td), "block"))
+            read = []
+            for turn in (0.0, 30.0):
+                mesh = base.copy()
+                mesh.apply_transform(trimesh.transformations.rotation_matrix(math.radians(turn), [0, 0, 1]))
+                path = Path(td) / f"turned{int(turn)}.stl"
+                mesh.export(path)
+                result = cad.stl.dfm(path, process="molding", material="abs")
+                m = result.measurements
+                read.append((result.ok, sorted((f.severity, f.code) for f in result.findings if f.severity != "info"),
+                             m["thickness"]["nominal_mm"], m["undercuts"]["candidate_area_mm2"],
+                             m["draft"]["wall_area_mm2"]))
+        (ok, codes, *figures), (turned_ok, turned_codes, *turned) = read
+        self.assertEqual((ok, codes), (turned_ok, turned_codes))
+        for want, have in zip(figures, turned):
+            self.assertAlmostEqual(want, have, delta=0.02 * max(1.0, abs(want)))
+
+
 class CheckTest(unittest.TestCase):
     def test_the_check_measures_every_family_and_passes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -516,12 +567,12 @@ class CheckTest(unittest.TestCase):
         # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
         self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
-        # A plain box's four sides have no draft: the fact is said, and the rules' 0.5 deg minimum fails the
-        # check at each side.
+        # A plain box's four sides have no draft: the fact is said (a warning: the pull looks wrong), and the
+        # rules' 0.5 deg recommendation (Protolabs' "VERTICAL FACES 0.5", no minimum) warns at each side.
         self.assertIn("zero_draft_walls", [f.code for f in result.findings if f.severity == "warning"])
-        self.assertFalse(result.ok)
+        self.assertTrue(result.ok)
         self.assertEqual(sum(f.code == "molding.draft_min" for f in result.findings), 4)
-        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"molding.draft_min"})
+        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, set())
 
     def test_an_open_mesh_of_two_bodies_is_still_measured(self) -> None:
         # One triangle gone: the mesh is no longer watertight, and splitting its two bodies must not reach for a
@@ -539,6 +590,11 @@ class CheckTest(unittest.TestCase):
         self.assertFalse(report["mesh"]["watertight"])
         self.assertFalse(report["partial"], report.get("partial_sections"))
         self.assertIn("several_bodies", {f.code for f in result.findings})
+        # an open surface is no part: an error, at the open body
+        (opened,) = [f for f in result.findings if f.code == "not_watertight"]
+        self.assertEqual(opened.severity, "error")
+        self.assertEqual(report["mesh"]["open_body_count"], 1)
+        self.assertFalse(result.ok)
         for family in ("draft", "undercuts", "thickness", "projection", "parting"):
             self.assertNotIn("error", report[family], family)
 
