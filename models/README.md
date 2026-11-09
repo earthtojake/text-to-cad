@@ -36,7 +36,9 @@ beside it (`src/`), read from the board file, and the scripts that made the boar
 
 Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, KiCad's board files, docs); never what a run
 or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
-XBF), review media (`.gitignore` keeps images and video out of this tree) or runtime debris.
+XBF, and no `.blend`, which a render's bpy script makes), review media (`.gitignore` keeps images and
+video out of this tree) or runtime debris. One project renders with Blender: `orbit_clock`'s `render.py`, a bpy script `cad run`
+runs, writes its stills into the project's gitignored `RENDERS/`.
 
 ## The files the corpus writes
 

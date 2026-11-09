@@ -79,10 +79,11 @@ holes and all 72 LEDs from `orbit.kicad_pcb`, every part's 3D extent from the bo
 | `scripts/geometry.py`, `scripts/board.py`, `scripts/routing.py` | the board: setup, place, route, zones, silk |
 | `src/part_models.py` | the two 3D models KiCad lacks (WS2812B-2020, LTR-303ALS-01) |
 | `src/orbit.py`, `src/check_fit.py`, `src/exports.py` | the printed parts, the assembly and its explode, the fit check, the deliverables |
+| `render.py` | the hero still in Blender (below, "Renders") |
 
 Nothing generated is committed: the two part models (`orbit.3dshapes/`), the fabrication files (`fab/`), the
-board's STEP and the printed parts' files (`STEP/`, `XBF/`, `GLB/`, `3MF/`, `DXF/`) are written by the commands
-below, and `.gitignore` keeps them out of Git.
+board's STEP and the printed parts' files (`STEP/`, `XBF/`, `GLB/`, `3MF/`, `DXF/`) and the renders (`RENDERS/`) are
+written by the commands below, and `.gitignore` keeps them out of Git.
 
 ## Rebuild
 
@@ -121,6 +122,23 @@ cad threemf dfm 3MF/baffle.3mf --process printing --angle-limit 45 --samples 200
 `build_libraries.py` writes the libraries byte for byte as committed, and `board.py all` makes the same
 placement, tracks and vias again. After a board change, export the STEP and the xbf again before
 `cad run src/orbit.py`: the printed parts follow.
+
+## Renders
+
+`render.py` is a Blender scene as a plain `import bpy` script, written the render skill's way: the clock at the
+end of its explode, out of the stand, with the LEDs lit to show 2:14:23. It reads `GLB/orbit_assembly.glb` (every
+part and the explode, `cad run src/exports.py`) and `GLB/orbit.glb` (the board's copper, mask and silkscreen,
+`cad kicad_pcb export orbit.kicad_pcb --to glb -o GLB`), laying the board's layers on the assembly's PCB, so make
+both first. `cad run` runs it in its own Python with Blender's module, without cad.
+
+```bash
+cad run render.py                                # an EEVEE draft at 1080p, RENDERS/hero-draft.png (15-35 s)
+cad run render.py --final                        # Cycles on the GPU, 256 samples, RENDERS/hero.png (about 1.5 min)
+cad run render.py --blend                        # either, and the scene as RENDERS/orbit.blend, for Blender 5.2
+```
+
+The script is the render's source: nothing in `RENDERS/` is committed. Times are an M1 Max's, the module already
+downloaded.
 
 ## Checks and their results
 
