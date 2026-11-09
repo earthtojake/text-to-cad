@@ -1015,8 +1015,12 @@ on the dark one, the same hues darkened to 3:1 on white on the light one), its h
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
 again in the browser, from the payload it holds. A net in focus (selected, or lit by a reference)
 steps the rest of the board back lightly, more than half its contrast kept, so the board still reads
-as a board round the lit net; what is isolated steps it back further. In 3D the step back is laid on
-the board alone, never on the see-through plane round the slab.
+as a board round the lit net; what is isolated steps it back further. The lit net's copper (its tracks,
+pads, vias and pour outlines) is edged, 1.5 px round each piece in a dark tone of the highlight under it
+(KiCad lights a net by brightening it over the rest dimmed; the edge adds what a light wash takes away): the net then stands out by its edge at 3:1 or more against
+the washed board in light (7.6:1 measured on a routed board, where its fill alone reads 2.8:1), and the
+edge parts the light net from the copper round it in dark. In 3D the step back is laid on the board alone,
+never on the see-through plane round the slab, and the edge is drawn on the face as in 2D.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

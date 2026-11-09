@@ -34,11 +34,17 @@ import { boardAirwires } from "./airwires.js";
  * a routed two-layer board with a 30-pad net lit, the wash this replaced (0.7 white, 0.6 black) left
  * the rest of the board 36% (light) and 48% (dark) of its L* contrast, pale and murky; these keep 58%
  * and 67%. The net's luminance contrast with the board beside it falls (3.2:1 to 2.5:1 light, 5.6:1 to
- * 3.6:1 dark), its colour difference hardly (ΔE76 54 to 52, 68 to 62). `isolatedDim`, for what is
- * isolated, is the heavier wash as it was: isolating asks for the rest to go.
+ * 3.6:1 dark), its colour difference hardly (ΔE76 54 to 52, 68 to 62). So a lit net is edged (`netEdge`): its
+ * copper outlined in a dark tone of the highlight beneath it, which stands 7.6:1 against the washed board in
+ * light (the fill alone 2.8:1) and parts the light net from the copper round it in dark (the fill 3.6:1).
+ * `isolatedDim`, for what is isolated, is the heavier wash as it was: isolating asks for the rest to go.
  */
-const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge }) => Object.freeze({
+const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge, netEdge }) => Object.freeze({
   selection,
+  // A lit net's edge: every piece of its copper outlined `width` screen pixels round, under it (the item
+  // drawn wider beneath itself, a keyline as the ink's): KiCad lights a net by brightening it over the rest
+  // dimmed, and here the net reads against the stepped-back board by its edge as well as its colour.
+  netEdge: Object.freeze({ color: netEdge, width: 1.5 }),
   // The ink's keyline (`drawing2d/marks.js`'s `keyline`): ink in a neon over copper of its own hue
   // reads by its edge, as the canvas's contrast, dark on the dark canvas and light on the light one.
   inkKeyline: Object.freeze({ color: inkEdge, width: 1.25 }),
@@ -60,9 +66,9 @@ const overlayTheme = (selection, rgb, { dim, isolatedDim, airwire, inkEdge }) =>
 });
 export const BOARD_OVERLAY_THEMES = Object.freeze({
   dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.4)", isolatedDim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)",
-    inkEdge: "rgba(0, 0, 0, 0.85)" }),
+    inkEdge: "rgba(0, 0, 0, 0.85)", netEdge: "#0b1a2a" }),
   light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.5)", isolatedDim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)",
-    inkEdge: "rgba(255, 255, 255, 0.95)" })
+    inkEdge: "rgba(255, 255, 255, 0.95)", netEdge: "#16304d" })
 });
 /** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
 export function boardOverlayColors(scheme) {
@@ -213,7 +219,8 @@ function crosshair(ctx, view, [x, y], color, size = 7) {
  * `crosshairs` for the caller to draw once the context is in pixels again. `shapesOf(pad)`: a pin's
  * pads (`index.shapesOf`).
  */
-export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, shapesOf = null, crosshairs = null, fills = BOARD_OVERLAY_COLORS }) {
+export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, shapesOf = null, crosshairs = null, fills = BOARD_OVERLAY_COLORS,
+  edge = null }) {
   if (!resolved) return;
   const kind = resolved.kind;
   const pinPads = shapesOf || ((pad) => pad.part.pads.filter((shape) => shape.number === pad.number));
@@ -225,7 +232,16 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
     polygons(ctx, view, pinPads(resolved.pad), { color, width: 1.5 * weight, fill: color });
   } else if (kind === "net") {
     const net = resolved.net;
-    polygons(ctx, view, net.zones.map((zone) => ({ polygon: zone.outline, box: zone.box })), { color, width: 1.5, fill: fills.zone });
+    const zones = net.zones.map((zone) => ({ polygon: zone.outline, box: zone.box }));
+    if (edge) {
+      // The edge first, `edge.width` pixels past each piece's own outline, so the copper drawn next covers its inside.
+      const out = edge.width, minimum = (pixels) => (item) => Math.max(pixels * view.px, item.width) + 2 * out * view.px;
+      polygons(ctx, view, zones, { color: edge.color, width: 1.5 + 2 * out });
+      strokes(ctx, view, net.tracks, edge.color, minimum(2));
+      dots(ctx, view, net.vias, edge.color, (via) => viaRadius(view, 2.5)(via) + out * view.px);
+      polygons(ctx, view, net.pads.flatMap(pinPads), { color: edge.color, width: 1 + 2 * out });
+    }
+    polygons(ctx, view, zones, { color, width: 1.5, fill: fills.zone });
     strokes(ctx, view, net.tracks, color, trackWidth(view, 2));
     dots(ctx, view, net.vias, color, viaRadius(view, 2.5));
     polygons(ctx, view, net.pads.flatMap(pinPads), { color, width: 1, fill: color });
@@ -306,7 +322,8 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
   }
   pageSpace(ctx, view, pixelRatio);
   if (draft) draftBox(ctx, view, draft, colors.selection, colors.draft);
-  for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25 });
+  // What is selected is outlined (a net's copper: `colors.netEdge`), so it reads against the stepped-back board.
+  for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25, edge: colors.netEdge });
   if (placement) {
     const nets = new Set(selection.filter((resolved) => resolved.kind === "net").map((resolved) => resolved.net.name));
     if (nets.size) strokes(ctx, view, boardAirwires(index).filter((wire) => nets.has(wire.net)), colors.selection, () => 2 * view.px);

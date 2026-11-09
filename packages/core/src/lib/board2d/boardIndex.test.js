@@ -4,6 +4,7 @@ import test from "node:test";
 import { createBoardIndex } from "./boardIndex.js";
 import { nearestOnSegment, pointInPolygon } from "./geometry.js";
 import { BOARD_OVERLAY_THEMES, drawBoardOverlay } from "./boardOverlay.js";
+import { boardPalette } from "../plot2d/theme.js";
 
 // A 40 x 30 mm sheet cut from a page whose origin sits at sheet (5, 25): KiCad's (10, -5) is sheet (15, 20).
 const rect = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
@@ -158,6 +159,38 @@ test("a net in focus steps the rest back lightly, at least half its contrast kep
   drawBoardOverlay(face.ctx, index, { ...frame, dimArea: [[[0, 0], [30, 0], [30, 20], [0, 20]]] });
   assert.equal(face.marks.some((mark) => mark.op === "fillRect"), false);
   assert.deepEqual(face.marks[0], { op: "fill", style: BOARD_OVERLAY_THEMES.dark.dim, points: [[0, 0], [300, 0], [300, 200], [0, 200]] });
+});
+
+test("a lit net is edged under its copper, the edge 3:1 or more by lightness against the washed board in light, dark in dark", () => {
+  const index = createBoardIndex(BOARD);
+  for (const [scheme, colors] of Object.entries(BOARD_OVERLAY_THEMES)) {
+    const { ctx, marks } = recordingContext();
+    drawBoardOverlay(ctx, index, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, width: 400, height: 300, dim: true, colors,
+      selection: [index.resolve("#net:GND")] });
+    const edges = marks.filter((mark) => mark.style === colors.netEdge.color);
+    // GND's pour outline, its via, and its three pads (R1.2, U1.3's two): each edged once, before any of the net's own colour.
+    assert.equal(edges.length, 5, scheme);
+    const firstLit = marks.findIndex((mark) => mark.style === colors.selection || mark.style === colors.zone);
+    assert.ok(marks.indexOf(edges.at(-1)) < firstLit, `${scheme}: the edge lies under the net`);
+  }
+  // Against every board colour washed by the light theme's dim (its canvas, each layer, each inner copper), the edge reads at 3:1.
+  const rgb = (css) => {
+    if (Array.isArray(css)) return css;
+    const hex = /^#([0-9a-f]{6})$/i.exec(css);
+    if (hex) return [0, 2, 4].map((at) => Number.parseInt(hex[1].slice(at, at + 2), 16));
+    const parts = /rgba?\(([^)]+)\)/.exec(css)[1].split(",").map(Number);
+    return parts;
+  };
+  const luminance = ([r, g, b]) => [r, g, b].map((c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+    .reduce((sum, v, k) => sum + v * [0.2126, 0.7152, 0.0722][k], 0);
+  const over = (top, under) => { const [r, g, b, a = 1] = rgb(top); return rgb(under).slice(0, 3).map((c, k) => [r, g, b][k] * a + c * (1 - a)); };
+  const light = BOARD_OVERLAY_THEMES.light, palette = boardPalette("light");
+  const edge = luminance(rgb(light.netEdge.color));
+  const surfaces = [palette.background, palette.layer("F.Cu"), palette.layer("B.Cu"), palette.layer("F.SilkS"), palette.layer("In1.Cu"), palette.layer("Edge.Cuts")];
+  for (const surface of surfaces) {
+    const washed = luminance(over(light.dim, over(surface, palette.background)));
+    assert.ok((washed + 0.05) / (edge + 0.05) >= 3, `${surface}: ${((washed + 0.05) / (edge + 0.05)).toFixed(2)}:1`);
+  }
 });
 
 test("a net is highlighted whole, and what is off screen left out", () => {
