@@ -33,12 +33,19 @@ between two links:
 - **Printed or machined parts by function.** A bracket that carries a servo and the arm segment
   that servo turns are two links.
 - **A servo's case goes with the link it is screwed to.** Its horns (the drive horn on the output
-  shaft and the idle horn opposite it) go with the link they turn.
+  shaft and the idle horn opposite it) go with the link they turn. The labels may be in another
+  language (`金属舵盘（驱动）`, the drive horn, and `金属舵盘（从动）`, the idle one); the geometry tells
+  them apart. The drive horn is splined onto the shaft, so it has many cylindrical faces (33 against
+  the idle horn's 7 on an ST3215): count `part.faces().filter_by(bd.GeomType.CYLINDER)`.
 - **Cables, boards and connectors go with the link they are clipped to.**
 - **Fasteners go with the part they hold.** Use the nearest part, found by bounding boxes first. A
   solid-to-solid `closest_points` on printed parts of thousands of faces runs for minutes per
   hundred pairs, so measure from the fastener's centre (`bd.Vertex`) to the few candidates the
-  boxes leave.
+  boxes leave. Two cases override the nearest part. A fastener on a joint's axis (its centre within
+  a millimetre of it) is the horn's centre screw: it threads into the parent's output shaft but
+  turns with the child, so it goes with the child. A fastener through two parts goes with the link
+  of the two it clamps together, even where a part of another link is nearer to its centre (a horn
+  beside the screw that holds a bracket to its servo).
 
 Write the grouping as a table of component name to link, and raise on any component the table does
 not name, so that a new revision of the STEP fails loudly instead of dropping a part. A vendor often
@@ -132,9 +139,17 @@ the other way confirms. Vendor parts often sit a fraction of a millimetre apart 
 servo's cover): such a pair stops a joint only where its contact grows or its gap closes to half,
 and the stop says so (`touching as built`). Check such a stop with a posed snapshot at it. Where
 it is not the hardware's stop (the jaws still 20 mm apart when the jaw meets the cover), set the
-pair aside in the model, `exclude(jaw, "servo6_bottom_cover")`, and sweep again: the two parts
-never stop the sweep, every other pair of their links still does, and the jaw then stops on the
-other jaw. The same declaration tells the MJCF their links never collide. `--geometry collision`
+pair aside in the model and sweep again: the two parts never stop the sweep, every other pair of
+their links still does, and the jaw then stops on the other jaw. A servo's case is several shells
+(a middle and two covers), and the jaw that clears one sweeps the next, so set aside the whole
+case at once: name the servo's assembly, the `bd.Compound` you made of its case and internals, or
+its label, and every part below it goes:
+
+```python
+exclude(jaw, "servo6")   # the label of servo 6's assembly: its case top, middle and bottom alike
+```
+
+The same declaration tells the MJCF their links never collide. `--geometry collision`
 sweeps the collision shapes as MuJoCo collides them, the pairs the MJCF never collides set aside
 (a body and its parent among them): what a joint hits in the simulator before its range holds
 it. Write the stops into `angular_range`, rounded towards zero. A joint found clear all the way
@@ -149,9 +164,46 @@ needs an estimate when the datasheet gives none
 ## 7. Zero and states
 
 The CAD's pose is every joint's zero unless you name another one. Compute a `home` state in the
-model from the measured axes (the arm upright, the gripper closed), name the vendor's pose `rest`
-with every joint at 0, and export with `--zero home`. Each joint then counts from `home`, and
-`rest` becomes a key. Check the signs on the model before exporting:
+model from the measured axes, name the vendor's pose `rest` with every joint at 0, and export with
+`--zero home`. Each joint then counts from `home`, and `rest` becomes a key.
+
+`home` is your choice, said in the model's docstring. For a desktop arm, upright means every link
+of the pitch chain pointing straight up (each joint at the angle that stands its link vertical),
+the wrist in line, the roll at 0 and the gripper closed. Compute each angle from the axes: a link
+runs from its joint's axis to the next joint's (the last along the roll axis), and each joint turns
+every link after it, so take them in order. An angle is only meaningful within its range: move it
+by a full turn into the range, or the export refuses the state (`wrist_flex at -357.86 deg,
+outside its range -91 to 91`).
+
+```python
+UP = bd.Vector(0, 0, 1)
+PITCH = ["shoulder_lift", "elbow_flex", "wrist_flex"]
+point = {name: bd.Vector(*AXES[name][0]) for name in AXES}       # AXES: (point, direction) measured
+along = {"shoulder_lift": point["elbow_flex"] - point["shoulder_lift"],
+         "elbow_flex": point["wrist_flex"] - point["elbow_flex"],
+         "wrist_flex": bd.Vector(*AXES["wrist_roll"][1])}
+
+
+def turn(v, target, axis):
+    """Degrees about axis that turn v onto target's direction, -180 to 180."""
+    n = axis.normalized()
+    v, target = v - n * v.dot(n), target - n * target.dot(n)
+    return math.degrees(math.atan2(n.dot(v.cross(target)), v.dot(target)))
+
+
+home = {"shoulder_pan": 0, "wrist_roll": 0, "gripper": RANGES["gripper"][0]}
+for at, joint in enumerate(PITCH):
+    axis = bd.Vector(*AXES[joint][1])
+    angle = turn(along[joint], UP, axis)
+    lo, hi = RANGES[joint]
+    home[joint] = next((a for a in (angle, angle - 360, angle + 360) if lo <= a <= hi), angle)
+    for later in PITCH[at + 1:]:   # this joint carries every link after it
+        along[later] = along[later].rotate(bd.Axis((0, 0, 0), axis), home[joint])
+mechanism_state(arm, "home", **home)
+```
+
+On the six-servo arm this gives a shoulder lift of 75.7, an elbow of 164.0 and a wrist of 2.2 degrees.
+Check the signs on the model before exporting:
 
 ```bash
 cad model snapshot "$ID" tmp/home.png --pose home --camera right
