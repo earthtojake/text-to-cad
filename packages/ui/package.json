@@ -1,6 +1,6 @@
 {
   "name": "@cad/ui",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "private": true,
   "type": "module",
   "files": [
