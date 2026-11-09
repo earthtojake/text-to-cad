@@ -54,7 +54,9 @@ XY = tuple[float, float]
 #: more for each via its limit allows, and some 60 more a node (``SEARCH_BYTES``), its last window the whole region.
 #: A 100 x 100 mm region of a four-layer board at 0.075 mm is some 230 MB of fields and 260 MB of search on four
 #: layers with no via limit.
-#: Past it, the plan is refused before anything is routed: route it in parts, or lower its via limits.
+#: A region over it is narrowed first: its margin cut, down to ``REGION_MARGIN``, to the widest that fits (said in
+#: ``Router.notes``); past it even so, the plan is refused before anything is routed: route it in parts, or lower its
+#: via limits.
 MAX_BYTES = 600_000_000
 #: What a search keeps for each state (``search``): its cost (8 bytes), its parent (8) and whether it is closed (1);
 #: and for each node of its window: its heuristic (8) and the numpy arrays it is worked out from (40), where a via
@@ -279,6 +281,7 @@ class Router:
         biggest = max([rules.clearance(net) for net in self.net_id] + [w.clearance for w in wants] + local + far
                       + [rules.holes, rules.edge, rules.hole_gap + max(w.via_drill for w in wants) / 2, 0.0])
         self.reach = biggest + widest + 0.2  # how far the fields and the exact check look round each obstacle
+        self.notes: list[str] = []  # what the router says of the plan as a whole (a region narrowed)
         self._region()
         self.fields = Fields(self.i0, self.j0, self.nx, self.ny, self.pitch, self.copper, self.reach)
         self.obstacles = Obstacles(len(self.copper), self.reach)
@@ -299,24 +302,44 @@ class Router:
             raise ValueError("route: the plan's nets have no pad on the board: nothing to route; name nets its pads "
                              "are on")
         g = self.pitch
-        x0, y0 = min(p[0] for p in points), min(p[1] for p in points)
-        x1, y1 = max(p[0] for p in points), max(p[1] for p in points)
-        grow = max(REGION_MARGIN, (x1 - x0) / 4, (y1 - y0) / 4) + self.reach
+        px0, py0 = min(p[0] for p in points), min(p[1] for p in points)
+        px1, py1 = max(p[0] for p in points), max(p[1] for p in points)
+        ex0, ey0 = min(p[0] for p in edge) - self.reach - 1.0, min(p[1] for p in edge) - self.reach - 1.0
+        ex1, ey1 = max(p[0] for p in edge) + self.reach + 1.0, max(p[1] for p in edge) + self.reach + 1.0
+        per_node = 28 * len(self.copper) + 16  # the fields' bytes a node, every copper layer
+        per_search = max(((self._vias_left(want, 0)[0] or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES
+                         + len(want.layers) * LAYER_BYTES for want in self.wants)
+
+        def sized(margin: float) -> tuple[float, tuple[float, float, float, float], int, int, int, int, int, int]:
+            grow = margin + self.reach
+            box = (max(px0 - grow, ex0), max(py0 - grow, ey0), min(px1 + grow, ex1), min(py1 + grow, ey1))
+            i0, j0 = math.floor(box[0] / g), math.floor(box[1] / g)
+            nx, ny = math.ceil(box[2] / g) - i0 + 1, math.ceil(box[3] / g) - j0 + 1
+            return grow, box, i0, j0, nx, ny, nx * ny * per_node, (nx + 2) * (ny + 2) * per_search
+
+        wanted = max(REGION_MARGIN, (px1 - px0) / 4, (py1 - py0) / 4)
+        margin = wanted
+        found = sized(margin)
+        if sum(found[6:]) > MAX_BYTES and sum(sized(REGION_MARGIN)[6:]) <= MAX_BYTES:
+            # The widest margin, in half millimetres, whose region fits: a search bound, not a rule, and said.
+            low, high = REGION_MARGIN, wanted
+            while high - low > 0.5:
+                middle = (low + high) / 2
+                low, high = (middle, high) if sum(sized(middle)[6:]) <= MAX_BYTES else (low, middle)
+            margin, found = low, sized(low)
+            self.notes.append(f"the plan's region reaches {margin:.0f} mm past its pads, not the {wanted:.0f} mm its "
+                              f"size would take, to keep within the router's {MAX_BYTES / 1e6:.0f} MB: a connection "
+                              "that needs a wider detour is answered so; route the plan in parts, the nets of one area "
+                              "each, for the wider region")
+        grow, (x0, y0, x1, y1), self.i0, self.j0, self.nx, self.ny, fields, searching = found
         self.grow = grow  # how far past the plan's pads the region reaches (less where the board ends)
-        x0, y0 = max(x0 - grow, min(p[0] for p in edge) - self.reach - 1.0), max(y0 - grow, min(p[1] for p in edge) - self.reach - 1.0)
-        x1, y1 = min(x1 + grow, max(p[0] for p in edge) + self.reach + 1.0), min(y1 + grow, max(p[1] for p in edge) + self.reach + 1.0)
-        self.i0, self.j0 = math.floor(x0 / g), math.floor(y0 / g)
-        self.nx, self.ny = math.ceil(x1 / g) - self.i0 + 1, math.ceil(y1 / g) - self.j0 + 1
-        fields = self.nx * self.ny * (28 * len(self.copper) + 16)
-        searching = (self.nx + 2) * (self.ny + 2) * max(
-            ((self._vias_left(want, 0)[0] or 0) + 1) * len(want.layers) * SEARCH_BYTES + NODE_BYTES
-            + len(want.layers) * LAYER_BYTES for want in self.wants)
         if fields + searching > MAX_BYTES:
             raise ValueError(f"route: the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
                              f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
                              f"{fields / 1e6:.0f} MB of fields and {searching / 1e6:.0f} MB for its largest search (its "
                              f"layers, once more for each via its limit allows), past the router's {MAX_BYTES / 1e6:.0f} "
-                             "MB: route the plan in parts, the nets of one area each, or lower its via limits")
+                             f"MB even {REGION_MARGIN:g} mm round its pads: route the plan in parts, the nets of one area "
+                             "each, or lower its via limits")
 
     def _ids(self, layers: Iterable[str]) -> list[int]:
         return [self.layer_of[layer] for layer in layers if layer in self.layer_of]

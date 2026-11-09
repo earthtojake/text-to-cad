@@ -55,8 +55,8 @@ class Routed:
     """What a ``route`` call did: every connection it was asked for, in the order routed (``connections``: each
     its net, its two ends, routed or not and why not, the copper it added, the plan entry it came from), and the
     totals. ``ok`` when every one is routed. ``warnings``: each custom rule the router does not keep (it holds where
-    a condition only KiCad's DRC evaluates, or is of a kind the router does not route by), said on stderr before
-    routing too: DRC judges those after."""
+    a condition only KiCad's DRC evaluates, or is of a kind the router does not route by), and a plan whose region
+    was narrowed to fit the router's memory, said on stderr before routing too: DRC judges the rules after."""
 
     connections: tuple[Any, ...]
     tracks: int
@@ -502,6 +502,9 @@ def route(board: Any, connections: Sequence[Any] | None = None, *, layers: Any =
     for warning in warnings:  # before routing: what the router does not keep, DRC's to judge after
         print(f"route: warning: {warning}", file=sys.stderr)
     router = Router(copper, rules, _wants(entries, copper, rules))
+    for note in router.notes:
+        print(f"route: warning: {note}", file=sys.stderr)
+    warnings = [*warnings, *router.notes]
     outcomes = router.run()
     _write(board, router.tracks, router.vias, copper.copper)
     for outcome in outcomes:

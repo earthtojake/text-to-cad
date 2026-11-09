@@ -372,6 +372,21 @@ class ViaLimit(unittest.TestCase):
             Router(copper, RULES, [want("A", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)), vias=5000)])
         self.assertIn("MB for its largest search", str(caught.exception))
 
+    def test_a_region_past_the_memory_cap_is_narrowed_said_and_still_routed(self) -> None:
+        """A long board's region, its margin a quarter of the pads' span, would not fit: its margin is cut to the
+        widest that fits, said in the router's notes, and the connection routes in it."""
+        copper = read_copper(board(resistor("R1", 3, 3, 0, "A", "B"), resistor("R2", 3, 195, 0, "A", "C"),
+                                   width=60.0, height=200.0))
+        wide = Router(copper, RULES, [want("A")])
+        self.assertEqual([], wide.notes)
+        with mock.patch.object(plan, "MAX_BYTES", wide.nx * wide.ny * 72 // 2):
+            narrow = Router(copper, RULES, [want("A")])
+            done = narrow.run()
+        self.assertLess(narrow.nx, wide.nx)
+        self.assertEqual(1, len(narrow.notes))
+        self.assertIn("not the 48 mm its size would take", narrow.notes[0])
+        self.assertTrue(done[0].routed, done[0].line())
+
 
 class LayerChanges(unittest.TestCase):
     def test_a_blind_via_changes_layer_only_between_the_layers_it_joins(self) -> None:
