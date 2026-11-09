@@ -776,7 +776,7 @@ class Installer:
         self.say(f"telemetry {said}" + ("; turn it off with `cad telemetry off`" if said.startswith("on") else ""))
         return said
 
-    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Restart to load it:") -> list[str]:
+    def _restart(self, apps: dict[str, Any], changed: set[str], heading: str = "Next, restart to load it:") -> list[str]:
         """What to restart for what this run did to take hold (``changed``: the apps it installed or updated
         the plugin in, a config it edited, and the agents that got the skills, or lost them to an uninstall),
         under ``heading``."""
@@ -889,7 +889,7 @@ class Installer:
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
                 self._keep(receipt)
         if steps:
-            told("Restart to load it: " + "; ".join(providers.RESTART[step.app] for step in steps
+            told("Next, restart to load it: " + "; ".join(providers.RESTART[step.app] for step in steps
                                                      if step.app in providers.RESTART))
         return not failed, [step.data() for step in steps]
 
@@ -1121,7 +1121,7 @@ class Installer:
                     self._keep(receipt)
         if self.args.purge:
             self._purge(state, cache)
-        restart = self._restart(apps, changed, "Restart to unload it:")
+        restart = self._restart(apps, changed, "Next, restart to unload it:")
         return self._result(steps, extra, None, restart, 1 if failed else 0)
 
     def _remove_command(self, proxy: str) -> bool:

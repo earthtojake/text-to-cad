@@ -23,11 +23,8 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor
---check` explains any other failure, changing nothing; `cad doctor` repairs what it reports.
-
-After the install command, `cad setup` or `cad update`, tell the person to restart each app it
-names, in its words. For Claude Desktop that is "quit and reopen Claude Desktop": the app reads
-CAD's server only as it starts. Until then, in its Code tab, give the `cad viewer` link instead.
+--check` explains any other failure, changing nothing; `cad doctor` repairs what it reports. Tell the
+person any next step `cad setup` prints.
 
 ## Geometry Inspection
 

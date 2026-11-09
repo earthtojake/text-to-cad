@@ -466,6 +466,18 @@ class TheCommand(Fixture):
         self.assertEqual(call.args[0]["cad"], record["cad"])
         self.assertIn("0.10     stopped cad-server 0.10.0's server (its own `cad stop`)", out)
 
+    def test_a_run_that_writes_claude_desktop_s_config_ends_telling_the_person_to_reopen_it(self) -> None:
+        # Claude Desktop reads its config only as it starts, its Code tab's card included: the run that changed
+        # it says so last, and a run that changed nothing says nothing of it.
+        self.desktop_with({})
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.rstrip("\n").endswith(f"Next, restart to load it:\n  {providers.RESTART['claude-desktop']}"), out)
+        self.assertIn("quit and reopen it to load CAD's server", providers.RESTART["claude-desktop"])
+        code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("restart to load it", out)
+
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
         code, out, err = self.run_setup("--dry-run", "--json")
@@ -944,8 +956,8 @@ sys.exit(0)
         self.assertEqual(last, ["npx", "--prefer-offline", "-y", "skills@latest", "remove", "-g", "-a", "windsurf", "-s",
                                 *sorted(providers.SKILLS), "-y"])
         self.assertEqual(providers.ours_in(folder), [])
-        self.assertIn("Restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
-        self.assertNotIn("Restart to load it", out)
+        self.assertIn("Next, restart to unload it:\n  Windsurf: start a new session for the skills\n", out)
+        self.assertNotIn("restart to load it", out)
 
     def test_an_agent_whose_skills_the_cli_keeps_in_the_shared_folder_is_read_there(self) -> None:
         """GitHub Copilot's project folder is `.agents/skills`, so `npx skills add -g` copies its skills into

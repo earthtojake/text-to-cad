@@ -159,7 +159,7 @@ INVENTORIED = frozenset({"claude", "claude-desktop", "codex", "cursor", "gemini"
 # What a person does for an app to pick up a changed plugin: never done for them.
 RESTART = {
     "claude": "Claude Code: start a new session (a running one keeps the plugin it started with)",
-    "claude-desktop": "Claude Desktop: quit and reopen Claude Desktop (it reads CAD's server only as it starts)",
+    "claude-desktop": "Claude Desktop: quit and reopen it to load CAD's server (it reads its config only as it starts)",
     "codex": "Codex: restart the app, and any terminal or IDE session (a running one keeps the copy it started with)",
     "cursor": "Cursor: reload the window",
     "grok": "Grok Build: start a new session",
