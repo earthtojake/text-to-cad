@@ -6,7 +6,8 @@ the block has done to it so far, not the file on disk. It is read with the board
 outline placed as KiCad places it), and every shape is the item's own (``shapes``): a pad by its shape, size,
 corner radius, offset and turn; a track as a segment or an arc of its width; a via as a disc on each layer it
 spans. A pad whose padstack draws other shapes on other layers is all of them on every layer (more copper,
-never less); a chamfered corner is the square corner (likewise). A copper pour is not read: KiCad refills it round
+never less), each at its own offset, and a track ends in it inside a disc that lies in its copper on every
+layer; a chamfered corner is the square corner (likewise). A copper pour is not read: KiCad refills it round
 the new copper, so it is neither an obstacle nor a connection to the router. The outline and the copper graphics and texts
 (rare; a footprint's as well as the board's) come from the board index (``read_index``), their arcs as chords
 within ``CHORD_TOLERANCE`` and their curves as chords within ``curve_reach``, which the router grows them by.
@@ -28,7 +29,7 @@ from cad.engine.formats.kicad.board_index import (
 )
 from cad.engine.formats.kicad.geometry import CHORD_TOLERANCE, bezier_points, rotate
 
-from .shapes import Shape
+from .shapes import Shape, segment_point_distance
 
 __all__ = ["BoardCopper", "Graphic", "Keepout", "Pad", "Track", "Via", "read_copper"]
 
@@ -39,9 +40,10 @@ XY = tuple[float, float]
 class Pad:
     """A pad: ``ref`` is ``U1.3`` (its part's reference and its number), ``at`` KiCad's anchor (its hole's centre,
     for a through-hole pad), ``copper`` its copper on each of ``layers`` (a union of shapes), ``inner`` where a
-    track may end and be in its copper on every layer, ``hole`` its drill, ``clearance`` its own (or its
-    footprint's) clearance where it overrides the netclass, ``end`` where a route to it ends: ``at``, or the middle
-    of its shape where its copper is offset past its anchor (an SMD pad's ``offset``)."""
+    track may end and be in its copper on every layer (for a padstack of several shapes, a disc round ``end``
+    that lies in each layer's), ``hole`` its drill, ``clearance`` its own (or its footprint's) clearance where it
+    overrides the netclass, ``end`` where a route to it ends: ``at``, or the middle of its shape where its copper
+    is offset past its anchor (an SMD pad's ``offset``)."""
 
     ref: str
     part: str
@@ -322,24 +324,80 @@ def _read_pads(footprint: list, table, copper: Sequence[str]) -> tuple[list[Pad]
             continue  # paste or mask only: no copper
         fields = _local(node)
         number = str(node[1]) if len(node) > 1 else ""
+        name = f"{ref or 'of a part'}.{number}"
+
+        def placed(local: dict[str, Any], shapes: Sequence[Shape]) -> list[Shape]:
+            return [_placed(shape, local["offset"], angle, center) for shape in shapes]
+
         try:
             made, inner = _shapes_of(fields, node)
-            for spec in sexpr.find_all(sexpr.find(node, "padstack") or [], "layer"):  # other layers' shapes: all, everywhere
-                made += _shapes_of(_local(spec), spec)[0]
+            copper_shapes, inside = placed(fields, made), placed(fields, inner)
+            # The other layers' shapes (KiCad's padstack), each at its own offset (KiCad draws a layer that gives
+            # none on the pad's anchor, not at the main layer's offset): all of them on every layer, more copper,
+            # never less, and where a track may end on each layer.
+            stack: dict[str, list[Shape]] = {}
+            for spec in sexpr.find_all(sexpr.find(node, "padstack") or [], "layer"):
+                local = _local(spec)
+                drawn, within = _shapes_of(local, spec)
+                copper_shapes += placed(local, drawn)
+                if len(spec) > 1 and isinstance(spec[1], str):
+                    stack[spec[1]] = placed(local, within)
         except ValueError as error:
-            raise ValueError(f"route cannot see all the copper of pad {ref or 'of a part'}.{number}: {error} is no shape "
+            raise ValueError(f"route cannot see all the copper of pad {name}: {error} is no shape "
                              "it reads, so it routes nothing on this board") from None
-        offset = fields["offset"]
-        inside = tuple(_placed(shape, offset, angle, center) for shape in inner)
-        middle = _placed(Shape.point(0.0, 0.0, 0.0), offset, angle, center).points[0]
+        middle = _placed(Shape.point(0.0, 0.0, 0.0), fields["offset"], angle, center).points[0]
+        end = center if any(shape.contains(*center) for shape in inside) else middle
+        if stack:
+            inside, end = _common_inside(name, layers, inside, stack, (center, middle))
         pads.append(Pad(
             ref=f"{ref}.{number}" if ref and number else "", part=ref, number=number, net=net_of(node, table),
-            layers=layers, at=center,
-            copper=tuple(_placed(shape, offset, angle, center) for shape in made),
-            inner=inside, hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own,
-            end=center if any(shape.contains(*center) for shape in inside) else middle,
+            layers=layers, at=center, copper=tuple(copper_shapes), inner=tuple(inside),
+            hole=hole if kind == "thru_hole" else None, clearance=_clearance_of(node) or own, end=end,
         ))
     return pads, holes
+
+
+def _depth(shape: Shape, point: XY) -> float:
+    """How deep ``point`` lies in ``shape``: the radius of a disc round it inside the shape, the largest for a
+    point, a segment or a polygon grown by its radius (an arc, which no pad's inside is, answers 0 at most);
+    0 or less outside it."""
+    x, y = point
+    if shape.kind == "polygon":
+        ring = shape.points
+        edge = min(segment_point_distance(a[0], a[1], b[0], b[1], x, y) for a, b in zip(ring, ring[1:] + ring[:1]))
+        return shape.radius + edge if Shape.polygon(ring).contains(x, y) else shape.radius - edge
+    if shape.kind == "point":
+        return shape.radius - math.dist(point, shape.points[0])
+    if shape.kind == "segment":
+        (ax, ay), (bx, by) = shape.points
+        return shape.radius - segment_point_distance(ax, ay, bx, by, x, y)
+    return -shape.point_distance(x, y)
+
+
+def _common_inside(name: str, layers: Sequence[str], main: Sequence[Shape], stack: dict[str, list[Shape]],
+                   candidates: Sequence[XY]) -> tuple[list[Shape], XY]:
+    """Where a track may end in a padstack pad, on whichever of its ``layers`` it lands: a disc round the first of
+    ``candidates`` (its anchor, then its main shape's middle) that lies in its copper on every layer, of the least
+    over the layers of how deep it lies there (on each layer, the deepest it lies in any of that layer's shapes,
+    a lower bound of the disc that fits). ``stack`` is the padstack's own layers: a copper layer's name, or
+    ``Inner`` for the inner layers it does not name; any other layer draws the main shape (``main``)."""
+
+    def shapes_on(layer: str) -> list[Shape]:
+        if layer in stack:
+            return stack[layer]
+        if layer not in ("F.Cu", "B.Cu") and "Inner" in stack:
+            return stack["Inner"]
+        return list(main)
+
+    on = [shapes_on(layer) for layer in layers]
+    for point in candidates:
+        depth = min(max(_depth(shape, point) for shape in shapes) for shapes in on)
+        if depth > 0:
+            return [Shape.point(point[0], point[1], depth)], point
+    raise ValueError(f"route cannot end a track in pad {name}: no point of its anchor or its shape's middle lies in "
+                     f"its copper on every layer its padstack draws ({', '.join(layers)}), so a track could end off "
+                     "the copper on one of them; give its layers' shapes a common point (round its anchor) in KiCad's "
+                     "pad properties, or route to it by hand")
 
 
 # --- the rest of the copper ------------------------------------------------------------------------------------
