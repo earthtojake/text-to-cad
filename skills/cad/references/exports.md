@@ -44,13 +44,14 @@ it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
-"seconds", "written"}]}`), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
+"seconds", "written", "robot"?}]}`, `robot` a robot description's summary), and a failure as one `{"ok": false, "error": ..., "reason": ...}`, with
 the exit status of its class either way: 2 for a request refused before anything ran (`reason`:
 `usage`, `invalid_argument`, `wrong_type`, `not_found`), 1 for an export that failed.
 
 An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
-export take and a mesh's does not. What a file shows is the model's
+mesh tolerance ([print tolerance](#print-tolerance)) and a robot description's zero state
+([robot descriptions](#robot-descriptions)), which a model's, an xbf's and a STEP's export take
+and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
 A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
@@ -214,23 +215,36 @@ A mechanism exports as a robot description for a simulator or ROS, by the destin
 
 ```bash
 cad model export "$ID" sim/arm.xml description/arm.urdf
+cad model export "$ID" sim/arm.xml --zero home
 ```
 
 `.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF. Each is
 one description of the model in SI units at its as-built state, and writes its meshes as binary STL
-in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF). What the model
+in metres beside it (`assets/` for the MJCF, `meshes/` for the URDF). `--zero STATE` (`zero="home"`
+from Python) takes it at a mechanism state instead: every body stands as the state poses it, each
+joint's value there is its zero, and its limits and the other states count from there; the CAD
+stays as drawn. A state the model does not have is refused, naming the ones it has. What the model
 contributes:
 
 - **the mechanism** ([kinematics](kinematics.md)): each link a body, each joint with its axis and
-  its limits around the as-built value, which is every joint's zero in the file; couplings as the
-  follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
+  its limits around the as-built value (or the zero state's), which is every joint's zero in the file;
+  couplings as the follower on its leader; mechanism states as MuJoCo keys (a URDF has no named poses);
 - **materials**: each link's mass, centre of mass and inertia, exact, from its solids at their
   densities; a part with no material weighs nothing;
-- **`collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` and
-  `friction()`** ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)): what each
-  part collides as, the named frames (an MJCF site, a URDF frame link), the parts kept
+- **`collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`,
+  `friction()`, `free()` and `link()`** ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)):
+  what each part collides as, the named frames (an MJCF site, a URDF frame link), the parts kept
   bodies of their own, the pairs that never collide, each joint's drive limits and dynamics, what a
-  part or an assembly weighs and the lumps its CAD leaves out, and each surface's contact friction.
+  part or an assembly weighs and the lumps its CAD leaves out, each surface's contact friction,
+  whether the base floats (an MJCF `<freejoint>`; bolted by default) and each link's name.
+
+After each file's `wrote` line the export says what it holds, on stderr: its links and how its base
+stands, its joints by kind and its mass, then its couplings, loops, frames, collisions by kind,
+exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
+it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
+robot when there is none (MuJoCo Menagerie's: an `include` of the robot, a floor, a light, a skybox),
+which is the person's to edit and never written over. A URDF whose root link has a mass is rooted at
+an empty `base_link` before it, as ROS's KDL wants.
 
 A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
 top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left

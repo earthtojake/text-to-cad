@@ -314,7 +314,7 @@ mechanism and each link's mass from its parts' materials. Declarations from `cad
 the rest, on finished parts, after the last operation, as a material is set:
 
 ```python
-from cad.build123d import body, collision, exclude, frame, friction, limits, mass, point_mass
+from cad.build123d import body, collision, exclude, frame, free, friction, limits, link, mass, point_mass
 
 collision(arm, "capsule")                   # what a simulator collides it as
 collision(cover, "none")                    # shown, never collides
@@ -327,6 +327,8 @@ limits(root, "elbow", effort=27, velocity=6.28,  # the elbow's drive: N*m and ra
 point_mass(housing, 85, bd.Pos(0, 0, 12), name="servo")  # g, at a point in the housing's own frame (mm)
 mass(forearm, 310)                          # g: the forearm assembly as weighed, the servo included
 friction(pads, 1.1)                         # the pads' contact friction (sliding), or three values
+link(forearm, "forearm_link")               # the name of the link the forearm's parts make
+free(root)                                  # the base is not bolted to the world (a mobile robot)
 ```
 
 - **`collision(part, kind)`**: `mesh` (the part's own mesh, the default where nothing is
@@ -336,10 +338,11 @@ friction(pads, 1.1)                         # the pads' contact friction (slidin
   none, as a material is; a part's own declaration wins. `decomposed` is for a concave part that must
   collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
   `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`
-  caps the count (no limit by default), `threshold=` (0.01 to 1, 0.05 by default) is the concavity left,
-  smaller cutting finer. The hulls are cached by the part's mesh and options; a decomposition not in the
-  cache needs CoACD, `cad[coacd]`: name `cad[build123d,coacd]` in the model's header, or the export is
-  refused, naming the part and the extra.
+  caps the count (16 by default, `None` for no limit), `threshold=` (0.01 to 1, 0.05 by default) is the
+  concavity left, smaller cutting finer. The hulls are cached by the part's mesh and options; a
+  decomposition not in the cache needs CoACD, `cad[coacd]`, which the engine fetches into an
+  environment of its own on first need: the export is refused, naming the part and the extra, only
+  where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl Linux) or no engine runs.
 - **`frame(part, name, location)`** names a frame on a part (a tool tip, a camera mount, a sensor):
   `location` is a `Location` (`Pos`, `Rot`) or a `Plane` in the part's OWN frame, the one its
   geometry is in before `part.location` places it (a `bd.Box` is centred on it unless aligned), so the
@@ -371,6 +374,15 @@ friction(pads, 1.1)                         # the pads' contact friction (slidin
   (sliding, torsional, rolling). MJCF writes it on the part's collision geoms; URDF has none. With
   none declared, nothing is written and the simulator's default holds; `bd_materials` carries no
   friction, so never invent one for a material.
+- **`free(part_or_assembly)`**: what it holds is not bolted to the world. On the top assembly, the
+  robot's base floats (MJCF a `<freejoint>`, its seven values in every key; a URDF's root floats
+  already); in a model with no joints, the one top-level part or assembly it names. A free node none of
+  whose parts is in a link hung from the world (a forearm) is refused by name: declare it on what holds
+  the base. Bolted is the default.
+- **`link(part_or_assembly, name)`** names the link its parts make, instead of the label of the
+  jointed assembly that holds the link's joint, else its first part's. An inner declaration names its
+  own link over an outer one; a body takes its `body()` name. One link whose parts declare two names,
+  a name declared on two links, and `world` (the ground's) are refused by name.
 
 They travel with the part as build123d moves it (a copy, `moved` and `located` keep them), and
 cost nothing until a robot description is exported. A part that declares other ones is a

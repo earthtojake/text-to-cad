@@ -23,8 +23,8 @@ written twice:
 
 | Determined by geometry (generated) | Decided in the scene (native `MjSpec`) | The consumer's own |
 | --- | --- | --- |
-| Links and their frames, joint axes, joint limits around the as-built zero | Where each piece stands, and what it is attached to (a frame, a site) | Actuators: kind, gains, control ranges |
-| Masses, centres of mass, inertia tensors (materials' densities, `mass()` totals, `point_mass()` lumps) | A free body (`add_freejoint`) for a part that moves loose | Sensors |
+| Links and their frames, joint axes, joint limits around the as-built zero (or the `--zero` state) | Where each piece stands, and what it is attached to (a frame, a site) | Actuators: kind, gains, control ranges |
+| Masses, centres of mass, inertia tensors (materials' densities, `mass()` totals, `point_mass()` lumps); a robot's free base (`free()`) | A free body (`add_freejoint`) for a part from elsewhere that moves loose | Sensors |
 | Visual meshes (STL, metres) and their colours | The floor, lights, cameras | Solver settings: timestep, cone, `impratio`, `solref` |
 | Collision shapes (`collision()`) and their contact friction (`friction()`), named frames as sites (`frame()`) | Robots from elsewhere (Menagerie), and the prefixes that keep their names apart | `condim`, contact softness (`solref`, `solimp` on the geoms) |
 | Joint armature, damping and frictionloss, the drive's force bound (`limits()`) | | |
@@ -184,13 +184,16 @@ What to read in it:
 - **Sites** are the `frame()`s, in their link's frame, in metres. A `body()` part is a child body
   with no joint.
 - **Contacts.** `<contact>` excludes each pair of bodies across a moving joint whose collisions touch
-  at rest (MuJoCo's `filterparent` misses the first joint's, whose parent is welded to the world),
-  then each `exclude()` pair.
+  at rest (MuJoCo's `filterparent` misses the first joint's, whose parent is welded to the world;
+  a free base is welded to nothing, and nothing across its freejoint is excluded), then each
+  `exclude()` pair.
 - **The coupling** is an equality: `right = 0 + -1 * left`.
 - **Keys** are the mechanism states, each joint's value in radians or metres from the as-built
   zero, a follower where its leader puts it. No `ctrl`: the file has no actuators.
 - **Not in it**: a floor, a light, actuators, sensors, solver settings beyond the integrator. A
-  scene adds them.
+  scene adds them: the `scene.xml` an export writes beside the robot once (Menagerie's: an `include`
+  of the robot, a floor, a light, a skybox), yours to edit and never written over, or a scene in
+  code (below).
 
 The robot file alone validates with `defaults_not_recommended` (a pyramidal cone, the default
 `solref`) and `mass_summary` as infos: solver settings are the scene's, so they are expected here.

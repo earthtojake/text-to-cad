@@ -49,8 +49,14 @@ and joints apart, so a link and a joint may share a name; a name already held in
 | Joint dynamics (`limits(armature=, damping=, friction=)`) | `armature`, `damping`, `frictionloss` on the joint | `<dynamics damping friction>`; no armature (the export's log says so) |
 | Declared masses and point masses (`mass()`, `point_mass()`) | in each body's `<inertial>` | in each link's `<inertial>` |
 | Contact friction (`friction()`) | `friction` on the part's collision geoms (one value, or three) | not written: URDF has none (the export's log says so) |
+| A free base (`free()`) | a `<freejoint>` on the base body, its position and quaternion in every key | the root, which floats already; no world link or joint |
+| A bolted base (the default) | the base body with no joint, welded to the world | the root too: a URDF bolts nothing (a consumer adds its own `world` link) |
+| A root link with mass | as any body | an empty `base_link` (`base_link_root` where the root is named `base_link`) on a fixed joint before it: KDL takes no inertia on the root |
+| A zero state (`--zero home`) | every body at the state, ranges and keys around it | every link at the state, limits around it |
+| A scene | `scene.xml` beside it, written once when there is none, never written over | none |
 
-The URDF's root is the first part hung from the ground (a ROS `base_link`). Never edit a generated file, and
+The URDF's root is the link hung from the ground, under an empty `base_link` where it has a mass. Never edit a
+generated file (the `scene.xml` an MJCF export writes once is yours), and
 never derive one format from another: export each from the model. An SRDF is always hand-written,
 over the generated URDF's names ([srdf-authoring.md](srdf-authoring.md)).
 

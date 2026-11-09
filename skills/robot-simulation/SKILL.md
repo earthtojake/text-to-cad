@@ -27,7 +27,7 @@ There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **A robot description from a CAD model** (MJCF or URDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` and `friction()`, then `cad model export <id> robot.xml` (or `.urdf`). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-two-writers) |
+| **A robot description from a CAD model** (MJCF or URDF) | The model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`, `friction()`, `free()` and `link()`, then `cad model export <id> robot.xml` (or `.urdf`, `--zero home` to count the joints from a state). | [Generate from CAD](#generate-from-cad), [interoperability](references/interoperability.md#one-description-two-writers) |
 | **Joint limits from the parts** | `cad model ranges <id>`: each joint swept alone until its parts meet, then the stops written into the joint's range in the model. | [Generate from CAD](#generate-from-cad) |
 | **A MuJoCo environment: CAD parts, a Menagerie robot, a scene** | `spec()` for each CAD piece, composed with MuJoCo's own `MjSpec` in a script, then `cad mjcf validate --compile required`. | [MuJoCo environment](references/mujoco-environment.md) |
 | **Tune a MuJoCo model's physics** | The model-health findings of `cad mjcf validate --compile required`, then one parameter at a time. | [Tuning](references/mujoco-environment.md#tuning), [checks](references/mjcf-checks.md#model-health) |
@@ -60,8 +60,8 @@ kernel. `cad mjcf validate --compile required` and `cad run mujoco-studio` use M
 and Studio's web viewer, `cad[mujoco]` (about 20 MB), which the `cad` command fetches into an
 environment of its own the first time and reuses after; a script run by `cad run` that imports
 `mujoco` gets the same. A part declared `collision(part, "decomposed")` uses CoACD, `cad[coacd]`
-(one wheel, about 3 MB), which the model's own environment holds once its header names it. `cad
-<verb> --help` gives the complete current interface.
+(one wheel, about 3 MB), which the engine likewise fetches into an environment of its own the first
+time a part is decomposed, and reuses after. `cad <verb> --help` gives the complete current interface.
 
 ## Generate from CAD
 
@@ -73,7 +73,10 @@ mechanism):
   `CylindricalJoint` and `BallJoint` connected with `connect_to`. The as-built pose is every joint's
   zero in the description, and each joint's limits are its range around that zero: build the
   mechanism at the pose a simulator should start from (fingers open, arm straight), so its joint
-  values are the CAD's. Where the hardware's stops are the parts meeting, find them from the parts:
+  values are the CAD's. Where the CAD stands elsewhere (a vendor STEP at its own pose, a calibration
+  zero the software sets), name that pose a mechanism state and export with `--zero <state>`: every
+  body stands as the state poses it, each joint counts from there (its limits and the other states
+  shifted with it), and the CAD stays as drawn. Where the hardware's stops are the parts meeting, find them from the parts:
   `cad model ranges <id>` turns or slides each joint alone until its child link meets its parent and
   prints each stop, in degrees or millimetres around the as-built pose; write them into the joint's
   `angular_range` or `linear_range`, rounded towards zero, and run the model again (the `cad` skill's
@@ -107,10 +110,11 @@ mechanism):
   `decomposed`, or `none`. On an assembly it applies to every part below it that declares none.
   `decomposed` is for a concave part whose one hull would fill its pocket or the gap between a
   gripper's jaws: CoACD cuts its mesh into convex hulls, each a collision geom of its own (MJCF and
-  URDF alike, `<part>_hull<i>`), while the visual stays whole. `max_hulls=` caps the count (no limit
-  by default) and `threshold=` (0.01 to 1, CoACD's 0.05 by default) is the concavity it leaves:
-  smaller cuts finer. It needs `cad[coacd]` where the robot is described: name
-  `cad[build123d,coacd]` in the model's header, or the export refuses, naming the part and the extra.
+  URDF alike, `<part>_hull<i>`), while the visual stays whole. `max_hulls=` caps the count (16 by
+  default, `None` for no limit) and `threshold=` (0.01 to 1, CoACD's 0.05 by default) is the concavity
+  it leaves: smaller cuts finer. The engine fetches `cad[coacd]` on first need; the export is refused,
+  naming the part and the extra, only where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl
+  Linux) or no engine runs to fetch it.
   The hulls are cached by the part's mesh and options, so only a changed part decomposes again.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
@@ -130,9 +134,18 @@ mechanism):
   rolling defaults) or the three. MJCF writes it on the part's collision geoms; URDF has none (said in
   the export's log). Where none is declared, nothing is written and the simulator's default holds:
   never invent a coefficient for a material.
+- **`free(assembly)`** says the robot is not bolted to the world (a humanoid, a quadruped, a mobile
+  base, a part dropped on a table): on the top assembly, its base floats, an MJCF `<freejoint>` (its
+  seven values in every key, the base where it stands) and a URDF's root, which floats already. Bolted
+  is the default, an arm on a bench. On a part or a sub-assembly of a model with no joints, that
+  node's body alone floats.
+- **`link(part_or_assembly, name)`** names the link its parts make (`base_link`, `upper_arm_link`)
+  where the first part's label is not the name a consumer wants. A link otherwise takes its jointed
+  assembly's label (the `Compound` that holds its joint), else its first part's; a body is named by
+  `body()`. Two links of one name, or one link's parts declaring two, are refused by name.
 
 ```python
-from cad.build123d import body, collision, exclude, frame, friction, limits, mass, point_mass
+from cad.build123d import body, collision, exclude, frame, free, friction, limits, link, mass, point_mass
 
 collision(palm, "box")
 frame(palm, "tcp", bd.Pos(0, 0, 65))   # mm, in the palm's own frame
@@ -142,6 +155,8 @@ limits(root, "left", effort=2, velocity=1.5, armature=0.002, damping=0.1)   # N*
 point_mass(palm, 120, bd.Pos(0, 0, 20), name="motor")   # g, mm in the palm's own frame
 mass(palm, 410)                        # g: the palm as weighed, its motor included
 friction(pads, 1.1)                    # the pads' rubber, sliding
+link(palm, "base_link")                # the palm's link, named as ROS names a base
+free(root)                             # on a mobile base: not bolted to the world
 ```
 
 Then run the model, find its stops where they are the parts' (`cad model ranges`), and write the
@@ -153,16 +168,28 @@ in metres beside it:
 cad run src/gripper.py
 cad model ranges "$ID"
 cad model export "$ID" sim/gripper.xml
-cad model export "$ID" description/gripper.urdf
+cad model export "$ID" description/gripper.urdf --zero home
 cad step export vendor/part.step sim/part.xml
 ```
+
+Each robot export says what it wrote after the file's line: its links and how its base stands, its
+joints by kind, its total mass, then its couplings, loops, frames, collisions by kind, exclusions,
+keys and zero; every warning (a link with no mass, a joint left out) is a line of the export's log
+before it. `--json` gives the same as the file row's `robot`. Read it before anything else: a mass of
+0, a link you did not expect or a missing joint is a model to fix.
+
+An MJCF export to `sim/gripper.xml` writes `sim/scene.xml` beside it when there is none: MuJoCo
+Menagerie's scene, which includes the robot's file and adds a floor, a light and a skybox, so `cad run
+mujoco-studio --model sim/scene.xml` opens it standing on something. The scene is yours to edit
+(actuators, cameras, other bodies); an export never writes over it and says it kept it. The robot's
+file is the one an export writes again.
 
 A generated MJCF is laid out as MuJoCo Menagerie lays out a robot (radians, `meshdir="assets"`,
 `autolimits`, `implicitfast`, a `visual` class in group 2 that collides with nothing and a
 `collision` class in group 3, explicit `<inertial>`s, a site per frame, a key per state); what each
 format drops is in [Interoperability](references/interoperability.md#one-description-two-writers).
-It holds no floor, light, actuator, sensor or solver setting: those belong to the scene and the
-consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world.
+It holds no floor, light, actuator, sensor or solver setting: those belong to the scene (the
+`scene.xml` written beside it, or your own) and the consumer. A STEP has no mechanism: each of its top-level parts is a body hung fixed from the world.
 In code, `from cad.mujoco import spec` makes a model call's handle, a build123d shape, a `.step`,
 an `.xbf` or an MJCF path (a Menagerie robot) a `mujoco.MjSpec`, its files named by absolute path,, MuJoCo's own editable model, and everything after is
 native MuJoCo: `scene.attach(spec(gripper(), assets="sim/assets"), prefix="gripper/", site=...)`,
@@ -327,7 +354,7 @@ so it is for this computer or a trusted network.
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()` or `friction()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
+| A CAD model's mechanism, materials, `collision()`, `frame()`, `body()`, `exclude()`, `limits()`, `mass()`, `point_mass()`, `friction()`, `free()` or `link()` | Run it, export again, and validate the file (and the scene built from it); `cad model snapshot` of each mechanism state first, where the joint signs show. |
 | A scene script | Run it, then `cad mjcf validate` on the scene it wrote with `--compile required`: every model-health warning cleared or explained; `--pose home` in a snapshot. |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |
