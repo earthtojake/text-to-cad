@@ -76,8 +76,8 @@ The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, 
   machine lacks would make it, a warning) and the hint follows it. A square corner a square end mill
   forms from some side -- its end on one face, its flank on the other, seen from outside (a plate's
   notch, however it is turned) -- is made, that side one more setup (`setups`); so is a V a chamfer
-  mill cuts along its bisector, and an obtuse root between two flats each faced from its own side (two
-  setups). A tool makes an edge only where it reaches its whole length: a window or a low lip that
+  mill cuts along its bisector. An obtuse root between two flats each faced from its own side is made
+  too, and adds no setup of its own: it is made in the setups that make its faces. A tool makes an edge only where it reaches its whole length: a window or a low lip that
   opens part of a corner leaves the rest unmade, and the finding says how much and where. A gear's
   curved tooth root or a closed pocket's corner no tool forms from any side: an error. The fix is a radius or a relief
   where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan. A

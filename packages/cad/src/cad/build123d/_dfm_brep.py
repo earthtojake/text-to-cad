@@ -825,6 +825,46 @@ class Rays:
         return [(crossings[i], crossings[i + 1]) for i in range(0, len(crossings) - 1, 2)]
 
 
+#: The least angle along a curved edge is refined to this many degrees' change (golden-section search).
+LEAST_ANGLE_TOL = 1e-6
+
+
+def least_edge_angle(part: Part, edge: Edge, fractions: np.ndarray, angles: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``fractions`` and ``angles`` with the edge's least angle added where it lies: a golden-section search of
+    ``edge_angles`` between the samples either side of the least sampled one (an end's least is its own)."""
+    finite = np.isfinite(angles)
+    k = int(np.nanargmin(angles))
+    if k in (0, len(fractions) - 1) or not (finite[k - 1] and finite[k + 1]):
+        return fractions, angles
+
+    def at(fraction: float) -> float:
+        value = float(edge_angles(part, edge, np.array([fraction]))[1][0])
+        return value if math.isfinite(value) else math.inf
+
+    ratio = (math.sqrt(5.0) - 1.0) / 2.0
+    lo, hi = float(fractions[k - 1]), float(fractions[k + 1])
+    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
+    fa, fb = at(a), at(b)
+    for _ in range(60):
+        if abs(fa - fb) < LEAST_ANGLE_TOL and hi - lo < 1e-9:
+            break
+        if fa <= fb:
+            hi, b, fb = b, a, fa
+            a = hi - ratio * (hi - lo)
+            fa = at(a)
+        else:
+            lo, a, fa = a, b, fb
+            b = lo + ratio * (hi - lo)
+            fb = at(b)
+        if hi - lo < 1e-9:
+            break
+    best, value = (a, fa) if fa <= fb else (b, fb)
+    if not value < float(angles[k]):
+        return fractions, angles
+    order = np.searchsorted(fractions, best)
+    return np.insert(fractions, order, best), np.insert(angles, order, value)
+
+
 def inside(solid: Any, points: Iterable[Iterable[float]], tolerance: float = 1e-6) -> list[bool]:
     """Whether each point lies inside ``solid`` (on its boundary is not inside)."""
     from OCP.BRepClass3d import BRepClass3d_SolidClassifier

@@ -325,7 +325,8 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   bore it meets by a convex edge seen along it (a groove inside a bore), else a T-slot cutter, where beside
   every station the cutter's shank (0.5 mm about its axis) leaves the part along the direction from some
   place across the void and the disc that reaches the station from there touches no material short of the
-  edge's own ends (the shank travels along the edge: an 8 mm port in a wall is no way to a 25 mm corner),
+  edge's own ends, slid back along the edge where it passes them (the shank travels along the edge: an 8 mm
+  port in a wall is no way to a 25 mm corner; an edge shorter than the disc is no run for one),
   through an opening at least as wide as the recess is tall (the disc's thickness); a 45/60 degree dovetail
   cutter likewise (its face a plane, no width asked: a dovetail's neck is narrower than it is deep); a
   60/90/120 degree chamfer mill along a V's bisector where the bisector keeps to one axis along the edge
@@ -336,18 +337,24 @@ drawn; `machine.frames` lists each part's (`axes`: the machine's X, Y, Z in the 
   (`BALL_VOID_DEG`, the owner's to confirm: the ball's round departs from the drawn crease by
   R (1 / sin(void / 2) - 1), 0.035 R at 150) along a direction both faces look along whose ray from the crease
   escapes (each face's normal more than half a degree's sine along it); a drill or tap for a hole's own edges.
-  Last, along directions a setup presents, each one setup: a chamfer mill along the bisector of a V between
-  two planes, whatever the turn (the V's bisector a setup even along a machine axis), and an obtuse edge
-  (void over 90) between two planes each seen from outside along its own normal, each side faced from its
-  own direction (the tool's corner forms the edge, the other face leaning away: two setups, a 140 degree
-  valley's or a 100 degree profile root's). A gear's curved roots and a closed pocket's corners stay
-  unmade. `by_tool` counts every concave edge by the tool. A recess a special cutter makes takes in the
+  Last, along directions a setup presents: a chamfer mill along the bisector of a V between two planes,
+  whatever the turn (a 60 or 90 degree V's bisector a setup of its own, even along a machine axis), and an
+  obtuse edge (void over 90) between two planes each seen from outside along its own normal, each side faced
+  from its own direction (the tool's corner forms the edge, the other face leaning away: a 140 degree
+  valley's, a 100 or 120 degree profile root's). An obtuse edge (void over 90.5, `OBTUSE_DEG`) adds no setup of
+  its own, however it is made: it is made in the setups that make its two faces, which the cover counts (a
+  root reads one count at any turn; a hex socket's pyramid floor adds none). On five axes (simultaneous) an end
+  mill's or a chamfer mill's direction leans along the edge as it goes, up to 40 deg toward its way, by at
+  most 20 deg station to station (`LEANS_DEG`, own figures): a continuous path, not one direction for all 9
+  stations (on 3 and 3+2 axes, one direction an edge). A gear's curved roots and a closed pocket's corners
+  stay unmade. `by_tool` counts every concave edge by the tool. A recess a special cutter makes takes in the
   faces across its edges no tool makes (its square ends, which the disc leaves round): what no straight line
   reaches there is the recess's. An edge sharing a vertex with a reported corner and a face with it (or with a round
   tangent to its faces) is folded into that corner.
 - **knife_edges** — convex edges whose material angle, read along the edge (a curved one at 17 points: an
   edge where a cone meets a sphere runs from 63 to 42 degrees), falls under 45 degrees (`KNIFE_DEG`,
-  printing's): the material thins to nothing there. `angle_deg` (the least), `length_mm` (the stretch under
+  printing's): the material thins to nothing there. `angle_deg` (the least, found between the samples about it
+  by golden-section search, as printing's: a rod cut 30 deg off its axis reads 30.0), `length_mm` (the stretch under
   the limit), `edge_length_mm`, `thickness_mm` 0, `edge`, `faces`. The two faces of a knife edge are no wall to
   each other.
 - **walls** — under each sampled point of each face, an exact ray into the material to the first face across
