@@ -104,7 +104,7 @@ mechanism):
   each link's mass, centre of mass and inertia tensor are the kernel's, exact. A part with no material
   weighs nothing, and a link of such parts has no inertial ([Inertials](references/inertials.md)).
 - **`mass(part_or_assembly, grams)`** is what the hardware weighs (a scale's reading, a datasheet's):
-  the solids below it keep their densities' ratios (one density where none has a material) and are
+  the solids below it keep their densities' ratios (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so) and are
   scaled alike to make up `grams`, so the centre of mass and the inertia's shape stay the geometry's.
   An inner `mass()` fixes its own subtree; an outer one scales only the solids no inner one holds.
 - **`point_mass(part, grams, at, name=, inertia=)`** is a lump the CAD leaves out (a motor inside a

@@ -69,9 +69,9 @@ Then:
   or square the axis where the hardware is square, and say which you did.
 - **Pick each direction's sign** so that a positive angle is the motion you mean (lift raises, the
   gripper opens). The writers copy the sign and cannot know which way is meant.
-- **Build each joint at the hinge's own frame.** Put the `RevoluteJoint` on the parent link's part
-  that carries the bearing, `bd.RevoluteJoint(name, holder, axis=bd.Axis(point, direction),
-  angular_range=...)`. Put `bd.RigidJoint(name, child_link, hinge.location)` on the child link, then
+- **Build each joint at the hinge's own frame.** Put the `RevoluteJoint` on the parent link (its
+  Compound, or the part that carries the bearing), `bd.RevoluteJoint(name, parent_link,
+  axis=bd.Axis(point, direction), angular_range=...)`. Put `bd.RigidJoint(name, child_link, hinge.location)` on the child link, then
   call `hinge.connect_to(child_link.joints[name], angle=0)`. The child stays where it was drawn.
 
 ## 4. Mass

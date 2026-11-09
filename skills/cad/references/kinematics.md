@@ -158,7 +158,8 @@ if __name__ == "__main__":
 ## Mechanism states
 
 `mechanism_state(assembly, name, **values)` names a pose by joint label, the joints it
-leaves out as built, and returns the assembly. A cylindrical joint takes
+leaves out as built (a state that names none is the as-built pose under a name: a key, a
+`--zero`), and returns the assembly. A cylindrical joint takes
 `(angle, distance)` and a ball joint its three angles; a coupling takes its value
 (`curl=0.5`). Mechanism states are what the viewer's Position lists as presets, and what
 a snapshot's `--pose` names.
@@ -364,7 +365,7 @@ free(root)                                  # the base is not bolted to the worl
   friction>` (URDF has no armature; the export's log says it is left out). Each is a fact of the
   hardware; an actuator's gains and control range are the simulation's.
 - **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
-  materials' densities give (one density for all where none has a material) and are scaled alike to
+  materials' densities give (one density for all where none of them has a material; a part with no material among parts that have one carries none of the total, and the export says so) and are scaled alike to
   make up `grams`, so the centre of mass and the shape of the inertia stay the geometry's. An inner
   `mass()` fixes its own subtree; an outer one scales only the solids no inner one holds, to make up
   its total less what the inner ones and its point masses weigh. A total its point masses and inner

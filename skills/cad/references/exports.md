@@ -243,8 +243,10 @@ stands, its joints by kind and its mass, then its couplings, loops, frames, coll
 exclusions, keys and zero; each warning (a link with no mass) is a line of the export's log before
 it. `--json` puts the same in the file's row as `robot`. An MJCF export writes `scene.xml` beside the
 robot when there is none (MuJoCo Menagerie's: an `include` of the robot, a floor, a light, a skybox),
-which is the person's to edit and never written over. A URDF whose root link has a mass is rooted at
-an empty `base_link` before it, as ROS's KDL wants.
+which is the person's to edit and never written over. A URDF whose root link has a mass, or whose
+root link's frame is not the world's (its first part turned or moved in its placement), is rooted at
+an empty `base_link` before it, at the root's placement, as ROS's KDL wants and so it stands where
+the MJCF stands it.
 
 A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
 top-level part is a body fixed to the world. A closed loop's last joint is an MJCF equality and left

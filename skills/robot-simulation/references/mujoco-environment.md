@@ -229,9 +229,10 @@ written:
 </mujoco>
 ```
 
-- **Defaults go above the `<include>`.** The robot's classes copy the scene's top-level defaults at
-  the point where the robot's file is included. A `<geom solref>` written after the `<include>` reaches
-  only the scene's own geoms (the floor), and never the robot's.
+- **Defaults go above the `<include>`.** A class the included file defines copies the top-level
+  defaults that stand at the `<include>`. A `<geom solref>` written after it reaches the elements in
+  no class (the floor), but none in the robot's classes, and every element of a generated robot is
+  in its class. `cad mjcf validate` warns `defaults_after_include` where it is below.
 - `inheritrange="1"` takes each control range from its joint's range. A continuous joint has no
   range, and MuJoCo refuses `inheritrange` on one, so give it a `ctrlrange` of its own.
 - The force is already bounded: `limits(effort=)` in the model writes each joint's
@@ -378,7 +379,8 @@ Read every line:
   nothing intersects at rest, visuals do not collide, every body has its inertial, and the sizes are
   metres. Any of them present is a modelling error to fix before anything else
   ([mjcf-checks.md](mjcf-checks.md#model-health) says what to do for each).
-- `defaults_not_recommended` is absent: the scene set the cone, `impratio` and `solref`.
+- `defaults_not_recommended` and `defaults_after_include` are absent: the scene set the cone,
+  `impratio` and `solref`, above anything it includes.
 - `mass_summary`: 16 kg moving in 15 degrees of freedom and 8 actuators, about a metre tall. A
   number off by 1000 is a unit; a count off by one is a joint or an actuator missing.
 
