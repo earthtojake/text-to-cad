@@ -845,9 +845,11 @@ class _Field:
         self.cavities, self.labels = mo.cavities(self.grid, self.ball)
 
 
-def _trapped_facts(field: _Field, walls: dict) -> dict:
+def _trapped_facts(field: _Field, walls: dict, open_mesh: bool = False) -> dict:
     """The cavities of the voxel field: volume, sealed or not, openings (estimated from the largest ball
-    through each), the thinnest wall round each (the wall samples whose outside lies in it)."""
+    through each), the thinnest wall round each (the wall samples whose outside lies in it). On a mesh with an
+    open body (``open_mesh``) a cavity's openings may be the mesh's own holes, no escape hole: its openings
+    are not measured (None), never read as escape holes or as none."""
     grid, labels = field.grid, field.labels
     near = {}
     if walls.get("thickness") is not None:
@@ -858,13 +860,20 @@ def _trapped_facts(field: _Field, walls: dict) -> dict:
     items = []
     for k, cavity in enumerate(field.cavities):
         diameters = sorted(float(opening["diameter_mm"]) for opening in cavity.openings)
-        items.append({"xyz": _p(cavity.centroid), "volume_mm3": _r(cavity.volume_mm3, 2),
-                      "sealed": bool(cavity.sealed and not diameters), "exact": False, "escape_holes": len(diameters),
-                      "escape_hole_diameters_mm": [_r(d, 3) for d in diameters],
-                      "min_escape_hole_mm": _r(diameters[0], mo.JUDGED) if diameters else None,
-                      "min_wall_mm": _r(near.get(k), 4)})
-    items.sort(key=lambda item: (item["escape_holes"], -(item["volume_mm3"] or 0)))
-    return {"items": items[:CAP], "count": len(items), "sealed_count": sum(1 for item in items if item["sealed"]),
+        item = {"xyz": _p(cavity.centroid), "volume_mm3": _r(cavity.volume_mm3, 2),
+                "sealed": bool(cavity.sealed and not diameters), "exact": False, "escape_holes": len(diameters),
+                "escape_hole_diameters_mm": [_r(d, 3) for d in diameters],
+                "min_escape_hole_mm": _r(diameters[0], mo.JUDGED) if diameters else None,
+                "min_wall_mm": _r(near.get(k), 4)}
+        if open_mesh:
+            item.update(sealed=None, escape_holes=None, escape_hole_diameters_mm=None, min_escape_hole_mm=None)
+        items.append(item)
+    items.sort(key=lambda item: (item["escape_holes"] if item["escape_holes"] is not None else -1,
+                                 -(item["volume_mm3"] or 0)))
+    note = {"openings_not_measured": "the mesh has an open body: a cavity's openings may be its holes, not escape "
+                                     "holes, and are not measured"} if open_mesh else {}
+    return {**note, "items": items[:CAP], "count": len(items),
+            "sealed_count": sum(1 for item in items if item["sealed"]),
             "trapped_volume_mm3": _r(sum(item["volume_mm3"] or 0 for item in items), 2),
             "pitch_mm": _r(field.pitch, 4), "ball_radius_mm": _r(field.ball, 3),
             "method": "air a ball cannot reach from outside, from a voxel field; openings and their widths estimated "
@@ -1045,7 +1054,8 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         failed = {"error": f"{type(exc).__name__}: {exc}".splitlines()[0][:300]}
         report["trapped_volumes"], report["sections"] = failed, dict(failed)
     else:
-        report["trapped_volumes"] = _safe(_trapped_facts, field, kept)
+        open_mesh = isinstance(report.get("mesh"), dict) and report["mesh"].get("watertight") is False
+        report["trapped_volumes"] = _safe(_trapped_facts, field, kept, open_mesh)
         report["sections"] = _safe(_section_facts, field)
     _mark_partial(report)
     return report

@@ -469,6 +469,27 @@ class OpenMeshTest(unittest.TestCase):
         self.assertEqual({o["status"] for o in walls}, {"failed"})
         self.assertAlmostEqual(min(f["value"] for o in walls for f in o["failures"]), 0.4, delta=0.01)
 
+    def test_an_open_mesh_s_holes_are_no_escape_holes(self) -> None:
+        # a sealed 2 mm box missing one triangle of its inside: on SLS the cavity's "opening" is the mesh's hole,
+        # neither an escape hole nor none -- not measured
+        import numpy as np
+
+        box = Box(24, 24, 16) - Box(20, 20, 12)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            mesh = trimesh.load(_stl(box, tmp, "box"))
+            inner = np.flatnonzero(np.abs(mesh.triangles_center).max(axis=1) < 10.01)
+            mesh.update_faces(np.arange(len(mesh.faces)) != int(inner[0]))
+            path = tmp / "open.stl"
+            mesh.export(path)
+            result = cad.stl.dfm(path, process="printing", technology="sls")
+        codes = {finding.code for finding in result.findings}
+        self.assertIn("not_watertight", codes)
+        self.assertFalse(codes & {"printing.escape_holes", "printing.escape_hole_diameter"})
+        trapped = result.measurements["trapped_volumes"]
+        self.assertIn("openings_not_measured", trapped)
+        self.assertTrue(all(item["escape_holes"] is None for item in trapped["items"]))
+
 
 class CheckTest(unittest.TestCase):
     def test_the_check_emits_every_fact_family(self) -> None:
