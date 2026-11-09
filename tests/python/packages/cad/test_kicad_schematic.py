@@ -98,14 +98,29 @@ def _wire(start: tuple[float, float], end: tuple[float, float], uuid: str) -> st
     return f'(wire (pts (xy {x0:g} {y0:g}) (xy {x1:g} {y1:g})) (stroke (width 0) (type default)) (uuid "{uuid}"))'
 
 
-ACROSS, TEE = "5c4e0000-0000-4000-8000-0000000000e1", "5c4e0000-0000-4000-8000-0000000000e2"
+ACROSS, TEE, RAIL = ("5c4e0000-0000-4000-8000-0000000000e1", "5c4e0000-0000-4000-8000-0000000000e2",
+                     "5c4e0000-0000-4000-8000-0000000000e4")
+#: C9, a capacitor on the root sheet, its pin 1 at (120, 27) and nothing on it; a rail across that pin, as KiCad
+#: saves a straight run through a pin drawn as wires ending on it (one wire, no junction).
+RAILED = (f'(symbol (lib_id "Device:C") (at {at(120, 30)[0]:g} {at(120, 30)[1]:g} 0) (unit 1) (exclude_from_sim no) '
+          '(in_bom yes) (on_board yes) (dnp no) (uuid "5c4e0000-0000-4000-8000-0000000000e5") '
+          '(property "Reference" "C9" (at 0 0 0) (effects (font (size 1.27 1.27)))) '
+          '(property "Value" "100n" (at 0 0 0) (effects (font (size 1.27 1.27)))) '
+          '(pin "1" (uuid "5c4e0000-0000-4000-8000-0000000000e6")) (pin "2" (uuid "5c4e0000-0000-4000-8000-0000000000e7")) '
+          f'(instances (project "divider" (path "/{ROOT_UUID}" (reference "C9") (unit 1))))) '
+          + _wire((114, 27), (126, 27), RAIL))
 #: What a test adds to the divider's root sheet: a wire drawn across R1's pin 1 (its end at (80, 44)) on its way
-#: elsewhere; a wire from the middle of the MID wire, a T with no junction; the same T with KiCad's junction.
+#: elsewhere; a wire from the middle of the MID wire, a T with no junction; the same T with KiCad's junction; the
+#: rail across C9's pin 1 alone, and with a wire ending on that pin besides, or a label on it.
 ON_SPANS = {
     "across": _wire((74, 44), (86, 44), ACROSS),
     "tee": _wire((90, 51), (90, 56), TEE),
     "tee with a junction": _wire((90, 51), (90, 56), TEE) + f' (junction (at {at(90, 51)[0]:g} {at(90, 51)[1]:g}) '
                            '(diameter 0) (color 0 0 0 0) (uuid "5c4e0000-0000-4000-8000-0000000000e3"))',
+    "rail": RAILED,
+    "rail and a wire's end": RAILED + " " + _wire((120, 27), (120, 22), "5c4e0000-0000-4000-8000-0000000000e8"),
+    "rail and a label": RAILED + f' (label "X" (at {at(120, 27)[0]:g} {at(120, 27)[1]:g} 0) '
+                        '(effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "5c4e0000-0000-4000-8000-0000000000e9"))',
 }
 
 
@@ -138,6 +153,13 @@ class TheSpans(SchematicFixture):
         self.assertEqual([("/", at(80, 44), "R1.1", None, ACROSS, "+5V")], self.joins(ON_SPANS["across"]))
         self.assertEqual([("/", at(90, 51), None, TEE, UUIDS["mid wire"], "/MID")], self.joins(ON_SPANS["tee"]))
         self.assertEqual([], self.joins(ON_SPANS["tee with a junction"]))
+
+    def test_a_pin_whose_one_connection_is_a_span_is_kicads_own_straight_run_and_not_named(self) -> None:
+        # KiCad saves a run through C9's pin 1 as one wire across it; the pin joined some other way besides is named.
+        self.assertEqual([], self.joins(ON_SPANS["rail"]))
+        for case, net in (("rail and a wire's end", "unconnected-(C9-Pad1)"), ("rail and a label", "/X")):
+            with self.subTest(case):
+                self.assertEqual([("/", at(120, 27), "C9.1", None, RAIL, net)], self.joins(ON_SPANS[case]))
 
 
 class TheReferences(SchematicFixture):
@@ -448,7 +470,8 @@ class TheType(SchematicFixture):
         x, y = at(80, 44)
         self.assertEqual(("warning", "pin_on_wire_span", f"/ ({x:g}, {y:g}) mm"),
                          (found.severity, found.code, found.location))
-        self.assertIn("Pin R1.1 lies on a wire's span, not at its end, and KiCad joins it to that wire's net (+5V)",
+        self.assertIn("Pin R1.1 lies on a wire's span with no junction, and KiCad joins it to that wire's net (+5V) as well "
+                      "as to what else meets it there",
                       found.message)
         self.assertEqual([("pin", "#R1.1"), ("wire", f"#wire:{ACROSS}")], [(item["kind"], item["ref"]) for item in found.items])
         self.assertTrue(checked.ok and checked.summary.endswith("ERC clean (1 warning(s))"), checked.summary)

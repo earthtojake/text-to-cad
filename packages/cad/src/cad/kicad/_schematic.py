@@ -7,7 +7,8 @@ alone); drawing one is ``cad kicad_sch snapshot``'s. ``kicad-cli`` is kicode's, 
 ``CAD_KICAD_CLI`` names (``_program``), found and run as the board's DRC and exports are: every run gets
 homes of its own, opens no window, and leaves the project's folder as it found it. The schematic is
 read, never rewritten. Beside KiCad's findings the check lists the reader's own (``span_findings``): each
-pin, and each wire's end, on a wire's span with no junction, which KiCad joins and its ERC passes.
+pin joined some other way besides that lies on a wire's span, and each wire's end on another wire's span,
+with no junction, which KiCad joins and its ERC passes.
 """
 
 from __future__ import annotations
@@ -141,9 +142,10 @@ def issues(findings) -> tuple[CheckFinding, ...]:
 
 def span_findings(schematic: Path) -> tuple[CheckFinding, ...]:
     """The pins and wire ends that join a wire on its span (``schematic.span_joins``), read from the saved
-    hierarchy by the schematic's reader, as warnings: KiCad joins them and its ERC says nothing. Each names
-    the pin (``#Q1.3``) or the wire whose end it is, and the wire it lies on (``#wire:<uuid>``). A hierarchy
-    the reader cannot read has none."""
+    hierarchy by the schematic's reader, as warnings: KiCad joins them and its ERC says nothing. A pin whose
+    one connection is the span is KiCad's own straight run through a pin, not one. Each names the pin
+    (``#Q1.3``) or the wire whose end it is, and the wire it lies on (``#wire:<uuid>``). A hierarchy the
+    reader cannot read has none."""
     from cad.engine.formats.kicad.schematic import read_schematic_index, span_joins
 
     try:
@@ -165,9 +167,11 @@ def span_findings(schematic: Path) -> tuple[CheckFinding, ...]:
             name = f" ({pin.name})" if pin.name and pin.name not in ("~", pin.number) else ""
             found.append(CheckFinding(
                 severity="warning", code="pin_on_wire_span", location=where,
-                message=(f"Pin {pin.ref}.{pin.number}{name} lies on a wire's span, not at its end, and KiCad joins it "
-                         f"to that wire's net ({join.wire.net}): {spanned['ref'] or 'a wire'}"),
-                hint="end the wire on the pin if the pin is on that net, else route the wire clear of the pin's end",
+                message=(f"Pin {pin.ref}.{pin.number}{name} lies on a wire's span with no junction, and KiCad joins it "
+                         f"to that wire's net ({join.wire.net}) as well as to what else meets it there: "
+                         f"{spanned['ref'] or 'a wire'}"),
+                hint="place a junction on the pin if it is meant on that wire's net, else route the wire clear of "
+                     "the pin's end",
                 items=[{"kind": "pin", "ref": pin.selector or f"#{pin.ref}.{pin.number}", "uuid": None, "net": pin.net,
                         "sheet": pin.sheet, "pos": list(pin.at)}, spanned]))
         else:
@@ -186,9 +190,10 @@ def check(schematic: Path) -> CheckResult:
 
     Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
     severity reported, and lists each violation with its sheet and where it is (millimetres on that
-    sheet's page). Beside KiCad's, a warning for every pin, and every wire's end, that lies on a wire's
-    span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``): KiCad joins them and its
-    ERC passes. The schematic fails when any error-severity violation exists; warnings are reported and
+    sheet's page). Beside KiCad's, a warning for every pin joined some other way besides, and every wire's
+    end, that lies on a wire's span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``):
+    KiCad joins them and its ERC passes. A pin whose one connection is a wire's span is KiCad's own straight
+    run through a pin (it saves a rail drawn to each pin as one wire across them), not a finding. The schematic fails when any error-severity violation exists; warnings are reported and
     do not fail it.
 
     schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).

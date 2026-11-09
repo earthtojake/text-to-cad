@@ -47,7 +47,7 @@ from __future__ import annotations
 import difflib
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -1027,7 +1027,14 @@ def span_joins(index: SchematicIndex) -> list[SpanJoin]:
     where it is, as a label does) and every wire's end that lies on another wire's span, not at one of its
     ends, on the same sheet, where no junction marks the join: KiCad's own way to draw one (its editor puts a
     junction at every T it draws, and a wire ending on a pin is a join it means). Wires alone: a bus and a bus
-    entry are not checked. A grid of the wires keeps it from being quadratic."""
+    entry are not checked. A grid of the wires keeps it from being quadratic.
+
+    A pin whose one connection is the span of one wire is KiCad's own drawing, not a finding: a straight run
+    through a row of pins (a rail of decoupling capacitors) drawn as wires ending on each pin, with junctions,
+    is saved by KiCad as one wire across the pins, the junctions removed (its cleanup merges two collinear
+    wires that meet at a pin). A pin on a span that is also joined some other way -- a wire ending on it,
+    another pin, a label, a sheet pin, a no-connect, or a second wire's span -- is one: there the span adds
+    a second connection, which a wire drawn past a pin on its way elsewhere makes."""
     cell = 25.4 / _UNIT
     found: list[SpanJoin] = []
     by_sheet: dict[str, list[Wire]] = defaultdict(list)
@@ -1036,11 +1043,24 @@ def span_joins(index: SchematicIndex) -> list[SpanJoin]:
             by_sheet[wire.sheet].append(wire)
     junctions = {(junction.sheet, _key(junction.at)) for junction in index.junctions}
     pins: dict[str, list[Pin]] = defaultdict(list)
+    # What joins a point besides a wire's span: a wire's end, a pin (a power symbol's too), a label, a sheet
+    # pin, a no-connect. A pin counts itself once, so a point holding two is joined otherwise.
+    joined: Counter[tuple[str | None, tuple[int, int]]] = Counter()
+    for wire in index.wires:
+        if wire.kind == "wire":
+            for point in wire.points:
+                joined[(wire.sheet, _key(point))] += 1
     for symbol in index.symbols:
-        if not symbol.power:
-            for pin in symbol.pins:
-                if not pin.hidden:
+        for pin in symbol.pins:
+            if not pin.hidden:
+                joined[(pin.sheet, _key(pin.at))] += 1
+                if not symbol.power:
                     pins[pin.sheet].append(pin)
+    for item in (*index.labels, *index.no_connects):
+        joined[(item.sheet, _key(item.at))] += 1
+    for sheet in index.sheets:
+        for sheet_pin in sheet.pins:
+            joined[(sheet.parent, _key(sheet_pin.at))] += 1
     for sheet, wires in by_sheet.items():
         grid: dict[tuple[int, int], list[Wire]] = defaultdict(list)
         for wire in wires:
@@ -1058,7 +1078,10 @@ def span_joins(index: SchematicIndex) -> list[SpanJoin]:
 
         said: set[tuple[tuple[int, int], int]] = set()  # a pin at a wire's end on another's span: the pin says it
         for pin in pins.get(sheet, ()):
-            for wire in spanned(pin.at):
+            spans = spanned(pin.at)
+            if len(spans) == 1 and joined[(sheet, _key(pin.at))] == 1:
+                continue  # the span is the pin's one connection: KiCad's own straight run through a pin
+            for wire in spans:
                 said.add((_key(pin.at), id(wire)))
                 found.append(SpanJoin(sheet, pin.at, wire, pin=pin))
         for end in wires:
