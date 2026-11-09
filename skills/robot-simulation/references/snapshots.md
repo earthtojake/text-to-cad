@@ -77,7 +77,11 @@ refused by name: snapshot the MJCF exported from the same model.
 
 ## Display, camera and annotations
 
-A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme.
+A normal snapshot uses Solid mode, and every snapshot is light, whatever the viewer's theme. A
+robot file carries each part's colour and its material's name, not the material's look: a `cad model
+snapshot` draws a metal's sheen (its flat faces dark where they mirror the studio's dark side, so a
+grey arm shows black panels), while the MJCF's and the URDF's stills draw the same parts in their flat
+colours. The two compare by shape and pose, not by shading.
 `--display` takes any of the viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`,
 ...), `exploded=AMOUNT`, or the display object: `camera` (projection and focal length) and `clip`
 (`{"clip": {"axis": "x", "at": 0.05}}`, `at` in metres, the file's own unit, as the viewer draws
