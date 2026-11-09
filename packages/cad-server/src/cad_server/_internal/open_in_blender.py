@@ -15,10 +15,14 @@ MIT, as the rest of the package. It runs only inside Blender (Blender's Python A
 imports it.
 """
 
+import importlib
 import os
 import sys
+from typing import Any
 
-import bpy  # pyrefly: ignore  # Blender's own module: this file runs inside Blender alone
+# Blender's own module, imported only where Blender runs this file (as ``__main__``, below): importing the module
+# elsewhere, as anything that walks the package does, loads nothing of Blender's.
+bpy: Any = None
 
 # What each extension is imported by: Blender's own importers (glTF's since 2.80, STL's built in since 4.1, an
 # add-on's before).
@@ -96,4 +100,6 @@ def main(argv: list[str]) -> None:
         bpy.app.timers.register(frame, first_interval=0.2)
 
 
-main(sys.argv)
+if __name__ == "__main__":  # Blender's --python runs a file as __main__
+    bpy = importlib.import_module("bpy")
+    main(sys.argv)
