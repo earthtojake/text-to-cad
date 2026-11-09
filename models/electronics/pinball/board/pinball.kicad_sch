@@ -1,0 +1,3746 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "6acfa16a-ed92-50d5-b0cc-8658134d4f0b")
+	(paper "A3")
+	(title_block
+		(title "SHORT CIRCUIT: the playfield")
+		(date "2026-11-08")
+		(rev "A")
+		(company "SHORT CIRCUIT (text-to-cad demo)")
+	)
+	(lib_symbols
+		(symbol "pinball:MountingHole"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "H"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "M2"
+				(at 0 3.175 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:NPTH_2.2mm"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Mounting Hole without connection"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "mounting hole"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "MountingHole*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "MountingHole_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 1.27)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:Fiducial"
+			(exclude_from_sim no)
+			(in_bom no)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "FID"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Fiducial"
+				(at 0 3.175 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Fiducial Marker"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "fiducial marker"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "Fiducial*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Fiducial_0_1"
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(text "SHORT CIRCUIT: a pinball machine whose playfield is its circuit board"
+		(exclude_from_sim no)
+		(at 30.48 22.86 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "da8c84d5-375a-58f6-9785-0dd1371bd9b4")
+	)
+	(text "112 x 236 mm, 4 layers, ENIG. F.Cu: the art and the ball's switches. In1: ground. In2 and B.Cu: the wiring, parts on the back."
+		(exclude_from_sim no)
+		(at 30.48 27.94 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c957ef97-10a6-56ae-b6e5-7b705fcf692e")
+	)
+	(sheet
+		(at 139.7 38.1)
+		(size 55.88 129.54)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "435b7e5f-d762-50eb-a1a3-dd710b3b6ab2")
+		(property "Sheetname" "MCU"
+			(at 139.7 37.3884 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 139.7 168.2246 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "IN_LANE_G" bidirectional
+			(at 195.58 43.18 0)
+			(uuid "f3bf708b-3f73-5acc-b8e2-395020a9d595")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_LANE_N" bidirectional
+			(at 195.58 45.72 0)
+			(uuid "e15c0da2-5c43-52e7-8c60-bd4dea47da67")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_LANE_D" bidirectional
+			(at 195.58 48.26 0)
+			(uuid "dff37a7f-4cb5-585b-aa9b-10dc44f02b00")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_OUT_L" bidirectional
+			(at 195.58 50.8 0)
+			(uuid "c876cbe8-930d-51cc-9b46-934a68f099d4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_IN_L" bidirectional
+			(at 195.58 53.34 0)
+			(uuid "d6c2053f-2b9c-5e1f-806e-d350f450abb2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_IN_R" bidirectional
+			(at 195.58 55.88 0)
+			(uuid "c089a3c6-f1f9-5012-ae55-4dc7f6cfe7e5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_OUT_R" bidirectional
+			(at 195.58 58.42 0)
+			(uuid "4d6e29ed-ad3d-5672-bda0-5dcbacf15a22")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_BUMPER_C1" bidirectional
+			(at 195.58 60.96 0)
+			(uuid "509d651a-3997-5d0c-a819-90cb734e7039")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_BUMPER_C2" bidirectional
+			(at 195.58 63.5 0)
+			(uuid "4a699f04-736f-5e98-963f-82890227f57b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_BUMPER_C3" bidirectional
+			(at 195.58 66.04 0)
+			(uuid "5b6b2382-48bf-5cc5-85f8-78311997b7f4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_TARGET_V" bidirectional
+			(at 195.58 68.58 0)
+			(uuid "ef0af80c-bf17-592a-9b74-d2ca7cc102f8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_TARGET_C" bidirectional
+			(at 195.58 71.12 0)
+			(uuid "6ea7ca48-be08-55c8-bc7b-ccb6307cb5be")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_TARGET_C2" bidirectional
+			(at 195.58 73.66 0)
+			(uuid "30fd4820-92da-549c-bb9e-8c6d82ce8e52")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_SLING_L" bidirectional
+			(at 195.58 76.2 0)
+			(uuid "9b9cd33c-cd0e-5914-95d4-33017f61615d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_SLING_R" bidirectional
+			(at 195.58 78.74 0)
+			(uuid "1f2be45b-1954-5667-903a-abd75cc9349e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_ORBIT" bidirectional
+			(at 195.58 81.28 0)
+			(uuid "0003a56c-ff38-5258-91e3-e54e5ef34384")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_SHOOTER" bidirectional
+			(at 195.58 83.82 0)
+			(uuid "f36b4b61-4595-5e78-92f8-301d6380d711")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IN_DRAIN" bidirectional
+			(at 195.58 86.36 0)
+			(uuid "d73dc09a-c898-5aaf-a603-8570f6723e1f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "BTN_FLIP_L" bidirectional
+			(at 195.58 88.9 0)
+			(uuid "7ee5c3b0-ba78-5f59-a52c-21a310f27bda")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "BTN_FLIP_R" bidirectional
+			(at 195.58 91.44 0)
+			(uuid "aa0f94ea-052e-5c09-b15b-742e6cb2b4ac")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "BTN_START" bidirectional
+			(at 195.58 93.98 0)
+			(uuid "ad1b2054-64de-5115-be9d-8bd1c01f9d03")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "I2C_SDA" bidirectional
+			(at 195.58 96.52 0)
+			(uuid "34194fda-057d-539e-afa1-04fc8340a0e7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "I2C_SCL" bidirectional
+			(at 195.58 99.06 0)
+			(uuid "65888c6f-1e8c-53a5-8870-26bd235f3e1b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "LED_DATA" bidirectional
+			(at 195.58 116.84 0)
+			(uuid "1d5461b5-35b3-52ab-a93a-20756155a349")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "COIL_L" bidirectional
+			(at 195.58 134.62 0)
+			(uuid "6189ec73-ea12-5507-8c15-0ada0f8e702e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "COIL_R" bidirectional
+			(at 195.58 137.16 0)
+			(uuid "7f66ee67-3ec9-54a4-aec6-07293b71de32")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "I2S_BCLK" bidirectional
+			(at 195.58 154.94 0)
+			(uuid "e535d175-c85b-5fa9-8c90-8cfeba33d43a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "I2S_LRCLK" bidirectional
+			(at 195.58 157.48 0)
+			(uuid "f805bdc6-4a8a-54cd-ac8d-f79c0e7ef422")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "I2S_DIN" bidirectional
+			(at 195.58 160.02 0)
+			(uuid "56a73507-3199-5b9f-b2ed-3ac0304cbe7f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 139.7 45.72 180)
+			(uuid "21b227f4-3efb-53cf-95bc-756137cbc605")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 139.7 48.26 180)
+			(uuid "05d5698a-3646-5807-9eb9-fe2a681f4cd2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VBUS_SENSE" input
+			(at 139.7 50.8 180)
+			(uuid "4f932900-9a7c-5796-a26e-2a32ac47593a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 50.8 38.1)
+		(size 50.8 22.86)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "4cd6823c-52d4-5b1f-98d1-e80ca3253ca9")
+		(property "Sheetname" "Power"
+			(at 50.8 37.3884 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 50.8 61.5446 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "USB_D+" bidirectional
+			(at 101.6 45.72 0)
+			(uuid "842ea345-4231-53d7-bd79-7f08cf29a22a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "USB_D-" bidirectional
+			(at 101.6 48.26 0)
+			(uuid "ea495593-3287-5eed-83c8-02b671443cf5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VBUS_SENSE" output
+			(at 101.6 50.8 0)
+			(uuid "3b871e8c-405a-5e29-a9da-9972023e0995")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "2")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 101.6 45.72) (xy 139.7 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c8d8bf98-9327-5eda-825e-6b8db5da9b07")
+	)
+	(wire
+		(pts
+			(xy 101.6 48.26) (xy 139.7 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "33bb326e-1083-5b04-bf5b-7d142e084de6")
+	)
+	(wire
+		(pts
+			(xy 101.6 50.8) (xy 139.7 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cc28e13b-8826-5cce-97da-4e6b33ab1caf")
+	)
+	(sheet
+		(at 266.7 38.1)
+		(size 55.88 66.04)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "21a1dfc2-0711-5bf2-b3a6-ccec272efb57")
+		(property "Sheetname" "Inputs"
+			(at 266.7 37.3884 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "inputs.kicad_sch"
+			(at 266.7 104.7246 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "IN_LANE_G" output
+			(at 266.7 43.18 180)
+			(uuid "a2fb25f8-856e-5a30-a8fa-e9aeb19b391c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_LANE_N" output
+			(at 266.7 45.72 180)
+			(uuid "15b23e09-ef8e-588f-8ab7-54beedbbf410")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_LANE_D" output
+			(at 266.7 48.26 180)
+			(uuid "30cc1198-d25d-5c0f-adae-f16cb6b6b55b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_OUT_L" output
+			(at 266.7 50.8 180)
+			(uuid "e7da04fb-88d2-5f1d-a83a-9330469ac762")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_IN_L" output
+			(at 266.7 53.34 180)
+			(uuid "837a76bc-a68b-5384-94e7-ca491d6a4fa2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_IN_R" output
+			(at 266.7 55.88 180)
+			(uuid "4a911579-c4a3-5dca-bd91-6532b24abc9d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_OUT_R" output
+			(at 266.7 58.42 180)
+			(uuid "c358cebd-14fb-5923-b751-ad1983e16480")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_BUMPER_C1" output
+			(at 266.7 60.96 180)
+			(uuid "cb7edfbb-b0be-55b5-b804-d5bd6bf094e8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_BUMPER_C2" output
+			(at 266.7 63.5 180)
+			(uuid "ac3e0e32-f9a9-5072-9a7b-00bcaf7b6edc")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_BUMPER_C3" output
+			(at 266.7 66.04 180)
+			(uuid "dedf7ae9-f3e2-5749-9e16-c12c4e96170b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_TARGET_V" output
+			(at 266.7 68.58 180)
+			(uuid "c6c74be2-f0fb-5aba-8bec-3e7a6edea802")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_TARGET_C" output
+			(at 266.7 71.12 180)
+			(uuid "23172dda-71ce-53fb-9066-97c785c86d56")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_TARGET_C2" output
+			(at 266.7 73.66 180)
+			(uuid "cc7d8b5d-d98e-55cc-a567-77d487107a47")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_SLING_L" output
+			(at 266.7 76.2 180)
+			(uuid "7f601f35-2028-529a-a1fa-d11ea91ad5d5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_SLING_R" output
+			(at 266.7 78.74 180)
+			(uuid "4a894108-107c-5c29-be41-23254e392dc8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_ORBIT" output
+			(at 266.7 81.28 180)
+			(uuid "c27fa4a9-cfa9-593c-844b-d631bf37753e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_SHOOTER" output
+			(at 266.7 83.82 180)
+			(uuid "d6655fa0-64a6-5779-b615-d107c806def3")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "IN_DRAIN" output
+			(at 266.7 86.36 180)
+			(uuid "0de36e7e-4091-513a-a9c1-3d565927c4c0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "BTN_FLIP_L" output
+			(at 266.7 88.9 180)
+			(uuid "453167bc-70b8-5432-a7a5-2cb57a5f5b3e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "BTN_FLIP_R" output
+			(at 266.7 91.44 180)
+			(uuid "0271edf6-8d5a-5bfa-89c6-7a8e3add3ad6")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "BTN_START" output
+			(at 266.7 93.98 180)
+			(uuid "f21f2f18-b29f-5db7-83a5-d9231dd8b276")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C_SDA" bidirectional
+			(at 266.7 96.52 180)
+			(uuid "bbbb1fa6-1c46-5263-8a4e-0b187f48f963")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C_SCL" bidirectional
+			(at 266.7 99.06 180)
+			(uuid "63ee33dd-d600-5889-823f-7b0a2bd5d221")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "4")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 195.58 43.18) (xy 266.7 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ba2af68d-c88e-52d8-8906-a3f981c0b589")
+	)
+	(wire
+		(pts
+			(xy 195.58 45.72) (xy 266.7 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5d4490ef-92e8-592b-abd2-f98c36c20e4a")
+	)
+	(wire
+		(pts
+			(xy 195.58 48.26) (xy 266.7 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1da0ea2a-60ed-5cd6-b3f2-e84c41799a69")
+	)
+	(wire
+		(pts
+			(xy 195.58 50.8) (xy 266.7 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4786ff6e-559c-5238-9e94-db5ee0958f45")
+	)
+	(wire
+		(pts
+			(xy 195.58 53.34) (xy 266.7 53.34)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c150b0a-159f-52b1-b26f-d0f018b26b13")
+	)
+	(wire
+		(pts
+			(xy 195.58 55.88) (xy 266.7 55.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a96afa82-2e7b-5301-a537-d63ce3a021a5")
+	)
+	(wire
+		(pts
+			(xy 195.58 58.42) (xy 266.7 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3744db69-c7e9-5adc-998b-dd215acacda9")
+	)
+	(wire
+		(pts
+			(xy 195.58 60.96) (xy 266.7 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d1933cc2-409f-5c0a-8de3-c6bb15143cd6")
+	)
+	(wire
+		(pts
+			(xy 195.58 63.5) (xy 266.7 63.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "160e8ba4-58ab-561c-a831-314ec51ee847")
+	)
+	(wire
+		(pts
+			(xy 195.58 66.04) (xy 266.7 66.04)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6aeb7a0b-7a05-5e58-900e-5bb37544824c")
+	)
+	(wire
+		(pts
+			(xy 195.58 68.58) (xy 266.7 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1b82cc9d-ce17-5ed3-8e64-d474261265d7")
+	)
+	(wire
+		(pts
+			(xy 195.58 71.12) (xy 266.7 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7b3bbda6-0d2e-5744-b6b0-e85ef185a954")
+	)
+	(wire
+		(pts
+			(xy 195.58 73.66) (xy 266.7 73.66)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "643491b1-8657-590f-8c6a-eba10c08af58")
+	)
+	(wire
+		(pts
+			(xy 195.58 76.2) (xy 266.7 76.2)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "53398b16-fde0-5c9a-a080-7635cbe0393b")
+	)
+	(wire
+		(pts
+			(xy 195.58 78.74) (xy 266.7 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fc799d13-0de1-53b3-9173-da460fa41f3b")
+	)
+	(wire
+		(pts
+			(xy 195.58 81.28) (xy 266.7 81.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "938f48e6-db40-5286-8f95-a72a8b25be89")
+	)
+	(wire
+		(pts
+			(xy 195.58 83.82) (xy 266.7 83.82)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b9bf84ae-b4f5-5512-a8c8-02d93af471b3")
+	)
+	(wire
+		(pts
+			(xy 195.58 86.36) (xy 266.7 86.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3908671f-d558-5dd7-8045-db3de0a90706")
+	)
+	(wire
+		(pts
+			(xy 195.58 88.9) (xy 266.7 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8f3dc3f0-a0b6-5796-b035-c5de814f6217")
+	)
+	(wire
+		(pts
+			(xy 195.58 91.44) (xy 266.7 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "42fd7f29-e470-5916-a0fc-5c8608d63200")
+	)
+	(wire
+		(pts
+			(xy 195.58 93.98) (xy 266.7 93.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3d7f3389-04df-50a9-a6ab-b0078df1b89d")
+	)
+	(wire
+		(pts
+			(xy 195.58 96.52) (xy 266.7 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b69cbb9f-3997-5293-979b-370537d5a148")
+	)
+	(wire
+		(pts
+			(xy 195.58 99.06) (xy 266.7 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "680e2151-3a88-5705-8b91-ab10be234c78")
+	)
+	(sheet
+		(at 266.7 111.76)
+		(size 55.88 10.16)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "cc4f5290-98c0-5aa2-ad45-973b6de79cc5")
+		(property "Sheetname" "Lighting"
+			(at 266.7 111.0484 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "lighting.kicad_sch"
+			(at 266.7 122.5046 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "LED_DATA" input
+			(at 266.7 116.84 180)
+			(uuid "54e07fc1-f84d-554f-acf0-bfdb76662518")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "5")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 195.58 116.84) (xy 266.7 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5edcb149-d7db-5ffc-91f8-9b99fb9a81fa")
+	)
+	(sheet
+		(at 266.7 129.54)
+		(size 55.88 12.7)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "88f1a782-1fce-5351-8bf6-e202e4f7d1ef")
+		(property "Sheetname" "Flippers"
+			(at 266.7 128.8284 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "flippers.kicad_sch"
+			(at 266.7 142.8246 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "COIL_L" input
+			(at 266.7 134.62 180)
+			(uuid "d54043f6-a090-5f46-a758-d6521e90b4d0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "COIL_R" input
+			(at 266.7 137.16 180)
+			(uuid "63ecc05e-ca1a-5f64-bf85-b98fc5f26336")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "6")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 195.58 134.62) (xy 266.7 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e4d21898-fc9c-5803-9868-82bd11a885e6")
+	)
+	(wire
+		(pts
+			(xy 195.58 137.16) (xy 266.7 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ed04beda-0171-5f41-9872-e7bfd78dbac1")
+	)
+	(sheet
+		(at 266.7 149.86)
+		(size 55.88 22.86)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 255 230 1)
+		)
+		(uuid "6f7045a4-2309-5fea-8525-fc8770db6bd8")
+		(property "Sheetname" "Audio and backbox"
+			(at 266.7 149.1484 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "audio.kicad_sch"
+			(at 266.7 173.3046 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "I2S_BCLK" input
+			(at 266.7 154.94 180)
+			(uuid "f4076790-7209-5a7d-80d1-51d0fd3a7023")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2S_LRCLK" input
+			(at 266.7 157.48 180)
+			(uuid "7fd8433a-d7cb-5269-9e28-5fc13660b004")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2S_DIN" input
+			(at 266.7 160.02 180)
+			(uuid "f28c7957-744d-5e0e-9a48-770131b16c99")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C_SDA" bidirectional
+			(at 266.7 165.1 180)
+			(uuid "7702a40d-8568-5996-b5cc-07416259045d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "I2C_SCL" bidirectional
+			(at 266.7 167.64 180)
+			(uuid "a1ce9141-4905-5bb5-9f90-db9a46869419")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(page "7")
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 195.58 154.94) (xy 266.7 154.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9e262675-977c-5324-9960-4a9e8081c375")
+	)
+	(wire
+		(pts
+			(xy 195.58 157.48) (xy 266.7 157.48)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3ff04085-3b3d-568a-8029-116118c8617a")
+	)
+	(wire
+		(pts
+			(xy 195.58 160.02) (xy 266.7 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6c41ca45-cab5-51c2-beda-3cda9e7c71ed")
+	)
+	(wire
+		(pts
+			(xy 266.7 165.1) (xy 261.62 165.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e912ce27-89b5-581f-a7cd-a5ced502e5f3")
+	)
+	(label "I2C_SDA"
+		(at 261.62 165.1 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "377c2a42-3874-5e9d-9f28-d384adcf8b9e")
+	)
+	(label "I2C_SDA"
+		(at 208.28 96.52 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "5bc8e161-4649-5cba-a0e8-66322126bb48")
+	)
+	(wire
+		(pts
+			(xy 266.7 167.64) (xy 261.62 167.64)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9139a090-dd1f-5ec0-b189-25988b7b2799")
+	)
+	(label "I2C_SCL"
+		(at 261.62 167.64 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "2c07057e-8864-5cf8-a949-e26f7365d216")
+	)
+	(label "I2C_SCL"
+		(at 208.28 99.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7830ea7b-96f1-52e5-85d6-331b6b6ab698")
+	)
+	(rectangle
+		(start 30.48 187.96)
+		(end 391.16 246.38)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "36a9821f-2f11-5f6e-9f70-4a143cd09b51")
+	)
+	(text "Mechanics: holes (each named for the part it fixes, geometry.py), fiducials"
+		(exclude_from_sim no)
+		(at 31.75 191.77 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "a014b5d3-bedc-5de2-a5fb-b1d589a83eae")
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 40.64 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "d5e87c61-c93f-5182-b008-44f3428a34c6")
+		(property "Reference" "H1"
+			(at 33.02 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "left_shaft"
+			(at 33.02 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_6.0mm"
+			(at 40.64 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 60.96 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e7e714b8-b402-5f0a-89a5-696190b29cda")
+		(property "Reference" "H2"
+			(at 53.34 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "right_shaft"
+			(at 53.34 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_6.0mm"
+			(at 60.96 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 81.28 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a034cbd6-aa44-5119-a7bc-272932ccbeff")
+		(property "Reference" "H3"
+			(at 73.66 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C1_post"
+			(at 73.66 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 81.28 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 101.6 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "8a647d09-6439-5cef-b387-6b1e055c0b01")
+		(property "Reference" "H4"
+			(at 93.98 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C1_post"
+			(at 93.98 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 101.6 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 101.6 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 121.92 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "65f82137-a06d-542d-b1c7-6082b6bda1f5")
+		(property "Reference" "H5"
+			(at 114.3 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C2_post"
+			(at 114.3 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 121.92 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 121.92 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 142.24 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "cf216679-a982-550f-90bf-275d94e697a8")
+		(property "Reference" "H6"
+			(at 134.62 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C2_post"
+			(at 134.62 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 142.24 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 142.24 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 162.56 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "9276cf08-5ef8-531f-bd88-654ce5605dd3")
+		(property "Reference" "H7"
+			(at 154.94 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C3_post"
+			(at 154.94 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 162.56 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 162.56 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 182.88 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "222c28cb-350d-5239-82cc-5788c1c3dea5")
+		(property "Reference" "H8"
+			(at 175.26 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "bumper_C3_post"
+			(at 175.26 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 182.88 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 182.88 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 203.2 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ac0071d0-4f8b-5a1b-a803-1dec64ca31ed")
+		(property "Reference" "H9"
+			(at 195.58 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_left_post_1"
+			(at 195.58 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 203.2 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 203.2 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 223.52 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f4a04d95-1a35-51db-922c-2cfa1845de89")
+		(property "Reference" "H10"
+			(at 215.9 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_left_post_2"
+			(at 215.9 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 223.52 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 223.52 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 243.84 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "93bb81a4-c1c6-55a8-b27d-78387a415199")
+		(property "Reference" "H11"
+			(at 236.22 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_left_post_3"
+			(at 236.22 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 243.84 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 243.84 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 264.16 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a523c25b-8398-5cc2-af91-8adf1ebb784c")
+		(property "Reference" "H12"
+			(at 256.54 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_right_post_1"
+			(at 256.54 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 264.16 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 264.16 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 284.48 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "30f758d0-e0d4-59b9-a3ad-678502ee9062")
+		(property "Reference" "H13"
+			(at 276.86 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_right_post_2"
+			(at 276.86 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 284.48 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 284.48 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 304.8 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "efb2cd7a-1b49-5d6d-aeb5-d74d60404973")
+		(property "Reference" "H14"
+			(at 297.18 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "sling_right_post_3"
+			(at 297.18 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 304.8 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 304.8 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 325.12 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "53c100dd-74e2-5cc9-bf41-6f2846cac438")
+		(property "Reference" "H15"
+			(at 317.5 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "lane_post_left"
+			(at 317.5 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 325.12 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 325.12 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 345.44 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "db28482b-f3e6-555f-a019-6efaedbb81ee")
+		(property "Reference" "H16"
+			(at 337.82 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "lane_post_right"
+			(at 337.82 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 345.44 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 345.44 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 365.76 200.66 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e18d8691-a6b1-5890-92ae-289af4bda43a")
+		(property "Reference" "H17"
+			(at 358.14 198.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_left"
+			(at 358.14 204.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 365.76 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 365.76 200.66 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 40.64 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ac72c140-61a6-58dc-9cb9-7a5812020917")
+		(property "Reference" "H18"
+			(at 33.02 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_left"
+			(at 33.02 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 40.64 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 60.96 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "372aa8b3-a438-56d6-9cb0-81d31ebad930")
+		(property "Reference" "H19"
+			(at 53.34 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_left"
+			(at 53.34 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 60.96 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 81.28 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3f480a5f-b9f6-5634-bfc6-54b435b08523")
+		(property "Reference" "H20"
+			(at 73.66 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_left"
+			(at 73.66 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 81.28 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 101.6 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ec271604-a9a5-5942-bf24-d239c27c0cbd")
+		(property "Reference" "H21"
+			(at 93.98 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_left"
+			(at 93.98 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 101.6 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 101.6 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 121.92 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "6caf4bee-a220-53d8-8fc3-036b46680426")
+		(property "Reference" "H22"
+			(at 114.3 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_right"
+			(at 114.3 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 121.92 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 121.92 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H22")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 142.24 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "12d1e563-f585-5180-bb5e-abe133919fda")
+		(property "Reference" "H23"
+			(at 134.62 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_right"
+			(at 134.62 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 142.24 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 142.24 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H23")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 162.56 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a03274c5-72a0-5292-aa6a-4da95e5faf30")
+		(property "Reference" "H24"
+			(at 154.94 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_right"
+			(at 154.94 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 162.56 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 162.56 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H24")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 182.88 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "bd94b8cc-9c43-5c96-9728-4a9ef60a5107")
+		(property "Reference" "H25"
+			(at 175.26 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_right"
+			(at 175.26 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 182.88 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 182.88 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H25")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 203.2 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "d330e003-9ba4-5772-9644-3764a3177894")
+		(property "Reference" "H26"
+			(at 195.58 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "rail_right"
+			(at 195.58 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 203.2 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 203.2 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H26")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 223.52 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "df64001f-37de-5c08-8810-af2c1a2d99ff")
+		(property "Reference" "H27"
+			(at 215.9 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "lockdown_bar"
+			(at 215.9 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 223.52 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 223.52 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H27")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 243.84 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "52fd0e3b-f653-58d1-82a0-62269aa27d8f")
+		(property "Reference" "H28"
+			(at 236.22 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "lockdown_bar"
+			(at 236.22 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 243.84 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 243.84 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H28")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 264.16 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "634e6f19-2ec7-5152-8c37-94f2025b310e")
+		(property "Reference" "H29"
+			(at 256.54 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "lockdown_bar"
+			(at 256.54 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 264.16 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 264.16 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H29")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 284.48 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3b30e605-056b-573c-8089-b47c2428ae01")
+		(property "Reference" "H30"
+			(at 276.86 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "backbox_wedge"
+			(at 276.86 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 284.48 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 284.48 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H30")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 304.8 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e67c400d-11be-51f8-9505-0d632e20d50f")
+		(property "Reference" "H31"
+			(at 297.18 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "backbox_wedge"
+			(at 297.18 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 304.8 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 304.8 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H31")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 325.12 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "7bcdb8a7-ac67-54ca-a03d-f373c804821e")
+		(property "Reference" "H32"
+			(at 317.5 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "backbox_wedge"
+			(at 317.5 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 325.12 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 325.12 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H32")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:MountingHole")
+		(at 345.44 213.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "9e9c5991-fa4a-5790-91f4-ae86286ee3ce")
+		(property "Reference" "H33"
+			(at 337.82 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "backbox_wedge"
+			(at 337.82 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:NPTH_2.2mm"
+			(at 345.44 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 345.44 213.36 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "H33")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 40.64 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "517f2e3a-0ce7-527e-8ea0-647f540123d2")
+		(property "Reference" "FID1"
+			(at 38.1 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 33.02 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 40.64 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 60.96 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3747f390-21db-5383-adae-505182ee7bd6")
+		(property "Reference" "FID2"
+			(at 58.42 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 53.34 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 60.96 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 81.28 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "8c43601e-9d9e-5ec2-a19e-babee39e84a1")
+		(property "Reference" "FID3"
+			(at 78.74 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 73.66 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 81.28 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 101.6 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e935e9ef-1148-5f67-afb8-26fb4546bd67")
+		(property "Reference" "FID4"
+			(at 99.06 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 93.98 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 101.6 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 101.6 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 121.92 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "b1b1d5a3-948b-50bc-8474-d555aceefcf9")
+		(property "Reference" "FID5"
+			(at 119.38 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 114.3 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 121.92 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 121.92 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:Fiducial")
+		(at 142.24 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e08b0348-8486-5081-ba69-6d7b13739a22")
+		(property "Reference" "FID6"
+			(at 139.7 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Fiducial"
+			(at 134.62 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Fiducial_1mm_Mask2mm"
+			(at 142.24 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 142.24 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b"
+					(reference "FID6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
+

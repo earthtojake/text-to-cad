@@ -1,0 +1,55 @@
+(footprint "Comb_S2"
+	(version 20241229)
+	(generator "pinball_build_libraries")
+	(layer "F.Cu")
+	(descr "Ball switch S2 (LANE_N): its comb's plated lands; the comb is drawn on the board from playfield.py, 0.4 mm fingers on a 0.8 mm pitch")
+	(tags "pinball sensor comb")
+	(property "Reference" "REF**"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "Comb_S2"
+		(at 0 1.5 0)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd exclude_from_pos_files exclude_from_bom)
+	(fp_poly
+		(pts
+			(xy -4.3025 6.016) (xy -4.3644 5.6258) (xy -4.3644 -3.9742) (xy -4.3025 -4.784) (xy -0.0768 -6.1697) (xy -0.0091 -6.1839)
+			(xy 0.0594 -6.1742) (xy 4.3594 -4.7742) (xy 4.3594 4.8258) (xy 4.2975 6.016)
+		)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+	)
+	(pad "1" thru_hole circle
+		(at -4.1025 6.266)
+		(size 0.7 0.7)
+		(drill 0.3)
+		(layers "*.Cu" "F.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "2" thru_hole circle
+		(at 4.0975 6.266)
+		(size 0.7 0.7)
+		(drill 0.3)
+		(layers "*.Cu" "F.Mask")
+		(remove_unused_layers no)
+	)
+)
+

@@ -32,7 +32,10 @@ of it as a script (`cad run check_<board>.py`). Four are boards alone (`blinky`,
 `pi_servo_hat`); three are ECAD samples, a board with the CAD built around it in the cad skill's layout
 beside it (`src/`), read from the board file, and the scripts that made the board (`scripts/`):
 [`macropad`](electronics/macropad/README.md), [`eurorack_lfo`](electronics/eurorack_lfo/README.md) and
-[`orbit_clock`](electronics/orbit_clock/README.md).
+[`orbit_clock`](electronics/orbit_clock/README.md). The fourth, [`pinball`](electronics/pinball/README.md), runs
+the other way: the design model (`src/`) is the source of the board's outline, holes and art, and the board, its
+scripts and checks live in `board/`. Its board is kept without its zones' fills, under the 5 MiB a file may be
+(`board/scripts/board.py refill` puts them back).
 
 Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, KiCad's board files, docs); never what a run
 or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
@@ -53,7 +56,7 @@ project delivers them and because something outside the model reads them:
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
 | `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.model.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
-| `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
+| `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/`, `board/pinball.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`, `board/scripts/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
 | `electronics` (the same three) | `3MF/`, `STEP/`, `GLB/`, `DXF/` | `src/exports.py` | the printed parts in their print orientation, the panel's cut and art DXFs, the assemblies' STEP and GLB (the GLB carries the explode) |
 
 ## Build and snapshot
@@ -148,6 +151,7 @@ marker costs a model body that is no longer one piece.
 | [`macropad`](electronics/macropad/README.md) | a KiCad project (4 sheets, a 2-layer board) + 6 CAD scripts | a board made through KiCad's API from its schematic and checked (ERC, DRC, `check_macropad.py`); a printed tray, switch plate, keycaps and knob read from the board file (`kicad_pcb.read`) and from its STEP (an xbf), an exploding assembly, a fit over every board solid; the project's own footprint models as declared STEP files |
 | [`eurorack_lfo`](electronics/eurorack_lfo/README.md) | a KiCad project (3 sheets, one placed twice; a 2-layer board) + 8 CAD scripts | a 10HP panel whose every hole is a part's axis on the board, a laser-cut DXF and its facts for a cutting service, hardware on the real stack-up, the explode; the board routed by an agent-directed search (`scripts/assist_route.py`) |
 | [`orbit_clock`](electronics/orbit_clock/README.md) | a KiCad project (5 sheets, a 4-layer round board) + 4 CAD scripts | 144 parts placed on two rings from a radius and a count, the LED chain routed as arcs, project libraries; a baffle with a cell over every LED read from the board, a diffuser, a stand and a two-material 3MF |
+| [`pinball`](electronics/pinball/README.md) | a KiCad project (7 sheets, a 4-layer board, 250 footprints, every net routed) + the design model (8 modules) | a miniature pinball machine whose playfield is the board: its gold art the ball's switches, written as copper from the design model's 2D geometry; the board made in KiCad edits and routed by a script's path search; the machine in two models (powered off, lit), a fit and play check (interference, the ball's room, the flippers' sweep), and the board checked against the model (`board/check_fit.py`) and its schematic (`board/check_board.py`) |
 
 Each model's README (linked above) says what was ported and what was dropped.
 

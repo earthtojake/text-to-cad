@@ -1,0 +1,11077 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "804a9388-e68b-52aa-96ee-61fc0951d9e4")
+	(paper "A3")
+	(title_block
+		(title "The ball's switches, the buttons, the tilt")
+		(date "2026-11-08")
+		(rev "A")
+		(company "SHORT CIRCUIT (text-to-cad demo)")
+	)
+	(lib_symbols
+		(symbol "pinball:BallSwitch"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "SW"
+				(at 1.27 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "ball"
+				(at 0 -1.524 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "BallSwitch_0_1"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:TVS_5V"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "D"
+				(at 0 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "PESD5V0S1BA"
+				(at 0 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:D_SOD-323"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Bidirectional transient-voltage-suppression diode"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "diode TVS thyrector"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "PESD5V0S1BA,115"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "Nexperia"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "TVS_5V_0_1"
+				(polyline
+					(pts
+						(xy -2.54 1.27) (xy -2.54 -1.27) (xy 2.54 1.27) (xy 2.54 -1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.508 1.27) (xy 0 1.27) (xy 0 -1.27) (xy -0.508 -1.27)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.27 0) (xy -1.27 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "TVS_5V_1_1"
+				(pin passive line
+					(at -3.81 0 0)
+					(length 2.54)
+					(name "A1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 3.81 0 180)
+					(length 2.54)
+					(name "A2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:R_1k"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "R"
+				(at 2.032 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "1k"
+				(at 0 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:R_0402_1005Metric"
+				(at -1.778 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Resistor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "R res resistor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "R_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "0402WGF1001TCE"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "UNI-ROYAL"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "LCSC" "C11702"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R_1k_0_1"
+				(rectangle
+					(start -1.016 -2.54)
+					(end 1.016 2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "R_1k_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 1.27)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 1.27)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "power:GND"
+			(power global)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#PWR"
+				(at 0 -6.35 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "GND"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "GND_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "GND_1_1"
+				(pin power_in line
+					(at 0 0 270)
+					(length 0)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:SW_Flipper"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "SW"
+				(at 1.27 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "FLIP"
+				(at 0 -1.524 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:SW_Tactile_SPST_Angled_PTS645Vx58-2LFS"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "PTS645VL58-2 LFS"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "C&K"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "SW_Flipper_0_1"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:SW_Start"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "SW"
+				(at 1.27 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "START"
+				(at 0 -1.524 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:SW_PUSH_6mm_H9.5mm"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SW_Start_0_1"
+				(circle
+					(center -2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 3.048)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 1.27) (xy -2.54 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:LIS3DH"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "U"
+				(at -7.62 11.43 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "LIS3DH"
+				(at 6.35 11.43 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "pinball:LGA-16_3x3mm_P0.5mm_LayoutBorder3x5y"
+				(at 2.54 -26.67 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" "https://www.st.com/resource/en/datasheet/cd00274221.pdf"
+				(at -5.08 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "3-Axis Accelerometer, 2/4/8/16g range, I2C/SPI interface, LGA-16"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "3-axis accelerometer i2c spi mems"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "LGA*3x3mm*P0.5mm*LayoutBorder3x5y*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "LIS3DHTR"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "STMicroelectronics"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "LCSC" "C15134"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "LIS3DH_0_1"
+				(rectangle
+					(start -10.16 10.16)
+					(end 10.16 -12.7)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "LIS3DH_1_1"
+				(pin power_in line
+					(at -2.54 12.7 270)
+					(length 2.54)
+					(name "VDD_IO"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin no_connect line
+					(at 10.16 5.08 180)
+					(length 2.54)
+					(hide yes)
+					(name "NC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin no_connect line
+					(at 10.16 7.62 180)
+					(length 2.54)
+					(hide yes)
+					(name "NC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input clock
+					(at -12.7 -5.08 0)
+					(length 2.54)
+					(name "SPC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(alternate "SCL" input clock)
+				)
+				(pin power_in line
+					(at 0 -15.24 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -12.7 -2.54 0)
+					(length 2.54)
+					(name "SDI"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(alternate "SDA" bidirectional line)
+					(alternate "SDO" output line)
+				)
+				(pin output line
+					(at -12.7 0 0)
+					(length 2.54)
+					(name "SDO"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(alternate "SA0" input line)
+				)
+				(pin input line
+					(at -12.7 -7.62 0)
+					(length 2.54)
+					(name "CS"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at -12.7 2.54 0)
+					(length 2.54)
+					(name "INT2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -15.24 90)
+					(length 2.54)
+					(hide yes)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "10"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at -12.7 5.08 0)
+					(length 2.54)
+					(name "INT1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "11"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -15.24 90)
+					(length 2.54)
+					(hide yes)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "12"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 12.7 -2.54 180)
+					(length 2.54)
+					(name "ADC3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "13"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 2.54 12.7 270)
+					(length 2.54)
+					(name "VDD"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "14"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 12.7 0 180)
+					(length 2.54)
+					(name "ADC2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "15"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 12.7 2.54 180)
+					(length 2.54)
+					(name "ADC1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "16"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:C_100n"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "C"
+				(at 0.635 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "100nF"
+				(at 0.635 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" "pinball:C_0402_1005Metric"
+				(at 0.9652 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Unpolarized capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "C_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "CL05B104KO5NNNC"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "Samsung"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "LCSC" "C1525"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "C_100n_0_1"
+				(polyline
+					(pts
+						(xy -2.032 0.762) (xy 2.032 0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.032 -0.762) (xy 2.032 -0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_100n_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "pinball:C_10u"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "C"
+				(at 0.635 2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "10uF"
+				(at 0.635 -2.54 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" "pinball:C_0805_2012Metric"
+				(at 0.9652 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Unpolarized capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "cap capacitor"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "C_*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "MPN" "CL21A106KAYNNNE"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "Samsung"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "LCSC" "C15850"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "C_10u_0_1"
+				(polyline
+					(pts
+						(xy -2.032 0.762) (xy 2.032 0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.032 -0.762) (xy 2.032 -0.762)
+					)
+					(stroke
+						(width 0.508)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_10u_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 2.794)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "power:+3V3"
+			(power global)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#PWR"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "+3V3"
+				(at 0 3.556 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"+3V3\""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "+3V3_0_1"
+				(polyline
+					(pts
+						(xy -0.762 1.27) (xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 2.54) (xy 0.762 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "+3V3_1_1"
+				(pin power_in line
+					(at 0 0 90)
+					(length 0)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(rectangle
+		(start 25.4 25.4)
+		(end 325.12 181.61)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "105f1031-8e74-58ad-b57c-f172ba936f1a")
+	)
+	(text "THE BALL IS THE SWITCH: 18 gold combs, the steel ball shorts SENSE to GND"
+		(exclude_from_sim no)
+		(at 26.67 29.21 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "7fed8ac6-7e6f-5096-9247-81956cd3cfb4")
+	)
+	(text "A comb's fingers are 0.4 mm on a 0.8 mm pitch; the 8 mm ball sags 5 um, less than the copper's 35 um, so it\ntouches both nets. The combs are exposed metal: at each comb's land a TVS clamps a strike to ground and a 1k beside it\nlimits what reaches the RP2040's pin, whose internal pull-up holds the line. SENSE_* is the comb's side, IN_* the pin's."
+		(exclude_from_sim no)
+		(at 27.94 40.64 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "61d4c390-f258-5dab-b893-34d5df23b330")
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "4a7829c3-004c-5f21-853e-da9e056c3917")
+		(property "Reference" "S1"
+			(at 93.98 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "LANE_G"
+			(at 93.98 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S1"
+			(at 96.52 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "eb895e13-decd-56b4-a517-d26ba5fe750f")
+		)
+		(pin "2"
+			(uuid "b8ef486e-6f3b-5e45-b265-0f1b4075b791")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 63.5 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5be7806e-3af7-59a5-9600-80104538941a")
+		(property "Reference" "D3"
+			(at 88.9 63.5 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 64.77 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "82eb36e8-5d25-5128-a342-326f1e4a08b8")
+		)
+		(pin "2"
+			(uuid "77a242e7-3638-5e05-8af0-07d21c0e58ef")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 58.42 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9fec702d-d07a-50c4-aa8f-62b40ffd40e3")
+		(property "Reference" "R50"
+			(at 53.34 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "63fd8249-1611-556e-b222-a3372bbbcefd")
+		)
+		(pin "2"
+			(uuid "debb70df-9661-5ee6-a9f6-df87777dc7ad")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R50")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 58.42) (xy 86.36 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1942092c-2cf9-5527-a99f-8a19824fb0ca")
+	)
+	(wire
+		(pts
+			(xy 86.36 58.42) (xy 60.96 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c0a42ce-f109-5789-95be-ac164f169361")
+	)
+	(wire
+		(pts
+			(xy 86.36 58.42) (xy 86.36 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bdb79def-1a25-5062-a648-a31ce4fee34d")
+	)
+	(label "SENSE_LANE_G"
+		(at 62.23 58.42 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c656e0f7-edbd-522f-8b71-31a4e574bf7a")
+	)
+	(wire
+		(pts
+			(xy 86.36 67.31) (xy 86.36 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "07aefa32-20c8-595f-b2dc-b0969ec24bf8")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 68.58 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "0c6fdfeb-910e-532d-ba85-823e256e573f")
+		(property "Reference" "#PWR0046"
+			(at 86.36 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "de428b88-e9fe-5a50-9436-a9276c03d886")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0046")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 58.42) (xy 48.26 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0c241686-a5e3-529e-b063-0a33ebfe995e")
+	)
+	(hierarchical_label "IN_LANE_G"
+		(shape output)
+		(at 48.26 58.42 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "24e85f2c-4d3c-51cb-9a9d-53541ec52d20")
+	)
+	(wire
+		(pts
+			(xy 101.6 58.42) (xy 106.68 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "71f8da9e-f79e-5bd9-b3a4-51fc7a2d9253")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "fcba7d63-2a3f-5dc8-845e-b608c20931ae")
+		(property "Reference" "#PWR0047"
+			(at 106.68 62.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "293125ee-2cf5-5af6-add9-7246691217be")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0047")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "7ddd6d2a-f01c-59de-9d7c-102429cb20e9")
+		(property "Reference" "S2"
+			(at 195.58 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "LANE_N"
+			(at 195.58 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S2"
+			(at 198.12 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "47445521-58f3-5d78-999b-733a307efadf")
+		)
+		(pin "2"
+			(uuid "19976799-72f2-5935-9c9d-8cce14c62ed9")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 63.5 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "577ac0a7-12ba-52fb-938c-3a7ebcb5f860")
+		(property "Reference" "D4"
+			(at 190.5 63.5 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 64.77 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "5bce158e-4301-5a56-acd1-0a4e7b922dbf")
+		)
+		(pin "2"
+			(uuid "e4522f05-9be4-5243-8efb-f45075436dfb")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 58.42 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "6a9d1985-d058-504a-a0d9-420337ffbbe1")
+		(property "Reference" "R51"
+			(at 154.94 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "ff69cf75-94ee-58af-bf98-bd8921182427")
+		)
+		(pin "2"
+			(uuid "346aa2a2-36d7-5e78-bcc3-2b080b969923")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R51")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 58.42) (xy 187.96 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "335af1d0-1958-504a-9161-81a1e5b81b26")
+	)
+	(wire
+		(pts
+			(xy 187.96 58.42) (xy 162.56 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1c6f1aaf-ab9c-5e90-8b4e-445708b4082c")
+	)
+	(wire
+		(pts
+			(xy 187.96 58.42) (xy 187.96 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5ea9c6ef-a47e-561e-ad95-b3275ba23ee0")
+	)
+	(label "SENSE_LANE_N"
+		(at 163.83 58.42 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0bd1c083-0010-50ac-a49d-46f72987dede")
+	)
+	(wire
+		(pts
+			(xy 187.96 67.31) (xy 187.96 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "16e3fc6c-d755-5e8e-be64-6d3304eb41e6")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 68.58 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "66094732-ae34-5919-aa34-471f6d5985fa")
+		(property "Reference" "#PWR0048"
+			(at 187.96 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b0881a48-56da-53fe-8e06-19a9e9b3ede3")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0048")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 58.42) (xy 149.86 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6152b162-b33b-5b19-84e0-79ef8429a205")
+	)
+	(hierarchical_label "IN_LANE_N"
+		(shape output)
+		(at 149.86 58.42 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "f0994e24-81cc-53c4-951c-f1c153c8dcf4")
+	)
+	(wire
+		(pts
+			(xy 203.2 58.42) (xy 208.28 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1aecfd83-071e-5f93-82d9-12f475604f99")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c13147ac-09b8-5559-83ef-fc6ef3156e45")
+		(property "Reference" "#PWR0049"
+			(at 208.28 62.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "05931844-860e-5b57-b473-a165d6d9e02b")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0049")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e497d3e1-8119-5c08-bc38-57bbc9d37460")
+		(property "Reference" "S3"
+			(at 297.18 52.07 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "LANE_D"
+			(at 297.18 54.61 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S3"
+			(at 299.72 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "804470b9-0a14-5330-89dd-d76424005f7d")
+		)
+		(pin "2"
+			(uuid "76dfdfe6-fb14-5a02-8b11-68ac1ead7ea5")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 63.5 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "679c8ed9-c0a3-52c7-a216-5bfd676a83b3")
+		(property "Reference" "D5"
+			(at 292.1 63.5 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 64.77 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 63.5 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "8b6745f1-df04-594a-bded-a17f0db0a401")
+		)
+		(pin "2"
+			(uuid "98d473e4-e04e-5125-922a-258df0c94d6e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 58.42 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1270efb0-9fea-51c4-b33b-27005008236a")
+		(property "Reference" "R52"
+			(at 256.54 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 55.88 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 58.42 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "f7d9e026-090a-5bd0-bb0a-4bac008aaa88")
+		)
+		(pin "2"
+			(uuid "480b3d9c-20dc-505e-a738-8eb972882f99")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R52")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 58.42) (xy 289.56 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "650142c0-725f-5f9d-b264-9ef9a6bd2fad")
+	)
+	(wire
+		(pts
+			(xy 289.56 58.42) (xy 264.16 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b9e8ecc4-0ff5-564c-a6a8-d2126eecc041")
+	)
+	(wire
+		(pts
+			(xy 289.56 58.42) (xy 289.56 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3975a1f8-6694-5bff-8e82-4bf230a3973b")
+	)
+	(label "SENSE_LANE_D"
+		(at 265.43 58.42 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b95988d9-c091-5b40-be64-23cefc780f32")
+	)
+	(wire
+		(pts
+			(xy 289.56 67.31) (xy 289.56 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3a35b8c0-7f4f-50c7-851f-6543e5448562")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 68.58 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "65d64734-551f-5262-842e-cf9b0ae734cf")
+		(property "Reference" "#PWR0050"
+			(at 289.56 72.39 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 68.58 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "363170c9-ddd7-5f70-b987-005909679cf6")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0050")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 58.42) (xy 251.46 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a18a6aad-c209-5cf6-ba34-82f4f8ee2816")
+	)
+	(hierarchical_label "IN_LANE_D"
+		(shape output)
+		(at 251.46 58.42 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "f4cdf00c-85a1-562d-84e2-2e0d697ba457")
+	)
+	(wire
+		(pts
+			(xy 304.8 58.42) (xy 309.88 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5ee2c739-01e4-5b96-8c7a-c9cccddbe1b2")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 58.42 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "278034df-63ab-5518-80ba-dc04fdf4f034")
+		(property "Reference" "#PWR0051"
+			(at 309.88 62.23 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 58.42 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0d2577b4-a90b-5567-9efc-5d4ed43a0484")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0051")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "6f9acc87-f73c-5988-9993-866872e3e0ef")
+		(property "Reference" "S4"
+			(at 93.98 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "OUT_L"
+			(at 93.98 74.93 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S4"
+			(at 96.52 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "26f6d58d-663b-563b-b68e-3b56a0e79145")
+		)
+		(pin "2"
+			(uuid "aebad3b4-2384-57eb-8736-0f8170e4c322")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 83.82 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8e83a780-7c19-5302-852b-93aab0441148")
+		(property "Reference" "D6"
+			(at 88.9 83.82 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 85.09 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "b8f4cc5f-325c-5dc7-85ec-a23855213f77")
+		)
+		(pin "2"
+			(uuid "689a7b90-e857-5683-b185-09aae940be61")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 78.74 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "956ca4d0-fd26-5dbe-a08a-c9622250cdca")
+		(property "Reference" "R53"
+			(at 53.34 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "4f152088-2665-5c28-a5f1-973611bc0e27")
+		)
+		(pin "2"
+			(uuid "9226baae-b1ff-5e83-b0a9-76f610361e35")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R53")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 78.74) (xy 86.36 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "01f811e2-b37b-554c-aae8-7801268f7714")
+	)
+	(wire
+		(pts
+			(xy 86.36 78.74) (xy 60.96 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b580ca52-d1a7-5368-a02d-2dd9f0608aef")
+	)
+	(wire
+		(pts
+			(xy 86.36 78.74) (xy 86.36 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ae637388-70b9-57de-b509-e54d46938bc0")
+	)
+	(label "SENSE_OUT_L"
+		(at 62.23 78.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "fc89ef90-fd57-5662-9ce3-2551e2523e4a")
+	)
+	(wire
+		(pts
+			(xy 86.36 87.63) (xy 86.36 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "813948d8-2a13-5d0b-bc83-fc60e5834723")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 88.9 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ab611b81-2bfe-581d-bb41-aa6fbd79108c")
+		(property "Reference" "#PWR0052"
+			(at 86.36 92.71 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 93.98 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b4bd51f6-f953-5a12-b0fa-618ccb7d595b")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0052")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 78.74) (xy 48.26 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a7144bd9-043c-5764-b0c7-b8bc57c87b17")
+	)
+	(hierarchical_label "IN_OUT_L"
+		(shape output)
+		(at 48.26 78.74 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d549e9a9-c4f9-56cd-9621-723ee649c7d1")
+	)
+	(wire
+		(pts
+			(xy 101.6 78.74) (xy 106.68 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "08425d3d-3e8d-5846-ab7e-ff77bd623660")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "1763b165-7485-53b9-a04a-09d6ef5672e3")
+		(property "Reference" "#PWR0053"
+			(at 106.68 82.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 83.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "038b7f65-0594-5a7b-8b24-d67b54df5c49")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0053")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3346ff9b-a5a6-541f-8d35-b14659d0a8b2")
+		(property "Reference" "S5"
+			(at 195.58 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "IN_L"
+			(at 195.58 74.93 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S5"
+			(at 198.12 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "4a94083a-d423-514e-ac39-46e22055f750")
+		)
+		(pin "2"
+			(uuid "9b640c98-c285-5c45-92e4-9f729a9d0314")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 83.82 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ca178a3e-0e72-5905-b5fe-c517afa8f808")
+		(property "Reference" "D7"
+			(at 190.5 83.82 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 85.09 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "8ea1a4ad-efbf-5c8c-b94c-0ab64ecd4091")
+		)
+		(pin "2"
+			(uuid "4d8eecb2-e56b-53e6-b090-39460c8bbf61")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 78.74 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "3bb7b8dd-294f-58b4-88dd-f4bede01b10a")
+		(property "Reference" "R54"
+			(at 154.94 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "35fe7321-61c4-5f60-91c3-41a0af7df92d")
+		)
+		(pin "2"
+			(uuid "86def645-5ca0-5b31-90d9-f20d1749eee2")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R54")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 78.74) (xy 187.96 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2f1b281d-22b4-52fb-818a-2e57bd8f0578")
+	)
+	(wire
+		(pts
+			(xy 187.96 78.74) (xy 162.56 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a6807140-afc6-5a91-915d-c7764e88e031")
+	)
+	(wire
+		(pts
+			(xy 187.96 78.74) (xy 187.96 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bd4d2216-d218-555b-9eff-e2e387257c95")
+	)
+	(label "SENSE_IN_L"
+		(at 163.83 78.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "1bad67ef-de9d-5144-9b2a-82633f02ae1f")
+	)
+	(wire
+		(pts
+			(xy 187.96 87.63) (xy 187.96 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bf163c2e-da84-5183-9743-736bff6cbd9a")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 88.9 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "6bf9dcb8-5c96-5e40-a7d9-40044ec4192a")
+		(property "Reference" "#PWR0054"
+			(at 187.96 92.71 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 93.98 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e27d6588-295c-593c-8bdb-8c2a85e868c9")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0054")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 78.74) (xy 149.86 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "462842d3-5d47-5af5-8a08-0083141cb0af")
+	)
+	(hierarchical_label "IN_IN_L"
+		(shape output)
+		(at 149.86 78.74 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "14b21113-4f38-5375-8572-a0f94ff6aa04")
+	)
+	(wire
+		(pts
+			(xy 203.2 78.74) (xy 208.28 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "52355289-7a39-5603-862a-1f90c2e362b6")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a8bccc1d-266c-5b9a-93ed-87a66856ed65")
+		(property "Reference" "#PWR0055"
+			(at 208.28 82.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 83.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b24944cc-d93a-574b-98d7-2ca2266694fa")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0055")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ebca0e29-9223-533b-8e66-7896a9400e8d")
+		(property "Reference" "S6"
+			(at 297.18 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "IN_R"
+			(at 297.18 74.93 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S6"
+			(at 299.72 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "3ac219b1-d593-5181-8fdc-086c2969396f")
+		)
+		(pin "2"
+			(uuid "d43800ba-ffad-53e7-9b61-7ddb14dfdbbf")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 83.82 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "945b9eb1-7840-5c7f-8880-1dbd2764c22e")
+		(property "Reference" "D8"
+			(at 292.1 83.82 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 85.09 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 83.82 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "9ecd0949-e12e-58e7-826a-881ad6bbbaf7")
+		)
+		(pin "2"
+			(uuid "20dc4115-77c6-5422-bc0d-0f000df30c03")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 78.74 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "bdc1ac1a-c217-5de0-a097-051c95d3d2bb")
+		(property "Reference" "R55"
+			(at 256.54 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 76.2 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 78.74 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "587b000a-1ce4-5766-847a-0b4a281a47a2")
+		)
+		(pin "2"
+			(uuid "4df27364-f850-5d03-8637-4e9b6adb9626")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R55")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 78.74) (xy 289.56 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "77dd6822-008e-5fe8-89e2-00df7e8d8eec")
+	)
+	(wire
+		(pts
+			(xy 289.56 78.74) (xy 264.16 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e9bb24b6-ffed-5bd3-a894-ca4e4a6bf42b")
+	)
+	(wire
+		(pts
+			(xy 289.56 78.74) (xy 289.56 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "08a04833-b5c6-5571-be6a-5d45d1b1b53d")
+	)
+	(label "SENSE_IN_R"
+		(at 265.43 78.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "bd019f06-1f32-5899-a7a1-fecead0f0679")
+	)
+	(wire
+		(pts
+			(xy 289.56 87.63) (xy 289.56 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "de41a2b0-2da8-538f-bc54-bbdbc14470ca")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 88.9 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "073c7787-254b-59a6-ab70-886b7218fd28")
+		(property "Reference" "#PWR0056"
+			(at 289.56 92.71 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 93.98 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 88.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7b07fe1f-d696-5768-aed3-311eda897a4b")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0056")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 78.74) (xy 251.46 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b32db06a-fb0c-51e8-ba62-48df5dcd8a81")
+	)
+	(hierarchical_label "IN_IN_R"
+		(shape output)
+		(at 251.46 78.74 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "66a574a0-78b3-5789-9bc2-21e92270429b")
+	)
+	(wire
+		(pts
+			(xy 304.8 78.74) (xy 309.88 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ff5ab7ba-9a40-5bf2-a87c-e94d5b37b5e6")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 78.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "b05fcca8-4f4c-5ad3-ac86-e6e32e10a253")
+		(property "Reference" "#PWR0057"
+			(at 309.88 82.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 83.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 78.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cd9c2955-8ab8-5ea3-8e30-cd90a9659fdb")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0057")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "9a25daff-523f-51a2-b217-c5f66ef68be8")
+		(property "Reference" "S7"
+			(at 93.98 92.71 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "OUT_R"
+			(at 93.98 95.25 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S7"
+			(at 96.52 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "35ff5e2d-ce34-578f-b8ff-e30ec057c3b4")
+		)
+		(pin "2"
+			(uuid "d9c78411-17d5-5d52-99a6-576bd11f736e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 104.14 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7ac92c4b-eb82-57c5-bb04-aaac8dfde265")
+		(property "Reference" "D9"
+			(at 88.9 104.14 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 105.41 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "faa94d4a-5705-54a9-acb3-5aeb53e5097c")
+		)
+		(pin "2"
+			(uuid "d364ac06-9545-54e5-8466-d503e6ba9a70")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 99.06 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5db7469f-d345-5bbb-9593-9a1529f8a149")
+		(property "Reference" "R56"
+			(at 53.34 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "716a94f5-eb75-5432-b70a-5444479f5d3f")
+		)
+		(pin "2"
+			(uuid "b39fa2c8-039f-59ee-972d-a515dcef1658")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R56")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 99.06) (xy 86.36 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5a6027a1-0473-5e6c-868c-7732fc91f4ea")
+	)
+	(wire
+		(pts
+			(xy 86.36 99.06) (xy 60.96 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5e936496-bbdb-5722-a9ad-17d4f45987b7")
+	)
+	(wire
+		(pts
+			(xy 86.36 99.06) (xy 86.36 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d3ea9955-475c-5396-bb8c-6bcb8abc93fd")
+	)
+	(label "SENSE_OUT_R"
+		(at 62.23 99.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "06ceca9b-3d98-5689-a40d-a58a7228f889")
+	)
+	(wire
+		(pts
+			(xy 86.36 107.95) (xy 86.36 109.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b79f34b6-2aa1-57d5-bb3b-74ac09e77a0f")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 109.22 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "70d4ba22-980b-5110-a27e-91fdbdf26acc")
+		(property "Reference" "#PWR0058"
+			(at 86.36 113.03 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d0f6cb9e-6a56-55be-960a-8fec062e2244")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0058")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 99.06) (xy 48.26 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4902a381-f9cd-5d2c-82b0-0e23a7353813")
+	)
+	(hierarchical_label "IN_OUT_R"
+		(shape output)
+		(at 48.26 99.06 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "101fbaaf-52ae-5747-a02e-50f27a054ce9")
+	)
+	(wire
+		(pts
+			(xy 101.6 99.06) (xy 106.68 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "42c85ad7-5502-5c80-a227-27881783c18c")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e7d2d1af-5a12-5273-9ce8-a2d4f2dba0f4")
+		(property "Reference" "#PWR0059"
+			(at 106.68 102.87 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cf65b607-7211-5671-96bd-f2b444577427")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0059")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "53df222e-1ae6-58c7-9a1f-94f6eede0ec2")
+		(property "Reference" "S8"
+			(at 195.58 92.71 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "BUMPER_C1"
+			(at 195.58 95.25 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S8"
+			(at 198.12 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "2bc6539a-008c-51e2-9c37-a106c55f8ff2")
+		)
+		(pin "2"
+			(uuid "9f9b7d3f-904f-565b-a301-590c5ab27a44")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 104.14 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7c546a8e-a721-5497-9095-fdb22ce0176b")
+		(property "Reference" "D10"
+			(at 190.5 104.14 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 105.41 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "d1b5c46e-c632-5639-90fb-d10726f5f040")
+		)
+		(pin "2"
+			(uuid "41e390ec-5568-5f9f-88b5-4d278d807dcd")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 99.06 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d7deed5a-9c81-51b2-846d-7bf97fcedd14")
+		(property "Reference" "R57"
+			(at 154.94 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "03abaf70-92f3-5fd8-b362-5ff4d3310c82")
+		)
+		(pin "2"
+			(uuid "45c500c4-0e0e-5d26-bf7e-3f7ca407e192")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R57")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 99.06) (xy 187.96 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5aca387a-4d80-5354-b545-b31a389d9403")
+	)
+	(wire
+		(pts
+			(xy 187.96 99.06) (xy 162.56 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3cd088ec-80bc-508a-9326-199b4d163f83")
+	)
+	(wire
+		(pts
+			(xy 187.96 99.06) (xy 187.96 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a07108ca-dc6f-5c7c-8d19-c66c84da38f3")
+	)
+	(label "SENSE_BUMPER_C1"
+		(at 163.83 99.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "6c57f088-010e-506e-99bb-64199c5978c9")
+	)
+	(wire
+		(pts
+			(xy 187.96 107.95) (xy 187.96 109.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b976e622-b246-5783-ac7a-cd52f9ddbd57")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 109.22 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "4f9dfe78-a71d-5812-adef-2046d07c0f7b")
+		(property "Reference" "#PWR0060"
+			(at 187.96 113.03 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "14447809-2c6b-5b0f-9a4b-24758a7fd2f8")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0060")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 99.06) (xy 149.86 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fcaf8651-e573-5f32-b52d-6852d342f805")
+	)
+	(hierarchical_label "IN_BUMPER_C1"
+		(shape output)
+		(at 149.86 99.06 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "56fe3af3-54cd-572c-a995-0f1870fe2de4")
+	)
+	(wire
+		(pts
+			(xy 203.2 99.06) (xy 208.28 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3da4dec5-2cb6-5de6-9167-755d6c48edd7")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "6a1dfb06-8a72-5752-8f31-599a43984729")
+		(property "Reference" "#PWR0061"
+			(at 208.28 102.87 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f7509131-fdb0-5a41-8d28-6f4ec2638721")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0061")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "08d0385f-b44e-556f-9f84-89aacddb61f5")
+		(property "Reference" "S9"
+			(at 297.18 92.71 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "BUMPER_C2"
+			(at 297.18 95.25 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S9"
+			(at 299.72 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "1a779539-630d-5724-89d7-eed1eb4c16ed")
+		)
+		(pin "2"
+			(uuid "bbdfb53f-1912-5376-a8cf-1d5d2d21cb16")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 104.14 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "dc4078db-f6ec-5490-a532-7a179a50185a")
+		(property "Reference" "D11"
+			(at 292.1 104.14 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 105.41 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 104.14 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "7a109003-8a26-555c-ab77-a9d0628150cd")
+		)
+		(pin "2"
+			(uuid "54f83298-ed41-59aa-bd23-7a52cfbb5000")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 99.06 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "30aaf57d-e3bb-5045-ba49-029c269e49ee")
+		(property "Reference" "R58"
+			(at 256.54 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 96.52 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 99.06 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "2f7889c7-f6ff-580e-b41c-1a972d25550b")
+		)
+		(pin "2"
+			(uuid "63e5c533-98a9-5ea1-a1e7-bf7d64890dea")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R58")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 99.06) (xy 289.56 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fff76444-f162-594e-8f22-533297bdc32c")
+	)
+	(wire
+		(pts
+			(xy 289.56 99.06) (xy 264.16 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc918619-77f7-526a-810c-9e75d3afa4f6")
+	)
+	(wire
+		(pts
+			(xy 289.56 99.06) (xy 289.56 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "634b7f33-26a2-5a69-805a-182a7faa5ab1")
+	)
+	(label "SENSE_BUMPER_C2"
+		(at 265.43 99.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "59277fbb-b1df-58c8-991b-5be8f5404925")
+	)
+	(wire
+		(pts
+			(xy 289.56 107.95) (xy 289.56 109.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "37a66338-c8f3-5d4d-a9c7-be85462cf27a")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 109.22 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "5322b990-4f4d-566a-b4b7-e814fb25f52b")
+		(property "Reference" "#PWR0062"
+			(at 289.56 113.03 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 109.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "27faf7ba-b284-5a44-af39-7ab59bc1541a")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0062")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 99.06) (xy 251.46 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e2af5554-13eb-55f3-afe0-a6bcc5c1c2e4")
+	)
+	(hierarchical_label "IN_BUMPER_C2"
+		(shape output)
+		(at 251.46 99.06 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "7b92ab16-5418-59af-bca6-40293fda096d")
+	)
+	(wire
+		(pts
+			(xy 304.8 99.06) (xy 309.88 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "06b24ec2-1619-5220-b892-bdcd21d1a013")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 99.06 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "5be30be9-dc96-5844-b788-f1eecda309b6")
+		(property "Reference" "#PWR0063"
+			(at 309.88 102.87 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 99.06 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "984e6a34-e0b6-5e97-b172-bab41c7a40bb")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0063")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "2a585c09-048e-5b5d-9e33-6521d2ca919c")
+		(property "Reference" "S10"
+			(at 93.98 113.03 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "BUMPER_C3"
+			(at 93.98 115.57 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S10"
+			(at 96.52 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "4786eda1-1b27-5b71-8234-71924d049796")
+		)
+		(pin "2"
+			(uuid "02e29d8e-0ca8-5c8a-8210-e8cd9ed278a3")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 124.46 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "aeeb6df5-a9b2-537c-bd23-d6ee8a388bca")
+		(property "Reference" "D12"
+			(at 88.9 124.46 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 125.73 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "143c2d00-da6c-594c-9630-9ba3195d760a")
+		)
+		(pin "2"
+			(uuid "e594635b-4459-59d5-88c4-e822d9f807ce")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 119.38 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8235d18c-64bb-5a6e-bbb2-e9564dca44f2")
+		(property "Reference" "R59"
+			(at 53.34 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "93eaf0a9-5015-5c24-94ce-0886912ce52a")
+		)
+		(pin "2"
+			(uuid "e2c113e9-8cd1-578d-947c-9474f14333ed")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R59")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 119.38) (xy 86.36 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bd1580c3-1030-59db-978d-4ae3fa28772d")
+	)
+	(wire
+		(pts
+			(xy 86.36 119.38) (xy 60.96 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4efa1768-59b5-5b21-924a-665283a1307c")
+	)
+	(wire
+		(pts
+			(xy 86.36 119.38) (xy 86.36 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dbd69e52-645e-5b42-b8e2-dfc6fc8b7b00")
+	)
+	(label "SENSE_BUMPER_C3"
+		(at 62.23 119.38 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "32f951d9-104d-5dd3-adcd-0937fc479390")
+	)
+	(wire
+		(pts
+			(xy 86.36 128.27) (xy 86.36 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1ffb6d8d-8927-50f0-9095-053f1e17cf90")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 129.54 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "a8d4579e-f5f2-52f7-817e-e3c6709145c1")
+		(property "Reference" "#PWR0064"
+			(at 86.36 133.35 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3b89e9c4-48a3-596d-968f-ca916bf92cfd")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0064")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 119.38) (xy 48.26 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "85895317-aa28-50af-b475-076ecadc91fc")
+	)
+	(hierarchical_label "IN_BUMPER_C3"
+		(shape output)
+		(at 48.26 119.38 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "1db09238-78a0-5cde-bb62-b6c6f6bf7a78")
+	)
+	(wire
+		(pts
+			(xy 101.6 119.38) (xy 106.68 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8040f567-408b-51b7-974c-cac73fad0958")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "77c46b6a-7a22-5f79-8aa2-d53eba603d0d")
+		(property "Reference" "#PWR0065"
+			(at 106.68 123.19 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0d62c8d1-83f8-5ea2-ae3a-306fa3429c1e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0065")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "646524c2-277d-5053-8469-3cfc76a71cf5")
+		(property "Reference" "S11"
+			(at 195.58 113.03 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TARGET_V"
+			(at 195.58 115.57 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S11"
+			(at 198.12 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "6c358dae-daad-5864-8a2d-024846dff2bf")
+		)
+		(pin "2"
+			(uuid "6fe37ed3-30a0-5d1f-9a95-b2df06b2611a")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 124.46 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "6bea6829-3bf7-5d69-aa62-24f67fe5ccda")
+		(property "Reference" "D13"
+			(at 190.5 124.46 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 125.73 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "63faca34-1862-500a-add2-8dea9ded166c")
+		)
+		(pin "2"
+			(uuid "6f76118a-e84a-569e-9928-ada1ee84d461")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 119.38 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "60122373-a81b-5832-8dde-ed07d07d526b")
+		(property "Reference" "R60"
+			(at 154.94 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "eb23a6df-7e76-5541-b6a8-b82bb531d5a7")
+		)
+		(pin "2"
+			(uuid "ce2a6345-9d49-56f8-9a80-c87ad66fe8a2")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R60")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 119.38) (xy 187.96 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4d99f852-86bf-5440-9934-c03384b1d941")
+	)
+	(wire
+		(pts
+			(xy 187.96 119.38) (xy 162.56 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "20de62b8-cb72-53fa-8544-4291556e196d")
+	)
+	(wire
+		(pts
+			(xy 187.96 119.38) (xy 187.96 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "11c0c2ab-3366-5114-98ef-1975e80948ae")
+	)
+	(label "SENSE_TARGET_V"
+		(at 163.83 119.38 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "e10520ea-3b1d-5686-80c0-b8aef634fb56")
+	)
+	(wire
+		(pts
+			(xy 187.96 128.27) (xy 187.96 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "641e689e-80d1-51af-a633-f07a0453b4db")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 129.54 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3575368c-6c68-5b07-9d1f-6b7cc8c3e65e")
+		(property "Reference" "#PWR0066"
+			(at 187.96 133.35 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "34d450ce-f65a-5ddc-a62b-f3fe7ea34b7b")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0066")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 119.38) (xy 149.86 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "868913f7-2c4e-5b01-8184-e51474af8ee8")
+	)
+	(hierarchical_label "IN_TARGET_V"
+		(shape output)
+		(at 149.86 119.38 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0234a8e8-f55b-5533-852f-62370e360a81")
+	)
+	(wire
+		(pts
+			(xy 203.2 119.38) (xy 208.28 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bdb6f15f-8e8e-547c-a35e-ae90c5c1a094")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c43e6861-c1a0-5b00-a015-d38311e2a49e")
+		(property "Reference" "#PWR0067"
+			(at 208.28 123.19 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d14783e0-07aa-5166-872f-3a546f419b8f")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0067")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "0df71f33-78e0-55a1-8c99-98188ea5ef20")
+		(property "Reference" "S12"
+			(at 297.18 113.03 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TARGET_C"
+			(at 297.18 115.57 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S12"
+			(at 299.72 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "f5a38059-55cc-5a99-a53f-2680ad33417b")
+		)
+		(pin "2"
+			(uuid "986b39fd-4a30-5c0c-9870-4227ef2b861e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 124.46 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5d655707-7c14-5dd9-a644-ca5f1b7aba44")
+		(property "Reference" "D14"
+			(at 292.1 124.46 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 125.73 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 124.46 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "f399e9cf-f736-5034-8290-1166d99030b2")
+		)
+		(pin "2"
+			(uuid "485a4b23-8028-5aeb-aa23-605df081a2b7")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 119.38 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "501a07c2-c550-5fcd-ad27-6ecf7cb38baf")
+		(property "Reference" "R61"
+			(at 256.54 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 116.84 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 119.38 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "6a52da81-b7e8-5629-be22-5487205ddd2c")
+		)
+		(pin "2"
+			(uuid "beb9627f-a618-5481-99d4-c6f7afa6a0ed")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R61")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 119.38) (xy 289.56 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b5cfd04f-f171-5dcb-864c-701edca73a8e")
+	)
+	(wire
+		(pts
+			(xy 289.56 119.38) (xy 264.16 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "829d0ae0-a538-5cf4-8d60-0acff2e6ac6d")
+	)
+	(wire
+		(pts
+			(xy 289.56 119.38) (xy 289.56 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "44286b95-b50b-537a-ad47-11d17df91bd6")
+	)
+	(label "SENSE_TARGET_C"
+		(at 265.43 119.38 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "2af2cee8-608d-5dbb-931f-6ddb283649af")
+	)
+	(wire
+		(pts
+			(xy 289.56 128.27) (xy 289.56 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7653e6d3-24fd-551c-a71e-3ca3b3febac7")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 129.54 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "10239cc9-33b4-5f5b-8593-da3f76650fdf")
+		(property "Reference" "#PWR0068"
+			(at 289.56 133.35 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 134.62 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 129.54 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5e8c19fd-4c2d-59eb-b8ea-762f99f8ff83")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0068")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 119.38) (xy 251.46 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4fab1399-c18a-57b1-afb5-d33f9a1e52be")
+	)
+	(hierarchical_label "IN_TARGET_C"
+		(shape output)
+		(at 251.46 119.38 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "65ead956-0ee9-560f-bbdb-f2b6cec7b44c")
+	)
+	(wire
+		(pts
+			(xy 304.8 119.38) (xy 309.88 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dd03dc6d-904f-593a-979b-f1900fc7e796")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 119.38 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "62559b37-9386-5a9a-8a24-4b72acb5d4af")
+		(property "Reference" "#PWR0069"
+			(at 309.88 123.19 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 119.38 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5cf5f6b5-09a4-585a-b0b8-83cc10cd0d3c")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0069")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "d52c6e98-2b7d-5008-af52-51a48caccac2")
+		(property "Reference" "S13"
+			(at 93.98 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TARGET_C2"
+			(at 93.98 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S13"
+			(at 96.52 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "05d1c6f8-abc9-5b84-b5f6-a62b6a18e1a9")
+		)
+		(pin "2"
+			(uuid "e12af7ba-1655-54d3-8cd9-3d64846f198a")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 144.78 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "2433d657-ac47-56a7-b65d-aa113260eaf6")
+		(property "Reference" "D15"
+			(at 88.9 144.78 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 146.05 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "885cca47-8642-58b3-9d6c-63b7957faa0f")
+		)
+		(pin "2"
+			(uuid "443c3877-282d-5f6a-8025-a835951d0540")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 139.7 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "4ff61fa1-a76c-5b03-ada8-029a7024c72a")
+		(property "Reference" "R62"
+			(at 53.34 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "8532732b-027e-5439-913c-4b23cc862c93")
+		)
+		(pin "2"
+			(uuid "cee1be13-6bbb-515e-a223-b62d61fb2236")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R62")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 139.7) (xy 86.36 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e562337f-ccf9-5d36-ba9d-815629f425e3")
+	)
+	(wire
+		(pts
+			(xy 86.36 139.7) (xy 60.96 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d3c36922-f586-525d-8326-cf386993f3bb")
+	)
+	(wire
+		(pts
+			(xy 86.36 139.7) (xy 86.36 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d29df7e3-457a-5482-8810-b0b92f56541e")
+	)
+	(label "SENSE_TARGET_C2"
+		(at 62.23 139.7 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f8e2dcb3-abd2-547c-9fbd-c2ca92912257")
+	)
+	(wire
+		(pts
+			(xy 86.36 148.59) (xy 86.36 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "96101b51-6b73-53a5-b282-d1a261c7a05e")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 149.86 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "71f8db60-a8eb-51ba-85ae-125b967a2af9")
+		(property "Reference" "#PWR0070"
+			(at 86.36 153.67 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "16f91b53-485f-5409-991d-0ea8f1e1dac7")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0070")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 139.7) (xy 48.26 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "80dbb968-157a-5e3e-b359-381524358a34")
+	)
+	(hierarchical_label "IN_TARGET_C2"
+		(shape output)
+		(at 48.26 139.7 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "343807dd-dd2c-5461-9932-b6f0841ebbfd")
+	)
+	(wire
+		(pts
+			(xy 101.6 139.7) (xy 106.68 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e8dc15c5-f58f-534d-bc1d-fdb0029da340")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "d7f30ed8-36d9-52e6-9ad6-5d7178639cb4")
+		(property "Reference" "#PWR0071"
+			(at 106.68 143.51 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "507373bb-7e70-5fd6-8e59-7d5fd86593a0")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0071")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "6a27759a-47b4-5789-94d6-d48feaebd8ee")
+		(property "Reference" "S14"
+			(at 195.58 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SLING_L"
+			(at 195.58 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S14"
+			(at 198.12 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "1f3fa682-ff98-50e6-826b-4fea9163cbad")
+		)
+		(pin "2"
+			(uuid "5413613a-b847-590e-ab18-273dcca953c5")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 144.78 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "91712be0-dd1b-584a-a7d2-ecd54a6282b5")
+		(property "Reference" "D16"
+			(at 190.5 144.78 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 146.05 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "904bb6fa-c5bd-526a-86d4-6e9afa4b8d0d")
+		)
+		(pin "2"
+			(uuid "092e6772-aa51-59d2-9eaf-314198e5e492")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 139.7 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9e21c1a1-ce1a-5893-9098-f0b2c97a0e0a")
+		(property "Reference" "R63"
+			(at 154.94 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "9980231a-37e4-57e4-93ee-8a1dbf7e4fae")
+		)
+		(pin "2"
+			(uuid "2441a9a5-86ce-53dc-94c5-9a33d1390251")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R63")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 139.7) (xy 187.96 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7194b125-1009-5605-815a-090a6df9321f")
+	)
+	(wire
+		(pts
+			(xy 187.96 139.7) (xy 162.56 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a121b522-eada-5dd0-8cb0-0813c6fc1480")
+	)
+	(wire
+		(pts
+			(xy 187.96 139.7) (xy 187.96 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b06d8783-7054-51e8-823e-3e1344a270ad")
+	)
+	(label "SENSE_SLING_L"
+		(at 163.83 139.7 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d4b7790f-7b31-5589-9170-26241dd3a7f3")
+	)
+	(wire
+		(pts
+			(xy 187.96 148.59) (xy 187.96 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "706c4ccb-ced0-554a-8781-492b3a0863d5")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 149.86 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "1bffb63a-1b55-57be-9618-47b964a8c71c")
+		(property "Reference" "#PWR0072"
+			(at 187.96 153.67 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "6e56e09d-14d7-5f00-8da3-f71519865725")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0072")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 139.7) (xy 149.86 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bb02f3a3-2030-5e8d-ba4a-a55781a1946a")
+	)
+	(hierarchical_label "IN_SLING_L"
+		(shape output)
+		(at 149.86 139.7 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "712b7234-e5fd-5213-a858-172e6575dd42")
+	)
+	(wire
+		(pts
+			(xy 203.2 139.7) (xy 208.28 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c9db504-b211-5493-b2f8-9484750d7318")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "1da50217-d8b2-59d2-8388-a35c10e4a0e6")
+		(property "Reference" "#PWR0073"
+			(at 208.28 143.51 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "242bc1a8-3afb-5c58-b6b4-a51286749f28")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0073")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3caaa40f-54dc-5bcc-959e-c107e1f47ad8")
+		(property "Reference" "S15"
+			(at 297.18 133.35 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SLING_R"
+			(at 297.18 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S15"
+			(at 299.72 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "fb060d0b-b6cd-526e-a06d-052600c3613c")
+		)
+		(pin "2"
+			(uuid "71dedc21-51ed-5559-be42-550ce0aa9934")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 144.78 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1cbdd25c-eaa4-5aea-b799-c6173f07e528")
+		(property "Reference" "D17"
+			(at 292.1 144.78 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 146.05 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 144.78 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "afc5003f-84fc-5b6c-bb38-d2c6ef14c106")
+		)
+		(pin "2"
+			(uuid "26ac00d9-a41b-59b3-8fdc-810e5bdc7f2f")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 139.7 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e1d77f00-9406-5448-907e-4644ef28df28")
+		(property "Reference" "R64"
+			(at 256.54 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 137.16 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 139.7 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "af7b3d9d-4503-51f0-8de4-d520c10a6253")
+		)
+		(pin "2"
+			(uuid "00551abe-fad1-53a2-a1e0-26143a1d5d32")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R64")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 139.7) (xy 289.56 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bac768bf-d77f-5f60-bf0f-15e1ac015bd4")
+	)
+	(wire
+		(pts
+			(xy 289.56 139.7) (xy 264.16 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c54683e6-fe59-5800-a898-36e0d7dd8fd5")
+	)
+	(wire
+		(pts
+			(xy 289.56 139.7) (xy 289.56 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "93626480-d563-5a58-b907-e29389f91361")
+	)
+	(label "SENSE_SLING_R"
+		(at 265.43 139.7 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "8f10f038-b596-509c-b331-1bb564507e74")
+	)
+	(wire
+		(pts
+			(xy 289.56 148.59) (xy 289.56 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "86a1e2c1-5cf7-56de-b8e5-e2b3dfbf744e")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 149.86 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "45ff880d-45da-5a2c-b693-edee4078c78a")
+		(property "Reference" "#PWR0074"
+			(at 289.56 153.67 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 149.86 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c4b07417-351f-5c5a-8e5a-36963b26a3c0")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0074")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 139.7) (xy 251.46 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "557c8af0-d485-560f-83d4-87b178cb9e63")
+	)
+	(hierarchical_label "IN_SLING_R"
+		(shape output)
+		(at 251.46 139.7 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "7f13b00f-0c65-5b55-8033-e9df85dace69")
+	)
+	(wire
+		(pts
+			(xy 304.8 139.7) (xy 309.88 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bed09449-bda5-5144-a8c8-9f39ecc40c50")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 139.7 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "49a98af5-f1af-5872-82e2-79bf5f7bbc68")
+		(property "Reference" "#PWR0075"
+			(at 309.88 143.51 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f67fef49-7f4f-5d65-9205-0c8f4b11c26a")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0075")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 96.52 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ed1fb0ef-d2fc-56a1-9571-274b4e72fd22")
+		(property "Reference" "S16"
+			(at 93.98 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "ORBIT"
+			(at 93.98 156.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S16"
+			(at 96.52 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 96.52 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "22841496-ebdb-5c8b-9f5a-6fea999a6f84")
+		)
+		(pin "2"
+			(uuid "e11d56d8-d2a7-5588-be83-8eb498e22c1e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 86.36 165.1 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "0d1030aa-f1f4-5a39-afd3-af4cab76982c")
+		(property "Reference" "D18"
+			(at 88.9 165.1 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 88.9 166.37 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 86.36 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 86.36 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 86.36 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "9447c79d-dc64-5c74-967f-987d1c43a9a7")
+		)
+		(pin "2"
+			(uuid "2b20372f-599d-5cd5-b16b-9a16f2fd261e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 57.15 160.02 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "b0f89c19-7846-5fe2-87b5-30d7309dfea8")
+		(property "Reference" "R65"
+			(at 53.34 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 58.42 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 57.15 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 57.15 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 57.15 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 57.15 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 57.15 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "f238ec18-f15e-5802-b713-43af14b81f9a")
+		)
+		(pin "2"
+			(uuid "173c90af-0bc3-5f5a-9c22-6c10ed50d979")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R65")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 91.44 160.02) (xy 86.36 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bf8c4358-440b-5249-8d58-0d0f2f5c7109")
+	)
+	(wire
+		(pts
+			(xy 86.36 160.02) (xy 60.96 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e8a8638a-d116-526e-bea3-2de06457c15b")
+	)
+	(wire
+		(pts
+			(xy 86.36 160.02) (xy 86.36 161.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "99cac6c4-6087-500c-a654-728efb56585c")
+	)
+	(label "SENSE_ORBIT"
+		(at 62.23 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b7d1c85f-17df-5905-8261-ae3dda705945")
+	)
+	(wire
+		(pts
+			(xy 86.36 168.91) (xy 86.36 170.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "22b75832-4262-59a7-9815-cf8727187d04")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 86.36 170.18 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "d0dd3d53-8c88-5d4d-b07a-25ede50e57ea")
+		(property "Reference" "#PWR0076"
+			(at 86.36 173.99 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 86.36 175.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 86.36 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 86.36 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "dc42f69c-ea08-5ee4-8033-e2d2eafa8979")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0076")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 53.34 160.02) (xy 48.26 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "90e5d83e-c91e-5f97-b320-52b90173288a")
+	)
+	(hierarchical_label "IN_ORBIT"
+		(shape output)
+		(at 48.26 160.02 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "8d1a7134-5248-5ee3-9a0f-56480b0131d4")
+	)
+	(wire
+		(pts
+			(xy 101.6 160.02) (xy 106.68 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "458bf7d6-536f-560b-860e-6c743930ad95")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 106.68 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "ea8832bf-7b1c-5428-9560-657ee32fce67")
+		(property "Reference" "#PWR0077"
+			(at 106.68 163.83 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 106.68 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e093acaf-0fb7-541d-9ee7-508f69baf345")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0077")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 198.12 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "b2d51447-e659-5f7f-928b-93e412662a8f")
+		(property "Reference" "S17"
+			(at 195.58 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "SHOOTER"
+			(at 195.58 156.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S17"
+			(at 198.12 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "edbeaa10-a449-5b8a-8ad3-7978860fa001")
+		)
+		(pin "2"
+			(uuid "3e7f38e9-d277-5832-ac1b-fc9cf931e8a7")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 187.96 165.1 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e778aab6-7e69-5f4c-b1e5-3af5de08334d")
+		(property "Reference" "D19"
+			(at 190.5 165.1 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 190.5 166.37 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 187.96 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 187.96 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 187.96 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "f08ef2da-7962-5dd8-9f1b-504357c59106")
+		)
+		(pin "2"
+			(uuid "b205bda2-fd30-5389-9984-9af61e968cc8")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 158.75 160.02 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f2ecbc91-561c-584c-8962-6a1a1aa5a8a4")
+		(property "Reference" "R66"
+			(at 154.94 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 160.02 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 158.75 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 158.75 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 158.75 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 158.75 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 158.75 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "c017e82e-d376-52b2-b4e0-5807647baa8f")
+		)
+		(pin "2"
+			(uuid "9a4cd4a7-d700-5378-93ba-d6ffccda8958")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R66")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 193.04 160.02) (xy 187.96 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "919bb354-18b3-565c-a807-e10dcd20d287")
+	)
+	(wire
+		(pts
+			(xy 187.96 160.02) (xy 162.56 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b8df94c4-2a49-5da0-89f2-d3d29d79d33e")
+	)
+	(wire
+		(pts
+			(xy 187.96 160.02) (xy 187.96 161.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2ecf6b76-5a76-5c2b-a7d7-4c14d9726d9d")
+	)
+	(label "SENSE_SHOOTER"
+		(at 163.83 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c2650161-1d68-558c-b6e6-ed29323ad513")
+	)
+	(wire
+		(pts
+			(xy 187.96 168.91) (xy 187.96 170.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "19855c68-81a8-5b14-b2fa-7f1c31b6abbe")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 187.96 170.18 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "c33526b5-eed7-5005-9058-067bc872a45e")
+		(property "Reference" "#PWR0078"
+			(at 187.96 173.99 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 175.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 187.96 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 187.96 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "bafda570-1f31-5acd-b068-02b98e962ed0")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0078")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 154.94 160.02) (xy 149.86 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8c894831-04dd-508a-8d52-4da92815d331")
+	)
+	(hierarchical_label "IN_SHOOTER"
+		(shape output)
+		(at 149.86 160.02 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "6d900709-74ec-572a-b2ed-7fa5fa59942e")
+	)
+	(wire
+		(pts
+			(xy 203.2 160.02) (xy 208.28 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c5654895-e28b-5219-92e4-8c35b4279578")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 208.28 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "4b028939-c170-5c6a-9b17-6160a14ed963")
+		(property "Reference" "#PWR0079"
+			(at 208.28 163.83 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 208.28 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 208.28 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 208.28 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2679da3d-7ec6-52b1-ab60-5801728573bf")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0079")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:BallSwitch")
+		(at 299.72 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "3582544c-d547-59b0-96ee-e8c0f0bfe692")
+		(property "Reference" "S18"
+			(at 297.18 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "DRAIN"
+			(at 297.18 156.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:Comb_S18"
+			(at 299.72 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 299.72 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "de531264-f521-5be9-b382-bf963f41f2a5")
+		)
+		(pin "2"
+			(uuid "2933192f-d5a5-5cc9-a118-ba43db5686cf")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "S18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:TVS_5V")
+		(at 289.56 165.1 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "099a7be5-778c-59ea-b6f2-4d95da5e7317")
+		(property "Reference" "D20"
+			(at 292.1 165.1 270)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "PESD5V0S1BA"
+			(at 292.1 166.37 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "pinball:D_SOD-323"
+			(at 289.56 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "MPN" "PESD5V0S1BA,115"
+			(at 289.56 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Manufacturer" "Nexperia"
+			(at 289.56 165.1 270)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "1"
+			(uuid "edb4d2c4-cd5c-5bba-9d3d-6225d33e3acb")
+		)
+		(pin "2"
+			(uuid "bf33cde0-f68d-5ec3-bc24-56752db07e5f")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "D20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:R_1k")
+		(at 260.35 160.02 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "b443d07b-fb86-5703-b6f7-9c6ab98bad82")
+		(property "Reference" "R67"
+			(at 256.54 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1k"
+			(at 261.62 157.48 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:R_0402_1005Metric"
+			(at 260.35 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 260.35 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "0402WGF1001TCE"
+			(at 260.35 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL"
+			(at 260.35 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C11702"
+			(at 260.35 160.02 90)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "5f587a88-80ed-54f4-83c6-63a34bae5fc7")
+		)
+		(pin "2"
+			(uuid "e171277f-9dce-509f-b79e-bf9c16202355")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "R67")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 294.64 160.02) (xy 289.56 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "56fc4214-1d9a-5bdd-847e-bca33b593253")
+	)
+	(wire
+		(pts
+			(xy 289.56 160.02) (xy 264.16 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74012290-4bc8-52b7-9943-fda64ec5e4cb")
+	)
+	(wire
+		(pts
+			(xy 289.56 160.02) (xy 289.56 161.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3cf3bfe0-d369-54d6-bd6f-99ff503bdc9e")
+	)
+	(label "SENSE_DRAIN"
+		(at 265.43 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "3e4393ee-d012-5295-8863-963824646e56")
+	)
+	(wire
+		(pts
+			(xy 289.56 168.91) (xy 289.56 170.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "02f4b744-4d21-533d-8b64-79b4e1dea77d")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 289.56 170.18 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "107b1688-521b-538c-ab7e-d1c846434cb9")
+		(property "Reference" "#PWR0080"
+			(at 289.56 173.99 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 289.56 175.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 289.56 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 289.56 170.18 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cc36bd81-3a64-5c34-8123-c5adc1d049f6")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0080")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 256.54 160.02) (xy 251.46 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "65457a41-c31b-561e-ae02-991dfa5a6cab")
+	)
+	(hierarchical_label "IN_DRAIN"
+		(shape output)
+		(at 251.46 160.02 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "fb17f102-e2cf-5fc5-b5b5-8056299d3fa5")
+	)
+	(wire
+		(pts
+			(xy 304.8 160.02) (xy 309.88 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7a7d89a9-ec9d-585b-a805-ab3970107dba")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 309.88 160.02 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "053f8b5b-e1e6-5dae-9ac8-1733ff52d71a")
+		(property "Reference" "#PWR0081"
+			(at 309.88 163.83 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 309.88 165.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 309.88 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 309.88 160.02 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "95a9a161-48c9-543a-8f3d-4462e78a9ee3")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0081")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(rectangle
+		(start 25.4 187.96)
+		(end 146.05 254)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "1f9472c1-61b3-5434-beb6-4a58caa5bed9")
+	)
+	(text "The player: flipper buttons in the rails, START on the lockdown bar"
+		(exclude_from_sim no)
+		(at 26.67 191.77 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "24c0e92f-b833-5c8e-b6c6-c314659cda65")
+	)
+	(symbol
+		(lib_id "pinball:SW_Flipper")
+		(at 66.04 205.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7d7514da-a61a-5b45-b638-88b79c8f0d4d")
+		(property "Reference" "SW3"
+			(at 63.5 199.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "FLIP L"
+			(at 63.5 201.93 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:SW_Tactile_SPST_Angled_PTS645Vx58-2LFS"
+			(at 66.04 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 66.04 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "PTS645VL58-2 LFS"
+			(at 66.04 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "C&K"
+			(at 66.04 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "141ccb37-3fb6-57c8-ac7f-a1e9c1188959")
+		)
+		(pin "2"
+			(uuid "630d75b1-acce-5196-a744-5058c85ce23a")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "SW3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 60.96 205.74) (xy 53.34 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4fb08b3d-edee-5fd9-ba59-2a1fa6ff2e57")
+	)
+	(hierarchical_label "BTN_FLIP_L"
+		(shape output)
+		(at 53.34 205.74 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "391c1e3e-d76b-5e93-8ca2-7486aa7dde0a")
+	)
+	(wire
+		(pts
+			(xy 71.12 205.74) (xy 76.2 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6a5f4dcd-a1ff-5737-834e-91069328708c")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 76.2 205.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "037a8294-ec94-537b-b566-64086b099d49")
+		(property "Reference" "#PWR0082"
+			(at 76.2 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 76.2 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 76.2 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 76.2 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b98728c8-a776-5a19-870d-7fc24ac0327d")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0082")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:SW_Flipper")
+		(at 66.04 220.98 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "d32ee7e0-e58e-5677-96db-9d51ebc3027c")
+		(property "Reference" "SW4"
+			(at 63.5 214.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "FLIP R"
+			(at 63.5 217.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:SW_Tactile_SPST_Angled_PTS645Vx58-2LFS"
+			(at 66.04 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 66.04 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "PTS645VL58-2 LFS"
+			(at 66.04 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "C&K"
+			(at 66.04 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "6d2ababc-0b32-5555-8a05-d0353f8baceb")
+		)
+		(pin "2"
+			(uuid "cf356f54-803d-5e6e-8db5-1d307c57c70e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "SW4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 60.96 220.98) (xy 53.34 220.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "29697383-1b1e-5542-8317-0187de6470dd")
+	)
+	(hierarchical_label "BTN_FLIP_R"
+		(shape output)
+		(at 53.34 220.98 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "6bac4bcc-96a5-5409-874a-65491c7bcc4c")
+	)
+	(wire
+		(pts
+			(xy 71.12 220.98) (xy 76.2 220.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "99e3644a-2678-5dfa-8512-a4632d7fe80e")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 76.2 220.98 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "4c3a7acf-d155-5a4f-ab5b-ab844c0239fb")
+		(property "Reference" "#PWR0083"
+			(at 76.2 224.79 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 76.2 226.06 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 76.2 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 76.2 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ef010c94-880f-5a57-9a1e-64065474987f")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0083")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:SW_Start")
+		(at 66.04 236.22 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "7aed85db-9c27-5311-8190-464de1ffd0ab")
+		(property "Reference" "SW5"
+			(at 63.5 229.87 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "START"
+			(at 63.5 232.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:SW_PUSH_6mm_H9.5mm"
+			(at 66.04 236.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 66.04 236.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "fa6e1d22-9450-590a-8cef-9668803293df")
+		)
+		(pin "2"
+			(uuid "5e815ff7-355e-5aa2-bad4-21375afbfbcf")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "SW5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 60.96 236.22) (xy 53.34 236.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0c452a72-a867-5c2a-a43a-b97fc7ab38bc")
+	)
+	(hierarchical_label "BTN_START"
+		(shape output)
+		(at 53.34 236.22 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "4948585a-4fea-5e34-b9db-49ffdaf73541")
+	)
+	(wire
+		(pts
+			(xy 71.12 236.22) (xy 76.2 236.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "437bc1c4-e299-5b1d-9a9a-b9534970c2d2")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 76.2 236.22 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f885c22a-a391-55b8-98b7-446ec1e1c4a5")
+		(property "Reference" "#PWR0084"
+			(at 76.2 240.03 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 76.2 241.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 76.2 236.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 76.2 236.22 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "524a985c-9b9f-5b48-a60c-5d45b11eb95f")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0084")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(rectangle
+		(start 153.67 187.96)
+		(end 325.12 254)
+		(stroke
+			(width 0)
+			(type dash)
+		)
+		(fill
+			(type none)
+		)
+		(uuid "074436eb-eb8a-5942-885e-4e56a2668cca")
+	)
+	(text "Tilt: LIS3DH on I2C (0x19), polled"
+		(exclude_from_sim no)
+		(at 154.94 191.77 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "7d2d0e30-42ca-5e90-990a-db0cc74eedd4")
+	)
+	(symbol
+		(lib_id "pinball:LIS3DH")
+		(at 215.9 220.98 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ab0008ad-4aae-5f31-a27c-4991bf38e783")
+		(property "Reference" "U9"
+			(at 186.69 205.74 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "LIS3DH"
+			(at 186.69 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:LGA-16_3x3mm_P0.5mm_LayoutBorder3x5y"
+			(at 215.9 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" "https://www.st.com/resource/en/datasheet/cd00274221.pdf"
+			(at 215.9 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "LIS3DHTR"
+			(at 215.9 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "STMicroelectronics"
+			(at 215.9 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C15134"
+			(at 215.9 220.98 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "6e9a507b-141b-5daa-8fd7-e998e567311f")
+		)
+		(pin "2"
+			(uuid "4ec05281-e8d6-5312-982f-d7434b9456e4")
+		)
+		(pin "3"
+			(uuid "7f55ba96-7052-5a02-b0fb-9cfeddd42305")
+		)
+		(pin "4"
+			(uuid "a8a5debd-36c6-5647-a74e-d508b23480a1")
+		)
+		(pin "5"
+			(uuid "b265943f-aff8-577c-b1ad-d03b2de2cadf")
+		)
+		(pin "6"
+			(uuid "7dbf952b-acd8-5ed2-9ac3-d872ec66603c")
+		)
+		(pin "7"
+			(uuid "5d2e13d2-18a9-5ab2-b822-d806e411b2c3")
+		)
+		(pin "8"
+			(uuid "836fafc5-90fd-588b-bde5-9287c594f75e")
+		)
+		(pin "9"
+			(uuid "a549960a-5d79-55a1-8dd2-9347112825fb")
+		)
+		(pin "10"
+			(uuid "50aaa0e5-57a0-5b3e-810d-526e8da510c5")
+		)
+		(pin "11"
+			(uuid "5b75ad54-3d69-56f1-bfec-b50b57b32c0d")
+		)
+		(pin "12"
+			(uuid "433bb981-2c6e-5f2d-a775-fb1972cab280")
+		)
+		(pin "13"
+			(uuid "3e83e0e8-bec7-5407-b184-e039f6ea01dc")
+		)
+		(pin "14"
+			(uuid "697eec4b-68ef-54d7-b607-05adcb269150")
+		)
+		(pin "15"
+			(uuid "9e2d7ac6-ffc1-509f-b9fb-9999d74975f4")
+		)
+		(pin "16"
+			(uuid "60e760e0-64dd-565a-950e-8b8a8618e371")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "U9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:C_100n")
+		(at 241.3 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "35777ad5-8c0c-5c1b-b66d-b2c76a4c0039")
+		(property "Reference" "C40"
+			(at 243.84 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 243.84 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:C_0402_1005Metric"
+			(at 241.3 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 241.3 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL05B104KO5NNNC"
+			(at 241.3 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Samsung"
+			(at 241.3 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C1525"
+			(at 241.3 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "de653f5e-2f86-52d3-95f0-a25a28c55e54")
+		)
+		(pin "2"
+			(uuid "2eb4ec3b-e1b7-5945-8569-ad95d8c380fb")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "C40")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "pinball:C_10u")
+		(at 255.27 209.55 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "cb58141c-8554-50c5-b811-4cef6e6c0ddd")
+		(property "Reference" "C41"
+			(at 257.81 208.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10uF"
+			(at 257.81 210.82 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "pinball:C_0805_2012Metric"
+			(at 255.27 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Datasheet" ""
+			(at 255.27 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "MPN" "CL21A106KAYNNNE"
+			(at 255.27 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Manufacturer" "Samsung"
+			(at 255.27 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "LCSC" "C15850"
+			(at 255.27 209.55 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "1"
+			(uuid "6dcf5df7-1388-5526-b2b7-66ba1b509284")
+		)
+		(pin "2"
+			(uuid "262e4e3b-2f22-5e5b-9a59-2ea34df88b9e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "C41")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 213.36 208.28) (xy 213.36 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "294472dc-7c0a-5748-815e-7fd96794bd92")
+	)
+	(wire
+		(pts
+			(xy 213.36 205.74) (xy 218.44 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "574f2f9e-5529-579b-9c9f-24d1fb9a1271")
+	)
+	(wire
+		(pts
+			(xy 218.44 205.74) (xy 226.06 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9a2a04a1-a716-59f1-8a53-8a799c968fa7")
+	)
+	(wire
+		(pts
+			(xy 226.06 205.74) (xy 241.3 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7ce3b109-5775-54c7-a263-c469b5493d8c")
+	)
+	(wire
+		(pts
+			(xy 241.3 205.74) (xy 255.27 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "87624b02-ab32-5ba1-b638-ad72d9d71e95")
+	)
+	(wire
+		(pts
+			(xy 218.44 208.28) (xy 218.44 205.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7d5083cd-ff84-54ce-bd3f-e55bb868f47b")
+	)
+	(symbol
+		(lib_id "power:+3V3")
+		(at 226.06 205.74 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "207a8e59-9faf-5048-ad5d-0a98e968cc73")
+		(property "Reference" "#PWR0085"
+			(at 226.06 201.93 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3V3"
+			(at 226.06 200.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 226.06 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 226.06 205.74 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fe108a78-04c0-51d9-bd41-ddc19d615976")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0085")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 241.3 213.36) (xy 255.27 213.36)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2fd833c8-7067-53ce-8b2e-588c97333172")
+	)
+	(wire
+		(pts
+			(xy 241.3 213.36) (xy 241.3 215.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "77c1e6e8-6927-5eb7-9358-d9ca7b2d6a7e")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 241.3 215.9 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "f80cc77a-973c-5082-a0f3-4f2af9c09bdc")
+		(property "Reference" "#PWR0086"
+			(at 241.3 219.71 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 241.3 220.98 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 241.3 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 241.3 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d334bc9e-3c7b-50c6-912a-d312f3e4687e")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0086")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 215.9 236.22) (xy 215.9 238.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8abcb8b4-3d7a-5d01-88bb-f456ca74f275")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 215.9 238.76 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "1dfa9045-4624-5312-8135-777c22c027ff")
+		(property "Reference" "#PWR0087"
+			(at 215.9 242.57 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 215.9 243.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 215.9 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 215.9 238.76 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "29502ea2-b55b-5e9b-a12b-3579c7b46e13")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0087")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 203.2 226.06) (xy 193.04 226.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3395c7bf-8dff-5170-9930-efc807acde89")
+	)
+	(hierarchical_label "I2C_SCL"
+		(shape bidirectional)
+		(at 193.04 226.06 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "e24a9da9-ba06-5607-a4b5-e336ec6e8cf7")
+	)
+	(wire
+		(pts
+			(xy 203.2 223.52) (xy 193.04 223.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bacd339f-0cd1-5a3d-b7e1-e3eb364449a4")
+	)
+	(hierarchical_label "I2C_SDA"
+		(shape bidirectional)
+		(at 193.04 223.52 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "dfcf6f6c-b570-53da-8007-cce31f9f863f")
+	)
+	(wire
+		(pts
+			(xy 203.2 228.6) (xy 199.39 228.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fbbb2e26-cd65-5e30-8393-b7221545b4b7")
+	)
+	(wire
+		(pts
+			(xy 199.39 228.6) (xy 199.39 233.68)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f49e5b92-be1f-5531-8ab2-114609beca91")
+	)
+	(symbol
+		(lib_id "power:+3V3")
+		(at 199.39 233.68 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e0ec9dd4-e7f9-5e3a-8ce2-e90f2a24c538")
+		(property "Reference" "#PWR0088"
+			(at 199.39 237.49 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3V3"
+			(at 199.39 238.76 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 199.39 233.68 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 199.39 233.68 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4d9fc17f-8048-57cf-a3c2-8d708d288162")
+		)
+		(instances
+			(project "pinball"
+				(path "/6acfa16a-ed92-50d5-b0cc-8658134d4f0b/21a1dfc2-0711-5bf2-b3a6-ccec272efb57"
+					(reference "#PWR0088")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(no_connect
+		(at 203.2 220.98)
+		(uuid "60345f07-0eb8-5aba-87e2-f317c7d1c7ce")
+	)
+	(no_connect
+		(at 203.2 218.44)
+		(uuid "467544ac-ac49-5db6-b255-da79fb1872a9")
+	)
+	(no_connect
+		(at 203.2 215.9)
+		(uuid "77e306f5-1537-5209-a2bf-576d0e79e3ba")
+	)
+	(no_connect
+		(at 228.6 223.52)
+		(uuid "4c83b51a-79d8-5da7-a92e-4b11cc3a6287")
+	)
+	(no_connect
+		(at 228.6 220.98)
+		(uuid "bff58f97-66f6-5c28-8d78-f8f849293c24")
+	)
+	(no_connect
+		(at 228.6 218.44)
+		(uuid "fb53a1a1-a2c2-5451-9f95-fd50ed15b284")
+	)
+	(junction
+		(at 86.36 58.42)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "9c141266-a01e-5bf3-80fe-d5a2d61e7f60")
+	)
+	(junction
+		(at 187.96 58.42)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6897c745-bf0d-59a9-81e0-e491eccb9819")
+	)
+	(junction
+		(at 289.56 58.42)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ad1a02fa-e25a-5481-a51a-1e3834e8a373")
+	)
+	(junction
+		(at 86.36 78.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "396fcda5-1fb0-57d1-ad8f-6f5d86a50678")
+	)
+	(junction
+		(at 187.96 78.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "cb651c00-39b0-5559-83c5-29622098e69d")
+	)
+	(junction
+		(at 289.56 78.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "002935b3-199f-54d1-b1b1-752c54e6ac01")
+	)
+	(junction
+		(at 86.36 99.06)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4c8ef098-4cec-5290-9b66-466b4e8436b3")
+	)
+	(junction
+		(at 187.96 99.06)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "8697db8e-f28e-5636-ab31-bc376c7127c3")
+	)
+	(junction
+		(at 289.56 99.06)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "33728a44-01ab-5880-8d8d-6cb52d648adf")
+	)
+	(junction
+		(at 86.36 119.38)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ce93a97f-c69d-53ed-9838-984b15d60715")
+	)
+	(junction
+		(at 187.96 119.38)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "90277bb0-84dc-573d-bebc-e305e95e5d7c")
+	)
+	(junction
+		(at 289.56 119.38)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "fdea06e7-c3ad-58d1-a84f-b6422abc87ad")
+	)
+	(junction
+		(at 86.36 139.7)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ac1fdd83-a082-516b-8f07-623958019212")
+	)
+	(junction
+		(at 187.96 139.7)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "380dbd12-e67a-5612-9c8e-3059649728f5")
+	)
+	(junction
+		(at 289.56 139.7)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "7e022ac9-21a4-5be9-8d41-3f8ed35aa334")
+	)
+	(junction
+		(at 86.36 160.02)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "47b5de72-8fdc-5b24-9d85-f5e8375024fd")
+	)
+	(junction
+		(at 187.96 160.02)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "49e723e1-e137-511d-86a0-b0ec5bb483da")
+	)
+	(junction
+		(at 289.56 160.02)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "27cb922e-12a2-5e97-841e-28940efe842f")
+	)
+	(junction
+		(at 241.3 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d0a8f78e-6d6f-5db7-aaf4-e44c1184974e")
+	)
+	(junction
+		(at 241.3 213.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ea301bc1-0779-5293-a316-cc49598dc032")
+	)
+	(junction
+		(at 218.44 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "68110373-3e99-5f1e-bc3d-41b3913a3ddf")
+	)
+	(junction
+		(at 226.06 205.74)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "5e84ca46-08f9-5eab-a728-518b0d3474fb")
+	)
+	(embedded_fonts no)
+)
+

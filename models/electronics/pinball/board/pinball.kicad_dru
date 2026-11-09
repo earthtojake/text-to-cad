@@ -1,0 +1,16 @@
+(version 2)
+# A comb's chevron fingers converge to 0.113 mm where they meet the spines (playfield.py's geometry; JLCPCB's
+# limit is 0.09 mm on 4 layers); straight combs keep their 0.4 mm. Only on the top copper, only the combs.
+(rule "comb fingers"
+  (layer "F.Cu")
+  (constraint clearance (min 0.1mm))
+  (condition "A.hasNetclass('Sense') || B.hasNetclass('Sense')"))
+# The SK6812MINI-E's stock land pattern sits 0.247 mm from its own cut-out; JLCPCB routes copper to 0.2 mm of an
+# edge, so the LEDs alone get 0.2 mm.
+(rule "LED cut-out"
+  (constraint edge_clearance (min 0.2mm))
+  (condition "A.memberOfFootprint('LED*')"))
+# The RP2040's 0.4 mm pads: its own fan-out runs at 0.15 mm under the package
+(rule "QFN fan-out"
+  (constraint track_width (min 0.15mm))
+  (condition "A.intersectsCourtyard('U1')"))
