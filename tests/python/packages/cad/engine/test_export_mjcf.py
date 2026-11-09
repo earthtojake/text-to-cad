@@ -406,6 +406,42 @@ def gripper():
 """
 
 
+# A vendor's cable: grey, one end face painted red, as a STEP colours a wire's faces; converted to an xbf as the
+# vendor-STEP workflow does and read by a model that gives every part a material (a vendor's are often wrong), which
+# build123d's setter gives its colour too.
+VENDOR = """
+import build123d as bd
+from cad.engine import paint, step
+
+
+@step("vendor.step")
+def vendor():
+    cable = bd.Box(20, 4, 4)
+    cable.color = "#808080"
+    cable = paint(cable, cable.faces().sort_by(bd.Axis.X)[-1], "#cc1100")
+    cable.label = "cable"
+    return bd.Compound(children=[cable], label="vendor")
+"""
+
+PAINTED = """
+from pathlib import Path
+
+import build123d as bd
+from bd_materials import plastics
+from cad import xbf as xbf_file
+from cad.build123d import leaves
+from cad.engine import xbf
+
+
+@xbf("XBF/painted.xbf")
+def painted():
+    parts = leaves(xbf_file.read(Path(__file__).parent / "vendor.xbf"))
+    for part in parts:
+        part.material = plastics.pe()
+    return bd.Compound(children=parts, label="painted")
+"""
+
+
 class EngineTest(_Folder):
     def built(self, name: str, source: str) -> Path:
         (self.folder / f"{name}.py").write_text(textwrap.dedent(source), encoding="utf-8")
@@ -451,6 +487,46 @@ class EngineTest(_Folder):
                 self.assertLess(gap(), 1e-3)
         self.assertLess(worst[1], 1e-2)
         self.assertGreater(worst[0], 10 * worst[1])
+
+    def test_a_part_whose_faces_are_painted_is_drawn_a_geom_per_look_as_the_viewer_draws_it(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        from cad.engine.export.mesh import groups, meshes
+
+        (self.folder / "vendor.py").write_text(textwrap.dedent(VENDOR), encoding="utf-8")
+        api.build_script(self.folder / "vendor.py", daemon=False)
+        api.export(self.folder / "vendor.step", self.folder / "vendor.xbf", daemon=False, progress=False)
+        xbf = self.built("painted", PAINTED)
+        view = Source.read(xbf).view()
+        # The viewer draws the painted face red over the part, whose own colour is its material's now.
+        [prototype] = view.prototypes
+        [(own, _), (paint, _)] = sorted(groups(meshes(view)[0], prototype), key=lambda look: look[0][1] is None)
+        self.assertEqual(round(paint[0][0], 3), round(0.6038, 3))  # #cc1100, linear
+        out = self.folder / "robot" / "painted.xml"
+        api.export(xbf, out, daemon=False, progress=False)
+        geoms = {geom.get("name"): geom for geom in ET.parse(out).iter("geom") if geom.get("class") == "visual"}
+        self.assertEqual(sorted(geoms), ["cable", "cable_paint1"])
+        red, white = [0.8, 0.0667, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]  # #cc1100, and PE's white, in sRGB
+
+        def rgba(text: str) -> list[float]:
+            return [round(float(value), 3) for value in text.split()]
+
+        self.assertEqual(rgba(geoms["cable_paint1"].get("rgba")), [round(value, 3) for value in red])
+        materials = {material.get("name"): material.get("rgba") for material in ET.parse(out).iter("material")}
+        self.assertEqual(rgba(materials[geoms["cable"].get("material")]), white)
+        # Each look an open surface, a shell to MuJoCo and drawn unweighed; the part whole collides.
+        model = mujoco.MjModel.from_xml_path(str(out))
+        self.assertEqual(model.nmesh, 3)
+        self.assertEqual({geoms[name].get("mass") for name in geoms}, {"0"})
+        self.assertEqual(sorted(mesh.get("inertia") or "" for mesh in ET.parse(out).iter("mesh")), ["", "shell", "shell"])
+        # The URDF draws the same two looks.
+        urdf = self.folder / "description" / "painted.urdf"
+        api.export(xbf, urdf, daemon=False, progress=False)
+        root = ET.parse(urdf).getroot()
+        colours = {material.get("name"): material.find("color").get("rgba") for material in root.findall("material")}
+        visuals = {visual.get("name"): rgba(colours[visual.find("material").get("name")])
+                   for visual in root.iter("visual")}
+        self.assertEqual(visuals, {"cable": white, "cable_paint1": [round(value, 3) for value in red]})
 
     def test_two_slides_a_pinion_couples_are_one_control_and_the_pinion_no_body(self) -> None:
         xbf = self.built("gripper", GRIPPER)

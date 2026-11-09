@@ -42,7 +42,8 @@ the geometry's) or a primitive in URDF's full sizes: a ``<box size>``, a ``<sphe
 ``<cylinder radius length>``; a capsule, which URDF has no word for, is its cylinder and a sphere at
 each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``. A decomposed part
 (``cad.build123d.collision(part, "decomposed")``) is a ``<collision>`` per convex hull, ``<part>_hull<i>``,
-each hull's mesh a file of its own (``<model>_<part>_hull<i>.stl``), its visual the part whole. A visual's colour
+each hull's mesh a file of its own (``<model>_<part>_hull<i>.stl``), its visual the part whole. A part whose
+faces are painted is a ``<visual>`` per look, as the viewer draws it (``<part>``, ``<part>_paint<i>``). A visual's colour
 is a ``<material>`` declared once at the top and named in the visual: one per material name and
 colour (a part with no material is ``color``), a repeat given ``_2``, ``_3``. A named frame is a
 link of its own with nothing in it, hung from its link by a ``fixed`` joint ``<frame>_joint``, as a
@@ -432,13 +433,15 @@ class _Writer:
             inertial.add("inertia", inertia_terms(link.inertial))
         visuals, collisions = _Names(), _Names()
         for visual in link.visuals:
-            wanted = name_of(visual.name, "visual")
-            material = self._material(visual.material, tuple(float(value) for value in visual.color))
-            for suffix, placement, geometry in shaped(visual.geometry):
-                piece = element.add("visual", [("name", visuals(wanted + suffix))])
-                piece.add("origin", _origin(placement))
-                piece.add("geometry").children.append(self._shape(geometry))
-                piece.add("material", [("name", material)])
+            # A painted part is a visual per look, as the viewer draws its faces (``Visual.drawn``).
+            for named, drawn, color, material_name in visual.drawn():
+                wanted = name_of(named, "visual")
+                material = self._material(material_name, tuple(float(value) for value in color))
+                for suffix, placement, geometry in shaped(drawn):
+                    piece = element.add("visual", [("name", visuals(wanted + suffix))])
+                    piece.add("origin", _origin(placement))
+                    piece.add("geometry").children.append(self._shape(geometry))
+                    piece.add("material", [("name", material)])
         for collision in link.collisions:
             if collision.friction:
                 note(f"collision {collision.of!r}'s contact friction is not written: URDF has none (an MJCF "

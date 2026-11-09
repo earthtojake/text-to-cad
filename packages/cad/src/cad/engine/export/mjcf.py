@@ -36,7 +36,10 @@ visual holds the part's name: a mesh, which MuJoCo hulls, or a primitive in MuJo
 box's half extents, a sphere's radius, a cylinder's or a capsule's radius and half its length, the
 capsule's length its cylinder's, as ``describe`` fits it); a decomposed part (``cad.build123d.collision(part,
 "decomposed")``) is a ``collision`` geom per convex hull, ``<part>_hull<i>``, each of the mesh asset of that
-name, a file of its own (``<model>_<part>_hull<i>.stl``), while its visual is the part whole. Each has its
+name, a file of its own (``<model>_<part>_hull<i>.stl``), while its visual is the part whole. A part whose
+faces are painted (``description.Visual.looks``) is a visual geom per look, as the viewer draws it: the part's
+own under its name, the others ``<part>_paint<i>``, each ``mass="0"`` (drawn, not weighed) on a mesh of that
+look's triangles with ``inertia="shell"``, an open surface having no volume. Each has its
 ``friction`` the part's
 contact friction (``cad.build123d.friction``: the sliding coefficient alone, the torsional and rolling
 then MuJoCo's defaults, or all three) where it declares one, none where it does not, so MuJoCo's
@@ -326,7 +329,7 @@ class _Writer:
         self.materials: dict[tuple, str] = {}
         self.material_rows: list[tuple[str, tuple]] = []
         self.meshes: dict[tuple[str, float], str] = {}
-        self.mesh_rows: list[tuple[str, str, float]] = []
+        self.mesh_rows: list[tuple[str, str, float, bool]] = []  # name, file, scale, and whether it is open
         self.files: dict[str, bytes] = {}
         self.mesh_files: dict[str, str] = {}  # each mesh's file, by its key: written once however it is scaled
         self.qpos: list[tuple[Joint, int]] = []  # each moving joint and how many values it holds, in MuJoCo's order
@@ -369,9 +372,11 @@ class _Writer:
         asset = _Element("asset")
         for name, rgba in self.material_rows:
             asset.add("material", [("name", name), ("rgba", _numbers(rgba, snap=0))])
-        for name, file, scale in self.mesh_rows:
+        for name, file, scale, surface in self.mesh_rows:
+            # A painted look is an open surface, of no volume: MuJoCo takes its inertia as a shell's, or refuses it.
             asset.add("mesh", [("name", name), ("file", file),
-                               ("scale", _numbers((scale,) * 3, snap=0) if scale != 1 else None)])
+                               ("scale", _numbers((scale,) * 3, snap=0) if scale != 1 else None),
+                               ("inertia", "shell" if surface else None)])
         if asset.children:
             sections.append(asset)
         sections.append(world)
@@ -460,14 +465,18 @@ class _Writer:
     def _content(self, body: _Element, link: Link, frame: np.ndarray) -> None:
         """A link's geoms and sites, each placed in ``body``'s frame (``frame`` the link's in it)."""
         for visual in link.visuals:
-            colour = tuple(float(value) for value in visual.color)
-            painted: list[tuple[str, str | None]]
-            if visual.material:
-                painted = [("material", self._material(visual.material, colour))]
-            else:
-                painted = [("rgba", _numbers(colour, snap=0))]
-            body.add("geom", [("class", "visual"), *self._shape(visual.geometry), ("name", self.geoms(visual.name)),
-                              *painted, *_placement(frame @ visual.geometry.placement)])
+            # A painted part is a geom per look, as the viewer draws its faces (``Visual.drawn``), each drawn and not
+            # weighed (a link with no inertial is weighed by its geoms: a look's surface would weigh as a shell).
+            weighed = None if not visual.looks else "0"
+            for named, geometry, color, material in visual.drawn():
+                colour = tuple(float(value) for value in color)
+                painted: list[tuple[str, str | None]]
+                if material:
+                    painted = [("material", self._material(material, colour))]
+                else:
+                    painted = [("rgba", _numbers(colour, snap=0))]
+                body.add("geom", [("class", "visual"), *self._shape(geometry), ("name", self.geoms(named)),
+                                  *painted, ("mass", weighed), *_placement(frame @ geometry.placement)])
         for collision in link.collisions:
             # A part's collision shares its visual's name: it is told apart as Menagerie tells them.
             named = collision.name if collision.name not in self.geoms.taken else f"{collision.name}_collision"
@@ -511,7 +520,7 @@ class _Writer:
         if file is None:
             file = self.mesh_files[key] = self.files_named(f"{_stem(self.description.name)}_{_stem(mesh.name)}") + ".stl"
             self.files[file] = _stl(f"{self.description.name}/{mesh.name}", mesh.positions, mesh.triangles)
-        self.mesh_rows.append((found, file, scale))
+        self.mesh_rows.append((found, file, scale, mesh.open))
         return found
 
     def _contact(self) -> _Element:

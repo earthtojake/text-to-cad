@@ -43,6 +43,7 @@ and joints apart, so a link and a joint may share a name; a name already held in
 | Decomposed collisions (`collision(part, "decomposed")`) | a `collision` geom and a mesh asset per convex hull, `<part>_hull<i>` | a `<collision>` per hull, `<part>_hull<i>`, each its own mesh file |
 | Named frames | sites | an empty link on a fixed joint `<frame>_joint`, as a ROS `tool0` |
 | A link with no material | no `<inertial>`: MuJoCo weighs its geoms | no `<inertial>` (the validator warns of a moving one) |
+| A part with painted faces (a STEP's or xbf's face colours, `paint()`) | a visual geom per colour, as the viewer draws it, each `mass="0"` on a mesh with `inertia="shell"` | a `<visual>` per colour |
 | Joint effort and velocity (`limits()`) | effort as `actuatorfrcrange`; no velocity: MJCF has no speed bound | `<limit effort velocity>`; `0` where not declared, which `cad urdf validate` warns of |
 | A part kept a body (`body()`) | a child body with no joint | a link on a fixed joint |
 | Contact exclusions (`exclude()`) | `<contact><exclude>`, and every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) |

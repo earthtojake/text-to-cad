@@ -102,7 +102,7 @@ import numpy as np
 
 from cad.engine.declarations import DRIVE, MAX_HULLS
 from cad.engine.description import (COLLISIONS, Closure, Collision, Description, DescriptionError, Geometry, Inertial,
-                                    Joint, Link, Mesh, Pose, Visual, column_major, srgb)
+                                    Joint, Link, Look, Mesh, Pose, Visual, column_major, srgb)
 
 __all__ = ["describe"]
 
@@ -197,6 +197,8 @@ class _Describer:
                            if self._declared(index).get("link") and self._declared(index).get("body") is None}
         self.reserved = set(self.link_named.values())
         self.declared_links: dict[str, str] = {}
+        self.meshes: dict[str, Mesh] = {}  # the description's meshes by key, a painted part's looks among them
+        self.made: dict[int, Any] = {}  # each placed prototype's engine mesh, its faces' triangle spans
 
     def warn(self, text: str) -> None:
         if text not in self.warnings:
@@ -631,7 +633,8 @@ class _Describer:
         from cad.engine.export.mesh import meshes
 
         found: dict[str, Mesh] = {}
-        for index, made in meshes(self.view).items():
+        self.meshes, self.made = found, meshes(self.view)
+        for index, made in self.made.items():
             prototype = self.prototypes[index]
             if prototype["key"] in found:
                 continue
@@ -640,6 +643,39 @@ class _Describer:
             found[prototype["key"]] = Mesh(prototype["key"], prototype["name"], positions,
                                            np.asarray(made.indices, dtype=np.uint32).reshape(-1, 3), normals)
         return found
+
+    def _looks(self, instance: dict[str, Any], prototype: dict[str, Any]) -> tuple[Look, ...]:
+        """A painted part's looks (``Visual.looks``), as the viewer draws it (``export.mesh.groups``): its faces by
+        colour and material, the part's own look first, each look's triangles a mesh of its own added to the
+        description's (``<key>#look<hash>``, named ``<prototype>_look<i>``); none for a part of one look."""
+        if not prototype.get("faceColors") and not prototype.get("faceMaterials"):
+            return ()
+        from cad.engine.export.mesh import _material, groups, look_of
+
+        made = self.made.get(instance["prototype"])
+        whole = self.meshes.get(prototype["key"])
+        faces = getattr(made, "faces", None)
+        if made is None or whole is None or faces is None or not len(faces):
+            return ()
+        own = instance.get("color")
+        looks = groups(made, prototype, own)
+        if len(looks) < 2:
+            return ()
+        base = own if own is not None else prototype.get("color")
+        mine = look_of(base, _material(prototype.get("material")))
+        looks.sort(key=lambda found: found[0] != mine)  # the part's own look first, the rest as the faces have them
+        found = []
+        for at, ((rgba, held), indices) in enumerate(looks):
+            triangles = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+            used, remapped = np.unique(triangles, return_inverse=True)
+            key = f"{prototype['key']}#look{hashlib.sha256(triangles.tobytes()).hexdigest()[:12]}"
+            if key not in self.meshes:
+                self.meshes[key] = Mesh(key, f"{prototype['name']}_look{at}", whole.positions[used],
+                                        remapped.reshape(-1, 3).astype(np.uint32),
+                                        None if whole.normals is None else whole.normals[used], open=True)
+            named = (json.loads(held).get("material") or {}).get("name") if held else None
+            found.append(Look(key, srgb(rgba), named or None))
+        return tuple(found)
 
     def _decompositions(self, links: list[Link], meshes: dict[str, Mesh]) -> dict[tuple[str, str], list[str]]:
         """Each decomposed prototype's hulls (the module's **Geometry and mass**), by its key and its
@@ -710,7 +746,8 @@ class _Describer:
             key = prototype["key"]
             link.visuals.append(Visual(name, Geometry("mesh", placement, mesh=key),
                                        srgb(instance.get("color") or prototype.get("color")),
-                                       material.get("name") or None, path=instance["path"]))
+                                       material.get("name") or None, path=instance["path"],
+                                       looks=self._looks(instance, prototype)))
             kind = prototype.get("collision") or self.collision_default
             surface = tuple(float(value) for value in prototype.get("friction") or ())
             if kind == "mesh" or (kind == "decomposed" and not self.decompose):

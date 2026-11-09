@@ -71,6 +71,12 @@ polished.pbr = polished.pbr.override(roughness=0.15)
 paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 ```
 
+A part read from a STEP or an xbf keeps the file's colours until it is given a material, which
+replaces its colour like any other part's, in the viewer and every export alike. To keep the
+file's colour, set it again after the material: `color = part.color; part.material = plastics.pe();
+part.color = color`. Faces the file paints (a cable's red and black wires) keep their colours
+either way, and the viewer, the GLB, the MJCF and the URDF all draw them.
+
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,

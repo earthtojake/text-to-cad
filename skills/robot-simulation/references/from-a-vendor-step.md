@@ -82,7 +82,8 @@ Then:
 ## 4. Mass
 
 Vendor materials are often wrong for weighing: cables marked steel, printed parts modelled solid.
-Weigh each part as the hardware is:
+A material you set replaces the part's colour (the faces the vendor painted keep theirs); set
+`part.color` back after it to keep the vendor's. Weigh each part as the hardware is:
 
 - **Printed parts:** a material (`plastics.pla()`), then `mass(part, grams)` estimated from the print
   settings ([inertials](inertials.md#a-printed-part)).

@@ -98,7 +98,7 @@ from typing import Any
 import numpy as np
 
 __all__ = ["COLLISIONS", "Closure", "Collision", "Description", "DescriptionError", "Geometry", "Inertial", "Joint",
-           "Link", "Mesh", "Pose", "Visual", "shown"]
+           "Link", "Look", "Mesh", "Pose", "Visual", "shown"]
 
 #: A label that names no part, only what kind of shape it is: a vendor STEP's ``SOLID``, a ``Body1``, a ``Part.2``.
 _ANONYMOUS = re.compile(r"(solid|body|part|shell|shape|brep|mesh)?[\s_.:#-]*\d*", re.IGNORECASE)
@@ -142,6 +142,7 @@ class Mesh:
     positions: np.ndarray  # (n, 3) float32, metres
     triangles: np.ndarray  # (m, 3) uint32
     normals: np.ndarray | None = None  # (n, 3) float32, where the tessellation has them
+    open: bool = False  # a surface, not a solid: a painted part's look (``Look``), whose volume is none
 
 
 @dataclass(frozen=True)
@@ -159,12 +160,36 @@ class Geometry:
 
 
 @dataclass(frozen=True)
+class Look:
+    """One look of a part whose faces are painted (a STEP's face colours, ``paint``): its triangles of that look as
+    a mesh of their own (a key of ``Description.meshes``), their colour (sRGB) and material name."""
+
+    mesh: str
+    color: tuple[float, float, float, float]
+    material: str | None = None
+
+
+@dataclass(frozen=True)
 class Visual:
+    """A part as it is drawn: its whole mesh (``geometry``: what is measured and swept), its colour and material, and,
+    where its faces are painted, its ``looks``, the part's own first: what a writer draws in its place, a mesh each,
+    as the viewer draws a painted face (``drawn``)."""
+
     name: str
     geometry: Geometry
     color: tuple[float, float, float, float]  # sRGB, 0..1
     material: str | None = None  # the material's name, where the part has one
     path: str = ""  # the part's occurrence path in the document, for messages (``shown``); "" where it has none
+    looks: tuple[Look, ...] = ()
+
+    def drawn(self) -> list[tuple[str, Geometry, tuple[float, float, float, float], str | None]]:
+        """What a writer draws of the part: (name, geometry, colour, material) for each piece -- the part whole, or
+        each look's triangles, the first under the part's name and the rest ``<name>_paint<i>``."""
+        if not self.looks:
+            return [(self.name, self.geometry, self.color, self.material)]
+        return [(self.name if at == 0 else f"{self.name}_paint{at}",
+                 Geometry("mesh", self.geometry.placement, mesh=look.mesh, scale=self.geometry.scale),
+                 look.color, look.material) for at, look in enumerate(self.looks)]
 
 
 @dataclass(frozen=True)
@@ -356,7 +381,8 @@ class Description:
                 raise DescriptionError(f"joint {joint.name!r} floats, and a link floats from the ground alone, not "
                                        f"from {joint.parent!r}")
         for link in self.links:
-            for geometry in [v.geometry for v in link.visuals] + [c.geometry for c in link.collisions]:
+            drawn = [geometry for v in link.visuals for _name, geometry, _color, _material in v.drawn()]
+            for geometry in [v.geometry for v in link.visuals] + drawn + [c.geometry for c in link.collisions]:
                 if geometry.kind == "mesh" and geometry.mesh not in self.meshes:
                     raise DescriptionError(f"link {link.name!r} names mesh {geometry.mesh!r}, which there is not")
         for pair in self.excludes:
