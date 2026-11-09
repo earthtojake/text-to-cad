@@ -149,8 +149,14 @@ def _number(value: Any) -> float | None:
     return float(value) if math.isfinite(value) else None
 
 
+#: An angle within this of its limit is at it: a figure of degrees carries its pull's or its normal's rounding
+#: (a 2 deg wall against a pull typed to nine digits reads 1.99999999), far above a length's float noise.
+ANGLE_TOLERANCE_DEG = 1e-6
+
+
 def _fails(rule: Rule, value: float, limit: float) -> bool:
-    slack = 1e-9 * max(1.0, abs(limit))
+    """Is ``value`` past ``limit``, beyond noise: a billionth of the limit, an angle's ``ANGLE_TOLERANCE_DEG``?"""
+    slack = ANGLE_TOLERANCE_DEG if rule.unit == "deg" else 1e-9 * max(1.0, abs(limit))
     return value < limit - slack if rule.op == "min" else value > limit + slack
 
 

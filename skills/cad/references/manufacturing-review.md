@@ -63,7 +63,8 @@ Never turn a rule's number into a physical law, or a shop's machine capacity int
 - **Fix by code.** A part with no closed solid (an open shell, a face) is refused, `not_solid`: close
   it or check the solid meant. What puts every figure in doubt comes first, whatever its severity
   (`not_watertight` and `not_sound`, errors in every process; `measurement_failed`, `units_suspect`: a
-  part under 1 mm across, probably modelled in metres or inches), then errors, warnings and
+  part under 1 mm or over 10 m across, probably in the wrong unit -- its note names the readings that
+  fit), then errors, warnings and
   the facts. A failing rule's finding is coded by its rule id
   (`cnc.internal_corner_radius`), with the measured value, its limit and source, and a hint saying
   what to change; several failures at one ref are one finding (`and 2 more at this ref`), a warning on

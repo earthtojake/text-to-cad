@@ -38,6 +38,7 @@ import numpy as np
 import trimesh
 
 from cad._internal import meshops_printing as mo
+from cad._internal.dfm._common import units_doubt
 from cad.trimesh import _mesh
 
 #: Items a family lists, at most (worst first).
@@ -927,25 +928,12 @@ def _mark_partial(report: dict) -> bool:
 
 
 def _scale_hint(mesh: trimesh.Trimesh) -> dict:
-    """Flag meshes whose units are probably not millimetres.
-
-    A meters-scale export measures a bbox like 0.05 x 0.02 x 0.04, which sits
-    under the 0.1 mm on-plate tolerance: every down-facing face reads as
-    resting on the plate, so overhangs and support both come back 0.0 and the
-    part looks like a flawless print. Give the workflow something measured to
-    branch on rather than asking the agent to eyeball the bounding box.
-    """
+    """Flag meshes whose units are probably not millimetres (``_common.units_doubt``: the test every process
+    and source takes). A metres export reads 0.05 x 0.02 x 0.04, under the 0.1 mm on-plate tolerance: every
+    down-facing face reads as resting on the plate, and the part looks like a flawless print."""
     diag = float(np.linalg.norm(mesh.extents))
-    suspect = bool(np.isfinite(diag) and diag < 1.0)
-    return {
-        "bbox_diagonal_mm": round(diag, 4),
-        "units_suspect": suspect,
-        "note": (
-            "bbox diagonal under 1 mm; source is probably in meters or inches. "
-            "Rescale to millimetres before trusting overhang, support or "
-            "thickness numbers."
-        ) if suspect else "bbox consistent with millimetre units",
-    }
+    units = mesh.metadata.get("source_units", "mm")
+    return {"bbox_diagonal_mm": round(diag, 4), **units_doubt(diag, f"read as {units}, it is")}
 
 
 def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: dict | None = None) -> dict:

@@ -90,6 +90,26 @@ class MeshCleanTest(unittest.TestCase):
         self.assertAlmostEqual(facts["volume_mm3"], 1000.0, delta=0.5)
         self.assertEqual((facts["degenerate_faces_dropped"], facts["cracks_closed"]), (1, 1))
 
+    def test_a_crack_closes_beside_two_openings_that_share_a_corner(self) -> None:
+        import numpy as np
+
+        from cad.trimesh import _mesh
+
+        with tempfile.TemporaryDirectory() as td:
+            mesh = trimesh.load(_cracked_box(Path(td)), force="mesh", process=False)
+        mesh.merge_vertices()
+        faces = [set(face) for face in np.asarray(mesh.faces).tolist()]
+        edges = np.sort(np.concatenate([mesh.faces[:, [0, 1]], mesh.faces[:, [1, 2]], mesh.faces[:, [2, 0]]]), axis=1)
+        unique, counts = np.unique(edges, axis=0, return_counts=True)
+        crack = set(unique[counts == 1].ravel().tolist())  # the T-junction's corners
+        # two triangles away from the crack meeting at one corner alone: their openings' loops share it
+        first, second = next((i, j) for i in range(len(faces)) for j in range(i + 1, len(faces))
+                             if len(faces[i] & faces[j]) == 1 and not (faces[i] | faces[j]) & crack)
+        mesh.update_faces(np.isin(np.arange(len(faces)), [first, second], invert=True))
+        _mesh.clean(mesh)
+        self.assertEqual(mesh.metadata["cracks_closed"], 1, "the sliver crack, whatever the other loops")
+        self.assertFalse(mesh.is_watertight, "the two openings stay open")
+
     def test_an_opening_stays_open_and_its_body_is_named(self) -> None:
         import numpy as np
 

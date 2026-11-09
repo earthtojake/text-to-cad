@@ -184,9 +184,10 @@ def _close_cracks(mesh: trimesh.Trimesh) -> int:
         return 0
     # The fill runs each boundary edge the other way from the face that holds it.
     nxt: dict[int, int] = {}
+    shared: set[int] = set()  # a corner two loops share: no loop through it is a simple crack
     for a, b in directed[once]:
-        if int(b) in nxt:  # a corner two loops share: no simple crack
-            return 0
+        if int(b) in nxt:
+            shared.add(int(b))
         nxt[int(b)] = int(a)
     diagonal = float(np.linalg.norm(mesh.extents)) or 1.0
     tolerance = CRACK_FRACTION * diagonal
@@ -195,12 +196,12 @@ def _close_cracks(mesh: trimesh.Trimesh) -> int:
     seen: set[int] = set()
     closed = 0
     for start in list(nxt):
-        if start in seen:
+        if start in seen or start in shared:
             continue
         loop = [start]
         seen.add(start)
         at = nxt[start]
-        while at != start and at in nxt and at not in seen and len(loop) <= CRACK_MAX_CORNERS:
+        while at != start and at in nxt and at not in seen and at not in shared and len(loop) <= CRACK_MAX_CORNERS:
             loop.append(at)
             seen.add(at)
             at = nxt[at]

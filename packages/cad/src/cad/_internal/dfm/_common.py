@@ -9,8 +9,16 @@ from typing import Any
 from cad._internal.refused import ArgumentRefused
 from cad.results import CheckFinding
 
-__all__ = ["first_error", "mm", "partial_findings", "require", "require_bool", "require_finite", "require_int",
-           "require_text", "scale_findings", "where"]
+__all__ = ["UNITS_LARGE_MM", "UNITS_SMALL_MM", "first_error", "mm", "partial_findings", "require", "require_bool",
+           "require_finite", "require_int", "require_text", "scale_findings", "units_doubt", "where"]
+
+#: A part under this across (its box's diagonal, mm) is implausible for anything these processes make: it is
+#: probably drawn in metres or inches and read as millimetres.
+UNITS_SMALL_MM = 1.0
+#: A part over this across is made in one piece by none of them: the largest standard sheet is 3048 x 1524
+#: (3.4 m across), gantry mills and large-format printers reach a few metres, a molded part rarely one. It is
+#: probably a thousand times too large (micrometres, or millimetres read as metres).
+UNITS_LARGE_MM = 10_000.0
 
 
 def _flag(name: str) -> str:
@@ -80,6 +88,29 @@ def partial_findings(report: dict[str, Any]) -> list[CheckFinding]:
     """An error for each family the measurement could not measure."""
     return [CheckFinding("error", "measurement_failed", f"{family} was not measured: {first_error(report[family])}",
                          family) for family in report.get("partial_sections") or []]
+
+
+def units_doubt(diagonal: float, reading: str) -> dict[str, Any]:
+    """``units_suspect`` and its ``note`` for a part ``diagonal`` mm across, ``reading`` saying how its unit was
+    read (``"the STEP declares its unit and it reads"``): suspect under ``UNITS_SMALL_MM`` or over
+    ``UNITS_LARGE_MM``, the note offering only the readings that would make it a plausible size. The same for
+    every process and every source."""
+    if not math.isfinite(diagonal) or UNITS_SMALL_MM <= diagonal <= UNITS_LARGE_MM:
+        return {"units_suspect": False, "note": f"{reading} {diagonal:.4g} mm across: a plausible size"}
+    small = diagonal < UNITS_SMALL_MM
+    readings = ((("metres", 1000.0), ("inches", 25.4), ("centimetres", 10.0)) if small else
+                (("micrometres, or millimetres read as metres", 1e-3), ("millimetres read as inches", 1 / 25.4),
+                 ("millimetres read as centimetres", 0.1)))
+    fits = [(name, f"{diagonal * factor:.4g} mm") for name, factor in readings
+            if UNITS_SMALL_MM <= diagonal * factor <= UNITS_LARGE_MM]
+    size = "small" if small else "large"
+    if fits:
+        found = "it is probably drawn in " + ", or ".join(f"{name} ({value} if so)" for name, value in fits) + \
+            " -- scale it to millimetres, then check again"
+    else:
+        found = "no unit read as millimetres makes it a plausible size: check the unit it was drawn in"
+    return {"units_suspect": True,
+            "note": f"{reading} {diagonal:.6g} mm across, implausibly {size} for a made part: {found}"}
 
 
 def scale_findings(report: dict[str, Any]) -> list[CheckFinding]:

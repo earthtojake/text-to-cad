@@ -27,11 +27,6 @@ __all__ = ["Cancelled", "checked", "checkpoint", "held", "measure", "measure_dec
 
 #: A solid of less volume than this fraction of its box's diagonal cubed holds no material: zero volume.
 _ZERO_VOLUME = 1e-9
-#: A document whose box's diagonal is under this many millimetres is implausibly small for a made part:
-#: drawn in metres or inches as millimetres (build123d has no unit; a model's millimetre is its unit).
-_PLAUSIBLE_DIAGONAL_MM = 1.0
-
-
 def _closed_solids(part: _dfm_brep.Part) -> tuple[list[Any], list[Any], int]:
     """The part's solids whose every shell is closed and whose volume is not zero, its other solids, and the
     faces it holds outside any solid (a free face or shell beside them)."""
@@ -106,8 +101,11 @@ def _integrity(document: _dfm_brep.Document, process: str) -> list[dict[str, Any
 
 
 def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, Any]) -> None:
-    """``report["scale"]`` says the units look wrong (``units_suspect``, a warning said first) where the
-    whole document is under ``_PLAUSIBLE_DIAGONAL_MM`` across, unless the process's own scale already does."""
+    """``report["scale"]`` says the units look wrong (``units_suspect``, a warning said first) where the whole
+    document is implausibly small or large across (``_common.units_doubt``: the one test every process and
+    source takes), unless the process's own scale already says so."""
+    from cad._internal.dfm._common import units_doubt
+
     scale = report.get("scale") if isinstance(report.get("scale"), dict) else {}
     if scale.get("units_suspect"):
         return
@@ -115,14 +113,10 @@ def _scale(document: _dfm_brep.Document, document_type: str, report: dict[str, A
     lo = np.min([[box.min.X, box.min.Y, box.min.Z] for box in boxes], axis=0)
     hi = np.max([[box.max.X, box.max.Y, box.max.Z] for box in boxes], axis=0)
     diagonal = float(np.linalg.norm(hi - lo))
-    if diagonal >= _PLAUSIBLE_DIAGONAL_MM:
-        return
-    declared = ("the STEP declares its unit and it reads" if document_type == "step"
-                else "build123d has no unit and a model's is the millimetre: it reads")
-    report["scale"] = {**scale, "bbox_diagonal_mm": round(diagonal, 6), "units_suspect": True,
-                       "note": f"{declared} {diagonal:.4g} mm across, implausibly small for a made part: it is "
-                               f"probably drawn in metres ({diagonal * 1000:.4g} mm if so) or inches "
-                               f"({diagonal * 25.4:.4g} mm) -- scale the model to millimetres, then check again"}
+    doubt = units_doubt(diagonal, "the STEP declares its unit and it reads" if document_type == "step"
+                        else "build123d has no unit and a model's is the millimetre: it reads")
+    if doubt["units_suspect"]:
+        report["scale"] = {**scale, "bbox_diagonal_mm": round(diagonal, 6), **doubt}
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],

@@ -50,10 +50,10 @@ _TOOLS = {"tools_given": True}
 #: the smallest standard tool (Hubs: "Most machine shops can accurately machine cavities and holes using tools
 #: down to 2.5 mm (0.1 inches) in diameter."). A recommendation: the hints say it, no error's limit is it.
 _SMALL_TOOL_RADIUS = 1.25
-#: The least radius any round tool leaves, without ``--tools``: half of Hubs' feasible smallest feature, "Feasible:
-#: 0.05 mm (0.005 inches)" -- derived (a 0.05 mm tool's radius), the guide states no radius itself.
+#: The least radius any round tool leaves, without ``--tools``: half of Hubs' feasible minimum hole diameter,
+#: "Feasible: 0.05 mm (0.005 inches)" -- derived (a 0.05 mm tool's radius), the guide states no radius itself.
 _MICRO_TOOL_RADIUS = 0.025
-_MICRO_NOTE = ('derived from Hubs\' small features: "Feasible: 0.05 mm (0.005 inches)" (a 0.05 mm tool; the guide '
+_MICRO_NOTE = ('derived from Hubs\' minimum hole diameter: "Feasible: 0.05 mm (0.005 inches)" (a 0.05 mm tool; the guide '
                'states the feature, not this figure); "Anything below this limit [2.5 mm] is considered '
                'micro-machining."')
 #: What a failing item says of itself, appended to the message (``Rule.detail``).
@@ -150,7 +150,7 @@ _RULES: tuple[Rule, ...] = (
     *_corner_rules("hubs-cnc", "every CNC tool is round, so an internal vertical edge always has a radius"),
     Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", _MICRO_TOOL_RADIUS, "mm",
          "internal corner radius", "hubs-cnc", when={**_POCKETS, **_NO_TOOLS}, item_when={"sharp": False},
-         fix="radius the corner to at least {limit:g} mm (half the 0.05 mm smallest feature: no micro tool cuts "
+         fix="radius the corner to at least {limit:g} mm (half the 0.05 mm least hole: no micro tool cuts "
              "tighter); 1.25 mm or more is recommended", note=_MICRO_NOTE),
     Rule("cnc.internal_corner_small", "internal_corners", "radius_mm", "min", 1.25, "mm",
          "internal corner radius", "hubs-cnc", severity="warning", when={**_POCKETS, **_NO_TOOLS},

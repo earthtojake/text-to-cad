@@ -23,8 +23,9 @@ rules' numbers, general practice from Protolabs Network's guide; `--tools` moves
   floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled sharp: give its
   corners a radius or call out a broach.
 - **Holes.** Standard drill diameters (6.8 mm for M8, 4.2 for M5, 6.6 for an M6 clearance; `cnc.drill_size`
-  names the nearest), none under 1 mm (an error), depth at most four diameters, and a thread as its
-  tap-drill hole with a callout, not modelled.
+  names the nearest), none under 1 mm (an error), depth at most four diameters -- a counterbore's and a
+  stepped bore's larger step too, each over its own diameter -- and a thread as its tap-drill hole with a
+  callout, not modelled.
 - **Walls and gaps.** Walls 0.8 mm or more in metal, 1.5 mm in plastic (0.5 / 1.0 are the floor);
   gaps 2.5 mm or wider (or the smallest tool).
 - **Reach.** Every face seen straight from one of the part's six axis directions (3 axes; its own

@@ -46,6 +46,13 @@ class RulesTest(unittest.TestCase):
         self.assertEqual((outcome["status"], outcome["evaluated"], outcome["unmeasured"]), ("failed", 2, 1))
         self.assertEqual(record["failed"], ["cnc.corner"])
 
+    def test_an_angle_is_at_its_limit_to_a_millionth_of_a_degree(self) -> None:
+        # a 2 deg wall against a pull typed to nine digits reads 1.99999999
+        rule = Rule("draft", "draft", "draft_deg", "min", 2.0, "deg", "wall draft", "s")
+        items = [{"draft_deg": 2.0 - 1e-8, "location": "a"}, {"draft_deg": 1.99999, "location": "b"}]
+        found, _record = evaluate({"draft": {"items": items}}, _set(rule), {})
+        self.assertEqual([f.location for f in found], ["b"])
+
     def test_limits_by_context_scaled_and_conditioned(self) -> None:
         by_class = Rule("wall", "walls", "t", "min", {"metal": 0.8, "plastic": 1.5}, "mm", "wall", "s",
                         by="material_class")
@@ -463,6 +470,30 @@ class IntegrityTest(unittest.TestCase):
             self.assertEqual((first.severity, first.code), ("warning", "units_suspect"))
             self.assertIn("metres (111.8 mm if so)", first.message)
         self.assertFalse(any(f.code == "units_suspect" for f in cnc(bd.Box(100, 50, 2)).findings))
+
+    def test_one_units_test_in_every_process_and_on_both_paths(self) -> None:
+        """Under 1 mm or over 10 m across is suspect wherever it is read (each process on exact geometry, printing
+        on a mesh), the note offering only the readings that make it a plausible size; a full 3048 x 1524 sheet
+        is not."""
+        import cad
+        from cad._internal.dfm._common import units_doubt
+        from cad.build123d import cnc, molding, printing, sheet_metal
+
+        self.assertFalse(units_doubt(float(np.hypot(3048, 1524)), "it reads")["units_suspect"])
+        note = units_doubt(12_000.0, "it reads")["note"]
+        self.assertIn("micrometres, or millimetres read as metres (12 mm if so)", note)
+        self.assertNotIn("metres (1.2e+07", note)
+        self.assertNotIn("inches (", units_doubt(0.002, "it reads")["note"], "0.05 mm read as inches: no fit")
+        for size, label in ((0.0005, "small"), (12_000.0, "large")):
+            box = bd.Box(size, size / 2, size / 50)
+            for check in (cnc, sheet_metal, molding, printing):
+                first = check(box).findings[0]
+                self.assertEqual((first.code, first.severity), ("units_suspect", "warning"), (label, check))
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "box.stl"
+                bd.export_stl(box, str(path))
+                codes = {f.code for f in cad.stl.dfm(path, process="printing").findings}
+                self.assertIn("units_suspect", codes, label)
 
     def test_a_faces_sampling_tolerance_turns_with_it(self) -> None:
         face = bd.Box(36, 20, 5).faces().sort_by(bd.Axis.Z)[-1]

@@ -56,7 +56,8 @@ the verdicts:
   technology, or a plastic with `pbf`, is refused.
 - `--build-volume XxYxZ`: the person's printer, else a typical machine of the technology's, assumed.
 - `--layer-height` and `--nozzle` (FDM): stair-stepping and fine detail.
-- `--angle-limit`: overrides the technology's self-supporting angle, from the person's datasheet.
+- `--angle-limit`: the person's printer's self-supporting angle, from its datasheet: the overhangs are
+  counted and `printing.overhang_angle` judges each against it in place of the technology's figure.
 - `--units` (an STL's: millimetres by default) and `--samples` (rays on a mesh).
 
 The rules are general, no printer's or shop's: a machine's own limits come in as options or from its

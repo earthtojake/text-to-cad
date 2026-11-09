@@ -1340,10 +1340,10 @@ def _sections(ctx: Context) -> dict[str, Any]:
 
 
 def _scale(ctx: Context) -> dict[str, Any]:
-    suspect = bool(ctx.diag < 1.0)
-    return {"bbox_diagonal_mm": _r(ctx.diag, 4), "units_suspect": suspect,
-            "note": ("bbox diagonal under 1 mm; the model is probably in metres or inches drawn as millimetres"
-                     if suspect else "bbox consistent with millimetre units")}
+    """The document's size and whether its unit looks wrong (``_common.units_doubt``, every process's test)."""
+    from cad._internal.dfm._common import units_doubt
+
+    return {"bbox_diagonal_mm": _r(ctx.diag, 4), **units_doubt(ctx.diag, "it reads")}
 
 
 def _orientations(ctx: Context) -> dict[str, Any]:
