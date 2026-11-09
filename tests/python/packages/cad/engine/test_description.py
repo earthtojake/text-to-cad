@@ -488,12 +488,32 @@ class DeclarationsTest(_Folder):
             np.testing.assert_allclose(fitted.geometry.size, size, atol=1e-9)
             np.testing.assert_allclose(fitted.geometry.placement[:3, 3], [0, 0, 0], atol=1e-9)
         self.assertEqual(describe(Source.read(xbf).view(), collision_default="none").link("base").collisions, [])
+        # A pancake motor, wider than it is tall, a connector boss on its side: a cylinder about the axis it is turned
+        # about, its short side, not along a diameter (its longest side, past the boss).
+        (fitted,) = self.described("pancake", PANCAKE)[0].link("pancake").collisions
+        np.testing.assert_allclose(np.abs(fitted.geometry.placement[:3, 2]), [0, 0, 1], atol=1e-6)
+        self.assertAlmostEqual(fitted.geometry.size[1], 0.025, delta=1e-6)
+        self.assertTrue(0.041 <= fitted.geometry.size[0] <= 0.0425, fitted.geometry.size)
         with self.assertRaisesRegex(ValueError, "collision 'cone' is none of mesh, box"):
             collision(bd.Box(1, 1, 1), "cone")
         with self.assertRaisesRegex(TypeError, "Location"):
             frame(bd.Box(1, 1, 1), "tip", (1, 2, 3))
         with self.assertRaisesRegex(ValueError, "collision_default 'hull'"):
             describe(Source.read(self.folder / "XBF/hinge.xbf").view(), collision_default="hull")
+
+
+PANCAKE = """
+import build123d as bd
+from cad.build123d import collision
+from cad.engine import xbf
+
+
+@xbf("XBF/pancake.xbf")
+def pancake():
+    motor = bd.Cylinder(41, 25) + bd.Pos(38, 0, 0) * bd.Box(10, 12, 10)
+    motor.label = "pancake"
+    return collision(motor, "cylinder")
+"""
 
 
 # A camera fastened to the arm's tip, kept a body of its own, excluded from the base; the elbow named as

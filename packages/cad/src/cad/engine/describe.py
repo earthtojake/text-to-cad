@@ -193,6 +193,7 @@ class _Describer:
         self.warnings: list[str] = []
         self.measured: dict[str, Any] = {}
         self.fitted: dict[str, Any] = {}
+        self.turned: dict[str, int | None] = {}  # each prototype's axis of turning, a side of its box (``_turned_axis``)
         self.link_names: set[str] = set()
         self.joint_names: set[str] = set()
         # Each part's declared link name (``declarations.link``: the innermost over it), a body's aside, and the
@@ -998,12 +999,65 @@ class _Describer:
         if kind == "sphere":
             return frame, (float(np.linalg.norm(halves)),)
         order = np.argsort(-halves, kind="stable")  # the longest side the axis, the next X
+        if kind == "cylinder":
+            # A part turned about an axis (a pancake motor, a wheel, a disc) is a cylinder about it, however short:
+            # the box's side along it the axis, the larger of the two across it the radius.
+            turned = self.turned.get(key, -1)
+            if turned == -1:
+                turned = self.turned[key] = _turned_axis(self._shape(key), axes)
+            if turned is not None:
+                across = [at for at in order if at != turned]
+                order = np.array([turned, *across])
         z, x = axes[order[0]], axes[order[1]]
         frame[:3, 0], frame[:3, 1], frame[:3, 2] = x, np.cross(z, x), z
         radius, length = float(halves[order[1]]), float(2 * halves[order[0]])
         if kind == "capsule":
             length = max(length - 2 * radius, 0.0)
         return frame, (radius, length)
+
+
+#: The share of a part's surface its faces turned about one axis (cylinders and cones) must hold for a fitted cylinder to
+#: take that axis rather than the part's longest side (``_turned_axis``), and how near (degrees) the axis must lie to
+#: a side of the part's oriented bounding box.
+TURNED = 0.25
+TURNED_ALIGNED = 5.0
+
+
+def _turned_axis(shape: Any, axes: list[np.ndarray]) -> int | None:
+    """Which side of a part's oriented bounding box (``axes``, unit vectors) its axis of turning lies along, or None:
+    the direction its cylindrical and conical faces share, weighed by their area, where those faces hold at least
+    ``TURNED`` of its surface and the direction lies within ``TURNED_ALIGNED`` of a side. A housing turned about one
+    axis is mostly such faces; a block with a hole or a boss is not."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder
+    from OCP.GProp import GProp_GProps
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+
+    if shape is None:
+        return None
+    total, by_side = 0.0, [0.0, 0.0, 0.0]
+    explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    while explorer.More():
+        face = TopoDS.Face(explorer.Current())
+        props = GProp_GProps()
+        BRepGProp.SurfaceProperties_s(face, props)
+        area = props.Mass()
+        total += area
+        surface = BRepAdaptor_Surface(face)
+        kind = surface.GetType()
+        if kind in (GeomAbs_Cylinder, GeomAbs_Cone):
+            axis = (surface.Cylinder() if kind == GeomAbs_Cylinder else surface.Cone()).Axis().Direction()
+            direction = np.array([axis.X(), axis.Y(), axis.Z()])
+            cosines = [abs(float(direction @ side)) for side in axes]
+            nearest = int(np.argmax(cosines))
+            if cosines[nearest] >= math.cos(math.radians(TURNED_ALIGNED)):
+                by_side[nearest] += area
+        explorer.Next()
+    best = int(np.argmax(by_side))
+    return best if total > 0 and by_side[best] >= TURNED * total else None
 
 
 def _virtual(blocks: list[dict[str, Any]], pairs: list[dict[str, Any]], ground: int) -> set[int]:

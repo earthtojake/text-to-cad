@@ -121,7 +121,9 @@ THRESHOLD = (0.01, 1.0)
 def collision(part: Any, kind: str, *, max_hulls: int | None = MAX_HULLS, threshold: float | None = None) -> Any:
     """Say what a simulator collides ``part`` as: one of ``mesh``, ``box``, ``sphere``,
     ``cylinder``, ``capsule``, ``decomposed`` or ``none`` (the primitives fitted by the kernel to the
-    part's oriented bounding box, a cylinder's and a capsule's axis its longest side). ``decomposed``
+    part's oriented bounding box, a capsule's axis its longest side, a cylinder's the axis the part is turned
+    about where its cylindrical and conical faces make a quarter of its surface, a pancake motor's short side,
+    else its longest side: ``describe._turned_axis``). ``decomposed``
     is a set of convex hulls cut from the part's mesh by CoACD (the coacd integration, ``cad[coacd]``,
     where the robot is described), its visual left whole: ``max_hulls`` at most that many (CoACD's
     ``max_convex_hull``; ``MAX_HULLS``, 16, by default, None for no limit), ``threshold`` its concavity

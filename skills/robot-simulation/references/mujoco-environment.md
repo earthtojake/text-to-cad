@@ -107,7 +107,9 @@ if __name__ == "__main__":
   robot's, so they live in the CAD model and every export carries them. Gains, control ranges,
   `condim`, solver settings and contact softness are the scene's.
 - **Collision kinds.** `box`, `sphere`, `cylinder` and `capsule` are fitted by the kernel to the
-  part's oriented bounding box (a cylinder's and a capsule's axis its longest side): fast and stable,
+  part's oriented bounding box (a capsule's axis its longest side; a cylinder's the axis the part is
+  turned about where its round faces make a quarter of its surface, so a pancake motor's is its short
+  side, else its longest side): fast and stable,
   and as wrong as the box is for a part far from its shape. `mesh` (the default) is the part's own
   mesh, which MuJoCo collides as its convex hull. `none` for a part that only shows (a cover, a
   label). Split a concave part that must collide as itself into convex parts in the model.
