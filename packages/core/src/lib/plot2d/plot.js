@@ -99,6 +99,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {"pad"|"via"|"npth"} [hole]
  * @property {readonly [string, string]} [span] A blind or buried via's hole: its top and bottom copper.
  * @property {number} [clearance] A front-copper pad's clearance: KiCad outlines it, a hairline that far out.
+ * @property {number[][][]} [grown] That outline, as rings, for a pad that is not convex (a custom pad's).
  * @property {readonly (readonly [number, number])[]} [knockout] Knocked-out text's box: filled, the letters cut from it.
  * @property {readonly [number, number, number, number]} box The item's page box, computed at layout.
  *
@@ -619,7 +620,9 @@ function clearancePath(item, PathCtor) {
   let path = OUTLINES.get(item);
   if (!path) {
     path = new PathCtor();
-    addPolyline(path, grownOutline(item.pts, item.clearance), true);
+    // A pad that is not convex (a custom pad's) carries its grown outline (`grown`); a convex one is grown here.
+    if (Array.isArray(item.grown)) for (const ring of item.grown) addPolyline(path, ring, true);
+    else addPolyline(path, grownOutline(item.pts, item.clearance), true);
     OUTLINES.set(item, path);
   }
   return path;

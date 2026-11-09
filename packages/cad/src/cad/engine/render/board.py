@@ -419,7 +419,8 @@ class _Painter:
                 self.knockout(item, paint)
                 continue
             if item.get("clearance", 0) > 0:
-                self.line(grown_outline(item["pts"], item["clearance"]), paint, 0, closed=True)
+                for ring in item.get("grown") or [grown_outline(item["pts"], item["clearance"])]:
+                    self.line(ring, paint, 0, closed=True)
             opacity = zones if item.get("pour") and not item.get("teardrop") else tracks if copper and is_track(item) else 1.0
             wide = item.get("w", 0)
             if kind == "poly":

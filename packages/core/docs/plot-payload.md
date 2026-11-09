@@ -137,11 +137,15 @@ locked: what the board index would otherwise repeat of every graphic is drawn he
 What each thing becomes:
 
 - **Pads** are their padstack's outline (rect, roundrect, oval, circle, trapezoid, chamfered,
-  custom: the hull of its primitives) as a `poly` on every copper layer they flash on, with `ref`
-  and `net`: a pad through the board whose unused copper is removed keeps it on the outer layers
+  custom: its anchor and every primitive -- filled polygons, circles and rectangles, and outlines,
+  lines, arcs and curves drawn with their pen's width -- united, as KiCad makes its copper, a `poly`
+  per piece with its `holes`: a comb is a comb, not the hull round it) as a `poly` on every copper
+  layer they flash on, with `ref` and `net`: a pad through the board whose unused copper is removed keeps it on the outer layers
   (when it keeps its end layers), where a zone connects it (`zone_layer_connections`) and where a
   track ends on it, as KiCad's `FlashLayer` decides. A front-copper pad carries its `clearance` (its
-  own, its footprint's, else its net class's): KiCad outlines it there, a hairline that far out. A
+  own, its footprint's, else its net class's): KiCad outlines it there, a hairline that far out; a
+  custom pad, which need not be convex, carries that outline as `grown` (rings: the pad grown by its
+  clearance, or its hull grown where it keeps its clearance from its hull, `(clearance convexhull)`). A
   pad's number and net name are `label`s fitted to it as KiCad fits them (`pcb_painter.cpp`): the
   number above the net, centred, turned to read upwards on a pad taller than wide, `x` for a
   no-connect pin and `*` for a free one; a surface pad's on its copper (in that copper's name
@@ -192,7 +196,7 @@ clearance outlines of tracks.
 
 `board` is `cad.engine.formats.kicad.board_index.BoardIndex.as_json()` in sheet millimetres: `parts` (ref,
 value, footprint, side, `at`, `rotation`, `fields`, `dnp`, `outline`), `pads` (part, number, name,
-net, type, side, `at`, `polygon`, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
+net, type, side, `at`, `polygon`: a custom pad's the outline of its largest piece, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
 `vias` (net, `at`, diameter, drill, the two `layers` it joins, `type`: `through`, `blind`, `buried`,
 `micro`), `zones` (net, layer, `outline`, `name`, `priority`, `filled`: the mm² of copper KiCad filled
 that layer with; a zone on several layers is one entry per layer, alike but for its layer; a rule
@@ -212,7 +216,11 @@ KiCad's own frame, millimetres, y down: a point the viewer copies pastes straigh
 `Vector2.from_xy_mm`.
 
 What a 3D view of the board reads: `thickness`, the board's (its stack-up's `(general (thickness ..))`,
-millimetres; absent when the file says none), and a part's `models`, each of its footprint's 3D models as
+millimetres; absent when the file says none), `stackup`, the physical stack-up the file saved, as it names
+it (`{"layers": [{"name": "F.Mask", "type": "Top Solder Mask", "color": "Black", "thickness": 0.01}, ...],
+"finish": "ENIG"}`: each layer's `type`, `color`, `thickness` and `material` where the file gives them; absent
+for a board that saved none), which a 3D face draws the board as made in (`plot2d/stackup.js`: KiCad's 3D
+viewer's colours for those names; the 2D view and snapshots keep the layers' colours), and a part's `models`, each of its footprint's 3D models as
 the file writes them: `name` (as written: `${KICAD9_3DMODEL_DIR}/…/R_0603.wrl`, `${KIPRJMOD}/…`, a
 relative or absolute path, `kicad-embed://…`), and where it differs from KiCad's default `offset`
 (millimetres), `rotate` (degrees about x, y, z), `scale`, `hidden: true` and `opacity`. Which file on the

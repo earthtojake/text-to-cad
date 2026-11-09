@@ -20,15 +20,18 @@ __all__ = [
     "bezier_points",
     "box",
     "chords",
+    "disc",
     "format_xy",
     "hull",
     "inside",
+    "pen_outlines",
     "polygon_distance",
     "polygons_overlap",
     "polyline_distance",
     "rotate",
     "segment_distance",
     "segments_distance",
+    "union",
 ]
 
 XY = tuple[float, float]
@@ -263,3 +266,218 @@ def polygons_overlap(first: Sequence[XY], second: Sequence[XY]) -> bool:
                     if _segments_cross(a, b, c, d):
                         return True
     return False
+
+
+# --- union -----------------------------------------------------------------------------
+
+# Points this close are one point (mm): what the union's edges are joined by.
+_SNAP = 1e-6
+# How far off an edge the union looks to see which side is inside (mm): above the snap, far below any copper.
+_PROBE = 1e-5
+
+
+def pen_outlines(points: Sequence[XY], width: float, *, closed: bool = False, tolerance: float = CHORD_TOLERANCE) -> list[list[XY]]:
+    """What a round pen ``width`` wide covers along ``points``, as polygons to unite (:func:`union`): a
+    stadium round each segment (round caps, so the joins are round too), a disc for a single point; with
+    ``closed``, the segment back to the first point as well. A cap's chords lie within ``tolerance`` of it."""
+    half = width / 2
+    if half <= 0 or not points:
+        return []
+    steps = max(4, math.ceil(math.pi / (2 * math.acos(1 - tolerance / half)))) if half > tolerance else 4
+    pts = list(points)
+    pairs = list(zip(pts, pts[1:])) + ([(pts[-1], pts[0])] if closed and len(pts) > 2 else [])
+    if not pairs:
+        return [disc(pts[0], half, tolerance=tolerance)]
+    out: list[list[XY]] = []
+    for (ax, ay), (bx, by) in pairs:
+        length = math.hypot(bx - ax, by - ay)
+        if length < _SNAP:
+            out.append(disc((ax, ay), half, tolerance=tolerance))
+            continue
+        heading = math.atan2(by - ay, bx - ax)
+        outline = []
+        for centre, start in (((bx, by), heading - math.pi / 2), ((ax, ay), heading + math.pi / 2)):
+            for step in range(steps + 1):
+                angle = start + math.pi * step / steps
+                outline.append((centre[0] + half * math.cos(angle), centre[1] + half * math.sin(angle)))
+        out.append(outline)
+    return out
+
+
+def disc(centre: XY, radius: float, *, tolerance: float = CHORD_TOLERANCE) -> list[XY]:
+    """A circle as a polygon, its chords within ``tolerance`` of it (24 at least)."""
+    steps = max(24, chords(radius, 2 * math.pi, tolerance))
+    return [(centre[0] + radius * math.cos(2 * math.pi * k / steps), centre[1] + radius * math.sin(2 * math.pi * k / steps)) for k in range(steps)]
+
+
+def _key(point: XY) -> tuple[int, int]:
+    return round(point[0] / _SNAP), round(point[1] / _SNAP)
+
+
+def _cuts(p: XY, r: XY, q: XY, s: XY, mine: list[float], theirs: list[float]) -> None:
+    """Where the segments ``p + t r`` and ``q + u s`` meet, as ``t`` on ``mine`` and ``u`` on ``theirs``
+    (both ends of a shared run where they lie along each other)."""
+    cross = r[0] * s[1] - r[1] * s[0]
+    qp = (q[0] - p[0], q[1] - p[1])
+    rr, ss = math.hypot(*r), math.hypot(*s)
+    if rr < _SNAP or ss < _SNAP:
+        return
+    if abs(cross) > 1e-12 * rr * ss:
+        t = (qp[0] * s[1] - qp[1] * s[0]) / cross
+        u = (qp[0] * r[1] - qp[1] * r[0]) / cross
+        slack_t, slack_u = _SNAP / rr, _SNAP / ss
+        if -slack_t <= t <= 1 + slack_t and -slack_u <= u <= 1 + slack_u:
+            mine.append(min(1.0, max(0.0, t)))
+            theirs.append(min(1.0, max(0.0, u)))
+        return
+    if abs(qp[0] * r[1] - qp[1] * r[0]) / rr > _SNAP:
+        return  # parallel, apart
+    # Along each other: each end of one that lies within the other cuts it.
+    for end in (q, (q[0] + s[0], q[1] + s[1])):
+        t = ((end[0] - p[0]) * r[0] + (end[1] - p[1]) * r[1]) / (rr * rr)
+        if 0 < t < 1:
+            mine.append(t)
+    for end in (p, (p[0] + r[0], p[1] + r[1])):
+        u = ((end[0] - q[0]) * s[0] + (end[1] - q[1]) * s[1]) / (ss * ss)
+        if 0 < u < 1:
+            theirs.append(u)
+
+
+def union(polygons: Iterable[Sequence[XY]]) -> list[tuple[list[XY], list[list[XY]]]]:
+    """The region any of ``polygons`` covers (each a simple polygon, running either way; overlapping,
+    touching or apart), as its pieces: each an outline counter-clockwise (in a y-up frame) with the
+    outlines of its holes clockwise, the largest piece first.
+
+    The standard library alone: every edge is cut where another meets it, and a cut edge is kept where
+    one side of it is covered and the other is not (looked at :data:`_PROBE` off it), so an edge two
+    polygons share, or one that runs inside another, drops out; the kept edges are then joined into rings."""
+    shapes: list[tuple[list[XY], tuple[float, float, float, float]]] = []
+    for polygon in polygons:
+        ring: list[XY] = []
+        for point in polygon:
+            if not ring or _key(point) != _key(ring[-1]):
+                ring.append((float(point[0]), float(point[1])))
+        if len(ring) > 1 and _key(ring[0]) == _key(ring[-1]):
+            ring.pop()
+        if len(ring) >= 3 and abs(area(ring)) > _SNAP * _SNAP:
+            shapes.append((ring, _bounds(ring)))
+    if not shapes:
+        return []
+    if len(shapes) == 1:
+        ring = shapes[0][0]
+        return [(ring if area(ring) > 0 else ring[::-1], [])]
+    edges = [(a, b) for ring, _box in shapes for a, b in zip(ring, [*ring[1:], ring[0]])]
+    spans = [(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])) for a, b in edges]
+    cuts: list[list[float]] = [[0.0, 1.0] for _ in edges]
+    order = sorted(range(len(edges)), key=lambda index: spans[index][0])
+    for position, i in enumerate(order):
+        (p, pe), (_x0, y0, x1, y1) = edges[i], spans[i]
+        r = (pe[0] - p[0], pe[1] - p[1])
+        for j in order[position + 1:]:
+            other = spans[j]
+            if other[0] > x1 + _SNAP:
+                break
+            if other[1] > y1 + _SNAP or other[3] < y0 - _SNAP:
+                continue
+            q, qe = edges[j]
+            _cuts(p, r, q, (qe[0] - q[0], qe[1] - q[1]), cuts[i], cuts[j])
+
+    # The shapes filed in a grid by their boxes: a point is tested against the few whose box holds it.
+    left = min(box[0] for _ring, box in shapes) - _PROBE
+    top = min(box[1] for _ring, box in shapes) - _PROBE
+    across = max(1, math.isqrt(len(shapes)))
+    cell_w = (max(box[2] for _ring, box in shapes) + _PROBE - left) / across or 1.0
+    cell_h = (max(box[3] for _ring, box in shapes) + _PROBE - top) / across or 1.0
+    grid: dict[tuple[int, int], list[int]] = {}
+    for number, (_ring, box) in enumerate(shapes):
+        for gx in range(int((box[0] - left) / cell_w), int((box[2] - left) / cell_w) + 1):
+            for gy in range(int((box[1] - top) / cell_h), int((box[3] - top) / cell_h) + 1):
+                grid.setdefault((gx, gy), []).append(number)
+
+    # Each shape's edges filed in horizontal bands: a point's winding number reads the edges of its band alone.
+    bands: list[tuple[float, float, dict[int, list[tuple[XY, XY]]]]] = []
+    for ring, box in shapes:
+        rows = max(1, len(ring) // 4)
+        height = (box[3] - box[1]) / rows or 1.0
+        filed: dict[int, list[tuple[XY, XY]]] = {}
+        for a, b in zip(ring, [*ring[1:], ring[0]]):
+            for row in range(int((min(a[1], b[1]) - box[1]) / height), int((max(a[1], b[1]) - box[1]) / height) + 1):
+                filed.setdefault(row, []).append((a, b))
+        bands.append((box[1], height, filed))
+
+    def winds(point: XY, number: int) -> bool:
+        x, y = point
+        base, height, filed = bands[number]
+        turns = 0
+        for a, b in filed.get(int((y - base) / height), ()):
+            if a[1] <= y:
+                if b[1] > y and _orientation(a, b, point) > 0:
+                    turns += 1
+            elif b[1] <= y and _orientation(a, b, point) < 0:
+                turns -= 1
+        return turns != 0
+
+    def covered(point: XY) -> bool:
+        x, y = point
+        for number in grid.get((int((x - left) / cell_w), int((y - top) / cell_h)), ()):
+            box = shapes[number][1]
+            if box[0] <= x <= box[2] and box[1] <= y <= box[3] and winds(point, number):
+                return True
+        return False
+
+    kept: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    seen: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+    for (p, pe), along in zip(edges, cuts):
+        keys = [_key((p[0] + t * (pe[0] - p[0]), p[1] + t * (pe[1] - p[1]))) for t in sorted(set(along))]
+        for a, b in zip(keys, keys[1:]):
+            if a == b or (a, b) in seen or (b, a) in seen:
+                continue
+            seen.add((a, b))
+            ax, ay, bx, by = a[0] * _SNAP, a[1] * _SNAP, b[0] * _SNAP, b[1] * _SNAP
+            length = math.hypot(bx - ax, by - ay)
+            nx, ny = -(by - ay) / length * _PROBE, (bx - ax) / length * _PROBE
+            mx, my = (ax + bx) / 2, (ay + by) / 2
+            on_left, on_right = covered((mx + nx, my + ny)), covered((mx - nx, my - ny))
+            if on_left and not on_right:
+                kept.setdefault(a, []).append(b)
+            elif on_right and not on_left:
+                kept.setdefault(b, []).append(a)
+
+    def point_of(key: tuple[int, int]) -> XY:
+        return key[0] * _SNAP, key[1] * _SNAP
+
+    rings: list[list[XY]] = []
+    while kept:
+        start = next(iter(kept))
+        ring_keys = [start]
+        previous, current = start, kept[start].pop()
+        if not kept[start]:
+            del kept[start]
+        while current != start:
+            choices = kept.get(current)
+            if not choices:
+                break
+            # Where rings touch at a point, turn as far right as the edges allow: each ring stays its own.
+            heading = math.atan2(current[1] - previous[1], current[0] - previous[0])
+            index = min(range(len(choices)), key=lambda k: (math.atan2(choices[k][1] - current[1], choices[k][0] - current[0]) - heading + math.pi) % (2 * math.pi))
+            ring_keys.append(current)
+            previous, current = current, choices.pop(index)
+            if not choices:
+                del kept[previous]
+        if current == start and len(ring_keys) >= 3:
+            ring = [point_of(key) for key in ring_keys]
+            # Points along a straight run are not corners.
+            simple = [ring[k] for k in range(len(ring))
+                      if abs(_orientation(ring[k - 1], ring[k], ring[(k + 1) % len(ring)])) > _SNAP * _SNAP]
+            if len(simple) >= 3:
+                rings.append(simple)
+    outers = sorted((ring for ring in rings if area(ring) > 0), key=lambda ring: -area(ring))
+    pieces: list[tuple[list[XY], list[list[XY]]]] = [(ring, []) for ring in outers]
+    for hole in (ring for ring in rings if area(ring) < 0):
+        (ax, ay), (bx, by) = hole[0], hole[1]
+        length = math.hypot(bx - ax, by - ay) or 1.0
+        probe = ((ax + bx) / 2 - (by - ay) / length * _PROBE, (ay + by) / 2 + (bx - ax) / length * _PROBE)
+        holders = [piece for piece in pieces if inside(probe, piece[0])]
+        if holders:
+            min(holders, key=lambda piece: area(piece[0]))[1].append(hole)
+    return pieces
