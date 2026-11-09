@@ -54,6 +54,17 @@ def presentation(client: dict[str, Any], offered: dict[str, Any], launched: Any)
     return "text", False, "no extension, no known launcher"
 
 
+def claude_code(transport: Any) -> bool:
+    """Whether Claude Code started the session's transport, which then lists no tools: the transport saw
+    ``CLAUDE_CODE_ENTRYPOINT`` in its own environment (``claudeCode``, which Claude Code sets for every server
+    it starts, its terminal's and the desktop app's Code tab's), and was not told ``CAD_MCP_CARDS=1``
+    (``cards``), which keeps CAD's tools there for testing. A server Claude Desktop starts from its own
+    config, which its Code tab also offers, never sees the variable, so it keeps every tool."""
+    if not isinstance(transport, dict):
+        return False
+    return bool(transport.get("claudeCode")) and transport.get("cards") is not True
+
+
 def headless(meta: Any) -> bool:
     """Whether a Codex call comes from a turn that shows no app (``codex exec``)."""
     turn = meta.get(CODEX_TURN) if isinstance(meta, dict) else None

@@ -898,6 +898,42 @@ class InlineServerTest(_Session):
         self.assertEqual(reply["status"], 200)
 
 
+class ClaudeCodeSessionTest(_Session):
+    """A server Claude Code started (``CLAUDE_CODE_ENTRYPOINT`` in the transport's environment, the terminal's
+    or the desktop app's Code tab's): no tools, and the instructions name the cad skill and the `cad` command.
+    ``CAD_MCP_CARDS=1`` keeps every tool; Claude Desktop's own server, which never sees the variable, keeps them."""
+
+    client = {"name": "claude-code", "title": "Claude Code", "version": "2.1.316"}
+    offered = RENDERS_APPS
+    environ: dict = {"CLAUDE_CODE_ENTRYPOINT": "claude-desktop"}
+
+    def setUp(self) -> None:
+        cleared = {key: "" for key in ("CLAUDE_CODE_ENTRYPOINT", "CAD_MCP_CARDS")}
+        patched = mock.patch.dict(os.environ, {**cleared, **self.environ})
+        patched.start()
+        self.addCleanup(patched.stop)
+        super().setUp()
+
+    def tools(self) -> list[str]:
+        return [tool["name"] for tool in self.server.handle("tools/list", {}, None)["tools"]]
+
+    def test_claude_code_s_session_lists_no_tool_and_says_to_use_the_skill(self) -> None:
+        self.assertEqual(self.tools(), [])
+        self.assertIn("cad skill", self.initialized["instructions"])
+        self.assertIn("`cad viewer`", self.initialized["instructions"])
+        with self.assertRaises(RpcError):
+            self.call("cad_show", {"source": self.bracket})
+
+    def test_cad_mcp_cards_keeps_every_tool_and_desktop_s_own_server_has_them(self) -> None:
+        for environ in ({"CLAUDE_CODE_ENTRYPOINT": "cli", "CAD_MCP_CARDS": "1"}, {"CLAUDE_CODE_ENTRYPOINT": ""}):
+            with self.subTest(environ=environ), mock.patch.dict(os.environ, environ):
+                self.server = Server(page=self.server.page, recents=RecentStore(self.tmp / "state"))
+                said = self.server.handle("initialize", initialize_params(
+                    {"protocolVersion": "2025-06-18", "capabilities": self.offered, "clientInfo": CLAUDE}), None)
+                self.assertIn("cad_show", self.tools())
+                self.assertIn("cad_show", said["instructions"])
+
+
 class TextServerTest(_Session):
     """A client that renders no MCP Apps: cad_show answers with the model's link in the CAD Viewer."""
 

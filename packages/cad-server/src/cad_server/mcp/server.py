@@ -51,6 +51,11 @@ evidence that this host shows none.
 
 ``CAD_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
 Apps without advertising them (the reference host, ``basic-host``, is one).
+
+A session Claude Code started -- its terminal, or the desktop app's Code tab running it -- lists no
+tools at all (``host.claude_code``): there CAD is the cad skill and the ``cad`` command, and the Code
+tab's card comes from Claude Desktop's own config, whose server Claude Code does not start.
+``CAD_MCP_CARDS=1`` in the transport's environment keeps the tools, for testing.
 """
 
 from __future__ import annotations
@@ -137,6 +142,13 @@ TEXT_INSTRUCTIONS = (
     "this app cannot show CAD views itself. Call cad_show with source set to a model's document id (running its "
     "script prints it) or a file's absolute path: it opens the page in the user's browser, or says it is open "
     "already, and answers with its URL; give the user that URL. " + FOLLOWS
+)
+
+# A session Claude Code started (``host.claude_code``): CAD lists no tools there and says how to use CAD instead.
+CLAUDE_CODE_INSTRUCTIONS = (
+    "This CAD server offers no tools in Claude Code: use the cad skill and the `cad` command. Where cad_show is "
+    "listed (Claude Desktop's own CAD server, in its Code tab), show models with it; otherwise run `cad viewer` "
+    "as the skill says and give the user its link, which opens in the app's browser pane or the user's browser."
 )
 
 _ICON_SVG = (
@@ -305,6 +317,8 @@ class Server:
         self.operations = Operations(crashed=lambda error, tool: self.analytics.crashed(error, "tool", tool=tool))
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
+        # A session Claude Code started (``host.claude_code``), decided at initialize: it lists no tools.
+        self.inert = False
         # Whether this host shows CAD cards (``host.presentation``): True, False, or None while nothing
         # says; ``_declared`` where the host said so itself, which nothing after overrules; and
         # ``_contacted`` once a view reached this server, which only a host that draws them does.
@@ -463,9 +477,11 @@ class Server:
         if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
+        self.inert = host.claude_code(transport)
         extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
-        LOG.info("client %s %s: %s views, %s (extensions: %s)", client.get("name"), client.get("version"), presentation,
-                 why, ", ".join(extensions) or "none")
+        LOG.info("client %s %s: %s views, %s (extensions: %s)%s", client.get("name"), client.get("version"), presentation,
+                 why, ", ".join(extensions) or "none",
+                 f"; started by Claude Code ({transport.get('claudeCode')}): no tools" if self.inert else "")
         self.analytics.started(client=client, presentation=presentation)
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
         requested = params.get("protocolVersion")
@@ -473,12 +489,15 @@ class Server:
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": INSTRUCTIONS if self.tabs else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS,
+            "instructions": (CLAUDE_CODE_INSTRUCTIONS if self.inert else INSTRUCTIONS if self.tabs
+                             else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS),
         }
 
     # -- the catalog -----------------------------------------------------------
 
     def tools(self) -> list[dict[str, Any]]:
+        if self.inert:
+            return []  # Claude Code's session: CAD is its skill and the `cad` command there (``host.claude_code``)
         if self._tools is None:
             self._tools = self._tab_catalog() if self.tabs else self._text_catalog() if self.text else self._inline_catalog()
             from .operations import catalog
