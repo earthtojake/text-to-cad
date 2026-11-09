@@ -228,10 +228,12 @@ def retirement(reports: list[dict[str, Any]], resident: float | None, cap: float
 def resident_after_build(cap: float | None) -> float | None:
     """This worker's resident memory after a build (``resident_mb``), measured again after a
     collection where it is over its cap (``cap``): the cycles the build and the uncollected ones
-    before it left are not what the worker holds. Under the cap nothing is collected here: that is
-    paid once the worker is idle (the module docstring)."""
+    before it left are not what the worker holds, nor what the checks it measured read (``shed``, dropped
+    first). Under the cap nothing is collected here: that is paid once the worker is idle (the module
+    docstring)."""
     resident = resident_mb()
     if resident is not None and cap is not None and resident > cap:
+        shed()  # what the checks it measured read, first: never what a build holds
         gc.collect()
         resident = resident_mb()
     return resident
@@ -587,11 +589,34 @@ def _waited() -> None:
         time.sleep(0.01)
 
 
-# The files a checks process holds, by path: each the digest of the bytes it read and their source, the most
-# recent last. A file is read once while its bytes stay as they were, whatever its modification time says, and
-# a new digest replaces the old one's.
-_FILES: "dict[str, tuple[str, Any]]" = {}
+# The files a checks process holds, by path: each the digest of the bytes it read, their source and their size,
+# the most recent last. A file is read once while its bytes stay as they were, whatever its modification time
+# says, and a new digest replaces the old one's. Held to ``_FILES_KEPT`` files and ``KEPT_BYTES`` of them (their
+# bytes on disk, the size a read source takes in memory is said by), and dropped whole when the process is over
+# its memory cap (``shed``).
+_FILES: "dict[str, tuple[str, Any, int]]" = {}
 _FILES_KEPT = 4
+# The bytes each of a process's memos of what a check read holds at most (``_FILES``, ``_DOCUMENTS``, and a
+# build's parts read back, ``_dfm_brep``'s): one larger is read for its check and not kept.
+KEPT_BYTES = 256 * 2**20
+
+
+def _bounded(memo: "dict[str, Any]", count: int, size: Callable[[Any], int]) -> None:
+    """``memo`` held to ``count`` entries and ``KEPT_BYTES`` of them (``size`` of each), the least recently
+    used (the first) going first."""
+    while memo and (len(memo) > count or sum(size(held) for held in memo.values()) > KEPT_BYTES):
+        memo.pop(next(iter(memo)))
+
+
+def shed() -> None:
+    """What this process holds of the checks it measured, dropped: the files and documents it read
+    (``_FILES``, ``_DOCUMENTS``) and a build's parts read back (``_dfm_brep``'s), as it is over its memory cap
+    (``resident_after_build``), so a person's warm worker is not kept large by a check."""
+    _FILES.clear()
+    _DOCUMENTS.clear()
+    held = sys.modules.get("cad.build123d._dfm_brep")
+    if held is not None:
+        held.forget()
 
 
 def _file(path: Path) -> tuple[Any, str | None, bool]:
@@ -617,15 +642,20 @@ def _file(path: Path) -> tuple[Any, str | None, bool]:
     source = export.Source.from_loaded(document.Loaded(path))
     if digest() != before:
         return source, None, True  # rewritten while it was read: measured, never kept
-    _FILES[str(path)] = (before, source)
-    while len(_FILES) > _FILES_KEPT:
-        _FILES.pop(next(iter(_FILES)))
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = KEPT_BYTES + 1
+    if size <= KEPT_BYTES:
+        _FILES[str(path)] = (before, source, size)
+        _bounded(_FILES, _FILES_KEPT, lambda row: row[2])
     return source, before, True
 
 
 # The held documents' bytes a checks process holds, by their id: each the version it was sent at (the
-# daemon's generation of it) and its source, the most recent last. A version read once: a new one replaces it.
-_DOCUMENTS: "dict[str, tuple[str, Any]]" = {}
+# daemon's generation of it), its source and its bytes' size, the most recent last. A version read once: a
+# new one replaces it. Held to ``_DOCUMENTS_KEPT`` and ``KEPT_BYTES``, and shed with ``_FILES``.
+_DOCUMENTS: "dict[str, tuple[str, Any, int]]" = {}
 _DOCUMENTS_KEPT = 4
 
 
@@ -641,10 +671,9 @@ def _document(spec: dict[str, Any], payload: bytes) -> tuple[Any, bool]:
         return held[1], False
     reads = engine_build.held_reads
     source = engine_build.held_source(payload, str(spec.get("name") or "document"), origin=spec.get("origin"))
-    if version is not None:
-        _DOCUMENTS[ident] = (str(version), source)
-        while len(_DOCUMENTS) > _DOCUMENTS_KEPT:
-            _DOCUMENTS.pop(next(iter(_DOCUMENTS)))
+    if version is not None and len(payload) <= KEPT_BYTES:
+        _DOCUMENTS[ident] = (str(version), source, len(payload))
+        _bounded(_DOCUMENTS, _DOCUMENTS_KEPT, lambda row: row[2])
     return source, engine_build.held_reads != reads
 
 
@@ -658,16 +687,19 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
     the digest of the bytes it measured; the integration's ``Cancelled`` when stopped."""
     from cad.engine import build as engine_build
     from cad.engine import export
-    from cad.engine.contract import release
+    from cad.engine.contract import measures_for, measuring, release
     from cad.engine.ids import canonical
     from cad.registry import manufacturing_check
-
-    measuring = manufacturing_check()
-    Cancelled, stop = measuring.Cancelled, measuring.stop
 
     spec = request["source"]
     check = request["check"]
     token = check.get("token")
+    mine = measuring()
+    if not measures_for(check.get("measures"), mine):
+        # Another code or library than the caller's: nothing measured, and the caller measures it its own way.
+        return {"reports": [], "files": [], "release": release(), "measures": mine}
+    measured_by = manufacturing_check()
+    Cancelled, stop = measured_by.Cancelled, measured_by.stop
     read = Path(spec["path"]).name if "path" in spec else None  # how a reading failure names it
     digest, fresh, keep = None, False, None
     with _RUNNING_LOCK:
@@ -684,26 +716,32 @@ def _check(request: dict[str, Any]) -> dict[str, Any]:
                 source = engine_build.held(Path(spec["script"]), spec.get("function"))
                 fresh = engine_build.held_reads != reads  # a model taken from the cache: its bytes read now
                 if source is None:
-                    raise export.ExportRefused(f"{spec.get('function')} is no longer held: run the program that "
-                                               "builds it again")
+                    # A fresh worker in a retired one's place holds nothing: refused as not held, as the daemon
+                    # refuses one, so its caller reads the document again from where it is held now.
+                    from cad.engine.serve import NotHeld
+
+                    raise NotHeld(f"{spec.get('function')} is no longer held: run the program that builds it again")
             elif "path" in spec:
                 source, digest, fresh = _file(Path(spec["path"]))
             else:
                 raise export.ExportRefused("a check reads a document the engine holds or a STEP's or an xbf's file")
-        except export.ExportRefused:
-            raise
+        except ValueError as error:
+            if isinstance(error, export.ExportRefused) or hasattr(error, "rebuild"):
+                raise
+            checked = {"unmeasured": {"code": "document_unreadable",
+                                      "message": f"failed to read {read or 'the document'}: {error}"}}
         except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
             checked = {"unmeasured": {"code": "document_unreadable",
                                       "message": f"failed to read {read or 'the document'}: {error}"}}
         else:
             _waited()
-            checked = measuring.held(source, check, read, keep)
+            checked = measured_by.held(source, check, read, keep)
             fresh = bool(checked.pop("read", False)) or fresh  # a build's parts read back now
     finally:
         with _RUNNING_LOCK:
             _RUNNING["token"] = None
             stop(False)
-    return {"reports": [], "files": [], "checked": {**checked, "release": release(), "read": fresh,
+    return {"reports": [], "files": [], "checked": {**checked, "release": release(), "read": fresh, "measures": mine,
                                                     **({"digest": digest} if "path" in spec else {})}}
 
 
@@ -719,6 +757,15 @@ def refusal(error: BaseException) -> dict[str, str]:
     kind = type(error)
     part = getattr(error, "part", None)
     return {"kind": f"{kind.__module__}:{kind.__qualname__}", **({"part": part} if isinstance(part, str) else {})}
+
+
+def failure(error: BaseException) -> dict[str, Any]:
+    """An export's failure as this worker answers it: a refusal by its type and part (``refusal``) -- a document
+    not held (``serve.NotHeld``) with its state and what builds it again, as the daemon refuses one -- and a
+    failure (a file not written, a ``BuildError``) by its type (``frames.failed_type``)."""
+    held = {"state": getattr(error, "state"), "rebuild": getattr(error, "rebuild")} if hasattr(error, "rebuild") else {}
+    return {"failed": str(error), **(refusal(error) or frames.failed_type(error)), **held}
+
 
 def main() -> int:
     os.environ["CAD_ENGINE_WORKER"] = "1"
@@ -855,7 +902,7 @@ def main() -> int:
                     resident = resident_after_build(cap)
                     retire = resident is not None and cap is not None and resident > cap
                     rss = {"rssMb": None if resident is None else round(resident), **({"retire": True} if retire else {})}
-                    if done is not None and retire:
+                    if done is not None and retire and "checked" in done:
                         # Said to the caller: a person's warm worker, and its memo, go with this check.
                         done["checked"]["retired"] = (
                             f"the worker held {resident:.0f} MB after the check, over its {cap:.0f} MB cap "
@@ -881,8 +928,7 @@ def main() -> int:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
-                # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
-                send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
+                send({"id": ident, **failure(error)})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})

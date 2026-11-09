@@ -97,6 +97,25 @@ def _plain(result: Any) -> Any:
     return json.loads(json.dumps(dataclasses.asdict(result), default=str))
 
 
+# What measures here (``contract.measuring``): what a fake daemon's caller and its processes say.
+MEASURES = {"code": "c0de", "libraries": {"build123d": "0.13.0", "OCP": "8.0.1", "numpy": "2.0.0"}}
+
+
+def _fake(records: dict[str, Any], document: Any, call: Any) -> SimpleNamespace:
+    """A daemon of ``records`` (its models' versions), whose documents ``document`` reads and whose processes
+    ``call`` asks, with ``Daemon.check``'s own helpers: what ``Daemon.check`` runs on, nothing started."""
+    from cad_server.engine.checks import Checks
+    from cad_server.engine.daemon import Daemon
+
+    fake = SimpleNamespace(models=SimpleNamespace(adopt=lambda _ident: None, lock=threading.Lock(), records=records),
+                           checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(), document=document,
+                           _call=call, stopping=threading.Event(), measurers={}, draining=False)
+    for name in ("_version", "_durable", "_routed"):
+        setattr(fake, name, getattr(Daemon, name).__get__(fake))
+    fake._learned = lambda _key, _python_key: None
+    return fake
+
+
 def _counts() -> dict[str, int]:
     from cad.engine import api
 
@@ -393,6 +412,95 @@ class KeptResultTest(unittest.TestCase):
             store.keep(f"file:{name}", "d", "cnc", {"x": name})
         self.assertEqual((store.status()["held"], store.get("file:one", "d", "cnc")), (2, None))
 
+    def test_a_deleted_document_keeps_nothing_and_its_entries_leave_the_index(self) -> None:
+        """Deleting a document (``Registry.delete``) drops its results from memory and from the disk's index, and a
+        check of it that began before keeps nothing; a cache folder wiped is indexed again, the half-written files
+        a stopped engine left swept."""
+        from cad_server.engine import registry
+        from cad_server.engine.checks import Checks
+        from cad_server.engine.registry import Registry
+
+        root = Path(tempfile.mkdtemp(prefix="engine-dfm-deleted-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        held = Registry(root / "state", cache=root / "cache")
+        store = Checks(folder=lambda: held)
+        registry.FORGOTTEN.append(store.deleted)
+        self.addCleanup(registry.FORGOTTEN.remove, store.deleted)
+        a, b = str(uuid.uuid4()), str(uuid.uuid4())
+        store.keep(f"model:{a}", "v", "cnc", {"x": 1}, (a, "r"))
+        store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"))
+        self.assertEqual(store.status()["disk"]["held"], 2)
+        since = store.epoch(b)
+        held.delete(b)
+        self.assertEqual((store.status()["held"], store.status()["disk"]["held"]), (1, 1), "its entries went")
+        store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"), since)
+        self.assertEqual(held.cache.names(f"documents/{b}"), [], "a check that began before its deletion keeps nothing")
+        self.assertIsNone(store.get("file:2:3", "d", "cnc"))
+
+        half = held.cache.path(f"documents/{a}/checks/0-0.json.1.ab.tmp")
+        half.write_bytes(b"{")
+        shutil.rmtree(held.cache.path("documents"))  # a person wiping the cache folder
+        held.cache.write(f"documents/{a}/checks/0-0.json.1.ab.tmp", b"{")
+        store.keep(f"model:{a}", "w", "cnc", {"x": 3}, (a, "s"))
+        self.assertEqual(store.status()["disk"]["held"], 1, "indexed again: the wiped entries gone")
+        self.assertEqual([name for name in held.cache.names(f"documents/{a}/checks") if name.endswith(".tmp")], [],
+                         "the half-written file swept")
+
+    def test_what_measures_is_in_the_key(self) -> None:
+        """A result is kept under what measured it: another code or another library's version is another check,
+        and a caller without a library (a command with no kernel) is answered by the process that has it."""
+        from cad.engine.contract import measures_for
+        from cad_server.engine.checks import Checks
+
+        other = {**MEASURES, "code": "other"}
+        newer = {**MEASURES, "libraries": {**MEASURES["libraries"], "build123d": "0.13.1"}}
+        bare = {**MEASURES, "libraries": {name: None for name in MEASURES["libraries"]}}
+        keys = {Checks.key({"type": "step", "token": "t"}, "1.0.0", measures) for measures in (MEASURES, other, newer)}
+        self.assertEqual(len(keys), 3)
+        self.assertEqual(Checks.key({"type": "step", "token": "a", "measures": other}, "1.0.0", MEASURES),
+                         Checks.key({"type": "step", "token": "b"}, "1.0.0", MEASURES), "never its token or own")
+        self.assertTrue(measures_for(MEASURES, MEASURES) and measures_for(bare, MEASURES))
+        self.assertFalse(measures_for(other, MEASURES) or measures_for(newer, MEASURES) or measures_for(None, MEASURES))
+
+    def test_a_check_is_measured_again_by_other_code_and_reused_by_the_same(self) -> None:
+        """The probe's case on a daemon of fakes: the same check of the same version, asked by a library of other
+        code at the same release, is measured again and kept beside the first; the same code reuses its own."""
+        from cad.engine.previous import version
+        from cad_server.engine.daemon import Daemon
+
+        asked: list[Any] = []
+
+        def call(_routed: Any, order: Any, answered: Any, _payload: bytes) -> None:
+            asked.append(order["check"]["measures"])
+            answered({"done": {"checked": {"measured": {"report": {"by": order["check"]["measures"]["code"]}},
+                                           "release": version(), "measures": order["check"]["measures"]}}})
+
+        fake = _fake({"id": {"version": "v1", "revision": "k1"}},
+                     lambda _ident: ({"document": "id", "name": "plate"}, b"bytes"), call)
+        other = {**MEASURES, "code": "edited"}
+        found = []
+        for measures in (MEASURES, other, MEASURES, other):
+            said: list[dict[str, Any]] = []
+            Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version(),
+                                "measures": measures}, said.append)
+            found.append(said[-1]["done"]["checked"]["measured"]["report"]["by"])
+        self.assertEqual(asked, [MEASURES, other], "each code measured once")
+        self.assertEqual(found, ["c0de", "edited", "c0de", "edited"], "and each served its own")
+
+    def test_a_check_s_record_is_cleared_whatever_its_store_raises(self) -> None:
+        """Its lookup inside the check's own ``try``: a store that raises leaves no check running, and every caller
+        attached to it answered."""
+        from cad.engine.previous import version
+        from cad_server.engine.daemon import Daemon
+
+        fake = _fake({"id": {"version": "v1"}}, lambda _ident: ({"document": "id", "name": "plate"}, b""),
+                     lambda *_args: None)
+        fake.checks.get = mock.Mock(side_effect=OSError("disk gone"))
+        with self.assertRaises(OSError):
+            Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version(),
+                                "measures": MEASURES}, lambda _message: None)
+        self.assertEqual((fake.asked, fake.running), ({}, {}))
+
 
 class ReleaseTest(unittest.TestCase):
     """A worker of an older release is never sent a check: its document is checked from the bytes its
@@ -450,7 +558,6 @@ class ReleaseTest(unittest.TestCase):
         """A build landing between the version read and the document's bytes: the bytes are the new version's and
         the version read the old one's, so the result is answered and kept under neither."""
         from cad.engine.previous import version
-        from cad_server.engine.checks import Checks
         from cad_server.engine.daemon import Daemon
 
         records = {"id": {"version": "v1"}}
@@ -460,16 +567,12 @@ class ReleaseTest(unittest.TestCase):
             return {"document": "id", "name": "plate"}, b"bytes"
 
         def call(_routed: Any, _order: Any, answered: Any, _payload: bytes) -> None:
-            answered({"done": {"checked": {"measured": {"report": {}}, "release": version()}}})
+            answered({"done": {"checked": {"measured": {"report": {}}, "release": version(), "measures": MEASURES}}})
 
-        fake = SimpleNamespace(models=SimpleNamespace(adopt=lambda _ident: None, lock=threading.Lock(), records=records),
-                               checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(), document=document,
-                               _call=call)
-        fake._version = lambda ident: Daemon._version(fake, ident)
-        fake._durable = lambda ident, at: Daemon._durable(fake, ident, at)
+        fake = _fake(records, document, call)
         said: list[dict[str, Any]] = []
-        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version()},
-                     said.append)
+        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version(),
+                            "measures": MEASURES}, said.append)
         self.assertIn("checked", said[-1]["done"])
         self.assertEqual((fake.checks.status()["measured"], fake.checks.status()["held"]), (1, 0))
         self.assertEqual((fake.asked, fake.running), ({}, {}))
@@ -479,7 +582,6 @@ class ReleaseTest(unittest.TestCase):
         once more -- the server or the cache holds it now -- and checked in a checks process, never said not found."""
         from cad.engine.previous import version
         from cad.engine.serve import NotHeld
-        from cad_server.engine.checks import Checks
         from cad_server.engine.daemon import Daemon, refused
 
         records = {"id": {"version": "v1", "revision": "k1"}}
@@ -492,16 +594,13 @@ class ReleaseTest(unittest.TestCase):
             if "script" in routed["source"]:
                 answered(refused(NotHeld("plate (id) is not held", "unsaved", "python parts.py")))
             else:
-                answered({"done": {"checked": {"measured": {"report": {}}, "release": version(), "read": True}}})
+                answered({"done": {"checked": {"measured": {"report": {}}, "release": version(), "read": True,
+                                               "measures": MEASURES}}})
 
-        fake = SimpleNamespace(models=SimpleNamespace(adopt=lambda _ident: None, lock=threading.Lock(), records=records),
-                               checks=Checks(), asked={}, running={}, asked_lock=threading.Lock(),
-                               document=lambda _ident: next(held), _call=call)
-        for name in ("_version", "_durable", "_routed"):
-            setattr(fake, name, getattr(Daemon, name).__get__(fake))
+        fake = _fake(records, lambda _ident: next(held), call)
         said: list[dict[str, Any]] = []
-        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version()},
-                     said.append)
+        Daemon.check(fake, {"source": {"id": "id"}, "check": {"type": "model", "token": "t"}, "caller": version(),
+                            "measures": MEASURES}, said.append)
         self.assertEqual([source for source, _payload in asked][1], {"document": "id", "name": "plate", "version": "v1"})
         self.assertEqual(asked[1][1], b"bytes")
         self.assertEqual([message for message in said if "failed" in message], [], "no refusal said")
@@ -611,6 +710,129 @@ class ReleaseTest(unittest.TestCase):
             pool.take("file:b", gave_up=lambda: len(said) > before, waiting=said.append)
         self.assertIn("the engine's memory has no room for another checks process", said[-1])
 
+    def test_the_pool_counts_a_process_it_has_not_heard_from_and_those_starting(self) -> None:
+        """No checks process has said its memory: the last one's, else the standby's, else the smallest worker's
+        stands for it, and each slot being started counts, so a burst of checks never starts past the cap."""
+        from cad_server.engine.checks import Pool
+        from cad_server.engine.supervisor import Withdrawn
+
+        live: list[Any] = []
+        workers: list[Any] = []
+        spare = {"rss": None}
+        supervisor = SimpleNamespace(processes=lambda service: list(live if service == "checks" else workers),
+                                     pressed=lambda: False, memory=lambda: 1000.0, resident=lambda: 500.0,
+                                     standby=lambda _service: SimpleNamespace(rss=spare["rss"]))
+        pool = Pool(supervisor, 3)
+        self.assertEqual(pool.size_of({}), 0.0, "nothing said: no floor")
+        workers.append(SimpleNamespace(rss=300.0, alive=lambda: True, retired=False))
+        self.assertEqual(pool.size_of({}), 300.0, "the smallest worker's")
+        spare["rss"] = 200.0
+        self.assertEqual(pool.size_of({}), 200.0, "the standby's: a kernel loaded, nothing built")
+        self.assertEqual(pool.take("file:a"), "checks", "one of 200 MB beside 500")
+        self.assertEqual(pool.take("file:b"), "checks-2", "two being started, 900 of 1000")
+        said: list[str] = []
+        with self.assertRaises(Withdrawn):  # a third would be 1100: it waits, and gives up once it has said so
+            pool.take("file:c", gave_up=lambda: bool(said), waiting=said.append)
+        self.assertIn("no room for another checks process", said[0])
+        live.append(SimpleNamespace(key="checks", pid=1, rss=450.0, retired=False, alive=lambda: True))
+        pool.size_of({"checks": live[0]})
+        live.clear()
+        self.assertEqual(pool.size_of({}), 450.0, "the last one's, after it is gone")
+
+    def test_the_pool_is_half_the_cores_and_its_setting_held_to_them(self) -> None:
+        from cad_server.engine import checks
+
+        for cores, given, size, said in ((16, "", 4, False), (2, "", 1, False), (1, "", 1, False), (8, "3", 3, False),
+                                         (8, "0", 1, True), (8, "64", 8, True), (8, "many", 4, True)):
+            with self.subTest(cores=cores, given=given), mock.patch.object(os, "cpu_count", return_value=cores), \
+                    mock.patch.dict(os.environ, {"CAD_ENGINE_CHECKS": given}):
+                found, line = checks.pool_size()
+                self.assertEqual((found, line is not None), (size, said))
+
+    def test_an_abandoned_check_gives_its_slot_to_one_someone_waits_for(self) -> None:
+        """Only a check whose callers have all gone, one for each waiter whose caller is there, the oldest first;
+        never one with a caller, nor for a waiter no one waits for."""
+        from cad_server.engine.daemon import CHECKS, Daemon, _Asked
+
+        def asked(token: str, *callers: bool, running: bool = True) -> _Asked:
+            found = _Asked(token, CHECKS, None, gone=None)
+            found.callers = [threading.Event() for _ in callers]
+            for event, there in zip(found.callers, callers):
+                if not there:
+                    event.set()
+            found.worker = SimpleNamespace(key="checks") if running else None
+            return found
+
+        stopped: list[str] = []
+        fake = SimpleNamespace(asked={}, asked_lock=threading.Lock(), _stop=lambda found: stopped.append(found.token))
+        held, gone, waiter, idle = asked("held", True, False), asked("gone", False, False), asked("w", True, running=False), \
+            asked("idle", False, running=False)
+        waiter.waiting = idle.waiting = True
+        fake.asked = {found.token: found for found in (held, gone, waiter, idle)}
+        Daemon._reap(fake, idle)
+        self.assertEqual(stopped, [], "a waiter no one waits for reaps nothing")
+        Daemon._reap(fake, waiter)
+        Daemon._reap(fake, waiter)
+        self.assertEqual(stopped, ["gone"], "one for the one waiter, and never the check a caller is attached to")
+
+    def test_a_file_is_one_key_by_any_of_its_names(self) -> None:
+        from cad_server.engine.daemon import _file_key
+        from cad_server.engine.models import durable, revision
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-names-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        first = folder / "Part.step"
+        first.write_bytes(b"x")
+        other = folder / "link.step"
+        os.link(first, other)
+        self.assertEqual(_file_key(str(first)), _file_key(str(other)), "a hard link")
+        if (folder / "part.step").exists():  # a file system that folds case: the other spelling is the file
+            self.assertEqual(_file_key(str(folder / "part.step")), _file_key(str(first)))
+        self.assertNotEqual(_file_key(str(first)), _file_key(str(folder / "elsewhere.step")))
+        self.assertTrue(durable(revision({"closure": {"key": "ab12"}})))
+        self.assertFalse(durable(revision({})) or durable(None) or durable(""))
+
+    def test_a_fresh_worker_refuses_a_document_it_does_not_hold_as_not_held(self) -> None:
+        """A retired worker's place taken by a fresh one, which holds nothing: its refusal is the daemon's own
+        not-held refusal, so the check reads the document again rather than failing."""
+        from cad.engine import contract, worker
+        from cad.engine.serve import NotHeld
+        from cad_server.engine.daemon import _not_held
+
+        request = {"source": {"held": "id", "script": "/nowhere/parts.py", "function": "plate"},
+                   "check": {"type": "model", "token": "t", "measures": contract.measuring()}}
+        with self.assertRaises(NotHeld) as raised:
+            worker._check(request)
+        self.assertTrue(_not_held({"id": 1, **worker.failure(raised.exception)}))
+        unlike = {**request, "check": {**request["check"], "measures": {**contract.measuring(), "code": "other"}}}
+        self.assertNotIn("checked", worker._check(unlike), "another code's caller: nothing measured")
+
+    def test_what_a_check_read_is_bounded_by_bytes_and_shed_over_the_cap(self) -> None:
+        from cad.build123d import _dfm_brep
+        from cad.engine import worker
+
+        memo = {name: (name, None, size) for name, size in (("a", 10), ("b", worker.KEPT_BYTES - 5), ("c", 10))}
+        worker._bounded(memo, 4, lambda row: row[2])
+        self.assertEqual(list(memo), ["c"], "held to its bytes, the least recently used going first")
+        worker._FILES["x"] = ("d", None, 1)
+        worker._DOCUMENTS["y"] = ("v", None, 1)
+        _dfm_brep._PRISTINE["z"], _dfm_brep._PRISTINE_BYTES["z"] = {}, {}
+        with mock.patch.object(worker, "resident_mb", return_value=5000.0):
+            worker.resident_after_build(1000.0)
+        self.assertEqual((worker._FILES, worker._DOCUMENTS, _dfm_brep._PRISTINE), ({}, {}, {}),
+                         "dropped where the process is over its cap")
+
+    def test_status_says_each_check_running_and_whether_its_caller_waits(self) -> None:
+        from cad_server.engine.cli import status_text
+
+        text = status_text({"pid": 1, "workers": [], "cap": 4, "checks": {"running": [
+            {"type": "step", "process": "printing", "file": "/p/box.step", "route": "checks", "where": "checks-2",
+             "seconds": 21.0, "attached": False, "waiting": False},
+            {"type": "model", "process": "cnc", "document": "abc", "route": "worker", "where": None,
+             "seconds": 3.0, "attached": True, "waiting": True}]}})
+        self.assertIn("check    printing of box.step in checks-2 · 21s · its caller gone", text)
+        self.assertIn("check    cnc of abc waiting for its process · 3s", text)
+
     def test_an_engine_without_checks_or_of_another_release_is_measured_here(self) -> None:
         import build123d as bd
 
@@ -704,9 +926,10 @@ class WorkerTest(unittest.TestCase):
         return process, int(reached.read_text(encoding="utf-8"))
 
     def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
-        """Its caller killed (a shell's time limit), a model's check and a file's run to their end and keep their
-        results: the same call again measures nothing. A file's check waiting behind another says so (a pool of
-        one checks process)."""
+        """Its caller killed (a shell's time limit), a model's check runs to its end and keeps its result: the same
+        call again measures nothing. A file's check waiting behind another says so (a pool of one checks process),
+        and `cad status` lists the one running; once that one's caller is gone, it gives its process up to the one
+        waiting, and keeps nothing."""
         import build123d as bd
 
         import cad
@@ -734,6 +957,9 @@ class WorkerTest(unittest.TestCase):
         bd.export_step(bd.Box(30, 20, 6), str(step))
         process, checks = self.caller(f"cad.step.dfm({str(step)!r}, process='printing')", fixture.env, reached)
         self.assertEqual(_busy(), [checks])
+        (row,) = _counts()["running"]
+        self.assertEqual((row["file"], row["process"], row["route"], row["where"], row["attached"]),
+                         (str(step), "printing", "checks", "checks", True))
         behind = subprocess.Popen([sys.executable, "-c", f"import cad; cad.step.dfm({str(step)!r}, process='sheet')"],
                                   env=fixture.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         self.addCleanup(behind.stderr.close)  # last: once it is gone, its reader is done
@@ -744,18 +970,58 @@ class WorkerTest(unittest.TestCase):
         reader.start()
         _until(self, lambda: any("waiting for another manufacturing check" in line for line in said),
                "the other check says it waits")
+        self.assertEqual([row["process"] for row in _counts()["running"] if not row["waiting"]], ["printing"],
+                         "a check whose caller is there keeps its process")
+        before = _counts()
         process.kill()
         process.wait()
-        before = _counts()
+        _until(self, lambda: [(row["process"], row["waiting"]) for row in _counts()["running"]] == [("sheet", False)],
+               "the abandoned check gives its process up to the one waiting")
+        from cad_server.engine.cli import status_text
+
+        self.assertIn("check    sheet of part.step in checks", status_text(api.status()))
         hold.write_text("", encoding="utf-8")
         self.assertEqual(behind.wait(JOIN_SECONDS), 0, said)
         reader.join(JOIN_SECONDS)
-        _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone ends")
-        self.assertEqual(_counts()["measured"], before["measured"] + 2)
+        _until(self, lambda: _counts()["asked"] == 0, "both checks end")
+        self.assertEqual(_counts()["measured"], before["measured"] + 1, "the abandoned one measured nothing")
         self.assertEqual([row["pid"] for row in _counts()["pool"]["processes"]], [checks],
                          "no one stopped the checks process")
         cad.step.dfm(step, process="printing")
-        self.assertEqual(_counts()["measured"], before["measured"] + 2, "the next call reuses its result")
+        self.assertEqual(_counts()["measured"], before["measured"] + 2, "nothing of it was kept")
+
+    def test_an_update_s_drain_waits_for_no_checks_process_and_its_checks_say_stopped(self) -> None:
+        """A drain for an update with a check running in the checks process and another waiting for it: neither is
+        waited for, and both callers are told the engine stopped (``api.Stopped``: run the check again)."""
+        import build123d as bd
+
+        from cad.engine import api, client
+
+        api.stop()
+        self.addCleanup(api.stop)
+        fixture, hold = self.waiting({"CAD_ENGINE_CHECKS": "1"})
+        reached = Path(f"{hold}.reached")
+        reached.unlink(missing_ok=True)
+        callers = []
+        for height in (6, 7):
+            step = fixture.folder / f"part{height}.step"
+            bd.export_step(bd.Box(30, 20, height), str(step))
+            code = (f"import cad\nfrom cad.engine import api\ntry:\n    cad.step.dfm({str(step)!r}, process='printing')\n"
+                    "except api.Stopped as error:\n    print('stopped:', error)")
+            callers.append(subprocess.Popen([sys.executable, "-c", code], env=fixture.env, stdout=subprocess.PIPE,
+                                            stderr=subprocess.DEVNULL, text=True))
+            self.addCleanup(callers[-1].stdout.close)
+            self.addCleanup(callers[-1].wait)
+            self.addCleanup(callers[-1].kill)
+            if height == 6:
+                _until(self, reached.exists, "the first check runs")
+        _until(self, lambda: _counts()["asked"] == 2, "the second waits for the checks process")
+        self.assertIsNotNone(client.request({"op": "stop", "drain": True}, start=False))
+        self.assertTrue(client.wait_gone(), "the engine drained and stopped with the checks under way")
+        for caller in callers:
+            out = caller.communicate(timeout=JOIN_SECONDS)[0]
+            self.assertIn("stopped: the CAD server stopped while it measured the manufacturing check", out)
+        self.assertFalse(hold.exists(), "neither check was let go")
 
     def test_different_checks_run_at_once_in_the_pool_and_one_past_it_waits_saying_so(self) -> None:
         """Two files' checks measured at once, in two checks processes; a third, the pool full, says it waits
@@ -792,6 +1058,29 @@ class WorkerTest(unittest.TestCase):
             self.assertEqual(caller.wait(JOIN_SECONDS), 0, caller.stderr.read())
         self.assertEqual(callers[2].wait(JOIN_SECONDS), 0, said)
         self.assertEqual(_counts()["measured"], before + 3)
+
+    def test_a_caller_of_other_code_or_libraries_is_measured_by_no_process_here(self) -> None:
+        """A library whose code or measuring libraries are not the engine's (a checkout's edited copy at the same
+        release, a base made again with a newer build123d) is measured by no process here and served nothing the
+        engine kept: it measures the file itself; the same code is served the result kept."""
+        import build123d as bd
+
+        import cad
+        from cad.engine import contract
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-dfm-unlike-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        step = folder / "box.step"
+        bd.export_step(bd.Box(24, 18, 7), str(step))
+        first = cad.step.dfm(step, process="printing")
+        before = _counts()
+        real = contract.measuring()
+        for unlike in ({**real, "code": "edited"}, {**real, "libraries": {**real["libraries"], "build123d": "0.0.1"}}):
+            with self.subTest(unlike=unlike), mock.patch.object(contract, "measuring", return_value=unlike):
+                self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first), "measured here")
+        self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"], before["reused"]))
+        cad.step.dfm(step, process="printing")
+        self.assertEqual(_counts()["reused"], before["reused"] + 1, "the same code reuses its result")
 
     def test_the_same_check_asked_while_it_runs_waits_for_it_and_measures_once(self) -> None:
         fixture, hold = self.waiting()

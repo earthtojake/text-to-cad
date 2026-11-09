@@ -319,6 +319,8 @@ def _failed(answer: dict[str, Any]) -> Exception:
     import importlib
 
     text = str(answer["failed"])
+    if answer.get("stopped"):
+        return Stopped(text)  # the engine stopping under it (``Daemon.check``): run it again
     module, _, name = str(answer.get("kind") or "").partition(":")
     kind: Any = None
     if module == "builtins" or module == "cad.engine" or module.startswith("cad.engine."):
@@ -677,18 +679,22 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
         connection = client.connect()
     except ConnectionError as error:
         raise Unreached(str(error)) from None
-    from cad.engine.contract import release
+    from cad.engine.contract import measuring, release
 
+    # Its release and what measures here (``contract.measuring``): no process unlike it measures it.
     order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd, "caller": release(),
-             "check": {**check, "token": os.urandom(8).hex()}}
+             "measures": measuring(), "check": {**check, "token": os.urandom(8).hex()}}
 
     def relay(message: dict[str, Any]) -> None:
         if message.get("stream") == "waiting":  # what it waits for: the same check running, or a busy process
-            print(message["log"], file=sys.stderr, flush=True)
+            try:
+                print(message["log"], file=sys.stderr, flush=True)
+            except OSError:
+                pass  # a standard error closed (its reader gone): the check is waited for all the same
 
     try:
         done = _ask(order, relay, connection=connection)["done"]
-    except OSError:  # the connection closed, or was reset, before the answer: the engine stopped
+    except ConnectionError:  # the engine's connection closed, or was reset, before the answer: the engine stopped
         raise Stopped(STOPPED) from None
     checked = done.get("checked") if isinstance(done, dict) else None
     if not isinstance(checked, dict):

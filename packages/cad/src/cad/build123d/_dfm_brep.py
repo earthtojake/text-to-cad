@@ -217,11 +217,21 @@ def read(document_type: str, source: Any) -> Document:
 # A build's parts as its saved xbf reads them back (``of_source``), kept by the document they were made for
 # (``keep``), the most recent last: each its geometry key's part, written and read once, never measured --
 # each check measures a copy (``_copied``). A document's next version keeps the parts it shares with this one
-# (their keys: a digest of their geometry) and drops the rest, so a document holds one version's parts.
+# (their keys: a digest of their geometry) and drops the rest, so a document holds one version's parts. Held to
+# ``_PRISTINE_KEPT`` documents and ``KEPT_BYTES`` of their parts (each its written bytes, ``_PRISTINE_BYTES``),
+# and dropped whole when the worker sheds what its checks read (``forget``, ``worker.shed``).
 _PRISTINE: "dict[str, dict[str, Any]]" = {}
+_PRISTINE_BYTES: "dict[str, dict[str, int]]" = {}
 _PRISTINE_KEPT = 4
+KEPT_BYTES = 256 * 2**20
 # The parts written and read back for ``_PRISTINE`` so far: a test's count of what a check made anew.
 made = 0
+
+
+def forget() -> None:
+    """Every build's parts read back, dropped (``worker.shed``)."""
+    _PRISTINE.clear()
+    _PRISTINE_BYTES.clear()
 
 
 def _pristine(source: Any, keep: str | None) -> dict[str, Any]:
@@ -232,16 +242,21 @@ def _pristine(source: Any, keep: str | None) -> dict[str, Any]:
     from cad.engine.mesh import _write, read_shape
 
     held = _PRISTINE.pop(keep, {}) if keep is not None else {}
+    sizes = _PRISTINE_BYTES.pop(keep, {}) if keep is not None else {}
     wanted = {proto["key"] for proto in source.structure["prototypes"]}
     parts = {key: shape for key, shape in held.items() if key in wanted}
+    sizes = {key: size for key, size in sizes.items() if key in parts}
     for key in sorted(wanted - set(parts)):
         checkpoint()
-        parts[key] = read_shape(_write(source.shapes[key]))
+        written = _write(source.shapes[key])
+        parts[key], sizes[key] = read_shape(written), len(written)
         made += 1
-    if keep is not None:
-        _PRISTINE[keep] = parts  # the most recent last
-        while len(_PRISTINE) > _PRISTINE_KEPT:
-            _PRISTINE.pop(next(iter(_PRISTINE)))
+    if keep is not None and sum(sizes.values()) <= KEPT_BYTES:
+        _PRISTINE[keep], _PRISTINE_BYTES[keep] = parts, sizes  # the most recent last
+        while len(_PRISTINE) > _PRISTINE_KEPT or sum(sum(row.values()) for row in _PRISTINE_BYTES.values()) > KEPT_BYTES:
+            oldest = next(iter(_PRISTINE))
+            _PRISTINE.pop(oldest)
+            _PRISTINE_BYTES.pop(oldest, None)
     return parts
 
 

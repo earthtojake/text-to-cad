@@ -29,6 +29,7 @@ project's environment neither registers nor moves the device's server.
 
 from __future__ import annotations
 
+import functools
 import re
 import sys
 from typing import Any
@@ -36,8 +37,8 @@ from typing import Any
 from cad.engine.previous import FORMAT, version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "PROTOCOL", "answers_checks", "interpreter", "notice", "refusal",
-           "release", "spelled"]
+__all__ = ["CHECKS_SINCE", "CONTRACT", "KERNEL", "MEASURING", "PROTOCOL", "answers_checks", "interpreter", "measures_for",
+           "measuring", "notice", "refusal", "release", "spelled"]
 
 # The number of what a script's worker and the server say to each other. Bumped by a release that
 # changes a request a worker answers, a frame it answers in, or the reports a build answers with.
@@ -79,6 +80,62 @@ def interpreter() -> dict[str, Any] | None:
         if run["script"] and run["header"]:
             named["header"] = {"script": run["script"], "with": run["header"]}
     return named
+
+
+# The libraries a manufacturing check measures with, by the distribution that carries each (the first of
+# them installed): their versions name the measuring side with the library's code (``measuring``).
+MEASURING: dict[str, tuple[str, ...]] = {
+    "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp"), "bd_materials": ("bd_materials",),
+    "trimesh": ("trimesh",), "scipy": ("scipy",), "numpy": ("numpy",)}
+
+
+@functools.lru_cache(maxsize=1)
+def measuring() -> dict[str, Any]:
+    """What measures a manufacturing check in this process, read once per process: the digest of this
+    library's code (``code``: every source file of the cad package, by its place in it, so a checkout's
+    edited copy and the published one of one release are two) and the version of each library a check
+    measures with (``libraries``, ``MEASURING``; None for one not installed here). The caller sends its own
+    with each check (``api.check``), the result is kept under the measuring process's, and a process whose
+    own is unlike the caller's (``measures_for``) measures nothing for it. Nothing is imported."""
+    import hashlib
+    import os
+    from importlib import metadata
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    found = hashlib.blake2b(digest_size=16)
+    for folder, folders, files in os.walk(root):
+        folders[:] = sorted(name for name in folders if name != "__pycache__")
+        for name in sorted(files):
+            if not name.endswith(".py"):
+                continue
+            path = Path(folder) / name
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            found.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0" + data + b"\0")
+    libraries: dict[str, str | None] = {}
+    for name, distributions in MEASURING.items():
+        libraries[name] = None
+        for distribution in distributions:
+            try:
+                libraries[name] = metadata.version(distribution)
+                break
+            except metadata.PackageNotFoundError:
+                continue
+    return {"code": found.hexdigest(), "libraries": libraries}
+
+
+def measures_for(asked: Any, mine: Any) -> bool:
+    """Whether a process whose measuring side is ``mine`` (``measuring``'s) measures a check its caller asks
+    with ``asked``: the same code, and the same version of every library the caller has (one it has not --
+    a command with no kernel -- is the measuring process's to name)."""
+    if not (isinstance(asked, dict) and isinstance(mine, dict) and isinstance(asked.get("libraries"), dict)
+            and isinstance(mine.get("libraries"), dict)):
+        return False
+    return asked.get("code") == mine.get("code") and all(
+        version is None or mine["libraries"].get(name) == version for name, version in asked["libraries"].items())
 
 
 def answers_checks(worker: Any) -> bool:
