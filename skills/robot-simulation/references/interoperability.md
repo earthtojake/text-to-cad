@@ -28,8 +28,10 @@ writes its meshes as binary STL in metres beside the file: in `assets/` for an M
 `meshdir`), in `meshes/` for a URDF, named by relative path. The two files of one
 model name every link and joint alike, so a controller, an SRDF and a policy read the same names in
 each (URDF names keep `[A-Za-z0-9_]`, every other character `_`). MJCF and URDF keep links
-and joints apart, so a link and a joint may share a name; a name already held in its kind is given
-`_2` and the export says so. What each drops is what its format cannot say:
+and joints apart, so a link and a joint may share a name, which the URDF export says (`cad urdf
+validate` warns `joint_link_name_collision`: some tools name the two together); name the link apart
+with `link(shape, name)` (a finger's joint `finger_left`, its link `finger_left_link`). A name already
+held in its kind is given `_2` and the export says so. What each drops is what its format cannot say:
 
 | | MJCF | URDF |
 | --- | --- | --- |

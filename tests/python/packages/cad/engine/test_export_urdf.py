@@ -271,9 +271,13 @@ class HandBuiltTest(_Folder):
 
     def test_a_ground_holding_nothing_gives_way_to_its_fixed_child_and_a_cylindrical_joint_is_two(self) -> None:
         path = self.folder / "rig.urdf"
-        write_description(rig(), path)
+        # The slider link and its joint share a name: legal, said at export as the validator warns of it.
+        with self.assertWarnsRegex(ExportWarning, r"^1 name held by a link and a joint both: slider \(legal URDF; "
+                                                  r"cad urdf validate warns of it, joint_link_name_collision"):
+            write_description(rig(), path)
         checked = urdf.validate(path)
         self.assertTrue(checked.ok, [f.message for f in checked.findings])
+        self.assertIn("joint_link_name_collision", {finding.code for finding in checked.findings})
         robot = read_urdf(path)
         # The base takes the ground's place; the joint that fixed it is not written, and the post hangs from the base
         # where it stood. The base stands turned and off the world's origin, so an empty base_link roots it there:

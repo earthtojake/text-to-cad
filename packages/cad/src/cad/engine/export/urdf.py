@@ -81,7 +81,8 @@ is ``_``, and a name already held in its kind is given ``_2``, ``_3`` and said (
 links among links, joints among joints, materials among materials, as URDF keeps them, so a link
 ``gripper`` and a joint ``gripper`` both keep their names (the description's are named first,
 then what the writer adds; Gazebo, which reads a URDF as SDFormat, names both in one frame graph,
-and ``cad urdf validate`` warns of a shared name). Numbers are
+and ``cad urdf validate`` warns of a shared name, so the export says each name a link and a joint
+share). Numbers are
 MJCF's writer's: nine significant digits at most, ``-0`` as ``0``, a length or an angle within 1e-12
 of zero as zero.
 """
@@ -372,6 +373,14 @@ class _Writer:
             if names:
                 note(f"{what} of {len(names)} {of}{'s' if len(names) != 1 else ''} not written (a URDF has none; "
                      f"an MJCF carries it): {', '.join(names)}")
+        shared = sorted(self.link_names.taken & self.joint_names.taken)
+        if shared:
+            # Each kind keeps its names apart, as URDF does; a tool that names links and joints in one namespace
+            # does not, and ``cad urdf validate`` warns of it (``joint_link_name_collision``).
+            note(f"{len(shared)} name{'s' if len(shared) != 1 else ''} held by a link and a joint both: "
+                 f"{', '.join(shared)} (legal URDF; cad urdf validate warns of it, joint_link_name_collision, as "
+                 "tools that name links and joints together collide them: rename the link with link(shape, name), "
+                 "or the joint)")
         for what, other in (("velocity", "effort"), ("effort", "velocity")):
             names = list(dict.fromkeys(self.zeroed[what]))
             if names:
