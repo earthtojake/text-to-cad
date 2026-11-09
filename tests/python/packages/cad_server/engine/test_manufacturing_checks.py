@@ -501,7 +501,7 @@ class KeptResultTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, site, True)
         for said, when in (("1.1", 2_000_000_000), ("1.0", 1_000_000_000)):
             (site / f"twice-{said}.dist-info").mkdir()
-            (site / f"twice-{said}.dist-info" / "METADATA").write_text("Name: twice\n")
+            (site / f"twice-{said}.dist-info" / "METADATA").write_text("Name: twice\n", encoding="utf-8")
             os.utime(site / f"twice-{said}.dist-info" / "METADATA", ns=(when, when))
         with mock.patch.object(sys, "path", [str(site)]):
             self.assertEqual(_measuring._installed(), {"twice": "1.1"}, "the one written last")
