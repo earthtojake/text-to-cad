@@ -473,15 +473,38 @@ class KeptResultTest(unittest.TestCase):
         self.assertIsNone(store.get("model:a", "v1", "k", serves=lambda by: measures_for(newer, by)))
 
     def test_what_measures_is_the_code_as_it_loaded_and_the_b_rep_checks_libraries(self) -> None:
-        """Taken as ``cad.engine`` is imported, of every source file -- a ``.py``, or the ``.pyc`` an install of
-        bytecode alone has in its place, never ``__pycache__`` -- and the libraries a B-rep check measures with;
-        a process with no kernel names no library."""
+        """Taken when a check is first asked, never as ``cad.engine`` is imported, of every source file -- a
+        ``.py``, or the ``.pyc`` an install of bytecode alone has in its place, never ``__pycache__`` -- read again
+        only once one's size or time changes; a code edited since the library loaded is no other process's. The
+        libraries a B-rep check measures with, each read from the path's listings (two of one name in a folder:
+        the one written last); a process with no kernel names no library."""
+        import importlib.metadata
         import importlib.util
 
-        from cad.engine import contract
+        import cad
+        from cad.engine import _measuring, contract
 
-        self.assertIn(contract.measuring.cache_info().currsize, (1,), "taken at import")
+        imported = subprocess.run([sys.executable, "-c", "import sys, cad.engine; print('cad.engine._measuring' in "
+                                   "sys.modules)"], env={**os.environ, "PYTHONPATH": str(SRC)}, capture_output=True,
+                                  text=True, check=True)
+        self.assertEqual(imported.stdout.strip(), "False", "nothing of it loads, nor is taken, on import")
+        self.assertFalse(contract.measuring()["code"].endswith(_measuring.EDITED), "the code as this process loaded it")
+        with mock.patch.dict(_measuring._TAKEN, clear=True), mock.patch.object(cad, "_LOADED_NS", 0):
+            self.assertTrue(contract.measuring()["code"].endswith(_measuring.EDITED), "edited since it loaded")
         self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy"})
+        with mock.patch.object(importlib.metadata, "version", side_effect=AssertionError("the long way")):
+            self.assertEqual(_measuring._version("OCP", _measuring.MEASURING["OCP"], {"cadquery_ocp": "8.0.1"}),
+                             "8.0.1", "cadquery-ocp as well as its -novtk, from the listings")
+            self.assertIsNone(_measuring._version("bd_materials_not_here", ("bd-materials-not-here",), {}),
+                              "a library not installed: None, never asked the long way")
+        site = Path(tempfile.mkdtemp(prefix="engine-dfm-site-"))
+        self.addCleanup(shutil.rmtree, site, True)
+        for said, when in (("1.1", 2_000_000_000), ("1.0", 1_000_000_000)):
+            (site / f"twice-{said}.dist-info").mkdir()
+            (site / f"twice-{said}.dist-info" / "METADATA").write_text("Name: twice\n")
+            os.utime(site / f"twice-{said}.dist-info" / "METADATA", ns=(when, when))
+        with mock.patch.object(sys, "path", [str(site)]):
+            self.assertEqual(_measuring._installed(), {"twice": "1.1"}, "the one written last")
         with mock.patch.object(importlib.util, "find_spec", return_value=None):
             self.assertEqual(contract.measure()["libraries"], {}, "no kernel: no library named")
         root = Path(tempfile.mkdtemp(prefix="engine-dfm-code-"))
@@ -490,6 +513,8 @@ class KeptResultTest(unittest.TestCase):
         for name, data in (("a.py", b"a"), ("b.pyc", b"b"), ("a.pyc", b"x"), ("__pycache__/a.cpython.pyc", b"y")):
             (root / name).write_bytes(data)
         first = contract.measure(root)["code"]
+        with mock.patch("builtins.open", side_effect=AssertionError("read again")):
+            self.assertEqual(_measuring._code(root)[0], first, "the same files, sizes and times: none read")
         for name, changes in (("a.pyc", False), ("__pycache__/a.cpython.pyc", False), ("b.pyc", True), ("a.py", True)):
             with self.subTest(name=name):
                 (root / name).write_bytes(b"edited " + name.encode())

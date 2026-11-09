@@ -18,8 +18,14 @@ kernel, and ``import build123d`` binds a module the kernel loads into on its fir
 ...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
 """
 
+import time as _time
 from functools import cache as _cache
 from typing import TYPE_CHECKING as _TYPE_CHECKING
+
+# When this library's code began to load in this process: what measures a manufacturing check here
+# (``cad.engine._measuring.measuring``, taken when one is first asked) says a code edited since as no other's.
+_LOADED_NS = _time.time_ns()
+del _time
 
 # Before anything imports build123d, which every entry point of the library eventually does:
 # build123d parses EVERY font in the system font folders at import time, with no

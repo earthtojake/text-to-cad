@@ -1493,7 +1493,7 @@ class Daemon:
     def _base_measures(self, said: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """What measures in a checks process started now: where the engine's kernel environment is the server's
         own (an installation that carries the kernel), the server's own, read now (``contract.measure``: a
-        checkout's edits included); else the base's as a checks process started since it was last made said it
+        checkout's edits included, its code hashed again only once a source file's size or time changed); else the base's as a checks process started since it was last made said it
         (``said``: one such process's, kept), None until one has. A base made again starts unknown
         (``made_base``)."""
         try:

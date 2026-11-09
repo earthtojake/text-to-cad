@@ -60,16 +60,6 @@ def _main_in_a_package() -> None:
     as_package_module(main)
 
 
-def _measuring() -> None:
-    """What measures a manufacturing check in this process (``contract.measuring``), taken now: the code as it
-    was loaded, never as it is when a check is first asked, whatever was edited meanwhile. From the module of
-    the standard library alone that holds it, so nothing else of the engine's loads here."""
-    from cad.engine._measuring import measuring
-
-    measuring()
-
-
-_measuring()
 _main_in_a_package()
 
 

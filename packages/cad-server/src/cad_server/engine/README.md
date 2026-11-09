@@ -1030,12 +1030,16 @@ in any Python) resolves the options and asks the engine (`api.check`): an `expor
 `check`, its own release (`caller`), what measures in it (`measures`, `contract.measuring`: the digest of the
 library's code, every source file of the cad package -- a `.py`, or the `.pyc` an install of bytecode alone holds
 in its place -- and the versions of the libraries a B-rep check measures with -- build123d, OCP, bd_materials,
-numpy -- taken as `cad.engine` is imported, and again at once as a worker starts, so it is the code as it was
-loaded; a process with no kernel, the `cad` command's, names no library) and no destinations. No process measures
+numpy -- taken once, when the caller first asks a check, and at once as a worker or a checks process starts, before
+anything a check measures with loads; never as `cad.engine` is imported, which costs nothing for it. It is the code
+as the process loaded it: a source file changed since the library began to load there (`cad._LOADED_NS`) makes it
+a code no other process has, so no process measures for it and the caller measures its check its own way. A process with
+no kernel, the `cad` command's, names no library) and no destinations. No process measures
 for a caller unlike it (`contract.measures_for`: other code, or another version of a library the caller names):
 the process answers such a check with nothing measured. What measures in each process is that process's own, said
 in its answers and kept with it, gone with it (its `state`); the checks processes' is the base's: the server's
-own, read at each check, where the kernel environment is the server's, else what the latest checks process
+own, read at each check (its digest kept by its source files' paths, sizes and times, so an unchanged checkout is
+stated, not hashed again), where the kernel environment is the server's, else what the latest checks process
 started since the base was made said (`Daemon._base_measures`) -- unknown until one has, and again once the base
 is made again, which retires every checks process (`made_base`). The daemon sends no check to a process it knows
 to be unlike the caller; one not known yet decides for itself, and a checks process found unlike the base as it
