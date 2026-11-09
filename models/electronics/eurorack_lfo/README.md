@@ -14,7 +14,7 @@ panel's hole moves with it*, then the panel goes straight to a fabrication servi
 | | |
 | --- | --- |
 | Schematic | 3 sheets (root, `lfo.kicad_sch` placed twice, `power.kicad_sch`); 76 parts, 45 nets, 227 pins; ERC 0 errors, 0 warnings; KiCad's nets equal the drawn intent pin for pin (`scripts/check_schematic.py`) |
-| Board | 48 x 107 mm, 2 layers, 1.6 mm; 76 parts (58 SMD, 62 on the back, panel parts on the front); 235 pads; 538 track segments, 1354 mm of copper track, 115 signal vias + 292 GND stitching vias; GND poured on both layers |
+| Board | 48 x 107 mm, 2 layers, 1.6 mm; 76 parts (58 SMD, 62 on the back, panel parts on the front); 235 pads; 495 track segments, 1475 mm of copper track, 85 signal vias + 297 GND vias (290 stitching, 5 in pour islands, 2 on a ground tie); GND poured on both layers |
 | DRC | JLCPCB 2-layer standard rules (track 0.25 / space 0.2, rails 0.4, via 0.8/0.4, copper to edge 0.3): **0 errors, 0 unconnected**; 69 warnings, all `lib_footprint_mismatch` (KiPy rounds a turned or flipped footprint's local coordinates by a nanometre, and KiCad's API hands the jacks back with their keepouts' fill settings and a text's angle changed); silkscreen 0 warnings (46 references printed, 30 in the dense expo cluster and under the jacks kept on the Fab layer) |
 | Layout checks | `check_twin_orbit.py`: 0 segments off 45 degrees; no two-pad net over 1.6x its straight line; rails 0.4 mm (1.2 A for 10 C rise, 0.1 A needed); board == schematic, 0 differences; decoupling 2.2-5.5 mm from each supply pin except C106/C206, 8.8 mm from the LM13700's V- pin (it sits at pin 10, the buffer input tied to -12 V: a revision would move it) |
 | Panel | 10HP x 3U, 2 mm, every hole read from the board; fit: worst overlap 0.000 mm^3 across 50 panel/hardware x board pairs and 435 hardware pairs; bushings clear their holes by 0.15 mm, LEDs by 0.25 mm (`src/check_fit.py`) |
@@ -61,14 +61,20 @@ Hardware modelled: Davies 1900H-style knobs, M6 hex nuts (jacks), M7 hex nuts (p
 
 ## How the board was routed
 
-The pcb skill routes by hand, never with an autorouter. Writing every vertex of this board's ~170 connections
-by reasoning did not converge, so `scripts/assist_route.py` routes it instead: the agent states the order of the
-nets, each net's layer and via costs and the GND ties, and an octolinear A* search on a 0.1 mm grid finds each
-connection's path around every other net's copper, inflated by the clearance. It is an autorouter in all but
-name, directed net by net, and a departure from the skill: whether the skill should offer such a search is an
-open question, so it stays this project's script and no skill names it. Its result is `scripts/routes.json`;
-`scripts/board_03_sync.py` puts the board back to that file without searching. The copper is DRC clean and
-octolinear, but not what a careful person would draw: some detours and extra vias.
+`scripts/board_03_route.py` routes it with `cad.kicad.route`, the library's router the pcb skill directs, as its plan directs: the
+order of the nets (each LFO's integrator node and rate wiper and the -12 V rail first, because they walled other
+connections in when they came later; then every other net, the shortest first; last the ground ties), the layer
+each keeps to (the back, a millimetre on the front costing 2.5, but +12V on the front) and what a via costs (2.5 mm
+of track). The router routes only what the plan names, round everything on the board, by the board's own rules
+(the netclasses' widths and clearances, the edge, the jacks' keepouts), and checks every segment and via exactly
+before it writes them through the edit. A connection it cannot route is said with what walls it in, and that is
+how the plan's first five nets were chosen; its last tie, LFO A's TL074 pin 3 to pin 6, is there because DRC
+found that pin's patch of pour joined to nothing else.
+
+The plan's 115 connections route in about 2 s (the step, with KiCad's start and save, in about 5 s): 495 segments,
+1475 mm of track and 87 vias. Before the tool, this project routed the board with a search of its own
+(`assist_route.py`, since deleted with its `routelib.py`, `route_plan.json`, `routes.json` and
+`board_03_sync.py`): about three minutes for 538 segments, 1354 mm of track and 115 vias.
 
 Moving a footprint over KiCad's API leaves its own keepout zones behind (KiPy moves a footprint zone's outline
 by the move in the footprint's frame), so `scripts/board_02_keepouts.py` writes each jack's keepout back as the
@@ -82,7 +88,7 @@ there and places them with it, so the router, the stitching and the front pour k
 | `twin_orbit.kicad_pro`, `.kicad_pcb`, `twin_orbit.kicad_sch` (+ `lfo`, `power` `.kicad_sch`) | the KiCad project (KiCad 10.99 format), the source |
 | `twin_orbit.pretty/`, `fp-lib-table`, `sym-lib-table` | the project's footprints and its library tables (KiCad's stock libraries through `${KICAD10_FOOTPRINT_DIR}` and `${KICAD10_SYMBOL_DIR}`) |
 | `check_twin_orbit.py` | the board's own checks |
-| `scripts/` | how the board was made, re-runnable: libraries, schematic (and its intent, `schematic_intent.json`), netlist import, placement (`place_table.py`), routing (`assist_route.py`, `route_plan.json`, `routes.json`), pours, silkscreen |
+| `scripts/` | how the board was made, re-runnable: libraries, schematic (and its intent, `schematic_intent.json`), netlist import, placement (`place_table.py`), routing (`board_03_route.py`, the plan), pours, silkscreen |
 | `src/` | the panel and its hardware: `footprint_models.py` (the jack and the pot), `hardware.py`, `panel.py`, `assembly.py`, `check_fit.py`, `check_dxf.py`, `exports.py`, `lib/twin_orbit.py` (what they read from the board) |
 
 Nothing generated is committed: the footprints' 3D models (`3dmodels/`), the fabrication files (`fab/`), the
@@ -112,8 +118,7 @@ python3 scripts/gen_schematic.py                # root, LFO (x2) and power sheet
 cad run scripts/board_01_import.py              # netlist -> board
 cad run scripts/board_02_place.py               # outline + placement (scripts/place_table.py)
 python3 scripts/board_02_keepouts.py            # the jacks' own keepouts back over the jacks
-cad run scripts/assist_route.py                 # tracks + vias -> scripts/routes.json (about 3 minutes)
-cad run scripts/board_03_sync.py                # or: the board back to routes.json, without searching
+cad run scripts/board_03_route.py               # tracks + vias: the plan, routed by cad.kicad.route (about 5 s)
 cad run scripts/board_04_pour.py                # GND pours both layers + stitching
 cad run scripts/board_05_islands.py             # a via in any pour piece left without one
 cad kicad_pcb drc twin_orbit.kicad_pcb --json > tmp/drc_before_cleanup.json
@@ -135,8 +140,8 @@ cad run src/check_dxf.py                        # the cut DXF's facts, for a Sen
 ```
 
 `make_libs.py` and `gen_schematic.py` write the files they make byte for byte as committed. The layout steps
-make the same placement and the same tracks again, from `routes.json` or from the search, and the pours'
-stitching vias land within a few of where they were; DRC and the check stay clean.
+make the same placement and the same copper again (the router gives the same tracks and vias for the same board
+and plan, and the stitching follows them); DRC and the check stay clean.
 
 ## Demo video script (about 3 minutes)
 
@@ -156,6 +161,6 @@ Record in an agent app with text-to-cad installed and this folder open; the view
 | 8 | "Explode it." | The assembly GLB playing `explode`: knobs, nuts and panel lift off the board and settle back | 15 s | Knobs, nuts and spacers sit on the real stack-up (panel 10 mm off the board, on the pots' mounting face) |
 
 Notes for the recording: run `cad run src/footprint_models.py` first, or the jacks and pots stand as blocks in 3D.
-Shot 6's jack move is real but takes a reroute (about 3 minutes of `scripts/assist_route.py`): record the panel
-half live and cut to the rerouted board, or move a jack whose hole is the point and show only the panel updating
-(the panel reads positions, not copper). Keep the light theme for the schematic, dark for the 3D.
+Shot 6's jack move is real, and so is its re-layout: the board's steps from the placement on (`board_02_place.py`
+through `board_07_silk.py`, the route about 5 s of it) take about 20 s, so the whole edit can be recorded live;
+the panel reads positions, not copper, so it follows the moved jack either way. Keep the light theme for the schematic, dark for the 3D.
