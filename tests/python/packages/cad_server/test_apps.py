@@ -634,7 +634,7 @@ class OpenTest(unittest.TestCase):
         self.assertEqual(script.parent, Path(apps.__file__).resolve().parent)
         text = script.read_text(encoding="utf-8")
         self.assertIn("import_scene.gltf", text)
-        self.assertNotIn("cad_glb", text)  # the render skill's GPL helper is never what the server runs
+        self.assertNotIn("cad_glb", text)  # the render skill's helper is never what the server runs
         # Its argument parsing alone, without bpy (which the script imports): the one argument after `--`.
         [function] = [node for node in ast.parse(text).body if isinstance(node, ast.FunctionDef) and node.name == "requested"]
         scope: dict = {}

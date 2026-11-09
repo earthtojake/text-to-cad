@@ -56,7 +56,7 @@ export const pluginRequestUrl = `${siteConfig.repository}/issues/new?title=${enc
 // How to take part, the README's Contributing in substance: each way in, with its links. Code is in
 // backticks, which the page sets as code.
 export const contributing = {
-  intro: "text-to-cad is MIT-licensed, but for one GPL file (the render skill's Blender helper), and built in the open.",
+  intro: "text-to-cad is MIT-licensed and built in the open.",
   items: [
     {
       title: "Bugs and plugin requests",

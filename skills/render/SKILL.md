@@ -1,7 +1,7 @@
 ---
 name: render
 description: Renders photoreal images and videos of a text-to-cad model, a STEP or an xbf with Blender, for people to look at, such as a hero shot, a README picture, a product post, a turntable or a film of a model's motion or animation. Exports a GLB, lights and frames it in a bpy script that `cad run` runs, drafts in EEVEE and finishes in Cycles on the GPU, and can save a .blend. Not for checking geometry, which a snapshot does.
-license: MIT AND GPL-3.0-or-later
+license: MIT
 metadata:
   repository: earthtojake/text-to-cad
 ---
@@ -137,10 +137,7 @@ plays the clip asked for.
 | `model.play("sweep")` | That clip from frame 0, the scene's range 0 to its duration; `model.play(None)` stands every part where cad placed it. |
 | `model.bounds()` | The world box at the current frame. |
 
-A still of a pose is a clip's frame: `model.play("sweep")`, `scene.frame_set(24)`, render. The
-helper uses Blender's API, so it is GPL-3.0-or-later (its header, and `scripts/COPYING`); copied
-beside a script, it keeps that licence. A script that uses Blender's API is GPL only when it is
-published; what it renders is the person's.
+A still of a pose is a clip's frame: `model.play("sweep")`, `scene.frame_set(24)`, render.
 
 ## Looks
 

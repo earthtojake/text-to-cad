@@ -292,7 +292,7 @@ jobs:
 
   # Blender as a Python module (bpy), as the render skill runs it: `cad run` makes the blender integration's
   # environment (bpy 5.2.3 on Python 3.13, without cad; about 430 MB from PyPI for Linux, some 20 s, not cached, as
-  # the KiCad job fetches kicode), and the skill's GPL helper (skills/render/scripts/cad_glb.py) loads a GLB this
+  # the KiCad job fetches kicode), and the skill's helper (skills/render/scripts/cad_glb.py) loads a GLB this
   # checkout's cad exports, plays its clips in both orders and renders a 64x64 still with Cycles on the CPU, then one
   # with EEVEE, which skips naming Blender's reason if the runner's software OpenGL cannot draw it. Its suite
   # (tests/python/packages/blender, test-blender.sh) is this job's alone. Only bpy's environment and how cad run

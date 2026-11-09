@@ -59,7 +59,7 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 
 ## 🛠️ Contributing
 
-text-to-cad is MIT-licensed, but for one GPL file (the render skill's Blender helper), and built in the open.
+text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
   A bug report with the model script and the output of `cad doctor --check` is the

@@ -336,8 +336,6 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad/pyproject.toml", "skills/cad/SKILL.md"):
             with self.subTest(path=path):
                 self.assertNotIn("blender", jobs_for(path))
-        # The GPL text cad-server's wheel carries is its licence: the wheel's job alone.
-        self.assertEqual(jobs_for("packages/cad-server/COPYING"), {"packaging", "skills"})
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")

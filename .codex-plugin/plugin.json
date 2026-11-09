@@ -8,7 +8,7 @@
   },
   "homepage": "https://www.texttocad.dev",
   "repository": "https://github.com/earthtojake/text-to-cad",
-  "license": "MIT AND GPL-3.0-or-later",
+  "license": "MIT",
   "keywords": [
     "cad",
     "robotics",

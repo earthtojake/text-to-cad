@@ -7,10 +7,8 @@ name = "cad-server"
 version = "0.11.3"
 description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the CAD Viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
 readme = "README.md"
-# MIT, but for the render skill's Blender helper the plugin carries (_runtime/plugin/skills/render/scripts/cad_glb.py),
-# which is GPL-3.0-or-later: LICENSE says which file, COPYING is the GPL's text.
-license = "MIT AND GPL-3.0-or-later"
-license-files = ["LICENSE", "COPYING"]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 authors = [{ name = "earthtojake" }]
 keywords = ["cad", "step", "glb", "build123d", "mcp", "agent-skills"]

@@ -284,8 +284,7 @@ RULES: tuple[Rule, ...] = (
     # law, documented commands), never by a build or a test of the code beside it. The one
     # exception, each distribution's README, is its wheel's long description.
     Rule((*(f"{project}/{name}" for project in PACKAGE_PROJECTS for name in ("README.md", "LICENSE")),
-          *(f"{project}/README.md" for project in ALIAS_PROJECTS),
-          "packages/cad-server/COPYING"), select(flags=["packaging"]), final=True),  # the GPL text cad-server ships
+          *(f"{project}/README.md" for project in ALIAS_PROJECTS)), select(flags=["packaging"]), final=True),
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
@@ -361,7 +360,7 @@ RULES: tuple[Rule, ...] = (
     # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
     Rule(("skills/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
-    # The render skill's helper runs in bpy, in the blender job; its pages and licence files are its light suite's.
+    # The render skill's helper runs in bpy, in the blender job; its pages are its light suite's.
     Rule(("skills/render/**",), select(flags=["blender"])),
 
     # The test runners and the gates each one feeds.

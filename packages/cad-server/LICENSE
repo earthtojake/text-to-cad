@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-One file the package carries is licensed differently: the plugin's
-cad_server/_runtime/plugin/skills/render/scripts/cad_glb.py is free software under the
-GNU General Public License, version 3 or (at your option) any later version
-(GPL-3.0-or-later), as its header says, with the license's text in COPYING beside this
-file and beside that one. It uses Blender's Python API and runs only inside Blender; no
-code of the package imports it.
