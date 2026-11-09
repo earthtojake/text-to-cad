@@ -1,0 +1,24 @@
+/*
+ * The card's notice: why it shows no model, what to do, and the one button. One look wherever it is
+ * drawn: the app's (`Notice.tsx`, through styles.css) and the shell's, where the app itself could not
+ * load (`host/shell.ts`, which inlines this file and has no Tailwind). Inline, the card is the notice's
+ * own height (`host/unreachable.js`'s `noticeHeight`), so nothing empty stands around it.
+ */
+.cad-notice {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 100%; padding: 20px 24px;
+  font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+  font-size: var(--cad-text-ui, 13px); line-height: 1.5; font-weight: 400;
+  color: var(--foreground, CanvasText);
+}
+.cad-notice-body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; width: 100%; max-width: 28rem; }
+.cad-notice-title { margin: 0; font-size: 15px; font-weight: 500; }
+.cad-notice-line { margin: 0; overflow-wrap: anywhere; }
+.cad-notice-muted { color: var(--muted-foreground, color-mix(in srgb, CanvasText 60%, transparent)); }
+.cad-notice-button {
+  display: inline-block; padding: 6px 12px; border-radius: 6px;
+  border: 1px solid var(--border, color-mix(in srgb, CanvasText 20%, transparent));
+  color: inherit; font-size: 12px; font-weight: 500; line-height: 1.5; text-decoration: none; cursor: pointer;
+}
+.cad-notice-button:hover { background: var(--muted, color-mix(in srgb, CanvasText 6%, transparent)); }
+.cad-notice-button:focus-visible { outline: 2px solid color-mix(in srgb, CanvasText 40%, transparent); outline-offset: 2px; }

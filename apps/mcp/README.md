@@ -137,6 +137,27 @@ Desktop's config. To undo it once flag 1824765482 is on: name `./claude.mcp.json
 `cad_server/_internal/providers.py`'s `_removal`, and drop `host.claude_code`. Then decide which one
 server the Code tab gets: with both, it lists CAD twice.
 
+## Cursor: where the card's capability comes from
+
+| Host | The page's capability | Cards |
+| --- | --- | --- |
+| Codex, Claude Desktop | the launch's result `_meta["dev.texttocad/httpToken"]`, as before | yes |
+| Cursor (`cursor-vscode`, declares MCP Apps) | the launching tool's own `_meta["dev.texttocad/httpToken"]` (`cad_show`'s, in `tools/list`), which Cursor hands the card at `ui/initialize` as `hostContext.toolInfo.tool.meta` | yes, inline |
+
+Cursor drops a result's `_meta` before its card sees it. Read from Cursor 3.25.6's bundle
+(`out/vs/workbench/workbench.glass.main.js`): the card's tool result is `JSON.parse` of the string the
+chat stored (`GIC` → `HIC`), and that string is built as `{content, structuredContent}` alone
+(`s.result=JSON.stringify(c)` in the `mcpToolCall` case); `cursor-mcp`'s `callTool` also returns
+`{structuredContent, content, isError}` alone. So from 0.10.0 every card call in Cursor was refused
+("Only a CAD view calls this tool."). What Cursor does keep: `hostContext.toolInfo = {id, tool}`, the tool
+as its cache holds it (`meta: _meta`, whole). What its agent reads of a tool: the descriptor files under
+`~/.cursor/projects/<project>/mcps/<server>/tools/`, name, description and arguments, never `_meta`.
+Cursor lists the app-only tools there too (`cad_sync.json`, `cad_http.json`, `cad_capture_reply.json`), so
+the capability is all that keeps its agent from acting as the page. Not the resource: Cursor's agent has
+`fetch_mcp_resource`, and the `ui://` page is listed to it. The server puts the capability in the tool for
+Cursor alone (`host.carries_capability`), so every other host's catalog is unchanged, and the page reads
+the launch's `_meta` first (`host/capability.ts`).
+
 ## The rules
 
 - **One page, told what to show.** Every surface loads this one page. The tool
@@ -283,7 +304,10 @@ server the Code tab gets: with both, it lists CAD twice.
   app-only and absent in text-only hosts. Every
   page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
-  carry it. The page sends `x-cad-app` with HTTP calls, and the same capability
+  carry it. Cursor delivers no result `_meta` to its card, so there it rides `cad_show`'s own `_meta`
+  instead ([Cursor](#cursor-where-the-cards-capability-comes-from)). A call refused for it answers
+  `structuredContent: {"refused": "capability" | "stale"}` beside the words, and the card says it
+  cannot connect (`Unreachable`), with Open in browser. The page sends `x-cad-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
   without it: a host is asked to keep app-only tools from the model, and the server
   does not rely on it. The server validates
@@ -432,7 +456,8 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 | `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`); where neither way reaches the engine, the no-channel notice (`unconnected`) |
-| `unreachable.js` | the no-channel notice's words, which the app's notice (`Notice.tsx`) and the shell both say: the line by whether there is a page and a model, the button, the card's height, and the launch's page |
+| `capability.ts` | the page's capability: the launch's result `_meta`, else the launching tool's (`hostContext.toolInfo.tool`, Cursor) |
+| `unreachable.js` | the can't-connect notice's words, which the app's notice (`Notice.tsx`) and the shell both say in one look (`src/notice.css`): the line by whether there is a page and a model, or a capability from before CAD restarted (`refusalOf`), the button, the card's measured height, and the launch's page |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 

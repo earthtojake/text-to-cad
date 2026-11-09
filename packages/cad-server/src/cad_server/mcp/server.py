@@ -184,9 +184,12 @@ class ToolFailed(Exception):
     """A tool call that fails the way its caller should read: as the tool's result. ``reason`` is why, in
     telemetry's words (``cad_server.analytics.FAILURES``), named where it is raised: never read from the message."""
 
-    def __init__(self, message: str, reason: str) -> None:
+    def __init__(self, message: str, reason: str, *, refused: str | None = None) -> None:
         super().__init__(message)
         self.reason = reason
+        # A page's call refused for its capability (``_app_only``): ``capability`` where it carried none or
+        # another's, ``stale`` where it carried a past session's. The page reads it, never the words.
+        self.refused = refused
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -207,9 +210,11 @@ _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to 
 _WATCH = _object({"file": {"type": ["string", "null"]}})
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
-# The capability a page's launch delivers it, in UI-only result metadata (``_call``). Every one of the
-# page's tools refuses a call without it: a host is asked to keep app-only tools from the model, and the
-# server does not rely on it. ``cad_http`` takes it as a header, the others as an argument.
+# The capability a page's launch delivers it, in UI-only result metadata (``_call``); in Cursor, which drops
+# that before its card sees it, in the launching tool's own metadata, which Cursor hands the card at
+# ``ui/initialize`` (``host.carries_capability``). Every one of the page's tools refuses a call without it: a
+# host is asked to keep app-only tools from the model, and the server does not rely on it (Cursor lists them
+# to its agent). ``cad_http`` takes it as a header, the others as an argument.
 _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
@@ -320,6 +325,7 @@ class Server:
         self.text = False
         # A session Claude Code started (``host.claude_code``), decided at initialize: it lists no tools.
         self.inert = False
+        self._capability_in_catalog = False  # Cursor's: the launching tool carries the capability (``host.carries_capability``)
         # Whether this host shows CAD cards (``host.presentation``): True, False, or None while nothing
         # says; ``_declared`` where the host said so itself, which nothing after overrules; and
         # ``_contacted`` once a view reached this server, which only a host that draws them does.
@@ -479,6 +485,7 @@ class Server:
             self.page = self.page.presenting("inline")
         self._tools = None
         self.inert = host.claude_code(transport)
+        self._capability_in_catalog = host.carries_capability(client, presentation)
         extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
         LOG.info("client %s %s: %s views, %s (extensions: %s)%s", client.get("name"), client.get("version"), presentation,
                  why, ", ".join(extensions) or "none",
@@ -547,7 +554,10 @@ class Server:
         ]
 
     def _inline_catalog(self) -> list[dict[str, Any]]:
-        shows = {"ui": {"resourceUri": self.page.uri}}
+        shows: dict[str, Any] = {"ui": {"resourceUri": self.page.uri}}
+        if self._capability_in_catalog:
+            # Cursor's card gets the tool that launched it, never the launch's ``_meta`` (``host.carries_capability``).
+            shows[_APP_TOKEN_META] = self._app_token
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
              "description": (f"Show a local CAD model ({FORMATS}) in an interactive viewer in the "
@@ -637,7 +647,7 @@ class Server:
             return result
         except ToolFailed as failure:
             reason = failure.reason
-            return _text(str(failure), error=True)
+            return _text(str(failure), {"refused": failure.refused} if failure.refused else None, error=True)
         except Exception as error:
             from cad.engine.serve import KernelProcessesUnavailable
 
@@ -1113,8 +1123,10 @@ class Server:
         page, which the launch's metadata delivered it to, reports a view or answers a capture."""
         token = arguments.get(_APP_TOKEN_ARGUMENT)
         if not isinstance(token, str) or not secrets.compare_digest(token.encode("utf-8"), self._app_token.encode("utf-8")):
+            stale = isinstance(token, str) and bool(token)
             raise ToolFailed("This CAD view was opened before CAD restarted: close it and open CAD again."
-                             if isinstance(token, str) and token else "Only a CAD view calls this tool.", "bad_request")
+                             if stale else "Only a CAD view calls this tool.", "bad_request",
+                             refused="stale" if stale else "capability")
 
     def _register(self, arguments: dict[str, Any], context: RequestContext) -> str:
         self._app_only(arguments)

@@ -88,8 +88,11 @@ can reach the port.
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which
-MCP Apps hosts keep out of the model's context, and refuses a call without it
-before anything routes the request. Agents reach none of the viewer's routes.
+MCP Apps hosts keep out of the model's context; to Cursor, which hands its card no result
+metadata, in the metadata of the tool that opens the card (`cad_show`), which Cursor hands the
+card and keeps out of what its agent reads of the tool. The server refuses a call without it
+before anything routes the request: no host is trusted to keep the page's tools from the model.
+Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.
 
 **Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF, SRDF, KiCad board or
