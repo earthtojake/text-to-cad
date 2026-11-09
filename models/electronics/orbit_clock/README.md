@@ -21,7 +21,7 @@ script that placed it.
 | Board | 120 mm circle with a flat for the USB-C receptacle, 4 layers, 1.6 mm, JLCPCB standard 4-layer rules |
 | Parts | 182 footprints: 72 x WS2812B-2020, 72 x 100 nF, ESP32-C3-WROOM-02, USB-C, 26 others |
 | Nets | 91; 536 tracks (1.77 m of copper), 71 arcs (the LED chain's links among them), 256 vias |
-| Checks | ERC clean (0 warnings); DRC 0 errors, 0 unconnected; 102 warnings: 101 `lib_footprint_mismatch` (footprints placed, turned and flipped over KiCad's API no longer compare equal to their library's) and the module's own silkscreen outline running past the board edge at the antenna |
+| Checks | ERC 0 errors, 142 warnings, all `pin_on_wire_span` (pins that lie along a wire rather than at its end, which KiCad joins to that wire's net; `check_orbit.py` finds the board equal to the schematic pin for pin); DRC 0 errors, 0 unconnected; 30 warnings: 29 `lib_footprint_mismatch` (footprints placed, turned and flipped over KiCad's API no longer compare equal to their library's) and the module's own silkscreen outline running past the board edge at the antenna |
 | Printed | baffle (black PLA), diffuser (natural PETG, 1.2 mm), stand (black PLA); 3MF of each and a two-material front |
 
 ## The design
@@ -132,8 +132,8 @@ and vias. After a board change, export the STEP and the xbf again before
 
 ## Checks and their results
 
-- **ERC**: clean, 0 warnings. **Board vs schematic**, pin by pin: 540 pins, 0 differ.
-- **DRC** (the board's JLCPCB rules): 0 errors, 0 unconnected; 102 warnings: 101 `lib_footprint_mismatch`
+- **ERC**: 0 errors; 142 warnings, all `pin_on_wire_span`. **Board vs schematic**, pin by pin: 540 pins, 0 differ.
+- **DRC** (the board's JLCPCB rules): 0 errors, 0 unconnected; 30 warnings: 29 `lib_footprint_mismatch`
   and the module's own silkscreen outline running past the board edge at the antenna.
 - **Antenna**: nothing poured on any layer and no via under the module's keep-out (736 sample points): the rule
   area inside its footprint, which `board.py place` sets from the library footprint after every move, since

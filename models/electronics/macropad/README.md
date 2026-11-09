@@ -56,7 +56,7 @@ switches' plastic) and a few short hops.
 | Nets | 46 connected (KiCad adds 21 more, one on each unconnected pin) |
 | Routing | 371 tracks, 1384 mm of copper, 81 vias; 0 unconnected |
 | ERC | clean, 0 warnings (`cad kicad_sch erc macropad.kicad_sch`) |
-| DRC | 0 errors; 40 warnings, all `lib_footprint_mismatch`: KiPy rounds a turned or flipped footprint's local coordinates by a nanometre (`7.499999`), so KiCad no longer finds 40 of them equal to their library's |
+| DRC | clean: 0 errors, 0 warnings (`cad kicad_pcb drc macropad.kicad_pcb` on the built board) |
 | Rules | JLCPCB standard 2-layer, read 2026-11-04 from the pcb skill's table of jlcpcb.com/capabilities: 0.15 mm space (fab 0.10), 0.2 mm signal tracks, 0.3/0.6 mm vias, 0.3 mm copper to edge (0.2 at the LEDs' own cut-outs, the fab's limit) |
 
 Hierarchical schematic: the root (`macropad.kicad_sch`) and three sheets, `usb_power` (USB-C, CC,
