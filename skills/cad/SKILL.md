@@ -322,18 +322,21 @@ cad step ranges arm.step --step 0.5 --json
   within a millimetre). Every gap is measured to within 0.6 mm over the true one, never under it.
 - **Touching or near as built.** Every pair is read against the as-built pose. Parts touching (a
   horn on its servo), or under 0.3 mm apart, meet only where their contact grows by about 15 mm^2,
-  not where one slides along the other. Parts a little farther apart (a jaw 0.42 mm from its
-  servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.06 mm
-  for a 0.42 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
+  not where one slides along the other. Parts a little farther apart (a jaw 0.5 mm from a
+  servo's cover) meet only where their gap closes under half of what it was, less 0.3 mm (0.1 mm
+  for a 0.5 mm gap), not where it narrows a hair. At a larger clearance the finding lists the
   pairs within it as built, `near as built:`, with the gap as built and at each stop, and a stop
-  one of them makes says `closed to 0.18 from 0.42 mm as built`.
+  one of them makes says `closed to 0.2 from 0.5 mm as built`.
 - **Which pair stopped it.** Each stop names the two parts that met one step past it. Read it
   against the geometry before you adopt it (a posed snapshot at the stop). A stop that comes from a
   pair that does not really limit the joint (a vendor's servo cover the jaw clears in the
   hardware) is set aside with `exclude(a, b)` in the body (a part or an assembly, and another or its
   label, [kinematics](references/kinematics.md)): those two parts never stop or clash in the sweep, and
   every other pair of their links still does, so the jaw then stops on the other jaw. The same
-  declaration tells a simulator their two links never collide (MJCF's `<contact><exclude>`).
+  declaration tells a simulator their two links never collide (MJCF's `<contact><exclude>`, the two
+  links whole): `exclude()` is both, with no sweep-only form. That is usually right, since a pair
+  that does not stop the hardware should not stop the simulation, and the two links are most often a
+  parent and its child, which MuJoCo never collides anyway.
 - **What is tested.** `--geometry parts` (the default) tests each part's own surface: the
   hardware's stops. `collision` tests what each part declares a simulator collides it as, and sets
   aside the link pairs the MJCF never collides, as MuJoCo does: a body and its parent (unless the
@@ -349,10 +352,10 @@ cad step ranges arm.step --step 0.5 --json
   its warning says so. A document with no joint fails with
   `no_joints`.
 - **Cost.** The sweep runs on one core. Each surface is sampled to within 0.3 mm whatever the
-  clearance, and the default is the fastest: a 270-part six-joint arm took 19 s at the
-  defaults and 23 s at `--clearance 1`; a finer `--step` costs in proportion, and
-  `--joint` only the joints it names. Answer a narrower question (do the jaws close?) with
-  `--joint gripper` or a posed snapshot.
+  clearance, and the default is the fastest: an arm of a few hundred parts and six joints takes
+  tens of seconds at the defaults on a laptop, by its parts' detail and the machine, and a little
+  more at `--clearance 1`; a finer `--step` costs in proportion, and `--joint` only the joints it
+  names. Answer a narrower question (do the jaws close?) with `--joint jaw` or a posed snapshot.
   `--verbose` says each step on stderr as it starts: reading the model, sampling its surfaces, each
   joint.
 

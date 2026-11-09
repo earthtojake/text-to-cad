@@ -127,13 +127,16 @@ mechanism):
   naming the part and the extra, only where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl
   Linux) or no engine runs to fetch it.
   The hulls are cached by the part's mesh and options, so only a changed part decomposes again; the
-  first export decomposes every part, at roughly 15 s for a printed part of a desktop arm.
+  first export decomposes every part, from a few seconds to about a minute each by its size and the
+  machine, and says one that reached its cap (CoACD merged hulls to fit): look at the hulls with
+  `cad mjcf snapshot sim/scene.xml tmp/collision.png --display collision`.
 - **`frame(part, name, location)`** names a frame on a part (a tool point, a camera mount, a sensor),
   in the part's own frame, the one its geometry is in before it is placed; it is a site in MJCF.
 - **`body(part, name=None)`** keeps a part a body of its own, fixed to the link it would merge into (a
   camera mount, a fingertip the simulator addresses), with its own mass and geoms.
 - **`exclude(a, b)`** says two parts (or assemblies) never collide, one given as the shape and the other
-  as the shape or its label. The MJCF excludes every
+  as the shape or its label; `cad model ranges` sets the same pair aside (one declaration for both,
+  with no form for one alone). The MJCF excludes every
   jointed pair whose collisions touch at rest by itself, the first joint's on a world-welded base too.
 - **`limits(assembly, joint, effort=, velocity=, armature=, damping=, friction=)`**: a joint's drive
   limits, N*m or N and rad/s or m/s, the URDF's `<limit>` and MJCF's `actuatorfrcrange`, and

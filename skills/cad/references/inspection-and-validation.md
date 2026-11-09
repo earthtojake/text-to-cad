@@ -76,7 +76,7 @@ for part in leaves(doc):
 finger = find_part(doc, "index_finger")
 top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
 plate = find_part(step.read("kit.step"), "plate")
-arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Upper_arm" in path[1]]
+arm_parts = [part for path, part in leaves(step.read("arm.step"), paths=True) if "Forearm" in path[1]]
 ```
 
 A vendor STEP's parts take a simulator's declarations the same way: loop its placed leaves,
@@ -99,9 +99,9 @@ def arm():
         name = part.label.lower()
         if fnmatch(name, "*screw*") or fnmatch(name, "*nut*"):
             collision(part, "none")                  # fasteners: seen, never collided
-        elif fnmatch(name, "sts3215*case*"):
+        elif fnmatch(name, "servo*case*"):
             collision(part, "box")                   # a servo case collides as its box
-            mass(part, 55)                           # the datasheet's grams, not volume x density
+            mass(part, 40)                           # the datasheet's grams, not volume x density
         elif fnmatch(name, "*camera*"):
             body(part, "camera")                     # a body of its own, for the camera's frame
         if any(fnmatch(label.lower(), "*gripper*") for label in path):

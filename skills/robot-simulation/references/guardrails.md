@@ -126,7 +126,7 @@ Validated: path/to/scene.xml
 Target consumer: MuJoCo 3.3
 Checks run:
 - cad mjcf validate --compile required: passed with 2 warnings (inertia_from_visuals on two finger links)
-- joint motion: shoulder_pan positive motion verified in snapshots; gripper joints skipped
+- joint motion: base_yaw positive motion verified in snapshots; gripper joints skipped
 - home key: drawn with --pose home
 - viewer review: live link returned, or explicit launch failure
 Assumptions:

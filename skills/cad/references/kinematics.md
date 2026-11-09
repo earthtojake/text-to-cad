@@ -343,8 +343,10 @@ free(root)                                  # the base is not bolted to the worl
   collide as its shape (a pocket, a jaw): CoACD cuts its mesh into convex hulls, each a collision geom
   `<part>_hull<i>`, while the part stays whole as its visual and in every other export. `max_hulls=`
   caps the count (16 by default, `None` for no limit), `threshold=` (0.01 to 1, 0.05 by default) is the
-  concavity left, smaller cutting finer. The first export decomposes every such part (about 15 s
-  for a printed part of a desktop arm). The hulls are cached by the part's mesh and options; a
+  concavity left, smaller cutting finer. The first export decomposes every such part, from a few
+  seconds to about a minute each by its size and detail and the machine, and says each as it is
+  done, `the cap` where it made as many hulls as `max_hulls` allows (CoACD merged hulls to fit: look
+  at them with `cad mjcf snapshot ... --display collision`). The hulls are cached by the part's mesh and options; a
   decomposition not in the cache needs CoACD, `cad[coacd]`, which the engine fetches into an
   environment of its own on first need: the export is refused, naming the part and the extra, only
   where CoACD has no wheel (an Intel Mac, Windows on ARM, a musl Linux) or no engine runs.
@@ -355,7 +357,7 @@ free(root)                                  # the base is not bolted to the worl
   assembly's; a second frame of one name on a part replaces the first.
 - **`body(part, name=None)`** keeps a part a body of its own (MJCF a child body, URDF a link
   on a fixed joint) where it would merge into its link: its mass, collision and frames go with it.
-- **`exclude(a, b)`**: the two never collide, each a part, an assembly or its label, one of them the shape itself, which keeps the declaration (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does; on the collision geometry (`--geometry collision`) it sets aside their two links whole, as the MJCF does.
+- **`exclude(a, b)`**: the two never collide, each a part, an assembly or its label, one of them the shape itself, which keeps the declaration (MJCF's `<contact><exclude>` of their two bodies; URDF has no word for it). It is the sweep's and the simulator's at once, with no form for one alone. The MJCF excludes each jointed pair touching at rest on its own; declare the rest. `ranges` sets the two parts aside, those two alone: they never stop or clash in its sweep, and every other part of their links still does; on the collision geometry (`--geometry collision`) it sets aside their two links whole, as the MJCF does.
 - **`limits(assembly, joint, effort=, velocity=)`** bounds every revolute or linear joint of that
   label on the assembly or below it, in SI: URDF's `<limit>`, MJCF's `actuatorfrcrange`
   (MJCF has no speed bound). Declare it after the joint is made. A joint without one is written
