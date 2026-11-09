@@ -54,6 +54,10 @@ test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per r
   const urdf = { kind: 'workspace-file', path: '/work/arm.urdf' };
   assert.deepEqual(parsePromptReference('/work/arm.urdf#upper_arm'), { resource: urdf, target: { kind: 'cad-selector', selectors: ['upper_arm'] } });
   assert.throws(() => referencePart({ resource: urdf, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }), /invalid CAD/);
+  // A 3MF's component, by its place in the build, as its scene picks it and the cad skill writes it.
+  const plate = { kind: 'workspace-file', path: '/work/out/plate.3mf' };
+  assert.equal(formatPromptReference({ resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } }), '/work/out/plate.3mf#o2.1');
+  assert.deepEqual(parsePromptReference('/work/out/plate.3mf#o2.1'), { resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } });
 });
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
@@ -141,4 +145,32 @@ test('a model is referenced by its document id, in the engine grammar, and nothi
   assert.equal(formatPromptReference(reference), `${id}#face 1`);
   assert.throws(() => validatePromptReference({ resource: { kind: 'cad-model', path: '/m/parts.py' }, target: { kind: 'whole-resource' } }), /by its id/);
   assert.equal(parsePromptReference('/m/parts.py::cube#face 1'), null);
+});
+
+test('a message names each file from the workspace or the home, never by the home itself; the parts keep absolute paths', async () => {
+  const { displayPath, resolvePromptMessage } = await import('./index.js');
+  const folders = { start: '/Users/jake/robots/demo', home: '/Users/jake' };
+  assert.equal(displayPath('/Users/jake/robots/demo/boards/lfo.kicad_pcb', folders), 'boards/lfo.kicad_pcb');
+  assert.equal(displayPath('/Users/jake/robots/other/a.step', folders), '~/robots/other/a.step');
+  assert.equal(displayPath('/Users/jakeX/a.step', folders), '/Users/jakeX/a.step', 'a folder by its name, not its prefix');
+  assert.equal(displayPath('/tmp/cad-quick-edit-x/a.snapshot.json', folders), '/tmp/cad-quick-edit-x/a.snapshot.json');
+  assert.equal(displayPath('/Users/jake/robots/demo/a.step', null), '/Users/jake/robots/demo/a.step');
+  // The root, the home and a folder above it are no workspace (a desktop host's server starts in one).
+  for (const start of ['/', '/Users', '/Users/jake', '']) assert.equal(displayPath('/Users/jake/w/a.step', { ...folders, start }), '~/w/a.step', start);
+  assert.equal(displayPath('C:/Users/Jake/w/a.step', { start: 'c:/users/jake/w', home: 'C:/Users/Jake' }), 'a.step', 'a drive in either case');
+  assert.equal(displayPath('0123456789abcdef', folders), '0123456789abcdef', 'an id as it is');
+
+  const board = { kind: 'workspace-file', path: '/Users/jake/robots/demo/my board.kicad_pcb' };
+  const snapshot = { id: 'snapshot', kind: 'attachment', name: 'b.snapshot.json', mimeType: 'application/json', content: new Blob(),
+    label: 'Snapshot', path: Promise.resolve('/Users/jake/robots/demo/tmp/b.snapshot.json'), about: ['file'] };
+  const parts = [textPart('Add a logo.'), referencePart({ resource: board, target: { kind: 'whole-resource' } }, 'file'),
+    referencePart({ resource: board, target: { kind: 'cad-selector', selectors: ['#R1'] } }, 'r1'), snapshot];
+  const context = createPromptContext(parts, undefined, { folders: Promise.resolve(folders) });
+  assert.equal(await resolvePromptMessage(context),
+    'Add a logo.\n\nFile: "my board.kicad_pcb"\nReferences:\n"my board.kicad_pcb"#R1\nSnapshot: tmp/b.snapshot.json');
+  assert.equal(context.parts[1].reference.resource.path, board.path, 'the part keeps the absolute path');
+  assert.equal(formatPromptReference(context.parts[2].reference), '"/Users/jake/robots/demo/my board.kicad_pcb"#R1', 'Copy References writes it whole');
+  // Folders the host could not say: every file by its absolute path.
+  assert.match(await resolvePromptMessage(createPromptContext(parts, undefined, { folders: Promise.reject(new Error('offline')) })),
+    /File: "\/Users\/jake\/robots\/demo\/my board.kicad_pcb"/);
 });

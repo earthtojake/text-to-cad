@@ -71,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/packages/kicad/(.*/)?test_[^/]*\.py$",       # test-kicad.sh
+            r"^tests/python/packages/fea/(.*/)?test_[^/]*\.py$",         # test-fea.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -249,12 +250,57 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"})
+                # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
+                solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
+                self.assertEqual(jobs_for(path),
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
                 self.assertEqual(set(chosen["skills_policy"]), {f"{POLICY}/{name}" for name in selector.HEAVY_POLICY})
                 self.assertEqual((route(path)["web_ui"], route(path)["web_viewer"]), ("false", "true"))
+
+    def test_the_stress_study_runs_its_own_job_with_its_integrations_installed(self):
+        self.assertIn("import cad_ccx", JOBS["fea"])  # the calculix extra's cad-ccx, from PyPI
+        self.assertNotIn("git+", JOBS["fea"])
+        # The netgen integration's extra, beside the development install's, with the mesher pinned to the version
+        # the accuracy tests' margins were measured with; the extra keeps the floor.
+        self.assertIn('"./packages/cad[build123d,trimesh,netgen,calculix]"', JOBS["fea"])
+        self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
+        self.assertIn("scripts/test/test-fea.sh", JOBS["fea"])
+        self.assertIn("timeout-minutes: 15", JOBS["fea"])
+        # The suite and its runner are that job's alone: no package job collects them.
+        suite = REPO_ROOT / "tests/python/packages/fea"
+        self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"},
+                             {path.name for path in suite.glob("test_*.py")})
+        for path in ("tests/python/packages/fea/test_fea.py", "scripts/test/test-fea.sh"):
+            with self.subTest(path=path):
+                self.assertEqual(jobs_for(path), {"fea", "skills"})
+        # The engine and shared modules a study reads and writes through run its solves too; the rest of the engine doesn't.
+        for path in ("packages/cad/src/cad/engine/refs.py", "packages/cad/src/cad/engine/executables.py",
+                     "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/_internal/atomic_replace.py",
+                     "packages/cad/src/cad/_internal/programs.py", "packages/cad/src/cad/_internal/operation.py",
+                     "packages/cad-server/src/cad_server/_internal/cli_from_function.py"):
+            with self.subTest(path=path):
+                self.assertIn("fea", jobs_for(path))
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/engine/api.py"))
+        # Its own code reaches the fea job beside what its package reaches.
+        for path in (
+            "packages/cad/src/cad/_internal/fea/solve.py",
+            "packages/cad/src/cad/_internal/fea/operation.py",
+            "packages/cad/src/cad/calculix/_program.py",
+            "packages/cad/src/cad/netgen/_mesher.py",
+            "packages/cad-server/src/cad_server/cli/document_types.py",
+            "packages/cad-server/src/cad_server/_internal/integration_env.py",
+            "packages/cad/src/cad/results.py",
+        ):
+            with self.subTest(path=path):
+                self.assertLessEqual({"fea", "cadgen-linux"}, jobs_for(path))
+        # The skill's pages are its own suite's, which reads them against the code they document; no solve reads them.
+        self.assertEqual(jobs_for("skills/fea/SKILL.md"), {"skills"})
+        self.assertEqual(tests_for("skills/fea/references/study-file.md")["skills_tests"], [f"{SKILLS}/fea"])
+        self.assertEqual(tests_for("packages/cad/src/cad/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/build123d/_geometry.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
@@ -288,7 +334,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea", "routing-macos"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -297,6 +343,28 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(jobs_for(path), {"kicad", "skills"})
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
+
+    def test_the_router_and_what_it_reads_a_board_through_run_its_unit_files_on_all_three_oses(self):
+        # The router's copper is held to a digest (test_kicad_routing_determinism.py): Linux and Windows run it in
+        # the cadgen jobs, macOS in the routing job, the library alone installed.
+        determinism = f"{LIBRARY}/test_kicad_routing_determinism.py"
+        for path in ("packages/cad/src/cad/kicad/_routing/shapes.py", "packages/cad/src/cad/kicad/_route.py",
+                     "packages/cad/src/cad/engine/formats/kicad/geometry.py",
+                     "packages/cad/src/cad/engine/formats/kicad/board_index.py",
+                     "packages/cad/src/cad/engine/formats/kicad/sexpr.py", "packages/cad/pyproject.toml", determinism):
+            with self.subTest(path=path):
+                self.assertLessEqual({"cadgen-linux", "cadgen-windows", "routing-macos"}, jobs_for(path))
+                self.assertTrue(set(tests_for(path)["cadgen_tests"]) & {CADGEN, determinism})
+        for path in (f"{LIBRARY}/test_kicad_routing.py", "scripts/test/test-routing.sh"):
+            with self.subTest(path=path):
+                self.assertIn("routing-macos", jobs_for(path))
+        self.assertNotIn("routing-macos", jobs_for("packages/cad/src/cad/engine/formats/kicad/plot.py"))
+        self.assertNotIn("routing-macos", jobs_for("packages/cad/src/cad/engine/api.py"))
+        job = JOBS["routing-macos"]
+        self.assertIn("runs-on: macos-latest", job)
+        self.assertIn("python -m pip install --editable ./packages/cad\n", job)
+        self.assertIn("run: scripts/test/test-routing.sh", job)
+        self.assertNotIn("setup-deps", job)
 
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
@@ -375,7 +443,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},

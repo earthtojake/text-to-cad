@@ -46,7 +46,11 @@ __all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Wri
            "observers", "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
-    """A request the engine refused or could not run: its words."""
+    """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
+    (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
+    tell its observers (``_error``)."""
+
+    raised: str | None = None
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -316,12 +320,18 @@ def _failed(answer: dict[str, Any]) -> Exception:
         except ImportError:
             kind = None
     if not (isinstance(kind, type) and issubclass(kind, ValueError)):
-        return EngineError(text) if not module else ValueError(text)
+        if module:
+            return ValueError(text)
+        failed = EngineError(text)
+        if isinstance(answer.get("type"), str):
+            failed.raised = answer["type"]  # what the engine failed with: the facts' type (``_error``)
+        return failed
     try:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    for key in ("state", "rebuild"):  # a document not held: what it is, and what builds it again
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused.
+    for key in ("state", "rebuild", "part"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
@@ -443,7 +453,9 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 if not streamed or WORKER_STDERR not in str(error):
                     raise
                 # A dead worker's stderr tail is what this log just showed: said once.
-                raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
+                again = EngineError(str(error).partition(WORKER_STDERR)[0])
+                again.raised = error.raised
+                raise again from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
             if named:
                 _heard_release(answer.get("release"))
@@ -676,7 +688,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
 
     if isinstance(source, (Model, Document)) or is_id(os.fspath(source)):
         if out.suffix.lower() != ".png":
-            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
+            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one", part="out")
         drawing.options(display, camera, grid, width, height, size_profile)  # refused here, before any build
         drawing.parse_annotation(annotation)  # refused here, before any build
         source = _called(source, daemon)
@@ -693,6 +705,7 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
+    _whole(source)
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
                                           board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
                                           schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
@@ -703,6 +716,24 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
                              measurements=drawing.parse_measurements(measurements), annotation_source=annotation,
                              progress=progress)
     return Drawn(out, found["width"], found["height"], found)
+
+
+_ELEMENT = re.compile(r"(?:^|/)\s*(?:(?:face|edge|vertex)\s+\d+|[fev]:.*)\s*$")
+
+
+def _whole(source: Any) -> None:
+    """A snapshot draws a whole document: a source that names something inside one (``ID#bracket``,
+    ``arm.step#arm/face 3``, a ``FILE#REF`` that is no file) is refused, saying what to draw instead."""
+    from cad.engine.addresses import parts
+    from cad.engine.snapshot import SnapshotRefused
+
+    named, ref = parts(os.fspath(source))
+    if ref is None:
+        return
+    owner = _ELEMENT.sub("", ref).strip(" /")  # the part an element ref is on, or the part itself
+    alone = f'--display \'{{"isolated": {json.dumps([owner or "PART"])}}}\' draws {owner or "a part"} alone'
+    raise SnapshotRefused(f"a snapshot draws a whole document, so its source names no #{ref}: give {named}; {alone}",
+                          part="source")
 
 
 def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
@@ -789,9 +820,9 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     from cad.engine import refs
     from cad.engine.said import weighed
 
-    from cad.engine.addresses import key, split
+    from cad.engine.addresses import key, parts, split
 
-    named = os.fspath(source).partition("#")[0]
+    named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
         raise EngineError("source reference and ref disagree")
@@ -1094,7 +1125,8 @@ def stop() -> bool:
 #     error     why it failed, or None: {type (the error's class, ``module.Name`` or a builtin's name; None
 #               when no error says), frames ([{file, line, function}], innermost last), engine (raised in
 #               the engine's own code, or its worker's), refused (the engine refused the request by name),
-#               here (raised in this process, as against told by the daemon or a report)}
+#               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
+#               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
 #               "sdf", "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
@@ -1194,7 +1226,9 @@ def _facts(verb: str, args: tuple, kwargs: dict[str, Any], heard: dict[str, Any]
             found["outputs"] = [{"kind": _SUFFIXES.get(Path(os.fspath(path)).suffix.lower(), "other"),
                                  "seconds": None} for path in args[1:]]
     if verb == "snapshot":
-        found["found"] = found["source"] == "model" or Path(os.fspath(source)).is_file()
+        from cad.engine.addresses import parts
+
+        found["found"] = found["source"] == "model" or Path(parts(os.fspath(source))[0]).is_file()
     return found
 
 
@@ -1203,9 +1237,10 @@ def _kind(source: Any) -> str:
 
     if isinstance(source, (Model, Document)):
         return "model"
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
 
-    text = os.fspath(source)
+    text = parts(os.fspath(source))[0]  # the document a FILE#REF or an ID#REF names
     if is_id(text):
         return "model"  # a document by its id
     return _SUFFIXES.get(Path(text).suffix.lower(), "other")
@@ -1238,11 +1273,14 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
             return {**_read(text), **told}
+        if error.raised:  # a failure the engine named by its type: what it is, a refusal only where that says so
+            refused = any(error.raised == f"{module}.{name}" for module, name in _REFUSALS)
+            return {"type": error.raised, "frames": [], **told, "refused": refused}
         return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)
         return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
-                "frames": [], **told, "refused": True}
+                "frames": [], **told, "refused": True, **_part(error)}
     refusals = tuple(kind for kind in (getattr(sys.modules.get(module), name, None) for module, name in _REFUSALS)
                      if isinstance(kind, type))
     frames = [{"file": frame.f_code.co_filename, "line": int(line or 0), "function": frame.f_code.co_name}
@@ -1250,7 +1288,13 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     kind = type(error)
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
-            "refused": isinstance(error, refusals), "here": True}
+            "refused": isinstance(error, refusals), "here": True, **_part(error)}
+
+
+def _part(error: BaseException) -> dict[str, str]:
+    """The part of a snapshot's request a refusal named (``SnapshotRefused.part``), where it named one."""
+    part = getattr(error, "part", None)
+    return {"part": part} if isinstance(part, str) else {}
 
 
 def told_error(report: dict[str, Any]) -> dict[str, Any]:

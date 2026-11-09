@@ -56,7 +56,7 @@ These words mean one thing each, in the code, the commands and every document.
   `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`, `trimesh`, `xcaf_pmi`),
+  `kicad`, `trimesh`, `netgen`, `calculix`, `xcaf_pmi`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -70,7 +70,7 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  (a 3D type's manufacturing check), `solve` (a B-rep type's stress study), `drc` (a board's design rule check), `erc` (a schematic's electrical
   rules check), `validate` (a robot description's conformance check). Each type implements those that make
   sense for it.
 
@@ -83,7 +83,8 @@ materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
 document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
-trimesh); and engineering drawings (`@eng_drawing`).
+trimesh); a B-rep document's stress study (`cad.<type>.solve(source, study=..., out=...)`, meshed by netgen
+and solved by CalculiX's ccx, its results a folder of standard files); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -411,7 +412,7 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
     CLI's alone.** *Every document.* A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
-    they do (`dfm`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    they do (`dfm`, `solve`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
     `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
     call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
@@ -491,12 +492,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
-    for what it does -- `dfm` a 3D type's manufacturing check, `drc` a board's design rule check, `erc` a
+    for what it does -- `dfm` a 3D type's manufacturing check, `solve` a B-rep type's stress study, `drc` a board's design rule check, `erc` a
     schematic's electrical rules check, `validate` a robot description's conformance check -- never a
     shared word that means something different per type. Each type implements those that make sense; a
     `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
     shared operation must be code-free, frequently needed and meaningful across types. One result shape
-    per operation: a check (`dfm`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    per operation: a check (`dfm`, `solve`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
     and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
     options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
@@ -600,7 +601,8 @@ src/cad/
   model/                 # the model, the type with no file: @model and a model's operations, by
                          #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
-  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
+  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
+                         #   B-rep type's solve: model's, xbf's and step's)
   urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
@@ -615,7 +617,8 @@ src/cad/
                          #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
                          #   a board or a schematic through its headless api-server and KiPy
                          #   (_session), DRC (_check), its exports (_export), a schematic's ERC
-                         #   and exports (_schematic)
+                         #   and exports (_schematic), and route, copper for the connections a
+                         #   plan names, inside an edit (_route; its search, _routing: numpy)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -632,7 +635,12 @@ src/cad/
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
-  results.py             # the operations' shared result types: what a check (dfm, drc, erc,
+  netgen/                # the netgen integration: the mesher, always in a process of its own
+                         #   (_mesher: a BREP in, a mesh out, every face kept under its ref)
+  calculix/              # the calculix integration, the cad-ccx package's ccx: found, checked and run
+                         #   headless (_program, on _internal/programs; `cad run ccx`, _command),
+                         #   its input and printed output (_files)
+  results.py             # the operations' shared result types: what a check (dfm, solve, drc, erc,
                          #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
@@ -649,7 +657,9 @@ src/cad/
                          #   at interpreter start), the font guard (font_scan; check_fonts, the
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
-                         #   the checks' door, the version
+                         #   the checks' door, the version, and the stress study a B-rep type
+                         #   runs (fea: its signature and options in operation, stdlib only; the
+                         #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 15's earlier name)
 ```
@@ -679,8 +689,12 @@ resolves them -- the names `kicad-cli sch export netlist` gives, which are the b
 references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
 (`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
 board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
-the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
-kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
+the same stroke font with KiCad's text markup, each page on KiCad's default drawing sheet as the viewer
+shows it; `cad kicad_sch snapshot --sheet /Power/` draws one page with its title block. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
+kicad_sch erc`; beside KiCad's findings the check lists, from the reader, each pin joined some other way besides
+and each wire end that lies on a wire's span with no junction, which KiCad joins and its ERC passes:
+`pin_on_wire_span`, `wire_end_on_wire_span`, warnings whose `items` name the pin or wire and the wire; a pin
+whose one connection is a wire's span is KiCad's own straight run through a pin, not one) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
 
 A board or a schematic is changed in place through KiCad's IPC API by an edit of it, a `with` block:
@@ -695,7 +709,52 @@ One KiCad serves a project: the board's and the schematic's edits of one
 project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
 are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
 lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
-made is removed. Exports and checks of the edited file are explicit calls after the block.
+made is removed. Exports and checks of the edited file are explicit calls after the block. A board's save is
+checked for the nets KiCad moved: KiCad gives copper the net of a pad it overlaps on any layer, as it loads
+and commits, so each track, via, copper shape and zone saved on another net than the block gave it (else the
+file had) is a warning on stderr naming it (`#via:<uuid>`), both nets and the pad it overlaps, and is on the
+board after the block, `board.net_changes` (`cad.kicad._drift`).
+
+Inside a board's edit, `cad.kicad.route(board, plan)` writes copper for the connections a plan names, in its
+order: each a net or a pair of pads, with the copper layers it may use (required; there is no default plan),
+its width and clearance (the net's netclass's by default, never under the board's rules), its via limit (for
+the whole entry) and via cost (in mm of track; the search settles for a path within 1.2 times the cheapest, so
+the trade is about that, not exact). A plan is a list, in order. The plan is checked whole before anything is
+routed; a mistake in it is a `ValueError` naming what to give, and so is a board it cannot route by: an outline
+that does not close, a pad drawn with a primitive it cannot read or whose padstack layers share no point, a
+TrueType copper text with no outline saved, a net KiCad pairs by name with another (a differential pair, which
+it does not route), a region past its memory even at the least margin (route the plan in parts). A region whose
+margin round the plan's pads would not fit the router's memory (600 MB for its fields and its largest search)
+is narrowed to fit first, and said.
+
+It reads the open board (`get_as_string`) and KiCad's rules for it: each net's netclass, the board's minimums,
+the solder-mask clearances, and the custom rules. Each clearance a custom rule names is kept everywhere (the
+largest of each); a track width, via diameter, hole size, annular width or via count of a rule with no condition
+and no layer is kept as DRC holds it (an entry's width outside it is refused naming the rule, the via the router
+places is taken up to its least and refused past its most, and a net's via count, its vias on the board counted,
+lowers each entry's via limit); a `disallow` or an `assertion` is refused by name; every other constraint that can
+bear on new copper, and every size of a rule with a condition or a layer, is a warning naming the rule and the
+fix, for DRC to judge after; a `.kicad_dru` its KiCad cannot read, or cannot give over the API, refuses the
+board. It routes round everything on the board: pads (a padstack's every layer; a route ends where every layer
+has copper), tracks, vias, holes, keep-outs (their arcs to the true arc), the edge, and every copper graphic,
+text (by KiCad's stroke metrics, a TrueType one by the outline KiCad saves), text box, table, barcode and
+dimension; new copper keeps out of other nets' solder-mask openings (DRC's `solder_mask_bridge`), and new
+untented vias whose openings the clearance cannot hold are refused. It searches each connection on a grid whose
+free nodes are worked out from the exact shapes (a move between two free nodes is clear along its whole
+length), pulls each path tight in continuous geometry, checks every segment and via once more, exactly, and
+writes the tracks and vias in one commit: nothing on the board is moved or deleted, nothing else is written,
+and the block's save writes the file; a block that raises saves nothing, so a dry run is a route and a raise.
+Octolinear and deterministic: the same board and plan give the same copper, in another process and on another
+OS: between the board's text and every decision there is only IEEE-754 arithmetic (its angles are its own, not
+the C library's), and the tests hold one board's routed copper to a digest on Linux, macOS and Windows.
+
+The answer, a `Routed`, holds every connection's outcome and the plan entry it came from (`Connection.entry`),
+with `.ok`, `.failed`, `.warnings` and `.human_lines()`: one it cannot route is answered by name with what walls
+it in and what to do (with no via left, the layers it reaches and the via limit as the cause), on stderr too,
+and the rest go on; each warning is on stderr (`route: warning: ...`) before routing. A copper pour is neither
+an obstacle nor a connection to it: a pad only a pour joins counts as apart, and `board.refill_zones()` in the
+block refills the pours round the new copper. It runs in the script's process. It does not route differential
+pairs, keep a length, skew or track-angle rule, or choose what to route or in what order.
 
 ## Manufacturing checks
 
@@ -735,3 +794,62 @@ measure a mesh a program already holds, answering the same report as data:
 or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
 `cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
 (`cad[trimesh]`), and a check without it says so in one line.
+
+## Stress studies
+
+A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
+parts touch: `cad.model.solve`, `cad.xbf.solve` and `cad.step.solve`, one to one with `cad model solve`,
+`cad xbf solve` and `cad step solve` (a mesh has no faces a study can hold or load by, so the mesh types
+have none). It is a check (law 28): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
+findings carry a severity, a code and a location, with two uses of one signature:
+
+```python
+from cad import step
+
+setup = step.solve("bracket.step")                          # writes nothing
+setup.parts, setup.pairs, setup.faces                       # what a study names, by ref
+result = step.solve("bracket.step", study="study.json", out="/tmp/bracket")
+result.ok, result.findings, result.measurements["safety_factor"], result.written
+```
+
+With no study it is the study's setup: the document's parts, the pairs that touch within the contact
+tolerance a study bonds by (an overlapping pair a warning) and one part's faces, each with the engine's
+ref (`bracket/face 17`, the one the CAD Viewer copies) and a hint (`plane, normal -Z, largest`). With a
+study (a JSON file, inline JSON or a dict) and `out`, a folder anywhere (made when missing), the solve,
+which writes its results there, each a standard file that stands on its own, and touches nothing else in
+the folder:
+
+| File | What it holds |
+| --- | --- |
+| `result.json` | the `FeaResult`, as `--json` prints it |
+| `result.glb` | the deformed surface coloured by stress (a ramp texture, so every glTF viewer and the engine's stills draw it), the raw fields as attributes |
+| `result.vtu` | the volume's tetrahedra with displacement and von Mises at their corner nodes, for meshio, PyVista or ParaView |
+| `stress.png`, `displacement.png` | the engine's stills of each field with a colour bar under each, where it can draw (else a `solver_note`) |
+| `ccx.inp` | with `deck`, the input CalculiX solved |
+
+There is no document type for a result: the answer is the JSON, the pictures are for looking, the GLB
+opens in the CAD Viewer as any GLB does, and the VTU is for a program's own questions. An option of the
+other use is refused by name before anything is read. The study reads a file in its own process, as the
+engine reads one (`engine.document.load`), with no worker and no build, and resolves faces in the
+document's structure as `cad <type> inspect` does (`engine.refs`); a model is written to an `.xbf` in a
+temporary folder first, by the engine that holds it, and its result names it by its document id. The
+folder's files are each replaced only once all are written, so a failed run leaves the previous results
+as they were. Its `ok` is every check's rule, an error blocks: a part that yields or misses a check is a
+correct result of a part unfit to use, so its results are written and the command exits 1, as is a study
+stopped before the solve (a part nothing holds), with none. A study whose answer would be wrong is refused
+instead, writing nothing: a zero load, a load on a held face, a study no load reaches, reactions that
+do not balance. `_internal/fea/` solves one kind of study: linear elastic stress and displacement.
+
+Three integrations run it. The kernel reads the B-rep. The mesher is `netgen` (`cad[netgen]`), installed
+only where netgen publishes wheels (macOS, Linux x86_64 and Windows x86_64; elsewhere a solve refuses,
+naming the platform) and always run in a process of its own, since its OpenCascade and OCP's cannot
+share one. The solver is `calculix` (`cad[calculix]`): CalculiX's own `ccx`, which the `cad-ccx` package
+carries for each platform (conda-forge's build, unmodified, pinned exactly), found by the integration's
+probe: `CAD_CCX` names another (2.20 or newer), and a `ccx` on PATH is never run. It runs headless, on
+one thread, in a private folder with homes of its own, so it reads and writes nothing of the person's,
+and the result names the CalculiX version that ran; `cad run ccx ARGS` runs the same program on a deck of
+a person's own (`cad.calculix._command`). The operation is the calculix integration's, which names the
+kernel and netgen `alongside`, so the `cad` command runs a study where all three are: its own process
+when its environment holds them, else the environment of `cad[build123d,calculix,netgen]` (law 29); a
+script run with `cad run` that calls `cad.<type>.solve` names the extras in its header, and a solve
+without one says so in one line.

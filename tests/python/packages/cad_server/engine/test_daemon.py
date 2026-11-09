@@ -305,6 +305,22 @@ class AdoptTest(unittest.TestCase):
             adopt(None, {})
             self.assertEqual(os.environ["TURN"], "2", "a request with no environment leaves it as it is")
 
+    def test_the_engine_s_display_told_with_a_picture_outlives_every_run_after(self) -> None:
+        # A model's still is drawn on the engine's X display where its run names no DISPLAY: told with the first
+        # export that draws, and kept through each run's environment after, which never names it.
+        from cad.engine.worker import adopt, told_display
+
+        own = {"CAD_ENGINE_WORKER": "1"}
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER": "1"}, clear=True):
+            adopt({"PATH": "/turn/1"}, own)
+            self.assertNotIn("CAD_ENGINE_DISPLAY", os.environ, "a build is told nothing")
+            told_display({"CAD_ENGINE_DISPLAY": ":7", "CAD_ENGINE_XAUTHORITY": "/x/cookie", "PATH": "/no"}, own)
+            for turn in ({"PATH": "/turn/2"}, {"PATH": "/turn/3", "CAD_ENGINE_DISPLAY": ":99"}, None):
+                adopt(turn, own)
+                self.assertEqual((os.environ["CAD_ENGINE_DISPLAY"], os.environ["CAD_ENGINE_XAUTHORITY"]),
+                                 (":7", "/x/cookie"))
+            self.assertEqual(os.environ["PATH"], "/turn/3", "nothing else it was told")
+
 
 class ClientGoneTest(unittest.TestCase):
     """A build's client gone mid-build (killed, or hung up): the daemon reads the worker on to its

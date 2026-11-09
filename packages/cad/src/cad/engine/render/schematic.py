@@ -3,10 +3,12 @@
 No XCAF document, model worker, browser or KiCad process is involved. The page is the schematic plot's
 (:mod:`cad.engine.formats.kicad.schematic_plot`): each sheet instance one page of layers, painted with
 Pillow in KiCad's default schematic colours (its light theme, as every snapshot is), text in the
-board's stroke font. The Display is ``{sheet, border}``: the sheet's path (``/`` the root,
-``/Power/``) and whether the page's edge is drawn (off unless asked).
-Without a camera the picture frames what the page draws (the whole page with its border on); a plan
-camera frames its window, as a board's does.
+board's stroke font, KiCad's markup drawn as KiCad draws it. The page is on KiCad's default drawing
+sheet: the Display is ``{sheet, border, title}``: the sheet's path (``/`` the root, ``/Power/``),
+whether KiCad's page as printed is drawn (``border``: the page's edge and the drawing sheet's frame, off
+unless asked) and whether its title block is (``title``, on unless ``false``).
+Without a camera the picture frames what the page draws (the title block with the rest, the whole page
+with its border on); a plan camera frames its window, as a board's does.
 """
 from __future__ import annotations
 
@@ -15,10 +17,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-DISPLAY_KEYS = {"sheet", "border"}
+DISPLAY_KEYS = {"sheet", "border", "title"}
 #: KiCad's default schematic colours (its light theme), by layer kind and by what an item is.
 LIGHT = {
-    "background": "#F5F4EF", "sheet": "#840000", "notes": "#0000C2", "sheet_box": "#840000", "sheet_name": "#006464",
+    "background": "#F5F4EF", "sheet": "#840000", "drawing_sheet": "#840000", "notes": "#0000C2", "sheet_box": "#840000", "sheet_name": "#006464",
     "sheet_file": "#725600", "sheet_pin": "#006464", "sheet_field": "#840084", "symbol": "#840000",
     "symbol_background": "#FFFFC2", "pin": "#840000", "wire": "#009600", "bus": "#000084", "junction": "#009600",
     "no_connect": "#000084", "pin_number": "#A90000", "pin_name": "#006464", "reference": "#006464",
@@ -27,7 +29,7 @@ LIGHT = {
 
 
 def display_options(value: Any, grid: bool = False) -> dict:
-    """A schematic's ``--display``: ``{sheet, border}`` (JSON, or a JSON file of it)."""
+    """A schematic's ``--display``: ``{sheet, border, title}`` (JSON, or a JSON file of it)."""
     from cad.engine.snapshot import SnapshotRefused, _json_or_file
 
     if isinstance(value, str):
@@ -37,12 +39,14 @@ def display_options(value: Any, grid: bool = False) -> dict:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
         raise SnapshotRefused(f"a schematic's display takes {', '.join(sorted(DISPLAY_KEYS))}: "
-                              "{\"sheet\": \"/Power/\", \"border\": true}")
-    display = {"sheet": "/", "border": False, **value}
+                              "{\"sheet\": \"/Power/\", \"border\": true, \"title\": false}")
+    display = {"sheet": "/", "border": False, "title": True, **value}
     if not isinstance(display["sheet"], str) or not display["sheet"]:
         raise SnapshotRefused("a schematic's display.sheet is a sheet's path: / (the root), /Power/")
     if type(display["border"]) is not bool:
         raise SnapshotRefused("a schematic's display.border is true or false")
+    if type(display["title"]) is not bool:
+        raise SnapshotRefused("a schematic's display.title is true or false: whether the title block is drawn")
     parts = [part for part in display["sheet"].split("/") if part]
     display["sheet"] = "/" + "".join(f"{part}/" for part in parts)
     return display
@@ -78,6 +82,22 @@ def item_color(kind: str, item: dict, theme: dict) -> str:
     if kind == "sheet_box" and item.get("role"):
         return theme.get(f"sheet_{item['role']}", theme["sheet_box"])
     return theme.get(kind, theme["symbol"])
+
+
+def shown_layers(layers: list[dict], display: dict) -> list[dict]:
+    """The layers a still draws: the page's edge and the drawing sheet's frame with ``border``, the
+    title block unless ``title`` is false."""
+    shown = []
+    for layer in layers:
+        if layer["kind"] == "sheet" and not display["border"]:
+            continue
+        if layer["kind"] == "drawing_sheet":
+            items = [item for item in layer["items"] if (display["border"] if item.get("frame") else display["title"])]
+            if not items:
+                continue
+            layer = {**layer, "items": items}
+        shown.append(layer)
+    return shown
 
 
 def extent(layers: list[dict], border: bool, page: list[float]) -> tuple[float, float, float, float]:
@@ -158,7 +178,7 @@ def page_of(payload: dict, sheet: str) -> dict:
         if page["path"] == sheet:
             return page
     known = ", ".join(page["path"] for page in payload["sheets"])
-    raise SnapshotRefused(f"the schematic has no sheet {sheet}; its sheets are {known}")
+    raise SnapshotRefused(f"the schematic has no sheet {sheet}; its sheets are {known}", part="display")
 
 
 def draw_page(path: Path, still: Any) -> tuple[bytes, dict[str, Any]]:
@@ -175,12 +195,12 @@ def draw_page(path: Path, still: Any) -> tuple[bytes, dict[str, Any]]:
     started = time.perf_counter()
     display = display_options(still.display)
     try:
-        payload = build_schematic_plot(path, sheets=[display["sheet"]], index=False)
+        payload = build_schematic_plot(path, sheets=[display["sheet"]], index=False, drawing_sheet=True)
     except ValueError as error:
         raise SnapshotRefused(str(error)) from None
     page = page_of(payload, display["sheet"])
     theme = LIGHT
-    layers = [layer for layer in page["layers"] if display["border"] or layer["kind"] != "sheet"]
+    layers = shown_layers(page["layers"], display)
     ss = 2
     width, height = (n * ss for n in still.drawn)
     if still.camera is not None:

@@ -47,6 +47,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
     **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
        for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
+    # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
+    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -70,8 +72,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
-                             "kicad_pcb")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+    # A KiCad board's still: the engine's snapshot with the box of the board to frame.
+    "kicad_pcb snapshot": SNAPSHOT | {"window"},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),

@@ -2,6 +2,7 @@ import { StrictMode, useMemo, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { createCadClient } from '@cad/core/client';
 import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
@@ -36,8 +37,9 @@ vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
 });
 // The board in 3D mounts the 3D views' viewport, which needs WebGL: a stand-in here, which says it has
 // presented and answers the camera calls; the pixels and the picks through it are the browser suite's.
-// `homes`: what each Home was asked to frame from (its direction and up).
-const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[] }));
+// `homes`: what each Home was asked to frame from (its direction and up). `camera`, `controls` and `hands`: a
+// camera for the runtime to hold, its orbit's target and the hands on it (none unless a test sets them).
+const viewport3d = vi.hoisted(() => ({ props: null as any, calls: [] as string[], homes: [] as any[], camera: null as any, controls: null as any, hands: 0 }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
   const React = await import('react');
   return {
@@ -56,7 +58,8 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', async () => {
       React.useEffect(() => { props.onPresentationChange?.({ key: props.modelKey, preparing: false }); }, [props.modelKey]);
       const context = { hostRef, runtimeRef, mountRef: hostRef, viewerReadyTick: 1, commitScene: () => true };
       return <div ref={hostRef} data-stand-in-viewport="">
-        <canvas ref={canvas => { runtimeRef.current = canvas ? { renderer: { domElement: canvas, capabilities: { maxTextureSize: 4096 }, initTexture() {} }, requestRender() {} } : null; }} />
+        <canvas ref={canvas => { runtimeRef.current = canvas ? { renderer: { domElement: canvas, capabilities: { maxTextureSize: 4096 }, initTexture() {} }, requestRender() {},
+          get camera() { return viewport3d.camera; }, get controls() { return viewport3d.controls; }, get cameraHands() { return viewport3d.hands; } } : null; }} />
         {typeof props.children === 'function' ? props.children(context) : props.children}
       </div>;
     })
@@ -84,6 +87,7 @@ beforeEach(() => {
   drawn.length = 0;
   themes.length = 0;
   canvases.length = 0;
+  Object.assign(viewport3d, { camera: null, controls: null, hands: 0 });
   copied = [];
   readPlot = () => json(BOARD);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
@@ -1215,6 +1219,60 @@ it("entering 3D eases to a camera on the side 2D showed, so Flip keeps it: Home'
   await waitFor(() => expect(viewport3d.calls).toContain('setPerspective [10,-40,30]'));
   expect([viewport3d.homes.length, side()]).toEqual([1, 'top']);
   dispose();
+});
+
+it("leaving 3D gives the 2D view its own window back, whatever the camera did there: an orbit's zoom and centre never reach the plan, after a reload in 3D too", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  // The 2D view panned off its fit (a middle-button drag): its own window.
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
+  const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
+  const fitted = { ...frames.at(-1)! };
+  fireEvent.pointerDown(canvas, { ...middle, ...at([20, 15]) });
+  fireEvent.pointerMove(canvas, { ...middle, ...at([28, 18]) });
+  fireEvent.pointerUp(canvas, { ...middle, ...at([28, 18]) });
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
+  const own = { ...frames.at(-1)! };
+  // In 3D, a hand orbits and zooms the camera: tilted, zoomed in threefold, centred far off the 2D window.
+  const orbit = (where: HTMLElement) => {
+    const camera = new THREE.OrthographicCamera(-600, 600, 350, -350, 0.1, 1000);
+    camera.position.set(60, -80, 40);
+    camera.up.set(0, 0, 1);
+    camera.zoom = 3;
+    camera.lookAt(60, -20, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    Object.assign(viewport3d, { camera, controls: { target: new THREE.Vector3(60, -20, 0) }, hands: viewport3d.hands + 1 });
+    const solid = where.querySelector<HTMLCanvasElement>('[data-board-3d] canvas')!;
+    Object.defineProperties(solid, { clientWidth: { configurable: true, value: 1200 }, clientHeight: { configurable: true, value: 700 } });
+    act(() => { viewport3d.props.onPerspectiveChange({ position: [60, -80, 40], target: [60, -20, 0], up: [0, 0, 1] }); });
+  };
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(viewport3d.calls).toContain('goHome'));
+  orbit(pane);
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  // Back in 2D: the window it was left at, exactly, from the side Flip showed.
+  expect(frames.at(-1)).toEqual(own);
+  expect(drawn.at(-1)).toMatchObject({ side: 'top' });
+  // Into 3D again and left there; reopened in 3D, the camera orbited, then back to 2D: the 2D window the file
+  // was left at, never the camera's.
+  fireEvent.click(dimensionButton(pane));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.mode).toBe('3d'));
+  const stored = view.state;
+  dispose();
+  cleanup();
+  frames.length = 0;
+  const again = await open('blinky.kicad_pcb', { state: stored });
+  await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
+  orbit(again.pane);
+  fireEvent.click(dimensionButton(again.pane));
+  await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).toBeNull());
+  await waitFor(() => expect(frames.length).toBeGreaterThan(0));
+  for (const key of ['scale', 'offsetX', 'offsetY'] as const) expect(frames.at(-1)![key], key).toBeCloseTo(own[key], 6);
+  again.dispose();
 });
 
 it("a part's card says its 3D model, or why it has none, and the Parts end with the parts that have none; the Layers' 3D models eye is kept with the file", async () => {

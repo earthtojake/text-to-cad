@@ -40,8 +40,8 @@ it('a host that refuses every call before any comes back gets one plain notice, 
   const fetchImpl = vi.fn(async () => { throw new TypeError('Refused to connect because it violates the document\'s Content Security Policy.'); });
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
   const notice = await screen.findByRole('alert');
-  expect(notice.textContent).toContain('This chat can\'t connect the CAD viewer to its engine. Open the model in the CAD Viewer instead.');
-  const link = screen.getByRole('link', { name: 'Open in CAD Viewer' });
+  expect(notice.textContent).toContain('This chat can\'t connect to CAD\'s engine. Open the model in your browser instead.');
+  const link = screen.getByRole('link', { name: 'Open in browser' });
   expect([link.getAttribute('href'), link.getAttribute('target')]).toEqual([PAGE, '_blank']);
   // No home, no library, and never the host's own words or the sandbox's.
   expect(viewer.props).toBeNull();
@@ -62,7 +62,7 @@ it('a host that declared it carries calls, and refused them anyway, ends on the 
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={{ ...launch, browser: undefined, engine: undefined }}
     presentation="inline" fetchImpl={fetchImpl as any} />);
   await waitFor(() => expect(container.querySelector('[data-cad-unreachable]')).not.toBeNull());
-  expect(container.textContent).toBe('This chat can\'t connect the CAD viewer to its engine. Ask your agent to open the model in the CAD Viewer instead.');
+  expect(container.textContent).toBe('This chat can\'t connect to CAD\'s engine. Ask your agent to open the model in your browser instead.');
   expect(screen.queryByRole('link')).toBeNull();
   expect(fetchImpl).not.toHaveBeenCalled();
 });

@@ -67,7 +67,10 @@ def edit(board: Path | str) -> AbstractContextManager[Any]:
     ``kicad-cli api-server``. At the block's end the board is saved when it was changed (KiCad's own modified
     state), so a block that changes nothing leaves the file byte for byte; when the block raises, nothing is
     saved and the exception goes on. A board not there yet is made by KiCad, with its project, and saved. A
-    ``kicad_sch.edit`` of the same project inside the block shares its KiCad. Needs the kicad extra
+    ``kicad_sch.edit`` of the same project inside the block shares its KiCad. A saved board is checked for the
+    nets KiCad moved (it gives copper the net of a pad it overlaps): each track, via, copper shape or zone saved
+    on another net than the block gave it, else the file had, is a warning on stderr and, after the block, one
+    of ``b.net_changes`` (``kind``, ``id``, ``ref``, ``was``, ``now``, ``pad``, ``joined``). Needs the kicad extra
     (``cad[kicad]``; ``cad run`` gives a script that calls it the extra)."""
     from cad.kicad._session import edit as editing
 

@@ -5,6 +5,10 @@ in them (``render.service``). The standard library alone.
 
 ``read`` skips a line that is no JSON object (one that does not start with ``{``) before a frame,
 so a banner a child prints where its frames go does not end the conversation.
+
+A failure is answered in its words (``failed``) and, where it is no refusal, the type it failed with
+(``failed_type``: ``type``, ``module.Name``), which the client raises it with (``api.EngineError.raised``)
+and its telemetry counts it by, never by its words.
 """
 
 from __future__ import annotations
@@ -12,7 +16,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-__all__ = ["exactly", "read", "write"]
+__all__ = ["exactly", "failed_type", "read", "write"]
+
+
+def failed_type(error: BaseException) -> dict[str, str]:
+    """``{"type": ...}``: the type a failure is answered with beside its words, a built-in's by its name
+    (``PermissionError``), any other ``module.Name``."""
+    kind = type(error)
+    return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}"}
 
 
 def read(stream: Any) -> tuple[dict[str, Any], bytes] | None:

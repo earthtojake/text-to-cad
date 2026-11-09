@@ -5,13 +5,17 @@ implements, then its file (or, for ``model``, a model's document id) -- ``cad xb
 arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
 robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
 others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
+wrote; ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
 A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
 check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
 <id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
+environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A B-rep
+type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
+the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
+DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
+CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. A KiCad
 board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
 way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
 environment of ``cad[kicad]``.
@@ -184,6 +188,60 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
                            summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
 
     return emit(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+
+
+# --- a B-rep type's stress study: read by the kernel, meshed by netgen, solved by CalculiX ------------------
+
+
+def _solve(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> solve SOURCE [--study STUDY --out DIR]``: the library's stress study
+    (``cad.<type>.solve``), run here when this environment holds the kernel, netgen and CalculiX, else in the
+    environment of ``cad[build123d,calculix,netgen]`` (``cad_server._internal.integration_env``), its options refused
+    here first, before one is made."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad._internal.fea.operation import INTEGRATION
+        from cad_server._internal import integration_env
+        from cad_server._internal.cli_from_function import _verb, generated_parser, run_cli
+
+        target = (f"cad.{document_type}", "solve")
+        if integration_env.carries(INTEGRATION):
+            parser = _typed(generated_parser(target, prog=prog), document_type, "solve", "source")
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        return _solve_elsewhere(document_type, target, INTEGRATION, argv, prog)
+
+    return run
+
+
+def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str], prog: str) -> int:
+    from cad._internal.fea.operation import options
+    from cad.results import FeaResult
+    from cad_server._internal import integration_env
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, emit, generated_parser)
+
+    parser = _typed(generated_parser(target, prog=prog), document_type, target[1], "source")
+    parsed = parser.parse_args(argv)
+    positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    def studied() -> FeaResult:
+        options(study=keywords.get("study"), out=keywords.get("out"), occurrence=keywords.get("occurrence"),
+                deck=bool(keywords.get("deck")))
+        python = integration_env.environment(integration, said)
+        # Paths as absolute text: the runner's process reads them as the command would, in this folder; a model's
+        # document id as it is.
+        plain = {name: str(Path(value).expanduser().resolve()) if isinstance(value, Path) else value
+                 for name, value in keywords.items()}
+        sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
+                   for value in positional]
+        found = integration_env.call(python, document_type, target[1], sources, plain)
+        return FeaResult.from_data(found)
+
+    return emit(studied, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
+                verbose=bool(getattr(parsed, "verbose", False)), verbose_hint=True)
 
 
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
@@ -395,7 +453,9 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
         parser.add_argument("--sheet", metavar="PATH",
                             help="the sheet to draw, by its path: / (the root, the default), /Power/; the same as "
                                  "--display '{\"sheet\": PATH}'")
-        parser.add_argument("--border", action="store_true", help="draw the page's edge (off by default)")
+        parser.add_argument("--border", action="store_true",
+                            help="draw KiCad's page as printed: the page's edge and the drawing sheet's frame (off by "
+                                 "default; the title block is drawn unless --display '{\"title\": false}')")
         return parser
     descriptions = {
         "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
@@ -451,6 +511,29 @@ def _schematic_inspect(argv: list[str], prog: str) -> int:
     return _answer(as_json, found, lines)
 
 
+def _display_object(given: str | None, prog: str, as_json: bool, shape: str, *, mode: bool = False) -> dict | int:
+    """A snapshot's ``--display`` as the object a flag of the type's folds into: its JSON, or the JSON file it
+    names, or (``mode``: a board's) a mode's name; a failure's exit status when it is none of them. Refused as
+    the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON that does not
+    read, are the command line's, said before anything renders."""
+    import json
+
+    given = (given or "").strip()
+    if mode and given and not given.startswith("{") and not given.endswith(".json"):
+        return {"mode": given}
+    if given.endswith(".json") and not Path(given).expanduser().is_file():
+        return _failed(as_json, prog, f"--display {given}: no such file", "not_found")
+    try:
+        if given.endswith(".json"):
+            given = Path(given).expanduser().read_text(encoding="utf-8")
+        display = json.loads(given) if given else {}
+    except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
+        return _failed(as_json, prog, f"--display is not JSON: {error}", "invalid_argument")
+    if not isinstance(display, dict):
+        return _failed(as_json, prog, f"--display is {shape}", "invalid_argument")
+    return display
+
+
 def _schematic_snapshot(argv: list[str], prog: str) -> int:
     """``cad kicad_sch snapshot``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
     import json
@@ -461,22 +544,75 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
     sheet, border = args.sheet, args.border
     del args.sheet, args.border
     if sheet is not None or border:
-        given = args.display
-        # Refused as the snapshot refuses its own (``cad.engine.snapshot``): a file that is not there, and JSON
-        # that does not read, are the command line's, said before anything renders.
-        if given and given.strip().endswith(".json") and not Path(given.strip()).expanduser().is_file():
-            return _failed(bool(args.json), prog, f"--display {given.strip()}: no such file", "not_found")
-        try:
-            if given and given.strip().endswith(".json"):
-                given = Path(given.strip()).expanduser().read_text(encoding="utf-8")
-            display = json.loads(given) if given else {}
-        except (OSError, ValueError) as error:  # a JSON error, or a file that cannot be read as text
-            return _failed(bool(args.json), prog, f"--display is not JSON: {error}", "invalid_argument")
-        if not isinstance(display, dict):
-            return _failed(bool(args.json), prog, "--display is a schematic's display object: {sheet, border}",
-                           "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a schematic's display object: {sheet, border, title}")
+        if isinstance(display, int):
+            return display
         display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
         args.display = json.dumps(display)
+    return answered(VERBS["snapshot"][2], args, prog)
+
+
+def _board_snapshot_parser(prog: str) -> argparse.ArgumentParser:
+    from cad_server.engine.cli import parser_for
+
+    parser = parser_for("snapshot", prog, document_type="kicad_pcb")
+    parser.add_argument("--window", metavar="X0,Y0,X1,Y1",
+                        help="draw only this box of the board, filling the picture: two opposite corners in the "
+                             "board's millimetres as KiCad shows them (y down; the box board.area(x0, y0, x1, y1) and "
+                             "#@x10y5..x20y15 name), e.g. --window 40,60,80,90 (--window=-10,5,20,30 when the first is negative). With --width alone the height follows "
+                             "the box's shape (and the width with --height alone); the same as --display "
+                             "'{\"window\": [X0, Y0, X1, Y1]}'. Takes no --camera")
+    return parser
+
+
+def window_value(text: str) -> list[float]:
+    """``--window X0,Y0,X1,Y1``: four numbers, the box in the board's millimetres; ``ValueError`` saying the form."""
+    import math
+
+    parts = [part.strip() for part in str(text).split(",")]
+    try:
+        numbers = [float(part) for part in parts] if len(parts) == 4 else None
+    except ValueError:
+        numbers = None
+    if numbers is None or not all(math.isfinite(number) for number in numbers):
+        raise ValueError(f"--window is X0,Y0,X1,Y1, four numbers in the board's millimetres (y down), e.g. "
+                         f"40,60,80,90; not {text!r}")
+    if numbers[0] == numbers[2] or numbers[1] == numbers[3]:
+        raise ValueError(f"--window {text} has no area: its corners share an x or a y")
+    return numbers
+
+
+def _board_snapshot(argv: list[str], prog: str) -> int:
+    """``cad kicad_pcb snapshot``: the engine's verb, ``--window`` folded into its display, and the picture's
+    other side, when one is given alone, following the window's shape."""
+    import json
+
+    from cad_server.engine.cli import VERBS, answered
+
+    args = _typed(_board_snapshot_parser(prog), "kicad_pcb", "snapshot", "document").parse_args(argv)
+    window = args.window
+    del args.window
+    if window is not None:
+        try:
+            box = window_value(window)
+        except ValueError as error:
+            return _failed(bool(args.json), prog, str(error), "invalid_argument")
+        if args.camera is not None:
+            return _failed(bool(args.json), prog, "--window frames the still, so it takes no --camera: give one or "
+                                                  "the other", "invalid_argument")
+        display = _display_object(args.display, prog, bool(args.json),
+                                  "a board's mode or its display object: {mode, side, layers, ..., window}", mode=True)
+        if isinstance(display, int):
+            return display
+        display["window"] = box
+        args.display = json.dumps(display)
+        across, down = abs(box[2] - box[0]), abs(box[3] - box[1])
+        if args.size_profile is None and (args.width is None) != (args.height is None):
+            if args.height is None:
+                args.height = max(16, round(args.width * down / across))
+            else:
+                args.width = max(16, round(args.height * across / down))
     return answered(VERBS["snapshot"][2], args, prog)
 
 
@@ -485,6 +621,7 @@ _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
     ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
     ("kicad_pcb", "inspect"): _board_inspect,
+    ("kicad_pcb", "snapshot"): _board_snapshot,
     ("kicad_sch", "erc"): _kicad_rules("kicad_sch", "erc"),
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
@@ -502,6 +639,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
             OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif _name == "solve" and getattr(_entry.operation(_name), "integration", None) == "calculix":
+            OPERATIONS[(_entry.id, _name)] = _solve(_entry.id)
         elif (_entry.id, _name) == ("urdf", "validate"):
             OPERATIONS[(_entry.id, _name)] = _urdf_validate
         else:
@@ -520,6 +659,8 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return generated_parser((f"cad.{document_type}", operation), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
+    if (document_type, operation) == ("kicad_pcb", "snapshot"):
+        return _board_snapshot_parser(prog)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:
@@ -556,6 +697,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
     of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
     and a file of the type's that is not there (``not_found``), whichever the type."""
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
 
@@ -563,7 +705,7 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
         return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
             f"; cad {other} takes {', '.join(operations_of(other))}"
 
-    given = source.partition("#")[0]
+    given = parts(source)[0]  # a FILE#REF's file, a path that holds a '#' itself (project#1/part.step) whole
     entry = DOCUMENT_TYPES[document_type]
     if is_id(given):
         if entry.has_file:

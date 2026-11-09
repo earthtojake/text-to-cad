@@ -340,5 +340,7 @@ under 5 MiB, no skill reaching into a repo root. Heavyweight media stays out of
 the tree. Git holds code, never CAD or mesh assets (a STEP, STL, GLB, 3MF, XBF or DXF is
 made at run time, in a temporary folder or a gitignored output folder):
 `tests/python/global/test_no_cad_assets_tracked.py` fails on a tracked one but for its short
-allowlist, a reason and a size cap each. Local hooks live in `.githooks` and delegate build
-checks through `scripts/git-hooks/pre-commit`.
+allowlist, a reason and a size cap each. KiCad files a sample's scripts write are build output
+too, gitignored and made by its `cad run build.py`; a board no script makes is source
+(`tests/python/global/test_generated_kicad_files_untracked.py`). Local hooks live in
+`.githooks` and delegate build checks through `scripts/git-hooks/pre-commit`.

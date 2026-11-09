@@ -168,8 +168,10 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                           "the display JSON object (mode, grid, camera, clip, exploded, "
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes none; a KiCad board a board mode (board, copper, "
-                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks}; "
-                                          "a KiCad schematic {sheet, border}. Every snapshot is drawn light")
+                                          "assembly, placement) or {mode, side, poured, layers, active, others, zones, tracks, "
+                                          "window: [x0, y0, x1, y1], the box of the board to frame, in its mm}; "
+                                          "a KiCad schematic {sheet, border, title} (title: KiCad's title block, on unless "
+                                          "false; border: the page's edge and frame). Every snapshot is drawn light")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "
@@ -454,8 +456,10 @@ def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect"
 
 def _inspect(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
+    from cad.engine.addresses import parts
 
-    query = args.query or (None if args.ref is not None or "#" in str(args.document) else "summary")
+    referred = args.ref is not None or parts(str(args.document))[1] is not None  # REF, or a FILE#REF's
+    query = args.query or (None if referred else "summary")
     try:
         found = api.inspect(args.document, args.ref, query=query)
     except ValueError as error:

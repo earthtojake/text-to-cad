@@ -26,7 +26,7 @@ add_repo_path("packages/cad/src")
 
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest  # noqa: E402
 from cad.engine.formats.kicad.plot import BOARD_BACKGROUND, build_plot, payload_bytes, plot_payload_bytes  # noqa: E402
-from cad.engine.formats.kicad.stroke_font import GLYPHS, glyph_strokes, text_strokes  # noqa: E402
+from cad.engine.formats.kicad.stroke_font import GLYPHS, glyph_strokes, parse_markup, text_strokes  # noqa: E402
 from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION, PlotError  # noqa: E402
 
 
@@ -503,6 +503,31 @@ class KiCadDrawingTest(unittest.TestCase):
         self.assertEqual(strokes("0"), strokes("180"), "turned half a turn, it is turned back to read")
         self.assertNotEqual(strokes("0"), strokes("180", "(unlocked yes) "))
 
+    def test_board_text_draws_kicads_markup(self) -> None:
+        """Silkscreen, fab and copper text and a footprint's fields draw ~{...}, _{...} and ^{...} as KiCad's PCB
+        editor does: the markers never drawn, an overbar over its letters; a marker that never closes is text."""
+        board = _board(_pad("U1", "15 10", '(property "Value" "~{EN}" (at 0 2 0) (layer "F.Fab") '
+                                           '(effects (font (size 1 1) (thickness 0.15))))')
+                       + '\n(gr_text "~{RESET} IO_{3}" (at 20 15 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))'
+                       + '\n(gr_text "~{open" (at 20 25 0) (layer "F.Cu") (effects (font (size 1 1) (thickness 0.15))))',
+                       layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (5 "F.SilkS" user) (7 "F.Fab" user)')
+        layers = self.layers(self.plot(board))
+
+        def drawn(layer: str, text: str) -> list:
+            [item] = [item for item in layers[layer]["items"] if item["t"] == "text" and item["text"] == text]
+            return item["strokes"]
+
+        def same(strokes, expected) -> None:  # the payload's strokes are to the micrometre
+            self.assertEqual([len(stroke) for stroke in strokes], [len(stroke) for stroke in expected])
+            for (x, y), (ex, ey) in zip([p for s in strokes for p in s], [p for s in expected for p in s]):
+                self.assertLess(abs(x - ex) + abs(y - ey), 0.002)
+
+        silk = drawn("F.SilkS", "~{RESET} IO_{3}")
+        same(silk, text_strokes("~{RESET} IO_{3}", size=(1, 1), at=(20, 15), markup=True))
+        self.assertEqual(len(silk), len(text_strokes("RESET IO3", size=(1, 1))) + 1, "the letters and one bar, no tilde or brace")
+        self.assertEqual(len(drawn("F.Fab", "~{EN}")), len(text_strokes("EN", size=(1, 1))) + 1)  # a field: the value
+        same(drawn("F.Cu", "~{open"), text_strokes("~{open", size=(1, 1), at=(20, 25)))
+
 
 class TrackNameTest(unittest.TestCase):
     """A track's net name, which the plot does not carry: the renderers lay it out as KiCad does, by one rule."""
@@ -576,6 +601,30 @@ class StrokeFontTest(unittest.TestCase):
         # Italic leans right as KiCad slants it: an eighth of the height above the baseline.
         [upright], [leaning] = text_strokes("l", size=(1, 1)), text_strokes("l", size=(1, 1), italic=True)
         self.assertAlmostEqual((leaning[0][0] - leaning[-1][0]) - (upright[0][0] - upright[-1][0]), (upright[-1][1] - upright[0][1]) / 8, places=6)
+
+    def test_kicads_markup_reads_and_draws_as_the_viewers_font_does(self) -> None:
+        """One reading of KiCad's markup on both sides: the cases `@cad/core`'s strokeFont.test.js asserts too."""
+        cases = json.loads(repo_path("packages", "core", "src", "lib", "plot2d", "strokeFont.parity.json").read_text(encoding="utf-8"))
+
+        def plain(runs) -> list:
+            return [run if isinstance(run, str) else [run[0], plain(run[1])] for run in runs]
+
+        for case in cases["markupCases"]:
+            with self.subTest(text=case["text"]):
+                self.assertEqual(plain(parse_markup(case["text"])), case["runs"])
+        for case in cases["strokeCases"]:
+            options = case["options"]
+            laid = text_strokes(case["text"], size=tuple(options["size"]), at=tuple(options.get("at", (0, 0))),
+                                angle=options.get("angle", 0), justify=options.get("justify", ()),
+                                mirror=options.get("mirror", False), italic=options.get("italic", False), markup=True)
+            with self.subTest(text=case["text"]):
+                self.assertEqual([len(stroke) for stroke in laid], [len(stroke) for stroke in case["strokes"]])
+                for stroke, expected in zip(laid, case["strokes"]):
+                    for (x, y), (ex, ey) in zip(stroke, expected):
+                        self.assertAlmostEqual(x, ex, delta=2e-6)
+                        self.assertAlmostEqual(y, ey, delta=2e-6)
+        # Markup a person could not mean costs no more than the text is long: a thousand markers never closed.
+        self.assertEqual(parse_markup("~{" * 1000), ["~{" * 1000])
 
     def test_the_viewer_lays_labels_out_in_the_same_font(self) -> None:
         # The board view lays a pad's names out itself (`@cad/core`'s plot2d/strokeFont.js): its table is this one.

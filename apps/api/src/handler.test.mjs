@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
+import { idOf } from './events.mjs';
 import { handle } from './handler.mjs';
 import { rateLimiter } from './limit.mjs';
 
@@ -323,6 +324,51 @@ test('schema 8 separates live models from XBF files without reinterpreting older
     assert.equal((await send(memory(), 'POST', '/v1/events', { ...batch,
       events: [{ name: 'files', kind, count: 1 }] })).status, 400);
   }
+});
+
+// Schema 9: which part of a snapshot's request a refusal named, and the machine's no OpenGL context and no kernel.
+const PARTS = {
+  ...ENGINE, schema: 9, batch: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  events: [
+    { name: 'snapshot', kind: 'model', count: 4, failed: 4, seconds: 1.5 },
+    { name: 'snapshot_failure', kind: 'model', reason: 'bad_request', part: 'display.clip', count: 1 },
+    { name: 'snapshot_failure', kind: 'model', reason: 'bad_request', part: 'camera', count: 1 },
+    { name: 'snapshot_failure', kind: 'model', reason: 'no_gl', part: 'none', count: 1 },
+    { name: 'snapshot_failure', kind: 'model', reason: 'no_kernel', part: 'none', count: 1 },
+    { name: 'build', kind: 'model', via: 'script', count: 1, failed: 1, crashed: 0, cancelled: 0, cached: 0, seconds: 0.2, longest: 0.2 },
+    { name: 'build_failure', kind: 'model', via: 'script', reason: 'no_kernel', count: 1 },
+  ],
+};
+
+test('schema 9 names the part of a request a snapshot refused, and why the machine could not draw or build', async () => {
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', PARTS)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    PARTS.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  // One row per part: a refusal of the clip and one of the camera are told apart.
+  assert.equal(new Set(store.rows.map(row => row.id)).size, PARTS.events.length);
+  // Every schema before it is read as ever: no part, and the same row ids a batch sent again had.
+  for (const earlier of [SCHEMA_1, SCHEMA_2, BATCH, { ...BATCH, schema: 4 }, NAMED, ENGINE, CONTROLS, { ...CONTROLS, schema: 8 }]) {
+    const kept = memory();
+    assert.equal((await send(kept, 'POST', '/v1/events', earlier)).status, 204, `schema ${earlier.schema}`);
+    assert.ok(kept.rows.every(row => row.part === undefined), `schema ${earlier.schema}`);
+  }
+  const old = memory();
+  assert.equal((await send(old, 'POST', '/v1/events', ENGINE)).status, 204);
+  assert.equal(old.rows.find(row => row.event === 'snapshot_failure').id, idOf(ENGINE.batch, 'snapshot_failure xbf render_error'));
+  const failure = PARTS.events[1];
+  for (const bad of [
+    { ...ENGINE, schema: 8, events: [failure] }, // schema 8 named no part
+    { ...ENGINE, schema: 8, events: [{ ...ENGINE.events[4], reason: 'no_gl' }] }, // nor these reasons
+    { ...ENGINE, schema: 8, events: [{ ...ENGINE.events[1], reason: 'no_kernel' }] },
+    { ...PARTS, events: [{ ...failure, part: undefined }] }, // schema 9 always does
+    { ...PARTS, events: [{ ...failure, part: 'display.clip.at' }] }, // a word outside the vocabulary
+    { ...PARTS, events: [{ ...failure, part: '{"axis": "w"}' }] }, // never the value
+    { ...PARTS, events: [{ ...failure, part: 'none' }] }, // a refusal names its part
+    { ...PARTS, events: [{ ...PARTS.events[3], part: 'camera' }] }, // and only a refusal does
+    { ...PARTS, events: [{ ...PARTS.events[6], reason: 'no_gl' }] }, // no_gl is a snapshot's
+    { ...PARTS, events: [failure, failure] }, // one kind, reason and part, counted once
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
 });
 
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
