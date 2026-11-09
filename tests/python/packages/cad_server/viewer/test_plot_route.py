@@ -267,6 +267,12 @@ class PlotRoute(unittest.TestCase):
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
         self.assertEqual((payload["kind"], [page["path"] for page in payload["sheets"]]), ("schematic", ["/", "/Load/"]))
+        # Each page on KiCad's drawing sheet, as KiCad's schematic editor shows it: its frame and its title block.
+        # Each sheet's title block is its own file's.
+        for page, shown in zip(payload["sheets"], ({"Title: Divider", "Id: 1/2"}, {"Sheet: /Load/", "Id: 2/2"})):
+            [sheet] = [layer for layer in page["layers"] if layer["id"] == "drawing_sheet"]
+            texts = {item["text"] for item in sheet["items"] if item["t"] == "text"}
+            self.assertTrue(shown | {"A", "1"} <= texts, texts)
         # The viewer reads the sheet on screen alone: with the hierarchy's index first, then without it.
         api = self.opened(schematic, "kicad_sch")
         status, _, body = self.request("GET", f"{api}/plot?sheet=/Load/")

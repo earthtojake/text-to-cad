@@ -112,7 +112,8 @@ export function perspectiveHeadOn(camera, fov) {
 /**
  * The 3D camera as the 2D view's window: centred on the sheet point the camera is centred on (where
  * its line of sight meets the face it looks at), from that side, at the millimetres per pixel there.
- * What leaving a 3D view frames the 2D view on.
+ * What a prompt's view of a 3D view is (a snapshot draws the plan the camera shows). Leaving 3D frames
+ * nothing on it: the 2D view keeps its own window, as each mode keeps its own view.
  *
  * @param {{ position: number[], target: number[], halfHeight: number, perspective?: boolean, width: number, height: number,
  *   mirrorX: (side: "top" | "bottom") => number | null, thickness?: number }} camera  `halfHeight`: the
@@ -133,24 +134,6 @@ export function planFromCamera({ position, target, halfHeight, perspective = fal
   // Along the line of sight the target is at distance 1 (`direction` is the eye to it), the face point at `hit.distance`.
   const scale = height / (2 * halfHeight * (perspective && hit ? hit.distance : 1));
   return { side, transform: { scale, offsetX: width / 2 - planX * scale, offsetY: height / 2 + planY * scale } };
-}
-
-/**
- * What leaving 3D hands the 2D view. Its own window — the 2D view as it was, from the side it showed
- * (`side`) — when the 3D view opened on that picture, head on (`flat`), and nobody has moved its camera
- * since (`moved`; the opening's ease is no move): the round trip of a 3D view nobody turned. Else the
- * camera's window (`plan()`, `planFromCamera`: what it centres, at its scale, from its side), whether the
- * camera was moved or the 3D view opened on the camera the file was left at (a reload in 3D), under which
- * no 2D picture was ever on screen. `plan` is asked only then.
- *
- * @param {{ flat: boolean, moved: boolean, side: "top" | "bottom" | null,
- *   plan(): { side: "top" | "bottom", transform: { scale: number, offsetX: number, offsetY: number } } | null }} leaving
- * @returns {{ transform: { scale: number, offsetX: number, offsetY: number } | null, side: "top" | "bottom" | null }}
- *   `transform`: the window to frame the 2D view on (null: its own); `side`: the side it shows (null: as it is).
- */
-export function leavingView({ flat, moved, side, plan }) {
-  const framed = flat && !moved ? null : plan();
-  return framed ? { transform: framed.transform, side: framed.side } : { transform: null, side };
 }
 
 /**

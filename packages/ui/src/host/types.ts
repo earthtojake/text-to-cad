@@ -28,6 +28,8 @@ export interface PromptFiles {
     references?: string[];
   }): Promise<{ snapshot: string; inline?: never } | { inline: string; snapshot?: never }>;
   read(path: string): Promise<Blob>;
+  /** The folders a Quick Edit's message names its files by (`displayPath`): the workspace and the home. */
+  folders?(): Promise<{ start?: string; home?: string }>;
 }
 /**
  * What the app menu links to — the running version (its release notes), the source and the

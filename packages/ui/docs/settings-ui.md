@@ -952,6 +952,17 @@ names, in both: the strip's view controls and the zoom pill stand where they sto
 There is no cube (a board turns over by Flip), and Projection is Display's menu's. The key **3** switches,
 as KiCad's Alt+3 opens its 3D view.
 
+A board whose file names its stack-up's colours (`(stackup ... (color "Black") ... (copper_finish "ENIG"))`)
+is shown in 3D as it is made, in Board mode: each face its substrate, its copper in the finish, its solder
+mask laid over with the pads' openings cut, its silkscreen, its edge the substrate's colour, in KiCad's
+3D viewer's colours for those names (`@cad/core/lib/plot2d/stackup.js`), the same in either theme. The
+Layers tab's rows still choose among what a made board has (the facing copper, mask and silkscreen, the
+drills and vias): unticking the mask shows the bare copper. Copper, Assembly and Placement, and a layer in
+focus with the others dimmed or hidden, are views for working on layers, so 3D draws them in the layers'
+colours, as 2D does. 2D keeps the layers' colours always, as KiCad's PCB editor does (its 2D canvas is
+for telling layers apart and editing them; a black mask and gold copper would hide which copper is
+which), and so does every snapshot. A board that saved no stack-up colours looks as it always did.
+
 | Control | In 3D |
 | --- | --- |
 | Select: a click, Shift, a click on nothing | the same pick where the pointer's ray meets the face it enters, from that side, with the same filter and the layers that side draws |
@@ -972,13 +983,13 @@ tilt, the board framed whole — from the bottom, that view turned over the boar
 right and below, the world's up still up) — or to the camera the file was left at in 3D, turned over to
 that side if it looks at the other: the ease never crosses the board's plane, so Flip shows the side the
 2D view showed throughout. The 2D picture stays on screen until the 3D
-view has drawn that same picture, so the switch shows no frame of anything else. Leaving with the camera
-where that left it (nothing turned, panned or zoomed since) gives the 2D view back exactly as it was,
-from its side; once the camera has been moved (a Flip is a move), leaving frames the 2D view on what the
-camera was centred on, at the matching scale, from its side, the side Flip showed. That round trip is a 3D
-view entered from the 2D view in the same page: a file reopened in 3D opens on its stored camera with no 2D
-picture under it, so leaving it always frames the 2D view on the camera's window, moved or not. Either way the 3D view stays until the 2D canvas has painted
-the view it hands over. Which is up, the 3D camera and its projection are the file's view (`board3d`).
+view has drawn that same picture, so the switch shows no frame of anything else. Leaving gives the 2D
+view back its own window, as it was left — or fitted, when a file reopened in 3D was never moved in 2D —
+whatever the camera did in 3D: each mode keeps its own last view, as KiCad's 3D viewer, a window of its
+own, never moves the PCB editor's. Framing the 2D view on the 3D camera's window brought an orbit's zoom
+and centre into the plan, off the board. Only the side carries over, as it does entering: the 2D view
+comes back from the side Flip showed, its window kept as a Flip in 2D keeps it. The 3D view stays until
+the 2D canvas has painted its window. Which is up, the 3D camera and its projection are the file's view (`board3d`).
 The library card's picture is the flat board in either mode. On a phone, **3D view** is a ticked row
 of More, and in 3D Display's choices end with Projection.
 
@@ -1002,7 +1013,14 @@ It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
-again in the browser, from the payload it holds.
+again in the browser, from the payload it holds. A net in focus (selected, or lit by a reference)
+steps the rest of the board back lightly, more than half its contrast kept, so the board still reads
+as a board round the lit net; what is isolated steps it back further. The lit net's copper (its tracks,
+pads, vias and pour outlines) is edged, 1.5 px round each piece in a dark tone of the highlight under it
+(KiCad lights a net by brightening it over the rest dimmed; the edge adds what a light wash takes away): the net then stands out by its edge at 3:1 or more against
+the washed board in light (7.6:1 measured on a routed board, where its fill alone reads 2.8:1), and the
+edge parts the light net from the copper round it in dark. In 3D the step back is laid on the board alone,
+never on the see-through plane round the slab, and the edge is drawn on the face as in 2D.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

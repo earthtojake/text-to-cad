@@ -252,7 +252,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             with self.subTest(path=path):
                 # The library's pyproject also pins the integrations' extras (netgen's among them): the solves run too.
                 solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"} | solves)
+                self.assertEqual(jobs_for(path),
+                                 GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -333,7 +334,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_kicad_code_reaches_the_kicad_job_beside_its_package_and_its_suite_that_job_alone(self):
         # KiCad's code runs what its package runs, and the KiCad job, which installs KiCad.
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
-        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+        self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs", "fea", "routing-macos"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
         self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
@@ -342,6 +343,28 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(jobs_for(path), {"kicad", "skills"})
         # ...and nothing else reaches it: an engine change runs the package suites, not KiCad.
         self.assertNotIn("kicad", jobs_for("packages/cad/src/cad/engine/api.py"))
+
+    def test_the_router_and_what_it_reads_a_board_through_run_its_unit_files_on_all_three_oses(self):
+        # The router's copper is held to a digest (test_kicad_routing_determinism.py): Linux and Windows run it in
+        # the cadgen jobs, macOS in the routing job, the library alone installed.
+        determinism = f"{LIBRARY}/test_kicad_routing_determinism.py"
+        for path in ("packages/cad/src/cad/kicad/_routing/shapes.py", "packages/cad/src/cad/kicad/_route.py",
+                     "packages/cad/src/cad/engine/formats/kicad/geometry.py",
+                     "packages/cad/src/cad/engine/formats/kicad/board_index.py",
+                     "packages/cad/src/cad/engine/formats/kicad/sexpr.py", "packages/cad/pyproject.toml", determinism):
+            with self.subTest(path=path):
+                self.assertLessEqual({"cadgen-linux", "cadgen-windows", "routing-macos"}, jobs_for(path))
+                self.assertTrue(set(tests_for(path)["cadgen_tests"]) & {CADGEN, determinism})
+        for path in (f"{LIBRARY}/test_kicad_routing.py", "scripts/test/test-routing.sh"):
+            with self.subTest(path=path):
+                self.assertIn("routing-macos", jobs_for(path))
+        self.assertNotIn("routing-macos", jobs_for("packages/cad/src/cad/engine/formats/kicad/plot.py"))
+        self.assertNotIn("routing-macos", jobs_for("packages/cad/src/cad/engine/api.py"))
+        job = JOBS["routing-macos"]
+        self.assertIn("runs-on: macos-latest", job)
+        self.assertIn("python -m pip install --editable ./packages/cad\n", job)
+        self.assertIn("run: scripts/test/test-routing.sh", job)
+        self.assertNotIn("setup-deps", job)
 
     def test_the_kicode_pin_in_the_library_s_project_reaches_the_kicad_job(self):
         # A change that only moves the pin moves the integration itself, and the job that installs it runs on it.
@@ -420,7 +443,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs", "kicad", "fea", "routing-macos"},
             "scripts/brand/export-logos.mjs": {"docs", "skills"},
             "scripts/bench/occt_parity.py": {"skills"},
             "scripts/bench/corpus.json": {"skills"},
