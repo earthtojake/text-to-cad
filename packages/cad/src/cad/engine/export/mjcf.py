@@ -12,7 +12,8 @@ does one of theirs: ``compiler`` (radians, the mesh folder, ``autolimits``), ``o
 ``implicitfast`` integrator MuJoCo's guide recommends; a scene that attaches the model keeps its own),
 ``default`` (a class named for the model holding ``visual``, group 2 and colliding with nothing, and
 ``collision``, group 3: MuJoCo prefixes every class of an attached model, so the classes survive an
-attach), ``asset`` (a ``material`` per distinct material name and colour, a ``mesh`` per prototype),
+attach), ``asset`` (a ``material`` per distinct material name and colour, a second colour of a name named for its
+colour, ``Steel_a0a0a0``; a ``mesh`` per prototype),
 ``worldbody``, ``contact``, ``equality`` and ``keyframe``.
 
 ``worldbody`` is the description's tree from its root: the ground's geometry in the world itself
@@ -294,6 +295,19 @@ class _Names:
         return name
 
 
+def material_name(names: _Names, wanted: str, rgba: tuple) -> str:
+    """A material's name among ``names``, for one more colour of the material ``wanted`` (a writer makes one per
+    material name and colour): the name itself the first time, else the name and the colour it is in, as sRGB hex
+    (``Steel_a0a0a0``, and the alpha where it is not opaque): a cable drawn grey in a STEP's ``Steel`` beside its
+    white fasteners is ``Steel_a0a0a0``, not ``Steel_2``. A clash after that gets ``_2``, as any name."""
+    if wanted not in names.taken:
+        return names(wanted)
+    values = [max(0, min(255, round(float(value) * 255))) for value in rgba]
+    colour = "".join(f"{value:02x}" for value in values[:3]) + (f"{values[3]:02x}" if len(values) > 3 and
+                                                               values[3] < 255 else "")
+    return names(f"{wanted}_{colour}")
+
+
 class _Element:
     def __init__(self, tag: str, attributes: Iterable[tuple[str, str | None]] = (), children: list | None = None):
         self.tag = tag
@@ -505,7 +519,7 @@ class _Writer:
         key = (name, _numbers(rgba, snap=0))
         found = self.materials.get(key)
         if found is None:
-            found = self.materials[key] = self.materials_named(name)
+            found = self.materials[key] = material_name(self.materials_named, name, rgba)
             self.material_rows.append((found, rgba))
         return found
 

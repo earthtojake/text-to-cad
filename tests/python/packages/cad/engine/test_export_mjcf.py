@@ -442,6 +442,18 @@ def painted():
 """
 
 
+class MaterialNameTest(unittest.TestCase):
+    def test_a_material_in_a_second_colour_is_named_for_the_colour_not_numbered(self) -> None:
+        from cad.engine.export.mjcf import _Names, material_name
+
+        names = _Names()
+        white, grey = (0.965, 0.965, 0.953, 1.0), (0.627, 0.627, 0.627, 1.0)
+        self.assertEqual([material_name(names, "Steel", white), material_name(names, "Steel", grey),
+                          material_name(names, "Steel", (0.627, 0.627, 0.627, 0.5)),
+                          material_name(names, "PLA", grey)],
+                         ["Steel", "Steel_a0a0a0", "Steel_a0a0a080", "PLA"])
+
+
 class EngineTest(_Folder):
     def built(self, name: str, source: str) -> Path:
         (self.folder / f"{name}.py").write_text(textwrap.dedent(source), encoding="utf-8")

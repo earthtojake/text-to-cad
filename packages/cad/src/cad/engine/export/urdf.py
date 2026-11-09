@@ -45,7 +45,7 @@ each end, three elements named ``<name>``, ``<name>_top`` and ``<name>_bottom``.
 each hull's mesh a file of its own (``<model>_<part>_hull<i>.stl``), its visual the part whole. A part whose
 faces are painted is a ``<visual>`` per look, as the viewer draws it (``<part>``, ``<part>_paint<i>``). A visual's colour
 is a ``<material>`` declared once at the top and named in the visual: one per material name and
-colour (a part with no material is ``color``), a repeat given ``_2``, ``_3``. A named frame is a
+colour (a part with no material is ``color``), a name's second colour named for it (``Steel_a0a0a0``). A named frame is a
 link of its own with nothing in it, hung from its link by a ``fixed`` joint ``<frame>_joint``, as a
 ROS ``tool0`` is; a part declared a body (``cad.build123d.body``) is a link with its own mass and
 geometry, hung by its ``fixed`` joint.
@@ -98,7 +98,7 @@ import numpy as np
 
 from cad.engine.description import Description, DescriptionError, Geometry, Inertial, Joint, Link
 from cad.engine.export import ExportRefused, note
-from cad.engine.export.mjcf import SNAP, _Names, _number, _numbers, _stem, _stl, place
+from cad.engine.export.mjcf import SNAP, _Names, _number, _numbers, _stem, _stl, material_name, place
 
 __all__ = ["UNBOUNDED", "rendered", "rooted", "write", "write_description"]
 
@@ -471,7 +471,8 @@ class _Writer:
         key = (name or "", _numbers(rgba, snap=0))
         found = self.materials.get(key)
         if found is None:
-            found = self.materials[key] = self.material_names(name_of(name, "color") if name else "color")
+            found = self.materials[key] = material_name(self.material_names,
+                                                        name_of(name, "color") if name else "color", rgba)
             material = Xml("material", [("name", found)])
             material.add("color", [("rgba", key[1])])
             self.material_rows.append(material)
