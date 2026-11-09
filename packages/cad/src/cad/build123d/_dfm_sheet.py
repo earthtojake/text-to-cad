@@ -63,11 +63,11 @@ def _r(value: Any, digits: int = 4) -> Any:
     if value is None:
         return None
     value = float(value)
-    return round(value, digits) if math.isfinite(value) else None
+    return round(value, digits) + 0.0 if math.isfinite(value) else None  # + 0.0: no -0.0
 
 
 def _xyz(point: Any) -> list[float]:
-    return [round(float(value), 4) for value in point]
+    return [round(float(value), 4) + 0.0 for value in point]
 
 
 class _Sets:
@@ -167,6 +167,9 @@ class _Flange:
     area: float
     to_flat: np.ndarray | None = None
     via: int | None = None   # the bend it was reached by
+    # a joint, no flange: the line where two bends meet tangent with no flat between them (a joggle), as a
+    # flange of no faces the unfold passes through, the two bends' numbers
+    joint: tuple[int, int] | None = None
 
 
 @dataclass
@@ -471,6 +474,8 @@ class _Analysis:
         self.holes: list[_HoleLoop] = []
         self.regions: list[_Region] = []
         self.unfold_note = ""
+        self.missing: list[str] = []
+        self.joggles: list[dict[str, Any]] = []
         self.overlap = 0.0
         self.sheet_fraction = 0.0
         self._boxes: tuple[np.ndarray, np.ndarray] | None = None
@@ -862,6 +867,43 @@ class _Analysis:
             bend = self._bend(number, members, flange_of)
             if bend is not None:
                 self.bends.append(bend)
+        self._joints()
+
+    def _joints(self) -> None:
+        """Bends that meet tangent with no flat between them (an S-jog, a joggle): each meeting a joint, a flange
+        of no faces at the tangent line both bends' ends share, so the unfold runs on from one bend to the next
+        -- each bend's strip laid on where the last one ends, as a flange between them would be."""
+        of: dict[int, _Bend] = {face: bend for bend in self.bends for face in bend.side_faces}
+        seen: set[tuple[int, int]] = set()
+        for edge in self.edges:
+            a, b = edge.faces
+            if not edge.smooth or a not in of or b not in of or of[a] is of[b]:
+                continue
+            first, second = of[a], of[b]
+            key = (min(first.number, second.number), max(first.number, second.number))
+            if key in seen:
+                continue
+            point = np.array(edge.midpoint)
+            ends = []
+            for bend in (first, second):
+                phi = float(bend.phi(point[None])[0])
+                d0 = abs((phi - bend.phi0 + math.pi) % (2 * math.pi) - math.pi)
+                d1 = abs((phi - bend.phi0 - bend.span + math.pi) % (2 * math.pi) - math.pi)
+                ends.append(0 if d0 <= d1 else 1)
+            if any(end in bend.flanges.values() for end, bend in zip(ends, (first, second))):
+                continue  # a flat already meets that end
+            seen.add(key)
+            import build123d as bd
+
+            at = self.faces[a - 1].normal_at(bd.Vector(*point))
+            normal = np.array([at.X, at.Y, at.Z])
+            joint = _Flange(len(self.flanges), [], normal / np.linalg.norm(normal), point, 0.0,
+                            joint=(first.number, second.number))
+            self.flanges.append(joint)
+            first.flanges[joint.number] = ends[0]
+            second.flanges[joint.number] = ends[1]
+            self.joggles.append({"bends": [self.ref(first.inner[0]), self.ref(second.inner[0])],
+                                 "location": self.ref(first.inner[0]), "xyz": _xyz(point)})
 
     def find_sharp(self) -> None:
         """Corners joined without a bend (``sharp_bends``): two skins at an angle meeting at an edge (a sharp
@@ -1056,7 +1098,11 @@ class _Analysis:
                 self._place(bend, current, self.flanges[child_number] if child_number is not None else None)
                 if child_number is not None:
                     queue.append(child_number)
-        unreached = [f.number for f in self.flanges if f.to_flat is None]
+        unreached = [f.number for f in self.flanges if f.to_flat is None and f.joint is None]
+        # what is not in the flat: each flange no bend reached (its largest face), each bend not laid out
+        self.missing = [self.ref(max(f.faces, key=lambda a: self.areas[a - 1])) for f in self.flanges
+                        if f.to_flat is None and f.joint is None] + \
+            [self.ref(b.inner[0]) for b in self.bends if b.frame is None]
         notes = []
         if cycles:
             notes.append(f"{cycles} bend(s) close a loop of flanges: the part does not unfold in one piece "
@@ -1423,7 +1469,7 @@ def _bend_item(analysis: _Analysis, bend: _Bend) -> dict[str, Any]:
         "tangent_lines": lines, "k_factor": _r(bend.k), "k_factor_source": bend.k_source,
         "bend_allowance_mm": _r(bend.allowance),
         "bend_deduction_mm": _r(2 * setback - bend.allowance) if setback is not None else None,
-        "flange_count": len(bend.flanges),
+        "flange_count": sum(1 for f in bend.flanges if analysis.flanges[f].joint is None),
         "location": analysis.ref(bend.inner[0]), "faces": [analysis.ref(a) for a in bend.inner + bend.outer],
         "xyz": _xyz(xyz),
     }
@@ -1461,8 +1507,8 @@ def _flanges(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], 
         eps = 1e-6 * max(1.0, t)
         for side, flange_number, x0, sign in (("parent", bend.parent, 0.0, -1.0),
                                               ("child", bend.child, bend.allowance, 1.0)):
-            if flange_number is None:
-                continue
+            if flange_number is None or analysis.flanges[flange_number].joint is not None:
+                continue  # a joint between two tangent bends is no flange: a joggle's (``joggles``)
             origins = _frame_points(bend, np.full(len(ws), x0 + sign * eps), ws)
             direction = np.repeat((sign * bend.frame[1])[None], len(ws), axis=0)
             hit, _, _ = plane.cast(origins, direction, barriers, skip=1e-9)
@@ -1504,6 +1550,8 @@ def _flanges(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], 
 def _channels(analysis: _Analysis, by_side: dict[tuple[int, int], dict]) -> list[dict]:
     items = []
     for flange in analysis.flanges:
+        if flange.joint is not None:
+            continue
         bends = [b for b in analysis.bends if flange.number in b.flanges and b.frame is not None]
         for i, first in enumerate(bends):
             for second in bends[i + 1:]:
@@ -1782,7 +1830,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                      "angle_deg": b["angle_deg"], "location": b["location"], "xyz": b["xyz"]}
                     for b in out["bends"] if b["kind"] == "curl"]
     item["bend_count"] = len(analysis.bends)
-    item["flange_count"] = len(analysis.flanges)
+    item["flange_count"] = sum(1 for flange in analysis.flanges if flange.joint is None)
     try:
         analysis.unfold()
     except Exception as error:  # noqa: BLE001
@@ -1792,6 +1840,8 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         item["unfold_note"] = f"the part did not unfold: {error}"
         return out
     item["unfold_note"] = analysis.unfold_note or None
+    item["not_in_flat"] = list(analysis.missing)
+    item["joggles"] = list(analysis.joggles)
     outer = [loop for loop in analysis.flat_loops if loop.label == "outer"]
     if outer:
         points = np.vstack([loop.points for loop in outer])

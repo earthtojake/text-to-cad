@@ -15,8 +15,9 @@ the thickness `t`; a shop's tooling and bend table move them):
 - **One thickness.** The whole part is one sheet: every face is its top, its bottom or a cut edge.
   No boss, pocket, countersink, second thickness or solid block. A chamfered or rounded cut edge is
   allowed but is a second operation (`sheet.edge_break`, a warning); a cone or a torus between
-  flanges is formed, not bent (`sheet.formed_surface`): a formed feature the person wants is a check
-  by hand.
+  flanges is formed, not bent (`sheet.formed_surface`, a warning: not measured): a formed feature the
+  person wants -- an emboss, a louver, a bead -- is quoted as one and checked by hand. Two bends may meet
+  with no flat between (a joggle): both unroll, `sheet.joggle` says it.
 - **A bend is two arcs.** Inside radius `r` of at least `t` (the shop's tooling sets it; `--bend-radius`
   when known) and outside radius `r + t` at the same corner. Build the legs, union them and fillet
   both edges of the corner:

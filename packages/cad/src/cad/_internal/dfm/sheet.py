@@ -388,6 +388,13 @@ def _faces_said(here: list[dict[str, Any]]) -> str:
     return ", ".join(refs[:6]) + (f" and {len(refs) - 6} more" if len(refs) > 6 else "")
 
 
+def _owner(location: Any) -> str:
+    """The part a ref names (``bracket`` of ``bracket/face 7``; an unnamed part's ``face 7``, the document's one
+    part: "")."""
+    text = str(location or "")
+    return text.rsplit("/", 1)[0] if "/" in text else ""
+
+
 def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
     """One finding per part for its formed faces (``sheet.formed_surface``) and one for its chamfered or
     rounded cut edges (``sheet.edge_break``), each naming its faces."""
@@ -395,18 +402,20 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for item in _items(report, "not_sheet"):
         if item.get("judged") and item.get("kind") in ("formed", "edge_break"):
-            part = str(item.get("location", "")).rsplit("/", 1)[0]
-            groups.setdefault((item["kind"], part), []).append(item)
+            groups.setdefault((item["kind"], _owner(item.get("location"))), []).append(item)
     for (kind, _), here in groups.items():
         if kind == "formed":
+            # no guide gives a feasibility limit for a stamped form (an emboss, a louver, a bead): not measured,
+            # a warning -- the part is quoted with it as a formed feature, never failed for it
             surfaces = sorted({str(item.get("surface")) for item in here})
             found.append(CheckFinding(
-                "error", "sheet.formed_surface",
+                "warning", "sheet.formed_surface",
                 f"{len(here)} face(s) of the sheet are formed to a {' and '.join(surfaces)} surface "
-                f"({_faces_said(here)}): a cone or a torus is rolled, spun or stamped, not brake-bent",
+                f"({_faces_said(here)}): not measured -- a cone, a torus or a free-form face is rolled, spun or "
+                "stamped (an emboss, a louver, a bead), not brake-bent, and no rule here judges a formed feature",
                 here[0].get("location"),
-                "make each bend a cylinder about a straight axis between flat flanges, or quote the part as formed "
-                "(rolled, spun or stamped)"))
+                "quote it as a formed feature (stamped, rolled or spun) with the shop's own limits, or make each "
+                "bend a cylinder about a straight axis between flat flanges"))
         else:
             deepest = max(float(item.get("break_mm") or 0.0) for item in here)
             found.append(CheckFinding(
@@ -443,9 +452,12 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     for part in _items(report, "parts"):
         where = part.get("location")
         if not part.get("is_sheet", True):
+            # named as its ref names it: a part placed twice is measured at its first occurrence, whose name
+            # the ref carries (pin_left/face 2, not the part's other name, pin_right)
+            name = _owner(where).rsplit("/", 1)[-1] or part.get("name") or "the part"
             found.append(CheckFinding(
                 "error", "sheet.not_sheet",
-                f"{part.get('name') or 'the part'} is not one sheet: {part.get('why') or 'no constant thickness'}",
+                f"{name} is not one sheet: {part.get('why') or 'no constant thickness'}",
                 where, "model it as one thickness of sheet, its bends as inside and outside radii a thickness apart"))
         measured = part.get("thickness_mm")
         if given is not None and isinstance(measured, (int, float)):
@@ -460,12 +472,29 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         explained = bool(_items(report, "sharp_bends")) or any(
             item.get("judged") and item.get("kind") != "edge_break" for item in _items(report, "not_sheet"))
         if isinstance(fraction, (int, float)) and abs(float(fraction) - 1.0) > FLAT_MATERIAL_SLACK and not explained:
-            why = "a flange or a bend did not unfold"
+            # nothing else says why: this finding names what is not in the flat itself
+            missing = [str(ref) for ref in part.get("not_in_flat") or ()]
+            if missing:
+                why = (f"{', '.join(missing[:6])}{f' and {len(missing) - 6} more' if len(missing) > 6 else ''} did "
+                       "not unfold (no bend joins it to the rest)")
+                fix = ("join each to the rest with a bend (an inside radius r and an outside r + t about one axis), "
+                       "then check again: the flat pattern and every distance measured on it follow")
+            else:
+                why = ("every flange and bend unfolded, yet the flat does not hold the part's material: a bend's "
+                       "strip or an edge break fell short of the part")
+                fix = ("check the part's bends are cylinders a thickness apart about one axis and its cut edges "
+                       "square, then check again")
             found.append(CheckFinding(
                 "error", "sheet.flat_incomplete",
                 f"the flat pattern holds {100 * float(fraction):.0f}% of the part's material: {why}; it is not the "
-                "part's blank", where, "fix what the other findings name, then check again: the flat pattern "
-                "and every distance measured on it follow"))
+                "part's blank", missing[0] if missing else where, fix))
+        for joggle in part.get("joggles") or ():
+            found.append(CheckFinding(
+                "info", "sheet.joggle",
+                f"two bends ({' and '.join(joggle.get('bends') or ())}) meet tangent with no flat between them: a "
+                "joggle (an offset bend), unrolled into the flat; the flange between them (none) and a joggle "
+                "die's limits are not measured", joggle.get("location"),
+                "a joggle is formed in one hit by a joggle die: confirm its offset and run with the shop"))
         if part.get("flat_overlap_mm2"):
             found.append(CheckFinding("error", "sheet.flat_overlap",
                                       f"the flat pattern overlaps itself by {part['flat_overlap_mm2']:.4g} mm2: "

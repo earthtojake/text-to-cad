@@ -12,6 +12,7 @@ it was cut less its radius.
 
 from __future__ import annotations
 
+import json
 import math
 import tempfile
 import unittest
@@ -483,6 +484,15 @@ class ModellingMistakeTest(unittest.TestCase):
         part = {"thickness_mm": 2.0, "is_sheet": True, "location": "p/face 1", "flat_material_fraction": 0.8}
         alone = {f.code for f in sheet_rules.findings({"parts": {"items": [part]}}, {}, False)}
         self.assertIn("sheet.flat_incomplete", alone)
+        # it names what did not unfold, at it, and never points at other findings that are not there
+        (short,) = [f for f in sheet_rules.findings({"parts": {"items": [{**part, "not_in_flat": ["p/face 4"]}]}},
+                                                    {}, False) if f.code == "sheet.flat_incomplete"]
+        self.assertEqual(short.location, "p/face 4")
+        self.assertIn("p/face 4 did not unfold", short.message)
+        self.assertNotIn("other findings", short.hint)
+        (whole,) = [f for f in sheet_rules.findings({"parts": {"items": [part]}}, {}, False)
+                    if f.code == "sheet.flat_incomplete"]
+        self.assertIn("every flange and bend unfolded", whole.message)
         sharp = {"parts": {"items": [part]}, "sharp_bends": {"items": [{"kind": "sharp", "location": "p/face 2",
                                                                          "thickness_mm": 2.0, "angle_deg": 90.0}]}}
         codes = {f.code for f in sheet_rules.findings(sharp, {}, False)}
@@ -558,6 +568,34 @@ class ModellingMistakeTest(unittest.TestCase):
         self.assertEqual(broken.severity, "warning")
         self.assertEqual(failed(result, "sheet.uniform_thickness"), [])
 
+    def test_an_s_jog_of_two_tangent_bends_unrolls_whole(self) -> None:
+        # two bends meeting with no flat between them: a joggle, unrolled one strip after the other
+        jog = bent([("line", 40), ("bend", 90, 1.5), ("bend", -90, 1.5), ("line", 40)], 1.5, 40, "jog")
+        allowance = math.pi / 2 * (1.5 + 0.4 * 1.5)
+        for turn in (bd.Rot(0, 0, 0), bd.Rot(23, -37, 61)):
+            result = checked(turn * jog, material="aluminum", k_factor=0.4)
+            self.assertTrue(result.ok, [f.message for f in result.findings if f.severity == "error"])
+            part = result.measurements["parts"]["items"][0]
+            self.assertAlmostEqual(part["flat_material_fraction"], 1.0, places=4)
+            self.assertAlmostEqual(part["flat_length_mm"], 80 + 2 * allowance, places=3)
+            self.assertEqual((part["bend_count"], part["flange_count"], part["not_in_flat"]), (2, 2, []))
+            codes = {f.code for f in result.findings}
+            self.assertIn("sheet.joggle", codes)
+            self.assertFalse(codes & {"sheet.flat_incomplete", "sheet.not_unfolded", "sheet.flange_length"})
+            self.assertNotIn("-0.0", json.dumps(result.measurements))
+
+    def test_a_part_s_formed_faces_and_broken_edges_are_one_finding_each_and_named_as_its_ref_names_it(self) -> None:
+        # an unnamed part's refs are bare (face 7): its chamfers are one finding, not one a face
+        plate = bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
+        broken = [f for f in checked(plate).findings if f.code == "sheet.edge_break"]
+        self.assertEqual(len(broken), 1)
+        # a part placed twice is measured at its first occurrence, its ref's name the message's
+        part = {"name": "pin_right", "is_sheet": False, "why": "its 12 mm thickness is no sheet's",
+                "location": "pin_left/face 2"}
+        (said,) = [f for f in sheet_rules.findings({"parts": {"items": [part]}}, {}, False)
+                   if f.code == "sheet.not_sheet"]
+        self.assertTrue(said.message.startswith("pin_left is not one sheet"), said.message)
+
     def test_a_cone_between_flanges_is_one_formed_surface(self) -> None:
         section = bd.Pos(10, 0, 0) * profile([("line", 20), ("bend", 30, 2.0), ("line", 25), ("bend", -30, 2.0),
                                               ("line", 20)], 2.0)
@@ -565,8 +603,10 @@ class ModellingMistakeTest(unittest.TestCase):
         cone.label = "cone"
         result = checked(cone)
         (formed,) = [f for f in result.findings if f.code == "sheet.formed_surface"]
-        self.assertEqual(formed.severity, "error")
+        # no guide gives a stamped or rolled form's feasibility limit: not measured, quoted as a formed feature
+        self.assertEqual(formed.severity, "warning")
         self.assertIn("cone", formed.message)
+        self.assertIn("not measured", formed.message)
         self.assertNotIn("sheet.uniform_thickness", {f.code for f in result.findings})  # not six 0.005 mm departures
 
     def test_thickness_departures_say_how_thick_against_the_sheet(self) -> None:

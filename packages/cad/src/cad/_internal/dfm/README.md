@@ -507,7 +507,10 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   arcs and holes stay arcs and holes) about its bend and out by `BA = angle * (r + K t)`; each bend is its
   cylinder's outline unrolled into a strip `BA` wide (exact for straight ends, sampled where an end is
   curved). A bend about the same axis, radius and angle as the bend that placed its flange (a bend line a
-  cut interrupts) is laid along the same line with its own strip, no loop. Fused, this is the flat pattern;
+  cut interrupts) is laid along the same line with its own strip, no loop. Two bends meeting tangent with no
+  flat between them (an S-jog, a joggle) meet at a joint, a flange of no faces at their shared tangent line:
+  the unfold runs on through it, the second strip laid where the first ends (`parts.joggles`; no flange there
+  for the flange rules). Fused, this is the flat pattern;
   a hole of the fused flat no face's inner wire gave (one crossing a bend's tangent line, part of both
   faces' outer wires) is read back from it, `in_bend` where it reaches a bend's strip. Where a chamfer or a
   round breaks the cut edge the skin stops short of the cut, so each flange's breaks are laid into its plane
@@ -525,7 +528,7 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
 
 | family | per item | notes |
 |---|---|---|
-| `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `box_short_mm`, `unfold_note`, `flat_bend_lines` | one per part |
+| `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `box_short_mm`, `unfold_note`, `not_in_flat` (the flanges no bend reached, each its largest face, and the bends not laid out), `joggles` [{bends, location, xyz}] (two bends meeting tangent with no flat between), `flat_bend_lines` | one per part |
 | `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict) | a boss, pocket, round, freeform face |
 | `sharp_bends` | `kind` (sharp, inside_only, outside_only, unjoined), `angle_deg`, `inside_radius_mm`, `outside_radius_mm`, `thickness_mm`, `edge_count`, `faces` | a corner joined without a bend: its flange is not in the flat |
 | `bends` | `kind` (bend, hem, curl), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm` (None for a hem or curl: its mold lines meet nowhere); `faces` [inside, outside] | location: the inside cylinder |
@@ -561,14 +564,18 @@ export runs (`validate_drawing_document`: `units_not_set`, `duplicate_entity`, `
 ### Findings of fact (`cad._internal.dfm.sheet.findings`)
 
 `sheet.not_sheet` (error: no constant-thickness sheet, a freeform shell, or a thickness over a quarter of
-the part's width), `sheet.sharp_bend` (error: each `sharp_bends` item, one finding per place; the message
-says which radius is missing, the hint "model an inside radius r >= t and an outside radius r + t at the
-corner"), `sheet.flat_incomplete` (error: `flat_material_fraction` off 1 by more than 3%, the flat is not the
-part's blank, where no `sheet.sharp_bend` or judged `not_sheet` face already says why; context
-`sharp_bends_found`), `sheet.thickness_mismatch` (error), `sheet.flat_overlap` (error), `sheet.not_unfolded`
-(warning: a loop of bends, a flange no bend reaches), `sheet.formed_surface` (error, one per part: its
-`formed` faces; a cone or a torus is rolled, spun or stamped, not brake-bent), `sheet.edge_break` (warning,
-one per part: its chamfered or rounded cut edges, a second operation after cutting), `sheet.bend_radius_differs`
+the part's width; named as its ref names the part), `sheet.sharp_bend` (error: each `sharp_bends` item, one
+finding per place; the message says which radius is missing, the hint "model an inside radius r >= t and an
+outside radius r + t at the corner"), `sheet.flat_incomplete` (error: `flat_material_fraction` off 1 by more
+than 3%, the flat is not the part's blank, where no `sheet.sharp_bend` or judged `not_sheet` face already says
+why: it names what did not unfold, `not_in_flat`, at the first of them, or says that every flange and bend
+did; context `sharp_bends_found`), `sheet.thickness_mismatch` (error), `sheet.flat_overlap` (error),
+`sheet.not_unfolded` (warning: a loop of bends, a flange no bend reaches), `sheet.joggle` (info: two bends
+meeting tangent with no flat between, unrolled; a joggle die's limits not measured), `sheet.formed_surface`
+(warning, one per part: its `formed` faces, not measured -- a cone, a torus or a free-form face is rolled,
+spun or stamped, an emboss, a louver or a bead, not brake-bent, and no source gives a stamped form's
+feasibility limit: quote it as a formed feature), `sheet.edge_break` (warning, one per part: its chamfered or
+rounded cut edges, a second operation after cutting), `sheet.bend_radius_differs`
 (warning: vs `--bend-radius`, one a bend), `sheet.bend_radii_mixed`
 (info: bends, not hems or curls), `sheet.under_kerf` (error), `sheet.hole_in_bend` (warning),
 `sheet.k_factor_assumed` (info); DXF: `sheet.thickness_unknown` (warning: no `--thickness`, naming the rules
@@ -617,7 +624,9 @@ protolabs.com sheet metal design guidelines; xometry.com/capabilities/sheet-meta
 ### What it does not measure
 
 Bend order, tooling access and collisions while bending; grain direction; hardware (PEMs) and their
-distances; window and joggle bends; box flange maxima and the corner flange gap;
+distances; window bends; a joggle's own limits (its offset against the thickness, a joggle die's: its two
+bends are unrolled, `sheet.joggle`); stamped forms -- embosses, louvers, beads -- beyond saying them
+(`sheet.formed_surface`); box flange maxima and the corner flange gap;
 bump-formed or conical bends (a cone between flanges is not a bend: `sheet.formed_surface`); freeform formed
 shells (reported not sheet); closed hems
 (modelled as a double thickness: not sheet); a hole crossing a bend is unrolled from samples; a non-straight
